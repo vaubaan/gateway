@@ -30,7 +30,8 @@ export interface DraftPolicyEntry {
 
 /**
  * The resources a mission may touch on one connection. `all` is resolved at
- * issuance to the resources known then and persisted as that explicit list:
+ * issuance to the resources known then — the ones the owner did not hide and
+ * discovery still returns — and persisted as that explicit list:
  * a resource discovered later is not covered (spec §3.1 "Resource selection").
  * A selection names resources by id (the interface) or by ref (an agent's
  * proposal, which only knows refs).
@@ -106,6 +107,13 @@ export interface IssuanceResource {
   readonly ref: string;
   readonly display_name: string;
   readonly env: string | null;
+  /**
+   * Hidden by the connection's owner: left out of "all resources", still
+   * selectable explicitly.
+   */
+  readonly hidden: boolean;
+  /** No longer returned by discovery: never part of a new mission. */
+  readonly stale: boolean;
 }
 
 /** A connection the creator holds authority on, with everything issuance needs. */
@@ -144,6 +152,7 @@ export const PREVIEW_ISSUE_CODES = [
   'duplicate-connection',
   'duplicate-provider',
   'resource-not-in-connection',
+  'resource-stale',
   'no-resource-selected',
   'unknown-preset',
   'unknown-risk',
@@ -189,6 +198,7 @@ export interface ConnectionPreview {
   readonly display_name: string;
   /** The resources the mission would be persisted with (explicit, even for `all`). */
   readonly resources: readonly IssuanceResource[];
+  /** Size of "all resources" on this connection, plus the hidden ones selected explicitly. */
   readonly resources_total: number;
   readonly preset: { readonly id: string; readonly label: string } | null;
   /** Accepted, inside the authority, resolvable, with a resolved budget. */

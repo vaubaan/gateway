@@ -150,11 +150,37 @@ export const ACME_CATALOG: RiskCatalog = {
   ],
 };
 
+const LISTED = { hidden: false, stale: false } as const;
+
 export const ACME_RESOURCES: readonly IssuanceResource[] = [
-  { id: 'res-app-staging', ref: 'app-staging', display_name: 'App (staging)', env: 'staging' },
-  { id: 'res-app-prod', ref: 'app-prod', display_name: 'App (prod)', env: 'prod' },
-  { id: 'res-scratch', ref: 'scratch', display_name: 'Scratch', env: null },
+  {
+    id: 'res-app-staging',
+    ref: 'app-staging',
+    display_name: 'App (staging)',
+    env: 'staging',
+    ...LISTED,
+  },
+  { id: 'res-app-prod', ref: 'app-prod', display_name: 'App (prod)', env: 'prod', ...LISTED },
+  { id: 'res-scratch', ref: 'scratch', display_name: 'Scratch', env: null, ...LISTED },
 ];
+
+/** A resource the owner hid, and one discovery no longer returns. */
+export const ACME_HIDDEN: IssuanceResource = {
+  id: 'res-archive',
+  ref: 'archive',
+  display_name: 'Archive',
+  env: 'prod',
+  hidden: true,
+  stale: false,
+};
+export const ACME_STALE: IssuanceResource = {
+  id: 'res-gone',
+  ref: 'gone',
+  display_name: 'Gone',
+  env: 'staging',
+  hidden: false,
+  stale: true,
+};
 
 /** The issuance context of an owner on one Acme connection. */
 export function acmeConnection(overrides: Partial<IssuanceConnection> = {}): IssuanceConnection {

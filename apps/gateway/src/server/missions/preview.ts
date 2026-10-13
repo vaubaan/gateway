@@ -102,13 +102,28 @@ interface ResourceResolution {
   readonly issues: PreviewIssue[];
 }
 
+/** What "all resources" means: not hidden by the owner, still returned by discovery. */
+export function defaultResources(
+  connection: Pick<IssuanceConnection, 'resources'>,
+): IssuanceResource[] {
+  return connection.resources.filter((r) => !r.hidden && !r.stale);
+}
+
+/** The "M" of "N of M resources": the default set plus hidden resources picked on purpose. */
+function resourcesTotal(
+  connection: Pick<IssuanceConnection, 'resources'>,
+  selected: readonly IssuanceResource[],
+): number {
+  return defaultResources(connection).length + selected.filter((r) => r.hidden).length;
+}
+
 function resolveResources(
   connection: IssuanceConnection,
   draft: DraftConnection,
   index: number,
 ): ResourceResolution {
   const wanted = draft.resources ?? { scope: 'all' };
-  if (wanted.scope === 'all') return { selected: [...connection.resources], issues: [] };
+  if (wanted.scope === 'all') return { selected: defaultResources(connection), issues: [] };
 
   const where = { connection_index: index, connection_id: connection.id };
   const byId = new Map(connection.resources.map((r) => [r.id, r]));
@@ -136,7 +151,21 @@ function resolveResources(
       ...where,
     });
   }
-  if (selected.size === 0 && foreign.length === 0) {
+  const stale = [...selected.values()].filter((r) => r.stale);
+  if (stale.length > 0) {
+    issues.push({
+      code: 'resource-stale',
+      message: `No longer found on "${connection.display_name}" at the provider: ${stale
+        .map((r) => r.ref)
+        .join(', ')}. Refresh the connection's resources or leave ${
+        stale.length === 1 ? 'it' : 'them'
+      } out.`,
+      resource_refs: stale.map((r) => r.ref),
+      ...where,
+    });
+    for (const r of stale) selected.delete(r.id);
+  }
+  if (selected.size === 0 && foreign.length === 0 && stale.length === 0) {
     issues.push({
       code: 'no-resource-selected',
       message: `Connection "${connection.display_name}" has no resource selected: the mission could touch nothing on it.`,
@@ -347,7 +376,7 @@ export function previewConnection(
       provider: connection.provider,
       display_name: name,
       resources: resources.selected,
-      resources_total: connection.resources.length,
+      resources_total: resourcesTotal(connection, resources.selected),
       preset: preset ? { id: preset.id, label: preset.label } : null,
       passes,
       exceeds,

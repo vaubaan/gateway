@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { DraftConnection, IssuanceConnection, MissionDraft, PreviewIssueCode } from './model';
 import { budgetProblem, previewConnection, previewDraft, uncoveredOf } from './preview';
-import { acmeConnection } from './testing';
+import { ACME_HIDDEN, ACME_RESOURCES, ACME_STALE, acmeConnection } from './testing';
 
 const NOW = new Date('2026-10-13T09:00:00.000Z');
 const BUDGET = { quota: 10, rate_limit: { max: 5, window_seconds: 60 } } as const;
@@ -246,6 +246,65 @@ describe('previewDraft — resource selection', () => {
       { connection_id: 'conn-acme', preset: 'reader', resources: { scope: 'selected' } },
     ]);
     expect(codes(p)).toEqual(['no-resource-selected']);
+  });
+
+  it('leaves hidden and stale resources out of "all"', () => {
+    const curated = acmeConnection({ resources: [...ACME_RESOURCES, ACME_HIDDEN, ACME_STALE] });
+    const p = preview([{ connection_id: 'conn-acme', preset: 'reader' }], [curated]);
+    expect(p.ok).toBe(true);
+    expect(p.resolved[0]?.resources.resource_ids).toEqual([
+      'res-app-staging',
+      'res-app-prod',
+      'res-scratch',
+    ]);
+    expect(p.connections[0]?.resources_total).toBe(3);
+  });
+
+  it('lets the creator select a hidden resource explicitly, never a stale one', () => {
+    const curated = acmeConnection({ resources: [...ACME_RESOURCES, ACME_HIDDEN, ACME_STALE] });
+    const hidden = preview(
+      [
+        {
+          connection_id: 'conn-acme',
+          preset: 'reader',
+          resources: { scope: 'selected', resource_refs: ['app-prod', 'archive'] },
+        },
+      ],
+      [curated],
+    );
+    expect(hidden.ok).toBe(true);
+    expect(hidden.connections[0]?.resources.map((r) => r.ref)).toEqual(['app-prod', 'archive']);
+    expect(hidden.connections[0]?.resources_total).toBe(4);
+
+    const stale = preview(
+      [
+        {
+          connection_id: 'conn-acme',
+          preset: 'reader',
+          resources: { scope: 'selected', resource_ids: ['res-app-prod', 'res-gone'] },
+        },
+      ],
+      [curated],
+    );
+    expect(codes(stale)).toEqual(['resource-stale']);
+    expect(stale.issues[0]?.resource_refs).toEqual(['gone']);
+    expect(stale.connections[0]?.resources.map((r) => r.ref)).toEqual(['app-prod']);
+  });
+
+  it('does not let a stale resource resolve an env-qualified risk', () => {
+    const onlyStaleStaging = acmeConnection({
+      resources: [ACME_RESOURCES[1]!, ACME_STALE],
+    });
+    const p = preview(
+      [
+        {
+          connection_id: 'conn-acme',
+          policy: [{ risk_id: 'acme[staging].write', ...BUDGET }],
+        },
+      ],
+      [onlyStaleStaging],
+    );
+    expect(codes(p)).toEqual(['unresolvable-env']);
   });
 
   it('lets a connection with no known resource through with an empty list', () => {

@@ -18,7 +18,7 @@ import type {
   ResolvedDraftConnection,
   SkippedPresetEntry,
 } from '@/server/missions/model';
-import { expandPreset, previewConnection } from '@/server/missions/preview';
+import { defaultResources, expandPreset, previewConnection } from '@/server/missions/preview';
 
 /** The inputs of one accepted risk; strings, as typed. An empty string is "no value yet". */
 export interface EntryState {
@@ -30,7 +30,7 @@ export interface EntryState {
 
 export interface ConnectionState {
   readonly included: boolean;
-  /** Selected resource ids; every resource of the connection by default. */
+  /** Selected resource ids; by default every resource that is neither hidden nor stale. */
   readonly resourceIds: readonly string[];
   /** Preset the policy was filled from; '' when none. */
   readonly presetId: string;
@@ -76,7 +76,7 @@ const MS_PER_DAY = 86_400_000;
 export function initialConnectionState(connection: IssuanceConnection): ConnectionState {
   return {
     included: false,
-    resourceIds: connection.resources.map((r) => r.id),
+    resourceIds: defaultResources(connection).map((r) => r.id),
     presetId: '',
     entries: {},
     edited: false,

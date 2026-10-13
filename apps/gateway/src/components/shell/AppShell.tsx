@@ -15,7 +15,10 @@ export interface AppNavEntry {
   readonly label: string;
 }
 
-export const APP_NAV: readonly AppNavEntry[] = [{ href: '/connections', label: 'Connections' }];
+export const APP_NAV: readonly AppNavEntry[] = [
+  { href: '/connections', label: 'Connections' },
+  { href: '/missions', label: 'Missions' },
+];
 
 export function AppShell({
   principal,

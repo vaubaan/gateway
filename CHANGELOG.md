@@ -11,6 +11,20 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Added
 
+- **Missions: authority, issuance, tokens, bootstrap kit (P1.5).** A connection owner issues a
+  mission from `/missions/new` on one page: name, connections and their resources (all selected
+  by default, hidden ones left out, stale ones refused), one preset per connection from the
+  plugin's catalog, a three-line summary (can / cannot / quantities), the per-risk detail folded
+  (quota, rate limit, gate; "select all" yields an enumerated list), period and nullable expiry.
+  A mission can also start from a duplicate or from an agent's pasted JSON proposal.
+  `AuthorityService` gives the owner the provider's full catalog as explicit ids;
+  `MissionService.preview()` says what passes, what exceeds the authority (with the uncovered
+  list), which env-qualified entries no selected resource can resolve, and `issue()` refuses any
+  accepted risk without a budget. The token (`vbn_live_`, argon2id, prefix lookup) is revealed
+  once with the bootstrap kit: env var, `.mcp.json` by reference to `${VAUBAAN_MISSION_TOKEN}`,
+  agent instructions with what to do on each refusal, and a `curl … tools/list` check. Rotate and
+  revoke from the mission page. `/agent-bootstrap.md` is rewritten for mission tokens. Browser
+  test `npm run test:e2e:v5` against an ephemeral instance with a simulated IdP.
 - **Connections, resources and provider apps (P1.4).** A signed-in user connects a provider
   from `/connections` through the app their company registered: one generic driver runs the
   four `CredentialSpec` kinds — `oauth2` (authorization code with PKCE, RFC 8707 resource

@@ -6,9 +6,10 @@ last_synced: 2026-10-13
 tracks:
   - apps/gateway/src/server/authority/
   - apps/gateway/src/server/missions/
-  - apps/gateway/src/app/missions/
+  - apps/gateway/src/app/(app)/missions/
   - apps/gateway/src/app/api/missions/
   - apps/gateway/src/app/agent-bootstrap.md/content.md
+  - apps/gateway/src/components/shell/AppShell.tsx
   - apps/gateway/tests/integration/missions/
   - apps/gateway/tests/e2e/v5/
 ---
@@ -24,7 +25,8 @@ Budget, Gate, Preset, Resource), §3.1, §3.2, §4.2 "Missions", §4.4, §7.4,
 [fallback-risk-only-when-uncategorized](../decisions/fallback-risk-only-when-uncategorized.md).
 Built on the [store](store.md) repositories, the
 [plugin SDK](plugin-sdk.md) registry (catalogs, presets, `experimental`,
-`envOf`), [budget and sessions](budget-and-sessions.md) (policy vocabulary,
+`envOf`), [connections](connections.md) (resources, their `env` labels, hidden
+and stale flags), [budget and sessions](budget-and-sessions.md) (policy vocabulary,
 mission state) and [authentication](authentication.md) (session, origin check).
 
 ## Layout
@@ -46,9 +48,9 @@ apps/gateway/src/server/missions/
   handlers.ts            Request → Response handlers of /api/missions/**
   index.ts               createMissionsModule(deps) → root.missions; server-only barrel
   testing.ts             ACME_CATALOG, acmeConnection(), seedConnection(), catalogEnvs() — tests only
-apps/gateway/src/app/missions/
-  layout.tsx             guard (user session) + shell
+apps/gateway/src/app/(app)/missions/
   page.tsx               /missions — list
+  current-user.ts        currentUser(); needs-user.tsx — the notice shown to the bootstrap operator
   new/page.tsx           /missions/new — loads the issuance context (and ?from=<id>)
   new/mission-form.tsx   the one-page creation screen (client)
   new/form-state.ts      state and transitions of the form (pure, unit-tested)
@@ -64,9 +66,11 @@ only from `@vaubaan/shared/risk-id` and `@vaubaan/policy-engine`): the creation
 form imports them directly and runs the same decision as the server. The
 `index.ts` barrel is server-only (argon2 through `token.ts`).
 
-The pages live under `app/missions/` with their own layout, like `app/admin/`,
-and not under the `(app)` route group: that group's layout is the v4 Supabase
-shell and cannot render on a v5 instance. The URL is `/missions` either way.
+The pages live in the `(app)` route group and take its layout: a v5 web
+session gets the `AppShell` (`components/shell/AppShell.tsx`), where "Missions"
+is one entry of `APP_NAV`; a visitor with no session is sent to `/login`. The
+bootstrap operator has a session but is not a user: each page then renders
+`NeedsUser` (a mission always has an identified human behind it).
 
 ## Authority
 
@@ -144,6 +148,7 @@ risk_ids?, resource_refs? }`, so everything is fixed in one pass.
 | `duplicate-connection`       | the same connection twice                                                                                                                            |
 | `duplicate-provider`         | two connections of one provider (see below)                                                                                                          |
 | `resource-not-in-connection` | a selected id or ref is not a resource of that connection                                                                                            |
+| `resource-stale`             | a selected resource is stale (discovery no longer returns it)                                                                                        |
 | `no-resource-selected`       | `selected` scope with an empty list                                                                                                                  |
 | `unknown-preset`             | not a preset of the plugin                                                                                                                           |
 | `unknown-risk`               | not an explicit id of that connection's catalog: wildcard, sentinel, other provider, base id of an env-scoped risk, env outside `acceptable_in_envs` |
@@ -163,6 +168,16 @@ callable, complete `MissionPolicyEntry` lines), `exceeds`, `unknown`,
 `resources` and `resources_total`. `resolved` is the passing part of the draft
 with every alias resolved; the form loads it after a proposal or a duplicate.
 The same shape is what the management door will expose (P2.4).
+
+**Hidden and stale resources** (handbook [connections](connections.md)).
+`IssuanceResource` carries `hidden` and `stale` (`staleSince !== null`).
+`defaultResources(connection)` — neither hidden nor stale — is what
+`{ scope: 'all' }` resolves to and what the form ticks by default. A creator may
+select a hidden resource explicitly (the form lists it, unticked, with a
+`hidden` badge); a stale one is never accepted (`resource-stale`; its checkbox
+is disabled), so it cannot resolve an env-qualified risk either.
+`resources_total` — the "M" of "N of M resources" — is the default set plus the
+hidden resources selected on purpose.
 
 **One connection per provider.** `mission_policy` is keyed `(mission, risk_id)`
 and a `RiskId` starts with its provider: two GitHub connections in one mission
@@ -227,13 +242,15 @@ Defaults the form adds: period **daily reload** (`DEFAULT_PERIOD`), expiry
 
 1. `issuanceContext(user)`: `authority.connectionsOf(user)`, minus `revoked`
    connections and those with no registered plugin or an empty authority; for
-   each, `connections.listResources`, `enumerateCatalog`, `presetsOf`.
+   each, `connections.listResources` (hidden and stale rows included, flagged),
+   `enumerateCatalog`, `presetsOf`.
 2. `previewDraft`. Not `ok` → `{ ok: false, reason: 'refused', preview }`,
    nothing written.
 3. `missions.create`: `creatorUserId`, `periodSeconds` (null for one-off),
    `expiresAt`, the policy lines, and per connection the **explicit resource
-   ids** with `resourceScope: 'selected'` — also when the draft said `all`, so a
-   resource discovered later is not covered (spec §3.1). A connection with no
+   ids** with `resourceScope: 'selected'` — also when the draft said `all`
+   (then: the resources neither hidden nor stale), so a resource discovered
+   later is not covered (spec §3.1). A connection with no
    known resource is stored `all` with an empty list (the store refuses an empty
    `selected`).
 4. Token: `mintMissionToken()` → `vbn_live_<8>_<32>`, argon2id hash; a prefix
@@ -248,7 +265,8 @@ Mission creation and token insertion are two transactions; a failure between
 them leaves a mission without a token, which `rotate` repairs.
 
 - **`draftFrom(user, missionId)` / `duplicate(...)`** — the creator's own
-  mission as a draft: same connections, the selected resources that still exist,
+  mission as a draft: same connections, the selected resources that still exist
+  and are not stale,
   the explicit policy split by provider, same period, **no expiry**, name
   `"<name> (copy)"`. `duplicate` issues it, so the copy is re-checked against the
   creator's _current_ authority and gets its own token, session and budget.
@@ -295,7 +313,8 @@ One page, one column, in the order of spec §4.2:
    issues are listed, nothing is issued).
 2. **Connections, resources, preset** — one row per connection: include
    checkbox, provider and name, "N of M resources" (a link that unfolds the
-   resource checkboxes, all ticked by default), the preset select; under it one
+   resource checkboxes: all ticked by default except the hidden ones, the stale
+   ones disabled), the preset select; under it one
    truncated line with the preset's width and description, and what the preset
    left out. "Show experimental providers" appears only when the creator owns a
    connection of an `experimental` plugin; those rows are hidden until ticked.
@@ -330,8 +349,8 @@ Behaviour worth knowing (`form-state.ts`):
   replaces the list of blockers with the server's.
 
 With three connections and their presets the page is about 1 200 px tall at
-1280×800 — at most one scroll — and shows four checkboxes; the Playwright spec
-asserts both.
+1280×800 — at most one scroll — shows four checkboxes, and the Issue button is
+in view; the Playwright spec asserts all three.
 
 After a 201 the **reveal-once dialog** shows the bootstrap kit with the secret;
 "I copied the token" goes to `/missions/<id>`, which only ever shows
@@ -366,21 +385,20 @@ documents every refusal code.
 authority?, clock?, mint? })` → `root.missions = { authority, service,
 handlers }` (composition root, after `root.auth`).
 
-The root's default registry is still the empty one
-(`buildEmptyRegistry`): until the provider list is wired into the root, an
-instance has no catalog, the issuance context is empty and `/missions/new` says
-"No connection yet". The tests build their roots with a registry of real plugins
-(`tests/integration/missions/support.ts`).
+The registry is the root's own (`compose/shipped-plugins.ts`): the plugins the
+image ships are the plugins issuance offers, with no second list. Connections
+and resources are read through the store repositories only
+(`connections.getById`, `listResources`); nothing here touches a credential.
 
 ## Tests
 
-Unit, beside the code (99): `authority/authority-service.test.ts` (7),
-`missions/preview.test.ts` (36), `catalog-view.test.ts` (11), `summary.test.ts`
+Unit, beside the code (104): `authority/authority-service.test.ts` (7),
+`missions/preview.test.ts` (39), `catalog-view.test.ts` (11), `summary.test.ts`
 (8), `bootstrap-kit.test.ts` (9), `token.test.ts` (8, with the draft schema),
-`app/missions/new/form-state.test.ts` (20).
+`app/(app)/missions/new/form-state.test.ts` (22).
 
-Integration, `tests/integration/missions/` (30) on the real root over
-`:memory:`: `mission-lifecycle.test.ts` (22) and `mission-handlers.test.ts` (8).
+Integration, `tests/integration/missions/` (32) on the real root over
+`:memory:`: `mission-lifecycle.test.ts` (24) and `mission-handlers.test.ts` (8).
 Scenarios in [integration-tests](../tests/integration-tests.md).
 
 Browser, `tests/e2e/v5/issue-mission.spec.ts` (2), `npm run test:e2e:v5`:
@@ -388,6 +406,9 @@ see [e2e-tests](../tests/e2e-tests.md) for the ephemeral instance.
 
 ## How to debug
 
+- **A resource is missing from the list, or cannot be ticked** — hidden
+  resources are listed unticked; a disabled one is stale: refresh discovery on
+  the Connections page.
 - **`connection-unknown` for a connection that exists** — the user is not its
   owner (or no longer a member of the owner group), the connection is `revoked`,
   or its provider has no registered plugin (`root.registry.ids`).
@@ -408,4 +429,5 @@ see [e2e-tests](../tests/e2e-tests.md) for the ephemeral instance.
   §4.4, §7.4, §7.8, §10.
 - Neighbours: [store](store.md), [plugin-sdk](plugin-sdk.md),
   [budget-and-sessions](budget-and-sessions.md),
-  [authentication](authentication.md), [configuration](configuration.md).
+  [authentication](authentication.md), [connections](connections.md),
+  [configuration](configuration.md).

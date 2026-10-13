@@ -27,7 +27,10 @@ test.beforeEach(async ({ context }) => {
 
 /** `/missions` behind the IdP: the round trip through the simulated consent screen. */
 async function signIn(page: Page): Promise<void> {
+  // No session: the page sends the visitor to the sign-in.
   await page.goto('/missions');
+  await expect(page).toHaveURL(/\/login$/);
+  await page.goto('/auth/login?return_to=/missions');
   await expect(page.getByRole('heading', { name: 'Missions', level: 1 })).toBeVisible();
   await expect(page.getByText(E2E_USER.email)).toBeVisible();
 }
@@ -174,7 +177,10 @@ test('issue a three-connection mission on one page, then rotate and revoke', asy
     mission_status: 'revoked',
   });
 
-  await page.getByRole('link', { name: 'Vaubaan · Missions' }).click();
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: 'Missions' })
+    .click();
   await expect(page.getByRole('row', { name: /Ship the billing page/ })).toContainText('revoked');
 });
 

@@ -155,6 +155,70 @@ describe('missions: issue, rotate, revoke', () => {
     ]);
   });
 
+  it('resolves "all" without hidden and stale resources; a hidden one only when ticked', async () => {
+    const connectionId = seeded.github.connection.id;
+    const idOf = (ref: string) => seeded.github.resources.find((r) => r.ref === ref)?.id ?? '';
+    await root.store.connections.setResourceHidden(idOf('acme/infra'), true);
+    // Discovery no longer returns acme/web: it turns stale, it is not deleted.
+    await root.store.connections.syncDiscoveredResources(connectionId, [
+      { ref: 'acme/app', displayName: 'acme/app' },
+      { ref: 'acme/infra', displayName: 'acme/infra' },
+    ]);
+
+    const context = await missions.issuanceContext(seeded.ada);
+    const github = context.find((c) => c.id === connectionId);
+    expect(github?.resources.map((r) => [r.ref, r.hidden, r.stale]).sort()).toEqual([
+      ['acme/app', false, false],
+      ['acme/infra', true, false],
+      ['acme/web', false, true],
+    ]);
+
+    const all = await issued();
+    expect(all.mission.connections[0]?.resourceIds).toEqual([idOf('acme/app')]);
+
+    const withHidden = await issued(
+      githubDraft({
+        name: 'With the hidden one',
+        connections: [
+          {
+            connection_id: connectionId,
+            preset: 'developer',
+            resources: { scope: 'selected', resource_refs: ['acme/app', 'acme/infra'] },
+          },
+        ],
+      }),
+    );
+    expect([...(withHidden.mission.connections[0]?.resourceIds ?? [])].sort()).toEqual(
+      [idOf('acme/app'), idOf('acme/infra')].sort(),
+    );
+
+    const withStale = await missions.issue(
+      seeded.ada,
+      githubDraft({
+        connections: [
+          {
+            connection_id: connectionId,
+            preset: 'developer',
+            resources: { scope: 'selected', resource_refs: ['acme/app', 'acme/web'] },
+          },
+        ],
+      }),
+    );
+    if (withStale.ok || withStale.reason !== 'refused') throw new Error('expected a refusal');
+    expect(withStale.preview.issues.map((i) => i.code)).toEqual(['resource-stale']);
+  });
+
+  it('drops a resource that turned stale when duplicating', async () => {
+    const source = await issued();
+    await root.store.connections.syncDiscoveredResources(seeded.github.connection.id, [
+      { ref: 'acme/app', displayName: 'acme/app' },
+    ]);
+    const copy = await missions.duplicate(seeded.ada, source.mission.id);
+    if (!copy.ok) throw new Error('duplicate refused');
+    expect(copy.mission.connections[0]?.resourceIds).toHaveLength(1);
+    expect(source.mission.connections[0]?.resourceIds).toHaveLength(3);
+  });
+
   it('stores the hash and the prefix, never the secret; audits the issuance without it', async () => {
     const { mission, token } = await issued();
     const [row] = await root.store.missions.listTokens(mission.id);

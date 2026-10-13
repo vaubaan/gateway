@@ -112,6 +112,8 @@ deploy/config/                  gateway.example.yaml, .env.example (every key do
      bootstrap, authenticator, handlers; handbook
      [authentication](authentication.md)), with `RootDeps.oidc` for the
      relying party's outbound `fetch` and the test-only insecure issuer;
+   - `createMissionsModule()` → `root.missions` (`authority`, `service`,
+     `handlers`; handbook [missions](missions.md));
    - the in-memory rate limiter and cache unless injected;
    - `ProviderAppsService(config.providers, store.config, registry)` →
      `root.providerApps`, then `createConnectionsModule()` →

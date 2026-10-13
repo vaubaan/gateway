@@ -1,21 +1,10 @@
 /**
  * An ephemeral instance for the mission tests: the real composition root on
- * the `:memory:` store, with a registry of real plugins (their catalogs and
+ * the `:memory:` store, with the plugins the image ships (their catalogs and
  * presets are what issuance is about) and connections seeded straight through
  * the repositories. Shared by the vitest integration suite and the Playwright
- * launcher. Not for production: the root's own default registry is wired by
- * the features that own the provider list.
+ * launcher.
  */
-import cloudflareDnsPlugin from '@vaubaan/plugin-cloudflare-dns';
-import githubPlugin from '@vaubaan/plugin-github';
-import gmailPlugin from '@vaubaan/plugin-gmail';
-import railwayPlugin from '@vaubaan/plugin-railway';
-import { PluginRegistry } from '@vaubaan/plugin-sdk';
-import sshPlugin from '@vaubaan/plugin-ssh';
-import stripePlugin from '@vaubaan/plugin-stripe';
-import supabasePlugin from '@vaubaan/plugin-supabase';
-import vercelPlugin from '@vaubaan/plugin-vercel';
-
 import { SESSION_COOKIE } from '../../../src/server/auth';
 import { buildRoot, type GatewayRoot, type RootDeps } from '../../../src/server/compose/root';
 import { memoryStoreDeps } from '../../../src/server/compose/testing';
@@ -26,34 +15,19 @@ import type { UserRecord } from '../../../src/server/store/types';
 
 export const PUBLIC_URL = 'https://gateway.example.com';
 
-/** The plugins the gateway app depends on, as a test registry. */
-export function testRegistry(): PluginRegistry {
-  return new PluginRegistry([
-    githubPlugin,
-    supabasePlugin,
-    vercelPlugin,
-    gmailPlugin,
-    stripePlugin,
-    railwayPlugin,
-    sshPlugin,
-    cloudflareDnsPlugin,
-  ]);
-}
-
 export interface TestInstanceOptions {
   readonly publicUrl?: string;
   readonly deps?: RootDeps;
   readonly env?: Record<string, string | undefined>;
 }
 
-/** The `RootDeps` of a test instance: fake configuration, `:memory:` store, real plugins. */
+/** The `RootDeps` of a test instance: fake configuration, `:memory:` store, shipped plugins. */
 export function testRootDeps(options: TestInstanceOptions = {}): RootDeps {
   return {
     loadConfig: () =>
       loadInstanceConfig({
         env: validEnv({ VAUBAAN_PUBLIC_URL: options.publicUrl ?? PUBLIC_URL, ...options.env }),
       }),
-    buildRegistry: async () => testRegistry(),
     logWrite: () => undefined,
     ...memoryStoreDeps,
     ...options.deps,

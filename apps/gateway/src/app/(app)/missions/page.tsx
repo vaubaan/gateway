@@ -8,6 +8,7 @@ import { Card, Code, Table, Tbody, Td, Th, Thead, Tr } from '@/components/ui';
 import { maskedToken } from '@/server/missions';
 
 import { currentUser } from './current-user';
+import { NeedsUser } from './needs-user';
 import styles from './missions.module.css';
 import { StateBadge } from './state-badge';
 
@@ -15,7 +16,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function MissionsPage() {
   const session = await currentUser();
-  if (!session) return null;
+  if (!session) return <NeedsUser />;
   const missions = await session.root.missions.service.list(session.user);
 
   return (

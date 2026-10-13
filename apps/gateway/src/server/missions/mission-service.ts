@@ -25,6 +25,7 @@ import type { Store } from '../store';
 import { toIso, type Clock } from '../store/clock';
 import type {
   ConnectionRecord,
+  ConnectionResourceRecord,
   MissionConnection,
   MissionPolicyEntry as MissionPolicyEntryRecord,
   MissionRecord,
@@ -162,13 +163,15 @@ function toRecordEntry(entry: MissionPolicyEntry): MissionPolicyEntryRecord {
   };
 }
 
-function toIssuanceResource(r: {
-  id: string;
-  ref: string;
-  displayName: string;
-  env: string | null;
-}): IssuanceResource {
-  return { id: r.id, ref: r.ref, display_name: r.displayName, env: r.env };
+function toIssuanceResource(r: ConnectionResourceRecord): IssuanceResource {
+  return {
+    id: r.id,
+    ref: r.ref,
+    display_name: r.displayName,
+    env: r.env,
+    hidden: r.hidden,
+    stale: r.staleSince !== null,
+  };
 }
 
 export class MissionService {
@@ -341,7 +344,8 @@ export class MissionService {
 
   private async survivingResources(c: MissionConnection): Promise<string[]> {
     const current = await this.deps.store.connections.listResources(c.connectionId);
-    const known = new Set(current.map((r) => r.id));
+    // A stale resource would refuse the copy: it is dropped like a vanished one.
+    const known = new Set(current.filter((r) => r.staleSince === null).map((r) => r.id));
     return c.resourceIds.filter((id) => known.has(id));
   }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { previewDraft } from '@/server/missions/preview';
-import { acmeConnection } from '@/server/missions/testing';
+import { ACME_HIDDEN, ACME_RESOURCES, ACME_STALE, acmeConnection } from '@/server/missions/testing';
 
 import {
   applyPreset,
@@ -72,6 +72,34 @@ describe('creation form — initial state', () => {
       period: { kind: 'recurring', length_seconds: 86_400 },
       expires_at: null,
     });
+  });
+});
+
+describe('creation form — curated resources', () => {
+  const curated = acmeConnection({ resources: [...ACME_RESOURCES, ACME_HIDDEN, ACME_STALE] });
+
+  it('starts without the hidden and the stale resources', () => {
+    const cs = initialFormState([curated]).connections[curated.id];
+    expect(cs?.resourceIds).toEqual(['res-app-staging', 'res-app-prod', 'res-scratch']);
+  });
+
+  it('issues with a hidden resource the creator ticked', () => {
+    const start = initialFormState([curated]);
+    const cs = applyPreset(
+      curated,
+      setResources(curated, setIncluded(start.connections[curated.id]!, true), [
+        'res-app-prod',
+        'res-archive',
+      ]),
+      'reader',
+    );
+    const state = { ...start, name: 'm', connections: { [curated.id]: cs } };
+    const preview = previewDraft(
+      { connections: [curated], now: NOW },
+      draftOf([curated], state, NOW),
+    );
+    expect(preview.ok).toBe(true);
+    expect(preview.connections[0]?.resources.map((r) => r.ref)).toEqual(['app-prod', 'archive']);
   });
 });
 

@@ -61,6 +61,8 @@ are absent.
 | `apps/gateway/tests/integration/budget/session-service.test.ts`                   |                                           19 |
 | `apps/gateway/tests/integration/compose/boot.test.ts`                             |                                            4 |
 | `apps/gateway/tests/integration/connections/connect-flow.test.ts`                 |                                            3 |
+| `apps/gateway/tests/integration/missions/mission-handlers.test.ts`                |                                            8 |
+| `apps/gateway/tests/integration/missions/mission-lifecycle.test.ts`               |                                           24 |
 | `apps/gateway/tests/integration/standalone-native-addons.test.ts`                 |                                            3 |
 | `apps/gateway/tests/integration/standalone-plugin-catalogs.test.ts`               |                                            2 |
 | `apps/gateway/tests/integration/store/audit.test.ts`                              |                                           13 |
@@ -1052,6 +1054,100 @@ Not covered here: the pages themselves (server components; walked by hand,
 see [`e2e-tests.md`](./e2e-tests.md)), a real provider, and
 `connection-unavailable` refusals of missions on a revoked connection
 (P1.6).
+
+## v5 — Missions: authority, issuance, tokens, bootstrap kit (P1.5)
+
+> Covers: spec [`vaubaan-gateway.md`](../spec/vaubaan-gateway.md) §3.1
+> (monotonicity, enumeration, partition per connection, resource selection),
+> §3.2 (mandatory budget, presets per plugin), §4.2 "Missions", §4.4, §7.4,
+> §7.8, §10 ("authority" structural tests). Handbook [[missions]].
+
+Unit, co-located (104):
+
+- **`src/server/authority/authority-service.test.ts`** (7) — the owner holds
+  the full catalog as an explicit enumeration (env-scoped risks expanded per
+  acceptable env, no wildcard); nobody else holds anything; every _current_
+  member of an owner group is an owner, recomputed on each call; no plugin, no
+  authority; `connectionsOf` (own and through a group); `uncoveredRisks`.
+- **`src/server/missions/preview.test.ts`** (39) — **monotonicity**: accepted ⊄
+  authority → `exceeds-authority` with the uncovered list, the covered part
+  still shown; wildcard, sentinel, foreign and out-of-env ids → `unknown-risk`;
+  unknown and unauthorised connections answer alike; inactive connection.
+  **Partition per connection**: each partition against its own authority; a
+  risk filed under the wrong connection; one flat policy; the same connection
+  twice; two connections of one provider; connection by provider, ambiguous
+  provider. **Resource selection**: `all` → the explicit list; by id or by ref;
+  a foreign resource; an empty selection; hidden and stale left out of `all`; a
+  hidden one selectable, a stale one refused and unable to resolve an env; a
+  connection with no resource. **Env-qualified ids**: pass with a labelled
+  resource, shown and refused without, no label needed when the plugin derives
+  the env. **Mandatory budget**: no budget, half a budget, zero / negative /
+  fractional / infinite values, the catalog's rate ceiling. **Presets**:
+  application as an explicit enumeration; intersection with the authority and
+  with the selection, reported in `skipped_from_preset`; a base id expanded per
+  selected env and never persisted; per-risk override inheriting what it omits;
+  exactly the explicit entries; no budget for a risk the preset lacks; unknown
+  preset, repeated risk, connection accepting nothing. Name, period, expiry;
+  every problem reported in one pass.
+- **`catalog-view.test.ts`** (11) — explicit enumeration equal to the owner
+  authority; base id, env, fallback, deprecated, rate ceiling; per-env vector;
+  `SEVERITY_RANKS` equal to `RISK_VECTOR_AXES`; score bounds and levels;
+  `isResolvable`; `presetWidth` and its one-liner.
+- **`summary.test.ts`** (8) — the three lines (can / cannot / quantities) for a
+  recurring and a one-off mission, the empty form, label truncation, period and
+  expiry phrases.
+- **`bootstrap-kit.test.ts`** (9) — the secret only in the env snippet; MCP
+  configuration with the instance URL and `${VAUBAAN_MISSION_TOKEN}`; the agent
+  block (connections, refs, risks, budget); one line per refusal code and "never
+  work around"; the `curl … tools/list` check; masked prefix on a revisited
+  page; sub-path of the public URL; `/agent-bootstrap.md` documents every
+  refusal code and names no instance.
+- **`token.test.ts`** (8) — `vbn_live_<8>_<32>`, argon2id hash, clear prefix;
+  verification; uniqueness; prefix of a live token only; the draft schema
+  (unknown keys refused, every malformed field named).
+- **`src/app/(app)/missions/new/form-state.test.ts`** (22) — initial state
+  (nothing included, hidden and stale resources unticked, daily period, no
+  expiry); a preset fills the policy and the draft sent is the explicit
+  enumeration; the untouched preset follows the resource selection and says
+  what it left out; edited entries are kept and flagged; base-id expansion;
+  per-risk override; the default budget of a hand-ticked risk (chosen preset,
+  another preset, none → issuance blocked); **"select all" → an enumerated list**
+  inside the authority and the selection, without the fallback and deprecated
+  entries; period and expiry mapping; loading a resolved draft.
+
+Integration, `:memory:` store, the real root with the shipped plugins,
+connections and resources seeded through the repositories (32):
+
+- **`tests/integration/missions/mission-lifecycle.test.ts`** (24) — **issue →
+  the token verifies → rotate → the old token is `retired/rotated` → revoke →
+  `retired/revoked` and gateway-core's `checkMissionActive` answers
+  `mission-inactive`**; malformed bearer, unknown prefix and wrong secret answer
+  alike; the mission persists explicit resource ids and policy lines, no preset
+  reference; a resource discovered later is not covered; `all` without hidden
+  and stale resources, a hidden one when ticked, a stale one refused; the hash
+  and prefix are stored, the secret is in neither the table nor the audit;
+  a refused draft writes nothing; no authority → `connection-unknown`; an
+  owner-group member issues until they leave the group; a three-connection
+  mission with one partition each (Vercel's env-qualified risks need no label);
+  env-qualified entries refused or skipped from a preset; duplicate (same
+  policy, own token, no expiry, stale resources dropped) re-checked against
+  the current authority; rotate / revoke creator-only, idempotent revoke,
+  no rotation of a revoked or expired mission; `rotation` / `revocation`
+  session events and audit acts; list and detail (state, labels, remaining,
+  masked kit); past expiry refused; one-off mission; a taken token prefix is
+  re-drawn; the issuance context (experimental, `derives_env`, presets,
+  authority); revoked connections left out, expired ones unusable; **every
+  preset of every shipped plugin previews cleanly** for an owner whose
+  resources carry every env label, never with the fallback.
+- **`tests/integration/missions/mission-handlers.test.ts`** (8) — 201 with the
+  secret once, the kit and `no-store`; cross-origin refused on all four routes
+  before the session is read; 401 without a session, 403 for the bootstrap
+  operator; 400 with the fields named; 422 with the preview; preview of an
+  agent's proposal (provider and refs resolved, nothing written); rotate
+  200 / 404 / 409; revoke 404 for someone else's mission.
+
+Not covered here: the browser (Playwright, [`e2e-tests.md`](./e2e-tests.md)),
+and a call through the execution door with the issued token (P1.6).
 
 ## Out of scope for these tests
 

@@ -4,6 +4,7 @@
  * missions, re-checked against their current authority.
  */
 import { currentUser } from '../current-user';
+import { NeedsUser } from '../needs-user';
 import styles from '../missions.module.css';
 import { MissionForm, type InitialDraft } from './mission-form';
 
@@ -15,7 +16,7 @@ interface Props {
 
 export default async function NewMissionPage({ searchParams }: Props) {
   const session = await currentUser();
-  if (!session) return null;
+  if (!session) return <NeedsUser />;
   const { service } = session.root.missions;
   const params = await searchParams;
   const from = typeof params.from === 'string' ? params.from : null;

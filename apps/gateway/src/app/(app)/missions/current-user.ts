@@ -1,8 +1,7 @@
 /**
- * The signed-in user behind a Missions page, or `null`. The layout renders
- * the sign-in redirect and the bootstrap notice; a page that gets `null`
- * renders nothing (layouts and pages render independently, so each page asks
- * for itself).
+ * The signed-in user behind a Missions page, or `null`. The `(app)` layout
+ * redirects a visitor with no session to the sign-in; a page that gets `null`
+ * is in front of the bootstrap operator and renders `NeedsUser`.
  */
 import { currentPrincipal } from '@/lib/auth/session';
 import type { GatewayRoot } from '@/server/compose';

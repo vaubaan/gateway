@@ -22,7 +22,7 @@ import type {
   PreviewIssue,
   ResolvedDraftConnection,
 } from '@/server/missions/model';
-import { previewDraft } from '@/server/missions/preview';
+import { defaultResources, previewDraft } from '@/server/missions/preview';
 
 import { RevealDialog } from '../bootstrap-kit-view';
 import styles from '../missions.module.css';
@@ -345,7 +345,13 @@ export function MissionForm({
               const preset = connection.presets.find((p) => p.id === cs.presetId);
               const skipped = describeSkipped(presetSkipped(connection, cs));
               const accepted = Object.keys(cs.entries).length;
-              const total = connection.resources.length;
+              // "N of M": M is "all resources" (neither hidden nor stale) plus
+              // the hidden ones the creator ticked on purpose.
+              const total =
+                defaultResources(connection).length +
+                connection.resources.filter((r) => r.hidden && cs.resourceIds.includes(r.id))
+                  .length;
+              const listed = connection.resources.length;
               return (
                 <div
                   key={connection.id}
@@ -377,7 +383,7 @@ export function MissionForm({
                           aria-expanded={openResources.has(connection.id)}
                           onClick={() => toggleResources(connection.id)}
                         >
-                          {total === 0
+                          {listed === 0
                             ? 'No resource'
                             : `${cs.resourceIds.length} of ${total} ${total === 1 ? 'resource' : 'resources'}`}
                         </button>
@@ -425,13 +431,15 @@ export function MissionForm({
                       {skipped && !cs.edited && <div>{skipped}</div>}
                     </div>
                   )}
-                  {cs.included && openResources.has(connection.id) && total > 0 && (
+                  {cs.included && openResources.has(connection.id) && listed > 0 && (
                     <div className={styles.resources}>
                       {connection.resources.map((r) => (
                         <label key={r.id}>
                           <input
                             type="checkbox"
                             checked={cs.resourceIds.includes(r.id)}
+                            // Discovery no longer returns it: never part of a new mission.
+                            disabled={r.stale}
                             aria-label={`Resource ${r.ref}`}
                             onChange={(e) =>
                               patchConnection(
@@ -448,6 +456,8 @@ export function MissionForm({
                           />
                           <span className={styles.mono}>{r.ref}</span>
                           {r.env && <Badge mono>{r.env}</Badge>}
+                          {r.hidden && <Badge>hidden</Badge>}
+                          {r.stale && <Badge tone="warning">stale</Badge>}
                         </label>
                       ))}
                     </div>

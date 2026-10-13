@@ -27,6 +27,7 @@ import { reloadPhrase } from '@/server/missions/summary';
 
 import { BootstrapKitView } from '../bootstrap-kit-view';
 import { currentUser } from '../current-user';
+import { NeedsUser } from '../needs-user';
 import styles from '../missions.module.css';
 import { StateBadge } from '../state-badge';
 import { MissionActions } from './mission-actions';
@@ -39,7 +40,7 @@ interface Props {
 
 export default async function MissionPage({ params }: Props) {
   const session = await currentUser();
-  if (!session) return null;
+  if (!session) return <NeedsUser />;
   const { id } = await params;
   const detail = await session.root.missions.service.get(session.user, id);
   if (!detail) notFound();
