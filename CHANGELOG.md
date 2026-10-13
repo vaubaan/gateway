@@ -9,8 +9,33 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Security
+
+- **App installations are bound to the person who performs them (P1.4b).** Connecting a
+  provider through an installed app (GitHub) accepted the `installation_id` of the callback
+  once the `state` was valid: a signed-in user who knew the id of another installation of the
+  company's app could connect it and issue missions on repositories they had no access to.
+  The host now requires the provider's user authorization during installation: it exchanges
+  the callback's `code` for a user token with the app's OAuth client, lists the installations
+  that user can reach and connects the installation only when it is among them; the user
+  token is discarded immediately and never stored or logged. A refused attempt stores nothing
+  and is audited (`connection-refused`, with the reason and the claimed installation id).
+  **Operators must update their GitHub App**: enable "Request user authorization (OAuth)
+  during installation", register the gateway callback as the App's callback URL, generate a
+  client secret, and add `client_id` / `client_secret` to the provider app (Administration →
+  Provider apps, or `providers.github.*`); until then GitHub is reported `incomplete` and
+  cannot be connected or used.
+
 ### Added
 
+- **Declarative installation verification in the plugin SDK (P1.4b).** The `app-install`
+  `CredentialSpec` accepts an optional `userVerification` block (authorization-code
+  parameter, token endpoint, installations endpoint, response shape, pagination) that the
+  host runs generically; `definePlugin` validates it and requires `client_id` /
+  `client_secret` among the app settings. The client secret is no longer handed to any plugin,
+  whatever its credential kind. A plugin whose `app-install` spec has no `userVerification`
+  cannot be connected unless an operator turns on "accept unverified installations" for that
+  provider app (off by default, shown with a warning, audited).
 - **Missions: authority, issuance, tokens, bootstrap kit (P1.5).** A connection owner issues a
   mission from `/missions/new` on one page: name, connections and their resources (all selected
   by default, hidden ones left out, stale ones refused), one preset per connection from the

@@ -8,10 +8,12 @@ import {
   fixturePlugin,
   OAUTH_SPEC,
   SSH_KEY_SPEC,
+  UNVERIFIED_APP_INSTALL_SPEC,
 } from '../connections/testing';
 import { openTestStore } from '../store/testing';
 import { appConfigFieldsOf, needsProviderApp } from './fields';
 import {
+  acceptUnverifiedKey,
   ProviderAppError,
   ProviderAppNotConfigured,
   providerAppKey,
@@ -20,9 +22,10 @@ import {
 
 const PLUGINS = [
   fixturePlugin({ id: 'oauthco', displayName: 'OAuth Co', credential: OAUTH_SPEC }),
-  fixturePlugin({ id: 'appco', displayName: 'App Co', credential: APP_INSTALL_SPEC }),
+  fixturePlugin({ id: 'appco', displayName: 'App Co', credential: UNVERIFIED_APP_INSTALL_SPEC }),
   fixturePlugin({ id: 'keyco', displayName: 'Key Co', credential: API_KEY_SPEC }),
   fixturePlugin({ id: 'sshco', credential: SSH_KEY_SPEC, experimental: true }),
+  fixturePlugin({ id: 'verco', displayName: 'Verified Co', credential: APP_INSTALL_SPEC }),
 ];
 
 function setup(fromFile: Record<string, FileProviderAppConfig> = {}) {
@@ -55,10 +58,18 @@ describe('fields derived from the CredentialSpec', () => {
     expect(
       appConfigFieldsOf({ ...OAUTH_SPEC, clientAuthMethod: 'none' }).map((f) => f.name),
     ).toEqual(['client_id']);
-    expect(appConfigFieldsOf(APP_INSTALL_SPEC).map((f) => f.name)).toEqual([
+    expect(appConfigFieldsOf(UNVERIFIED_APP_INSTALL_SPEC).map((f) => f.name)).toEqual([
       'app_id',
       'private_key',
       'app_slug',
+    ]);
+    // An installed app whose installations are verified also needs its OAuth client.
+    expect(appConfigFieldsOf(APP_INSTALL_SPEC).map((f) => [f.name, f.secret])).toEqual([
+      ['app_id', false],
+      ['private_key', true],
+      ['app_slug', false],
+      ['client_id', false],
+      ['client_secret', true],
     ]);
     expect(needsProviderApp(API_KEY_SPEC)).toBe(false);
     expect(needsProviderApp(SSH_KEY_SPEC)).toBe(false);
@@ -74,6 +85,14 @@ describe('ProviderAppsService', () => {
       ['appco', true, false, 'none'],
       ['keyco', false, true, 'none'],
       ['sshco', false, true, 'none'],
+      ['verco', true, false, 'none'],
+    ]);
+    expect(list.map((a) => a.installVerification)).toEqual([
+      null,
+      'unverified-refused',
+      null,
+      null,
+      'verified',
     ]);
     expect(list[3]!.experimental).toBe(true);
     expect(list[0]!.missing).toEqual(['client_id', 'client_secret']);
@@ -147,6 +166,55 @@ describe('ProviderAppsService', () => {
     expect(await service.pluginAppConfig('keyco')).toEqual({});
   });
 
+  it('keeps the client secret of a verified app-install from its plugin too', async () => {
+    const { service } = setup();
+    await service.save('verco', {
+      app_id: '42',
+      private_key: 'PEM',
+      app_slug: 'slug',
+      client_id: 'Iv1.cid',
+      client_secret: 'install-client-secret',
+    });
+    expect(await service.hostAppConfig('verco')).toMatchObject({
+      client_id: 'Iv1.cid',
+      client_secret: 'install-client-secret',
+    });
+    expect(await service.pluginAppConfig('verco')).toEqual({
+      app_id: '42',
+      private_key: 'PEM',
+      app_slug: 'slug',
+      client_id: 'Iv1.cid',
+    });
+  });
+
+  it('accepts unverified installations only on an explicit operator decision', async () => {
+    const { service, store } = setup({ appco: { appId: '42' } });
+    expect(await service.installVerification('oauthco')).toBeNull();
+    expect(await service.installVerification('verco')).toBe('verified');
+    expect(await service.installVerification('appco')).toBe('unverified-refused');
+
+    // The decision is the operator's whatever the source of the fields (here: the file).
+    expect(await service.setAcceptUnverifiedInstallations('appco', true)).toMatchObject({
+      installVerification: 'unverified-accepted',
+      source: 'file',
+    });
+    expect(await store.config.get(acceptUnverifiedKey('appco'))).toBe('true');
+    expect(
+      (await service.setAcceptUnverifiedInstallations('appco', false)).installVerification,
+    ).toBe('unverified-refused');
+    expect(await store.config.get(acceptUnverifiedKey('appco'))).toBeNull();
+
+    // The flag never weakens a verification that exists, and means nothing elsewhere.
+    await expect(service.setAcceptUnverifiedInstallations('verco', true)).rejects.toThrow(
+      /verifies every installation/,
+    );
+    await expect(service.setAcceptUnverifiedInstallations('oauthco', true)).rejects.toThrow(
+      ProviderAppError,
+    );
+    await store.config.set(acceptUnverifiedKey('verco'), 'true');
+    expect(await service.installVerification('verco')).toBe('verified');
+  });
+
   it('names the missing fields and both places to set them', async () => {
     const { service } = setup();
     const err = await service.hostAppConfig('appco').catch((e: unknown) => e);
@@ -193,8 +261,18 @@ describe('ProviderAppsService', () => {
     const { service } = setup();
     await service.save('oauthco', { client_id: 'cid', client_secret: 'csecret' });
     await service.save('appco', { app_id: '42', private_key: 'PEM', app_slug: 'slug' });
+    await service.setAcceptUnverifiedInstallations('appco', true);
     await service.clear('oauthco');
     expect((await service.status('oauthco')).source).toBe('none');
-    expect((await service.status('appco')).configured).toBe(true);
+    expect(await service.status('appco')).toMatchObject({
+      configured: true,
+      installVerification: 'unverified-accepted',
+    });
+    // Removing an app's settings also takes back the acceptance.
+    await service.clear('appco');
+    expect(await service.status('appco')).toMatchObject({
+      source: 'none',
+      installVerification: 'unverified-refused',
+    });
   });
 });

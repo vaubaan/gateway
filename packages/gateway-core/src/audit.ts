@@ -78,6 +78,9 @@ export interface CallAuditEntry {
 export type AdminAct =
   | 'connection-created'
   | 'connection-reconnected'
+  /** A connect attempt the host refused because the installation could not be
+   *  bound to the connecting human (nothing was stored). */
+  | 'connection-refused'
   | 'connection-transferred'
   | 'connection-revoked'
   | 'share-created'

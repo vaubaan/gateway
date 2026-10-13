@@ -15,6 +15,8 @@ export const CONNECT_ERROR_CODES = [
   'state-invalid',
   'provider-denied',
   'token-exchange-failed',
+  'installation-not-verified',
+  'installation-unverifiable',
   'credential-rejected',
   'provider-unreachable',
   'not-found',
@@ -36,6 +38,10 @@ export const CONNECT_ERROR_MESSAGES: Readonly<Record<ConnectErrorCode, string>> 
     'This authorization attempt has expired, was already used, or was started by another session. Start again from Connections.',
   'provider-denied': 'The provider did not grant the authorization.',
   'token-exchange-failed': 'The provider refused to exchange the authorization for a credential.',
+  'installation-not-verified':
+    'The provider did not confirm that your account has access to this installation; nothing was connected.',
+  'installation-unverifiable':
+    'This provider cannot prove who performed an installation. An operator must explicitly accept unverified installations for it (Administration → Provider apps).',
   'credential-rejected': 'The provider rejected this credential.',
   'provider-unreachable': 'The provider could not be reached. Retry in a moment.',
   'not-found': 'This connection does not exist or is not yours.',
@@ -54,6 +60,8 @@ const STATUS_BY_CODE: Readonly<Record<ConnectErrorCode, number>> = {
   'state-invalid': 400,
   'provider-denied': 400,
   'token-exchange-failed': 502,
+  'installation-not-verified': 403,
+  'installation-unverifiable': 409,
   'credential-rejected': 400,
   'provider-unreachable': 502,
   'not-found': 404,

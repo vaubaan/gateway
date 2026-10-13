@@ -11,6 +11,12 @@
  *
  * Which fields exist comes from the plugin (`fields.ts`); this module holds
  * no provider list.
+ *
+ * One operator decision is not a field of the app: whether an `app-install`
+ * provider whose plugin declares no `userVerification` may be connected at
+ * all (`accept unverified installations`, off by default). It is stored under
+ * `provider_app_flags.<id>.accept_unverified_installations`, only from the
+ * Admin page, whatever the source of the fields.
  */
 import type {
   CredentialField,
@@ -33,8 +39,19 @@ import {
 } from './fields';
 
 export const PROVIDER_APP_KEY_PREFIX = 'provider_apps';
+export const PROVIDER_APP_FLAG_PREFIX = 'provider_app_flags';
+const ACCEPT_UNVERIFIED_FLAG = 'accept_unverified_installations';
+const FLAG_ON = 'true';
 
 export type ProviderAppSource = 'file' | 'store' | 'none';
+
+/**
+ * How an installation is bound to the human who connects it:
+ *   `verified`             the plugin declares `userVerification`; the host proves it
+ *   `unverified-refused`   it does not; connecting is refused (the default)
+ *   `unverified-accepted`  it does not; the operator accepted the risk explicitly
+ */
+export type InstallVerification = 'verified' | 'unverified-refused' | 'unverified-accepted';
 
 export interface ProviderAppStatus {
   readonly providerId: string;
@@ -53,6 +70,8 @@ export interface ProviderAppStatus {
   readonly values: Readonly<Record<string, string>>;
   /** Names of the secret fields that hold a value; the value itself is never returned. */
   readonly secretsSet: readonly string[];
+  /** `null` for every kind but `app-install`. */
+  readonly installVerification: InstallVerification | null;
 }
 
 export class ProviderAppError extends Error {
@@ -77,6 +96,10 @@ export class ProviderAppNotConfigured extends Error {
 
 export function providerAppKey(providerId: string, field: string): string {
   return `${PROVIDER_APP_KEY_PREFIX}.${providerId}.${field}`;
+}
+
+export function acceptUnverifiedKey(providerId: string): string {
+  return `${PROVIDER_APP_FLAG_PREFIX}.${providerId}.${ACCEPT_UNVERIFIED_FLAG}`;
 }
 
 /** The file block as the snake_case record plugins read (`client_id`, `app_id`…). */
@@ -131,7 +154,45 @@ export class ProviderAppsService {
       missing,
       values: visible,
       secretsSet,
+      installVerification: await this.installVerification(providerId),
     };
+  }
+
+  /**
+   * Whether the host can prove who performed an installation of this
+   * provider's app, and what the operator decided when it cannot. `null` for
+   * the kinds that install nothing.
+   */
+  async installVerification(providerId: string): Promise<InstallVerification | null> {
+    const spec = this.registry.require(providerId).plugin.credential;
+    if (spec.kind !== 'app-install') return null;
+    if (spec.userVerification) return 'verified';
+    const flag = await this.config.get(acceptUnverifiedKey(providerId));
+    return flag === FLAG_ON ? 'unverified-accepted' : 'unverified-refused';
+  }
+
+  /**
+   * The operator's explicit acceptance of installations nobody can verify.
+   * Refused for a provider whose plugin verifies them: the flag never
+   * weakens a verification that exists.
+   */
+  async setAcceptUnverifiedInstallations(
+    providerId: string,
+    accept: boolean,
+  ): Promise<ProviderAppStatus> {
+    const { plugin } = this.registry.require(providerId);
+    const spec = plugin.credential;
+    if (spec.kind !== 'app-install') {
+      throw new ProviderAppError([`${plugin.displayName} is not connected by installing an app`]);
+    }
+    if (spec.userVerification) {
+      throw new ProviderAppError([
+        `${plugin.displayName} verifies every installation; there is nothing to accept`,
+      ]);
+    }
+    if (accept) await this.config.set(acceptUnverifiedKey(providerId), FLAG_ON);
+    else await this.config.delete(acceptUnverifiedKey(providerId));
+    return this.status(providerId);
   }
 
   /**
@@ -151,15 +212,14 @@ export class ProviderAppsService {
   /**
    * What a plugin receives as `ctx.appConfig`: the same record minus the OAuth
    * client secret, which only the host uses (ADR plugin-contract-and-credential-spec
-   * D2 "a plugin never sees the OAuth client secret"). An `app-install` plugin
-   * keeps every field: it mints the installation tokens from the private key.
+   * D2 "a plugin never sees the OAuth client secret") — for the `oauth2` flows
+   * and for the user verification of an `app-install`. An `app-install` plugin
+   * keeps every other field: it mints the installation tokens from the private key.
    */
   async pluginAppConfig(providerId: string): Promise<ProviderAppConfig> {
     const { plugin } = this.registry.require(providerId);
     if (appConfigFieldsOf(plugin.credential).length === 0) return {};
-    const full = await this.hostAppConfig(providerId);
-    if (plugin.credential.kind !== 'oauth2') return full;
-    const { [CLIENT_SECRET_FIELD]: _clientSecret, ...rest } = full;
+    const { [CLIENT_SECRET_FIELD]: _clientSecret, ...rest } = await this.hostAppConfig(providerId);
     return rest;
   }
 
@@ -215,12 +275,16 @@ export class ProviderAppsService {
     return this.status(providerId);
   }
 
-  /** Removes everything the Admin page stored for this provider. */
+  /**
+   * Removes everything the Admin page stored for this provider, the
+   * acceptance of unverified installations included (back to the default).
+   */
   async clear(providerId: string): Promise<void> {
     const prefix = providerAppKey(providerId, '');
     for (const key of await this.config.keys()) {
       if (key.startsWith(prefix)) await this.config.delete(key);
     }
+    await this.config.delete(acceptUnverifiedKey(providerId));
   }
 
   private async read(

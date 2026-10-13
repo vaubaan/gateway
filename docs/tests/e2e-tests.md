@@ -128,8 +128,17 @@ with the URL shown on `/admin/provider-apps`
 3. **OAuth** — Supabase: "Continue to Supabase" → consent → back on
    `/connections/<id>` with "Connected" and the projects in the resources
    table. Same for Railway.
-4. **App installation** — GitHub: install the App on the organisation →
-   back with the repositories as resources.
+4. **App installation** — GitHub, with "Request user authorization
+   (OAuth) during installation" enabled on the App and the gateway callback
+   registered as its callback URL: install the App on the organisation →
+   authorize → back with the repositories as resources (the callback
+   carries `code`, `installation_id` and the `state`). Then, as another
+   gateway user whose GitHub account cannot reach that organisation: start
+   a connection, and open the callback by hand with that organisation's
+   `installation_id` and the fresh `state` → "Not connected", no
+   connection, a `connection-refused` entry in the audit. With the checkbox
+   disabled on the App: "Not connected — the provider returned no user
+   authorization".
 5. **API key** — Vercel with a token and a team id → connected with the
    projects. Resend with a sending-only key → "Not connected", with
    Resend's own error; with a full-access key → domains and segments.

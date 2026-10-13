@@ -5,14 +5,21 @@
  *
  *   oauth2       `client_id`, `client_secret` unless the client is public
  *                (`clientAuthMethod: 'none'`), then the plugin's `appConfigFields`
- *   app-install  the plugin's `appConfigFields` (app id, private key, slug…)
+ *   app-install  the plugin's `appConfigFields` (app id, private key, slug…; with
+ *                `userVerification`, the SDK requires `client_id` and `client_secret`
+ *                among them)
  *   api-key      nothing: the user pastes their own key, no company app exists
  *   ssh-key      nothing: the instance generates the key pair
  */
-import type { CredentialField, CredentialSpec } from '@vaubaan/plugin-sdk';
+import {
+  CLIENT_ID_FIELD,
+  CLIENT_SECRET_FIELD,
+  type CredentialField,
+  type CredentialSpec,
+} from '@vaubaan/plugin-sdk';
 
-export const CLIENT_ID_FIELD = 'client_id';
-export const CLIENT_SECRET_FIELD = 'client_secret';
+// One definition, in the SDK: the plugin contract names these two keys.
+export { CLIENT_ID_FIELD, CLIENT_SECRET_FIELD };
 
 /** Field names become `instance_config` keys and form input names. */
 export const APP_FIELD_NAME_PATTERN = /^[a-z][a-z0-9_]*$/;

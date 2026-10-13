@@ -7,7 +7,10 @@
  *   oauth2       start(): authorization redirect with a single-use `state` and PKCE
  *                complete(): code exchange with the company's OAuth client
  *   app-install  start(): redirect to the app's installation page with a `state`
- *                complete(): the installation id of the callback
+ *                complete(): the installation id of the callback, accepted only once
+ *                the provider confirms the authorizing user can reach it
+ *                (`install-verification.ts`); a spec that cannot prove it is
+ *                refused unless the operator accepted unverified installations
  *   api-key      start(): the form values, checked by a first discovery
  *   ssh-key      start(): an ed25519 key pair generated here, public key shown
  *
@@ -20,6 +23,7 @@
  */
 import { UpstreamAuthError, type CredentialKind } from '@vaubaan/shared';
 import type {
+  AppInstallCredentialSpec,
   ConnectionContext,
   CredentialField,
   CredentialSecret,
@@ -59,6 +63,12 @@ import {
   resolveReturnTo,
 } from './input';
 import {
+  InstallationRefused,
+  InstallationVerificationUnavailable,
+  verifyInstallation,
+  type InstallationRefusalReason,
+} from './install-verification';
+import {
   buildAuthorizationUrl,
   exchangeCode,
   newCodeVerifier,
@@ -76,6 +86,17 @@ export const DISCOVERY_TIMEOUT_MS = 30_000;
 export const CONNECTIONS_PATH = '/connections';
 const INSTALLATION_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 const SSH_KEY_COMMENT = 'vaubaan-gateway';
+
+/** Why a connect attempt was refused before anything was stored (audit `after.reason`). */
+export type ConnectRefusalReason =
+  | InstallationRefusalReason
+  /** The callback carried no authorization code. */
+  | 'no-authorization-code'
+  /** The plugin declares no verification and the operator did not accept that. */
+  | 'verification-not-supported';
+
+/** How the installation behind a connection was bound to its owner (`metadata.installation_verification`). */
+export type InstallationBinding = 'user-authorization' | 'none';
 
 /** The human behind a request, with their *current* groups (never a snapshot). */
 export interface Actor {
@@ -204,9 +225,10 @@ export class ConnectionService {
   private async describe(providerId: string): Promise<ConnectableProvider> {
     const { plugin } = this.deps.registry.require(providerId);
     const spec = plugin.credential;
-    const configured = needsProviderApp(spec)
-      ? (await this.deps.providerApps.status(providerId)).configured
-      : true;
+    // An installation nobody can verify is not connectable until the operator says so.
+    const status = needsProviderApp(spec) ? await this.deps.providerApps.status(providerId) : null;
+    const configured =
+      status === null || (status.configured && status.installVerification !== 'unverified-refused');
     return {
       id: plugin.id,
       displayName: plugin.displayName,
@@ -275,6 +297,13 @@ export class ConnectionService {
       }
       case 'app-install': {
         const appConfig = await this.hostAppConfig(providerId);
+        // Refused before the user is sent anywhere; checked again on the callback.
+        if (
+          !spec.userVerification &&
+          (await this.deps.providerApps.installVerification(providerId)) !== 'unverified-accepted'
+        ) {
+          throw new ConnectError('installation-unverifiable');
+        }
         const url = new URL(spec.installUrl(appConfig));
         const state = await this.deps.pending.create({
           kind: 'app-install',
@@ -389,17 +418,109 @@ export class ConnectionService {
           'no installation was returned (it may be awaiting approval by an account owner)',
         );
       }
+      const binding = await this.bindInstallation(actor, plugin, spec, pending, query, {
+        installationId,
+      });
       const secret: CredentialSecret = { kind: 'app-install', installationId, metadata: {} };
       return this.finalize(actor, plugin, secret, {
         displayName: pending.displayName,
         reconnectId: pending.reconnectId,
         returnTo: pending.returnTo,
         discovery: 'reject-auth-failure',
-        metadata: { installation_id: installationId },
+        metadata: { installation_id: installationId, installation_verification: binding },
       });
     }
 
     throw new ConnectError('state-invalid');
+  }
+
+  /**
+   * Proves that the human behind the callback can reach the installation it
+   * names, or refuses. A refusal stores nothing and leaves an audit entry; an
+   * unreachable provider is not a refusal (the user retries).
+   */
+  private async bindInstallation(
+    actor: Actor,
+    plugin: ProviderPlugin,
+    spec: AppInstallCredentialSpec,
+    pending: PendingConnect,
+    query: URLSearchParams,
+    claim: { readonly installationId: string },
+  ): Promise<InstallationBinding> {
+    const refuse = async (
+      reason: ConnectRefusalReason,
+      error: ConnectError,
+    ): Promise<ConnectError> => {
+      await this.auditRefusal(actor, plugin, pending, claim.installationId, reason);
+      this.deps.logger.warn('connection refused: installation not bound to the user', {
+        provider: plugin.id,
+        user_id: actor.user.id,
+        installation_id: claim.installationId,
+        reason,
+      });
+      return error;
+    };
+
+    const verification = spec.userVerification;
+    if (!verification) {
+      const accepted =
+        (await this.deps.providerApps.installVerification(plugin.id)) === 'unverified-accepted';
+      if (!accepted) {
+        throw await refuse(
+          'verification-not-supported',
+          new ConnectError('installation-unverifiable'),
+        );
+      }
+      this.deps.logger.warn('installation accepted without verification (operator setting)', {
+        provider: plugin.id,
+        user_id: actor.user.id,
+        installation_id: claim.installationId,
+      });
+      return 'none';
+    }
+
+    const code = query.get(verification.codeParam);
+    if (!code) {
+      const denied = query.get('error');
+      throw await refuse(
+        'no-authorization-code',
+        new ConnectError(
+          'installation-not-verified',
+          denied
+            ? `the authorization was not granted (${denied})`
+            : 'the provider returned no user authorization; the app must request user authorization during installation',
+        ),
+      );
+    }
+    const app = await this.hostAppConfig(plugin.id);
+    const clientId = app[CLIENT_ID_FIELD];
+    const clientSecret = app[CLIENT_SECRET_FIELD];
+    if (!clientId || !clientSecret) throw new ConnectError('app-not-configured');
+    try {
+      await verifyInstallation(
+        verification,
+        { clientId, clientSecret },
+        { installationId: claim.installationId, code },
+        { fetch: this.deps.fetch, now: () => this.deps.clock.now() },
+      );
+    } catch (err) {
+      if (err instanceof InstallationVerificationUnavailable) {
+        throw new ConnectError('provider-unreachable', err.message);
+      }
+      if (err instanceof InstallationRefused) {
+        throw await refuse(
+          err.reason,
+          new ConnectError(
+            err.reason === 'authorization-code-rejected'
+              ? 'token-exchange-failed'
+              : 'installation-not-verified',
+            err.message,
+          ),
+        );
+      }
+      throw err;
+    }
+    return 'user-authorization';
   }
 
   private async finalize(
@@ -764,6 +885,31 @@ export class ConnectionService {
         display_name: connection.displayName,
         status: connection.status,
         owner: connection.owner,
+      },
+      delegated_client_id: null,
+    });
+  }
+
+  /** Nothing was created: the entry names the provider and the claim that was refused. */
+  private async auditRefusal(
+    actor: Actor,
+    plugin: ProviderPlugin,
+    pending: PendingConnect,
+    installationId: string,
+    reason: ConnectRefusalReason,
+  ): Promise<void> {
+    await this.deps.audit.write({
+      kind: 'admin',
+      ts: this.nowIso(),
+      user_id: actor.user.id,
+      act: 'connection-refused',
+      object: { type: 'connection', id: pending.reconnectId ?? `not-created:${plugin.id}` },
+      before: null,
+      after: {
+        provider: plugin.id,
+        reason,
+        installation_id: installationId,
+        reconnect: pending.reconnectId !== null,
       },
       delegated_client_id: null,
     });

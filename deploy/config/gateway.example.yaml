@@ -83,6 +83,14 @@ admin:
 #     app_id: '12345'
 #     app_slug: acme-gateway
 #     private_key: ${file:/run/secrets/github_app_key.pem}
+#     # OAuth client of the same GitHub App (not the App ID). Required: the
+#     # App must have "Request user authorization (OAuth) during installation"
+#     # enabled, and the gateway checks that whoever installs it can reach the
+#     # installation before connecting it.
+#     # env: VAUBAAN_PROVIDER_GITHUB_CLIENT_ID,
+#     #      VAUBAAN_PROVIDER_GITHUB_CLIENT_SECRET[_FILE]
+#     client_id: Iv1.0123456789abcdef
+#     client_secret: ${file:/run/secrets/github_app_client_secret}
 #   vercel:
 #     client_id: ${VERCEL_CLIENT_ID}
 #     client_secret: ${VERCEL_CLIENT_SECRET}

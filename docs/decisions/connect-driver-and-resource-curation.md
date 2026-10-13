@@ -18,6 +18,11 @@ partially-supersedes:
 > credential flows and the standard OAuth refresh). The brief named no ADR;
 > these points are structural enough that someone will ask why. Handbook:
 > [[connections]].
+>
+> **Amended on 2026-10-13 by P1.4b** — the `app-install` trust gap listed
+> under Consequences is closed: see "Amendment 2026-10-13 — installation
+> binding" below (D9, D10). D4 gains one exception (the acceptance of
+> unverified installations is stored, never read from the file).
 
 ## Context
 
@@ -148,7 +153,137 @@ empty registry.
   same company) could claim it. Closing this needs the provider's
   user-authorisation step during installation, hence OAuth client fields
   in the GitHub plugin's spec; it is left to a follow-up and listed in the
-  handbook.
+  handbook. **Closed by the amendment of 2026-10-13 below.**
+
+## Amendment 2026-10-13 — installation binding (P1.4b)
+
+### Why
+
+The gap above is not theoretical on a single-company instance. Installation
+ids are small integers visible in URLs and webhook payloads; any signed-in
+user could start a connect flow, obtain a valid `state`, and come back with
+the id of an installation on another organisation or on another team's
+repositories. The first discovery succeeds — the company's app really is
+installed there — and the user owns a connection to repositories they have
+no right to, on which they can issue missions. The attacker is an insider,
+and bounding what insiders' agents can do is the product. GitHub documents
+the same warning for the setup URL: the `installation_id` it carries can be
+spoofed, and the app should generate a user access token and check that the
+installation is associated with that user.
+
+### D9 — An installation is accepted only when the provider confirms the authorizing user can reach it
+
+The `app-install` `CredentialSpec` gains an optional, declarative
+`userVerification` block: callback parameter of the authorization code,
+token endpoint and client authentication method, installations endpoint
+with its static headers, where the list and the id are in the response, and
+page-number pagination. The authorization request is implicit — the
+provider's installation page is configured to ask the installing user to
+authorize the app — so the host only handles the callback: it exchanges the
+code with the app's `client_id` / `client_secret`, lists the installations
+the resulting user token can reach, and accepts the claimed id only when it
+is in that list. The check runs before the plugin is asked for anything.
+The user token is used for that one listing and dropped: never stored,
+logged, returned, or handed to the plugin.
+
+A plugin that declares the block must list `client_id` and a secret
+`client_secret` in its `appConfigFields` (`definePlugin` enforces it); the
+host removes `client_secret` from the `appConfig` every plugin receives,
+whatever its credential kind. GitHub declares the block
+(`POST https://github.com/login/oauth/access_token`,
+`GET https://api.github.com/user/installations`, 100 per page).
+
+Every refusal — no code, code refused, list denied, id not listed — stores
+nothing and writes an `AdminAuditEntry` with the new act
+`connection-refused` (provider, reason, claimed installation id). An
+unreachable provider is reported as such and is not a refusal.
+
+### D10 — A plugin that cannot verify is refused unless the operator accepts it, per provider
+
+When an `app-install` spec has no `userVerification`, starting and
+completing a connect flow are both refused, and the provider is not offered
+in the picker. The operator may set "accept unverified installations" for
+that provider app in Admin → Provider apps: off by default, shown with a
+warning, audited, withdrawn by removing the app's settings. The flag is
+refused for a provider whose plugin verifies: it can never switch a
+verification off. It is stored in `instance_config`
+(`provider_app_flags.<id>.accept_unverified_installations`) and set from
+the page only, including for a provider whose fields come from the mounted
+configuration — the one exception to D4, because the file block is a
+string-to-string record handed to the plugin and an operator decision is
+neither.
+
+### Consequences
+
+- The insider attack needs, besides the id, a GitHub account that can
+  already reach the target installation — at which point the user had that
+  access anyway.
+- The check proves **access**, not administration: for GitHub, any account
+  with explicit read access to one repository of the installation passes.
+  A connection then still carries the installation's full reach through
+  the app, which may exceed what that person can do by hand. Narrowing
+  this (requiring an organisation owner, or intersecting resources with the
+  user's own repositories) is a separate decision.
+- Operators must enable "Request user authorization (OAuth) during
+  installation" on the GitHub App, register the gateway's callback URL as
+  the app's **callback URL** (GitHub then offers no setup URL), generate a
+  client secret and enter `client_id` / `client_secret`. Until they do, the
+  GitHub app is `incomplete`: no new connection, and — because the plugin's
+  `appConfig` is built from the complete record — existing GitHub
+  connections stop resolving. Fail-closed on purpose; v5 has no released
+  instance to migrate.
+- The provider is trusted to return the `state` on the callback of an
+  installation that includes user authorization. This is the behaviour of
+  GitHub; it is not spelled out in its documentation and is covered by the
+  manual end-to-end run only.
+- A user who is redirected to an installation that already exists updates
+  it instead of installing it; whether the provider then comes back with a
+  code depends on the provider. For GitHub the dependable path for a second
+  connection to an existing installation is not covered here.
+- The discarded user token stays valid at the provider until it expires
+  (eight hours on GitHub when token expiry is enabled, which is the
+  default). The host does not revoke it: nobody holds it.
+- The generic OAuth client classes an `error` member under HTTP 200 as a
+  failure but not as a dead grant (P1.4, pinned by a test). GitHub reports a
+  wrong code exactly that way, so the installation check treats any OAuth
+  error stated below 5xx as a refusal on its own, without changing the
+  refresh path.
+- `AdminAct` gains `connection-refused` (additive, `@vaubaan/gateway-core`).
+- One more page of pagination logic lives in the host, capped at 20 pages;
+  a user reaching more installations of one app than that is refused, not
+  accepted unverified.
+
+### Rejected alternatives
+
+**Let the plugin verify (a `verifyInstallation(ctx, id, code)` hook).** The
+plugin would need the client secret and would hold a user token; D2 of
+[[plugin-contract-and-credential-spec]] keeps both out of plugins, and each
+plugin would re-implement an exchange the host already has.
+
+**A full host-driven OAuth authorization before the installation redirect.**
+Two redirects and a `redirect_uri` the host controls, but the user would
+authorize, then install, and the two steps would have to be correlated by
+the host; the provider's "authorize during installation" does it in one
+step with one callback.
+
+**Check through the app itself (`GET /app/installations/{id}` with the app
+JWT) that the installation's account matches something the user typed.**
+Proves the installation exists for this app — which the first discovery
+already does — and nothing about the human.
+
+**Match the gateway user's IdP email against the installation's account.**
+The IdP identity and the GitHub identity are unrelated namespaces; emails
+at GitHub are user-controlled and often private.
+
+**Keep accepting unverified installations by default, with a warning.** The
+default would remain the vulnerable state on every instance that upgrades
+without reading. Refused; the unsafe mode is opt-in per provider.
+
+**A global "accept unverified installations" switch, or a key in the
+mounted configuration.** Global is wider than any need (one third-party
+plugin); a file key would have to be carved out of the per-provider record
+plugins receive and of the provider-app field list. Kept per provider, in
+the store, behind the audited page.
 
 ## Rejected alternatives
 
