@@ -115,10 +115,15 @@ export {
   type RequestHandlerDeps,
   type RequestHandlers,
 } from './handlers';
+export { askedBy, REFUSED_CALL_KIND, type AskedBy } from './asker';
 export {
   RequestService,
   SESSION_EVENTS_SHOWN,
   type ApprovalCall,
+  type ApprovalGateLine,
+  type RequestAsker,
+  type RequestMissionView,
+  type WaitingItem,
   type ApprovalView,
   type ClaimView,
   type DecideResult,

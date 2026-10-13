@@ -23,7 +23,16 @@ tracks:
   - apps/gateway/src/app/(app)/delegations/layout.tsx
   - apps/gateway/src/components/LocalDate.tsx
   - apps/gateway/src/components/auth/NeedsUser.tsx
-  - apps/gateway/src/components/auth/PrincipalCard.tsx
+  - apps/gateway/src/components/auth/AuthPage.tsx
+  - apps/gateway/src/app/(app)/_now/
+  - apps/gateway/src/app/(app)/not-found.tsx
+  - apps/gateway/src/app/(app)/error.tsx
+  - apps/gateway/src/app/not-found.tsx
+  - apps/gateway/src/app/error.tsx
+  - apps/gateway/src/app/global-error.tsx
+  - apps/gateway/src/server/now/
+  - apps/gateway/src/server/http/document.ts
+  - apps/gateway/tests/integration/now/
   - apps/gateway/src/components/auth/principal.ts
   - apps/gateway/src/components/connections/
   - apps/gateway/src/components/risk/
@@ -94,7 +103,7 @@ endpoints behind them, and the agent-facing MCP door from the same process.
 
 | Route                                                                                                                       | File under `apps/gateway/src/app/`                                                                            | Handbook                                                                                     |
 | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `/`                                                                                                                         | `(app)/page.tsx`                                                                                              | this handbook: the one home; until the "Now" page lands, the missions list                   |
+| `/`                                                                                                                         | `(app)/page.tsx`, `(app)/_now/**`                                                                             | this handbook, [The home — Now](#the-home--now)                                              |
 | `/settings`, `/design`                                                                                                      | `(app)/settings/page.tsx`, `(app)/design/**`                                                                  | this handbook, [The shell](#the-shell--componentsshell), [The gallery](#the-gallery--design) |
 | `/login`                                                                                                                    | `(public)/login/page.tsx`, `(public)/layout.tsx`                                                              | [authentication](authentication.md)                                                          |
 | `GET /auth/login`, `GET /auth/callback`                                                                                     | `auth/login/route.ts`, `auth/callback/route.ts`                                                               | [authentication](authentication.md)                                                          |
@@ -131,8 +140,8 @@ endpoints behind them, and the agent-facing MCP door from the same process.
 | `GET /healthz`                                                                                                              | `healthz/route.ts`                                                                                            | [configuration](configuration.md)                                                            |
 
 `/` is the one home of a signed-in person (`(app)/page.tsx`: `currentUser()`,
-then the missions list until the "Now" page lands); a visitor without a
-session is sent to `/login`. Every path the interface had before its words
+then "Now", [below](#the-home--now)); a visitor without a session is sent to
+`/login`. Every path the interface had before its words
 changed answers with a permanent redirect
 ([Routes follow the words](#routes-follow-the-words--nextconfigts)).
 
@@ -161,7 +170,11 @@ only.
 - **Icons.** `app/icon.svg` and `app/apple-icon.png` are picked up by the Next
   file convention.
 - **`(public)/layout.tsx`** — the pages reachable without a session (`/login`):
-  the page inside a `Container`, then the build footer.
+  it renders its children and nothing else; the page draws its own frame
+  (`AuthPage`, [Pages outside the shell](#pages-outside-the-shell)).
+- **`not-found.tsx` and `error.tsx`**, at the root and under `(app)/`, and
+  `global-error.tsx`: what is rendered for an address that matches nothing
+  and for a page that failed, inside the shell and outside it (same section).
 - **`(app)/layout.tsx`** — the human surface: `currentPrincipal()`; no
   principal → `redirect('/login')`; otherwise
   `<AppShell principal instance>`, `instance` being the host of the public URL.
@@ -344,14 +357,15 @@ reads carries it:
 
 - the shell, for the application and for Administration, and the "Not an
   operator" explanation of the Administration layout;
-- the public layout (`/login`);
-- `/admin/bootstrap`, which is outside every layout and renders the footer
-  itself (`admin/bootstrap/page.tsx`);
+- `/login`, `/admin/bootstrap` (outside every layout) and the root
+  `not-found.tsx`, through the `footer` of `AuthPage`;
 - the pages of the authorization endpoint — the consent screen and its
   message pages. They are HTML documents built as strings by
-  `server/oauth-as/pages.ts`, not React, with their own minimal styles (they
-  do not read the tokens): `buildFooter(build)` there writes the same line
-  with the same test ids ([management-door](management-door.md)).
+  `server/oauth-as/pages.ts`, not React, over the shared document of
+  `server/http/document.ts`
+  ([Self-contained documents](#self-contained-documents--serverhttpdocumentts)):
+  `buildFooter(build)` there writes the same line with the same test ids
+  ([management-door](management-door.md)).
 
 `data-testid`: `build-footer`, `gateway-version`, `gateway-commit`. The
 version has one source, the root `package.json`
@@ -364,6 +378,109 @@ you and Connected apps pages render `NeedsUser` for the bootstrap operator
 open to every session (`requirePrincipal()`), and `/activity` widens what it
 shows for an administrator.
 
+## The home — Now
+
+`(app)/page.tsx` is the one home (spec §4.2): what is waiting for me, what is
+running, what just happened. It calls `currentUser()` (the bootstrap operator
+reads `NeedsUser`), reads **one model** and decides nothing:
+`readNow(nowDepsOf(root), { user, groups })` (`server/now/now-reader.ts`).
+
+**The read model** composes reads that already decide who sees what, and adds
+no rule of its own.
+
+| Field             | From                                                                          | Holds                                                                                                                                                                                                                                                                                                         |
+| ----------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `waiting`         | `RequestService.waiting` ([requests](requests.md))                            | the open requests of the missions the person created, each with who asked and what is left; never the arguments of a call                                                                                                                                                                                     |
+| `running`         | `MissionService.list`, then per mission the tokens, the session and the audit | the active missions the person can read, the most recently active first (`byLastActivity`): services, key holders (theirs first), the connected app that created it, `nearest` (the permission closest to its limit, `nearestLimit`), `limits_reached`, `open_requests`, `last_activity_at`, `calls_last_day` |
+| `stopped`         | the same list                                                                 | at most `STOPPED_SHOWN` (3) missions that do not run any more — expired, revoked, orphaned — with since when                                                                                                                                                                                                  |
+| `totals`          | `AuditRepo.tokenHolderActivity` per mission; `ConnectionService.listFor`      | missions, stopped, calls in the last 24 hours, refusals in the last hour, accounts the person owns and how many must be reconnected                                                                                                                                                                           |
+| `first_run`       | the same list                                                                 | the person created no mission                                                                                                                                                                                                                                                                                 |
+| `shared_accounts` | `ShareService.received`                                                       | the accounts someone gave access to: service, owner, how many permissions (the union when several shares cover one account)                                                                                                                                                                                   |
+| `shared_missions` | the same list                                                                 | the missions shared with the person as a teammate, and whether they hold a key of each                                                                                                                                                                                                                        |
+
+A teammate does not read the requests of a mission shared with them; they may
+know that it waits (`open_requests`, counted from `listForMission`). Counts
+are windows of time, not calendar days: the server does not know the
+reader's time zone. The cost is a handful of indexed reads per mission the
+person can read, no scan. `readSetup(setupDepsOf(root))` (`server/now/setup.ts`)
+is the checklist an administrator reads on a first run: the host of the
+identity provider, the services whose company app is registered or missing
+(`ProviderAppsService.list`, `needsApp`), and whether telemetry was decided.
+
+**The page has three forms** (`(app)/_now/`; style guide §1.1):
+
+- **Something waits** (`NowView`): `Waiting for you` (`now-waiting`: an
+  `AnswerRow` per request — the permission or "… reached its daily limit",
+  who and on which mission, the tool, the room left), `Running now`
+  (`now-running`: a `RunRow` per mission; the one figure is a `Meter` that
+  draws itself only near a limit, "Limit reached", or — for a teammate —
+  "waiting for Alice's yes"), a line naming what does not run any more, and
+  the totals as a `SummaryLine` (`now-totals`). The oldest request carries
+  the one primary action; "New mission" steps down to a secondary button.
+  "Show details" (a `DetailScope`, `now:running`) adds a line per mission:
+  the calls of the last 24 hours and the nearest limit as a figure.
+- **Nothing waits** (`now-nothing`): one sentence — "Nothing needs you. 4
+  missions are running." — and three links; "New mission" is the primary
+  action. What is running is one click away (`Disclosure`, `now:essential`)
+  and the page remembers the click.
+- **First run** (`FirstRun`, when `first_run` and nothing waits): a welcome,
+  one paragraph, the model in five nodes (`ModelDiagram`, `FIRST_RUN.model`),
+  then three steps (`now-steps`): an account (done when the person owns one
+  or was given access to one), the first mission, the kit. An administrator
+  reads the setup list first (`now-setup`). What was shared is listed
+  (`now-shared-missions`) with "Get my key". One accent on the page: what is
+  left to set up, else the next step.
+
+**A yes is never given from the home.** The row of an approval leads to its
+request ("Review"), where the exact call and its arguments are shown; a
+refusal runs nothing and is a plain form post from the row. The row of a
+limit leads to its request ("Answer"). ADR
+[now-and-waiting-pages](../decisions/now-and-waiting-pages.md).
+
+The date under the title (`Today`, client) is the reader's own; the server
+renders the UTC instant and the browser replaces it after hydration.
+
+## Pages outside the shell
+
+`components/auth/AuthPage.tsx` is the frame of a page that has no shell: one
+narrow column in the middle of the window — the mark, the product and the
+host of the gateway (`instance`), then the page — and the build line the page
+passes as `footer`. `AuthHeading` is its title and its one sentence. It reads
+the tokens, so it follows the theme like any page, and has no hook: `error.tsx`
+(a client component) uses it too.
+
+| Page                               | Says                                                                                                                                                                                                      |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/login`                           | "Sign in to `<host>`" and one button per identity provider; the closed error codes of a failed attempt; signed in, who is signed in and "Open the gateway" ([authentication](authentication.md), "Pages") |
+| `/admin/bootstrap`                 | "Set up this gateway": the bootstrap token form while it is active, otherwise that it no longer works ([authentication](authentication.md))                                                               |
+| `app/not-found.tsx`                | an address that matches no page, and a page of Administration asked by someone who does not administer: "This page does not exist", the way to the home, nothing about what exists                        |
+| `(app)/not-found.tsx`              | `notFound()` thrown by a page of the application — an unknown mission, account or service, or one that is not the reader's: the shell stays, the title is "Not found" (`data-testid="not-found"`)         |
+| `(app)/error.tsx`, `app/error.tsx` | a page failed while rendering: "This page could not be shown", "Try again" (`reset`), and the digest the server logged the error under as a reference to quote (`page-error`, `error-reference`)          |
+| `app/global-error.tsx`             | the root layout itself failed: it replaces the document, imports the style sheet and reads no session and no theme cookie                                                                                 |
+
+## Self-contained documents — `server/http/document.ts`
+
+Some pages are answered by a handler itself, as an HTML string, under a
+content policy that loads nothing: the consent screen of the authorization
+endpoint and its messages ([management-door](management-door.md)), and the
+refusals of the forwarded request URL ([requests](requests.md)). They cannot
+read the style sheet of the application, so `document.ts` (host-agnostic,
+pure) repeats the tokens they need, value for value, in both themes
+(`DOCUMENT_TOKENS`), and builds the document:
+
+- `htmlDocument({ title, body, footer?, theme?, nonce? })` — the brand, then
+  `body` inside one column with the rhythm of `AuthPage`; `messageDocument`
+  is the document of one title and one sentence;
+- `documentThemeOf(headers)` — the theme the person chose in the application,
+  from the `vaubaan_theme` cookie; `null` follows the system
+  (`prefers-color-scheme`). The handler passes it, so the document arrives in
+  the right theme with no script;
+- `escapeHtml` — the caller escapes what it puts in `body`.
+
+`src/server/http/document.test.ts` keeps every value equal to
+`styles/tokens.css`, refuses any colour that is not one of them, and checks
+that a document carries no script and no external resource.
+
 ## Words — `lib/vocabulary.ts`
 
 The words a person reads are in one file, pure and browser-safe, imported by
@@ -371,20 +488,23 @@ the shell, the components and the pages (ADR
 [interface-redesign-vocabulary-and-design-system](../decisions/interface-redesign-vocabulary-and-design-system.md)).
 The protocol keeps its names; this file is the bridge, keyed by them.
 
-| Export                                                                  | Holds                                                                                                                   |
-| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `ROUTES`, `NAV`, `NAV_ORDER`, `NavKey`                                  | the page paths and the seven entries, in order                                                                          |
-| `TERMS`, `count(n, term)`, `formatNumber`, `capitalize`                 | one word per thing, keyed by the spec's name (`TERMS.connection.one` is "account"); "26 permissions", "1,212 calls"     |
-| `PAGES`, `ACTIONS`, `SECTIONS`                                          | page titles and their one-sentence ledes; the labels of actions ("Replace key", "Give access"); shared section headings |
-| `GATE_WORDS`, `gateWordOf(gate)`, `ALLOW_WORDS`, `asksFirst(name)`      | "runs freely", "ask me first", "not included"; "Can", "Asks you first" / "Asks Alice first", "Cannot", "Limits today"   |
-| `SEVERITY_LABEL`, `WHY_LABELS`, `WHY_ORDER`, `whyValue(axis, v)`        | the six axes of the risk model in words (Undo, Blast radius, Data, Cost, Visible to, Lasts) and their values            |
-| `LIMIT_WORDS`, `usage`, `roomLeft`, `perPeriod`, `limitsReset`          | "1,860 / 3,000", "49 of 50 left today", "3,000 a day", "limits reset every day"                                         |
-| `KEY_WORDS`, `keyOf(holder)`, `possessive`                              | "your key", "Carol’s key", "the machine key nightly"                                                                    |
-| `ROLE_WORDS`, `qualifiers`, `ownership`, `accessGiven`, `mayAllow`      | "· you · creator", "you own it with Platform", "access given by Bob · 12 of 17", "all 15"                               |
-| `MISSION_STATES`, `ACCOUNT_STATES`, `REQUEST_STATES`, `DECISION_WORDS`  | a label and a tone per state, keyed by the protocol's state; the tone is `null` for the normal state                    |
-| `WAITING`, `waitingFor(name)`, `ASKED_FIRST`, `reachedLimit`, `running` | the sentences of "Waiting for you"                                                                                      |
-| `ago(from, now)`                                                        | "now", "4 min", "1 h", "yesterday", "4 d"                                                                               |
-| `THEME_WORDS`                                                           | System, Light, Dark                                                                                                     |
+| Export                                                                               | Holds                                                                                                                                                                              |
+| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ROUTES`, `NAV`, `NAV_ORDER`, `NavKey`                                               | the page paths and the seven entries, in order                                                                                                                                     |
+| `TERMS`, `count(n, term)`, `formatNumber`, `capitalize`                              | one word per thing, keyed by the spec's name (`TERMS.connection.one` is "account"); "26 permissions", "1,212 calls"                                                                |
+| `PAGES`, `ACTIONS`, `SECTIONS`                                                       | page titles and their one-sentence ledes; the labels of actions ("Replace key", "Give access"); shared section headings                                                            |
+| `GATE_WORDS`, `gateWordOf(gate)`, `ALLOW_WORDS`, `asksFirst(name)`                   | "runs freely", "ask me first", "not included"; "Can", "Asks you first" / "Asks Alice first", "Cannot", "Limits today"                                                              |
+| `SEVERITY_LABEL`, `WHY_LABELS`, `WHY_ORDER`, `whyValue(axis, v)`                     | the six axes of the risk model in words (Undo, Blast radius, Data, Cost, Visible to, Lasts) and their values                                                                       |
+| `LIMIT_WORDS`, `usage`, `roomLeft`, `perPeriod`, `limitsReset`                       | "1,860 / 3,000", "49 of 50 left today", "3,000 a day", "limits reset every day"                                                                                                    |
+| `KEY_WORDS`, `keyOf(holder)`, `possessive`                                           | "your key", "Carol’s key", "the machine key nightly"                                                                                                                               |
+| `ROLE_WORDS`, `qualifiers`, `ownership`, `accessGiven`, `mayAllow`                   | "· you · creator", "you own it with Platform", "access given by Bob · 12 of 17", "all 15"                                                                                          |
+| `MISSION_STATES`, `ACCOUNT_STATES`, `REQUEST_STATES`, `DECISION_WORDS`               | a label and a tone per state, keyed by the protocol's state; the tone is `null` for the normal state                                                                               |
+| `WAITING`, `waitingFor(name)`, `ASKED_FIRST`, `reachedLimit`, `running`              | the sentences of "Waiting for you"                                                                                                                                                 |
+| `everyOf`, `periodNow`, `limitOf`, `missionReachedLimit`, `limitReachedOn`, `usedOf` | a limit said with its period, from a period length in seconds: "today", "its daily limit", "5,000 of 5,000"; "this period" for an unnamed length, "in all" when limits never reset |
+| `until`, `agoPhrase`, `delay`, `asker`                                               | "in 13 h", "4 min ago", "10 minutes"; who asks: "Carol · codex", "You · codex", "machine key nightly", "An agent"                                                                  |
+| `NOW`, `FIRST_RUN`, `ANSWERS`, `REQUEST_WORDS`                                       | the words of the home, of a first run (the model in five nodes, the steps), of the answers keyed by the protocol's resolution, and of a request's page                             |
+| `ago(from, now)`                                                                     | "now", "4 min", "1 h", "yesterday", "4 d"                                                                                                                                          |
+| `THEME_WORDS`                                                                        | System, Light, Dark                                                                                                                                                                |
 
 A page that needs a word or a sentence pattern that is not there adds it
 there. A page never prints a protocol name as prose; it prints an id with
@@ -518,13 +638,16 @@ each one is in its file header and on the gallery.
 
 **Permissions, answers, states**
 
-| Export                                                                    | What it is                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PermissionTable`, `PermissionGroup`, `PermissionRow`                     | client. The table chooses its columns by `variant`: `editor` (tick, permission, risk, per day, per minute, ask me first), `read`, `usage` (used today, per minute, gate), `pick` (tick, permission, risk). A row takes `label`, `id` (mono, under the label), `severity`, `included`, `select`, `usage`, `perDay`, `perMinute`, `gate`, `gateControl`, `tag`, and `why` (`reason`, `cells`, `referenceHref`, `tools`), closed behind "why?" |
-| `AllowSummary`                                                            | Can / Asks you first / Cannot, and "Limits today" when given; the asking line is left out when nothing asks; `asksLabel` for someone else's mission; `compact` in the rail                                                                                                                                                                                                                                                                  |
-| `AnswerList`, `AnswerRow`                                                 | what waits for the person: `who`, `title`, `age`, `description`, `answers`; `boxed` is the one filled (amber) box of a page                                                                                                                                                                                                                                                                                                                 |
-| `EmptyState`, `Lede`, `ModelDiagram`, `StepMark`, `CheckMark`, `Skeleton` | one sentence and one action; the paragraph and the drawn model of a first run; the lead of a step row and of a checklist row; the shape of what is loading                                                                                                                                                                                                                                                                                  |
-| `Callout`, `Banner`                                                       | a note with an optional `title`, a `tone`, an optional `action`; `role="note"`. `Banner` is the same component under the name the earlier pages import                                                                                                                                                                                                                                                                                      |
+| Export                                                                                                      | What it is                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PermissionTable`, `PermissionGroup`, `PermissionRow`                                                       | client. The table chooses its columns by `variant`: `editor` (tick, permission, risk, per day, per minute, ask me first), `read`, `usage` (used today, per minute, gate), `pick` (tick, permission, risk). A row takes `label`, `id` (mono, under the label), `severity`, `included`, `select`, `usage`, `perDay`, `perMinute`, `gate`, `gateControl`, `tag`, and `why` (`reason`, `cells`, `referenceHref`, `tools`), closed behind "why?" |
+| `AllowSummary`                                                                                              | Can / Asks you first / Cannot, and "Limits today" when given; the asking line is left out when nothing asks; `asksLabel` for someone else's mission; `compact` in the rail                                                                                                                                                                                                                                                                  |
+| `AnswerList`, `AnswerRow`                                                                                   | what waits for the person: `who`, `title`, `age`, `description`, `answers`; `boxed` is the one filled (amber) box of a page                                                                                                                                                                                                                                                                                                                 |
+| `RunList`, `RunRow`                                                                                         | what is running, one line per mission in four columns: `title` (a link), `facts`, `holders` (an `AvatarStack`), `figure` (a `Meter` or a `StatusMark`: one thing), `last`; `detail` is a second line shown while the surrounding `DetailScope` is open                                                                                                                                                                                      |
+| `InboxFrame`, `InboxList`, `InboxItem`                                                                      | the inbox: a list of links (`who`, `title`, `context`, `meta`; `current` is a fill and `aria-current`) and one item open beside it; one column under 900 px                                                                                                                                                                                                                                                                                 |
+| `RequestStatement`, `CallBox`, `ArgList`, `FactColumns`, `DecideBar`, `ContextColumns`, `Feed`, `FeedEvent` | one open request: who asks then the statement at the size of a title (with the `status` of a closed one); "Exactly what it sent" (the one quiet fill; each argument by its name, never truncated); labelled facts side by side; the answers with one quieter `aside`; context in two columns; a short timeline whose mark carries its word                                                                                                  |
+| `EmptyState`, `Lede`, `ModelDiagram`, `StepMark`, `CheckMark`, `Skeleton`                                   | one sentence and one action; the paragraph and the drawn model of a first run; the lead of a step row and of a checklist row; the shape of what is loading                                                                                                                                                                                                                                                                                  |
+| `Callout`, `Banner`                                                                                         | a note with an optional `title`, a `tone`, an optional `action`; `role="note"`. `Banner` is the same component under the name the earlier pages import                                                                                                                                                                                                                                                                                      |
 
 **Actions, overlays, details, forms**
 
@@ -557,7 +680,8 @@ function.
 
 `(app)/design/` renders every component in every state: `page.tsx`
 (`requirePrincipal()`, any session) and a client gallery (`gallery.tsx`,
-three files of sections, `specimen.tsx`). A `Specimen` draws its content twice,
+four files of sections — `sections-waiting.tsx` holds the running list, the
+inbox and the open request —, `specimen.tsx`). A `Specimen` draws its content twice,
 on an island with `data-theme="light"` and on one with `data-theme="dark"`, so
 both themes are compared on one screen whatever the theme of the page. Every
 value on it is invented. It is linked from Settings, and it is what a page is
@@ -630,9 +754,8 @@ handbook:
 - `app/(app)/missions/state-badge.tsx`: `StateBadge({ state })` for a mission
   state, with the count of exhausted risks on an active mission
   ([missions](missions.md));
-- `components/auth/PrincipalCard.tsx`: `PrincipalCard`, `OperatorBadge` and
-  `SignOutButton` (a plain `POST /logout` form)
-  ([authentication](authentication.md)).
+- `components/auth/AuthPage.tsx`: `AuthPage` and `AuthHeading`, the frame of a
+  page outside the shell ([Pages outside the shell](#pages-outside-the-shell)).
 
 ## The provider reference — `/reference`
 
@@ -903,8 +1026,21 @@ beside them: `components/auth/principal.test.ts`,
 `app/(app)/missions/message-of.test.ts` and
 `app/(app)/missions/new/form-state.test.ts`.
 
+- `now-and-waiting.test.tsx` renders the home, a first run and the page of a
+  request to static markup over invented views: one `h1` and one primary
+  action; the order a request is read in; the answers offered in each state;
+  no yes and no argument on the home; the words of a limit, of a delay and of
+  who asks.
+
+`tests/integration/now/now.test.ts` holds the read models on the real root:
+`readNow` for a creator, a teammate and a newcomer, its windows of time, and
+`readSetup`; `src/server/now/derive.test.ts` the pure derivations.
+
 In a browser, the Playwright suite `apps/gateway/tests/e2e/v5/`
-(`npm run test:e2e:v5`, nine specs) exercises the rest. `shell.spec.ts` is the
+(`npm run test:e2e:v5`, ten specs) exercises the rest. `now-and-entry.spec.ts`
+holds the sign-in, a first run, "not found" inside and outside the shell and
+the themed refusal of a forwarded URL; what waits and what runs on the home is
+asserted by `exhaust-and-claim.spec.ts` and `approve-action.spec.ts`. `shell.spec.ts` is the
 frame's own: one home and seven entries, each leading to a page and then
 marked; the person's menu and the skip link; the collapsed navigation at
 900 px and the bar at 390 px; the three states of the theme, kept across a

@@ -1,0 +1,23 @@
+/* The page-specific layout of the home. */
+.rowDetail {
+  display: block;
+  margin-top: var(--space-half);
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+/* What is running, one click under the sentence that nothing needs the person. */
+.essential {
+  margin-top: var(--space-2);
+}
+.essential > div > button {
+  display: block;
+  margin: 0 auto;
+}
+/* A first run: the paragraph, the model, then the steps. */
+.intro {
+  margin-top: var(--space-2);
+}
+.setupNote a {
+  color: var(--accent);
+}

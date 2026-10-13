@@ -123,7 +123,9 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/execution/execution.test.ts`                                                     |       21 |
 | `apps/gateway/src/server/groups/service.test.ts`                                                          |       15 |
 | `apps/gateway/src/server/http/client-ip.test.ts`                                                          |       11 |
+| `apps/gateway/src/server/http/document.test.ts`                                                           |        6 |
 | `apps/gateway/src/server/http/healthz.test.ts`                                                            |        4 |
+| `apps/gateway/src/server/now/derive.test.ts`                                                              |        5 |
 | `apps/gateway/src/server/logging/logging.test.ts`                                                         |        6 |
 | `apps/gateway/src/server/management/door.test.ts`                                                         |        4 |
 | `apps/gateway/src/server/management/hard-deny.test.ts`                                                    |       16 |
@@ -142,7 +144,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/oauth-as/delegation-lifetime.test.ts`                                            |        5 |
 | `apps/gateway/src/server/oauth-as/delegations.test.ts`                                                    |       28 |
 | `apps/gateway/src/server/oauth-as/endpoints.test.ts`                                                      |       15 |
-| `apps/gateway/src/server/oauth-as/pages.test.ts`                                                          |       12 |
+| `apps/gateway/src/server/oauth-as/pages.test.ts`                                                          |       13 |
 | `apps/gateway/src/server/oauth-as/pkce.test.ts`                                                           |       13 |
 | `apps/gateway/src/server/oauth-as/redirect-uri.test.ts`                                                   |       52 |
 | `apps/gateway/src/server/oauth-as/secrets.test.ts`                                                        |        6 |
@@ -151,6 +153,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/providers/planes.test.ts`                                                        |        9 |
 | `apps/gateway/src/server/providers/reference.test.ts`                                                     |       20 |
 | `apps/gateway/src/server/requests/approval.test.ts`                                                       |       33 |
+| `apps/gateway/src/server/requests/asker.test.ts`                                                          |        4 |
 | `apps/gateway/src/server/requests/claim.test.ts`                                                          |       38 |
 | `apps/gateway/src/server/requests/client-ip.test.ts`                                                      |        2 |
 | `apps/gateway/src/server/requests/events.test.ts`                                                         |        7 |
@@ -203,6 +206,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/missions/mission-lifecycle.test.ts`                                       |       33 |
 | `apps/gateway/tests/integration/missions/team-interleaving.test.ts`                                       |        6 |
 | `apps/gateway/tests/integration/missions/team.test.ts`                                                    |       28 |
+| `apps/gateway/tests/integration/now/now.test.ts`                                                          |       11 |
 | `apps/gateway/tests/integration/oauth-as/credential-separation.test.ts`                                   |       19 |
 | `apps/gateway/tests/integration/oauth-as/http-surface.test.ts`                                            |       66 |
 | `apps/gateway/tests/integration/oauth-as/mcp-client-flow.test.ts`                                         |        4 |
@@ -238,6 +242,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/app/design-system.test.tsx`                                                      |       29 |
 | `apps/gateway/tests/unit/app/design-tokens.test.ts`                                                       |       62 |
 | `apps/gateway/tests/unit/app/field.test.tsx`                                                              |        6 |
+| `apps/gateway/tests/unit/app/now-and-waiting.test.tsx`                                                    |       28 |
 | `apps/gateway/tests/unit/app/risk-explain.test.tsx`                                                       |        9 |
 | `apps/gateway/tests/unit/app/shell-and-vocabulary.test.ts`                                                |       18 |
 | `apps/gateway/tests/unit/server/auth/mutation-guard.test.ts`                                              |      287 |
@@ -2772,6 +2777,64 @@ Integration:
 Not covered here: the approval decision ("Scenarios — Approval gate"
 below). The claim URL reaching an MCP client through the execution door is
 asserted in "Scenarios — Execution door" (`budget-exhausted`).
+
+## Scenarios — Now and Waiting for you
+
+> Covers: spec [`vaubaan-gateway.md`](../spec/vaubaan-gateway.md) §4.2 (the
+> home, "Request inbox"), §3.4, §3.5 as a person reads them; style guide §1
+> (one primary action, the exception and not the rule), §6. Handbooks
+> [[web-app]] ("The home — Now", "Pages outside the shell", "Self-contained
+> documents") and [[requests]] ("Who asked, and what waits", "Pages"). ADR
+> [[now-and-waiting-pages]].
+
+- **`src/server/requests/asker.test.ts`** (4) — **who asked**: the first
+  refused call that points to the request names the holder and the label,
+  the count is every such call; the calls of another request, the allowed
+  calls and the refusals that ask nothing are ignored; an event stored
+  before tokens had a holder has a label and no holder; `null` when nothing
+  points to the request or the details cannot be read.
+- **`src/server/now/derive.test.ts`** (5) — the nearest limit is the largest
+  share used, ties to the first listed, never more used than the limit, a
+  limit of zero is reached, `null` for an empty policy; missions sort by last
+  activity, the never-called ones after, newest first.
+- **`tests/integration/now/now.test.ts`** (11, real root) —
+  `RequestService.waiting` names the holder by display name and the agent by
+  its label, counts the replays, lists what is left, names a machine key by
+  its name, **is the creator's alone** (a teammate and an administrator get
+  nothing) and **never carries arguments**; the `asker` of a view;
+  `answered` since an instant, never someone else's. `readNow`: a newcomer is
+  on a first run; what waits and what runs with its keys, its nearest limit
+  and its counts; **calls are the last 24 hours and refusals the last
+  hour**; a teammate sees the mission shared with them, that it waits, none
+  of its requests, and their own key first once generated; a stopped mission
+  is named apart. `readSetup`: every service that needs a company app is
+  registered or missing; telemetry undecided.
+- **`tests/unit/app/now-and-waiting.test.tsx`** (28, static markup) — the
+  words of a period, of a delay and of who asks; an event in the words of the
+  interface, total on malformed details. **The page of an approval is read
+  in order**: who, the mission, the call and its arguments, the permission
+  and its severity, the room left, what an answer does, then the answers —
+  the consequence precedes the first button; three forms, yes first; one
+  answer for several permissions and a limit already reached said before
+  answering; answered, expired and refused each have a state and no form,
+  and no argument; a mission that cannot run says why and disables what does
+  not apply, in the page's own words; a problem code has its sentence. **A
+  limit**: who was stopped, how much was used, when it resets; one choice,
+  without the answer that does not apply; **the form posts `resolution` and
+  nothing else**. **The home**: one `h1`, one primary action; what waits,
+  what runs, the counts; **no yes and no argument from the home**; one meter,
+  drawn near a limit; nothing waits → one sentence, the list closed; a
+  teammate reads "waiting for Alice's yes". **First run**: the model, the
+  steps, one accent; an account given by someone makes the mission the next
+  step; an administrator reads the setup list first.
+- **`src/server/http/document.test.ts`** (6) — **the self-contained
+  documents repeat the tokens value for value** in both themes and use no
+  other colour; light by default, dark for the system, the chosen theme when
+  given; the theme cookie is the application's; no script, no external
+  resource, title and message escaped; the style nonce.
+- The themed 403 of the forwarded URL is in
+  `tests/integration/requests/request-handlers.test.ts`; the theme of the
+  consent pages in `src/server/oauth-as/pages.test.ts` (13).
 
 ## Scenarios — Approval gate
 

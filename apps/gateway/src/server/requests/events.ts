@@ -40,6 +40,12 @@ export interface SessionEventLine {
   readonly kind: string;
   readonly risk_id: RiskId | null;
   readonly summary: string;
+  /**
+   * The stored details of the event, as its writer built them (`SessionEventDetails`):
+   * what a page words the event from (`parseEventDetails`). Never arguments — an event
+   * holds a tool name and a fingerprint.
+   */
+  readonly details: Readonly<Record<string, unknown>> | null;
 }
 
 const RESET_LINE = 'The creator reset the period for the claimed risk: its counter is back to zero';
@@ -180,5 +186,6 @@ export function eventLineOf(event: SessionEventLike): SessionEventLine {
     kind: event.kind,
     risk_id: event.riskId,
     summary: describeEvent(event),
+    details: event.details,
   };
 }

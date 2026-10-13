@@ -1,17 +1,10 @@
 /**
- * Layout of the pages reachable without a session (`/login`): the page, centred,
- * then the build footer (the same stamps `/healthz` gives anyone).
+ * Layout of the pages reachable without a session (`/login`). The page draws
+ * its own frame (`AuthPage`: the brand, the column, the build line), because
+ * it names the gateway and only the page knows it.
  */
-import { BuildFooter } from '@/components/shell/BuildFooter';
-import { Container } from '@/components/ui';
-
 export const dynamic = 'force-dynamic';
 
 export default function PublicLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <>
-      <Container>{children}</Container>
-      <BuildFooter />
-    </>
-  );
+  return children;
 }

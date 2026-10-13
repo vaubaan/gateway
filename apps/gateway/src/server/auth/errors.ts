@@ -27,24 +27,24 @@ export function isLoginErrorCode(raw: string): raw is LoginErrorCode {
 
 /** What the login page says for each code. One sentence, no IdP detail. */
 export const LOGIN_ERROR_MESSAGES: Readonly<Record<LoginErrorCode, string>> = {
-  'idp-not-configured': 'No identity provider is configured on this instance yet.',
+  'idp-not-configured': 'No identity provider is configured on this gateway yet.',
   'discovery-failed':
-    'The identity provider could not be reached. Try again or contact the operator.',
+    'The identity provider could not be reached. Try again or contact the administrator of this gateway.',
   'login-expired': 'The sign-in attempt expired. Start again.',
   'state-mismatch': 'The sign-in response did not match the attempt that started it. Start again.',
   'idp-error': 'The identity provider refused the sign-in.',
-  'claims-missing': 'The identity provider did not return the claims this instance requires.',
+  'claims-missing': 'The identity provider did not return the claims this gateway requires.',
   'email-not-verified':
     'The identity provider has not verified this email address. Verify it there, then sign in again.',
-  'email-domain-not-allowed': 'This email domain is not allowed on this instance.',
+  'email-domain-not-allowed': 'This email domain is not allowed on this gateway.',
   'groups-overage':
-    'Your account belongs to more groups than the identity provider puts in a sign-in token, so this instance cannot read them and refuses the sign-in rather than ignore them. Ask the operator: the groups claim must be limited to the groups assigned to this application.',
+    'Your account belongs to more groups than the identity provider puts in a sign-in token, so this gateway cannot read them and refuses the sign-in rather than ignore them. Ask the administrator: the groups claim must be limited to the groups assigned to this application.',
   'groups-unavailable':
-    'The identity provider did not return your groups this time, so this instance refuses the sign-in rather than sign you in without them. Try again in a moment; if it keeps happening, tell the operator.',
+    'The identity provider did not return your groups this time, so this gateway refuses the sign-in rather than sign you in without them. Try again in a moment; if it keeps happening, tell the administrator.',
   'account-deactivated':
-    'This account was deactivated on this instance by an operator. Ask an operator to reactivate it.',
+    'This account was deactivated on this gateway by an administrator. Ask an administrator to reactivate it.',
   'bootstrap-refused': 'The bootstrap token was not accepted.',
-  'bootstrap-unavailable': 'Bootstrap sign-in is no longer available on this instance.',
+  'bootstrap-unavailable': 'Bootstrap sign-in is no longer available on this gateway.',
 };
 
 export class LoginError extends Error {
