@@ -269,7 +269,7 @@ const removed = await root.audit.retention.sweep(); // number, or null when the 
   and of nothing else (other tables untouched, boundary kept), triggers still forbidding
   update and delete, idempotence, configured days, scheduling (boot sweep, interval,
   stop, failure logged, shared sweep), wiring in the composition root.
-- `tests/integration/audit/admin-mutations.test.ts` (30) — the structural test above,
+- `tests/integration/audit/admin-mutations.test.ts` (36) — the structural test above,
   plus `before` / `after` of a resource edit and a failed discovery.
 - `tests/e2e/v5/audit-session.spec.ts` (3, Playwright on the ephemeral instance) — a day
   of calls on the session page and on the audit page, filters in one row; every column

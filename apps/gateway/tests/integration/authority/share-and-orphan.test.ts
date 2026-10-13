@@ -207,6 +207,24 @@ describe('share → issue within the restriction → exceed → revoke → orpha
     expect((await rig.read(await rig.issueFor(rig.bob, [READ]))).result).toBeDefined();
   });
 
+  it('leaves nothing to do on an orphaned mission but close it: no gate edit, the creator revokes', async () => {
+    const { share } = await shareToBob([READ]);
+    const mission = await rig.issueFor(rig.bob, [READ]);
+    await rig.root.shares.service.revoke(await rig.actor(rig.ada), share.id);
+
+    const { service } = rig.root.missions;
+    expect(await service.setGate(rig.bob, mission.mission.id, READ, 'approval')).toEqual({
+      ok: false,
+      reason: 'inactive',
+      state: 'orphaned',
+    });
+    expect(await service.revoke(rig.bob, mission.mission.id)).toMatchObject({
+      ok: true,
+      mission: { status: 'revoked' },
+    });
+    expect(inactive(await rig.read(mission)).status).toBe('revoked');
+  });
+
   it('orphans the missions of a creator the IdP removed', async () => {
     await shareToBob([READ]);
     const mission = await rig.issueFor(rig.bob, [READ]);

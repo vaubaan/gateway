@@ -332,6 +332,16 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Security
 
+- **The execution door re-checks the creator's authority on every request.** A mission used
+  to keep working after the share behind it was revoked or its creator left the owner group:
+  the `orphaned` status existed and nothing set it. The door now re-reads the creator's
+  status, memberships and shares for each request (about 20–45 µs), and the services orphan
+  the affected missions as soon as a share, a connection or a membership changes.
+- **The admin rule counts IdP-claimed groups only.** A local group — which an operator can
+  now create and fill in Administration — never makes its members operators, and cannot take
+  the name of the admin rule's group.
+- **Pages no longer answer 500 for a connection that is not yours.** A page could fail to
+  recognise the "not found" a service threw and render an error instead of a 404.
 - **An approval is bound to the tool it was read for.** Approvals were keyed by mission, risk
   and argument fingerprint: the same arguments sent to another tool touching the same risk
   would have consumed an approval granted for the first. The key now includes the tool
