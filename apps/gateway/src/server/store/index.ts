@@ -135,6 +135,9 @@ export {
   journalMode,
 } from './db.ts';
 export type { StoreDb } from './db.ts';
+export { MEMBERSHIPS, isOnMission, membershipOf, type Membership } from './membership.ts';
+export { TOKEN_NOT_ISSUABLE_REASONS, TokenNotIssuableError } from './errors.ts';
+export type { TokenNotIssuableReason } from './errors.ts';
 export { ManualClock, systemClock, toIso } from './clock.ts';
 export type { Clock } from './clock.ts';
 export { newId, isUuidV7, idTimestampMs } from './ids.ts';

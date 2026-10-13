@@ -559,6 +559,7 @@ const RULES: Readonly<Record<string, Rule>> = {
   'MissionService.get': READ,
   'MissionService.access': READ,
   'MissionService.stateOf': READ,
+  'MissionService.stateAfterRefusal': READ,
   'MissionService.kitOf': READ,
   'MissionService.issue': {
     kind: 'mutation',

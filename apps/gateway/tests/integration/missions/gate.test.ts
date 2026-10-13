@@ -178,6 +178,46 @@ describe('editing a gate after issuance', () => {
     expect(await gateEdits()).toEqual([]);
   });
 
+  it('an expired mission takes no gate edit: nothing moves, nothing is written, and the page says so', async () => {
+    // The creator opened MERGE for the period while the mission was alive.
+    const asked = await call(MERGE);
+    if (asked.outcome !== 'refused' || !asked.request_id) throw new Error('expected a request');
+    await rig.root.requests.service.decide(rig.seeded.ada, asked.request_id, {
+      resolution: 'open-gate',
+    });
+    const eventsBefore = (await events()).length;
+
+    // The expiry passes (the column still says `active`: expiry is read from the date).
+    await rig.root.store.missions.setExpiresAt(mission.id, '2020-01-01T00:00:00.000Z');
+
+    for (const [riskId, gate] of [
+      [MERGE, 'approval'],
+      [MERGE, 'auto'],
+      [READ, 'approval'],
+    ] as const) {
+      expect(await service().setGate(rig.seeded.ada, mission.id, riskId, gate)).toEqual({
+        ok: false,
+        reason: 'inactive',
+        state: 'expired',
+      });
+    }
+    expect(await gateOf(MERGE)).toBe('approval');
+    expect(await gateOf(READ)).toBe('auto');
+    expect(await gateEdits()).toEqual([]);
+    expect((await events()).length).toBe(eventsBefore);
+    const detail = await service().get(rig.seeded.ada, mission.id);
+    expect(detail?.gates_editable).toBe(false);
+
+    const response = await rig.root.missions.handlers.setGate(
+      gateRequest(await sessionHeaders(rig.root, rig.seeded.ada), { risk_id: MERGE, gate: 'auto' }),
+      mission.id,
+    );
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      message: 'The mission is expired; every call is refused whatever its gates.',
+    });
+  });
+
   it('asking for `approval` on a risk whose gate is open for the period closes the opening: one entry, one event', async () => {
     const asked = await call(MERGE);
     if (asked.outcome !== 'refused' || !asked.request_id) throw new Error('expected a request');

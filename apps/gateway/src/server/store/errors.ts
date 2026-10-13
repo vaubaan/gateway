@@ -29,5 +29,27 @@ export class UnknownRiskIdError extends StoreError {
 /** A write that violates a domain rule the schema or the repository enforces. */
 export class InvariantError extends StoreError {}
 
+export const TOKEN_NOT_ISSUABLE_REASONS = [
+  'mission-not-active',
+  'holder-not-a-member',
+  'name-taken',
+] as const;
+export type TokenNotIssuableReason = (typeof TOKEN_NOT_ISSUABLE_REASONS)[number];
+
+/**
+ * A mission token was about to be inserted for a mission that no longer serves, for a
+ * holder who is no longer on it, or under a name a working token already carries. Its
+ * own class, apart from `InvariantError` (which a corrupt row raises too): the services
+ * answer each reason in its own words.
+ */
+export class TokenNotIssuableError extends StoreError {
+  constructor(
+    readonly reason: TokenNotIssuableReason,
+    missionId: string,
+  ) {
+    super(`mission ${missionId}: no token can be issued (${reason})`);
+  }
+}
+
 /** The migration directory or the applied history is inconsistent. */
 export class MigrationError extends StoreError {}
