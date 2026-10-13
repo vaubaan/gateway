@@ -4,20 +4,51 @@ import type { ApprovalRecord, Iso, RiskId } from '../types.ts';
 import { nowIso, requireRow, type RepoContext } from './context.ts';
 
 /**
- * What an approval is bound to (spec §3.5, migration 0005): within its mission, the
- * risk, the tool and the canonical fingerprint of the arguments. The same arguments
- * sent to another tool that touches the same risk are another call, and ask again.
+ * The call an approval is bound to (spec §3.5, migrations 0005 and 0013): within its
+ * mission, the tool and the canonical fingerprint of the arguments. The same arguments
+ * sent to another tool are another call, and ask again. An approval then lists the
+ * gated risks of that call it covers (`riskIds`).
  */
-export interface ApprovalKey {
-  readonly riskId: RiskId;
+export interface ApprovedCall {
   readonly tool: string;
   readonly fingerprint: string;
 }
 
-export interface CreateApprovalInput extends ApprovalKey {
+export interface CreateApprovalInput extends ApprovedCall {
   readonly missionId: string;
   readonly requestId: string;
+  /** Every gated risk of the call the approval covers; never empty. */
+  readonly riskIds: readonly RiskId[];
   readonly expiresAt: Iso;
+}
+
+/**
+ * The risks a row lists. A row with no list, or one that cannot be read, covers the one
+ * risk of its `risk_id` column and nothing more: the narrow reading.
+ */
+export function riskIdsOf(riskId: RiskId, json: string | null): readonly RiskId[] {
+  if (json === null) return [riskId];
+  try {
+    const parsed: unknown = JSON.parse(json);
+    if (
+      Array.isArray(parsed) &&
+      parsed.length > 0 &&
+      parsed.every((item): item is string => typeof item === 'string' && item.length > 0)
+    ) {
+      return parsed;
+    }
+  } catch {
+    // Falls through to the narrow reading.
+  }
+  return [riskId];
+}
+
+/** What a request or an approval about several risks stores: the list, the first as `risk_id`. */
+export function riskIdsColumn(riskIds: readonly RiskId[]): { riskId: RiskId; json: string } {
+  const distinct = [...new Set(riskIds)];
+  const [first] = distinct;
+  if (first === undefined) throw new InvariantError('a request or an approval names a risk');
+  return { riskId: first, json: JSON.stringify(distinct) };
 }
 
 export interface ApprovalsRepo {
@@ -33,6 +64,7 @@ interface ApprovalRow {
   mission_id: string;
   request_id: string;
   risk_id: string;
+  risk_ids_json: string | null;
   tool: string;
   fingerprint: string;
   created_at: string;
@@ -41,7 +73,7 @@ interface ApprovalRow {
 }
 
 const COLUMNS =
-  'id, mission_id, request_id, risk_id, tool, fingerprint, created_at, expires_at, consumed_at';
+  'id, mission_id, request_id, risk_id, risk_ids_json, tool, fingerprint, created_at, expires_at, consumed_at';
 
 function toRecord(row: ApprovalRow): ApprovalRecord {
   return {
@@ -49,6 +81,7 @@ function toRecord(row: ApprovalRow): ApprovalRecord {
     missionId: row.mission_id,
     requestId: row.request_id,
     riskId: row.risk_id,
+    riskIds: riskIdsOf(row.risk_id, row.risk_ids_json),
     tool: row.tool,
     fingerprint: row.fingerprint,
     createdAt: row.created_at,
@@ -58,65 +91,59 @@ function toRecord(row: ApprovalRow): ApprovalRecord {
 }
 
 const SELECT_BY_ID = `SELECT ${COLUMNS} FROM approvals WHERE id = ?`;
-const SELECT_CANDIDATE = `SELECT id FROM approvals
-  WHERE mission_id = ? AND risk_id = ? AND tool = ? AND fingerprint = ?
+const SELECT_FOR_CALL = `SELECT ${COLUMNS} FROM approvals
+  WHERE mission_id = ? AND tool = ? AND fingerprint = ?
     AND consumed_at IS NULL AND expires_at > ?
-  ORDER BY expires_at LIMIT 1`;
-const CONSUME = 'UPDATE approvals SET consumed_at = ? WHERE id = ? AND consumed_at IS NULL';
-const INSERT = `INSERT INTO approvals (id, mission_id, request_id, risk_id, tool, fingerprint, created_at, expires_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+  ORDER BY expires_at, id`;
+const CONSUME = `UPDATE approvals SET consumed_at = ?
+  WHERE id = ? AND mission_id = ? AND consumed_at IS NULL AND expires_at > ?`;
+const INSERT = `INSERT INTO approvals (id, mission_id, request_id, risk_id, risk_ids_json, tool, fingerprint, created_at, expires_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
 function getApprovalRecord(ctx: RepoContext, id: string): ApprovalRecord | null {
   const row = ctx.db.prepare<[string], ApprovalRow>(SELECT_BY_ID).get(id);
   return row ? toRecord(row) : null;
 }
 
-function candidateId(
-  ctx: RepoContext,
-  missionId: string,
-  key: ApprovalKey,
-  now: Iso,
-): string | null {
-  // A row older than migration 0005 has an empty tool: it must match no call.
-  if (key.tool === '') return null;
-  // perf: prepared on every call (the driver keeps no statement cache). Cheap in-process;
-  // a hot path would prepare these once in the factory and pass them in.
-  const candidate = ctx.db
-    .prepare<[string, string, string, string, string], { id: string }>(SELECT_CANDIDATE)
-    .get(missionId, key.riskId, key.tool, key.fingerprint, now);
-  return candidate?.id ?? null;
-}
-
 /**
  * Synchronous non-consuming lookup, meant to run inside an already-open write
- * transaction: the budget decision checks every gated risk before consuming anything,
- * so a call refused on one risk leaves the approvals of the others untouched.
+ * transaction: every usable approval of the mission for this call — same tool, same
+ * fingerprint, not consumed, not expired — soonest-expiring first. The budget decision
+ * reads which gated risks they cover before consuming anything, so a call refused on one
+ * risk leaves every approval untouched.
  */
-export function findApprovalSync(
+export function findApprovalsSync(
   ctx: RepoContext,
   missionId: string,
-  key: ApprovalKey,
+  call: ApprovedCall,
   now: Iso,
-): ApprovalRecord | null {
-  const id = candidateId(ctx, missionId, key, now);
-  return id ? getApprovalRecord(ctx, id) : null;
+): ApprovalRecord[] {
+  // A row older than migration 0005 has an empty tool: it must match no call.
+  if (call.tool === '') return [];
+  // perf: prepared on every call (the driver keeps no statement cache). Cheap in-process;
+  // a hot path would prepare these once in the factory and pass them in.
+  return ctx.db
+    .prepare<[string, string, string, string], ApprovalRow>(SELECT_FOR_CALL)
+    .all(missionId, call.tool, call.fingerprint, now)
+    .map(toRecord);
 }
 
 /**
- * Synchronous consumption, meant to run inside an already-open write transaction.
- * Picks the soonest-expiring valid approval so a later grant stays usable.
+ * Synchronous consumption of one approval by id, meant to run inside an already-open
+ * write transaction. `null`, and nothing written, when the approval is not this
+ * mission's, is already consumed or has expired: an approval is used once.
  */
 export function consumeApprovalSync(
   ctx: RepoContext,
   missionId: string,
-  key: ApprovalKey,
+  approvalId: string,
   now: Iso,
 ): ApprovalRecord | null {
-  const id = candidateId(ctx, missionId, key, now);
-  if (!id) return null;
-  const result = ctx.db.prepare<[string, string]>(CONSUME).run(now, id);
+  const result = ctx.db
+    .prepare<[string, string, string, string]>(CONSUME)
+    .run(now, approvalId, missionId, now);
   if (result.changes === 0) return null;
-  return getApprovalRecord(ctx, id);
+  return getApprovalRecord(ctx, approvalId);
 }
 
 /**
@@ -129,14 +156,16 @@ export function insertApprovalSync(
   now: Iso,
 ): ApprovalRecord {
   if (input.tool === '') throw new InvariantError('an approval is bound to a tool');
+  const risks = riskIdsColumn(input.riskIds);
   const id = ctx.newId();
   ctx.db
-    .prepare<[string, string, string, string, string, string, string, string]>(INSERT)
+    .prepare<[string, string, string, string, string, string, string, string, string]>(INSERT)
     .run(
       id,
       input.missionId,
       input.requestId,
-      input.riskId,
+      risks.riskId,
+      risks.json,
       input.tool,
       input.fingerprint,
       now,

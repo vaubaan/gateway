@@ -337,6 +337,52 @@ describe('preset operator — everything, each command under the risk that names
     }
   });
 
+  test('write-data alone cannot make a key go away: no time to live, no move', () => {
+    // The defect: `EXPIRE k 1` deleted any key for a mission that could only write.
+    const db = database('staging');
+    const writeOnly = new Set(['upstash-redis.read-data', 'upstash-redis[staging].write-data']);
+    const both = new Set([...writeOnly, 'upstash-redis[staging].delete-data']);
+    const disguised: [string, Record<string, unknown>][] = [
+      execute(['EXPIRE', 'k', '1']),
+      execute(['PEXPIRE', 'k', '1']),
+      execute(['SET', 'k', 'v', 'EX', '1']),
+      execute(['SETEX', 'k', '1', 'v']),
+      execute(['RENAME', 'k', 'trash']),
+      execute(['LMOVE', 'l', 'trash', 'LEFT', 'RIGHT']),
+      execute(['SMOVE', 's', 'trash', 'm']),
+      execute(['RPOPLPUSH', 'l', 'trash']),
+      [
+        'upstash_redis__execute',
+        {
+          command: [
+            ['SET', 'k', 'v'],
+            ['EXPIRE', 'k', '1'],
+          ],
+        },
+      ],
+      ['upstash_redis__expire', { key: 'k', seconds: 1 }],
+      ['upstash_redis__set', { key: 'k', value: 'v', ex: 1 }],
+      ['upstash_redis__set', { key: 'k', value: 'v', px: 1 }],
+    ];
+    for (const [tool, args] of disguised) {
+      const label = JSON.stringify(args);
+      expect(missing(decide(writeOnly, db, tool, args)), label).toEqual([
+        'upstash-redis[staging].delete-data',
+      ]);
+      expect(decide(both, db, tool, args).outcome, label).toBe('allowed');
+    }
+    // What write-data alone still does: values that stay.
+    for (const [tool, args] of [
+      execute(['SET', 'k', 'v']),
+      execute(['SET', 'k', 'v', 'KEEPTTL']),
+      execute(['INCR', 'n']),
+      execute(['PERSIST', 'k']),
+      ['upstash_redis__set', { key: 'k', value: 'v' }],
+    ] as [string, Record<string, unknown>][]) {
+      expect(decide(writeOnly, db, tool, args).outcome, JSON.stringify(args)).toBe('allowed');
+    }
+  });
+
   test('arbitrary execution outside development is behind approval, like the FLUSH a script can run', () => {
     const operator = upstashRedisPlugin.catalog.presets.find((p) => p.id === 'operator')!;
     const gateOf = (riskId: string) => operator.entries.find((e) => e.risk_id === riskId)!.gate;

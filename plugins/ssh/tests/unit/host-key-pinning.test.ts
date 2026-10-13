@@ -51,8 +51,22 @@ import {
 const LOOPBACK = '127.0.0.1';
 const TIMEOUT_MS = 5_000;
 
-const hostKeyPair = utils.generateKeyPairSync('ed25519');
-const clientKeyPair = utils.generateKeyPairSync('ed25519');
+/**
+ * A test key pair. About three in a thousand of the ed25519 keys `ssh2` generates
+ * cannot be read back by `ssh2` itself ("Cannot parse privateKey: Malformed OpenSSH
+ * private key"), which failed this whole file now and then : draw until the pair is
+ * one its own parser accepts. The instance does not generate its keys this way
+ * (`ssh-keypair.ts` encodes them from the raw seed).
+ */
+function testKeyPair(): ReturnType<typeof utils.generateKeyPairSync> {
+  for (;;) {
+    const pair = utils.generateKeyPairSync('ed25519');
+    if (!(utils.parseKey(pair.private) instanceof Error)) return pair;
+  }
+}
+
+const hostKeyPair = testKeyPair();
+const clientKeyPair = testKeyPair();
 
 /**
  * The key blob an SSH server presents is the base64 field of its public key

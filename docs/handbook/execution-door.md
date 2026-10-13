@@ -55,7 +55,7 @@ Built on [gateway-core](gateway-core.md) (pipeline, refusals),
 apps/gateway/src/server/execution/      host-agnostic, never imports `next`
   index.ts            createExecutionModule(deps) → root.execution { pipeline, credentialCache, tokens, door, handlers }; the log line of a failed decision stage
   door.ts             ExecutionDoor: handleMcp(), handleCatalog(); admission, MCP serving
-  token-verifier.ts   TokenVerifier — verified-token cache (sliding), throttle per prefix and client address, single flight
+  token-verifier.ts   TokenVerifier — asks the mission service at every call; throttles the argon2id check of legacy tokens
   mission-context.ts  loadMissionContext(), missionResourceOf(), periodOf()
   resource-stage.ts   createResourceStage(), citedRefs()        → resource-not-in-mission
   risk-stage.ts       createRiskStage()                         → risk-not-accepted
@@ -144,6 +144,13 @@ to the request's own id.
   window are the door's, the limit is `InstanceConfig.mcp.rateLimitPerMinute`
   ([configuration](configuration.md)). It is not the `rate-limited` refusal:
   that one is per risk, decided by the budget, and carries a `risk_id`.
+  **It stays per mission** (product owner's decision of 2026-10-13, ADR
+  [owner-decisions-of-2026-10-13](../decisions/owner-decisions-of-2026-10-13.md)):
+  it bounds what one mission sends to the instance and to the provider, and a
+  window per token would multiply that ceiling by the number of tokens. One
+  holder can therefore use up the window for the others (threat model, A26);
+  the audit names the holder of each call, and the creator revokes that token
+  alone.
 
 ### Token holders: who is calling, and when a token stops
 
@@ -206,7 +213,7 @@ the token at the next call even if nothing revoked the token row
 `TOKEN_LAST_USED_GRANULARITY_SECONDS` = 60). It is the door's only write
 outside the pipeline; a failure is logged and never refuses the request.
 
-### Verified-token cache (`token-verifier.ts`)
+### Token verification (`token-verifier.ts`)
 
 `TokenVerifier.verify(bearer, clientIp)` → `TokenVerification` (missions) or
 `{ outcome: 'throttled', retryAfterMs }`. `clientIp` is the address of the
@@ -214,41 +221,55 @@ outside the pipeline; a failure is logged and never refuses the request.
 the door resolves it once per request, before authenticating, and builds the
 `DoorAuthenticator` of that request around it.
 
-- Key `mission-token:<sha256(bearer)>`, value: the id of the token row the
-  bearer matched, TTL `VERIFIED_TOKEN_TTL_SECONDS` (15 min) counted from the
-  last use, in `root.cache` (`CacheClient`).
-- **Hit**: `MissionService.provenToken(prefix, tokenId)` — the row re-read by
-  prefix and, if it still has that id, judged by the same `standingOf` a miss
-  ends in: the token's status, and for a member token the holder's status and
-  membership. Rotation, revocation, a member removed and a holder deactivated
-  are therefore seen by the next call; only the argon2 computation is skipped,
-  and a hit can never be more lenient than a miss (the verifier holds no rule
-  of its own). A row that is gone or replaced voids the entry.
-- **One proof per token.** The key is the bearer's hash and the throttle key
-  the token's prefix: the several tokens of one mission never share an entry
-  or a window, and retiring one holder's token neither evicts nor slows
-  another's.
-  A hit writes the entry again with a full TTL (the proof slides): an agent that
-  calls at least once every 15 minutes verifies once per process lifetime and
-  never meets the throttle below.
-- **Miss**: one `rateLimiter.take(verifyThrottleKey(prefix, clientIp), VERIFY_ATTEMPTS_PER_WINDOW (30), VERIFY_WINDOW_MS (60 s))`
-  — the key is `mcp-verify:<prefix>:<client address | unknown>` — then
-  `MissionService.verifyToken` (argon2id). Only `verified` / `retired` results
-  are stored. Concurrent misses of one bearer share one promise (`inFlight`,
-  `// single-process only`).
-- **Why the address is in the key.** The prefix is not a secret (log lines,
-  session events, the Missions pages). Keyed on the prefix alone, thirty wrong
-  secrets a minute would keep the real agent at 429 each time its proof is cold
-  (restart, 15 minutes of silence). With `trusted_proxies` configured, a flood
-  closes only the window of the address it comes from. Without it every caller
-  is `unknown` and shares one window per prefix: a cold agent can still be held
-  off for the duration of a flood, a warm one cannot (its hits skip the
-  throttle). The argon2 ceiling is therefore 30 a minute per prefix **and
-  address**, not per prefix. The shared window of an instance without
-  `trusted_proxies` is accepted and said: the composition root logs one
-  warning at boot naming the key ([configuration](configuration.md), "Boot
-  sequence"; ADR
-  [execution-door-json-faithful-arguments-and-shared-throttle](../decisions/execution-door-json-faithful-arguments-and-shared-throttle.md)).
+A mission token is stored as the **SHA-256 digest** of the Bearer
+(`mission_tokens.hash`, `hash_alg = 'sha256'`; ADR
+[mission-token-sha256-digest](../decisions/mission-token-sha256-digest.md)).
+Verifying one is a lookup by prefix and a constant-time comparison, so:
+
+- **Nothing is remembered.** Every call goes to
+  `MissionService.verifyToken`, which reads the row, its mission and — for a
+  member token — the holder's status and membership, and ends in
+  `standingOf`. Rotation, revocation, a member removed and a holder
+  deactivated are seen by the next call because there is no cached answer to
+  be stale. The verified-token cache, its sliding TTL and its single-flight
+  map are gone: they existed to skip an argon2id computation.
+- **Nothing is throttled**, for a token stored as a digest: a wrong secret
+  costs a row read and a hash of forty-nine bytes. Wrong secrets replayed on
+  a real prefix are answered 401, each of them, and never hold the agent.
+
+**Tokens issued by an earlier build** are stored as an argon2id hash
+(`hash_alg = 'argon2id'`) and keep working:
+
+- `bearerMatches` checks the row with the algorithm the row names. A row
+  naming any other algorithm matches nothing.
+- That check costs tens of milliseconds, so it is the one thing still
+  throttled: the verifier hands `verifyToken` a gate,
+  `rateLimiter.take(verifyThrottleKey(prefix, clientIp), VERIFY_ATTEMPTS_PER_WINDOW (30), VERIFY_WINDOW_MS (60 s))`
+  — key `mcp-verify:<prefix>:<client address | unknown>` — which the service
+  asks only when the row it found is a legacy one, before computing anything.
+- **The first call that matches moves the row**:
+  `MissionsRepo.rehashToken(id, { fromHash, hash, hashAlg })` replaces the
+  argon2id hash by the SHA-256 digest of the same Bearer, only while the row
+  still holds the hash that was read (two concurrent calls write once). Same
+  row, same prefix, same holder, same status. One `info` log line,
+  `mission token moved to its sha256 digest`, with the mission and the prefix.
+  If the write fails the call still goes on — the token is as valid as before
+  — a `warn` line says so and the next call tries again.
+- **Why the address is in the throttle key.** The prefix is not a secret (log
+  lines, session events, the Missions pages). Keyed on the prefix alone,
+  thirty wrong secrets a minute would keep the real agent at 429. With
+  `trusted_proxies` configured, a flood closes only the window of the address
+  it comes from. Without it every caller is `unknown` and shares one window
+  per prefix: the agent of a legacy token that has never called since the
+  upgrade can be held off for the duration of a flood. One successful call
+  ends that for good. The composition root logs one warning at boot naming
+  the key ([configuration](configuration.md), "Boot sequence"; ADR
+  [execution-door-json-faithful-arguments-and-shared-throttle](../decisions/execution-door-json-faithful-arguments-and-shared-throttle.md),
+  whose throttle now concerns legacy tokens only).
+
+Once every legacy row has been used or retired, the throttle is dead code and
+goes with the `argon2` dependency. `SELECT COUNT(*) FROM mission_tokens WHERE
+hash_alg = 'argon2id' AND status = 'active'` says how many are left.
 
 ### Grounds (`door.ts` → `authority/mission-grounds.ts`)
 
@@ -302,7 +323,7 @@ holder (`{ id, prefix, holder }`):
 | --------- | -------------------------------------------------------------------------- | ------------------------------------------------------- |
 | resources | `createResourceStage({ registry, connections })`                           | `resource-not-in-mission`; rejects a call no one owns   |
 | risks     | `createRiskStage({ registry })`                                            | `risk-not-accepted`; rejects a classifier denial        |
-| budget    | `createBudgetStage({ service: root.budget, missions })` (P1.3)             | `budget-exhausted`, `rate-limited`, `approval-required` |
+| budget    | `createBudgetStage({ service: root.budget, missions })`                    | `budget-exhausted`, `rate-limited`, `approval-required` |
 | upstream  | `createUpstreamStage({ credentials, credentialCache, logger, telemetry })` | `connection-unavailable` (after the allow)              |
 | audit     | `store.auditWriter` (`SqliteAuditWriter`)                                  | —                                                       |
 
@@ -478,7 +499,7 @@ declining the call itself (an unknown tool, an argument it cannot read or
 that the tool does not declare, a target outside the mission) — the SDK's
 `ExecutorRefusal`, turned into that result by `declining()`: it is an
 `allowed` outcome with no `upstream_error`, handed to the agent untouched. All ten shipped plugins
-follow the rule since the Phase 2 cycle-end (`vercel` and `upstash-redis`
+follow the rule (since the second review cycle: `vercel` and `upstash-redis`
 used to return provider failures as results; `cloudflare-dns` used to throw
 its own refusals).
 
@@ -567,8 +588,10 @@ tool and that hash; the entry of the approved replay carries `approval_id`.
 
 ### `approval-required`
 
-A call touching a risk gated `approval` is refused whole: `risk_id`,
-`fingerprint`, `approval_url` (`<public_url>/r/<id>`), `expires_at` (the
+A call touching a risk gated `approval` is refused whole: `risk_ids` (every
+gated risk the call touches; `risk_id` is the first), `fingerprint`,
+`approval_url` (`<public_url>/r/<id>` — one request for the call, however
+many gated risks it touches), `expires_at` (the
 request's), `approval_valid_seconds` (`approvals.expiry`) and a hint that
 tells the agent to hand the URL to its human and to replay the same tool with
 exactly the same arguments within that delay of the grant. The door does
@@ -878,7 +901,7 @@ const execution = createExecutionModule({
   logger,
   build,
   delegations: deps.delegatedTokens ?? oauth.verifier, // delegated tokens are refused by kind
-  telemetry: telemetry.sink, // community telemetry (P2.5); inert unless the operator opted in
+  telemetry: telemetry.sink, // community telemetry; inert unless the operator opted in
 });
 ```
 
@@ -1054,13 +1077,12 @@ plugin streams), and a run behind a proxy other than Caddy.
 
 ## Tests
 
-- `src/server/execution/execution.test.ts` (26) — agent label (shape, absent,
+- `src/server/execution/execution.test.ts` (21) — agent label (shape, absent,
   rejected with its reason, carrier and what was dropped), client address
   (hop with a port, brackets, spaces, invalid CIDR), `citedRefs`, tool filter,
-  verified-token cache (once, standing asked again on every call, a cached
-  proof that never outlives a removed or deactivated holder, one proof and one
-  throttle window per token, void proof, single flight, throttle, sliding
-  proof, throttle per address), upstream credential cache.
+  token verifier (nothing remembered: the standing is asked again on every
+  call; no throttle for a token stored as a digest; the argon2id check of a
+  legacy token throttled per prefix and address), upstream credential cache.
 - `tests/integration/execution/team-door.test.ts` (11) — over HTTP: two
   members and a named token share one counter and are attributed separately in
   the audit, the session and the search; the holder is the token's whatever
@@ -1084,15 +1106,15 @@ plugin streams), and a run behind a proxy other than Caddy.
   host-built summary in the audit, the detail to the agent, the HTTP status
   of a client error), 401 → refresh → retry, rejected refresh → `expired`,
   403, credential cache.
-- `tests/integration/execution/door-http.test.ts` (21) — the official MCP
+- `tests/integration/execution/door-http.test.ts` (23) — the official MCP
   client in both eras against the real GitHub plugin on a mocked upstream,
   refusal `data` as the client sees it, plain JSON for `curl`, 405, tool filter,
   catalog, the 401 cases, session and delegated token refused, foreign origin,
-  argon2 once, verification throttle, a flood of wrong secrets that does not
-  lock out the agent (from another address; with a warm proof), the accepted
-  risk stated (with no trusted proxy, an agent not verified yet is held at 429
-  while its prefix is flooded, and is back with the window; the mission and
-  its token stand), surface rate limit, a call whose arguments carry `1e999`
+  token verification (the stored digest, a revocation seen on the next call,
+  wrong secrets answered 401 and never 429; a token an earlier build stored as
+  argon2id still authenticates and is moved to its digest by its first call,
+  its argon2id check throttled per prefix and address, the accepted risk
+  stated for such a token with no trusted proxy), surface rate limit, a call whose arguments carry `1e999`
   rejected `-32602` with the argument's path, nothing sent upstream and an
   audit entry without refusal code, logs.
 - `tests/integration/execution/agent-label.test.ts` (6) — two labels and no
@@ -1100,7 +1122,7 @@ plugin streams), and a run behind a proxy other than Caddy.
   that claims an identity; a value that is not a label dropped, logged
   without its value, the call served; `_meta.agent` over the header and the
   fallback; the official MCP client in both eras.
-- `tests/integration/execution/approval-door.test.ts` (7) — the GitHub
+- `tests/integration/execution/approval-door.test.ts` (8) — the GitHub
   `developer` preset as shipped: the workflow write is the gated risk;
   refusal → grant → the identical replay passes → a second identical replay
   is refused; one byte changed asks again and leaves the other approval
@@ -1154,12 +1176,13 @@ Scenarios in [integration-tests](../tests/integration-tests.md).
 - **403 on every request from a browser-based MCP client** — it sends an
   `Origin`; the door answers no CORS.
 - **429** — `Retry-After` says when. `-32002`: the mission's surface limit
-  (`mcp.rate_limit_per_minute`) or, on a 401-looking bearer, the verification
-  throttle of its prefix and client address. A valid token answered 429 right
-  after a restart: someone is replaying wrong secrets on its prefix from the
-  same resolved address — or `trusted_proxies` is empty and all callers share
-  the `unknown` window (the boot log has `trusted_proxies is empty: …` at
-  `warn`); declare the proxies.
+  (`mcp.rate_limit_per_minute`) or, for a token issued by a build that stored
+  argon2id hashes and not used since, the verification throttle of its prefix
+  and client address: someone is replaying wrong secrets on that prefix from
+  the same resolved address — or `trusted_proxies` is empty and all callers
+  share the `unknown` window (the boot log has `trusted_proxies is empty: …`
+  at `warn`). Declare the proxies, or let the agent call once: its first
+  successful call moves the token to its digest and out of the throttle.
 - **`Vaubaan rejected the call: …`** (`-32602`) — no refusal code: the tool is
   unknown, its provider has no connection in the mission, or the classifier
   could not place the arguments. The sentence is the classifier's. The audit
@@ -1233,7 +1256,10 @@ textParts(response.body))`, or call `ctx.emitPart` yourself and await it.
   [docker-image-and-config-format](../decisions/docker-image-and-config-format.md),
   [upstream-credential-cache-and-rejected-credentials](../decisions/upstream-credential-cache-and-rejected-credentials.md),
   [atomic-budget-accounting](../decisions/atomic-budget-accounting.md),
-  [api-key-format-vbn-live-argon2id](../decisions/api-key-format-vbn-live-argon2id.md),
+  [api-key-format-vbn-live-argon2id](../decisions/api-key-format-vbn-live-argon2id.md)
+  (the format),
+  [mission-token-sha256-digest](../decisions/mission-token-sha256-digest.md)
+  (what is stored),
   [execution-door-json-faithful-arguments-and-shared-throttle](../decisions/execution-door-json-faithful-arguments-and-shared-throttle.md),
   [scope-caps-not-enforced-in-v5-0](../decisions/scope-caps-not-enforced-in-v5-0.md),
   [decision-stages-fail-closed-and-audited](../decisions/decision-stages-fail-closed-and-audited.md),

@@ -8,7 +8,10 @@
  * decision. The **client's status** is evaluated at every verification too
  * (`ClientRegistry.statusOf`: the operator's decision, else the registration
  * policy as configured now): a token of a client that is no longer approved
- * is worth nothing, whatever its expiry says.
+ * is worth nothing, whatever its expiry says. So is the **delegation's absolute
+ * lifetime** (`DelegationLifetime`): a token of a delegation past it is worth
+ * nothing, whatever its own expiry says — a token is minted to expire at the
+ * deadline at the latest, and the operator may have shortened the key since.
  *
  * Two consumers, one answer:
  *
@@ -23,6 +26,7 @@ import type { DelegationContext } from '@vaubaan/gateway-core';
 import type { DelegationsRepo } from '../store/repositories/delegations';
 import type { UsersRepo } from '../store/repositories/users';
 import type { ClientRegistry } from './clients';
+import type { DelegationLifetime } from './delegation-lifetime';
 import { scopesOf } from './endpoints';
 import { digestOf, isAccessTokenShaped } from './secrets';
 
@@ -31,6 +35,8 @@ export interface DelegatedTokenVerifierDeps {
   readonly users: Pick<UsersRepo, 'getById'>;
   /** What the operator and the registration policy say of a client, now. */
   readonly clients: Pick<ClientRegistry, 'statusOf'>;
+  /** The absolute lifetime of a delegation, as configured now. */
+  readonly lifetime: Pick<DelegationLifetime, 'isOver'>;
 }
 
 export class DelegatedTokenVerifier {
@@ -38,7 +44,8 @@ export class DelegatedTokenVerifier {
 
   /**
    * The delegation behind a bearer, or `null`: not a delegated token, expired,
-   * revoked, of a revoked delegation, of a user who is no longer active, or
+   * revoked, of a revoked delegation, of a delegation past its absolute
+   * lifetime, of a user who is no longer active, or
    * of a client that is not approved as of now (disabled, or left pending by a
    * registration policy tightened since the token was issued).
    * A value of another shape is refused before anything is hashed or read.
@@ -49,6 +56,7 @@ export class DelegatedTokenVerifier {
     const found = await this.deps.repo.findActiveAccessToken(digestOf(token));
     if (!found) return null;
     const { delegation } = found;
+    if (this.deps.lifetime.isOver(delegation)) return null;
     const user = await this.deps.users.getById(delegation.userId);
     if (!user || user.status !== 'active') return null;
     const client = await this.deps.repo.getClient(delegation.clientId);

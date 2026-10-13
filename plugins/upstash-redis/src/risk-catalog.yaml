@@ -27,7 +27,7 @@
 # account-scoped as well.
 #
 # The fallback `upstash-redis.uncategorized-write` counts only when no
-# specific entry matched the write (policy-engine rule, P1.2-SDK) ; presets
+# specific entry matched the write (policy-engine rule) ; presets
 # never carry it. Seen in production, it means a tool classifies to a slice
 # no fine-grained entry covers : add the entry.
 #
@@ -38,7 +38,7 @@
 # Risk count : 10 named risks + 1 fallback.
 
 provider: upstash-redis
-catalog_version: 4
+catalog_version: 5
 catalog_date: 2026-10-13
 
 risks:
@@ -80,20 +80,18 @@ risks:
   # ─── WRITES — DATA ─────────────────────────────────────────────────────
 
   - id: upstash-redis.write-data
-    label: 'Write Redis data (SET, HSET, LPUSH, SADD, EXPIRE with a positive TTL)'
+    label: 'Write Redis data (SET, HSET, LPUSH, SADD — without a time to live)'
     reason: >-
       Create, overwrite or modify individual keys, through the dedicated
       tools or the generic `execute` tool. An overwrite replaces the
       previous value, which is lost unless it is kept elsewhere ; a RENAME
       replaces the destination key. Affects application state if the app
       reads from Redis at runtime. The deletion commands (DEL, UNLINK, the
-      POP and REM families, an expiry at an absolute instant), FLUSH and
-      arbitrary commands fire it next to their own, more severe risk, so a
-      mission accepting `write-data` alone cannot run them. It can still
-      make a key go away without them : a positive TTL (EXPIRE, SET … EX)
-      removes the key when it elapses, and RENAME, LMOVE or SMOVE take a
-      key or an element out of its source — as an overwrite already
-      destroys a value.
+      POP and REM families), every command that sets a time to live
+      (EXPIRE, SETEX, SET … EX) or moves data out of a key (RENAME, LMOVE,
+      SMOVE), FLUSH and arbitrary commands fire it next to their own, more
+      severe risk, so a mission accepting `write-data` alone cannot run
+      them : it can write and overwrite values that stay, nothing else.
     matches: 'upstash-redis.database[**].key-space[**].W'
     vector:
       reversibility: reversible
@@ -105,13 +103,18 @@ risks:
     acceptable_in_envs: [development, staging, prod]
 
   - id: upstash-redis.delete-data
-    label: 'Delete keys, fields, members or entries (DEL, UNLINK, HDEL, LPOP, EXPIRE with a TTL of 0)'
+    label: 'Delete keys, fields, members or entries — now, or by a time to live or a move (DEL, UNLINK, HDEL, LPOP, EXPIRE, SET … EX, RENAME)'
     reason: >-
-      Targeted removal of data : whole keys (DEL, UNLINK, GETDEL, an expiry
-      of zero, negative or absolute), or parts of a value (HDEL, LPOP, SREM,
-      ZREM, XTRIM…), through the dedicated `del` and `expire` tools or the
-      generic `execute` tool. Costly to reverse if the data is not backed
-      up elsewhere. May break application state.
+      Targeted removal of data : whole keys (DEL, UNLINK, GETDEL), parts of
+      a value (HDEL, LPOP, SREM, ZREM, XTRIM…), any time to live given to a
+      key or a field (EXPIRE, PEXPIRE, SETEX, SET with EX or PX, the
+      absolute expiries) — the data is gone when it elapses, and one second
+      is a deletion in all but name —, and the moves (RENAME, LMOVE, SMOVE,
+      RPOPLPUSH), which take a key or an element out of its source.
+      Through the dedicated `del`, `expire` and `set` tools or the generic
+      `execute` tool. Costly to reverse if the data is not backed up
+      elsewhere. May break application state. A cache write with a time to
+      live therefore needs this risk next to `write-data`.
     matches: 'upstash-redis.database[**].key-space[**].delete.W'
     vector:
       reversibility: costly

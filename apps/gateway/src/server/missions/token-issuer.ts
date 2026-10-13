@@ -3,7 +3,7 @@
  * creator's rotation and the team service (member tokens, named tokens).
  *
  * The secret exists in the return value only: the store receives the prefix
- * and the argon2id hash (`token.ts`), so no row, no audit entry and no log
+ * and the SHA-256 digest (`token.ts`), so no row, no audit entry and no log
  * line can give a token back — not to its holder, and not to the creator of
  * the mission either (spec §0: "the creator never sees its secret").
  *

@@ -60,13 +60,14 @@ import type {
 } from '../store/repositories/requests';
 import type { EventRecord, MissionRecord, RequestRecord } from '../store/types';
 import {
-  approvalOptions,
-  checkApprovalDecision,
-  parseApprovalDecision,
   type ApprovalDecision,
   type ApprovalOption,
+  approvalOptions,
   type ApprovalProblem,
   type ApprovalSituation,
+  checkApprovalDecision,
+  closedGates,
+  parseApprovalDecision,
 } from './approval';
 import {
   checkClaimDecision,
@@ -119,8 +120,14 @@ export interface RequestSummary {
   readonly kind: RequestKind;
   /** As of now: an open request past its expiry reads `expired`. */
   readonly state: RequestStatus;
+  /** The claimed risk; for an approval request, the first of `risks`. */
   readonly risk_id: RiskId;
   readonly risk_label: string;
+  /**
+   * Every risk the request is about: the one risk of a claim, every gated risk of the
+   * call for an approval request (spec §3.5 "one request covers the call").
+   */
+  readonly risks: readonly { readonly risk_id: RiskId; readonly label: string }[];
   readonly created_at: Iso8601;
   readonly expires_at: Iso8601;
   readonly decided_at: Iso8601 | null;
@@ -185,6 +192,14 @@ export interface ApprovalCall {
   readonly risks: readonly TouchedRiskLine[];
 }
 
+/** The gate of one risk an approval request covers, as the mission holds it now. */
+export interface ApprovalGateLine {
+  readonly risk_id: RiskId;
+  readonly label: string;
+  readonly policy: Gate | null;
+  readonly open_until: Iso8601 | null;
+}
+
 /** The approval a grant produced, as the creator follows it. */
 export interface GrantedApproval {
   readonly id: string;
@@ -204,8 +219,10 @@ export interface ApprovalView {
   };
   readonly period: CurrentPeriod;
   readonly call: ApprovalCall;
-  /** The gate of the request's risk now: the policy's, and whether it is open for the period. */
+  /** The gate of the request's first risk now: the policy's, and whether it is open for the period. */
   readonly gate: { readonly policy: Gate | null; readonly open_until: Iso8601 | null };
+  /** The gate of every risk the request covers, in its order (`gate` is the first). */
+  readonly gates: readonly ApprovalGateLine[];
   /** Set once the request was granted with an approval. */
   readonly approval: GrantedApproval | null;
   /** Last events of the mission's session, most recent first. */
@@ -411,7 +428,7 @@ export class RequestService {
             deriveMissionState(budget, [], now).kind,
             period,
             { ...ctx.request, tool },
-            gateEventsOf(ctx, ctx.request.riskId, period),
+            gateEventsOf(ctx, ctx.request.riskIds, period),
             validitySeconds,
           ),
         });
@@ -439,6 +456,7 @@ export class RequestService {
       after: {
         mission_id: mission.id,
         risk_id: request.riskId,
+        risk_ids: request.riskIds,
         tool: request.tool,
         fingerprint: request.fingerprint,
         ...outcome.after,
@@ -576,8 +594,14 @@ export class RequestService {
         })
       : [];
     const opened = openedGatesOf(gateEvents, period);
-    const policyGate =
-      budget.policy.find((entry) => entry.risk_id === request.riskId)?.gate ?? null;
+    const gates: ApprovalGateLine[] = request.riskIds.map((riskId) => ({
+      risk_id: riskId,
+      label: this.labelOf(riskId),
+      policy: budget.policy.find((entry) => entry.risk_id === riskId)?.gate ?? null,
+      open_until: opened.has(riskId) ? period.end : null,
+    }));
+    const [firstGate] = gates;
+    if (!firstGate) throw new InvariantError(`approval request ${request.id} names no risk`);
 
     // What the call touches is the audit's to say: the pipeline wrote the entry of
     // the refused call with its slices and risks, keyed by the same fingerprint.
@@ -587,7 +611,7 @@ export class RequestService {
       argumentsHash: fingerprint,
       refusalCode: 'approval-required',
     });
-    const touched = new Set<RiskId>(audited?.risks_touched ?? []).add(request.riskId);
+    const touched = new Set<RiskId>([...(audited?.risks_touched ?? []), ...request.riskIds]);
     const risks: TouchedRiskLine[] = budget.policy
       .filter((entry) => touched.has(entry.risk_id))
       .map((entry) => ({ ...this.lineOf(entry, consumed), gate: effectiveGate(entry, opened) }));
@@ -616,10 +640,8 @@ export class RequestService {
         slices: audited ? audited.slices_executed.map(serializeSlice) : null,
         risks,
       },
-      gate: {
-        policy: policyGate,
-        open_until: opened.has(request.riskId) ? period.end : null,
-      },
+      gate: { policy: firstGate.policy, open_until: firstGate.open_until },
+      gates,
       approval: approval
         ? {
             id: approval.id,
@@ -678,6 +700,7 @@ export class RequestService {
       state: effectiveState(request, now),
       risk_id: request.riskId,
       risk_label: this.labelOf(request.riskId),
+      risks: request.riskIds.map((riskId) => ({ risk_id: riskId, label: this.labelOf(riskId) })),
       created_at: request.createdAt,
       expires_at: request.expiresAt,
       decided_at: request.decidedAt,
@@ -760,10 +783,10 @@ function situationOf(
 
 function gateEventsOf(
   ctx: ApprovalDecisionContext,
-  riskId: RiskId,
+  riskIds: readonly RiskId[],
   period: CurrentPeriod,
 ): EventRecord[] {
-  return ctx.riskEvents({ kinds: GATE_EVENT_KINDS, riskIds: [riskId], since: period.start });
+  return ctx.riskEvents({ kinds: GATE_EVENT_KINDS, riskIds, since: period.start });
 }
 
 function approvalSituationOf(
@@ -771,17 +794,20 @@ function approvalSituationOf(
   missionState: MissionState['kind'],
   period: CurrentPeriod,
   /** The request with the tool its callers already checked is there. */
-  request: Pick<RequestRecord, 'riskId' | 'expiresAt'> & { readonly tool: string },
+  request: Pick<RequestRecord, 'riskIds' | 'expiresAt'> & { readonly tool: string },
   gateEvents: readonly EventRecord[],
   approvalValiditySeconds: number,
 ): ApprovalSituation {
+  const opened = openedGatesOf(gateEvents, period);
   return {
     mission_state: missionState,
     period_end: period.end,
-    risk_id: request.riskId,
+    risks: request.riskIds.map((riskId) => ({
+      risk_id: riskId,
+      gate: mission.policy.find((entry) => entry.risk_id === riskId)?.gate ?? null,
+      gate_open: opened.has(riskId),
+    })),
     tool: request.tool,
-    gate: mission.policy.find((entry) => entry.risk_id === request.riskId)?.gate ?? null,
-    gate_open: openedGatesOf(gateEvents, period).has(request.riskId),
     approval_valid_seconds: approvalValiditySeconds,
     request_expires_at: request.expiresAt,
   };
@@ -809,8 +835,13 @@ function applyApproval(ctx: ApprovalDecisionContext, input: ApplyApprovalInput):
 
   switch (decision.resolution) {
     case 'grant': {
+      // One approval for the call: it covers every gated risk the request lists.
       const approval = ctx.createApproval(input.expiresAt);
-      const granted = { approval_id: approval.id, approval_expires_at: approval.expiresAt };
+      const granted = {
+        approval_id: approval.id,
+        approval_expires_at: approval.expiresAt,
+        risk_ids: approval.riskIds,
+      };
       ctx.recordEvent({
         kind: 'approval',
         riskId,
@@ -821,6 +852,7 @@ function applyApproval(ctx: ApprovalDecisionContext, input: ApplyApprovalInput):
           tool,
           fingerprint,
           expires_at: approval.expiresAt,
+          risk_ids: approval.riskIds,
         },
       });
       return {
@@ -835,20 +867,26 @@ function applyApproval(ctx: ApprovalDecisionContext, input: ApplyApprovalInput):
       // `checkApprovalDecision` refused a mission whose period never ends.
       if (period.end === null) throw new InvariantError('a gate is opened until a period end');
       const span = { period_start: period.start, period_end: period.end };
-      const recorded = ctx.recordEvent({
-        kind: 'gate-opened',
-        riskId,
-        actorUserId: user.id,
-        details: { request_id: request.id, ...span },
-      });
-      // The event is the opening: without a session to carry it nothing was opened.
-      if (!recorded) throw new InvariantError(`request ${request.id} has no session`);
+      // Every gate of the request that is still closed, one event each: an opening is
+      // read per risk (`openedGatesOf`), and `checkApprovalDecision` found at least one.
+      const opened = closedGates(situation);
+      for (const openedRisk of opened) {
+        const recorded = ctx.recordEvent({
+          kind: 'gate-opened',
+          riskId: openedRisk,
+          actorUserId: user.id,
+          details: { request_id: request.id, ...span },
+        });
+        // The event is the opening: without a session to carry it nothing was opened.
+        if (!recorded) throw new InvariantError(`request ${request.id} has no session`);
+      }
+      if (opened.length === 0) throw new InvariantError(`request ${request.id} opens no gate`);
       return {
         state: 'granted',
-        decision: { resolution: decision.resolution, ...span },
+        decision: { resolution: decision.resolution, ...span, opened_risk_ids: opened },
         act: 'gate-opened',
         before: { gate: 'approval' },
-        after: { resolution: decision.resolution, gate: 'auto', ...span },
+        after: { resolution: decision.resolution, gate: 'auto', ...span, opened_risk_ids: opened },
       };
     }
     case 'refuse': {
@@ -887,8 +925,9 @@ function applyClaim(ctx: ClaimDecisionContext, input: ApplyInput): AppliedClaim 
 
   switch (decision.resolution) {
     case 'reset-period': {
-      const before = ctx.resetCounters(period.start);
-      const credits = Object.fromEntries([...before].filter(([, count]) => count > 0));
+      // The claimed risk, and no other: a claim on one risk reopens nothing else.
+      const given = ctx.resetCounter(period.start, riskId);
+      const credits: Record<RiskId, number> = given > 0 ? { [riskId]: given } : {};
       ctx.recordEvent({
         kind: 'reset',
         riskId,

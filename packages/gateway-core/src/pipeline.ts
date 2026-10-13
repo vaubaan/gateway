@@ -15,9 +15,9 @@
  *   resource resolution             resource-not-in-mission (ResourceStage, execution door)
  *   connection availability         connection-unavailable (this module)
  *   classify + risk decision        risk-not-accepted      (RiskStage over risk-gateway.ts)
- *   budget / rate / gate            budget-exhausted, rate-limited, approval-required (BudgetStage, P1.3)
+ *   budget / rate / gate            budget-exhausted, rate-limited, approval-required (BudgetStage)
  *   upstream mint + forward         —                      (UpstreamStage, execution door)
- *   audit                           always, exactly once   (AuditWriter, P0.3 store)
+ *   audit                           always, exactly once   (AuditWriter, the application's store)
  *
  * A refused call decrements nothing and still produces an audit entry. An
  * allowed call that fails upstream keeps `decision: 'allowed'` and records
@@ -273,7 +273,7 @@ export interface ResourceStage {
 /**
  * Classify and decide on risks. The default implementation wraps
  * `evaluateCallForToken` (risk-gateway.ts) with the plugin classifier and
- * the provider catalog (P1.2 wires the registry).
+ * the provider catalog (the application wires the plugin registry).
  */
 export interface RiskStage {
   evaluate(ctx: MissionContext, call: CallRequest, target: CallTarget): Promise<CallVerdict>;
@@ -292,7 +292,7 @@ export type BudgetDecision =
 
 /**
  * Budget, rate limit and gate, decided and decremented atomically (spec §3.2,
- * §3.3, §3.5; plan §3.5). Feature P1.3. Refuses `budget-exhausted`,
+ * §3.3, §3.5). Refuses `budget-exhausted`,
  * `rate-limited` or `approval-required`; a refusal decrements nothing.
  */
 export interface BudgetStage {

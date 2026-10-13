@@ -298,7 +298,7 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
   {
     name: 'upstash_redis__expire',
     description:
-      'EXPIRE — set a timeout on a key in seconds. A TTL of 0 or less deletes the key at once and is authorized as a deletion.',
+      'EXPIRE — set a timeout on a key in seconds. The key is removed when it elapses (at once for a TTL of 0 or less), so the call is authorized as a deletion, whatever the TTL.',
     inputSchema: {
       type: 'object',
       properties: {

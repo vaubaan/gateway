@@ -453,3 +453,66 @@ describe('supabase presets — decisions on labelled projects', () => {
     }
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// execute_sql on the schemas Supabase manages — a read risk of its own
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('supabase — SQL reads of the managed schemas', () => {
+  const sql = (ref: string, query: string) =>
+    ['supabase__execute_sql', { project_ref: ref, query }] as const;
+  const AUTH_USERS = 'select email, encrypted_password from auth.users';
+  const VAULT = 'select * from vault.decrypted_secrets';
+  const UNKNOWN_FUNCTION = 'select public.export_everything()';
+  const APPLICATION = 'select id, title from public.todo';
+
+  test('the read-only analyst reads application tables, never auth, vault or an unread query', () => {
+    const analyst = presetRisks('read-only-analyst');
+    for (const ref of [STAGING, PROD, PREVIEW, UNLABELLED]) {
+      expect(decide(...sql(ref, APPLICATION), analyst).outcome, ref).toBe('allowed');
+    }
+    for (const query of [AUTH_USERS, VAULT, UNKNOWN_FUNCTION]) {
+      const decision = decide(...sql(STAGING, query), analyst);
+      expect(decision.outcome, query).toBe('denied');
+      if (decision.outcome !== 'denied') continue;
+      expect(decision.missing_risks, query).toEqual(['supabase[staging].read-managed-schemas']);
+      expect(decision.covered_risks, query).toEqual(['supabase.read-data']);
+    }
+  });
+
+  test('read-data alone never covers it, on any project', () => {
+    for (const ref of [STAGING, PROD, PREVIEW, UNLABELLED]) {
+      expect(decide(...sql(ref, AUTH_USERS), ['supabase.read-data']).outcome, ref).toBe('denied');
+    }
+  });
+
+  test('accepted for an environment, it passes there and nowhere else', () => {
+    const accepted: readonly RiskId[] = [
+      'supabase.read-data',
+      'supabase[staging].read-managed-schemas',
+    ];
+    expect(decide(...sql(STAGING, AUTH_USERS), accepted).outcome).toBe('allowed');
+    expect(decide(...sql(PROD, AUTH_USERS), accepted).outcome).toBe('denied');
+    expect(decide(...sql(PREVIEW, AUTH_USERS), accepted).outcome).toBe('denied');
+  });
+
+  test('on an unlabelled project it is refused whatever the mission holds', () => {
+    for (const query of [AUTH_USERS, UNKNOWN_FUNCTION]) {
+      const decision = decide(...sql(UNLABELLED, query), EVERYTHING);
+      expect(decision.outcome, query).toBe('denied');
+      if (decision.outcome !== 'denied') continue;
+      expect(decision.hint).toContain('a resource with no environment label');
+    }
+  });
+
+  test('the staging developer reads them on staging only ; the migration operator never', () => {
+    const developer = presetRisks('staging-developer');
+    expect(decide(...sql(STAGING, AUTH_USERS), developer).outcome).toBe('allowed');
+    expect(decide(...sql(STAGING, UNKNOWN_FUNCTION), developer).outcome).toBe('allowed');
+    expect(decide(...sql(PROD, AUTH_USERS), developer).outcome).toBe('denied');
+    const operator = presetRisks('migration-operator');
+    expect(decide(...sql(STAGING, AUTH_USERS), operator).outcome).toBe('denied');
+    expect(decide(...sql(PROD, AUTH_USERS), operator).outcome).toBe('denied');
+    expect(decide(...sql(PROD, APPLICATION), operator).outcome).toBe('allowed');
+  });
+});

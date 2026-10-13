@@ -1,5 +1,5 @@
 /**
- * What migration 0006 and the authorization server (P2.3) added to the
+ * What migration 0006 and the authorization server added to the
  * delegations repository: client registration kinds and operator decisions,
  * revocation reasons, the lookups a replay is recognised with, token activity,
  * the sweep of expired rows, and the audit scope of a user's own delegations.
@@ -376,7 +376,13 @@ describe('delegations repository — clients, reasons, replay lookups, sweep', (
         });
       }
       const scopeOf = (userId: string | null, allAdmin: boolean) => ({
-        scope: { missionCreatorUserId: userId, connectionOwners: [], allAdmin },
+        scope: {
+          missionCreatorUserId: userId,
+          missionMemberUserId: null,
+          connectionOwners: [],
+          allAdmin,
+          allCalls: false,
+        },
         limit: 10,
       });
       const seenBy = async (userId: string | null, allAdmin = false): Promise<string[]> =>

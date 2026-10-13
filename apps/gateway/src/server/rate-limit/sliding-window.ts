@@ -11,7 +11,7 @@
  * - `SlidingWindows` (synchronous `peek` / `push`) is what the budget decision uses
  *   inside the store's transaction: it must probe without consuming (a call refused
  *   on another risk records nothing) and record only once the call is allowed.
- * - `RateLimiter` (`take`, the composition root's port of P0.4) is the surface
+ * - `RateLimiter` (`take`, the composition root's port) is the surface
  *   limiter: one call checks and consumes.
  *
  * Each key holds the timestamps of its actions, pruned to the window on every access.

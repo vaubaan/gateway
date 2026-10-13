@@ -2,7 +2,7 @@
  * Audit repository — append, read, and the only legitimate purge path.
  *
  * Spec §6 "immutable audit", §8 (fields, 90-day default retention). Entries are
- * `@vaubaan/gateway-core`'s `AuditEntry` (P0.5). The schema's triggers abort every
+ * `@vaubaan/gateway-core`'s `AuditEntry`. The schema's triggers abort every
  * UPDATE and every DELETE that happens outside a purge window; `purgeOlderThan` opens
  * that window inside its own transaction.
  */
@@ -67,16 +67,23 @@ export interface AuditFilter {
  * Whose audit a search may return (spec §4.2 "Audit", §6): the entries about the
  * missions one user created and about the connections some principals own, plus —
  * for an operator — every administrative entry. A search always carries a scope;
- * an empty one (`missionCreatorUserId: null`, no owner, `allAdmin: false`) matches
- * nothing.
+ * an empty one (no creator, no member, no owner, `allAdmin` and `allCalls` false)
+ * matches nothing.
  */
 export interface AuditScope {
   /** Entries about the missions this user created (calls, acts on them, their requests). */
   readonly missionCreatorUserId: string | null;
+  /**
+   * Entries about the missions this user is a member of right now (calls, acts on
+   * them, their requests): a removed member reads none of them, past ones included.
+   */
+  readonly missionMemberUserId: string | null;
   /** Entries about the connections these principals own (calls through them, acts on them). */
   readonly connectionOwners: readonly Principal[];
   /** Every administrative entry, whatever its object. */
   readonly allAdmin: boolean;
+  /** Every call entry, whatever its mission and its connection (an operator). */
+  readonly allCalls: boolean;
 }
 
 /** Keyset position: the last entry of the previous page (`ts`, then `id`). */
@@ -403,6 +410,106 @@ const SHARES_OF_CONNECTION = 'SELECT id FROM shares WHERE connection_id';
  * the filters, then the keyset position. Plain subqueries and `IN` lists only, so the
  * statement is the same on Postgres.
  */
+/** A piece of SQL with the values of its own placeholders, in order. */
+interface SqlPiece {
+  readonly sql: string;
+  readonly params: readonly string[];
+}
+
+/** `column IN (<subquery>)`: the subquery's values travel with it, wherever it is placed. */
+function inSet(column: string, set: SqlPiece): SqlPiece {
+  return { sql: `${column} IN (${set.sql})`, params: set.params };
+}
+
+/** Pieces joined by `OR`, between parentheses; their values in the same order. */
+function anyOf(pieces: readonly SqlPiece[]): SqlPiece {
+  return {
+    sql: `(${pieces.map((piece) => piece.sql).join(' OR ')})`,
+    params: pieces.flatMap((piece) => piece.params),
+  };
+}
+
+const NOTHING: SqlPiece = { sql: '1 = 0', params: [] };
+const EVERYTHING: SqlPiece = { sql: '1 = 1', params: [] };
+
+/**
+ * The visibility rule, as one predicate over `audit` (spec §4.2 "Audit", §8;
+ * ADR audit-visibility-members-and-operators). An entry is in the scope when:
+ *
+ *   call   — the scope holds every call, or its mission is one the viewer created
+ *            or is a current member of, or its connection is one they own;
+ *   admin  — the scope holds every administrative entry, or its object is such a
+ *            mission, a request of such a mission, a connection they own, a share
+ *            of such a connection, or a delegation they gave.
+ *
+ * A dimension the scope does not hold is an always-false piece, never a placeholder
+ * value that happens to match nothing. Each piece carries its own values, so adding
+ * a dimension cannot shift the placeholders of another.
+ */
+function scopePredicate(scope: AuditScope): SqlPiece {
+  const owners = principalPredicate(scope.connectionOwners, 'owner_user_id', 'owner_group_id');
+  const created: SqlPiece =
+    scope.missionCreatorUserId === null
+      ? { sql: 'SELECT id FROM missions WHERE 1 = 0', params: [] }
+      : {
+          sql: 'SELECT id FROM missions WHERE creator_user_id = ?',
+          params: [scope.missionCreatorUserId],
+        };
+  // A member row with `removed_at` set is a past membership: it grants nothing.
+  const memberOf: SqlPiece =
+    scope.missionMemberUserId === null
+      ? { sql: 'SELECT mission_id FROM mission_members WHERE 1 = 0', params: [] }
+      : {
+          sql: 'SELECT mission_id FROM mission_members WHERE user_id = ? AND removed_at IS NULL',
+          params: [scope.missionMemberUserId],
+        };
+  const ownConnections: SqlPiece = {
+    sql: `SELECT id FROM connections WHERE ${owners.sql}`,
+    params: owners.params,
+  };
+  // The delegations the viewer gave: granted and revoked under their name (spec §4.1 bis).
+  const ownDelegations: SqlPiece =
+    scope.missionCreatorUserId === null
+      ? { sql: 'SELECT id FROM delegations WHERE 1 = 0', params: [] }
+      : {
+          sql: 'SELECT id FROM delegations WHERE user_id = ?',
+          params: [scope.missionCreatorUserId],
+        };
+  const requestsOf = (missions: SqlPiece): SqlPiece => ({
+    sql: `${REQUESTS_OF_MISSION} IN (${missions.sql})`,
+    params: missions.params,
+  });
+  const sharesOf = (connections: SqlPiece): SqlPiece => ({
+    sql: `${SHARES_OF_CONNECTION} IN (${connections.sql})`,
+    params: connections.params,
+  });
+  const about = (type: string, ids: SqlPiece): SqlPiece => {
+    const inIds = inSet('object_id', ids);
+    return { sql: `(object_type = '${type}' AND ${inIds.sql})`, params: inIds.params };
+  };
+
+  const calls = anyOf([
+    scope.allCalls ? EVERYTHING : NOTHING,
+    inSet('mission_id', created),
+    inSet('mission_id', memberOf),
+    inSet('connection_id', ownConnections),
+  ]);
+  const admin = anyOf([
+    scope.allAdmin ? EVERYTHING : NOTHING,
+    about('mission', created),
+    about('mission', memberOf),
+    about('request', requestsOf(created)),
+    about('request', requestsOf(memberOf)),
+    about('connection', ownConnections),
+    about('share', sharesOf(ownConnections)),
+    about('delegation', ownDelegations),
+  ]);
+  return {
+    sql: `((kind = 'call' AND ${calls.sql}) OR (kind = 'admin' AND ${admin.sql}))`,
+    params: [...calls.params, ...admin.params],
+  };
+}
+
 function searchStatement(query: AuditSearch): { sql: string; params: (string | number)[] } {
   const where: string[] = [];
   const params: (string | number)[] = [];
@@ -411,35 +518,8 @@ function searchStatement(query: AuditSearch): { sql: string; params: (string | n
     params.push(...values);
   };
 
-  const { scope } = query;
-  const owners = principalPredicate(scope.connectionOwners, 'owner_user_id', 'owner_group_id');
-  // No creator in the scope: an always-false subquery, as `principalPredicate` does for
-  // an empty owner list, rather than a placeholder value that happens to match nothing.
-  const creator = scope.missionCreatorUserId === null ? [] : [scope.missionCreatorUserId];
-  const ownMissions = `SELECT id FROM missions WHERE ${creator.length ? 'creator_user_id = ?' : '1 = 0'}`;
-  const ownConnections = `SELECT id FROM connections WHERE ${owners.sql}`;
-  // The delegations the viewer gave: granted and revoked under their name (spec §4.1 bis).
-  const ownDelegations = `SELECT id FROM delegations WHERE ${creator.length ? 'user_id = ?' : '1 = 0'}`;
-  add(
-    `(
-      (kind = 'call' AND (mission_id IN (${ownMissions}) OR connection_id IN (${ownConnections})))
-      OR (kind = 'admin' AND (
-        ${scope.allAdmin ? '1 = 1' : '1 = 0'}
-        OR (object_type = 'mission' AND object_id IN (${ownMissions}))
-        OR (object_type = 'connection' AND object_id IN (${ownConnections}))
-        OR (object_type = 'request' AND object_id IN (${REQUESTS_OF_MISSION} IN (${ownMissions})))
-        OR (object_type = 'share' AND object_id IN (${SHARES_OF_CONNECTION} IN (${ownConnections})))
-        OR (object_type = 'delegation' AND object_id IN (${ownDelegations}))
-      ))
-    )`,
-    ...creator,
-    ...owners.params,
-    ...creator,
-    ...owners.params,
-    ...creator,
-    ...owners.params,
-    ...creator,
-  );
+  const scoped = scopePredicate(query.scope);
+  add(scoped.sql, ...scoped.params);
 
   if (query.missionId) {
     add(

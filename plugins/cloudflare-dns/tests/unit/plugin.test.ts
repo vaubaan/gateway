@@ -15,11 +15,13 @@ import {
 } from '@vaubaan/plugin-sdk';
 import {
   assertCatalogCoverage,
+  assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
   assertPresetsValid,
   declaredOnly,
   mockFetch,
+  type ToolSamples,
 } from '@vaubaan/plugin-sdk/testing';
 
 import {
@@ -78,48 +80,71 @@ describe('cloudflare-dns plugin — structural kit', () => {
     assertNoWildcard(cloudflareDnsPlugin);
   });
 
+  // One table for the catalog coverage and for the identifier proof.
+  const SAMPLES: ToolSamples = {
+    cloudflare_dns__list_zones: [
+      { args: {} },
+      { args: {}, resources: [github], expectDenied: true },
+    ],
+    cloudflare_dns__get_zone: [{ args: { zone_id: 'z1' } }],
+    cloudflare_dns__list_records: [{ args: { zone_id: 'z1', type: 'A' } }],
+    cloudflare_dns__get_record: [{ args: { zone_id: 'z1', record_id: 'r1' } }],
+    cloudflare_dns__export_records: [{ args: { zone_id: 'z1' } }],
+    cloudflare_dns__get_zone_settings: [{ args: { zone_id: 'z1' } }],
+    cloudflare_dns__get_dnssec: [{ args: { zone_id: 'z1' } }],
+    cloudflare_dns__create_record: [
+      { args: { zone_id: 'z1', type: 'A', name: 'www.example.com', content: '192.0.2.1' } },
+      { args: { zone_id: 'z1', type: 'A', name: 'example.com', content: '192.0.2.1' } },
+    ],
+    cloudflare_dns__update_record: [
+      { args: { zone_id: 'z1', record_id: 'r1', type: 'A', name: 'www.example.com' } },
+      { args: { zone_id: 'z1', record_id: 'r1', type: 'MX', name: 'example.com' } },
+      { args: { zone_id: 'z1', type: 'A', name: 'www.example.com' }, expectDenied: true },
+    ],
+    cloudflare_dns__delete_record: [
+      { args: { zone_id: 'z1', record_id: 'r1' } },
+      { args: { zone_id: 'z1', record_id: 'r1', type: 'A', name: 'www.example.com' } },
+      { args: { zone_id: 'z1', record_id: 'r1', type: 'NS', name: 'sub.example.com' } },
+      { args: { zone_id: 'z1', record_id: '..' }, expectDenied: true },
+    ],
+    cloudflare_dns__import_records: [{ args: { zone_id: 'z1', file: ';; bind' } }],
+    cloudflare_dns__edit_zone_settings: [
+      { args: { zone_id: 'z1', items: [{ id: 'ssl', value: 'strict' }] } },
+    ],
+    cloudflare_dns__purge_cache: [{ args: { zone_id: 'z1', purge_everything: true } }],
+    cloudflare_dns__edit_dnssec: [{ args: { zone_id: 'z1', status: 'active' } }],
+    cloudflare_dns__delete_zone: [{ args: { zone_id: 'z1' } }],
+  };
+
   test('every tool classifies to slices the catalog covers ; every risk is touched', () => {
-    const report = assertCatalogCoverage(
-      cloudflareDnsPlugin,
-      {
-        cloudflare_dns__list_zones: [
-          { args: {} },
-          { args: {}, resources: [github], expectDenied: true },
-        ],
-        cloudflare_dns__get_zone: [{ args: { zone_id: 'z1' } }],
-        cloudflare_dns__list_records: [{ args: { zone_id: 'z1', type: 'A' } }],
-        cloudflare_dns__get_record: [{ args: { zone_id: 'z1', record_id: 'r1' } }],
-        cloudflare_dns__export_records: [{ args: { zone_id: 'z1' } }],
-        cloudflare_dns__get_zone_settings: [{ args: { zone_id: 'z1' } }],
-        cloudflare_dns__get_dnssec: [{ args: { zone_id: 'z1' } }],
-        cloudflare_dns__create_record: [
-          { args: { zone_id: 'z1', type: 'A', name: 'www.example.com', content: '192.0.2.1' } },
-          { args: { zone_id: 'z1', type: 'A', name: 'example.com', content: '192.0.2.1' } },
-        ],
-        cloudflare_dns__update_record: [
-          { args: { zone_id: 'z1', record_id: 'r1', type: 'A', name: 'www.example.com' } },
-          { args: { zone_id: 'z1', record_id: 'r1', type: 'MX', name: 'example.com' } },
-          { args: { zone_id: 'z1', type: 'A', name: 'www.example.com' }, expectDenied: true },
-        ],
-        cloudflare_dns__delete_record: [
-          { args: { zone_id: 'z1', record_id: 'r1' } },
-          { args: { zone_id: 'z1', record_id: 'r1', type: 'A', name: 'www.example.com' } },
-          { args: { zone_id: 'z1', record_id: 'r1', type: 'NS', name: 'sub.example.com' } },
-          { args: { zone_id: 'z1', record_id: '..' }, expectDenied: true },
-        ],
-        cloudflare_dns__import_records: [{ args: { zone_id: 'z1', file: ';; bind' } }],
-        cloudflare_dns__edit_zone_settings: [
-          { args: { zone_id: 'z1', items: [{ id: 'ssl', value: 'strict' }] } },
-        ],
-        cloudflare_dns__purge_cache: [{ args: { zone_id: 'z1', purge_everything: true } }],
-        cloudflare_dns__edit_dnssec: [{ args: { zone_id: 'z1', status: 'active' } }],
-        cloudflare_dns__delete_zone: [{ args: { zone_id: 'z1' } }],
-      },
-      { resources: [exampleCom] },
-    );
+    const report = assertCatalogCoverage(cloudflareDnsPlugin, SAMPLES, { resources: [exampleCom] });
     expect(report.toolsChecked).toBe(15);
     expect(report.risksUntouched).toEqual([]);
     expect(report.fallbackHits).toEqual([]);
+  });
+
+  // What is executed is what was classified (SDK kit) : every string argument of
+  // every sample above is fed the hostile identifiers, through `classify` and
+  // through `execute`. The finer cases are in `identifiers.test.ts`.
+  test('hostile identifiers are refused by classify and by execute, or named exactly', async () => {
+    const report = await assertIdentifiersRefused(cloudflareDnsPlugin, SAMPLES, {
+      resources: [exampleCom],
+      context: (fetch, resources) => ({
+        credential: { kind: 'api-key', fields: { api_token: 'cf_token' }, metadata: {} },
+        appConfig: {},
+        fetch,
+        resources,
+      }),
+    });
+    expect(report.toolsChecked).toBe(15);
+    // Found by running the samples : the arguments that are a segment of a request path.
+    expect([...new Set(report.pathIdentifiers.map((p) => p.argument))].sort()).toEqual([
+      'record_id',
+      'zone_id',
+    ]);
+    // Whatever classify refused, execute sent nothing for.
+    expect(report.refusedByClassify).toBeGreaterThan(0);
+    expect(report.nothingSent).toBeGreaterThanOrEqual(report.refusedByClassify);
   });
 });
 

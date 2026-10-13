@@ -46,6 +46,7 @@ import {
 import { toIso, type Clock } from '../store/clock';
 import { CONNECT_ERROR_MESSAGES, ConnectError, errorMessage } from './errors';
 import type { Notice, NoticeStore } from './pending';
+import { providerGrantReport } from './provider-grant';
 import {
   CONNECTIONS_PATH,
   type Actor,
@@ -333,12 +334,15 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
       if ('response' in who) return who.response;
       try {
         const revoked = await deps.connections.revoke(who.actor, connectionId);
+        const at = deps.connections.providerGrantOf(revoked);
+        const grant = providerGrantReport(at.providerLabel, revoked.providerGrant, at.grant.byHand);
         return await redirectWithNotice(who.principal, connectionPath(revoked.id), {
-          tone: 'success',
+          // The act succeeded either way; the tone says whether something is left to do.
+          tone: grant.actionNeeded ? 'warning' : 'success',
           title: 'Connection revoked',
           lines: [
             'The stored credential was erased. Missions that carry this connection are now orphaned and refuse every call; a revoked connection never comes back, so they stay orphaned.',
-            'The authorization granted at the provider is not withdrawn by the gateway: remove it there too if needed.',
+            `${grant.title}. ${grant.text}`,
           ],
         });
       } catch (err) {

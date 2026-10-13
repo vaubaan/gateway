@@ -1,6 +1,6 @@
 /**
  * The Mission session page and the Audit page in a browser, against an
- * ephemeral instance (spec §4.2, §8; plan P1.8 definition of done: "a day of
+ * ephemeral instance (spec §4.2, §8: "a day of
  * calls per mission with the remaining budget per call").
  *
  * The launcher issues a mission for the signed-in user and leaves a day of
@@ -101,6 +101,8 @@ test('a day of calls: session page, then the audit of the mission', async ({ pag
     `/waiting/${day.claim_id}`,
   );
   await expect(page.locator('body')).not.toContainText(ARGUMENT_MARKER);
+  // The timeline is kept as long as the audit, and says so.
+  await expect(page.getByTestId('timeline-retention')).toContainText('Kept 90 days');
   await snap(page, 'mission-session');
 
   // The timeline of one label: its calls only; the budget above does not move.

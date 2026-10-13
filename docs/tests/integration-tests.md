@@ -93,7 +93,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/app/(app)/missions/message-of.test.ts`                                                  |        2 |
 | `apps/gateway/src/app/(app)/missions/new/form-state.test.ts`                                              |       36 |
 | `apps/gateway/src/components/auth/principal.test.ts`                                                      |        2 |
-| `apps/gateway/src/server/audit/filters.test.ts`                                                           |       20 |
+| `apps/gateway/src/server/audit/filters.test.ts`                                                           |       24 |
 | `apps/gateway/src/server/audit/session-event-detail.test.ts`                                              |       10 |
 | `apps/gateway/src/server/auth/admin-rule.test.ts`                                                         |        5 |
 | `apps/gateway/src/server/auth/bootstrap.test.ts`                                                          |        3 |
@@ -107,19 +107,20 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/authority/mission-grounds.test.ts`                                               |       27 |
 | `apps/gateway/src/server/compose/compose.test.ts`                                                         |       17 |
 | `apps/gateway/src/server/config/duration.test.ts`                                                         |        2 |
-| `apps/gateway/src/server/config/keys-doc.test.ts`                                                         |       34 |
+| `apps/gateway/src/server/config/keys-doc.test.ts`                                                         |       35 |
 | `apps/gateway/src/server/config/load.test.ts`                                                             |       54 |
 | `apps/gateway/src/server/connections/codec-and-keypair.test.ts`                                           |       12 |
 | `apps/gateway/src/server/connections/credentials.test.ts`                                                 |       15 |
 | `apps/gateway/src/server/connections/input.test.ts`                                                       |       23 |
 | `apps/gateway/src/server/connections/install-verification.test.ts`                                        |        5 |
 | `apps/gateway/src/server/connections/mapping.test.ts`                                                     |        3 |
-| `apps/gateway/src/server/connections/oauth2.test.ts`                                                      |       16 |
+| `apps/gateway/src/server/connections/oauth2.test.ts`                                                      |       28 |
 | `apps/gateway/src/server/connections/pending.test.ts`                                                     |        7 |
+| `apps/gateway/src/server/connections/provider-revocation.test.ts`                                         |       16 |
 | `apps/gateway/src/server/connections/service.test.ts`                                                     |       33 |
-| `apps/gateway/src/server/connections/shipped-providers.test.ts`                                           |        5 |
+| `apps/gateway/src/server/connections/shipped-providers.test.ts`                                           |        7 |
 | `apps/gateway/src/server/crypto/aead.test.ts`                                                             |       12 |
-| `apps/gateway/src/server/execution/execution.test.ts`                                                     |       26 |
+| `apps/gateway/src/server/execution/execution.test.ts`                                                     |       21 |
 | `apps/gateway/src/server/groups/service.test.ts`                                                          |       15 |
 | `apps/gateway/src/server/http/client-ip.test.ts`                                                          |       11 |
 | `apps/gateway/src/server/http/healthz.test.ts`                                                            |        4 |
@@ -134,21 +135,22 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/missions/preview.test.ts`                                                        |       44 |
 | `apps/gateway/src/server/missions/summary.test.ts`                                                        |        8 |
 | `apps/gateway/src/server/missions/token-name.test.ts`                                                     |       23 |
-| `apps/gateway/src/server/missions/token.test.ts`                                                          |        8 |
+| `apps/gateway/src/server/missions/token.test.ts`                                                          |       10 |
 | `apps/gateway/src/server/oauth-as/authorization.test.ts`                                                  |       41 |
 | `apps/gateway/src/server/oauth-as/client-metadata-document.test.ts`                                       |       91 |
 | `apps/gateway/src/server/oauth-as/clients.test.ts`                                                        |       40 |
-| `apps/gateway/src/server/oauth-as/delegations.test.ts`                                                    |       26 |
+| `apps/gateway/src/server/oauth-as/delegation-lifetime.test.ts`                                            |        5 |
+| `apps/gateway/src/server/oauth-as/delegations.test.ts`                                                    |       28 |
 | `apps/gateway/src/server/oauth-as/endpoints.test.ts`                                                      |       15 |
 | `apps/gateway/src/server/oauth-as/pages.test.ts`                                                          |       12 |
 | `apps/gateway/src/server/oauth-as/pkce.test.ts`                                                           |       13 |
 | `apps/gateway/src/server/oauth-as/redirect-uri.test.ts`                                                   |       52 |
 | `apps/gateway/src/server/oauth-as/secrets.test.ts`                                                        |        6 |
-| `apps/gateway/src/server/oauth-as/token-service.test.ts`                                                  |       58 |
+| `apps/gateway/src/server/oauth-as/token-service.test.ts`                                                  |       66 |
 | `apps/gateway/src/server/provider-apps/service.test.ts`                                                   |       15 |
 | `apps/gateway/src/server/providers/planes.test.ts`                                                        |        9 |
 | `apps/gateway/src/server/providers/reference.test.ts`                                                     |       20 |
-| `apps/gateway/src/server/requests/approval.test.ts`                                                       |       28 |
+| `apps/gateway/src/server/requests/approval.test.ts`                                                       |       33 |
 | `apps/gateway/src/server/requests/claim.test.ts`                                                          |       38 |
 | `apps/gateway/src/server/requests/client-ip.test.ts`                                                      |        2 |
 | `apps/gateway/src/server/requests/events.test.ts`                                                         |        7 |
@@ -162,17 +164,20 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/telemetry/settings.test.ts`                                                      |        7 |
 | `apps/gateway/src/server/telemetry/stats.test.ts`                                                         |       11 |
 | `apps/gateway/tests/integration/audit/admin-mutations.test.ts`                                            |       52 |
-| `apps/gateway/tests/integration/audit/audit-query.test.ts`                                                |       25 |
+| `apps/gateway/tests/integration/audit/audit-query.test.ts`                                                |       35 |
 | `apps/gateway/tests/integration/audit/events-agent-label.test.ts`                                         |        3 |
 | `apps/gateway/tests/integration/audit/mission-session.test.ts`                                            |       21 |
 | `apps/gateway/tests/integration/audit/retention.test.ts`                                                  |       10 |
+| `apps/gateway/tests/integration/audit/session-history-retention.test.ts`                                  |       11 |
 | `apps/gateway/tests/integration/auth/deactivate-user.test.ts`                                             |       12 |
 | `apps/gateway/tests/integration/auth/oidc-login.test.ts`                                                  |       22 |
+| `apps/gateway/tests/integration/authority/close-orphaned.test.ts`                                         |       11 |
 | `apps/gateway/tests/integration/authority/door-latency.bench.test.ts`                                     |        1 |
 | `apps/gateway/tests/integration/authority/handlers.test.ts`                                               |       11 |
 | `apps/gateway/tests/integration/authority/ownership.test.ts`                                              |       13 |
 | `apps/gateway/tests/integration/authority/rules-read-by-pages.test.ts`                                    |        7 |
 | `apps/gateway/tests/integration/authority/share-and-orphan.test.ts`                                       |       19 |
+| `apps/gateway/tests/integration/authority/share-restores.test.ts`                                         |       11 |
 | `apps/gateway/tests/integration/budget/pipeline-consistency.test.ts`                                      |        6 |
 | `apps/gateway/tests/integration/budget/session-service.test.ts`                                           |       20 |
 | `apps/gateway/tests/integration/compose/boot.test.ts`                                                     |        4 |
@@ -184,9 +189,9 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/demo/demo-smoke.test.ts`                                                  |       17 |
 | `apps/gateway/tests/integration/demo/demo-vercel.test.ts`                                                 |        3 |
 | `apps/gateway/tests/integration/execution/agent-label.test.ts`                                            |        6 |
-| `apps/gateway/tests/integration/execution/approval-door.test.ts`                                          |        7 |
+| `apps/gateway/tests/integration/execution/approval-door.test.ts`                                          |        8 |
 | `apps/gateway/tests/integration/execution/counters-vs-audit.test.ts`                                      |        4 |
-| `apps/gateway/tests/integration/execution/door-http.test.ts`                                              |       21 |
+| `apps/gateway/tests/integration/execution/door-http.test.ts`                                              |       23 |
 | `apps/gateway/tests/integration/execution/pipeline.test.ts`                                               |       24 |
 | `apps/gateway/tests/integration/execution/streaming.test.ts`                                              |       13 |
 | `apps/gateway/tests/integration/execution/team-door.test.ts`                                              |       11 |
@@ -195,20 +200,20 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/management/output-schemas.test.ts`                                        |        9 |
 | `apps/gateway/tests/integration/missions/gate.test.ts`                                                    |       20 |
 | `apps/gateway/tests/integration/missions/mission-handlers.test.ts`                                        |        8 |
-| `apps/gateway/tests/integration/missions/mission-lifecycle.test.ts`                                       |       28 |
+| `apps/gateway/tests/integration/missions/mission-lifecycle.test.ts`                                       |       33 |
 | `apps/gateway/tests/integration/missions/team-interleaving.test.ts`                                       |        6 |
 | `apps/gateway/tests/integration/missions/team.test.ts`                                                    |       28 |
-| `apps/gateway/tests/integration/oauth-as/credential-separation.test.ts`                                   |       18 |
+| `apps/gateway/tests/integration/oauth-as/credential-separation.test.ts`                                   |       19 |
 | `apps/gateway/tests/integration/oauth-as/http-surface.test.ts`                                            |       66 |
 | `apps/gateway/tests/integration/oauth-as/mcp-client-flow.test.ts`                                         |        4 |
 | `apps/gateway/tests/integration/oauth-as/routes.test.ts`                                                  |       16 |
 | `apps/gateway/tests/integration/requests/approval-access.test.ts`                                         |       29 |
-| `apps/gateway/tests/integration/requests/approval.test.ts`                                                |       42 |
+| `apps/gateway/tests/integration/requests/approval.test.ts`                                                |       51 |
 | `apps/gateway/tests/integration/requests/request-handlers.test.ts`                                        |       14 |
-| `apps/gateway/tests/integration/requests/request-service.test.ts`                                         |       34 |
+| `apps/gateway/tests/integration/requests/request-service.test.ts`                                         |       36 |
 | `apps/gateway/tests/integration/standalone-native-addons.test.ts`                                         |        3 |
 | `apps/gateway/tests/integration/standalone-plugin-catalogs.test.ts`                                       |        3 |
-| `apps/gateway/tests/integration/store/approval-decisions.test.ts`                                         |       17 |
+| `apps/gateway/tests/integration/store/approval-decisions.test.ts`                                         |       20 |
 | `apps/gateway/tests/integration/store/audit-guarded-append.test.ts`                                       |       10 |
 | `apps/gateway/tests/integration/store/audit.test.ts`                                                      |       15 |
 | `apps/gateway/tests/integration/store/config.test.ts`                                                     |        7 |
@@ -216,10 +221,11 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/store/corrupt-rows.test.ts`                                               |       14 |
 | `apps/gateway/tests/integration/store/delegations.test.ts`                                                |       20 |
 | `apps/gateway/tests/integration/store/identities.test.ts`                                                 |       11 |
-| `apps/gateway/tests/integration/store/missions.test.ts`                                                   |       17 |
+| `apps/gateway/tests/integration/store/missions.test.ts`                                                   |       18 |
 | `apps/gateway/tests/integration/store/oauth-clients.test.ts`                                              |       16 |
 | `apps/gateway/tests/integration/store/ownership-and-orphans.test.ts`                                      |       13 |
-| `apps/gateway/tests/integration/store/requests-approvals.test.ts`                                         |       10 |
+| `apps/gateway/tests/integration/store/request-covers-the-call-migration.test.ts`                          |        1 |
+| `apps/gateway/tests/integration/store/requests-approvals.test.ts`                                         |       14 |
 | `apps/gateway/tests/integration/store/schema.test.ts`                                                     |        6 |
 | `apps/gateway/tests/integration/store/sessions.test.ts`                                                   |       11 |
 | `apps/gateway/tests/integration/store/token-holders.test.ts`                                              |        4 |
@@ -235,7 +241,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/app/risk-explain.test.tsx`                                                       |        9 |
 | `apps/gateway/tests/unit/app/shell-and-vocabulary.test.ts`                                                |       18 |
 | `apps/gateway/tests/unit/server/auth/mutation-guard.test.ts`                                              |      287 |
-| `apps/gateway/tests/unit/server/budget/decide.test.ts`                                                    |       15 |
+| `apps/gateway/tests/unit/server/budget/decide.test.ts`                                                    |       20 |
 | `apps/gateway/tests/unit/server/budget/gates.test.ts`                                                     |        9 |
 | `apps/gateway/tests/unit/server/budget/mission-state.test.ts`                                             |        7 |
 | `apps/gateway/tests/unit/server/budget/period.test.ts`                                                    |        8 |
@@ -248,11 +254,11 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/structural/base-images-pinned.test.ts`                                           |        5 |
 | `apps/gateway/tests/unit/structural/catalog-caps-enforced.test.ts`                                        |       12 |
 | `apps/gateway/tests/unit/structural/example-config-providers.test.ts`                                     |       10 |
-| `apps/gateway/tests/unit/structural/index.test.ts`                                                        |       99 |
+| `apps/gateway/tests/unit/structural/index.test.ts`                                                        |      100 |
 | `apps/gateway/tests/unit/structural/no-arguments-in-logs.test.ts`                                         |        3 |
-| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`                                          |      343 |
+| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`                                          |      377 |
 | `apps/gateway/tests/unit/structural/persisted-enumerations.test.ts`                                       |       10 |
-| `apps/gateway/tests/unit/structural/plugin-identifier-tests.test.ts`                                      |       13 |
+| `apps/gateway/tests/unit/structural/plugin-identifier-tests.test.ts`                                      |       25 |
 | `apps/gateway/tests/unit/structural/shipped-presets.test.ts`                                              |       41 |
 | `apps/gateway/tests/unit/structural/telemetry-collector-schema.test.ts`                                   |        7 |
 | `apps/gateway/tests/unit/structural/telemetry-report-shape.test.ts`                                       |        3 |
@@ -268,8 +274,9 @@ this table says where each requirement lives, and what is not written yet.
 | `packages/plugin-sdk/tests/unit/arguments.test.ts`                                                        |       10 |
 | `packages/plugin-sdk/tests/unit/catalog-loader.test.ts`                                                   |       31 |
 | `packages/plugin-sdk/tests/unit/catalog-path.test.ts`                                                     |        4 |
-| `packages/plugin-sdk/tests/unit/define-plugin.test.ts`                                                    |       26 |
+| `packages/plugin-sdk/tests/unit/define-plugin.test.ts`                                                    |       32 |
 | `packages/plugin-sdk/tests/unit/env-of.test.ts`                                                           |        8 |
+| `packages/plugin-sdk/tests/unit/identifiers-kit.test.ts`                                                  |        9 |
 | `packages/plugin-sdk/tests/unit/registry.test.ts`                                                         |       11 |
 | `packages/plugin-sdk/tests/unit/slices.test.ts`                                                           |       21 |
 | `packages/plugin-sdk/tests/unit/streaming.test.ts`                                                        |        9 |
@@ -281,7 +288,7 @@ this table says where each requirement lives, and what is not written yet.
 | `packages/policy-engine/tests/unit/risk-runtime.test.ts`                                                  |       33 |
 | `packages/policy-engine/tests/unit/slice-dsl.test.ts`                                                     |       23 |
 | `packages/policy-engine/tests/unit/slice-matcher.test.ts`                                                 |       29 |
-| `packages/shared/src/api-key.test.ts`                                                                     |        9 |
+| `packages/shared/src/api-key.test.ts`                                                                     |       12 |
 | `packages/shared/src/data-model.test.ts`                                                                  |        4 |
 | `packages/shared/src/mcp.test.ts`                                                                         |       10 |
 | `packages/shared/src/risk-id.test.ts`                                                                     |       20 |
@@ -289,29 +296,29 @@ this table says where each requirement lives, and what is not written yet.
 | `packages/telemetry/src/client.test.ts`                                                                   |       24 |
 | `packages/telemetry/src/queue.test.ts`                                                                    |       12 |
 | `packages/telemetry/src/report.test.ts`                                                                   |       24 |
-| `plugins/_template/tests/unit/plugin.test.ts`                                                             |       25 |
+| `plugins/_template/tests/unit/plugin.test.ts`                                                             |       26 |
 | `plugins/cloudflare-dns/tests/unit/classify.test.ts`                                                      |       33 |
 | `plugins/cloudflare-dns/tests/unit/data-model.test.ts`                                                    |        9 |
 | `plugins/cloudflare-dns/tests/unit/identifiers.test.ts`                                                   |       59 |
-| `plugins/cloudflare-dns/tests/unit/plugin.test.ts`                                                        |       50 |
+| `plugins/cloudflare-dns/tests/unit/plugin.test.ts`                                                        |       51 |
 | `plugins/cloudflare-dns/tests/unit/risk-catalog.test.ts`                                                  |       38 |
 | `plugins/github/tests/unit/classify.test.ts`                                                              |       69 |
 | `plugins/github/tests/unit/data-model.test.ts`                                                            |        1 |
 | `plugins/github/tests/unit/execute.test.ts`                                                               |       25 |
 | `plugins/github/tests/unit/injection.test.ts`                                                             |      415 |
-| `plugins/github/tests/unit/plugin.test.ts`                                                                |       14 |
+| `plugins/github/tests/unit/plugin.test.ts`                                                                |       16 |
 | `plugins/github/tests/unit/risk-catalog.test.ts`                                                          |       56 |
 | `plugins/github/tests/unit/token-cache.test.ts`                                                           |        5 |
 | `plugins/gmail/tests/unit/classify.test.ts`                                                               |      108 |
 | `plugins/gmail/tests/unit/data-model.test.ts`                                                             |        5 |
 | `plugins/gmail/tests/unit/injection.test.ts`                                                              |      190 |
-| `plugins/gmail/tests/unit/plugin.test.ts`                                                                 |       26 |
+| `plugins/gmail/tests/unit/plugin.test.ts`                                                                 |       27 |
 | `plugins/gmail/tests/unit/q-parser.test.ts`                                                               |       32 |
 | `plugins/gmail/tests/unit/risk-catalog.test.ts`                                                           |       45 |
 | `plugins/railway/tests/unit/classify.test.ts`                                                             |       22 |
 | `plugins/railway/tests/unit/data-model.test.ts`                                                           |        1 |
-| `plugins/railway/tests/unit/identifier-injection.test.ts`                                                 |      316 |
-| `plugins/railway/tests/unit/plugin.test.ts`                                                               |       30 |
+| `plugins/railway/tests/unit/identifier-injection.test.ts`                                                 |      294 |
+| `plugins/railway/tests/unit/plugin.test.ts`                                                               |       31 |
 | `plugins/railway/tests/unit/policy.test.ts`                                                               |       39 |
 | `plugins/railway/tests/unit/risk-catalog.test.ts`                                                         |       19 |
 | `plugins/resend/tests/unit/addresses.test.ts`                                                             |       13 |
@@ -319,52 +326,53 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/resend/tests/unit/data-model.test.ts`                                                            |        6 |
 | `plugins/resend/tests/unit/identifiers.test.ts`                                                           |       58 |
 | `plugins/resend/tests/unit/mission-evaluation.test.ts`                                                    |       15 |
-| `plugins/resend/tests/unit/plugin.test.ts`                                                                |       43 |
+| `plugins/resend/tests/unit/plugin.test.ts`                                                                |       44 |
 | `plugins/resend/tests/unit/risk-catalog.test.ts`                                                          |       33 |
 | `plugins/ssh/tests/unit/adversarial.test.ts`                                                              |      181 |
 | `plugins/ssh/tests/unit/classify.test.ts`                                                                 |       90 |
 | `plugins/ssh/tests/unit/data-model.test.ts`                                                               |        2 |
 | `plugins/ssh/tests/unit/host-key-pinning.test.ts`                                                         |       37 |
 | `plugins/ssh/tests/unit/injection.test.ts`                                                                |       87 |
-| `plugins/ssh/tests/unit/plugin.test.ts`                                                                   |      299 |
+| `plugins/ssh/tests/unit/plugin.test.ts`                                                                   |      300 |
 | `plugins/stripe/tests/unit/classify.test.ts`                                                              |       48 |
 | `plugins/stripe/tests/unit/data-model.test.ts`                                                            |        8 |
 | `plugins/stripe/tests/unit/execute.test.ts`                                                               |       23 |
 | `plugins/stripe/tests/unit/identifiers.test.ts`                                                           |       59 |
-| `plugins/stripe/tests/unit/plugin.test.ts`                                                                |       31 |
+| `plugins/stripe/tests/unit/plugin.test.ts`                                                                |       32 |
 | `plugins/stripe/tests/unit/policy.test.ts`                                                                |       30 |
 | `plugins/stripe/tests/unit/risk-catalog.test.ts`                                                          |       20 |
-| `plugins/supabase/tests/unit/classify.test.ts`                                                            |      133 |
+| `plugins/supabase/tests/unit/classify.test.ts`                                                            |      134 |
 | `plugins/supabase/tests/unit/data-model.test.ts`                                                          |        1 |
 | `plugins/supabase/tests/unit/execute.test.ts`                                                             |       42 |
 | `plugins/supabase/tests/unit/identifier-injection.test.ts`                                                |     1337 |
-| `plugins/supabase/tests/unit/mission-evaluation.test.ts`                                                  |       34 |
-| `plugins/supabase/tests/unit/plugin.test.ts`                                                              |       22 |
-| `plugins/supabase/tests/unit/risk-catalog.test.ts`                                                        |       44 |
-| `plugins/upstash-redis/tests/unit/classify.test.ts`                                                       |       30 |
-| `plugins/upstash-redis/tests/unit/command-table.test.ts`                                                  |       88 |
+| `plugins/supabase/tests/unit/mission-evaluation.test.ts`                                                  |       39 |
+| `plugins/supabase/tests/unit/plugin.test.ts`                                                              |       23 |
+| `plugins/supabase/tests/unit/query-sql.test.ts`                                                           |      118 |
+| `plugins/supabase/tests/unit/risk-catalog.test.ts`                                                        |       46 |
+| `plugins/upstash-redis/tests/unit/classify.test.ts`                                                       |       31 |
+| `plugins/upstash-redis/tests/unit/command-table.test.ts`                                                  |      105 |
 | `plugins/upstash-redis/tests/unit/data-model.test.ts`                                                     |        1 |
 | `plugins/upstash-redis/tests/unit/execute.test.ts`                                                        |       33 |
 | `plugins/upstash-redis/tests/unit/identifiers.test.ts`                                                    |       42 |
-| `plugins/upstash-redis/tests/unit/plugin.test.ts`                                                         |       26 |
-| `plugins/upstash-redis/tests/unit/policy.test.ts`                                                         |       24 |
+| `plugins/upstash-redis/tests/unit/plugin.test.ts`                                                         |       27 |
+| `plugins/upstash-redis/tests/unit/policy.test.ts`                                                         |       25 |
 | `plugins/upstash-redis/tests/unit/risk-catalog.test.ts`                                                   |       49 |
 | `plugins/vercel/tests/unit/binding.test.ts`                                                               |       50 |
 | `plugins/vercel/tests/unit/classify.test.ts`                                                              |       43 |
 | `plugins/vercel/tests/unit/data-model.test.ts`                                                            |        1 |
 | `plugins/vercel/tests/unit/firewall.test.ts`                                                              |       11 |
 | `plugins/vercel/tests/unit/identifier-injection.test.ts`                                                  |      315 |
-| `plugins/vercel/tests/unit/plugin.test.ts`                                                                |       48 |
+| `plugins/vercel/tests/unit/plugin.test.ts`                                                                |       49 |
 | `plugins/vercel/tests/unit/risk-catalog.test.ts`                                                          |       55 |
 | `plugins/vercel/tests/unit/team-pin.test.ts`                                                              |       99 |
 | `scripts/audit-gate.test.mjs`                                                                             |       29 |
 | `scripts/release-lib.test.mjs`                                                                            |       50 |
-| **TOTAL** (`npx vitest run --reporter=json`, 2026-10-13, with a build; 269 files; 9445 passed, 1 skipped) | **9446** |
+| **TOTAL** (`npx vitest run --reporter=json`, 2026-10-14, with a build; 277 files; 9746 passed, 1 skipped) | **9747** |
 
 The table is generated from the JSON report of one run of the whole suite
 (`npx vitest run --reporter=json`). A count is the number of tests the file
 declares, `it.each` expanded, **skipped tests included**: the TOTAL is the
-report's number of tests, of which 9445 passed and 1 was skipped in that
+report's number of tests, of which 9746 passed and 1 was skipped in that
 run, made with a build (as `npm run ci` does). The one skipped whatever the
 build is the latency measurement of the authority re-check
 (`door-latency.bench.test.ts`, run with `VAUBAAN_BENCH=1`). Without a build 27
@@ -497,7 +505,7 @@ npx vitest run packages/policy-engine     # one package
   `toolDeclarations`, `labels` (with `experimental`, and `summary` when the plugin has one), `idEnum` (non-empty tuple, throws when
   empty), `catalogOf` indexed, `presetsOf`; conflicts: same id twice, tool
   outside the plugin prefix, ill-formed plugin reported with its id.
-- **`define-plugin.test.ts`** (26) — fixture well-formed and frozen; `summary` optional, a non-empty paragraph of at most 600 characters when present; a `tokenHandouts` entry names a declared tool and risks of the catalog; every issue
+- **`define-plugin.test.ts`** (32) — fixture well-formed and frozen; `summary` optional, a non-empty paragraph of at most 600 characters when present; a `tokenHandouts` entry names a declared tool and risks of the catalog; **a preset that leaves a token-handing risk on `auto` is refused unless the plugin declares that risk read-only** (`readOnlyRiskIds`, a list of the handout's own risks; undeclared means write; refused where it is on `auto`, per preset and environment); every issue
   collected (id grammar, semver, tool prefix and duplicates, data-model
   and catalog provider mismatch); catalog rules through the definition;
   data-model referential integrity; credential spec rules per kind
@@ -511,6 +519,26 @@ npx vitest run packages/policy-engine     # one package
   a TypeScript catalog**: a preset entry with an infinite quota, a negative
   rate or an unknown gate is refused like its YAML twin, every illegal value
   of one entry listed.
+- **`identifiers-kit.test.ts`** (9) — **`assertIdentifiersRefused`, the
+  behavioural proof of "what is executed is what was classified"**: passes a
+  plugin whose `classify` and `execute` share one grammar and reports what it
+  ran (tools, arguments, hostile calls, the path identifiers **found by
+  running the samples**); **finds the fixture plugin, which interpolates its
+  arguments**; finds a grammar applied in `classify` only (refused, yet
+  sent — one finding per hostile value and position); finds a dot segment
+  escaping left in place and accepts what escaping names exactly; finds an
+  accepted value the request does not name (repair instead of refusal); a
+  classifier that throws is a finding; **refuses to pass on nothing** (no
+  identifier seen in a path must be stated with its reason, and a wrong
+  statement is refused too); leaves out refused samples, undeclared tools
+  and exempt arguments; reads a request reached after an answer when the
+  routes give it. Each of the ten plugin directories runs it on its own
+  samples in `plugin.test.ts` (no finding; GitHub: `owner`, `repo`,
+  `branch`, `path`, `sha`, `workflow_id`; Supabase: `project_ref`,
+  `function_slug`, `provider_id`, `tpa_id`, `type`; Vercel: `projectId`,
+  `deploymentId`, `idOrUrl`, `domain`, `id`; Cloudflare: `zone_id`,
+  `record_id`; Stripe: `id`; Resend: `id`, `segment_id`; Upstash:
+  `databaseId`; Railway and SSH state why they have none in a path).
 - **`testing-kit.test.ts`** (14) — `assertCatalogCoverage` on the fixture
   (touched risks in catalog order; `risksUntouched` leaves the fallback
   out — reachable by design only; `fallbackHits` names the samples only
@@ -576,7 +604,7 @@ npx vitest run packages/policy-engine     # one package
 - **`mcp.test.ts`** (10) — `toolPrefixFor` / `splitToolName` (hyphen ↔
   underscore, first separator only, malformed names); the eight refusal
   codes of spec §4.1 and §6; `isRefusalCode`.
-- **`api-key.test.ts`** (9) — `generateApiKey` for `live` and `test`
+- **`api-key.test.ts`** (12) — `generateApiKey` for `live` and `test`
   (`vbn_live_<8>_<32>` / `vbn_test_<8>_<32>`, the prefix being part of the
   key); `parseApiKey` tells the two kinds apart and rejects the retired
   `vbn_mgmt_` prefix, an unknown prefix, wrong lengths and a prefix or a
@@ -764,18 +792,21 @@ touches `upsert-variable` alone and only a replace touches
 unlabelled and a free-text-labelled project**; an `environmentId` must
 belong to the resolved project (`accept-deploy`, `redeploy`, the agent
 tool).
-`identifier-injection.test.ts` (316): a malformed id refused by `classify`
-and by `execute` (252), variable names, `execute` running on the target
+`identifier-injection.test.ts` (294): a malformed id refused by `classify`
+and by `execute`, variable names, `execute` running on the target
 the classifier resolved, a project id discovery would refuse; **a tool
 takes what its schema declares, nothing else** (8; `projectId` on a tool
 that takes none is checked, then not sent); **`serviceId` is bound to the
-project the mission holds** (20, threat model A18): a service of another
+project the mission holds** (20): a service of another
 project is refused by both sides and nothing is sent, the project's own
 service is sent as given, a service of another project _of the same
 mission_ is still not the named project's, a project discovered before
 services were recorded refuses with what to do, a project with no service
 refuses every `serviceId`, a malformed list in the metadata binds nothing.
-`deploymentId` and `threadId` are not bound (known limitation).
+**An id nothing can bind is refused**: `deploymentId` of `get-logs` and
+`threadId` of `railway-agent`, whatever their value, by `classify` and by
+`execute` with nothing sent; the declared schemas do not offer them; no other
+id-like argument of any tool is left unbound.
 `data-model` (1).
 
 **SSH** (696) — `plugin.test.ts` (299): kit (every catalog risk touched by
@@ -854,7 +885,7 @@ status on both surfaces and a network failure thrown as it is, never an
 `discoverResources` (one resource per database, no token in the metadata,
 200 cap with a warning) against `mockFetch`. `risk-catalog` (49): YAML
 validation, pattern parsing, coverage lint, saliency checks.
-`command-table.test.ts` (88): **every Redis command sits in exactly one
+`command-table.test.ts` (105): **every Redis command sits in exactly one
 class** (the six sets are pairwise disjoint, no deleting command is a plain
 write or a read); `execute` with one command, a pipeline or a
 `MULTI` / `EXEC` body costs the union of its commands; an unknown command
@@ -1078,7 +1109,7 @@ enforced limits is pinned to what the code enforces today.
   and integer spellings per source**: a variable reads `yes`, `ON`, `1` and
   `True` as true; the file takes a YAML boolean and a YAML number and
   refuses the spellings `yes`, `"true"`, `on` and a quoted integer.
-- **`config/keys-doc.test.ts`** (34) — **structural: the key table of the
+- **`config/keys-doc.test.ts`** (35) — **structural: the key table of the
   configuration handbook is the loader's.** The table of
   `docs/handbook/configuration.md` has the six columns the test reads and
   lists each key once; it has a row for every key of `KEYS` and no other
@@ -1440,7 +1471,7 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
 > §3.5, §6 ("encryption at rest", "authoritative, atomic counting",
 > "immutable audit"), §8, §10 (structural tests). Handbook [[store]]. ADR
 > [[embedded-store-sqlite-and-migrations]]. Every suite runs on an
-> ephemeral `:memory:` store with the real migrations (`0001`-`0011`), a
+> ephemeral `:memory:` store with the real migrations (`0001`-`0013`), a
 > `ManualClock`, a `StubEncryptor` and a five-id `SetCatalogIndex`
 > (`apps/gateway/src/server/store/testing.ts`); the two file-based cases
 > use a temp directory. Paths are relative to `apps/gateway/tests/`.
@@ -1455,7 +1486,7 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   immutability of an applied file (boot refused), full rollback of a
   failing file (nothing recorded, no table left), a database carrying a
   migration this image does not ship is refused, the eleven shipped
-  migrations `0001`-`0011` in the default directory.
+  migrations `0001`-`0013` in the default directory.
 - **`unit/server/store/db.test.ts`** (2) — `isSqliteVersionAtLeast`
   against `MIN_SQLITE_VERSION`: major, minor and patch compared in order;
   a missing or malformed component counts as zero.
@@ -1530,7 +1561,7 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   wildcard risk ids refused by the catalog check** (`*`, `github.*`,
   unknown, empty) and **by the schema `CHECK`** when bypassed, empty
   restriction allowed, active-for-targets listing and revocation.
-- **`integration/store/missions.test.ts`** (17) — creation with
+- **`integration/store/missions.test.ts`** (18) — creation with
   connections and policy rows, resource selection per connection,
   inconsistent selections refused (`selected` without resources, `all`
   with resources, resource of another connection, no connection), policy
@@ -1575,7 +1606,7 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   the counters of the period (through `decideClaim`) and `listEvents`
   since/limit; **structural check**: `session_counters`
   consumed == allowed audit touches after a mixed run.
-- **`integration/store/requests-approvals.test.ts`** (10) — approval
+- **`integration/store/requests-approvals.test.ts`** (14) — approval
   request arguments sealed with `request:<id>` as associated data and
   readable only through `getArguments`; approval requires tool and
   fingerprint; decision erases the blob and a second decision is refused;
@@ -1660,7 +1691,7 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   stored anchor for a one-off `Period`.
 - The fingerprint tests live with the function, in
   `packages/gateway-core/tests/unit/fingerprint.test.ts` (above).
-- **`unit/server/budget/decide.test.ts`** (15) — **multi-risk decrement**
+- **`unit/server/budget/decide.test.ts`** (20) — **multi-risk decrement**
   (`[READ, WRITE, READ]` → decrements `[READ, WRITE]`, remaining per risk),
   a call touching no risk, remaining after prior consumption, a gated risk
   with an approval names it for consumption, an opened gate behaves as
@@ -1737,7 +1768,7 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
 Unit, co-located under `apps/gateway/src/server/connections/` and
 `apps/gateway/src/server/provider-apps/` (134):
 
-- **`oauth2.test.ts`** (16) — authorization URL (code flow, state, S256
+- **`oauth2.test.ts`** (28) — authorization URL (code flow, state, S256
   challenge, RFC 7636 appendix B vector, resource indicator, extra
   parameters that cannot override the core ones, PKCE required when the
   spec says so); code exchange with `client_secret_basic` (form-encoded
@@ -1834,7 +1865,7 @@ Unit, co-located under `apps/gateway/src/server/connections/` and
   malformed items refused; a spec header cannot replace `Authorization`;
   the cap of 20 pages refuses; refusal versus unreachable for each failure,
   and no error message carries the user token or the client secret.
-- **`shipped-providers.test.ts`** (5) — the plugins the image ships:
+- **`shipped-providers.test.ts`** (7) — the plugins the image ships:
   registered once; every provider-app field is expressible in the mounted
   configuration; no shipped `app-install` plugin is unverifiable;
   redirect-flow providers are offered only once their app
@@ -2018,8 +2049,11 @@ included` equals the catalog; where the environment comes from (Vercel: the
   `curl … tools/list` check; masked prefix on a revisited
   page; sub-path of the public URL; `/agent-bootstrap.md` documents every
   refusal code and names no instance.
-- **`token.test.ts`** (8) — `vbn_live_<8>_<32>`, argon2id hash, clear prefix;
-  verification; uniqueness; prefix of a live token only; the draft schema
+- **`token.test.ts`** (10) — `vbn_live_<8>_<32>`, SHA-256 digest, clear
+  prefix; verification against the digest and nothing else; a hash an
+  earlier build stored as argon2id still verifies; a hash is never read
+  under the wrong algorithm nor under an unknown one; uniqueness; prefix of
+  a live token only; the draft schema
   (unknown keys refused, every malformed field named).
 - **`src/app/(app)/missions/new/form-state.test.ts`** (36) — initial state
   (nothing included, hidden and stale resources unticked, daily period, no
@@ -2049,7 +2083,7 @@ included` equals the catalog; where the environment comes from (Vercel: the
 Integration, `:memory:` store, the real root with the shipped plugins,
 connections and resources seeded through the repositories (36):
 
-- **`tests/integration/missions/mission-lifecycle.test.ts`** (28) — **issue →
+- **`tests/integration/missions/mission-lifecycle.test.ts`** (33) — **issue →
   the token verifies → rotate → the old token is `retired/rotated` → revoke →
   `retired/revoked` and gateway-core's `checkMissionActive` answers
   `mission-inactive`**; malformed bearer, unknown prefix and wrong secret answer
@@ -2127,7 +2161,7 @@ connections and resources seeded through the repositories (36):
   - **the secret of a member token belongs to the member alone**: everything
     the creator can read (detail, list, team, session, audit search) and every
     column of every table hold the prefix and never the secret, and the row
-    is an argon2id hash; over HTTP the secret is in the answer to the member
+    is a SHA-256 digest; over HTTP the secret is in the answer to the member
     and in no answer to the creator's own mutations;
   - **handlers**: each refusal with its status and a sentence; no session,
     another origin.
@@ -2173,9 +2207,9 @@ connections and resources seeded through the repositories (36):
   **`store/missions.test.ts`** — migration `0010` and the repository (the
   check inside the insert, the stale token revoked when a member is added):
   see "Scenarios — Store".
-- **`src/server/execution/execution.test.ts`** — the verified-token cache asks
-  the mission service on every hit: a cached proof never outlives a removed or
-  deactivated holder; one proof and one throttle window per token.
+- **`src/server/execution/execution.test.ts`** — the token verifier remembers
+  nothing: every call asks the mission service, so a removed or deactivated
+  holder is refused on the next one.
 - **`tests/unit/structural/telemetry-report-shape.test.ts`** — the calls of
   the property are made with three holders, and the member's id, subject and
   email, the token name, every token id, prefix and secret are among what must
@@ -2208,7 +2242,7 @@ account-level tool, an env-scoped risk, a risk to gate, an `execute` and a
 `refresh` the test scripts), missions issued through `MissionService.issue`,
 calls sent as JSON-RPC to `root.execution.handlers.mcp`.
 
-- **`src/server/execution/execution.test.ts`** (26) — agent label (header,
+- **`src/server/execution/execution.test.ts`** (21) — agent label (header,
   `_meta.agent` wins; the accepted shape up to 64 characters, trimmed;
   absent, empty and blank hold nothing; too long, a character outside the
   list, a non-string are **rejected with their reason, never repaired**; the
@@ -2218,13 +2252,12 @@ calls sent as JSON-RPC to `root.execution.handlers.mcp`.
   chain, a hop with a port or in brackets, an invalid `trusted_proxies`
   entry skipped — the one rule of `http/client-ip`); `citedRefs` over
   identifier and list segments; tool filter (needs a connection **and** an
-  accepted risk, nothing of an experimental plugin); verified-token cache
-  (hash computed once, state re-read on every call, proof keyed by a hash of
-  the bearer, **the proof slides on every hit** so an agent that keeps
-  calling never verifies again, a replaced row voids the proof, concurrent
-  first calls share one verification, unknown bearers never cached and
-  **throttled per prefix and client address** — a flood of wrong secrets
-  locks out only its sender —, a non-token bearer costs nothing); upstream
+  accepted risk, nothing of an experimental plugin); token verifier (nothing
+  remembered: the state is read again on every call; a token stored as a
+  SHA-256 digest is never throttled, however many wrong secrets are
+  replayed; the argon2id check of a legacy token is **throttled per prefix
+  and client address** — a flood of wrong secrets locks out only its sender
+  —, a non-token bearer costs nothing); upstream
   credential cache (scoped per connection, dropped on demand, unreachable
   after the connection row changed, lifetime capped).
 - **`integration/execution/pipeline.test.ts`** (24)
@@ -2271,7 +2304,7 @@ calls sent as JSON-RPC to `root.execution.handlers.mcp`.
     and re-derived on 401; **the provider's text stays out of the audit**
     (a host-built summary there, the detail to the calling agent; for an
     HTTP error the status is named and nothing of its message).
-- **`integration/execution/door-http.test.ts`** (21) — the real GitHub
+- **`integration/execution/door-http.test.ts`** (23) — the real GitHub
   plugin on a mocked upstream (`mockFetch`: installation-token mint, branch
   list), driven by the official MCP client (`@modelcontextprotocol/client`)
   whose HTTP goes to the handler:
@@ -2291,17 +2324,23 @@ calls sent as JSON-RPC to `root.execution.handlers.mcp`.
     bearer and a delegated token (injected resolver) are 403
     `wrong-credential-kind` naming door, presented and expected; a foreign
     `Origin` is 403;
-  - argon2 once for a burst and a series, yet a revocation is seen on the
-    next call; wrong secrets on a real prefix end in 429 for their sender,
-    while a verified agent is not locked out when another address floods its
-    prefix, nor when no client address can be resolved; the surface limit
-    is per mission, whatever the agent label, with `Retry-After`;
-  - **the accepted cold-agent 429** (ADR
+  - **token verification** (ADR [[mission-token-sha256-digest]]): the row
+    holds the SHA-256 digest of the Bearer; a revocation is seen on the next
+    call; wrong secrets on a real prefix are each 401, never 429, and the
+    agent is never held, proxy or not; the surface limit is per mission,
+    whatever the agent label, with `Retry-After`;
+  - **a token an earlier build stored as argon2id**: the same Bearer still
+    authenticates and its first call replaces the stored hash by the digest
+    (same row, same prefix, still active); a wrong secret moves nothing; a
+    legacy token of a revoked mission is refused by its reason; wrong secrets
+    on a legacy prefix end in 429 for their sender while the agent, from
+    another address, passes — after which the flood is answered 401 again;
+  - **the accepted 429, legacy tokens only** (ADR
     [[execution-door-json-faithful-arguments-and-shared-throttle]]): with no
-    trusted proxy, thirty wrong secrets on a known prefix are each 401, and
-    the real token, not verified yet, is then answered 429 with
-    `Retry-After`; nothing was learnt or changed — the mission and its token
-    stand — and the agent is served again once the window has passed;
+    trusted proxy, thirty wrong secrets on a legacy prefix are each 401, and
+    the real token, never used since the upgrade, is then answered 429 with
+    `Retry-After`; nothing was learnt or changed — the mission, its token and
+    its stored hash stand;
   - **arguments JSON cannot carry**: a `tools/call` whose body carries
     `"per_page":1e999` is answered `-32602` naming `argument 'per_page' is
 Infinity`; nothing reaches GitHub, and the audit entry is `refused` with
@@ -2456,6 +2495,32 @@ Unit, beside the code (102):
   dialog's context (catalog, groups,
   active shares, labelling, stale resources ignored); `received` flags a risk
   the catalog dropped and that risk leaves the authority.
+- **`tests/integration/authority/share-restores.test.ts`** (11) — **a share
+  that would bring orphaned missions back names them first** (spec §2.3,
+  §7.3): the forecast names exactly the missions the share then restores,
+  with who issued them, and none for a share that covers nothing they
+  accepted; **it reads only** (no share, no entry, no state); it counts the
+  union with the shares the creator still receives; it supposes the share
+  **in place of** the one its target holds; a group target reaches its
+  current members only; missions the store holds as revoked are left out; it
+  refuses what a share refuses. Over HTTP: **the first post stores nothing**
+  and answers a `303` to the dialog with an opaque `confirm` id (readable by
+  that session only, as often as the page loads); the post that carries
+  every mission shares and restores; one that misses a mission, or names
+  something else, comes back again; a share that restores nothing is made
+  at once.
+- **`tests/integration/authority/close-orphaned.test.ts`** (11) — **closing an
+  orphaned mission** (spec §2.3): **an owner of the connection revokes it** —
+  stored `revoked`, every token stopped, the door answers `mission-inactive`
+  (revoked), one `mission-revoked` under the owner's name with `before.status:
+orphaned`, `closed_as: connection-owner` and the connection; a closed
+  mission is not restored by a share made again; **an owner cannot close a
+  mission that serves and reads "not found"**; someone who owns none of its
+  connections reads "not found"; the creator closes as before, no ground
+  named; every current member of the owner group may, a former member may
+  not; idempotent, one entry; **a delegated client never acts as an owner**;
+  the missions a revoked connection left orphaned; `orphanedOn` lists them to
+  owners only and none that serves; the route answers 200 then 404.
 - **`src/server/shares/errors.test.ts`** (4) — a `ShareError` / `ConnectError`
   recognised by name and code when thrown by another copy of the class (what
   a page catches); a sentence and a 4xx status for every code.
@@ -2665,9 +2730,12 @@ Integration:
   beneficiary of a share on the same connection**, a co-owner through the
   owner group → `forbidden`, and a refused decision changes nothing; the
   creator's view (risk line, other risks, period, events, options);
-  after a rollover the risk reads un-exhausted; **reset** zeroes every
-  counter of the period, records the `reset` event with credits, **the
-  replay passes**, admin audit `period-reset`; **extend quota** gives back
+  after a rollover the risk reads un-exhausted; **reset** zeroes the
+  counter of the claimed risk and no other, records the `reset` event with
+  that one credit, **the replay passes**, a claim on one exhausted risk does
+  not reopen another exhausted risk (its claim stays open, a call touching
+  both is still refused), with nothing consumed it gives nothing back, admin
+  audit `period-reset`; **extend quota** gives back
   N on the claimed risk only, does not carry over to the next period,
   refuses more than was consumed and leaves the request open, and the
   store never lets a counter go below zero; **extend expiry** moves the
@@ -2731,7 +2799,7 @@ Unit:
   timestamp, another kind) open nothing; fed to `decide()`: an opened gate
   consumes no approval, the next period needs one again, the budget still
   refuses at zero quota.
-- **`apps/gateway/src/server/requests/approval.test.ts`** (28) — the three
+- **`apps/gateway/src/server/requests/approval.test.ts`** (33) — the three
   options, always in the same order, each with a one-line consequence (the
   tool, "once, within 10 minutes", the quota and the rate limit; the period
   end in UTC; "approval again from the next period"); a refusal is always
@@ -2774,8 +2842,17 @@ executor is `SessionService.recordCall`, the creator is `RequestService`.
   quota the claim comes first; **one approval covers a multi-risk call**
   (both risks counted, one request); bound to the exact fingerprint, to the
   tool and to the mission; **expires after the configured delay** (boundary
-  instant), and the delay is the operator's; a second gated risk of the same
-  call asks in its turn and both approvals are consumed together.
+  instant), and the delay is the operator's. **A call touching several
+  gated risks**: ONE request listing every gated risk, one row, one inbox
+  entry, a hint that says so; a replay before the decision reuses it
+  whatever the order of the risks; **granting it approves the call** (one
+  approval, one replay, both counters, single use); the grant is audited and
+  recorded with every risk; refusing it refuses the call; `open-gate` opens
+  every listed gate, one event each; a gate already open is not listed;
+  another tool with the same arguments does not use it. **What an earlier
+  build left**: an open one-risk request is neither reused for a call that
+  needs more nor widened, granting it approves what it named and no more,
+  and approvals granted risk by risk are consumed together.
 - **Erasure** — on `grant`, `open-gate` and `refuse` **the row's `args_blob`
   and `key_version` are NULL** (read with SQL), `decision_json` names no
   argument, the view shows `arguments: null`; **on expiry the sweeper erases
@@ -2812,7 +2889,7 @@ Integration, the real composition root:
   decides over JSON (the answer is the summary, tool but no argument) and
   through the page's form (303 `?decided=1`, `?problem=<code>`); after the
   decision the whole audit and the session events hold no argument.
-- **`tests/integration/execution/approval-door.test.ts`** (7) — **the
+- **`tests/integration/execution/approval-door.test.ts`** (8) — **the
   GitHub plugin's `developer` preset as shipped**, over JSON-RPC on `/mcp`
   with a mocked upstream: a workflow file write on a feature branch (the
   gated `github.workflow-write-via-file` and the ungated
@@ -2842,7 +2919,7 @@ Integration, the real composition root:
   is not a gate, a risk outside the policy, a revoked mission; the detail's
   `gate_open_until`; `POST /api/missions/:id/gate` 200 / 400 / 404 / 422 /
   409 / 403 / 401.
-- **`tests/integration/store/approval-decisions.test.ts`** (17) — migration
+- **`tests/integration/store/approval-decisions.test.ts`** (20) — migration
   0005 (the `tool` column and the lookup index), `decideApproval` in one
   transaction and its rollback, `getArguments` on an overdue request, the
   open request of a call, `riskEvents`, `setGate` (with `closeOpening` on a
@@ -2888,13 +2965,13 @@ itself are asserted in "Scenarios — Execution door".
   a token issued to a holder names the holder and the token it replaced; one
   token revoked on its own names it and its holder;
   nothing for malformed details or a kind of a later version.
-- **`audit-query.test.ts`** (25) — **by agent label**: exact and
+- **`audit-query.test.ts`** (35) — **by agent label**: exact and
   case-sensitive, call entries only (no administrative entry), narrowed by
   the other filters, and never a way into someone else's audit (the scope
   comes first). **Visibility**: a creator sees the calls and acts of their
   missions, another user none; a connection's owner sees the calls made through it by a
   mission they did not create; a member of the owning group sees it, a non-member does
-  not; an operator sees every administrative entry and still not other people's calls;
+  not; an operator sees every entry, calls included, and the bootstrap operator the administrative ones only; **a member** sees the calls, acts and requests of a mission shared with them and nothing of any other, stops at once when removed, and is offered the mission as a filter; **neither a member nor an operator is shown the argument fingerprint** (call entries and request entries), while the creator and the connection's owners are — decided entry by entry (`standingOn`), every dimension of the scope exercised at once;
   the bootstrap operator sees administrative entries only; a request's entries belong to
   its mission; **a filter never widens the scope**. **Filters**: mission, connection,
   tool (exact), decision, kind, period, user (email or id, unknown user → nothing),
@@ -2930,6 +3007,17 @@ itself are asserted in "Scenarios — Execution door".
   risks, what is left, refusal code and request; timeline paging; revoked mission keeps
   its history; `eventView` ignores every detail it does not name and shows an event with
   malformed details without detail.
+- **`session-history-retention.test.ts`** (11) — **`retention_days` also purges the
+  session history**: events older than N days and no other (exactly N days old is kept);
+  **the counters of periods that ended more than N days ago, never the current one**;
+  in a period longer than the retention the call events leave and **the gate and credit
+  events of the period stay — the gate opened 90 days ago still reads open** — with the
+  period's counters; a gate or credit event leaves once its period is over; on a one-off
+  mission the old calls leave, its counters and credits stay; each session by its own
+  mission's period, idempotent; nothing but `events` and `session_counters` is
+  touched; a retention that is not a number of days is refused. The sweeper purges both
+  with the same number of days, logs what it removed, **the two purges fail apart**, and
+  the composition root wires it.
 - **`retention.test.ts`** (10) — **the purge removes the entries older than N days and
   nothing else**: older call and act gone with their risk rows, the entry exactly N days
   old and the recent ones intact, seven other tables unchanged; **the triggers still
@@ -3176,7 +3264,7 @@ Unit, beside the code (`apps/gateway/src/server/oauth-as/`):
   expiry; a client disabled meanwhile; no code when the entry cannot be
   written; **the delegation is revoked when its code cannot be minted**
   (nothing stays active that no client can redeem); the response keeps the registered query and names the issuer.
-- **`token-service.test.ts`** (58) — the code exchange; digests only in the
+- **`token-service.test.ts`** (66) — the code exchange; digests only in the
   database and the audit; **PKCE verification** (wrong verifier, the
   challenge as verifier, missing verifier; the code is spent by the failed
   attempt); **code single-use**: a replay revokes the delegation and the
@@ -3209,6 +3297,8 @@ Unit, beside the code (`apps/gateway/src/server/oauth-as/`):
   confidential, waiting, disabled; Basic or body, never both); the sweep.
 - **`delegations.test.ts`** (26) — a user's delegations with their client, most
   recent first, with the missions each issued; `idle` when no token is left;
+  the date the consent ends, and `expired` past the absolute lifetime with
+  nothing written; the state derived in one place;
   **revoke cascades** to every token, with its entry, once; not another
   user's; the verifier: what resolves, what never does (a refresh token, a
   code, a client id, a mission-token shape), revocation and a removed user at
@@ -3245,7 +3335,7 @@ surface as one `fetch`):
   token expires and **the client renews by itself**, the refresh token
   rotated; the user revokes and the client is sent back to the browser; a
   refusal reaches it as `access_denied`.
-- **`credential-separation.test.ts`** (18) — **the three real credentials on one
+- **`credential-separation.test.ts`** (19) — **the three real credentials on one
   instance**: a delegated token at `/mcp` → `wrong-credential-kind`; a
   mission token at `/mcp/manage` → `wrong-credential-kind`; a web session at
   `/mcp/manage`, as cookie or as bearer → `wrong-credential-kind`; `401` with

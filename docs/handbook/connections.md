@@ -9,7 +9,7 @@ tracks:
   - apps/gateway/src/server/compose/shipped-plugins.ts
   - apps/gateway/src/server/store/repositories/connections.ts
   - apps/gateway/migrations/0004_connection_resource_curation.sql
-  - apps/gateway/src/app/(app)/connections/
+  - apps/gateway/src/app/(app)/accounts/
   callback/[provider]/route.ts       GET  /connections/callback/<provider>   registered at the provider: kept its path
 apps/gateway/src/app/(app)/accounts/   (was connections/; the old paths redirect, handbook web-app)
   - apps/gateway/src/app/(app)/layout.tsx
@@ -478,7 +478,8 @@ owner user was deactivated — is covered by
 `ConnectionService.revoke` is idempotent and audited (`connection-revoked`);
 it watches the missions of the connection across the act
 (`grounds.watchConnection` → `settle`, handbook [authority](authority.md)).
-It does not withdraw the grant at the provider; the notice says so.
+It also withdraws the grant at the provider when the provider documents
+how — see "The grant at the provider" below.
 Missions that carry a `revoked` connection are `orphaned` from then on and
 stay so: the execution door derives it on every request
 (`MissionGrounds.inspect`, cause `connection-revoked`) and refuses every
@@ -486,6 +487,59 @@ call of the mission with `mission-inactive`. Calls on an `expired`
 connection are refused with `connection-unavailable` (handbook
 [execution-door](execution-door.md)) by the upstream stage, which reads the
 status through `CredentialBroker.resolve` (`execution/upstream-stage.ts`).
+
+### The grant at the provider (`credentials.ts`, `oauth2.ts`, `provider-grant.ts`)
+
+Revoking a connection erases its credential here. The access the provider
+granted — the OAuth authorization, the installed app, the API key — is
+another object, and it lives at the provider (spec §2.3; ADR
+[provider-side-revocation-on-connection-revoke](../decisions/provider-side-revocation-on-connection-revoke.md)).
+
+**Order.** `revoke` reads the stored credential
+(`CredentialBroker.forRevocation`: as it is, no refresh, whatever the
+status — an `expired` connection still holds the refresh token the
+provider wants), **revokes the connection in the store**, and only then
+calls `CredentialBroker.withdrawAtProvider`. The local revocation never
+waits for the provider and never depends on its answer; the call is bounded
+by `REVOCATION_REQUEST_TIMEOUT_MS` (10 s, plus a second of grace that cuts a
+plugin `revoke` ignoring its signal) and never throws.
+
+**How the provider is asked** — the plugin says, the host does:
+
+| The plugin declares                                                            | Who sends                | Request                                                                                                                                |
+| ------------------------------------------------------------------------------ | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `revoke(ctx)` on the contract                                                  | the plugin               | whatever its provider needs; it resolves when the provider confirmed and throws otherwise. Takes precedence. No shipped plugin has one |
+| `credential.revocation: { url, format: 'token-form' }` (`oauth2`)              | the host (`revokeGrant`) | `POST url`, form-encoded `token=<refresh token, else access token>`, no client authentication                                          |
+| `credential.revocation: { url, format: 'client-credentials-json' }` (`oauth2`) | the host                 | `POST url`, JSON `{ client_id, client_secret, refresh_token }`; nothing is sent without a stored refresh token                         |
+| nothing                                                                        | nobody                   | —                                                                                                                                      |
+
+The host sends the declarative shapes itself because one of them carries
+the company's OAuth client secret, which a plugin never receives. Redirects
+are refused (`redirect: 'error'`): the token goes to the declared endpoint
+or nowhere. `canWithdraw(plugin)` is the one rule that says whether a
+plugin has a way.
+
+**Outcome** — `ProviderGrantOutcome`, stored in `connections.provider_grant`
+(migration `0012`, written once by `recordProviderGrant`, only on a revoked
+row that holds none) and written in the `connection-revoked` entry as
+`after.provider_grant`:
+
+| Outcome   | When                                                                                                                                       | What the person is told                                                                    |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `revoked` | the plugin's `revoke` resolved, or the endpoint answered 2xx                                                                               | "Access withdrawn at <provider>": nothing left to remove                                   |
+| `manual`  | the plugin declares no way, or the stored credential holds no token the endpoint accepts                                                   | "Remove the access at <provider> by hand", then the plugin's `manualRevocation` sentence   |
+| `failed`  | there is a way and it did not confirm: any other status, unreachable, too slow, a `revoke` that threw, a credential that could not be read | "Access NOT withdrawn at <provider>": it may still stand; remove it by hand, same sentence |
+| `NULL`    | a connection revoked by a build that asked nothing                                                                                         | read as `manual`                                                                           |
+
+The wording is one module, `provider-grant.ts` (`providerGrantForecast`
+before the act, `providerGrantReport` after): the dialog, the notice of the
+redirect (tone `warning` whenever something is left to do — the revocation
+itself succeeded) and the banner of the revoked connection's page say the
+same thing. Log lines: `provider grant withdrawn` (`info`), `provider grant
+not withdrawn` (`warn`, with the upstream status, never a token).
+
+Which shipped provider does what:
+[providers, "Revoking a connection"](providers/README.md#revoking-a-connection-what-happens-at-the-provider).
 
 ## Credentials and refresh — `CredentialBroker`
 
@@ -563,7 +617,7 @@ A ref the discovery no longer returns is **not deleted**: `stale_since` is
 set (kept at its first value by later discoveries) and cleared when the
 ref comes back. `ConnectionResourceRecord.metadata` is the effective
 metadata, `{ ...discovered, ...ownerMetadata }` — what `toPluginResource()`
-hands to `classify` / `execute`. The destructive `replaceResources` of P0.3
+hands to `classify` / `execute`. The destructive `replaceResources` of the first store
 (it deleted missing refs and cascaded to mission selections) is gone from the
 repository: fixtures seed resources through `syncDiscoveredResources` too.
 
@@ -618,7 +672,14 @@ explicitly and refuses a stale one (handbook [missions](missions.md),
   editable lists, display name input, environment input or `set by the
 plugin` badge, hidden checkbox, Save — inputs reach their per-row form
   through the `form` attribute); "Refresh discovery", "Reconnect", and
-  "Revoke" (`RevokeConnection`: type the connection name, then a form POST).
+  "Revoke" (`RevokeConnection`: type the connection name, then a form POST;
+  the dialog says beforehand what the revocation does at the provider —
+  "the gateway will also ask <provider> to withdraw the access", or "the
+  gateway cannot withdraw the access at <provider>: you remove it there
+  yourself" with the plugin's sentence). A revoked connection keeps a
+  second banner under "Revoked": green "Access withdrawn at <provider>", or
+  amber "Remove the access at <provider> by hand" / "Access NOT withdrawn at
+  <provider>" with where to do it, for as long as the connection is listed.
   An `unowned` connection has no "Reconnect" action (the server refuses it,
   `connection-unowned`); the page says so instead.
   The owner also gets a **Shares** card (target, the restriction as a folded
@@ -654,7 +715,7 @@ Unit, co-located (`src/server/connections/*.test.ts`,
 `src/server/provider-apps/service.test.ts`), all on `openTestStore()` and
 `mockFetch` through `connectionsHarness()`:
 
-- `oauth2.test.ts` (16) — authorization URL, RFC 7636 vector, the three
+- `oauth2.test.ts` (28) — authorization URL, RFC 7636 vector, the three
   client authentication methods, resource indicator, error mapping,
   rotation, a PKCE exchange without a verifier refused before any request.
 - `service.test.ts` (33) — the driver per credential kind against mocked
@@ -727,7 +788,7 @@ ordinary reassignment are in `tests/integration/authority/ownership.test.ts`
 
 Not automated: a browser run against real providers
 ([e2e-tests](../tests/e2e-tests.md#connect-a-provider), "Manual checks
-by feature" → "Connect a provider (P1.4)").
+by feature" → "Connect a provider").
 
 ## How to debug
 

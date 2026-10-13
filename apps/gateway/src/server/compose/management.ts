@@ -12,7 +12,7 @@
  * crafted call, performs one of those acts. `management/hard-deny.test.ts`
  * walks the object graph of the door built here against the real root.
  *
- * The admission gate (authorization server, P2.3) is built here too and stays
+ * The admission gate (authorization server) is built here too and stays
  * `root.management.gate`; the door receives its `admit` as a function.
  */
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';

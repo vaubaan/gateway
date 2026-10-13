@@ -202,6 +202,18 @@ A share is `(connection, target, restriction)`; rows `shares` +
   revocation is stored, the missions it orphaned or restored are settled even
   when the act's own entry (`share-created`, `share-revoked`) cannot be
   written; that failure still reaches the caller.
+- `forecast(actor, connectionId, input)`: what `share()` would do with the
+  same input, without doing it — the same refusals (owner only, unshareable
+  connection, empty or unknown restriction, unknown target, a current owner),
+  then `restores`: the orphaned missions of the connection the share would
+  ground again, each with its name and the email of who issued it. It asks
+  `MissionGrounds.forecastShare(supposed)`, which takes the verdict of each
+  orphaned mission a second time **supposing** the share
+  (`AuthorityRecheck.gapsOf(user, questions, supposing)`): the supposed share
+  stands in place of the active one its target already holds, as
+  `replaceForTarget` would store it, and counts for the creator when its
+  target is them or one of their current groups. Nothing is written. The
+  execution door never passes a supposition.
 - `received(actor)`: the active shares targeting the user or one of their
   current groups, each with `via` (`you` or `group <name>`) and the exact
   restriction; a risk the catalog dropped since is listed with `known: false`.
@@ -210,6 +222,33 @@ A share is `(connection, target, restriction)`; rows `shares` +
 explicit id except deprecated entries and the uncategorized-write fallback,
 and the form posts one `risk` field per ticked box (`SHARE_FIELDS`). The
 server never receives "all"; a risk added to the catalog later is not shared.
+
+**A share that brings missions back is confirmed first** (spec §2.3, §7.3;
+product owner's decision of 2026-10-13). A restored mission serves calls at
+once with the token its agent still holds, so the owner reads which ones
+before the share exists:
+
+1. `POST /accounts/<id>/shares` asks `forecast()`. With nothing to restore
+   the share is made as before.
+2. Otherwise nothing is stored: what was asked is kept under an opaque id in
+   the `SessionStore` (`PendingShareStore`, prefix `share-confirm:`, 10
+   minutes, readable by the posting session only) and the answer is a `303`
+   to `/accounts/<id>/share?confirm=<id>`. The URL carries neither the
+   target nor the risks.
+3. The dialog reads the pending share, **asks the forecast again** and shows
+   the list of that instant in a warning: each mission, who issued it, and
+   one button. The checklist under it is filled with what was asked, so the
+   owner can narrow the share instead.
+4. The confirmation posts the same share plus one `restore` field per
+   mission listed (`SHARE_FIELDS.restore`). The handler forecasts once more
+   and makes the share only when every mission it would restore is among
+   those values; a mission that became restorable in between sends the
+   dialog back with the new list. The `restore` values authorize nothing:
+   they are the list the owner read.
+
+The confirmation lives in the handler: `ShareService.share()` called from
+code restores without asking, and its outcome and the trail
+(`mission-restored`) say what it did.
 
 `envNotes(risks, selected, labelling)` produces the dialog's warning when
 env-qualified risks are ticked on a connection whose plugin does not derive
@@ -459,6 +498,31 @@ entry: the two acts of a mission need not come in pairs.
 `ConnectionsRepo.markOwnerlessUnowned()` (the one stored state here) and
 returns `{ unowned, orphaned, restored }`.
 
+### Closing an orphaned mission
+
+Spec §2.3: "an orphaned mission may be closed by its creator, or by an owner of
+one of the connections it carries". Closing is the mission's revocation
+(`MissionService.revoke`, handbook [missions](missions.md)): the stored status
+goes `active` → `revoked`, every token is revoked, and no share brings the
+mission back.
+
+- **Who.** The creator, always. Anyone else is asked two things by
+  `closableBy`: is the mission `orphaned` at this instant (`grounds.inspect`),
+  and do they own one of its connections now (`authorityOf(…).basis ===
+'owner'`: the owner, or a current member of the owner group; a revoked
+  connection still has its owner, an `unowned` one has none). Otherwise the
+  answer is "not found" — an owner is not told which missions that serve carry
+  their connection. A delegated client acts for the creator only.
+- **Where.** `/accounts/<id>` shows the card "Orphaned missions" when
+  `MissionService.orphanedOn(user, connectionId)` lists any: name, who issued
+  it, why (`OrphanCause`), and "Close", which asks for the mission's name
+  (`CloseOrphanedMission`, client) and posts to `/api/missions/<id>/revoke`.
+  On a revoked connection the card lists every mission the revocation left
+  orphaned.
+- **Trail.** `mission-revoked` under the owner's name, `before.status:
+'orphaned'`, and `after.closed_as: 'connection-owner'` with the
+  `connection_id` they own. The creator's entry carries neither field.
+
 ### The door
 
 `ExecutionDoor.credentialResolver` (`execution/door.ts`) calls
@@ -479,11 +543,11 @@ Measured cost of `inspect` (`tests/integration/authority/door-latency.bench.test
 `:memory:` store, mean over 20 000 calls on a shared development machine;
 `VAUBAAN_BENCH=1 npx vitest run <that file>`):
 
-| Mission grounded on     | P2.2 (`settle`, stored) | P2.2b (`inspect`, derived) | Share of an in-process `tools/call` |
-| ----------------------- | ----------------------- | -------------------------- | ----------------------------------- |
-| owner, user-owned       | 19.2 µs                 | 16.8–18.1 µs               | ~2 %                                |
-| owner through a group   | 21.1 µs                 | 19.3–20.6 µs               | ~3 %                                |
-| a share made to a group | 43.9 µs                 | 42.5–45.3 µs               | ~5 %                                |
+| Mission grounded on     | stored at the act (`settle`, before migration 0007) | derived on read (`inspect`, today) | Share of an in-process `tools/call` |
+| ----------------------- | --------------------------------------------------- | ---------------------------------- | ----------------------------------- |
+| owner, user-owned       | 19.2 µs                                             | 16.8–18.1 µs                       | ~2 %                                |
+| owner through a group   | 21.1 µs                                             | 19.3–20.6 µs                       | ~3 %                                |
+| a share made to a group | 43.9 µs                                             | 42.5–45.3 µs                       | ~5 %                                |
 
 The cheap path is the same (`gapsOf`: one to three indexed reads, no catalog
 enumerated); the orphan path lost its write. The share path compiles its
@@ -510,21 +574,22 @@ group overage) never reaches the sync: the sign-in is refused with
 
 ### Pages and routes
 
-| Path                                                                            | What                                                                                                                                                                              | Guard    |
-| ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| `/accounts/<id>`                                                                | "Shares" card (target, restriction on demand, Edit, Revoke), "Ownership" card (transfer)                                                                                          | owner    |
-| `/accounts/<id>/share[?share=<id>]`                                             | the Share dialog (`share-form.tsx`, client): the checklist open under its summary, each risk a compact `RiskExplain` row ([missions](missions.md)), the helper text behind "More" | owner    |
-| `POST /accounts/<id>/shares`                                                    | `shares.handlers.share`                                                                                                                                                           | user     |
-| `POST /accounts/<id>/shares/<shareId>/revoke`                                   | `shares.handlers.revoke`                                                                                                                                                          | user     |
-| `POST /accounts/<id>/transfer`                                                  | `connections.handlers.transfer` (`group_id`)                                                                                                                                      | user     |
-| `/shares`                                                                       | Shares received                                                                                                                                                                   | user     |
-| `/admin/groups`                                                                 | groups, members                                                                                                                                                                   | operator |
-| `POST /admin/groups/create`, `…/<id>/members`, `…/<id>/members/<userId>/remove` | `groups.handlers.*`                                                                                                                                                               | operator |
-| `/admin/connections`                                                            | connections without owner                                                                                                                                                         | operator |
-| `POST /admin/connections/<id>/reassign`                                         | `connections.handlers.reassign` (`owner_kind`, `owner_email` / `owner_group`)                                                                                                     | operator |
+| Path                                                                            | What                                                                                                                                                                                                                                                                                     | Guard    |
+| ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| `/accounts/<id>`                                                                | "Shares" card (target, restriction on demand, Edit, Revoke), "Orphaned missions" card when there are some (name, issued by, why, Close), "Ownership" card (transfer)                                                                                                                     | owner    |
+| `/accounts/<id>/share[?share=<id>][?confirm=<id>]`                              | the Share dialog (`share-form.tsx`, client): the checklist open under its summary, each risk a compact `RiskExplain` row ([missions](missions.md)), the helper text behind "More"; with `confirm`, the orphaned missions the pending share would bring back and the button that makes it | owner    |
+| `POST /accounts/<id>/shares`                                                    | `shares.handlers.share` (makes the share, or sends back to the dialog to confirm what it would restore)                                                                                                                                                                                  | user     |
+| `POST /accounts/<id>/shares/<shareId>/revoke`                                   | `shares.handlers.revoke`                                                                                                                                                                                                                                                                 | user     |
+| `POST /accounts/<id>/transfer`                                                  | `connections.handlers.transfer` (`group_id`)                                                                                                                                                                                                                                             | user     |
+| `/shares`                                                                       | Shares received                                                                                                                                                                                                                                                                          | user     |
+| `/admin/groups`                                                                 | groups, members                                                                                                                                                                                                                                                                          | operator |
+| `POST /admin/groups/create`, `…/<id>/members`, `…/<id>/members/<userId>/remove` | `groups.handlers.*`                                                                                                                                                                                                                                                                      | operator |
+| `/admin/connections`                                                            | connections without owner                                                                                                                                                                                                                                                                | operator |
+| `POST /admin/connections/<id>/reassign`                                         | `connections.handlers.reassign` (`owner_kind`, `owner_email` / `owner_group`)                                                                                                                                                                                                            | operator |
 
 Every POST is a form post answered by a `303` to a page with `?notice=<id>`
-(`createNoticeRedirect`, the connections' `NoticeStore`).
+(`createNoticeRedirect`, the connections' `NoticeStore`), except a share that
+waits for its confirmation: `303` to the dialog with `?confirm=<id>`.
 
 ### From code
 
@@ -557,6 +622,8 @@ A page that catches a service error matches it by shape (`isShareError(err,
 | `tests/integration/authority/ownership.test.ts`           | transfer, unowned, reassignment (restores), a group claim missing at one sign-in then back at the next; a share to oneself or to a fellow member of the owner group refused (`target-is-owner`, nothing stored), so leaving the group orphans the member's missions; a share to a former member and a share to a group the sharer belongs to accepted            |
 | `tests/integration/auth/deactivate-user.test.ts`          | a deactivated user holds nothing: mission `orphaned` with nothing written on it, own connection `unowned` and reassigned by the operator, `mission-restored` on reactivation; what a half-failed deactivation left open is closed before the user is active again, and a reactivation that cannot close it does not happen ([authentication](authentication.md)) |
 | `tests/integration/authority/handlers.test.ts`            | the form posts and their notices                                                                                                                                                                                                                                                                                                                                 |
+| `tests/integration/authority/share-restores.test.ts`      | the forecast (exact, read-only, union of shares, replacement of the target's share, group target), and the confirmation over HTTP: nothing stored on the first post, shared on the post that carries every mission, back again otherwise                                                                                                                         |
+| `tests/integration/authority/close-orphaned.test.ts`      | an owner of the connection closes an orphaned mission (entry, tokens, the door), never one that serves; strangers, former group members and delegated clients read "not found"; what the connection page lists; the route                                                                                                                                        |
 | `tests/integration/authority/rules-read-by-pages.test.ts` | what a page reads is what the act answers: `ownerActRefusal` and `ShareContext.unshareable`, `transferTargets`, `ConnectionService.reassignTargets()`, `gateEditBlockedBy` and `MissionDetail.gates_editable`, on every status                                                                                                                                   |
 | `tests/integration/store/ownership-and-orphans.test.ts`   | the repository transitions; migration `0007` (reset, triggers)                                                                                                                                                                                                                                                                                                   |
 | `tests/integration/store/audit-guarded-append.test.ts`    | `AuditRepo.appendUnlessLatest`: two writers, one entry; per object, within the guarded acts, not for an older equal entry                                                                                                                                                                                                                                        |
@@ -579,9 +646,18 @@ at the execution door` with the same fields. Do not look for `orphaned` in
   the creator only while `groupsOf(user)` lists the group — IdP groups change
   at sign-in only. `connection-revoked` never ends.
 - **A mission came back that the owner did not expect.** Sharing again to the
-  same person restores the missions that fit inside the new share (the notice
-  counts them, and each has a `mission-restored` entry). The creator, not the
-  owner, revokes a mission; the owner narrows or revokes the share.
+  same person restores the missions that fit inside the new share. The dialog
+  lists them before the share is made and the owner confirms; the notice
+  counts them, and each has a `mission-restored` entry. A mission restored
+  without that step came back by another road: a membership returned, a
+  connection reassigned, or `ShareService.share()` called from code. A mission
+  that serves is revoked by its creator only; the owner narrows or revokes the
+  share, and may then close the mission it orphaned ("Closing an orphaned
+  mission", above).
+- **The dialog keeps coming back with a list.** The share asked would restore
+  a mission that the confirmation did not carry: the list changed between the
+  page and the post (a mission was orphaned meanwhile), or the pending share
+  expired (10 minutes) and the form was posted without `restore` values.
 - **A beneficiary cannot tick a risk at issuance.** It is outside
   `authorityOf`: compare `/shares` (what they received, each `via`) with the
   owner's "Shares" card. A share made to a group reaches them only while
@@ -629,10 +705,6 @@ with a local group`), and local membership does not count.
 
 ## Not built here
 
-- Closing an orphaned mission by an owner of the connection (spec §2.3): the
-  creator closes it with the mission's "Revoke"; an orphaned mission already
-  refuses everything. An owner who wants it never to serve again revokes the
-  connection, or does not share again.
 - An audit entry for a change of authority that no service performed (the
   door sees it and refuses or serves; nobody is named).
 - Deleting a group.

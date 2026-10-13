@@ -18,7 +18,7 @@ export interface IdpClaimMapping {
   readonly sub: string;
   /** Claim carrying the email address. */
   readonly email: string;
-  /** Claim carrying the group list (array or delimited string, resolved by P1.1). */
+  /** Claim carrying the group list (array or delimited string, resolved at sign-in). */
   readonly groups: string;
 }
 
@@ -44,7 +44,7 @@ export interface AdminRule {
 
 /**
  * The app the company registered at a provider. Which fields a given
- * provider needs is declared by its plugin (`CredentialSpec`, P0.2); the
+ * provider needs is declared by its plugin (`CredentialSpec`); the
  * loader only guarantees the shape and resolves secret references.
  */
 export interface ProviderAppConfig {
@@ -124,6 +124,12 @@ export interface OAuthConfig {
   readonly accessTokenTtlSeconds: number;
   /** Lifetime of a refresh token; each rotation starts it again. */
   readonly refreshTokenTtlSeconds: number;
+  /**
+   * Absolute lifetime of a delegation, counted from the user's consent (spec §0
+   * "Delegation"): past it no token of the delegation is issued or accepted,
+   * whatever was renewed, and the client must obtain the consent again.
+   */
+  readonly delegationMaxLifetimeSeconds: number;
   /**
    * For how long the refresh token that was just rotated may be presented once
    * more without ending the delegation (two processes sharing one stored token

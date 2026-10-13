@@ -689,6 +689,30 @@ covered: add the missing catalog entry. Coverage looks at which risks a slice
 matches, not at the environment: samples on one resource are enough, and an
 env-scoped risk counts as touched whatever the label.
 
+**Run the identifier proof on the same samples.** `assertIdentifiersRefused`
+feeds `..`, `.`, `a/../b`, `%2e%2e`, `..%2f`, `%2f`, a line break and
+`r1?x=1#y` to every string argument of every sample, through your `classify`
+and through your `execute`, and fails when a value your classifier refuses is
+sent anyway, when a request carries a dot segment, when a delimiter reaches a
+URL as it is, or when an accepted identifier is not the one the request
+names:
+
+```ts
+const report = await assertIdentifiersRefused(acmePlugin, SAMPLES, {
+  resources: [staging],
+  context: (fetch, resources) => ({ credential, appConfig: {}, fetch, resources }),
+});
+expect(report.pathIdentifiers).toContainEqual({ tool: TOOL.getWidget, argument: 'widget_id' });
+```
+
+It finds the identifiers by running your samples: an argument whose sample
+value is a segment of a request path. If it finds none it fails — give it
+`routes` for what your executor reads first (a token, a lookup), or say
+`pathIdentifiers: { none: '<why>' }` when your identifiers do not travel in a
+path. The repository refuses a plugin whose tests do not run it. It does not
+replace the cases of step 6 that only you know (a ref, a nested field, a
+value that is legitimately dotted).
+
 `mockFetch(routes)` returns a `fetch` that answers from a list of routes and
 records what it was asked:
 

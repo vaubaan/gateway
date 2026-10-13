@@ -37,12 +37,104 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
   Supabase plugins refuse a call that carries an argument its tool does not
   declare, naming the argument; they used to forward it or drop it. An agent that
   pads its calls with fields of the provider's own API (`target` on
-  `vercel__deploy_to_vercel`, `project_id` beside `projectId`) must stop. These plugins and GitHub are `3.0.0`; Stripe is `0.4.0`, Resend and Gmail
-  `0.3.0`, Upstash Redis `2.0.1`, SSH stays `2.0.0`.
+  `vercel__deploy_to_vercel`, `project_id` beside `projectId`) must stop. The
+  versions the plugins carry today are listed under "Added", below.
+- **Railway: `deploymentId` and `threadId` are refused.** Neither can be tied to the
+  mission's project, and the Railway credential reaches every project of the
+  workspace, so the gateway no longer forwards them: `railway__get-logs` takes
+  `serviceId` and `environmentId` and reads the latest deployment, and every
+  `railway__railway-agent` call starts a new conversation. The tools no longer list
+  the two arguments. The Railway plugin is `4.0.0`.
 - **Railway: refresh the resources of each connection once.** A `serviceId` is
   checked against the services recorded for the mission's project at discovery; a
   project discovered by an earlier build has none recorded, and a call that names
   a service is refused until its owner refreshes the connection.
+- **Revoking a connection now withdraws the access at the provider, where the
+  provider allows it.** Schema migration `0012` (forward-only, one nullable column).
+  For Supabase (and the experimental Gmail plugin) the gateway asks the provider to
+  revoke the OAuth authorization and tells you whether it confirmed. For every other
+  provider it cannot, and says so before and after: the dialog and the revoked
+  connection's page tell you where to remove the access by hand — uninstall the
+  GitHub App, revoke the app in your Railway account, delete the API key for Vercel,
+  Stripe, Cloudflare, Upstash and Resend, remove the public key for SSH. Connections
+  revoked before this build asked nothing of the provider: their page says to remove
+  the access by hand.
+- **Mission tokens are stored as a SHA-256 digest; tokens you already issued keep
+  working.** Nothing to do, and no schema migration. A token issued by an earlier
+  build is stored as an argon2id hash: it still authenticates with the same Bearer,
+  and its first successful call replaces the stored hash by the digest (one `info`
+  log line, `mission token moved to its sha256 digest`). Until that first call, and
+  only for such a token, wrong secrets replayed on its prefix are still throttled
+  (429). **Do not go back to an older image after this one has served calls**: it
+  reads argon2id only and would refuse every token that has been moved or issued
+  since.
+- **A delegation now ends 90 days after the consent.** An application you authorized
+  on the Delegations page used to stay authorized for as long as it renewed its token.
+  It is now refused 90 days after you consented, whatever it renewed, and sends you to
+  the consent screen again; the missions it issued are untouched. **Delegations
+  granted more than 90 days ago stop at the first renewal after the upgrade.** The
+  page shows the date for each. Operators set another duration with
+  `oauth.delegation_max_lifetime` (`VAUBAAN_OAUTH_DELEGATION_MAX_LIFETIME`).
+- **One approval request per call.** A call that touches several risks gated
+  `approval` used to ask the creator once per risk, with a refused replay in between.
+  It now drops one request that lists every gated risk; granting it approves the call,
+  and "open the gate" opens the gate of each listed risk. The `approval-required`
+  refusal carries `risk_ids` next to `risk_id`. Schema migration `0013` (forward-only).
+  Requests that are open when you upgrade keep the one risk they named: granting one
+  approves that risk, and a call that needs more gets a new request covering it.
+- **`retention_days` also purges the session history.** The events of a mission's
+  timeline older than the retention are deleted with the audit entries of the same age,
+  and so are the counters of periods that ended longer ago. The counters of the current
+  period, the gates opened in it and the credits granted in it are never purged. **The
+  first start of this image deletes that history on an existing instance**: raise
+  `retention_days` before you upgrade if you want to keep more than 90 days of it.
+- **The plugin test kit proves "what is executed is what was classified" by running
+  the plugin.** `assertIdentifiersRefused` feeds hostile identifiers to every string
+  argument of a plugin's samples, through `classify` and through `execute`; every
+  shipped plugin and the template run it, and a plugin whose tests do not is refused.
+  A plugin author adds one test to `plugin.test.ts` (see `plugins/README.md`).
+- **A preset never hands a write token without approval.** A plugin now declares which
+  of its token-handing risks are read-only (`TokenHandout.readOnlyRiskIds`); every
+  other one is treated as write, and a plugin whose preset leaves a write one on `auto`
+  is refused at load. GitHub is unchanged: the Developer preset still hands the clone
+  token (read-only) automatically and the push token after approval. The provider
+  reference says "hands a read-only token" or "hands a write token".
+- **Two connections of one provider in a mission: the refusal says why.** The rule is unchanged (one connection per provider); the message now names both connections, says that risks and budget are counted per provider, and says to issue a second mission.
+- **An owner of a connection can close the missions orphaned on it.** The connection
+  page lists them (name, who issued it, why) with "Close", which revokes the mission for
+  good. A mission that serves is still its creator's alone.
+- **The Share dialog lists the orphaned missions a share would bring back.** Sharing
+  again to someone whose missions were orphaned restores those missions at once, with
+  the token their agent still holds. The dialog now names them, with who issued each,
+  and makes the share only once you have confirmed that list.
+- **"Reset the period" on a claim resets the claimed risk only.** It used to put every
+  counter of the mission back to zero, so answering a claim on one risk silently
+  reopened any other exhausted risk. Each exhausted risk has its own claim. The quota
+  extension is unchanged: at most what the period consumed on that risk.
+- **The Audit page shows more to two people.** A **member** of a mission now reads
+  that mission's entries (calls, acts, requests) for as long as they are a member.
+  An **operator** now reads every entry of the instance, calls included, where they
+  used to read administrative acts only. Neither is shown arguments — the audit never
+  holds them — nor the fingerprint that stands for them, which stays with the
+  mission's creator and the connection's owners.
+- **Upstash Redis: a time to live and a move are deletions.** `EXPIRE` with any
+  TTL, `SETEX`, `SET … EX`/`PX` (and `upstash_redis__set` with `ex` or `px`),
+  `RENAME`, `LMOVE`, `SMOVE` and `RPOPLPUSH` now need `delete-data` next to
+  `write-data`: a one-second TTL removes a key as surely as `DEL`. **A mission that
+  holds `write-data` alone can no longer write a cache entry with a TTL**; add
+  `delete-data`, which the Developer and Operator presets already carry. With the
+  Operator preset, a TTL write on a prod database now waits for approval. The plugin
+  is `3.0.0`, its catalog `5`.
+- **Supabase: reading `auth`, `vault` or `storage` through SQL is a risk of its
+  own.** `supabase__execute_sql` now needs `supabase[<env>].read-managed-schemas`
+  on top of `supabase.read-data` when the query names a schema Supabase manages, and
+  also when the gateway cannot read the query with confidence: a call to a function
+  it does not know to be inert (any function of your application), `$$`, a
+  parameter, a statement that is not a plain query. A mission that holds `read-data`
+  alone keeps running plain queries on application tables; anything else is refused
+  `risk-not-accepted` until its creator adds the risk. The **Read-only analyst**
+  preset does not carry it; **Staging developer** does, on staging. Missions issued
+  before this build do not hold it. The Supabase plugin is `4.0.0`, its catalog `4`.
 - **Supabase missions.** A migration that changes a column type now needs
   `bulk-row-write` on top of the schema write. `supabase.row-write-one` is
   deprecated: it matches no call and grants nothing; missions and shares that name
@@ -99,7 +191,7 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
   agent wrote. Issuance refuses anything beyond the owner's authority, and the preview
   warns when a selected resource has no usable environment label.
 - **Mission tokens, members and the bootstrap kit.** A mission has one or more tokens
-  (`vbn_live_…`, stored as an argon2id hash), each with one holder. The creator adds
+  (`vbn_live_…`, stored as a SHA-256 digest), each with one holder. The creator adds
   colleagues as **members**; each generates their own token, shown once with the
   bootstrap kit — the creator never sees it — and the creator creates **named tokens**
   for a CI runner or a shared machine. Every token shares the mission's resources, policy
@@ -296,10 +388,10 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
     `release-manager`.
   - **Vercel** `3.0.0` — access token and team id; one resource per project; the
     environment is read from the call. Presets `read-only`, `developer`, `operator`.
-  - **Supabase** `3.0.0` — OAuth against the Management API; resources from the
+  - **Supabase** `4.0.0` — OAuth against the Management API; resources from the
     account's projects; env-scoped write risks; `execute_sql` on the read-only endpoint.
     Presets `read-only-analyst`, `staging-developer`, `migration-operator`.
-  - **Railway** `3.0.0` — OAuth with PKCE; one resource per project with its
+  - **Railway** `4.0.0` — OAuth with PKCE; one resource per project with its
     environments and services. Presets `read-only`, `developer`, `operator`.
   - **Cloudflare DNS** `3.0.0` — a zone-scoped API token; one resource per zone; record
     writes split into ordinary, critical (apex, wildcard, MX, NS) and deletion. Presets
@@ -307,7 +399,7 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
   - **SSH** `2.0.0` — an ed25519 pair generated by the instance and a pinned host key;
     `ssh__exec` classified by a shell lexer; a line it cannot see through is never a
     read. Presets `read-only`, `developer`, `operator`.
-  - **Upstash Redis** `2.0.1` — account email and Management API key; one resource per
+  - **Upstash Redis** `3.0.0` — account email and Management API key; one resource per
     database; every Redis command in exactly one class. Presets `read-only`,
     `developer`, `operator`.
   - **Stripe** `0.4.0` — optional test and live keys, one resource per mode, every risk
@@ -449,7 +541,7 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
   sign-in and connect flows cannot leave the instance.
 - **Sessions and tokens at rest.** The session cookie is `__Host-vbn_session`, which a
   sibling subdomain cannot plant; session rows are keyed by the SHA-256 of the session
-  id and mission tokens by an argon2id hash, so a copy of the database holds no usable
+  id and mission tokens by a SHA-256 digest, so a copy of the database holds no usable
   credential.
 - **The management door checks the client on every request.** A delegated token stops
   working as soon as its client is disabled or no longer approved under the registration
@@ -457,10 +549,13 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
   knowing a `client_id` is not enough to exhaust a client's budget. Client ID Metadata
   Documents are never fetched from private, loopback, link-local or site-local
   addresses.
-- **Token verification throttle keyed on prefix and client address.** A flood of wrong
-  secrets on `/mcp` locks out its sender, not the agent that holds the token. Behind a
-  proxy, set `trusted_proxies`, or every caller shares one address; the instance warns
-  at start when it is empty.
+- **Wrong secrets on a token's prefix never hold its agent.** A mission token is stored
+  as a SHA-256 digest: a wrong secret on `/mcp` is answered 401 at once, nothing is
+  throttled and nothing about a verification is remembered, so a rotation or a
+  revocation is seen by the next call. The one exception is a token issued by an earlier
+  build and not used since (see the upgrade notes): its check is throttled per prefix
+  and client address. Behind a proxy, set `trusted_proxies`, or every caller shares one
+  address for the address-keyed limits; the instance warns at start when it is empty.
 - **No telemetry reaches the placeholder collector, whatever is appended to its URL**,
   and a call its caller abandoned is not reported at all.
 - **The image and the pipeline.** The image holds what the server needs and nothing

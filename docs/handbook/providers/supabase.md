@@ -23,18 +23,20 @@ modelling rationale (research, edge cases) is preserved in git history
 
 ## Shape
 
-| Member              | Where                   | Facts                                                                                                                                                                                                           |
-| ------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id` / `version`    | `src/index.ts`          | `supabase`, `3.0.0`. Default export `supabasePlugin`.                                                                                                                                                           |
-| `tools`             | `src/tools.ts`          | 44, prefix `supabase__`. The three v4 `*_to_venv` tools are gone (plan §8-Q5).                                                                                                                                  |
-| `dataModel`         | `src/data-model.ts`     | 4 planes (`db`, `storage`, `auth`, `functions` : 14 / 6 / 8 / 6 entities, 34 in all) rooted on `project` (`envScopable`).                                                                                       |
-| `catalog`           | `src/risk-catalog.yaml` | `catalog_version: 3`, 23 live risks + the deprecated `supabase.row-write-one` + `supabase.uncategorized-write`, 3 presets. Loaded by `loadCatalogFile` at import.                                               |
-| `credential`        | `src/credential.ts`     | `oauth2`, PKCE, `client_secret_basic`, scope `all`, `refreshable: true`.                                                                                                                                        |
-| `classify`          | `src/classify.ts`       | Pure ; identifiers validated, missing identifiers denied, undeclared arguments denied. Exports `resolveProjectRef`, `readIdentifiers` and `tableSchemas`, which `execute` shares, and the grammar `base64Text`. |
-| migration reading   | `src/migration-sql.ts`  | Pure allow-list reader of the SQL of `apply_migration` : the write classes it takes, every class when a statement is not recognised.                                                                            |
-| `execute`           | `src/execute.ts`        | Management API + per-project data plane ; `UpstreamAuthError` on 401/403 ; `fetch` and `signal` from the context ; target from `resolveProjectRef`, identifiers from `readIdentifiers`.                         |
-| `discoverResources` | `src/execute.ts`        | One `Resource` per project of every organization, capped at 200.                                                                                                                                                |
-| `refresh`           | —                       | None : the standard `refresh_token` grant (Basic client auth) is performed by the host from the spec (P1.2-align).                                                                                              |
+| Member              | Where                   | Facts                                                                                                                                                                                                                                 |
+| ------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id` / `version`    | `src/index.ts`          | `supabase`, `4.0.0`. Default export `supabasePlugin`.                                                                                                                                                                                 |
+| `tools`             | `src/tools.ts`          | 44, prefix `supabase__`. The three v4 `*_to_venv` tools are gone (plan §8-Q5).                                                                                                                                                        |
+| `dataModel`         | `src/data-model.ts`     | 4 planes (`db`, `storage`, `auth`, `functions` : 14 / 6 / 8 / 6 entities, 34 in all) rooted on `project` (`envScopable`). Also the one list of the schemas Supabase manages (`SUPABASE_MANAGED_SCHEMAS`), which both SQL readers use. |
+| `catalog`           | `src/risk-catalog.yaml` | `catalog_version: 4`, 24 live risks + the deprecated `supabase.row-write-one` + `supabase.uncategorized-write`, 3 presets. Loaded by `loadCatalogFile` at import.                                                                     |
+| `credential`        | `src/credential.ts`     | `oauth2`, PKCE, `client_secret_basic`, scope `all`, `refreshable: true`.                                                                                                                                                              |
+| `classify`          | `src/classify.ts`       | Pure ; identifiers validated, missing identifiers denied, undeclared arguments denied. Exports `resolveProjectRef`, `readIdentifiers` and `tableSchemas`, which `execute` shares, and the grammar `base64Text`.                       |
+| migration reading   | `src/migration-sql.ts`  | Pure allow-list reader of the SQL of `apply_migration` : the write classes it takes, every class when a statement is not recognised.                                                                                                  |
+| query reading       | `src/query-sql.ts`      | Pure allow-list reader of the SQL of `execute_sql` : whether the read reaches the managed schemas, and yes when it cannot tell.                                                                                                       |
+| SQL tokeniser       | `src/sql-tokens.ts`     | Shared by the two readers : comments and literals removed, statements of tokens, `null` on any construct whose extent it will not guess.                                                                                              |
+| `execute`           | `src/execute.ts`        | Management API + per-project data plane ; `UpstreamAuthError` on 401/403 ; `fetch` and `signal` from the context ; target from `resolveProjectRef`, identifiers from `readIdentifiers`.                                               |
+| `discoverResources` | `src/execute.ts`        | One `Resource` per project of every organization, capped at 200.                                                                                                                                                                      |
+| `refresh`           | —                       | None : the standard `refresh_token` grant (Basic client auth) is performed by the host from the spec.                                                                                                                                 |
 
 ## Classification rules
 
@@ -95,8 +97,11 @@ flowchart LR
   not slice segments : no catalog entry names an arbitrary id there, so the
   slice would land on the fallback, and an id spelled `bulk` would read as
   the bulk marker.
-- **`execute_sql` → `schema[any].row[bulk].R`, always.** Enforced at
-  execution by the Management API read-only endpoint
+- **`execute_sql` → `schema[any].row[bulk].R`, plus
+  `schema[managed].row[bulk].R` when the query names a schema Supabase
+  manages or cannot be read with confidence** — see "Reading a query"
+  below. Read slices only, whatever the SQL says : the read-only guarantee
+  is enforced at execution by the Management API read-only endpoint
   (`/database/query/read-only`) ; `list_tables` and `list_migrations` use it
   too. Nothing writes rows one by one : `supabase.row-write-one` is
   `deprecated: true` (below). A `query` that is not a non-blank string is
@@ -200,15 +205,81 @@ expression (`DEFAULT f()`, `CHECK (…)`, `SET a = f()`) and so run a function
 that already exists in the database. Creating such a function is never a
 recognised statement.
 
+### Reading a query
+
+`execute_sql` cannot write : that is the provider's guarantee. What it can
+read is another matter. A project database also holds what Supabase keeps
+for itself, and reading it is the risk `supabase.read-managed-schemas`,
+distinct from `supabase.read-data`. `readQuerySql` (`src/query-sql.ts`)
+decides **by what the SQL names, never by what the database role may read**
+: the plugin does not know the grants of the role behind the read-only
+endpoint (the provider documentation names it, `supabase_read_only_user`,
+and does not list what it can select), and does not need to.
+
+The one list is in `src/data-model.ts` :
+
+| Kind         | Schemas                                                                                                                                                                                                                      | A query that names one            |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| `sensitive`  | `auth`, `vault`, `storage`, `pgsodium`, `pgsodium_masks`, `net`, `cron`, `realtime`, `pgbouncer`, and any schema whose name starts with `supabase_`, `_`, `pg_toast` or `pg_temp`                                            | touches `read-managed-schemas`    |
+| `inspection` | `information_schema`, `pg_catalog`, `extensions`, `graphql`, `graphql_public`                                                                                                                                                | is an ordinary read (`read-data`) |
+| —            | the catalog relations of `SUPABASE_SENSITIVE_CATALOG_RELATIONS` (`pg_authid`, `pg_shadow`, `pg_user_mappings`, `pg_largeobject`, `pg_stats`, `pg_stat_activity`, `pg_stat_statements`, `pg_settings`, …), by their bare name | touches `read-managed-schemas`    |
+
+The reader answers one of three things :
+
+- **names a managed schema** — a `schema.` qualifier, bare or quoted,
+  folded to lower case (`"AUTH".users` is priced as `auth`, the costly
+  side), anywhere in any statement, or one of the catalog relations above ;
+- **unread** — the reader cannot vouch for the query : text the tokeniser
+  refuses (dollar quoting, `E'…'` and `U&"…"`, a backslash in a string, a
+  positional parameter `$1`, a control character, anything unterminated),
+  no statement at all, a statement that does not start with `SELECT`,
+  `WITH`, `VALUES`, `TABLE`, `EXPLAIN` or `SHOW` (`SET` changes how names
+  resolve, `DO` and `PREPARE` run SQL held in a string), and **any call to
+  a function outside the inert list** of `query-sql.ts`. A function is how
+  a query reads a relation it does not name : `query_to_xml('select …')`,
+  `set_config('search_path', …)`, `dblink(…)`, or a function somebody
+  defined in the database. A name under a qualifier other than
+  `pg_catalog`, a quoted function name and a column list after an alias
+  (`with c (a, b) as`, `as t (a, b)`) are unread too ;
+- **an application read** — everything else.
+
+The first two emit the second slice, so the mission needs
+`read-managed-schemas` for the project's environment ; only the third
+passes with `read-data` alone. Text inside a string literal or a comment
+names nothing (`select 'auth.users'` is an application read) : a string
+becomes a relation only through a function, and the function is what is
+checked.
+
+Known limits, by construction : a relation the query names may itself be a
+view over a managed schema (`public.all_users` defined as a select on
+`auth.users`), and an operator may be user-defined. Creating either is a
+migration, priced on its own.
+
+What it costs a caller : a query that calls a function of the application,
+or a built-in the list does not hold, is refused to a mission that has
+`read-data` alone, with `risk-not-accepted` naming
+`supabase[<env>].read-managed-schemas`. The inert list is a list of names in
+one file ; adding a built-in that computes from its arguments alone is a
+one-line change, reviewed like the catalog.
+
 ## Catalog decisions (v5)
 
 - Ids are the v4 ids, unchanged. **Every write risk is env-scoped**
   (`acceptable_in_envs`) ; reads are account-scoped except `auth.read-users`
-  (PII). The three bulk risks (`bulk-row-write`, `storage.bulk-object-write`,
+  (PII) and `read-managed-schemas` (identities, secrets). The three bulk risks (`bulk-row-write`, `storage.bulk-object-write`,
   `auth.bulk-user-write`) are acceptable on `preview` and `staging` only.
 - The fallback `supabase.uncategorized-write` is env-scoped and **counts only
-  when no specific entry matched** the write (policy-engine rule, P1.2-SDK) ;
+  when no specific entry matched** the write (policy-engine rule) ;
   no preset carries it and no tool reaches it today.
+- **`supabase.read-managed-schemas`** (catalog v4, product owner's decision
+  of 2026-10-13) is the read of `auth`, `vault`, `storage` internals and
+  the other managed schemas through `execute_sql`, and of any query the
+  reader cannot read. Env-scoped on `preview`, `staging` and `prod`. No
+  read-only preset carries it ; `staging-developer` does, on `[staging]`,
+  because that preset already lists users and migrates there, and without
+  it every query calling an application function would be refused.
+  `auth.read-users` is the auth admin API only : it no longer claims to
+  cover a SELECT on `auth.users`, which it never did.
 - `db-role-write` and `extension-write` are reached through
   `apply_migration` (they had no tool before the migration reader).
 - `supabase.row-write-one` is `deprecated: true` and matches no call : no
@@ -227,10 +298,10 @@ from the touched set, and no mission can hold it there. For Supabase :
 
 | Project label                 | What goes through                                                                                                   | What is refused, whatever the mission accepted                                                                                                                                                     |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| none (owner has not labelled) | Account-scoped reads : `get_project`, `list_tables`, `execute_sql`, `list_buckets`, `list_objects`, config reads, … | **Every write**, and `list_users` / `get_user` (`auth.read-users` is env-scoped).                                                                                                                  |
+| none (owner has not labelled) | Account-scoped reads : `get_project`, `list_tables`, `execute_sql`, `list_buckets`, `list_objects`, config reads, … | **Every write**, `list_users` / `get_user` (`auth.read-users` is env-scoped), and an `execute_sql` that names a managed schema or is unread.                                                       |
 | `prod`                        | Reads, and the writes whose risks list `prod`, when the mission accepted them on `[prod]`.                          | **Every bulk write** : a migration that writes rows, drops a table or a column or changes a column type, a migration the reader does not recognise (it touches `bulk-row-write`), `delete_bucket`. |
 | `preview`, `staging`          | Everything the mission accepted for that label.                                                                     | —                                                                                                                                                                                                  |
-| any other label (`dev`, …)    | Account-scoped reads.                                                                                               | Every write and user read : no Supabase risk lists that label.                                                                                                                                     |
+| any other label (`dev`, …)    | Account-scoped reads.                                                                                               | Every write, user read and managed-schema read : no Supabase risk lists that label.                                                                                                                |
 
 Before this rule, `supabase__list_users` on an unlabelled project passed
 with `read-data` alone, and a migration embedding DML on a prod project
@@ -248,11 +319,11 @@ Connections page.
 
 ### Presets
 
-| Preset               | Entries                                                                                                                                                                                                                                                                                                                                                                                   | Allows                                                                                                                                                                                                          | Does not allow                                                                                                                    |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `read-only-analyst`  | `read-data`, `storage.object-read`                                                                                                                                                                                                                                                                                                                                                        | Queries, schema and config reads, bucket and object listing on every selected project, labelled or not.                                                                                                         | Any write, user listing, signed URLs, function reads.                                                                             |
-| `staging-developer`  | `read-data`, `storage.object-read`, `functions.read` ; on `[staging]`, all `auto` : `auth.read-users`, `bulk-row-write`, `migration-write`, `policy-write`, `db-role-write`, `extension-write`, `bucket-write`, `storage.object-write-one`, `storage.bulk-object-write`, `auth.user-write-one`, `auth.generate-link`, `functions.body-write`, `functions.deploy`, `function-secret-write` | On staging : any migration (unrecognised ones included), buckets and objects, users one by one, links, edge functions and secrets, user listing. Reads of data, schema, objects and functions on every project. | Auth, storage, SSO and third-party-auth configuration, bulk user writes, signed URLs ; any write or user listing outside staging. |
-| `migration-operator` | `read-data` ; on `[staging]`, `auto` : `migration-write`, `bulk-row-write`, `policy-write`, `db-role-write`, `extension-write` ; on `[prod]`, `approval` : `migration-write`, `policy-write`                                                                                                                                                                                              | Any migration on staging. On prod, plain schema changes and RLS statements, each behind an approval.                                                                                                            | On prod : row writes, dropped tables or columns, grants, extensions, functions, anything unrecognised. Every non-migration write. |
+| Preset               | Entries                                                                                                                                                                                                                                                                                                                                                                                                           | Allows                                                                                                                                                                                                          | Does not allow                                                                                                                    |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `read-only-analyst`  | `read-data`, `storage.object-read`                                                                                                                                                                                                                                                                                                                                                                                | Queries, schema and config reads, bucket and object listing on every selected project, labelled or not.                                                                                                         | Any write, user listing, signed URLs, function reads.                                                                             |
+| `staging-developer`  | `read-data`, `storage.object-read`, `functions.read` ; on `[staging]`, all `auto` : `auth.read-users`, `read-managed-schemas`, `bulk-row-write`, `migration-write`, `policy-write`, `db-role-write`, `extension-write`, `bucket-write`, `storage.object-write-one`, `storage.bulk-object-write`, `auth.user-write-one`, `auth.generate-link`, `functions.body-write`, `functions.deploy`, `function-secret-write` | On staging : any migration (unrecognised ones included), buckets and objects, users one by one, links, edge functions and secrets, user listing. Reads of data, schema, objects and functions on every project. | Auth, storage, SSO and third-party-auth configuration, bulk user writes, signed URLs ; any write or user listing outside staging. |
+| `migration-operator` | `read-data` ; on `[staging]`, `auto` : `migration-write`, `bulk-row-write`, `policy-write`, `db-role-write`, `extension-write` ; on `[prod]`, `approval` : `migration-write`, `policy-write`                                                                                                                                                                                                                      | Any migration on staging. On prod, plain schema changes and RLS statements, each behind an approval.                                                                                                            | On prod : row writes, dropped tables or columns, grants, extensions, functions, anything unrecognised. Every non-migration write. |
 
 `db-role-write` and `extension-write` sit in the two migration presets
 because an unrecognised migration (a function body, a trigger) touches all
@@ -301,7 +372,7 @@ OAuth Apps) with the instance callback URL, and enters the client id and
 secret in the instance configuration. The host runs the authorization-code
 flow from `supabaseCredential` and the refresh : Supabase's is the standard
 RFC 6749 `refresh_token` grant with Basic client authentication, so the
-plugin declares `refreshable: true` and implements nothing (P1.2-align
+plugin declares `refreshable: true` and implements nothing (the alignment of the plugins on the v5 SDK
 removed `refreshSupabaseCredential` and `shouldRefreshSupabaseCredential`).
 `discoverResources` reads `/organizations` and `/projects` (unpaged upstream,
 capped at `MAX_DISCOVERED_PROJECTS` with a logger warning) and returns
@@ -312,19 +383,19 @@ could name it.
 
 ## Tests
 
-`npx vitest run plugins/supabase` — 1613 tests : `plugin.test.ts` (22 : SDK
+`npx vitest run plugins/supabase` — 1739 tests : `plugin.test.ts` (22 : SDK
 kit with samples per tool and `fallbackHits` empty, presets, credential
 spec, execute and discovery against `mockFetch`), `risk-catalog.test.ts`
-(44 : loaded catalog lint, coverage without the fallback, exact risks of the
+(46 : loaded catalog lint, coverage without the fallback, exact risks of the
 single-user / single-object writes and of migrations, cardinality exclusion,
-spot checks), `classify.test.ts` (133 : the security suite of
+spot checks), `classify.test.ts` (134 : the security suite of
 `classifySupabase`, including the adversarial SQL table — the comment that
 ends at a carriage return, the column type changes —, the project-ref
 denials, the two writes of `deploy_function`, the undeclared arguments and
 the identifiers written as `[*]`), `execute.test.ts` (42 : request shapes
 sent to the Management API and the per-project data plane, the
 target-project resolution — zero request on a denial —, and the body built
-from declared arguments only, `upload_object` included), `mission-evaluation.test.ts` (34 : the engine decision
+from declared arguments only, `upload_object` included), `query-sql.test.ts` (118 : the reader of `execute_sql` — plain queries, every spelling of a managed schema, and the adversarial table of what must be unread), `mission-evaluation.test.ts` (39 : the managed-schema read per preset and per label, and the engine decision
 through the real catalog — unlabelled project, bulk writes on prod, each
 preset call by call), `identifier-injection.test.ts` (1337 : hostile values
 in every identifier position of `classify` and `execute`, the dot-segment
@@ -350,6 +421,11 @@ strings and SQL text the plugin builds, the project ref as a host label),
   the allow-list of `migration-sql.ts` (a `$$` body, a CTE, `SET`, a
   command not listed). Split the migration, or run it where the mission
   holds the five risks.
+- **An `execute_sql` is refused with `risk-not-accepted` on
+  `read-managed-schemas` although it reads an application table** — the
+  query is unread : it calls a function outside the inert list of
+  `query-sql.ts`, uses `$$`, a parameter, a CTE column list, or is not a
+  plain query. Rewrite it, or run it on a mission that holds the risk.
 - **`projectRef: unknown argument`** — the tool argument is `project_ref`.
 - **`<name>: not an argument of '<tool>'`** — the call carries an argument
   the tool's schema does not declare (a field of Supabase's own API, a

@@ -1,5 +1,5 @@
 /**
- * Budget, session and decision core (feature P1.3).
+ * Budget, session and decision core.
  *
  * Pure pieces (`decide`, period arithmetic, fingerprint, mission state) and their
  * store-backed executor (`SessionService`), the pipeline's `BudgetStage` adapter and
@@ -62,6 +62,12 @@ export {
   type SessionServiceDeps,
 } from './session-service.ts';
 export { createBudgetStage, type BudgetStageDeps } from './budget-stage.ts';
+export {
+  PERIOD_STATE_EVENT_KINDS,
+  SessionHistoryRetention,
+  type SessionHistoryPurge,
+  type SessionHistoryRetentionDeps,
+} from './retention.ts';
 export {
   countersAgreeWithAudit,
   CREDIT_EVENT_KINDS,

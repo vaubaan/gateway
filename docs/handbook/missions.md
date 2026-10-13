@@ -32,7 +32,10 @@ policy on selected resources — and receives its token once. Spec:
 [vaubaan-gateway](../spec/vaubaan-gateway.md) §0 (Mission, Mission policy,
 Budget, Gate, Preset, Resource), §3.1, §3.2, §4.2 "Missions", §4.4, §7.4,
 §7.8. Decisions: pivot ADR D4 (nullable expiry, mandatory budget),
-[api-key-format-vbn-live-argon2id](../decisions/api-key-format-vbn-live-argon2id.md),
+[api-key-format-vbn-live-argon2id](../decisions/api-key-format-vbn-live-argon2id.md)
+(the token format),
+[mission-token-sha256-digest](../decisions/mission-token-sha256-digest.md)
+(what is stored),
 [fallback-risk-only-when-uncategorized](../decisions/fallback-risk-only-when-uncategorized.md),
 [execution-door-json-faithful-arguments-and-shared-throttle](../decisions/execution-door-json-faithful-arguments-and-shared-throttle.md)
 (a repeated `approval` ends an opening),
@@ -68,6 +71,8 @@ apps/gateway/src/server/missions/
                          also the input of the management door's `preview_policy` and `issue_mission`
   token.ts               mintMissionToken(), prefixOfBearer(), bearerMatches(), maskedToken()
   token-issuer.ts        issueTokenTo() — mints one token for one holder; the secret is in its return value only
+  member-token.ts        reissueMemberToken() — a member's own token, issued or replaced: the one implementation
+                         behind MissionService.rotate and MissionTeamService.generateToken (store, entry, event)
   token-name.ts          parseTokenName(), TOKEN_NAME_RULE — the name of a named token             (pure)
   team-service.ts        MissionTeamService: team / addMember / removeMember / generateToken /
                          createNamedToken / revokeToken / revokeTokensOfDeactivated
@@ -115,7 +120,7 @@ apps/gateway/src/app/api/missions/   route.ts, preview/route.ts, [id]/rotate, [i
 only from `@vaubaan/shared/risk-id`, `@vaubaan/shared/domain` and
 `@vaubaan/policy-engine`): the creation
 form imports them directly and runs the same decision as the server. The
-`index.ts` barrel is server-only (argon2 through `token.ts`).
+`index.ts` barrel is server-only (`node:crypto` and argon2 through `token.ts`).
 
 The pages live in the `(app)` route group and take its layout: a web
 session gets the `AppShell` (`components/shell/AppShell.tsx`), where "Missions"
@@ -158,14 +163,15 @@ same counters ([authority](authority.md), "Orphaned missions"). The state is
 `ownInspected` for one mission, `list` for all), so each of its answers is
 about this instant:
 
-| Method                    | On an orphaned mission                                                             |
-| ------------------------- | ---------------------------------------------------------------------------------- |
-| `list`, `get`             | `mission.status: 'orphaned'`, `state.kind: 'orphaned'`, `orphan: { cause, … }`     |
-| `setGate`                 | `{ ok: false, reason: 'inactive', state: 'orphaned' }`                             |
-| `rotate`                  | `{ ok: false, reason: 'inactive', state: 'orphaned' }`                             |
-| `revoke`                  | revokes: the stored status goes `active` → `revoked`, terminal                     |
-| `draftFrom` / `duplicate` | unaffected: a copy is a new issuance, checked against what the creator holds now   |
-| `verifyToken`             | returns the stored record; the door derives the state right after (execution-door) |
+| Method                           | On an orphaned mission                                                                                                                                                                                                     |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `list`, `get`                    | `mission.status: 'orphaned'`, `state.kind: 'orphaned'`, `orphan: { cause, … }`                                                                                                                                             |
+| `setGate`                        | `{ ok: false, reason: 'inactive', state: 'orphaned' }`                                                                                                                                                                     |
+| `rotate`                         | `{ ok: false, reason: 'inactive', state: 'orphaned' }`                                                                                                                                                                     |
+| `revoke`                         | revokes: the stored status goes `active` → `revoked`, terminal. The creator; **or, while the mission is orphaned, an owner of one of its connections** (handbook [authority](authority.md), "Closing an orphaned mission") |
+| `orphanedOn(user, connectionId)` | the orphaned missions that carry a connection, for an owner of that connection; nobody else reads any                                                                                                                      |
+| `draftFrom` / `duplicate`        | unaffected: a copy is a new issuance, checked against what the creator holds now                                                                                                                                           |
+| `verifyToken`                    | returns the stored record; the door derives the state right after (execution-door)                                                                                                                                         |
 
 `MissionOverview.orphan` (`MissionOrphanReason`: `cause`, `connection_id`,
 `uncovered`) is `null` unless the mission is orphaned. `/missions/<id>` renders
@@ -316,7 +322,10 @@ hidden resources selected on purpose.
 and a `RiskId` starts with its provider: two GitHub connections in one mission
 would share one partition and one budget, and the execution door could not tell
 which one a tool call targets. The draft is refused (`duplicate-provider`); the
-creator issues a second mission.
+creator issues a second mission. The message names the two connections, says
+that risks and budget are counted per provider, and says to keep one and issue
+a second mission for the other. Kept for now (product owner, 2026-10-13):
+lifting it needs the connection in the key of the policy and of the counters.
 
 **Env-qualified ids.** `isResolvable(risk, connection, selected)`: an
 account-scoped id always resolves; an env-qualified id resolves when a selected
@@ -372,7 +381,11 @@ whose resources carry every environment label of the catalog, and expects no
 issue and nothing skipped.
 
 Defaults the form adds: period **daily reload** (`DEFAULT_PERIOD`), expiry
-**never** (`DEFAULT_EXPIRY`), gate `auto` when a line names none.
+**never** (`DEFAULT_EXPIRY`), gate `auto` when a line names none. "Never"
+is decided, not an oversight (product owner, 2026-10-13, ADR
+[owner-decisions-of-2026-10-13](../decisions/owner-decisions-of-2026-10-13.md)):
+a mission is bounded by its budget, its gates and its revocation, and a
+default date would stop scheduled agents at a moment nobody chose.
 
 ## Issuance — `MissionService.issue(user, draft)`
 
@@ -393,9 +406,9 @@ Defaults the form adds: period **daily reload** (`DEFAULT_PERIOD`), expiry
    read.
 4. Token: `issueTokenTo` (`token-issuer.ts`) for the creator as holder
    (`{ kind: 'member', userId: creatorUserId }`): `mintMissionToken()` →
-   `vbn_live_<8>_<32>`, argon2id hash; a prefix already taken is re-drawn (up
-   to 5 times); `missions.issueToken` stores prefix + hash + `hashAlg:
-'argon2id'` + the holder + `createdBy`, after checking in its own
+   `vbn_live_<8>_<32>` and its SHA-256 digest; a prefix already taken is
+   re-drawn (up to 5 times); `missions.issueToken` stores prefix + digest +
+   `hashAlg: 'sha256'` + the holder + `createdBy`, after checking in its own
    transaction that the mission is active and the holder on it ("The token
    insert checks again" below).
 5. Admin audit `mission-issued`; log line with the prefix. The `after` payload
@@ -475,9 +488,13 @@ preference of the owner); a stale one is dropped by all three.
 - **`revoke`** — creator only, idempotent; status `revoked`, every active
   token of every holder `revoked`; audit `mission-revoked`; `revocation`
   session event.
-- **`verifyToken(bearer)`** — `prefixOfBearer` (a `vbn_live_` key only) →
-  `missions.findTokenByPrefix` → `bearerMatches` (argon2 verify) →
-  `standingOf`: `{ outcome: 'verified', mission, token }`, `{ outcome:
+- **`verifyToken(bearer, legacyGate?)`** — `prefixOfBearer` (a `vbn_live_`
+  key only) → `missions.findTokenByPrefix` → `bearerMatches` (the stored
+  SHA-256 digest, compared in constant time; argon2id for a row an earlier
+  build stored, after asking `legacyGate` when one is given, and then
+  `rehashToken` to move the row to the digest — see
+  [execution-door, "Token verification"](execution-door.md#token-verification-token-verifierts))
+  → `standingOf`: `{ outcome: 'verified', mission, token }`, `{ outcome:
 'retired', reason, mission, token }` or `{ outcome: 'unknown' }` (malformed,
   unknown prefix and wrong secret are one answer). `token` is a `VerifiedToken`
   — `{ id, prefix, holder }`: the token record and its hash do not leave the
@@ -597,9 +614,20 @@ of the mission's connections (spec §11.2). `orphaned` is still derived from
 the **creator** alone: it holds for every holder at once, and comes back for
 every holder at once, same tokens.
 
+**One implementation for a member's own token.** The creator's "Rotate token"
+(`MissionService.rotate`) and "Generate / Rotate my token"
+(`MissionTeamService.generateToken`, which the creator may use too) are the
+same act on the same row. Both call `reissueMemberToken` (`member-token.ts`):
+it mints and stores the token (the holder's previous active one becomes
+`rotated`), writes `mission-token-issued` for a first token or
+`mission-rotated` for a replacement — with the delegated client when the act
+came through the management door — and records the `rotation` event. The
+callers keep what differs: who may ask (the creator, within what a delegation
+issued; any member), and what is handed back.
+
 **The creator never sees a member's secret.** `generateToken` returns it to
 the member who called, and `issueTokenTo` (`token-issuer.ts`) hands the store
-a prefix and an argon2id hash. No method of either service, no handler answer
+a prefix and a SHA-256 digest. No method of either service, no handler answer
 to the creator, no audit entry and no row carries it; a test reads everything
 the creator can read, and every column of every table, and looks for it.
 
@@ -663,9 +691,10 @@ reversibly.
 ### The token insert checks again — `MissionsRepo.issueToken`, `TokenNotIssuableError`
 
 Every token goes through `issueTokenTo` → `store.missions.issueToken`. The
-services check the mission and the caller **before** they compute the argon2id
-hash, which takes tens of milliseconds: a revocation, a removal or a
-deactivation committed meanwhile must not be undone by the insert. So
+services check the mission and the caller **before** they mint the token, and
+other requests run between that check and the insert (the mint and the
+prefix lookup are awaited): a revocation, a removal or a deactivation
+committed meanwhile must not be undone by the insert. So
 `issueToken` reads the mission's stored status and, for a member token, the
 holder's user status and member row (`membershipOf`) in the same
 `BEGIN IMMEDIATE` transaction that retires the holder's previous token and
@@ -993,7 +1022,9 @@ After a 201 the **reveal-once dialog** shows the bootstrap kit with the secret;
     kit, as at issuance) and "Revoke my token";
   - **Members** — email, role, added, whether they generated a token; for the
     creator, "Remove" and a select of the active users not on the mission yet
-    ("Add member");
+    ("Add member"). The select lists every active user's email on purpose
+    (product owner, 2026-10-13; threat model, A25): the instance is one
+    company's, and a free-text field would confirm or deny any address typed;
   - **Tokens that work now** — holder, kind, masked prefix, created (and by
     whom, for a named token), last used; for the creator, "Revoke" on each and
     a name field ("Create named token").
@@ -1086,7 +1117,7 @@ creator reading everything and every table without finding a member's secret;
 the handlers' statuses and guard), `team-interleaving.test.ts` (6: a token insert that
 lost the race — the member removed, removed while rotating, or deactivated, and the
 mission revoked, while the hash was computed; two creations of one name at once; nothing
-happened meanwhile), `mission-lifecycle.test.ts` (28), `mission-handlers.test.ts` (8) and
+happened meanwhile), `mission-lifecycle.test.ts` (33), `mission-handlers.test.ts` (8) and
 `gate.test.ts` (20: both directions and what the next call answers, the audit entry and
 the session event, a no-op, `approval` asked on a gate open for the period closing the
 opening with one entry and one event, the same on an expired mission and what the next

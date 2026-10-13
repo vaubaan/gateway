@@ -14,6 +14,11 @@ status: draft
 > describes _who_ may accept _which_ risk, _how many times_, _how fast_,
 > _under whose eyes_, and on which instance.
 >
+> It stays "draft" on purpose: the product owner's decisions of 2026-10-13
+> are in, but §11.2 still lists questions nobody has decided (notifying the
+> creator, per-tool discovery, audit export) and v1 assumptions that the
+> pilot is meant to test. It becomes "stable" when that list is empty.
+>
 > From v5 on, everything in the repository is written in English (ADR
 > pivot, amendment of 2026-10-12). The v4 documents, in French, are
 > historical and are replaced, not translated.
@@ -54,6 +59,9 @@ Twenty-eight terms, distinct and not interchangeable.
   on the management surface, through an OAuth consent given once in the
   interface. The agent receives a **delegated token**, short-lived,
   revocable, bounded by the user's authority and by mission management.
+  A delegation has an **absolute lifetime** (ninety days unless the
+  operator sets another): past it the agent must obtain the user's
+  consent again, however recently it renewed its token.
   A delegated token is neither a mission token nor a human session: it
   can neither execute a provider tool nor answer a request.
 
@@ -166,11 +174,13 @@ Twenty-eight terms, distinct and not interchangeable.
   IdP, can answer it. Two kinds:
   - **Claim** — when the budget is exhausted: reset or extension.
   - **Approval request** — when the action touches a risk whose gate is
-    `approval`: grant or refusal for that precise action.
+    `approval`: grant or refusal for that precise action. One request
+    covers the call, however many gated risks it touches.
 - **Approval** — the positive answer to an approval request. Bound to
-  the mission, the risk, the tool, and the exact fingerprint of the call's
-  arguments. Single-use, valid for a short time. The identical replayed
-  call passes; any other call asks again.
+  the mission, the tool, and the exact fingerprint of the call's
+  arguments, and covering every gated risk that call touches. Single-use,
+  valid for a short time. The identical replayed call passes; any other
+  call asks again.
 
 **Cross-cutting**
 
@@ -292,7 +302,7 @@ Instance                          (one company, one trust domain)
 | **Session**        | History of the mission. Counters per `RiskId` and per period. Created on the first call, never recreated.                                                                                         |
 | **Event**          | Session entry: allowed call, refused call, request, extension, reset, approval, rotation, revocation.                                                                                             |
 | **Request**        | Claim (reset or extension) or approval request (one precise action), addressed to the creator. States: open, granted, refused, expired.                                                           |
-| **Approval**       | Creator's grant for one action: `(mission, RiskId, tool, argument fingerprint)`. Single-use, short-lived.                                                                                         |
+| **Approval**       | Creator's grant for one action: `(mission, tool, argument fingerprint)`, covering the gated risks of that call. Single-use, short-lived.                                                          |
 | **Audit**          | One entry per call and per administrative act. Append-only.                                                                                                                                       |
 
 ### 2.3 States
@@ -303,7 +313,13 @@ owner; `revoked` by an owner, terminal. An `expired` connection makes
 every call of the missions that carry it fail with
 `connection-unavailable`, naming the connection, until someone
 reconnects it. A `revoked` connection grounds no authority any more: the
-missions that carry it become `orphaned`. A connection whose owner group
+missions that carry it become `orphaned`. Revoking a connection erases
+its credential on the instance and, **when the provider offers a way to
+do it, also withdraws the grant at the provider**; the interface says,
+provider by provider, whether the grant was withdrawn there or must be
+removed by hand, and keeps saying it on the revoked connection. The
+local revocation never waits for the provider's answer nor depends on
+it. A connection whose owner group
 becomes empty (all members removed from the IdP) becomes `unowned`:
 missions keep running, but nobody can share or reconnect until the
 operator reassigns an owner. This is the operator's only act on the
@@ -330,8 +346,14 @@ revoke the missions the target already issued; it turns them `orphaned`
   stored as a verdict**: if the authority comes back (the share is made
   again, the creator is back in the owner group at the next sign-in),
   the mission serves calls again, with its session and counters intact.
+  A share that would bring orphaned missions back names them to the owner
+  before it is made (§7.3).
   A revoked connection never comes back, so its missions stay orphaned.
-  The creator, or an owner of the connection, may close it.
+  An orphaned mission may be closed — revoked, for good — by its
+  creator, or by an owner of one of the connections it carries. An owner
+  has that right only while the mission is orphaned: a mission that
+  serves is its creator's alone, and an owner who is not its creator is
+  not told it exists.
 - `revoked` — by the creator, terminal.
 
 **Request**: `open` → `granted` | `refused` | `expired` (unanswered
@@ -354,9 +376,14 @@ the company:
   provider token, because the work cannot go through the gateway (a
   repository-scoped installation token for `git clone` and `git push`).
   Such a tool is a risk of its own in the catalog, never accepted by
-  default, gated by approval in the presets that carry it, counted
-  against the budget and audited like any call; the long-lived
-  credential still never leaves the instance.
+  default, counted against the budget and audited like any call; the
+  long-lived credential still never leaves the instance. **In a preset, a
+  token-handing risk that grants write is gated by approval; a read-only
+  one may be automatic** (a clone token reads what the mission already
+  reads through the gateway; a push token writes where no risk decision
+  follows it). A plugin declares which of its token-handing risks are
+  read-only; one it does not declare is treated as write, and a preset
+  that leaves it automatic is refused when the plugin is loaded.
 - An exfiltrated mission token grants the mission's rights, within its
   budget, until revocation. Nothing more. Because each token has one
   holder, the audit says whose token it was, and revoking it leaves the
@@ -400,7 +427,10 @@ Rules:
 - **A multi-connection mission** composes its authority connection by
   connection: `accepted_risks` is partitioned per connection, and each
   partition is checked against the creator's authority on that
-  connection.
+  connection. A mission carries **at most one connection per provider**:
+  a `RiskId` names the provider, so two connections of one provider would
+  share one partition and one budget. A draft that names two is refused
+  with a message that names both and says to issue a second mission.
 - **Resource selection.** A mission names, per connection, the resources
   it may touch; by default, all the connection's resources known at
   issuance. A call whose arguments cite a resource outside the mission's
@@ -481,7 +511,12 @@ For the claim, raised when a call touches a risk at zero quota:
   beneficiary of the same share.
 - The creator sees the session history, the risk concerned, the
   remainder of the other risks, and chooses: reset the period, extend
-  the quota, extend the expiry, or refuse.
+  the quota, extend the expiry, or refuse. **A claim is about one risk,
+  and so is its answer**: "reset the period" puts the counter of the
+  claimed risk back to zero for the current period and leaves the other
+  risks as they are; "extend the quota" gives back a number of actions
+  on that risk, at most what the period consumed on it. A larger quota,
+  or more room on another risk, is a change of the mission.
 - The claim produces an event. The token does not change; the executor
   replays its call.
 - A refused or expired claim does not close the mission: the risk stays
@@ -501,8 +536,9 @@ the risk's gate to `approval` at issuance, or later.
   for the lifetime of the request, then erased; only their fingerprint
   remains in the audit.
 - The creator grants or refuses. A grant produces an **approval** bound
-  to `(mission, RiskId, tool, argument fingerprint)`, single-use, valid for a
-  short time configured by the operator.
+  to `(mission, tool, argument fingerprint)`, covering the gated risks the
+  request lists, single-use, valid for a short time configured by the
+  operator.
 - The executor replays the call **identically**. The gateway finds the
   approval, consumes it, decrements the budget, executes. A call with
   different arguments, even by one byte, asks again.
@@ -512,6 +548,11 @@ the risk's gate to `approval` at issuance, or later.
 - A call touching several risks of which only one is gated `approval` is
   refused as a whole; the approval covers the call, not the isolated
   risk.
+- **A call touching several gated risks creates one request**, which
+  lists them all. The creator answers once: granting it approves the
+  call, refusing it refuses the call, and opening the gate opens the
+  gate of each listed risk. The executor is never sent back and forth
+  for one call.
 - The gate does not replace the budget: an approved action counts
   against the risk's quota and rate limit.
 
@@ -554,20 +595,36 @@ JSON-RPC, authenticated by `Authorization: Bearer <mission token>`.
     Unchanged since v4.
   - `budget-exhausted`: `RiskId`, quota for the period, consumed, end of
     period, **claim URL**.
-  - `approval-required`: `RiskId`, argument fingerprint, **approval
-    request URL**, validity delay, and the instruction to replay the call
-    identically once approved.
+  - `approval-required`: every gated `RiskId` the call touches, argument
+    fingerprint, **approval request URL** (one, for the call), validity
+    delay, and the instruction to replay the call identically once
+    approved.
   - `resource-not-in-mission`: the ref cited, the connection, and the
     resources the mission may touch.
   - `rate-limited`: `RiskId`, limit, delay before retry.
-  - `connection-unavailable`: the connection is `expired` or `revoked`;
-    connection name and owner to contact.
+  - `connection-unavailable`: the connection is `expired` (the provider
+    rejected its credential); connection name and owner to contact.
+    A `revoked` connection is not answered this way: it orphans the
+    missions that carry it (§2.3), which then answer `mission-inactive`.
   - `mission-inactive`: `expired`, `orphaned` or `revoked`, with the
-    reason.
+    reason. `orphaned` covers every loss of the creator's authority, a
+    revoked connection included.
   - `wrong-credential-kind`: the bearer is not a mission token (a
     delegated token or a human session presented at the execution door),
     with the door that would accept it. The same code is returned by the
     management door to a mission token (§6).
+- **A token that stopped working** is not a structured refusal: the
+  mission may still be serving its other holders. It is answered `401`,
+  with one of four reasons, stated only to a caller whose secret was
+  recognised (an unknown bearer gets the `401` and nothing else):
+  - `token-rotated`: its holder generated a newer one;
+  - `token-revoked`: its holder, or the creator, revoked it;
+  - `holder-removed`: its member was removed from the mission;
+  - `holder-deactivated`: its member was deactivated on the instance.
+
+  Such a call consumes nothing and leaves no call entry; the rotation,
+  revocation, removal or deactivation has its own administrative entry.
+
 - **Catalog**: a read endpoint, authenticated by the mission token,
   returning the full tool surface, what the mission may call, the refs
   and environment labels of the resources the mission may touch, and the
@@ -629,7 +686,8 @@ token, not only at consent: disabling a client stops its delegations at
 the next request.
 
 A user sees their delegations in the interface, with the client holding
-each one and the missions it issued, and may revoke them in one click.
+each one, the date its absolute lifetime ends, and the missions it
+issued, and may revoke them in one click.
 
 ### 4.2 Human surface
 
@@ -640,7 +698,8 @@ pages:
   environment labels (edit, refresh discovery), their shares. A "Connect
   a provider" button that starts the provider's authorization flow with
   the apps registered by the operator. A "Share" button that opens the
-  checklist of catalog `RiskId` with "select all".
+  checklist of catalog `RiskId` with "select all"; before confirming, the
+  dialog lists the orphaned missions the share would bring back.
 - **Shares received** — what others entrusted to me, and the exact
   restriction.
 - **Missions** — the missions I created and those shared with me as a
@@ -660,18 +719,29 @@ pages:
 - **Mission session** — event timeline, counters per risk and per
   period, gate per risk, open requests, and calls per token holder.
 - **Request inbox** — claims and approval requests awaiting me as
-  creator, with the action's detail for approvals.
+  creator, with the action's detail for approvals. Each request also has
+  its own page, at the URL the executor hands over.
 - **Delegations** — the agents authorized to manage my missions, what
   they issued, and their revocation.
 - **Audit** — search by mission, user, connection, tool, decision,
-  period.
+  agent label, token holder, kind of entry (call or administrative act)
+  and period. **Who reads what:** a user reads the entries of the missions
+  they created, of the missions shared with them as a member, and of the
+  connections they own; an operator reads every entry of the instance,
+  calls included. **Nobody reads arguments there**: the audit never holds
+  them, and the fingerprint that stands for them is shown only to who
+  answers for the call — the creator of its mission, an owner of its
+  connection — never to a member or to an operator as such.
 - **Providers** — the reference of each shipped plugin, for any
   signed-in user: what it connects to, its data model, its risk catalog
   with the reason and the vector of each risk, its presets with
   everything they contain, its tools. Every risk shown elsewhere links
   to its entry here.
-- **Administration** (operator) — IdP, provider apps, local groups,
-  telemetry, retention, public URL.
+- **Administration** (operator) — identity provider, provider apps,
+  users (deactivate, reactivate), local groups, connections without an
+  owner (reassign), the OAuth clients of the management door, telemetry.
+  The public URL, the retention and the other keys of §4.3 are set in the
+  instance configuration and shown in the interface, not edited there.
 
 Styling follows [style-guide](./style-guide.md).
 
@@ -694,6 +764,9 @@ a mounted file, never committing anything:
   who is operator once the bootstrap token is revoked;
 - the **telemetry opt-in** and the collector URL (default supplied,
   overridable, disableable).
+
+Optional keys have defaults; among them the **absolute lifetime of a
+delegation** (ninety days) and the **audit retention** (ninety days).
 
 Anything missing makes startup fail with a message naming the variable.
 
@@ -731,8 +804,10 @@ command.
 - **Provider plugins** — one per provider. Two responsibilities: classify
   `(tool, arguments) → slices`, execute the tool with an ephemeral
   credential. They also declare how to obtain and refresh a credential
-  from the app registered by the company, how to discover resources, and
-  ship at least one **preset** in their catalog. Contribution process:
+  from the app registered by the company, how to withdraw the grant at
+  the provider when a connection is revoked (or, failing that, where a
+  person removes it by hand), how to discover resources, and ship at
+  least one **preset** in their catalog. Contribution process:
   [CONTRIBUTING](../../CONTRIBUTING.md) and the plugin kit,
   [plugins/README](../../plugins/README.md).
 - **The company's IdP** — authenticates humans, provides subject, email
@@ -775,7 +850,9 @@ command.
   therefore neither claim for itself, nor approve itself, nor modify its
   mission, even if it also holds a delegated token of its creator.
 - **Short, traceable delegated tokens.** Short lifetime, renewal through
-  a revocable refresh token, scope limited to management, and every
+  a revocable refresh token, scope limited to management, an absolute
+  lifetime of the delegation itself after which the user consents again
+  (ninety days by default, a configuration key), and every
   mission issued by delegation carries in the audit the identity of the
   delegated client and of the delegating user.
 - **Authoritative, atomic counting.** The budget decision and the
@@ -785,10 +862,17 @@ command.
   single-use nonce, return URL limited to the instance's public URL.
 - **Surface rate limits** on the MCP endpoint per mission, on connection
   flows per user, on the request page per IP.
+- **Mission tokens at rest.** The instance stores a SHA-256 digest of each
+  mission token and never the token. The secret part is long and drawn at
+  random by the instance, so a digest cannot be searched; a slow password
+  hash would protect nothing and is not used. A token issued while tokens
+  were stored otherwise keeps working unchanged.
 - **No secret in logs.** Mission tokens are logged by prefix. Call
   arguments are never logged in clear, only hashed.
 - **Immutable audit.** No update or delete from the application. Purge by
-  operator-configured retention.
+  operator-configured retention. The same retention purges the session
+  history — timeline events and the counters of past periods — and never
+  what the budget of the current period is computed from.
 - **Leak-free telemetry.** See §9: no argument, no resource ref, no
   stable instance identifier.
 
@@ -816,13 +900,19 @@ The owner picks a target (user or group), ticks the risks, confirms. The
 target sees the share under "Shares received" and may issue missions
 within that bound.
 
+When the share would ground orphaned missions again — they would serve
+calls at once, with the token their agent still holds — the dialog lists
+those missions, each with the person who issued it, and the share is made
+only once the owner has confirmed that list.
+
 ### 7.4 Issue a mission
 
 The creator names the mission, picks its connections and, within each,
 the resources it may touch, picks one preset per connection, reads the
 summary, unfolds the detail only if something needs adjusting within
-their authority, sets period and expiry. The token is revealed once. The
-bootstrap kit is displayed.
+their authority, sets period and expiry. A mission has no expiry unless
+its creator gives it one: the form's default is "never". The token is
+revealed once. The bootstrap kit is displayed.
 
 ### 7.5 Execute
 
@@ -850,6 +940,9 @@ new request.
 The creator revokes a mission or rotates its token without changing the
 mission. The owner revokes a share or a connection; the missions that
 depend on it become `orphaned` and refuse everything, with the reason.
+When a connection is revoked, the owner is told what became of the
+access granted at the provider: withdrawn there too, or theirs to remove
+by hand, with the place to do it.
 
 ### 7.9 Work with several agents
 
@@ -897,8 +990,21 @@ granted or revoked, configuration change), object, previous and new
 state when meaningful, and, when the act comes from the management
 surface, the identity of the delegated client.
 
+An entry is read by the creator of its mission, the current members of
+that mission, the owners of its connection, and the operators (§4.2
+"Audit"). A member who is removed stops reading the mission's entries,
+past ones included.
+
 Retention configured by the operator, 90 days by default. No cold archive
 in v5.
+
+The retention covers the session as well as the audit: an event of a
+session's timeline older than the retention is deleted, and so are the
+counters of a period that ended longer ago than the retention. What the
+current period rests on is kept whatever its age: its counters, the gates
+opened until it ends, and the credits granted claims gave back in it. A
+one-off mission has a single period that never ends, so its counters stay
+for as long as the mission does.
 
 ## 9. Community telemetry
 
@@ -980,12 +1086,31 @@ automated suite. Trust comes from usage.
 - Every request, claim or approval, reserved to the mission creator,
   through the IdP, never holding a call.
 - Gate per risk, `auto` by default, `approval` bound to the argument
-  fingerprint, single use.
+  fingerprint, single use; one request and one approval per call,
+  whatever the number of gated risks it touches.
 - Two MCP doors: execution by mission token, management by OAuth
   delegated token. Three credentials that never cross. Requests are
   granted only in a human session.
 - Mission rate limit = instantiation of the catalog's speed cap.
 - Opt-in telemetry, report shape frozen in §9.
+- The instance is its own authorization server for the management door
+  and relies on the IdP for identity only (ADR
+  [management-door-authorization-server](../decisions/management-door-authorization-server.md)).
+- A member works under the creator's authority and needs no share of the
+  mission's connections; they see the whole session of the mission and
+  its audit entries, never arguments nor their fingerprint, and requests
+  stay the creator's (ADRs
+  [mission-members-and-per-holder-tokens](../decisions/mission-members-and-per-holder-tokens.md),
+  [audit-visibility-members-and-operators](../decisions/audit-visibility-members-and-operators.md)).
+- One connection per provider in a mission; no default expiry; the
+  surface rate limit is per mission; a loopback-only client needs no
+  operator (ADR
+  [owner-decisions-of-2026-10-13](../decisions/owner-decisions-of-2026-10-13.md)).
+- A request and an approval each expire after a delay the operator
+  configures (twenty-four hours and ten minutes by default); a request
+  on a mission that can no longer be granted expires on the same delay
+  (ADR
+  [request-expiry-on-orphaned-missions](../decisions/request-expiry-on-orphaned-missions.md)).
 - No v4 migration; manual cutover.
 - A connection's owner is a principal, user or group; a mission always
   has a user creator.
@@ -998,6 +1123,9 @@ automated suite. Trust comes from usage.
   instance configuration.
 
 ### 11.2 Open questions
+
+What is listed here is not decided, or is a v1 assumption that usage may
+overturn. A question an ADR settled is in §11.1.
 
 - **Local groups.** When the IdP provides no groups, the local table is
   kept by the operator. Should any user be allowed to create a group?
@@ -1018,19 +1146,9 @@ automated suite. Trust comes from usage.
   the beneficiary's missions could not exceed? v1 assumption: no,
   quantities live in the mission; to reconsider if usage shows
   beneficiaries granting themselves unreasonable budgets.
-- **Members and authority.** A member works under the creator's
-  authority: they need no share of the mission's connections. Should a
-  member be required to hold that authority themselves? v1 assumption:
-  no — the creator answers for the mission, as when handing a token.
-- **What a member sees.** The whole session of the mission, or only
-  their own calls? v1 assumption: the whole session; arguments are never
-  shown, and requests stay the creator's.
 - **Transitive sharing.** May a beneficiary re-share a connection to a
   third party within their restriction? v1 assumption: no, only the
   owner shares.
-- **Expiry delays of requests and approvals.** Default values and
-  operator configurability. An approval must live long enough for the
-  agent to replay, not long enough to linger.
 - **Notifying the creator.** In v1 the request inbox in the interface is
   enough, plus the URL the executor hands over. Is an optional outbound
   channel needed (webhook, mail through the company's server)? Operator
@@ -1039,9 +1157,6 @@ automated suite. Trust comes from usage.
   risks for the beneficiary's missions, with approval by the connection
   owner rather than the creator? v1 assumption: no, the gate lives in the
   mission, like quantities.
-- **Several connections of one provider in a mission.** Allowed by the
-  model; the interface must make the resource ref unambiguous in the
-  bootstrap kit.
 - **Resources in shares.** A share's restriction is a list of `RiskId`.
   Should the owner also be able to restrict a share to some resources of
   the connection? v1 assumption: no, resource selection lives in the
@@ -1051,9 +1166,6 @@ automated suite. Trust comes from usage.
   metadata field) and whether the orchestrator can impose it on its
   sub-agents. No effect on authorization, hence decidable at
   implementation.
-- **Machine-to-machine delegation.** Removed from v5: a mission's agents
-  share the token. If a need to narrow a sub-agent's authority appears,
-  it will be an evolution with its own ADR.
 - **Scope of the management surface.** Limited to missions in v1. Should
   it include sharing connections, so that an administration agent also
   prepares a team's shares? v1 assumption: no, sharing stays a human
@@ -1062,9 +1174,6 @@ automated suite. Trust comes from usage.
   composing a policy from a natural-language task is the client's job,
   not the instance's. Plugin presets are the instance-side help; the
   management surface exposes them.
-- **Authorization server.** The instance issues delegated tokens itself,
-  relying on the IdP for identity. The alternative, accepting IdP tokens
-  directly, is a technical decision for an ADR at implementation.
 - **Per-tool discovery.** `tools/list` filters per provider (§4.1).
   Should plugins declare, per tool, the risks it can touch, so that a
   mission lists only what it can call?

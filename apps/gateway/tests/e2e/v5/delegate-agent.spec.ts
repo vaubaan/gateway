@@ -1,6 +1,6 @@
 /**
  * "Have an agent act on my behalf" in a browser, against an ephemeral instance
- * with a simulated IdP (spec §4.1 bis, §4.2 "Delegations", §7.10; plan P2.3
+ * with a simulated IdP (spec §4.1 bis, §4.2 "Delegations", §7.10
  * definition of done).
  *
  * The agent is the official MCP client, pointed at the management door with
@@ -312,6 +312,8 @@ test('an agent obtains a delegation, prepares and issues a mission, and the user
   await expect(card).toContainText('127.0.0.1:43217');
   await expect(card.getByRole('link', { name: MISSION_NAME })).toBeVisible();
   await expect(card).toContainText('issued in your name');
+  // A consent does not last for ever: the page says when it ends (90 days by default).
+  await expect(card).toContainText('Consent ends');
   await snap(page, 'delegations');
 
   await card.getByRole('button', { name: 'Revoke' }).click();

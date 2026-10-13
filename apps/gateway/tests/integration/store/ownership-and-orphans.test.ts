@@ -204,7 +204,7 @@ describe('ownership and orphan states in the store', () => {
           `INSERT INTO missions (id, name, creator_user_id, status, period_anchor, created_at, updated_at, closed_at)
            VALUES (?, ?, 'u', ?, ?, ?, ?, ?)`,
         );
-        insert.run('m-orphaned', 'orphaned by P2.2', 'orphaned', at, at, at, at);
+        insert.run('m-orphaned', 'orphaned by an earlier build', 'orphaned', at, at, at, at);
         insert.run('m-revoked', 'revoked', 'revoked', at, at, at, at);
         insert.run('m-expired', 'expired', 'expired', at, at, at, at);
         insert.run('m-active', 'active', 'active', at, at, at, null);

@@ -68,21 +68,40 @@ describe('classifySupabase — plane db', () => {
   });
 
   test('execute_sql is strictly R-only (spec §7.2 #2)', () => {
-    // even with a query that looks mutating, the classifier emits R
+    const data = `supabase.project[${STAGING_REF}].schema[any].row[bulk].R`;
+    const managed = `supabase.project[${STAGING_REF}].schema[managed].row[bulk].R`;
+    // a query that looks mutating is not a plain query : R slices only, both of them
     expect(
       classifySerialized('supabase__execute_sql', {
         project_ref: STAGING_REF,
         query: "INSERT INTO users(name) VALUES ('a');",
       }),
-    ).toEqual([`supabase.project[${STAGING_REF}].schema[any].row[bulk].R`]);
+    ).toEqual([data, managed]);
 
-    // pure SELECT also produces the same R slice
+    // a plain SELECT on an application table : the data read alone
     expect(
       classifySerialized('supabase__execute_sql', {
         project_ref: STAGING_REF,
         query: 'SELECT * FROM users;',
       }),
-    ).toEqual([`supabase.project[${STAGING_REF}].schema[any].row[bulk].R`]);
+    ).toEqual([data]);
+  });
+
+  test('execute_sql naming a managed schema adds the managed read (spec §7.2 #2)', () => {
+    const data = `supabase.project[${STAGING_REF}].schema[any].row[bulk].R`;
+    const managed = `supabase.project[${STAGING_REF}].schema[managed].row[bulk].R`;
+    for (const query of [
+      'select * from auth.users',
+      'select * from vault.decrypted_secrets',
+      'select name from storage.objects',
+      "select query_to_xml('select 1', true, true, '')",
+      'do $$ begin null; end $$',
+    ]) {
+      expect(
+        classifySerialized('supabase__execute_sql', { project_ref: STAGING_REF, query }),
+        query,
+      ).toEqual([data, managed]);
+    }
   });
 
   test('apply_migration with pure DDL → schema/table.W only', () => {

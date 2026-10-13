@@ -8,7 +8,16 @@ import { useRef, useState } from 'react';
 
 import { Button, DangerConfirm } from '@/components/ui';
 
-export function RevokeConnection({ action, name }: { action: string; name: string }) {
+export function RevokeConnection({
+  action,
+  name,
+  atProvider,
+}: {
+  action: string;
+  name: string;
+  /** What the revocation does to the access granted at the provider, in one or two sentences. */
+  atProvider: string;
+}) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
@@ -26,6 +35,9 @@ export function RevokeConnection({ action, name }: { action: string; name: strin
               Revocation is final: the stored credential is erased and every mission that carries
               this connection refuses its calls from now on. To use the provider again you will
               create a new connection.
+              <br />
+              <br />
+              {atProvider}
             </>
           }
           phrase={name}

@@ -71,14 +71,14 @@ The domain types are defined once, in `@vaubaan/shared` (`domain.ts`,
 D8). `types.ts` re-exports what the pipeline consumes so the door keeps a
 single import, and defines only what is specific to the core:
 
-| Re-exported from `@vaubaan/shared`                                                  | Defined here                                                                                    |
-| ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `REFUSAL_CODES`, `RefusalCode`, `isRefusalCode`                                     | `Door` — `execution` \| `management`                                                            |
-| `ConnectionStatus`, `MissionStatus`                                                 | `BearerKind` — `mission-token` \| `delegated-token` \| `human-session` (spec §6)                |
-| `Gate`, `GATES`, `Budget`, `RateLimit`, `Period`                                    | `ConnectionOwner` — shared `Principal` plus the `display` a refusal shows (email or group name) |
-| `Principal`, `MissionPolicyEntry`, `MissionPolicy`, `acceptedRisksOf`               | `MissionConnection`, `MissionResource`, `MissionSummary`, `SessionHandle`, `MissionContext`     |
-| `ConnectionResource`, `AuditDecision` (`allowed` \| `refused`, from `audit.ts`)     | `DelegationContext` (the door-check part of a delegated token; P2.3 owns the rest)              |
-| `MISSION_TOKEN_KINDS`, `MissionTokenKind`, `isMissionTokenKind`, `TokenAttribution` | `TokenHolder`, `AuthenticatedToken`, `tokenAttributionOf`, `tokenHolderLabel`                   |
+| Re-exported from `@vaubaan/shared`                                                  | Defined here                                                                                           |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `REFUSAL_CODES`, `RefusalCode`, `isRefusalCode`                                     | `Door` — `execution` \| `management`                                                                   |
+| `ConnectionStatus`, `MissionStatus`                                                 | `BearerKind` — `mission-token` \| `delegated-token` \| `human-session` (spec §6)                       |
+| `Gate`, `GATES`, `Budget`, `RateLimit`, `Period`                                    | `ConnectionOwner` — shared `Principal` plus the `display` a refusal shows (email or group name)        |
+| `Principal`, `MissionPolicyEntry`, `MissionPolicy`, `acceptedRisksOf`               | `MissionConnection`, `MissionResource`, `MissionSummary`, `SessionHandle`, `MissionContext`            |
+| `ConnectionResource`, `AuditDecision` (`allowed` \| `refused`, from `audit.ts`)     | `DelegationContext` (the door-check part of a delegated token; the authorization server owns the rest) |
+| `MISSION_TOKEN_KINDS`, `MissionTokenKind`, `isMissionTokenKind`, `TokenAttribution` | `TokenHolder`, `AuthenticatedToken`, `tokenAttributionOf`, `tokenHolderLabel`                          |
 
 Two names deserve a word. **`BearerKind`** is the kind of bearer a door
 receives; it is not `CredentialKind` from `@vaubaan/shared`, which is how a
@@ -94,16 +94,16 @@ A refusal is **data returned by the pipeline**, not an exception. Eight
 codes, one builder each under `refuse.*`, every refusal carrying its
 `code`, the fields the spec lists, and an agent-readable `hint`:
 
-| Code                      | Fields                                                                             | Hint says                                                                           |
-| ------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `risk-not-accepted`       | `missing_risks`, `executed_slices`                                                 | the policy engine's hint (required input), naming the risks                         |
-| `budget-exhausted`        | `risk_id`, `quota`, `consumed`, `period_end` (null = one-off), `claim_url`         | hand the claim URL to the human, do not loop                                        |
-| `approval-required`       | `risk_id`, `fingerprint`, `approval_url`, `expires_at`, `approval_valid_seconds`   | nothing executed, nothing held; replay the same tool and arguments within the delay |
-| `resource-not-in-mission` | `cited_ref`, `connection {id,name}`, `allowed_resources[]`                         | which refs the mission may touch                                                    |
-| `rate-limited`            | `risk_id`, `limit: RateLimit`, `retry_after_seconds`                               | wait N seconds; quota not consumed                                                  |
-| `connection-unavailable`  | `connection {id,name}`, `status` (`expired` \| `revoked`), `owner {kind, display}` | who can reconnect                                                                   |
-| `mission-inactive`        | `status` (expired/orphaned/revoked), `reason`                                      | stop calling, report to the human                                                   |
-| `wrong-credential-kind`   | `door`, `presented`, `expected` (`BearerKind`)                                     | where the presented kind IS accepted (`ACCEPTED_AT`)                                |
+| Code                      | Fields                                                                                       | Hint says                                                                                                                            |
+| ------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `risk-not-accepted`       | `missing_risks`, `executed_slices`                                                           | the policy engine's hint (required input), naming the risks                                                                          |
+| `budget-exhausted`        | `risk_id`, `quota`, `consumed`, `period_end` (null = one-off), `claim_url`                   | hand the claim URL to the human, do not loop                                                                                         |
+| `approval-required`       | `risk_id`, `risk_ids`, `fingerprint`, `approval_url`, `expires_at`, `approval_valid_seconds` | nothing executed, nothing held; one request covers every gated risk of the call; replay the same tool and arguments within the delay |
+| `resource-not-in-mission` | `cited_ref`, `connection {id,name}`, `allowed_resources[]`                                   | which refs the mission may touch                                                                                                     |
+| `rate-limited`            | `risk_id`, `limit: RateLimit`, `retry_after_seconds`                                         | wait N seconds; quota not consumed                                                                                                   |
+| `connection-unavailable`  | `connection {id,name}`, `status` (`expired` \| `revoked`), `owner {kind, display}`           | who can reconnect                                                                                                                    |
+| `mission-inactive`        | `status` (expired/orphaned/revoked), `reason`                                                | stop calling, report to the human                                                                                                    |
+| `wrong-credential-kind`   | `door`, `presented`, `expected` (`BearerKind`)                                               | where the presented kind IS accepted (`ACCEPTED_AT`)                                                                                 |
 
 `isRefusal(value)` is the type guard (`isRefusalCode(code)` and a non-empty
 hint); `RefusalOf<C>` narrows a `Refusal` to one code.
@@ -200,7 +200,7 @@ wherever an actor is shown. One pair of constants serves every writer
 (auth, connections) and every reader (audit).
 
 **`AuditWriter { write(entry: AuditEntry): Promise<void> }`** is the
-contract with the store's SQLite writer (`SqliteAuditWriter`, P0.3). Name
+contract with the store's SQLite writer (`SqliteAuditWriter`). Name
 and signature are stable. A writer must not swallow failures: the pipeline
 lets a rejected `write` propagate, so no call completes without its entry
 (v4 logged and continued).
@@ -241,7 +241,7 @@ reads. Its `token` is an `AuthenticatedToken` — `{ id, prefix, holder }`,
 reader is shown. The pipeline writes the attribution on every call entry
 (`CallAuditEntry.token_id`, `token_kind`, `token_holder`; all three `null`
 only on an entry older than the holder model): it comes from the context, so
-nothing a call carries can change who called. Every member is a projection of a shared record, so the store (P0.3)
+nothing a call carries can change who called. Every member is a projection of a shared record, so the store
 maps its rows to it without translation:
 
 - `mission` — `MissionSummary = Pick<Mission, 'id' | 'name' | 'status' |
@@ -301,9 +301,9 @@ checkMissionActive(ctx, now)        mission-inactive         (pure, this module)
 resources.resolve(ctx, call)        resource-not-in-mission  (ResourceStage — execution door)
 checkConnectionAvailable(target)    connection-unavailable   (pure, this module)
 risks.evaluate(ctx, call, target)   risk-not-accepted        (RiskStage over evaluateCallForToken)
-budget.decide(ctx, call, risks)     budget-exhausted | rate-limited | approval-required  (BudgetStage — P1.3)
+budget.decide(ctx, call, risks)     budget-exhausted | rate-limited | approval-required  (BudgetStage — the application's budget module)
 upstream.execute(ctx, call, target) mint + forward           (UpstreamStage — execution door)
-audit.write(entry)                  always, exactly once     (AuditWriter — P0.3)
+audit.write(entry)                  always, exactly once     (AuditWriter — the application's store)
 ```
 
 `CallPipeline` is built from `CallPipelineDeps` (`resources`, `risks`,
@@ -446,9 +446,9 @@ resolved
 | --------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ResourceStage` | execution door | `resolve(ctx, call)` → `ResourceResolution`: target, `resource-not-in-mission` refusal, or `{ ok: false, reason }` (structural rejection); a throw is a refused, audited call   |
 | `RiskStage`     | execution door | `evaluate(ctx, call, target)` → `CallVerdict` (default: `evaluateCallForToken` + the plugin's `classify`); a throw is a refused, audited call                                   |
-| `BudgetStage`   | P1.3           | `decide(ctx, call, {risks_touched, now})` → allowed `{session_id, remaining, approval_id}` or refusal; atomic; a refusal decrements nothing; a throw is a refused, audited call |
+| `BudgetStage`   | budget module  | `decide(ctx, call, {risks_touched, now})` → allowed `{session_id, remaining, approval_id}` or refusal; atomic; a refusal decrements nothing; a throw is a refused, audited call |
 | `UpstreamStage` | execution door | `execute(ctx, call, target)` → provider result; throws `UpstreamRefusalError(refusal)` for an unusable connection, `UpstreamFailureError` for any other failure                 |
-| `AuditWriter`   | P0.3           | `write(entry)`; failures propagate                                                                                                                                              |
+| `AuditWriter`   | the store      | `write(entry)`; failures propagate                                                                                                                                              |
 
 ## Decision core (`risk-gateway.ts`)
 

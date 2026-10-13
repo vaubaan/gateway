@@ -39,11 +39,13 @@ export const railwayCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url)
 export const railwayPlugin = definePlugin({
   id: 'railway',
   displayName: 'Railway',
-  version: '3.0.0',
+  version: '4.0.0',
   description:
     'Deploy, redeploy, read logs and manage variables of Railway projects through the official Railway MCP server and GraphQL API.',
   summary:
     'One connection is one Railway account reached through the Railway MCP server; one resource is one project. The connection owner labels each project with an environment (prod, staging, preview or dev); deploys and variable changes are accepted per label, and a project without a label can only be inspected.',
+  manualRevocation:
+    "In your Railway account settings, open Authorized Apps, select your company's app and choose Revoke Access: every token it holds stops working at once.",
   docsUrl:
     'https://github.com/sbw-vaubaan/vaubaan-gateway/blob/main/docs/handbook/providers/railway.md',
   tools: railwayTools,

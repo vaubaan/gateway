@@ -17,7 +17,7 @@
  *                OAuth flow would change that
  *
  * A mission token is *identified* before it is refused (the execution door's
- * `TokenVerifier`: cached proof, throttled per prefix and address), exactly as
+ * `TokenVerifier`: looked up and compared at every request), exactly as
  * the execution door identifies a delegated token: a string that merely looks
  * like a mission token is an unknown bearer.
  */

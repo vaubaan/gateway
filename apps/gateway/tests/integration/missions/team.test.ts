@@ -651,12 +651,12 @@ describe('missions: members and per-holder tokens', () => {
         const rows = JSON.stringify(root.store.db.prepare(`SELECT * FROM ${name}`).all());
         expect(rows, name).not.toContain(secretPart);
       }
-      // What is stored is an argon2id hash of it.
+      // What is stored is the sha256 digest of it.
       const [row] = (await root.store.missions.listTokens(mission.id)).filter(
         (t) => t.prefix === bobs.prefix,
       );
-      expect(row?.hashAlg).toBe('argon2id');
-      expect(row?.hash).toMatch(/^\$argon2id\$/);
+      expect(row?.hashAlg).toBe('sha256');
+      expect(row?.hash).toMatch(/^[0-9a-f]{64}$/);
     });
 
     it('over HTTP: the secret is in the answer to the member who generated it, and in no answer to the creator', async () => {

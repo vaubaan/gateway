@@ -206,7 +206,7 @@ export type {
   RequestInput,
   RequestsRepo,
 } from './repositories/requests.ts';
-export type { ApprovalKey, ApprovalsRepo, CreateApprovalInput } from './repositories/approvals.ts';
+export type { ApprovalsRepo, ApprovedCall, CreateApprovalInput } from './repositories/approvals.ts';
 export type {
   ClientDocumentUpdate,
   CreateCodeInput,

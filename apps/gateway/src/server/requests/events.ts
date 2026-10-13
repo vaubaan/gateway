@@ -42,7 +42,7 @@ export interface SessionEventLine {
   readonly summary: string;
 }
 
-const RESET_LINE = 'The creator reset the period: every counter back to zero';
+const RESET_LINE = 'The creator reset the period for the claimed risk: its counter is back to zero';
 const ROTATION_LINE = 'A mission token was rotated';
 const TOKEN_ISSUED_LINE = 'A mission token was issued';
 const REVOCATION_LINE = 'The mission was revoked';
@@ -87,13 +87,19 @@ function describeRequest(details: RequestEventDetails): string {
       ? `The ${kind} expired unanswered`
       : `The creator refused the ${kind}`;
   }
-  return details.request_kind === 'approval'
-    ? `An approval request for ${details.tool || 'a tool'} was dropped in the creator’s inbox`
-    : 'A claim was dropped in the creator’s inbox';
+  if (details.request_kind !== 'approval') return 'A claim was dropped in the creator’s inbox';
+  const risks = details.risk_ids?.length ?? 1;
+  return `An approval request for ${details.tool || 'a tool'} was dropped in the creator’s inbox${coveringRisks(risks)}`;
+}
+
+/** Said only when one request or approval covers several gated risks of the call. */
+function coveringRisks(count: number): string {
+  return count > 1 ? `, covering the ${count} gated risks of the call` : '';
 }
 
 function describeApproval(details: ApprovalEventDetails): string {
-  return `The creator approved one ${details.tool || 'call'}, usable until ${details.expires_at}`;
+  const risks = details.risk_ids?.length ?? 1;
+  return `The creator approved one ${details.tool || 'call'}${coveringRisks(risks)}, usable until ${details.expires_at}`;
 }
 
 function describeGateOpened(details: GateOpenedEventDetails): string {

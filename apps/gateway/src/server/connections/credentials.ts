@@ -4,7 +4,7 @@
  * refreshed (spec §2.3 "expired: the provider rejected the credential and
  * refresh failed"; §2.4).
  *
- * Callers (resource discovery here, the execution door in P1.6) use it as
+ * Callers (resource discovery here, the execution door) use it as
  * the refresh persistence hook:
  *
  *   const resolved = await broker.resolve(connectionId);   // refreshes when about to expire
@@ -37,10 +37,17 @@ import type { Logger } from '../logging';
 import { CLIENT_ID_FIELD, CLIENT_SECRET_FIELD, type ProviderAppsService } from '../provider-apps';
 import type { ConnectionsRepo } from '../store';
 import type { Clock } from '../store/clock';
-import type { ConnectionRecord } from '../store/types';
+import type { ConnectionRecord, ProviderGrantOutcome } from '../store/types';
 import { parseSecret, serializeSecret } from './credential-codec';
 import { ConnectionUnavailableError, errorMessage, ProviderUnreachableError } from './errors';
-import { OAuth2TokenError, refreshGrant, type OAuth2Client } from './oauth2';
+import {
+  OAuth2TokenError,
+  refreshGrant,
+  REVOCATION_REQUEST_TIMEOUT_MS,
+  revokeGrant,
+  type OAuth2Client,
+  type RevocationAttempt,
+} from './oauth2';
 
 /** An access token that expires within this delay is refreshed before use. */
 export const REFRESH_SKEW_MS = 60_000;
@@ -62,6 +69,42 @@ export interface CredentialBrokerDeps {
   readonly fetch: typeof fetch;
   readonly clock: Clock;
   readonly logger: Logger;
+}
+
+/**
+ * Can the gateway withdraw the provider-side grant of a connection to this
+ * plugin? The one rule, for the broker and for the page that says beforehand
+ * what a revocation will do.
+ */
+export function canWithdraw(plugin: Pick<ProviderPlugin, 'revoke' | 'credential'>): boolean {
+  if (plugin.revoke) return true;
+  return plugin.credential.kind === 'oauth2' && plugin.credential.revocation !== undefined;
+}
+
+/** A withdrawal that takes longer than the delay did not confirm anything. */
+async function withinRevocationDelay<T>(attempt: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const tooSlow = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(
+      () => reject(new RevocationTimeout()),
+      REVOCATION_REQUEST_TIMEOUT_MS + REVOCATION_GRACE_MS,
+    );
+  });
+  try {
+    return await Promise.race([attempt, tooSlow]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Past the request's own timeout: a plugin `revoke` that ignores its signal is cut here. */
+const REVOCATION_GRACE_MS = 1_000;
+
+class RevocationTimeout extends Error {
+  constructor() {
+    super('the provider-side revocation did not complete in time');
+    this.name = 'RevocationTimeout';
+  }
 }
 
 export class CredentialBroker {
@@ -104,6 +147,104 @@ export class CredentialBroker {
     });
     this.refreshing.set(connectionId, pending);
     return pending;
+  }
+
+  /**
+   * The stored credential of a connection that is about to be revoked, exactly
+   * as it is: no refresh, and whatever the status (an `expired` connection
+   * still holds the refresh token the provider's revocation endpoint wants).
+   * `null` when there is nothing to present: no such connection, a plugin that
+   * is no longer registered, no stored credential, or one that cannot be read.
+   * Never throws: the local revocation must not depend on it.
+   */
+  async forRevocation(connectionId: string): Promise<ResolvedCredential | null> {
+    try {
+      const connection = await this.deps.connections.getById(connectionId);
+      if (!connection) return null;
+      const registered = this.deps.registry.get(connection.provider);
+      if (!registered) return null;
+      const sealed = await this.deps.connections.getCredential(connectionId);
+      if (sealed === null) return null;
+      return {
+        connection,
+        plugin: registered.plugin,
+        credential: parseSecret(sealed),
+        appConfig: await this.deps.providerApps.pluginAppConfig(connection.provider),
+      };
+    } catch (err) {
+      this.deps.logger.warn('credential not readable for the provider-side revocation', {
+        connection_id: connectionId,
+        error_class: err instanceof Error ? err.name : typeof err,
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Asks the provider to withdraw the grant of a connection that was just
+   * revoked here (spec §2.3), with the credential `forRevocation` read before
+   * the store erased it. Never throws and never takes longer than
+   * `REVOCATION_REQUEST_TIMEOUT_MS`: the answer is one of three facts.
+   *
+   *   `revoked`  the provider confirmed (the plugin's `revoke` resolved, or
+   *              the endpoint of `credential.revocation` answered 2xx);
+   *   `manual`   nothing to ask: the plugin declares no way to withdraw, or
+   *              the stored credential holds no token the endpoint accepts;
+   *   `failed`   there is a way and it did not confirm: refused, unreachable,
+   *              too slow, or the credential could not be read.
+   */
+  async withdrawAtProvider(
+    connection: Pick<ConnectionRecord, 'id' | 'provider'>,
+    held: ResolvedCredential | null,
+  ): Promise<ProviderGrantOutcome> {
+    const plugin = held?.plugin ?? this.deps.registry.get(connection.provider)?.plugin;
+    if (!plugin || !canWithdraw(plugin)) return 'manual';
+    const log = { connection_id: connection.id, provider: plugin.id };
+    if (held === null) {
+      this.deps.logger.warn('provider grant not withdrawn: no readable credential', log);
+      return 'failed';
+    }
+    try {
+      const outcome = await withinRevocationDelay(this.withdraw(plugin, held));
+      if (outcome.outcome === 'revoked') {
+        this.deps.logger.info('provider grant withdrawn', log);
+        return 'revoked';
+      }
+      if (outcome.outcome === 'no-token') {
+        this.deps.logger.info('provider grant not withdrawn: no token the provider accepts', log);
+        return 'manual';
+      }
+      this.deps.logger.warn('provider grant not withdrawn', {
+        ...log,
+        upstream_status: outcome.status,
+        detail: outcome.detail,
+      });
+      return 'failed';
+    } catch (err) {
+      this.deps.logger.warn('provider grant not withdrawn', {
+        ...log,
+        error_class: err instanceof Error ? err.name : typeof err,
+      });
+      return 'failed';
+    }
+  }
+
+  /** The plugin's own `revoke`, else the declared OAuth revocation request. */
+  private async withdraw(
+    plugin: ProviderPlugin,
+    held: ResolvedCredential,
+  ): Promise<RevocationAttempt> {
+    if (plugin.revoke) {
+      await plugin.revoke(this.contextOf(held, AbortSignal.timeout(REVOCATION_REQUEST_TIMEOUT_MS)));
+      return { outcome: 'revoked' };
+    }
+    const spec = plugin.credential;
+    if (spec.kind !== 'oauth2' || !spec.revocation || held.credential.kind !== 'oauth2') {
+      return { outcome: 'no-token' };
+    }
+    return revokeGrant(spec.revocation, await this.oauthClient(plugin.id, spec), held.credential, {
+      fetch: this.deps.fetch,
+    });
   }
 
   /** The `ConnectionContext` a plugin receives for a connection-level call (discovery). */

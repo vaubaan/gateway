@@ -245,7 +245,7 @@ outside the ident class before it reaches a slice.
   workflow write on `main` additionally touches `merge-protected`.
 - The fallback was widened to `github.**.W` (was `github.repo[**].W`), per
   the risk-model spec §4.3 wording. It counts only when no specific entry
-  matched the write (policy-engine rule settled with P1.2-SDK); no preset
+  matched the write (policy-engine rule); no preset
   offers it, the creator adds it for unconventional branch names
   (`risk-catalog.test.ts` pins a `wip-x` write on the fallback alone;
   `plugin.test.ts` checks that its slice is a fallback hit and that no

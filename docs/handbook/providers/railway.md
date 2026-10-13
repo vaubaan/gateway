@@ -15,7 +15,7 @@ The Railway plugin on the v5 Plugin SDK (feature P1.2d). It rewraps the
 official Railway MCP server (`mcp.railway.com`) and adds four GraphQL
 variable tools, authenticates through the company's Railway Auth app
 (OAuth2 + PKCE, refresh on the hot path), discovers projects as resources
-and ships three presets. Plugin version 3.0.0. ADRs:
+and ships three presets. Plugin version 4.0.0. ADRs:
 [[railway-rewrap-remote-mcp]] (why rewrap, audience binding, refresh),
 [[plugin-contract-and-credential-spec]] (the contract) and
 [`plugin-arguments-closed-surface-and-typed-refusals`](../../decisions/plugin-arguments-closed-surface-and-typed-refusals.md)
@@ -174,35 +174,47 @@ a value outside its grammar is denied by `classify` and refused by
 No id reaches a URL: the rewrapped tools carry them as JSON-RPC arguments,
 the variable tools as GraphQL variables of a constant document.
 
-| Value                                 | Grammar                                                      | Bound to the mission                               | Where it lands                                           | Outside the grammar                                                                                                                  |
-| ------------------------------------- | ------------------------------------------------------------ | -------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `projectId`, the project resource ref | `railwayId` — `RAILWAY_ID = ^[A-Za-z0-9_-]{1,64}$`           | yes — a resource of the mission                    | JSON-RPC argument / GraphQL variable, slice `project[P]` | `projectId: malformed ref.` (the argument); `projectId: the project ref of this mission is not a Railway identifier.` (the resource) |
-| `environmentId`                       | `railwayId`                                                  | yes — one of the project's discovered environments | JSON-RPC argument / GraphQL variable                     | `environmentId: malformed ref.`                                                                                                      |
-| `serviceId`                           | `railwayId`                                                  | yes — one of the project's discovered services     | JSON-RPC argument / GraphQL variable, slice `service[S]` | `serviceId: malformed ref.`                                                                                                          |
-| `deploymentId` (`get-logs`)           | `railwayId`                                                  | **no** — shape only                                | JSON-RPC argument                                        | `deploymentId: malformed ref.`                                                                                                       |
-| `threadId` (`railway-agent`)          | none: a declared argument, forwarded as given                | **no**                                             | JSON-RPC argument                                        | —                                                                                                                                    |
-| `name`, the keys of `variables`       | `variableName` — `VARIABLE_NAME = ^[a-zA-Z0-9_./~-]{1,256}$` | —                                                  | GraphQL variable, slice `service-var[NAME,…]`            | `name: malformed variable name.` / `variables: malformed variable name.`                                                             |
+| Value                                 | Grammar                                                       | Bound to the mission                               | Where it lands                                           | Outside the grammar                                                                                                                                               |
+| ------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `projectId`, the project resource ref | `railwayId` — `RAILWAY_ID = ^[A-Za-z0-9_-]{1,64}$`            | yes — a resource of the mission                    | JSON-RPC argument / GraphQL variable, slice `project[P]` | `projectId: malformed ref.` (the argument); `projectId: the project ref of this mission is not a Railway identifier.` (the resource)                              |
+| `environmentId`                       | `railwayId`                                                   | yes — one of the project's discovered environments | JSON-RPC argument / GraphQL variable                     | `environmentId: malformed ref.`                                                                                                                                   |
+| `serviceId`                           | `railwayId`                                                   | yes — one of the project's discovered services     | JSON-RPC argument / GraphQL variable, slice `service[S]` | `serviceId: malformed ref.`                                                                                                                                       |
+| `deploymentId` (`get-logs`)           | **refused** — nothing can bind a deployment to the project    | —                                                  | never sent                                               | `deploymentId: not accepted by 'railway__get-logs' — it cannot be bound to the mission's project, so it is not sent. Give serviceId and environmentId instead: …` |
+| `threadId` (`railway-agent`)          | **refused** — nothing can bind an agent thread to the project | —                                                  | never sent                                               | `threadId: not accepted by 'railway__railway-agent' — …. Every call starts a new conversation: …`                                                                 |
+| `name`, the keys of `variables`       | `variableName` — `VARIABLE_NAME = ^[a-zA-Z0-9_./~-]{1,256}$`  | —                                                  | GraphQL variable, slice `service-var[NAME,…]`            | `name: malformed variable name.` / `variables: malformed variable name.`                                                                                          |
 
 `classify` and `execute` share the readers, not only the grammars:
 `resolveTarget(tool, args, resources)` is the only place that decides the
-project, environment, service and deployment of a project-scoped call, and
+project, environment and service of a project-scoped call, and
 `readVariableWrite` the only reading of a variable write. `execute`
 (`pinTarget`) calls both with the same inputs and writes `projectId`,
-`environmentId`, `serviceId` and `deploymentId` from their answer, never
-from the arguments.
+`environmentId` and `serviceId` from their answer, never from the arguments.
 
-**Limit: `deploymentId` and `threadId` are not bound to the mission's
-project.** A deployment cannot be listed ahead of the call and the provider
-has no cheap lookup that names the project of a deployment or of an agent
-thread, so `deploymentId` is held to the id grammar only and `threadId` is
-forwarded as the caller gave it. The OAuth token reaches every project of
-the workspace: `get-logs` with the `deploymentId` of another project, or
-`railway-agent` continuing a thread started on another project, is
-classified on the mission's project and sent with the foreign id; whether
-it is served depends on Railway alone. Recorded in the
-[threat model](../threat-model.md) (accepted risk A18) and in ADR
-[`plugin-arguments-closed-surface-and-typed-refusals`](../../decisions/plugin-arguments-closed-surface-and-typed-refusals.md)
-D4.
+**Every id that is forwarded is bound to the mission's project; an id that
+cannot be bound is refused.** The OAuth token reaches every project of the
+workspace, so an id the gateway forwards without checking would be served on
+the mission's name: `get-logs` with the `deploymentId` of another project,
+`railway-agent` continuing a thread started on another project. Discovery
+stores the environments and the services of a project — no deployment, no
+thread — and the classifier is pure, so neither can be checked. Both
+arguments are therefore **refused**, by `classify` and by `execute`
+(`UNBOUND_ARGUMENTS` in `tools.ts`, `unboundArgument` in `classify.ts`),
+whatever their value, with what to do instead:
+
+- `get-logs`: give `serviceId` and `environmentId` — both bound — and the
+  logs of the latest deployment of that service are read. The logs of an
+  older, named deployment cannot be read through the gateway.
+- `railway-agent`: every call starts a new conversation; the message carries
+  the context it needs. A conversation cannot be continued.
+
+The schema the agent reads (`tools/list`) does not offer the two arguments,
+and the description of each tool says so (`withoutUnboundArguments`). A test
+checks that no other declared argument named like an id is left unbound
+(`workspaceId` of `create-project` is account-level and names no resource of
+a mission). This closes accepted risk A18 of the
+[threat model](../threat-model.md); what stays open about Railway is the
+agent tool itself, which cannot be bound at all (below, and
+[known limitations](../known-limitations.md)).
 
 ## Catalog and presets
 
@@ -246,7 +258,7 @@ standard RFC 6749 `refresh_token` grant with Basic client authentication
 plus the same `resource=https://mcp.railway.com` indicator, which the host
 performs from `tokenUrl`, `clientAuthMethod` and `resourceIndicator`. The
 plugin therefore declares `refreshable: true` and implements no `refresh`
-(P1.2-align removed `refreshRailwayCredential` and `railwayNeedsRefresh`).
+(the alignment on the v5 SDK removed `refreshRailwayCredential` and `railwayNeedsRefresh`).
 The plugin never persists: the host refreshes and stores the result.
 
 ## Execution
@@ -334,7 +346,7 @@ with the upstream message.
 
 ## Tests
 
-`npx vitest run plugins/railway` — 427 tests. `plugin.test.ts` (30)
+`npx vitest run plugins/railway` — 405 tests. `plugin.test.ts` (30)
 runs the kit (`assertPluginWellFormed`, `assertPresetsValid`,
 `assertNoWildcard`, `assertCatalogCoverage` with every risk touched),
 classifier branches on `Resource[]` (including the `environmentId`
@@ -347,12 +359,14 @@ real classifier and catalog through the gateway decision core
 decision per sample call for `read-only`, `developer` and `operator` on
 each environment, the risks each variable write touches, the refusal of
 env-scoped operations on an unlabelled or mislabelled project, and the
-`environmentId` binding. `identifier-injection.test.ts` (316) feeds
+`environmentId` binding. `identifier-injection.test.ts` (294) feeds
 malformed ids and variable names to `classify` and to `execute`, checks
 that `execute` runs on the target the classifier resolved, that a
 `serviceId` is bound to its project (a foreign one, an unknown list, a
 project with no service), that undeclared arguments are refused on both
-sides, and that discovery refuses a project id that is not a `railwayId`. No test reaches
+sides, that `deploymentId` and `threadId` are refused whatever their value
+with nothing sent, that the declared schema does not offer them and that no
+other id-like argument is left unbound, and that discovery refuses a project id that is not a `railwayId`. No test reaches
 Railway.
 
 ## References

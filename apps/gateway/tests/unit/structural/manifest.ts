@@ -285,7 +285,7 @@ export const INVARIANTS: readonly Invariant[] = [
         tests: [
           'two members and a named token share one counter and are attributed separately',
           'the holder is the token’s: nothing a caller sends changes who called',
-          'refuses a removed member at the next call, warm cache included; the others keep working',
+          'refuses a removed member at the next call; the others keep working',
           'refuses a member the moment their membership row says removed, even if their token row still reads active',
           'refuses a deactivated member at once; reactivated, they generate a new token',
           'refuses a member the moment their user row says removed, before anything else is written',
@@ -293,10 +293,7 @@ export const INVARIANTS: readonly Invariant[] = [
       },
       {
         file: `${SERVER}/execution/execution.test.ts`,
-        tests: [
-          'a cached proof never outlives the holder: removed or deactivated is refused on the next call, with no hash',
-          'keeps one proof per token: two holders of one mission never share a cache entry or a throttle window',
-        ],
+        tests: ['remembers nothing: every call asks what the token is worth now'],
       },
       {
         file: 'packages/gateway-core/tests/unit/pipeline.test.ts',
@@ -468,8 +465,8 @@ export const INVARIANTS: readonly Invariant[] = [
         file: `${INTEGRATION}/execution/door-http.test.ts`,
         tests: [
           'applies the surface rate limit per mission, not per agent',
-          'throttles hash verifications of wrong secrets on a real prefix',
-          'does not lock a verified agent out when another address floods its prefix with wrong secrets',
+          'throttles the argon2id check of wrong secrets on a legacy prefix',
+          'does not lock the agent of a legacy token out when another address floods its prefix, and the move ends the throttle',
         ],
       },
       {
@@ -563,7 +560,19 @@ export const INVARIANTS: readonly Invariant[] = [
     proofs: [
       {
         file: `${STRUCTURAL}/plugin-identifier-tests.test.ts`,
-        tests: ['%s has a test feeding hostile identifiers to classify and to execute'],
+        tests: [
+          '%s has a test feeding hostile identifiers to classify and to execute',
+          '%s runs the identifier proof of the SDK kit',
+        ],
+      },
+      {
+        file: 'packages/plugin-sdk/tests/unit/identifiers-kit.test.ts',
+        tests: [
+          'passes a plugin whose classify and execute share one grammar, and says what it ran',
+          'finds a grammar applied in classify only : refused, yet sent',
+          'finds a dot segment that escaping left in place, and accepts what escaping names exactly',
+          'refuses to pass on nothing : no identifier seen in a path must be stated, with its reason',
+        ],
       },
       {
         file: 'plugins/github/tests/unit/injection.test.ts',

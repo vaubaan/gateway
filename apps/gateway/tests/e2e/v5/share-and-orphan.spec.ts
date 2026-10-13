@@ -208,6 +208,14 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await ines.getByLabel('Email').fill(E2E_SHARE_TARGET.email);
   await ines.getByLabel(`Share risk ${READ_CODE}`).check();
   await ines.getByRole('button', { name: 'Share', exact: true }).click();
+  // Nothing is shared yet: the dialog names the mission the share would bring back.
+  await expect(ines.getByText('This share brings 1 orphaned mission back')).toBeVisible();
+  await expect(ines.getByTestId('share-restores')).toContainText('Read ines-org');
+  await expect(ines.getByTestId('share-restores')).toContainText(E2E_SHARE_TARGET.email);
+  await expect(ines.getByLabel(`Share risk ${READ_CODE}`)).toBeChecked();
+  expect(await read()).toMatchObject({ outcome: 'refused' });
+  await snap(ines, 'share-dialog-restores');
+  await ines.getByRole('button', { name: 'Share and bring this mission back' }).click();
   await expect(ines.getByText('Shared', { exact: true })).toBeVisible();
   await expect(
     ines.getByText(
@@ -233,6 +241,46 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await joan.getByRole('link', { name: 'Audit of this mission' }).click();
   await expect(joan.getByText('mission-orphaned').first()).toBeVisible();
   await expect(joan.getByText('mission-restored').first()).toBeVisible();
+
+  // ── The owner revokes the share again, then closes the orphaned mission ──
+  await ines.goto(`/accounts/${connectionId}`);
+  await expect(ines.getByTestId('orphaned-missions')).toHaveCount(0);
+  await ines.getByRole('button', { name: `Revoke the share to ${E2E_SHARE_TARGET.email}` }).click();
+  await expect(ines.getByText('Share revoked', { exact: true })).toBeVisible();
+  const orphanedCard = ines.getByTestId('orphaned-missions');
+  await expect(orphanedCard).toContainText('Read ines-org');
+  await expect(orphanedCard).toContainText(E2E_SHARE_TARGET.email);
+  await expect(orphanedCard).toContainText('its creator no longer holds the risks it accepted');
+  await snap(ines, 'connection-orphaned-missions');
+  await orphanedCard.getByRole('button', { name: 'Close mission Read ines-org' }).click();
+  await ines.getByRole('textbox').last().fill('Read ines-org');
+  await snap(ines, 'connection-close-orphaned-confirm');
+  await ines.getByRole('button', { name: 'Close mission', exact: true }).click();
+  await expect(ines.getByTestId('orphaned-missions')).toHaveCount(0);
+  // Revoked for good: the client is refused, and sharing again brings nothing back.
+  expect(await read()).toMatchObject({ outcome: 'refused' });
+  await joan.goto(missionUrl);
+  await expect(joan.getByText('revoked', { exact: true }).first()).toBeVisible();
+  await ines.getByRole('link', { name: 'Share', exact: true }).click();
+  await ines.getByLabel('Email').fill(E2E_SHARE_TARGET.email);
+  await ines.getByLabel(`Share risk ${READ_CODE}`).check();
+  await ines.getByRole('button', { name: 'Share', exact: true }).click();
+  await expect(ines.getByText('Shared', { exact: true })).toBeVisible();
+  await expect(ines.getByText('This share brings')).toHaveCount(0);
+  expect(await read()).toMatchObject({ outcome: 'refused' });
+
+  // ── Revoking the connection says what becomes of the access at the provider ──
+  await ines.goto(`/accounts/${connectionId}`);
+  await ines.getByRole('button', { name: 'Revoke', exact: true }).first().click();
+  const revokeDialog = ines.getByRole('dialog');
+  // A GitHub App installation is not uninstalled by the gateway: the owner is told so first.
+  await expect(revokeDialog).toContainText('The gateway cannot withdraw the access at GitHub');
+  await snap(ines, 'connection-revoke-dialog');
+  await revokeDialog.getByRole('textbox').fill(connectionName);
+  await revokeDialog.getByRole('button', { name: 'Revoke', exact: true }).click();
+  await expect(ines.getByText('revoked', { exact: true }).first()).toBeVisible();
+  await expect(ines.locator('body')).toContainText('by hand');
+  await snap(ines, 'connection-revoked-provider-grant');
 });
 
 test('transfer to a group; the group empties; the operator reassigns the connection', async ({

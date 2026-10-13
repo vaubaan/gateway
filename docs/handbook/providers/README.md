@@ -11,8 +11,8 @@ tracks:
 # Provider plugin handbooks
 
 One handbook per provider plugin (`plugins/<id>`). Every shipped plugin is on
-the v5 plugin SDK since P1.2 (2026-10-13) and was brought to one consistent
-surface by P1.2-align: catalog loaded with `catalogPathNextTo`, fallback
+the v5 plugin SDK (2026-10-13) and was brought to one consistent
+surface since: catalog loaded with `catalogPathNextTo`, fallback
 entry flagged `fallback: true`, no preset on the fallback, standard `oauth2`
 refresh performed by the host. Each handbook covers the same six subjects, under headings of its own
 (spec [`gateway-risk-model.md`](../../spec/gateway-risk-model.md),
@@ -42,7 +42,7 @@ lets the drift detector compare the two.
 | Resend         | [`resend.md`](./resend.md)                 | `email`                              | 15 + fallback (+ 2 deprecated ids) | `read-only`, `developer`, `marketing-operator`, `domain-admin` | `api-key`     | Recipient zones from the domain resource metadata.                                                                                                                              |
 | SSH            | [`ssh.md`](./ssh.md)                       | `host`                               | 7 + fallback                       | `read-only`, `developer`, `operator`                           | `ssh-key`     | Pinned host key; command classes.                                                                                                                                               |
 | Stripe         | [`stripe.md`](./stripe.md)                 | `billing`                            | 16 + fallback                      | `read-only`, `test-mode-developer`, `finance-operator`         | `api-key`     | One resource per mode (test / live); catalog v4. `read-only` covers catalog, subscriptions and balance: invoices, charges, payment intents and events need `read-customer-pii`. |
-| Supabase       | [`supabase.md`](./supabase.md)             | `db`, `storage`, `auth`, `functions` | 23 + fallback (+ 1 deprecated id)  | `read-only-analyst`, `staging-developer`, `migration-operator` | `oauth2`      | Management API; `execute_sql` read-only. Prod migrations are limited to plain DDL and RLS.                                                                                      |
+| Supabase       | [`supabase.md`](./supabase.md)             | `db`, `storage`, `auth`, `functions` | 24 + fallback (+ 1 deprecated id)  | `read-only-analyst`, `staging-developer`, `migration-operator` | `oauth2`      | Management API; `execute_sql` read-only. Prod migrations are limited to plain DDL and RLS.                                                                                      |
 | Upstash Redis  | [`upstash-redis.md`](./upstash-redis.md)   | `cache`                              | 10 + fallback                      | `read-only`, `developer`, `operator`                           | `api-key`     | Env from the owner's database label.                                                                                                                                            |
 | Vercel         | [`vercel.md`](./vercel.md)                 | `runtime`                            | 16 + fallback                      | `read-only`, `developer`, `operator`                           | `api-key`     | Declares `envOf` (the `env[<label>]` segment).                                                                                                                                  |
 
@@ -71,10 +71,36 @@ corresponding handbook in the same pull request and bump `catalog_version`
 [`plugins/README.md`](../../../plugins/README.md), "Step 11 — Version, changelog, pull request"). The
 `tracks:` frontmatter lists the files to watch.
 
+## Revoking a connection: what happens at the provider
+
+When an owner revokes a connection the gateway erases the credential it
+holds and, where the provider documents an endpoint for it, withdraws the
+grant there too ([connections, "The grant at the
+provider"](../connections.md#the-grant-at-the-provider-credentialsts-oauth2ts-provider-grantts)).
+An endpoint enters this table once it was read in the provider's
+documentation through Context7
+([ADR](../../decisions/use-context7-for-provider-docs.md)), never from memory
+and never by analogy with another provider.
+
+| Provider                                              | Credential    | Withdrawn by the gateway                                                                                      | Read in the documentation                                                                                                                                                                                                                                                                                                                                                                 | Otherwise: by hand                                                                                                                                                                                                    |
+| ----------------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Supabase                                              | `oauth2`      | **yes** — `POST https://api.supabase.com/v1/oauth/revoke`, JSON `{ client_id, client_secret, refresh_token }` | the path, its purpose ("revokes an OAuth app authorization and its corresponding tokens") and the three body fields, in the Management API types (`OAuthRevokeTokenBody`). **Not read there**: the HTTP method and the success status. `POST` and JSON are what a typed request body means for this API; any 2xx is taken as confirmed, and any other answer is reported as not withdrawn | the organisation's settings, authorised OAuth apps                                                                                                                                                                    |
+| Gmail (experimental)                                  | `oauth2`      | **yes** — `POST https://oauth2.googleapis.com/revoke`, form-encoded `token`                                   | Google's OAuth 2.0 guide: method, content type, the `token` parameter (access or refresh token; revoking one revokes the other), 200 on success and 400 on error                                                                                                                                                                                                                          | the Google Account, Security, third-party access                                                                                                                                                                      |
+| Railway                                               | `oauth2`      | no                                                                                                            | the documentation describes revocation by the account holder only (account settings, Authorized Apps, Revoke Access) and no endpoint for the application                                                                                                                                                                                                                                  | account settings, Authorized Apps, Revoke Access                                                                                                                                                                      |
+| GitHub                                                | `app-install` | no, on purpose                                                                                                | —                                                                                                                                                                                                                                                                                                                                                                                         | uninstall the company's App from the organisation. The gateway never does it: one installation may serve several connections of the instance, and the stored credential is the installation, not a user authorization |
+| Vercel, Stripe, Cloudflare DNS, Upstash Redis, Resend | `api-key`     | no, on purpose                                                                                                | —                                                                                                                                                                                                                                                                                                                                                                                         | delete the key or token in the provider's dashboard. The key was created by a person and may be used elsewhere: the gateway erases its copy and deletes nothing at the provider                                       |
+| SSH                                                   | `ssh-key`     | no                                                                                                            | —                                                                                                                                                                                                                                                                                                                                                                                         | remove the connection's public key from `authorized_keys` on the host                                                                                                                                                 |
+
+Each plugin carries its "by hand" sentence (`manualRevocation`), shown in
+the revoke dialog and on the revoked connection. A structural test
+(`shipped-providers.test.ts`) pins this table: the providers that declare
+an endpoint, the endpoint and its shape; adding one changes the test and
+this table in the same commit.
+
 Versions shipped today (`version` in `src/index.ts`, equal to the plugin's
-`package.json`; what telemetry reports as `plugin_version`): `3.0.0` for
-cloudflare-dns, github, railway, supabase and vercel; `2.0.1` for
-upstash-redis; `2.0.0` for ssh; `0.4.0` for stripe; `0.3.0` for gmail and
+`package.json`; what telemetry reports as `plugin_version`): `4.0.0` for
+railway and supabase; `3.0.0` for cloudflare-dns, github, upstash-redis and
+vercel; `2.0.0` for ssh; `0.4.0` for stripe; `0.3.0` for gmail and
 resend. A version moves by a breaking step — major, or minor before 1.0 —
 when the classification becomes stricter or the executor refuses what it used
 to forward, because a call the previous version allowed is then refused: the

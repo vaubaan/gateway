@@ -7,16 +7,17 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import type { Resource } from '@vaubaan/plugin-sdk';
+import { pluginIssues, writeHandoutRiskIds, type Resource } from '@vaubaan/plugin-sdk';
 import {
   assertCatalogCoverage,
+  assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
   assertPresetsValid,
 } from '@vaubaan/plugin-sdk/testing';
 
 import { classifyGithub, githubCatalog, githubCredential, githubPlugin } from '../../src/index.ts';
-import { appRepo, libRepo } from './fixtures.ts';
+import { appRepo, executeCtx, libRepo, mintRoute } from './fixtures.ts';
 
 const repo = { owner: 'acme', repo: 'app' };
 const feature = 'feature/test';
@@ -131,6 +132,31 @@ describe('github plugin — structural kit', () => {
     expect(report.fallbackHits).toEqual([]);
   });
 
+  // What is executed is what was classified (SDK kit) : every string argument of
+  // every sample above is fed the hostile identifiers, through `classify` and
+  // through `execute`. The finer cases are in this plugin's identifier tests.
+  test('hostile identifiers are refused by classify and by execute, or named exactly', async () => {
+    const report = await assertIdentifiersRefused(githubPlugin, samples, {
+      resources,
+      context: (fetch, missionResources) => executeCtx(fetch, missionResources),
+      // The installation token is minted before the call that carries the identifiers.
+      routes: [mintRoute()],
+    });
+    expect(report.toolsChecked).toBe(26);
+    // Found by running the samples : the arguments that are a segment of a request path.
+    expect([...new Set(report.pathIdentifiers.map((p) => p.argument))].sort()).toEqual([
+      'branch',
+      'owner',
+      'path',
+      'repo',
+      'sha',
+      'workflow_id',
+    ]);
+    // Whatever classify refused, execute sent nothing for.
+    expect(report.refusedByClassify).toBeGreaterThan(0);
+    expect(report.nothingSent).toBeGreaterThanOrEqual(report.refusedByClassify);
+  });
+
   test('the fallback is the one catalog risk the samples leave out', () => {
     const named = githubCatalog.catalog.risks.filter((r) => !r.fallback).map((r) => r.id);
     expect(named).toHaveLength(14);
@@ -200,6 +226,37 @@ describe('github catalog — presets', () => {
     expect(entry('developer', 'github.workflow-write-via-file')?.gate).toBe('approval');
     expect(entry('developer', 'github.mint-install-token-push')?.gate).toBe('approval');
     expect(entry('developer', 'github.mint-install-token-clone')?.gate).toBe('auto');
+  });
+
+  // Spec §2.4: a token that can write is handed after approval; the clone token is
+  // read-only (`contents:read`) and is the only one a preset may leave on auto.
+  test('the push token is gated in every preset that carries it; only the clone token is declared read-only', () => {
+    expect(githubPlugin.tokenHandouts).toEqual([
+      {
+        tool: 'github__mint_install_token',
+        riskIds: ['github.mint-install-token-clone', 'github.mint-install-token-push'],
+        readOnlyRiskIds: ['github.mint-install-token-clone'],
+      },
+    ]);
+    for (const preset of presets) {
+      const push = preset.entries.find((e) => e.risk_id === 'github.mint-install-token-push');
+      if (push) expect(push.gate, preset.id).toBe('approval');
+    }
+    expect([...writeHandoutRiskIds(githubPlugin)]).toEqual(['github.mint-install-token-push']);
+    expect(pluginIssues(githubPlugin)).toEqual([]);
+    // Without the declaration the clone token is taken as write, and the preset is refused.
+    const undeclared = {
+      ...githubPlugin,
+      tokenHandouts: (githubPlugin.tokenHandouts ?? []).map(({ tool, riskIds }) => ({
+        tool,
+        riskIds,
+      })),
+    };
+    expect(pluginIssues(undeclared)).toEqual([
+      expect.stringContaining(
+        "preset 'developer': 'github.mint-install-token-clone' hands the agent a token that can write",
+      ),
+    ]);
   });
 
   test('release-manager gates merge-protected, create-release and delete-release on approval', () => {

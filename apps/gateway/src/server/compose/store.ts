@@ -1,5 +1,5 @@
 /**
- * Store wiring — the root opens the embedded SQLite store (P0.3) from
+ * Store wiring — the root opens the embedded SQLite store from
  * `InstanceConfig.store.path`, with the encryptor it built and a catalog
  * index derived from the plugin registry. Migrations run inside
  * `openStore()`, so a process that reaches "store opened" has a current

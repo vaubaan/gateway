@@ -1,7 +1,7 @@
 /**
  * Instance configuration persisted in the store (spec §4.3): the Admin-set half of the
  * configuration (IdP, provider apps, telemetry opt-in, retention, bootstrap state). The
- * mounted config file wins on conflict — that precedence is the loader's job (P0.4).
+ * mounted config file wins on conflict — that precedence is the loader's job.
  * Secrets are sealed with `instance_config:<key>` as associated data.
  */
 

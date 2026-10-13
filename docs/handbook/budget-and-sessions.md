@@ -231,27 +231,33 @@ const result = await service.recordCall({
    `requests.prepareArguments` (the encryptor is asynchronous, the transaction is not);
 2. runs `sessions.decideAndDecrement({ missionId, riskIds, periodStart })`; inside the
    transaction: peeks the rate windows of the touched risks, derives the gates opened for
-   the period (`ctx.riskEvents` → `openedGatesOf`), looks up a valid approval per gated
-   risk (`ctx.findApproval({ riskId, tool, fingerprint })`), calls `decide()`;
-3. on **allow**: consumes each approval (`ctx.consumeApproval`; a vanished one is an
-   `InvariantError` that rolls back), pushes `now` into the windows of the decremented
+   the period (`ctx.riskEvents` → `openedGatesOf`), looks up the usable approvals of
+   the call (`ctx.findApprovals({ tool, fingerprint })`) and reads which of the gated
+   risks still closed each one covers — one that covers them all is preferred —, calls
+   `decide()`;
+3. on **allow**: consumes each distinct approval once (`ctx.consumeApproval(id)`; a
+   vanished one is an `InvariantError` that rolls back), pushes `now` into the windows of the decremented
    risks, returns `allow: true` (the primitive increments the counters) and the
    `call-allowed` event;
-4. on **refuse**: for `budget-exhausted` / `approval-required` reuses the open, unexpired
-   request of the same `(kind, risk[, tool, fingerprint])` (`ctx.findOpenRequest`) or
-   drops a new one (`ctx.createRequest`, expiry `now + requestExpirySeconds`) with a
-   `request` event; `rate-limited` opens nothing; returns `allow: false` and the
+4. on **refuse**: for `budget-exhausted` reuses the open, unexpired claim of the risk;
+   for `approval-required` the open request of the call (tool, fingerprint) that lists
+   every gated risk of `details.gated_risks` (`ctx.findOpenRequest`); or drops a new one
+   (`ctx.createRequest`, expiry `now + requestExpirySeconds` — an approval request with
+   all those risks) with a `request` event; `rate-limited` opens nothing; returns `allow: false` and the
    `call-refused` event;
 5. after commit, builds the typed `Refusal` with `refuse.*` (`claim_url` /
    `approval_url` from `requestUrl(request.id)`, `expires_at` from the request,
    `approval_valid_seconds` from the configuration).
 
 **The approval key.** An approval and an approval request are bound to the call:
-mission, risk, **tool**, fingerprint (`ApprovalKey`, store migration 0005). The same
-arguments sent to another tool that touches the same risk find neither the request nor
-the approval of the first: they ask on their own. A call touching two gated risks is
-refused on the first one that has no approval; the approval of the other, if any, is
-found but not consumed, and is still there when the creator has granted both.
+mission, **tool**, fingerprint (`ApprovedCall`, store migrations 0005 and 0013), and
+list the gated risks of that call they cover. The same arguments sent to another tool
+find neither the request nor the approval of the first: they ask on their own. **A call
+touching several gated risks is refused once, with one request that lists them all**
+(`details.gated_risks`, handbook [requests](requests.md), "One request covers the
+call"); one grant, one replay. An approval that covers only some of them — granted
+before a request covered the call — is found but not consumed until the others are
+covered too.
 
 Result: `{ outcome: 'allowed', session_id, period, fingerprint, decrements, remaining,
 approval_ids }` (remaining computed from the committed counters) or `{ outcome: 'refused',
@@ -271,7 +277,7 @@ for `rotation` and `revocation`) build a `NewEvent` (`store/types.ts`) on that u
 compile. Readers (the request timeline, the session view, the structural check below) call
 `parseEventDetails(kind, details)`, the only code that reads stored details: it answers
 `null` for a kind it does not know and for an object that does not have the shape of its
-kind. Since P2.1 every kind has a shape: `approval` `{ request_id, approval_id, tool,
+kind. Every kind has a shape: `approval` `{ request_id, approval_id, tool,
 fingerprint, expires_at }` and `gate-opened` `{ request_id, period_start, period_end }`
 (written by the request service), `gate-changed` `{ gate, gate_before }` (written by the
 missions repository in the transaction that edits the gate), `rotation` `{ token_prefix, token_kind, holder,
@@ -372,7 +378,7 @@ prunes that key to its window on every access. Two faces on one state:
 windowMs, nowMs)` records one action. The budget peeks before `decide()` and pushes
   only on allow, inside the transaction callback, so refusals leave windows intact and
   no interleaving fits between probe and record.
-- `RateLimiter` (composition root port, P0.4) — `take(key, limit, windowMs)` checks and
+- `RateLimiter` (composition root port) — `take(key, limit, windowMs)` checks and
   consumes in one call, for the surface limits of spec §6 (per mission on `/mcp`, per
   user on connect flows, per IP on request pages).
 
@@ -409,13 +415,13 @@ approval-required, concurrent burst); an operator diagnostic may run it on a liv
 ## What the store gained
 
 `DecideContext` (`store/repositories/sessions.ts`) has three non-consuming,
-in-transaction lookups: `findApproval({ riskId, tool, fingerprint })`
-(`findApprovalSync`, `approvals.ts`), `findOpenRequest({ kind, riskId, tool?,
-fingerprint? })` (`findOpenRequestSync`, `requests.ts`; `state = 'open' AND expires_at >
-now`; the tool and the fingerprint are mandatory for an approval request and ignored for
-a claim) and `riskEvents({ kinds, riskIds, since })` (the session's events about some
-risks, oldest first, details as stored). `consumeApproval` takes the same `ApprovalKey`
-as `findApproval`.
+in-transaction lookups: `findApprovals({ tool, fingerprint })`
+(`findApprovalsSync`, `approvals.ts`: every usable approval of the call, soonest-expiring
+first, each with the risks it covers), `findOpenRequest(lookup)` (`findOpenRequestSync`,
+`requests.ts`; `state = 'open' AND expires_at > now`; a claim by its risk, an approval
+request by its tool, its fingerprint and the risks it must list) and `riskEvents({ kinds, riskIds, since })` (the session's events about some
+risks, oldest first, details as stored). `consumeApproval(id)` consumes one approval of
+the mission by id, once.
 
 A call event is also indexed by who made it. At insert the sessions repository copies, for `call-allowed` and
 `call-refused` only, `details.agent_label` into `events.agent_label` (`agentLabelColumn`, migration 0008) and
@@ -434,7 +440,7 @@ session view"). A `rotation` or `revocation` event names its holder in its detai
 - `packages/gateway-core/tests/unit/fingerprint.test.ts` (12) — the canonical JSON, the fingerprint and
   `unfaithfulArgument` (a value JSON would rewrite), next to their implementation
   ([gateway-core](gateway-core.md)).
-- `tests/unit/server/budget/decide.test.ts` (15) — N risks → N decrements, no risk,
+- `tests/unit/server/budget/decide.test.ts` (20) — N risks → N decrements, no risk,
   remaining, approval to consume, opened gate; `budget-exhausted` (recurring and one-off),
   whole-call refusal, `rate-limited` (≥ 1 s), `approval-required`, multi-risk gate
   refusal, dimension order, approval does not bypass quota or rate; invariant on an

@@ -62,12 +62,69 @@ describe('definePlugin', () => {
     ]);
   });
 
+  test('manualRevocation is optional, and a sentence or two when present; revoke is a function', () => {
+    const sentence = 'Delete the API key in the Acme dashboard, under API keys.';
+    expect(pluginIssues({ ...acmePlugin, manualRevocation: sentence })).toEqual([]);
+    expect(pluginIssues({ ...acmePlugin, manualRevocation: ' ' })).toEqual([
+      'manualRevocation: expected a non-empty string when present',
+    ]);
+    expect(pluginIssues({ ...acmePlugin, manualRevocation: 'x'.repeat(401) })).toEqual([
+      'manualRevocation: expected at most 400 characters',
+    ]);
+    expect(pluginIssues({ ...acmePlugin, revoke: async () => undefined })).toEqual([]);
+    expect(pluginIssues({ ...acmePlugin, revoke: 'yes' } as unknown as ProviderPlugin)).toEqual([
+      'revoke: expected a function when present',
+    ]);
+  });
+
+  test('an oauth2 revocation block names an https endpoint and one of the two request shapes', () => {
+    const oauth = (extra: Record<string, unknown>): ProviderPlugin => ({
+      ...acmePlugin,
+      credential: {
+        kind: 'oauth2',
+        authorizationUrl: 'https://auth.example/authorize',
+        tokenUrl: 'https://auth.example/token',
+        scopes: ['read'],
+        pkce: true,
+        clientAuthMethod: 'client_secret_basic',
+        refreshable: true,
+        ...extra,
+      },
+    });
+    const url = 'https://auth.example/revoke';
+    expect(pluginIssues(oauth({ revocation: { url, format: 'token-form' } }))).toEqual([]);
+    expect(pluginIssues(oauth({ revocation: { url, format: 'client-credentials-json' } }))).toEqual(
+      [],
+    );
+    expect(
+      pluginIssues(oauth({ revocation: { url: 'http://auth.example/revoke', format: 'rfc7009' } })),
+    ).toEqual([
+      'credential.revocation.url: expected an https URL',
+      'credential.revocation.format: expected one of token-form | client-credentials-json',
+    ]);
+    expect(pluginIssues(oauth({ revocation: 'https://auth.example/revoke' }))).toEqual([
+      'credential.revocation: expected { url, format }',
+    ]);
+    // The JSON shape carries the client secret and a refresh token: both must exist.
+    for (const extra of [{ clientAuthMethod: 'none' }, { refreshable: false }]) {
+      expect(
+        pluginIssues(oauth({ ...extra, revocation: { url, format: 'client-credentials-json' } })),
+      ).toEqual([
+        "credential.revocation.format: 'client-credentials-json' needs a confidential client and refresh tokens",
+      ]);
+    }
+  });
+
   test('a token handout names a declared tool and risks of the catalog', () => {
     const [tool] = acmePlugin.tools;
     const [risk] = acmePlugin.catalog.risks;
     const withHandout = (tokenHandouts: unknown): ProviderPlugin =>
       ({ ...acmePlugin, tokenHandouts }) as ProviderPlugin;
-    expect(pluginIssues(withHandout([{ tool: tool!.name, riskIds: [risk!.id] }]))).toEqual([]);
+    expect(
+      pluginIssues(
+        withHandout([{ tool: tool!.name, riskIds: [risk!.id], readOnlyRiskIds: [risk!.id] }]),
+      ),
+    ).toEqual([]);
     expect(pluginIssues(withHandout('yes'))).toEqual([
       'tokenHandouts: expected a list when present',
     ]);
@@ -79,6 +136,48 @@ describe('definePlugin', () => {
     expect(pluginIssues(withHandout([{ tool: tool!.name, riskIds: ['acme.unknown'] }]))).toEqual([
       "tokenHandouts[0].riskIds: 'acme.unknown' is not a risk of the catalog",
     ]);
+  });
+
+  // Spec §2.4: in a preset, a token-handing risk that grants write is gated by
+  // approval; a read-only one may be automatic. Undeclared means write.
+  describe('a preset and the token-handing risks', () => {
+    const [tool] = acmePlugin.tools;
+    const handing = (riskIds: string[], readOnlyRiskIds?: unknown): ProviderPlugin =>
+      ({
+        ...acmePlugin,
+        tokenHandouts: [{ tool: tool!.name, riskIds, readOnlyRiskIds }],
+      }) as ProviderPlugin;
+
+    test('a write token left on auto is refused, where it is left on auto', () => {
+      // `acme.thing-write` is on auto in staging and on approval in prod.
+      expect(pluginIssues(handing(['acme.thing-write']))).toEqual([
+        expect.stringMatching(
+          /^catalog: preset 'developer': 'acme\[staging\]\.thing-write' hands the agent a token that can write ; its gate must be 'approval'/,
+        ),
+      ]);
+    });
+
+    test('a risk that is not declared read-only is taken as write', () => {
+      const issues = pluginIssues(handing(['acme.read-things']));
+      expect(issues).toHaveLength(2);
+      expect(issues[0]).toContain("preset 'reader': 'acme.read-things'");
+      expect(issues[1]).toContain("preset 'developer': 'acme.read-things'");
+    });
+
+    test('a declared read-only token may stay on auto', () => {
+      expect(pluginIssues(handing(['acme.read-things'], ['acme.read-things']))).toEqual([]);
+    });
+
+    test('read-only is declared among the risks of the handout, as a list', () => {
+      expect(pluginIssues(handing(['acme.read-things'], ['acme.thing-write']))).toEqual(
+        expect.arrayContaining([
+          "tokenHandouts[0].readOnlyRiskIds: 'acme.thing-write' is not one of its riskIds",
+        ]),
+      );
+      expect(pluginIssues(handing(['acme.read-things'], 'all'))).toEqual(
+        expect.arrayContaining(['tokenHandouts[0].readOnlyRiskIds: expected a list when present']),
+      );
+    });
   });
 
   test('catalog rules apply (presets, fallback) through the definition', () => {
@@ -223,7 +322,7 @@ describe('definePlugin', () => {
       ]),
     );
     // `refreshable: true` without `refresh()` is fine : the host performs the
-    // standard refresh_token grant from the spec (P1.2-align).
+    // standard refresh_token grant from the spec.
     expect(oauthIssues.filter((m) => /refresh/.test(m))).toEqual([]);
 
     const appInstall: ProviderPlugin = {

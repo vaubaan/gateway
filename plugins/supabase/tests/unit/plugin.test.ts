@@ -14,10 +14,12 @@ import {
 } from '@vaubaan/plugin-sdk';
 import {
   assertCatalogCoverage,
+  assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
   assertPresetsValid,
   mockFetch,
+  type ToolSamples,
 } from '@vaubaan/plugin-sdk/testing';
 
 import {
@@ -87,120 +89,116 @@ describe('supabase plugin — structural kit', () => {
     expect(declared).toEqual([...SUPABASE_CLASSIFIED_TOOLS].sort());
   });
 
-  test('every tool classifies to slices the catalog covers', () => {
-    const p = { project_ref: STAGING_REF };
-    const report = assertCatalogCoverage(
-      supabasePlugin,
+  const p = { project_ref: STAGING_REF };
+  // One table for the catalog coverage and for the identifier proof.
+  const SAMPLES: ToolSamples = {
+    supabase__get_project: [{ args: p }, { args: {} }],
+    supabase__get_anon_key: [{ args: p }],
+    supabase__list_tables: [{ args: { ...p, schemas: ['public', 'app'] } }],
+    supabase__list_migrations: [{ args: p }],
+    supabase__execute_sql: [
+      { args: { ...p, query: 'DELETE FROM users;' } },
+      { args: p, expectDenied: true },
+    ],
+    supabase__get_advisors: [{ args: { ...p, type: 'security' } }],
+    supabase__apply_migration: [
+      { args: { ...p, name: 'ddl', query: 'CREATE TABLE x(id int);' } },
       {
-        supabase__get_project: [{ args: p }, { args: {} }],
-        supabase__get_anon_key: [{ args: p }],
-        supabase__list_tables: [{ args: { ...p, schemas: ['public', 'app'] } }],
-        supabase__list_migrations: [{ args: p }],
-        supabase__execute_sql: [
-          { args: { ...p, query: 'DELETE FROM users;' } },
-          { args: p, expectDenied: true },
-        ],
-        supabase__get_advisors: [{ args: { ...p, type: 'security' } }],
-        supabase__apply_migration: [
-          { args: { ...p, name: 'ddl', query: 'CREATE TABLE x(id int);' } },
-          {
-            args: {
-              ...p,
-              name: 'rls',
-              query: 'CREATE POLICY p ON users USING (true); UPDATE users SET a = 1;',
-            },
-          },
-          { args: { ...p, name: 'grant', query: 'grant select on t to anon;' } },
-          { args: { ...p, name: 'ext', query: 'create extension if not exists vector;' } },
-          { args: { ...p, name: 'fn', query: 'do $$ begin null; end $$;' } },
-          {
-            args: { ...p, name: 'no-sql', query: ['create table x(id int);'] },
-            expectDenied: true,
-          },
-          {
-            args: { ...p, projectRef: STAGING_REF, name: 'alias', query: 'select 1;' },
-            expectDenied: true,
-          },
-        ],
-        supabase__list_buckets: [{ args: p }],
-        supabase__get_storage_config: [{ args: p }],
-        supabase__update_storage_config: [{ args: { ...p, config: {} } }],
-        supabase__create_bucket: [
-          { args: { ...p, id: 'b1', name: 'B1' } },
-          { args: { ...p, name: 'has space' }, expectDenied: true },
-        ],
-        supabase__update_bucket: [{ args: { ...p, id: 'b1' } }, { args: p, expectDenied: true }],
-        supabase__delete_bucket: [{ args: { ...p, id: 'b1' } }],
-        supabase__list_objects: [{ args: { ...p, bucket: 'b1' } }],
-        supabase__upload_object: [
-          { args: { ...p, bucket: 'b1', path: 'dir/p.txt', content_base64: 'AA' } },
-          { args: { ...p, bucket: 'b1', content_base64: 'AA' }, expectDenied: true },
-        ],
-        supabase__delete_object: [{ args: { ...p, bucket: 'b1', path: 'p.txt' } }],
-        supabase__create_signed_url: [{ args: { ...p, bucket: 'b1', path: 'p.txt' } }],
-        supabase__get_auth_config: [{ args: p }],
-        supabase__update_auth_config: [{ args: { ...p, config: {} } }],
-        supabase__list_sso_providers: [{ args: p }],
-        supabase__get_sso_provider: [{ args: { ...p, provider_id: 'sso1' } }],
-        supabase__create_sso_provider: [
-          { args: { ...p, type: 'saml' } },
-          { args: p, expectDenied: true },
-        ],
-        supabase__update_sso_provider: [{ args: { ...p, provider_id: 'sso1' } }],
-        supabase__delete_sso_provider: [{ args: { ...p, provider_id: 'sso1' } }],
-        supabase__list_third_party_auth: [{ args: p }],
-        supabase__get_third_party_auth: [{ args: { ...p, tpa_id: 't1' } }],
-        supabase__create_third_party_auth: [{ args: { ...p, type: 'oidc' } }],
-        supabase__delete_third_party_auth: [{ args: { ...p, tpa_id: 't1' } }],
-        supabase__list_users: [{ args: p }],
-        supabase__get_user: [{ args: { ...p, user_id: 'u1' } }, { args: p, expectDenied: true }],
-        supabase__create_user: [
-          { args: { ...p, email: 'a@b.c' } },
-          { args: { ...p, phone: '+33612345678' } },
-          { args: p },
-        ],
-        supabase__update_user: [
-          { args: { ...p, user_id: 'u1' } },
-          { args: { ...p, user_id: 'bulk' } },
-        ],
-        supabase__delete_user: [
-          { args: { ...p, user_id: 'u1' } },
-          { args: { ...p, user_id: ['u1'] }, expectDenied: true },
-        ],
-        supabase__generate_link: [
-          { args: { ...p, email: 'a@b.c', type: 'magiclink' } },
-          { args: { ...p, email: 'a b', type: 'magiclink' }, expectDenied: true },
-        ],
-        supabase__list_functions: [{ args: p }],
-        supabase__get_function: [{ args: { ...p, function_slug: 'fn1' } }],
-        supabase__get_function_body: [{ args: { ...p, function_slug: 'fn1' } }],
-        supabase__list_function_secrets: [{ args: p }],
-        supabase__create_function: [{ args: { ...p, slug: 'fn1', body: 'x' } }],
-        supabase__update_function: [{ args: { ...p, function_slug: 'fn1' } }],
-        supabase__delete_function: [{ args: { ...p, function_slug: 'fn1' } }],
-        supabase__deploy_function: [
-          {
-            args: {
-              ...p,
-              slug: 'fn1',
-              entrypoint_path: 'index.ts',
-              files: [{ name: 'i', content: 'x' }],
-            },
-          },
-          { args: { ...p, slug: 'fn1', entrypoint_path: 'index.ts', files: [] } },
-        ],
-        supabase__create_function_secrets: [
-          { args: { ...p, secrets: [{ name: 'K', value: 'v' }] } },
-          { args: { ...p, secrets: [] }, expectDenied: true },
-          { args: { ...p, secrets: [{ name: 'bad name', value: 'v' }] }, expectDenied: true },
-        ],
-        supabase__delete_function_secrets: [
-          { args: { ...p, names: ['K'] } },
-          { args: { ...p, names: [] }, expectDenied: true },
-        ],
+        args: {
+          ...p,
+          name: 'rls',
+          query: 'CREATE POLICY p ON users USING (true); UPDATE users SET a = 1;',
+        },
       },
-      { resources: [staging] },
-    );
+      { args: { ...p, name: 'grant', query: 'grant select on t to anon;' } },
+      { args: { ...p, name: 'ext', query: 'create extension if not exists vector;' } },
+      { args: { ...p, name: 'fn', query: 'do $$ begin null; end $$;' } },
+      {
+        args: { ...p, name: 'no-sql', query: ['create table x(id int);'] },
+        expectDenied: true,
+      },
+      {
+        args: { ...p, projectRef: STAGING_REF, name: 'alias', query: 'select 1;' },
+        expectDenied: true,
+      },
+    ],
+    supabase__list_buckets: [{ args: p }],
+    supabase__get_storage_config: [{ args: p }],
+    supabase__update_storage_config: [{ args: { ...p, config: {} } }],
+    supabase__create_bucket: [
+      { args: { ...p, id: 'b1', name: 'B1' } },
+      { args: { ...p, name: 'has space' }, expectDenied: true },
+    ],
+    supabase__update_bucket: [{ args: { ...p, id: 'b1' } }, { args: p, expectDenied: true }],
+    supabase__delete_bucket: [{ args: { ...p, id: 'b1' } }],
+    supabase__list_objects: [{ args: { ...p, bucket: 'b1' } }],
+    supabase__upload_object: [
+      { args: { ...p, bucket: 'b1', path: 'dir/p.txt', content_base64: 'AA' } },
+      { args: { ...p, bucket: 'b1', content_base64: 'AA' }, expectDenied: true },
+    ],
+    supabase__delete_object: [{ args: { ...p, bucket: 'b1', path: 'p.txt' } }],
+    supabase__create_signed_url: [{ args: { ...p, bucket: 'b1', path: 'p.txt' } }],
+    supabase__get_auth_config: [{ args: p }],
+    supabase__update_auth_config: [{ args: { ...p, config: {} } }],
+    supabase__list_sso_providers: [{ args: p }],
+    supabase__get_sso_provider: [{ args: { ...p, provider_id: 'sso1' } }],
+    supabase__create_sso_provider: [
+      { args: { ...p, type: 'saml' } },
+      { args: p, expectDenied: true },
+    ],
+    supabase__update_sso_provider: [{ args: { ...p, provider_id: 'sso1' } }],
+    supabase__delete_sso_provider: [{ args: { ...p, provider_id: 'sso1' } }],
+    supabase__list_third_party_auth: [{ args: p }],
+    supabase__get_third_party_auth: [{ args: { ...p, tpa_id: 't1' } }],
+    supabase__create_third_party_auth: [{ args: { ...p, type: 'oidc' } }],
+    supabase__delete_third_party_auth: [{ args: { ...p, tpa_id: 't1' } }],
+    supabase__list_users: [{ args: p }],
+    supabase__get_user: [{ args: { ...p, user_id: 'u1' } }, { args: p, expectDenied: true }],
+    supabase__create_user: [
+      { args: { ...p, email: 'a@b.c' } },
+      { args: { ...p, phone: '+33612345678' } },
+      { args: p },
+    ],
+    supabase__update_user: [{ args: { ...p, user_id: 'u1' } }, { args: { ...p, user_id: 'bulk' } }],
+    supabase__delete_user: [
+      { args: { ...p, user_id: 'u1' } },
+      { args: { ...p, user_id: ['u1'] }, expectDenied: true },
+    ],
+    supabase__generate_link: [
+      { args: { ...p, email: 'a@b.c', type: 'magiclink' } },
+      { args: { ...p, email: 'a b', type: 'magiclink' }, expectDenied: true },
+    ],
+    supabase__list_functions: [{ args: p }],
+    supabase__get_function: [{ args: { ...p, function_slug: 'fn1' } }],
+    supabase__get_function_body: [{ args: { ...p, function_slug: 'fn1' } }],
+    supabase__list_function_secrets: [{ args: p }],
+    supabase__create_function: [{ args: { ...p, slug: 'fn1', body: 'x' } }],
+    supabase__update_function: [{ args: { ...p, function_slug: 'fn1' } }],
+    supabase__delete_function: [{ args: { ...p, function_slug: 'fn1' } }],
+    supabase__deploy_function: [
+      {
+        args: {
+          ...p,
+          slug: 'fn1',
+          entrypoint_path: 'index.ts',
+          files: [{ name: 'i', content: 'x' }],
+        },
+      },
+      { args: { ...p, slug: 'fn1', entrypoint_path: 'index.ts', files: [] } },
+    ],
+    supabase__create_function_secrets: [
+      { args: { ...p, secrets: [{ name: 'K', value: 'v' }] } },
+      { args: { ...p, secrets: [] }, expectDenied: true },
+      { args: { ...p, secrets: [{ name: 'bad name', value: 'v' }] }, expectDenied: true },
+    ],
+    supabase__delete_function_secrets: [
+      { args: { ...p, names: ['K'] } },
+      { args: { ...p, names: [] }, expectDenied: true },
+    ],
+  };
+
+  test('every tool classifies to slices the catalog covers', () => {
+    const report = assertCatalogCoverage(supabasePlugin, SAMPLES, { resources: [staging] });
     expect(report.toolsChecked).toBe(44);
     // No sample lands on the fallback : every write a tool can make has a
     // dedicated catalog entry (ADR fallback-risk-only-when-uncategorized).
@@ -212,6 +210,28 @@ describe('supabase plugin — structural kit', () => {
       'supabase.row-write-one',
       'supabase.auth.bulk-user-write',
     ]);
+  });
+
+  // What is executed is what was classified (SDK kit) : every string argument of
+  // every sample above is fed the hostile identifiers, through `classify` and
+  // through `execute`. The finer cases are in this plugin's identifier tests.
+  test('hostile identifiers are refused by classify and by execute, or named exactly', async () => {
+    const report = await assertIdentifiersRefused(supabasePlugin, SAMPLES, {
+      resources: [staging],
+      context: (fetch, resources) => execCtx(fetch, resources),
+    });
+    expect(report.toolsChecked).toBe(44);
+    // Found by running the samples : the arguments that are a segment of a request path.
+    expect([...new Set(report.pathIdentifiers.map((p) => p.argument))].sort()).toEqual([
+      'function_slug',
+      'project_ref',
+      'provider_id',
+      'tpa_id',
+      'type',
+    ]);
+    // Whatever classify refused, execute sent nothing for.
+    expect(report.refusedByClassify).toBeGreaterThan(0);
+    expect(report.nothingSent).toBeGreaterThanOrEqual(report.refusedByClassify);
   });
 
   test('project ref resolution : explicit must be a mission resource, single resource is the default', () => {

@@ -32,13 +32,13 @@ requests, approvals), §6 (encryption at rest, immutable audit), §8 (audit). De
 apps/gateway/migrations/
   0001_schema.sql                 schema v1 (27 tables + schema_migrations from the runner, 4 triggers)
   0002_audit_risks_purge_guard.sql audit_risks delete guard compares with the purge cutoff (schema version 2)
-  0003_web_sessions.sql           web_sessions: the human web-session rows (schema version 3, P1.1)
+  0003_web_sessions.sql           web_sessions: the human web-session rows (schema version 3)
   0004_connection_resource_curation.sql  connection_resources: metadata, owner metadata, env source,
-                                  renamed / hidden / stale flags (schema version 4, P1.4)
+                                  renamed / hidden / stale flags (schema version 4)
   0005_approval_bound_to_tool.sql approvals: the tool joins the key and the lookup index
-                                  (schema version 5, P2.1)
+                                  (schema version 5)
   0006_oauth_client_decisions.sql oauth_clients / delegations: registration, decision, revoke reason
-                                  (schema version 6, P2.3)
+                                  (schema version 6)
   0007_orphaned_not_stored.sql    missions: stored `orphaned` rows reset to `active`, two triggers
                                   refuse the value (schema version 7, P2.2b)
   0008_events_agent_label.sql     events: the agent label of a call event as a column, backfilled,
@@ -51,6 +51,13 @@ apps/gateway/migrations/
   0011_users_keyed_by_issuer_and_subject.sql
                                   users: `subject` renamed `identity_key` (still the unique column),
                                   `issuer` and `subject` added, index `users_issuer` (schema version 11)
+  0012_connection_provider_grant.sql
+                                  connections: `provider_grant`, what became of the grant at the
+                                  provider when the connection was revoked (schema version 12)
+  0013_request_covers_the_call.sql
+                                  requests, approvals: `risk_ids_json`, every gated risk of the call
+                                  a request or an approval covers; `approvals_lookup` by the call
+                                  (schema version 13)
 apps/gateway/src/server/store/
   index.ts                        openStore() / openMemoryStore(), Store type, re-exports
   db.ts                           openDb() — better-sqlite3 handle, pragmas, MIN_SQLITE_VERSION,
@@ -197,7 +204,7 @@ five-id catalog).
   with no resource…), driver errors (`SqliteError` with `code`) for constraint
   violations the schema catches (`UNIQUE`, `FOREIGN KEY`, `CHECK`).
 
-## Schema (`0001_schema.sql` … `0011_users_keyed_by_issuer_and_subject.sql`)
+## Schema (`0001_schema.sql` … `0013_request_covers_the_call.sql`)
 
 Schema version 11. `0001` creates every table and trigger; `0002` only replaces the
 `audit_risks` delete trigger (see Audit); `0003` adds `web_sessions`; `0004` adds the
@@ -217,7 +224,19 @@ deactivation, kept after a reactivation — `removed_at` cannot carry it, since 
 cleared when the user is active again (handbook [authentication](authentication.md),
 "Deactivating a user"); `0010` adds mission members and gives every mission token one
 holder (see "Mission members and token holders" below); `0011` makes a user the pair
-(issuer, subject) (see "Users: (issuer, subject)" below).
+(issuer, subject) (see "Users: (issuer, subject)" below); `0012` adds
+`connections.provider_grant` (one nullable `ADD COLUMN`): `revoked`, `manual` or `failed`
+once the connection is revoked and the provider was asked — or could not be — to
+withdraw its grant, `NULL` before that and for a connection revoked by an earlier build.
+The values are checked by the repository (`PROVIDER_GRANT_OUTCOMES`), and the column is
+written once (`ConnectionsRepo.recordProviderGrant`: only on a revoked row that holds
+none). Handbook [connections](connections.md), "The grant at the provider". `0013` adds
+`risk_ids_json` to `requests` and `approvals` (nullable; backfilled from `risk_id` by
+concatenation for approval requests and approvals, left NULL for claims) and recreates
+`approvals_lookup` on `(mission_id, tool, fingerprint)`: one approval request, and the
+approval it produces, cover every gated risk of a call (handbook
+[requests](requests.md), "One request covers the call"). A list that is NULL or
+unreadable reads as the one risk of `risk_id` (`riskIdsOf`).
 
 | Area        | Tables                                                                                                                     | Notes                                                                                                                                                                                                                                                                                                                                                                         |
 | ----------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -229,7 +248,7 @@ holder (see "Mission members and token holders" below); `0011` makes a user the 
 | Shares      | `shares`, `share_restrictions`                                                                                             | target principal like owner; one `risk_id` row per restriction entry                                                                                                                                                                                                                                                                                                          |
 | Missions    | `missions`, `mission_connections`, `mission_resources`, `mission_policy`, `mission_tokens`, `mission_members`              | status `active\|expired\|revoked` (`orphaned` is derived, `0007` refuses it; `exhausted` is per risk, computed); `period_anchor` + nullable `period_seconds`; `resource_scope all\|selected`; policy row = `(quota, rate_limit, rate_window_seconds, gate)`; two partial unique indexes = one `active` token per member and per token name (`0010`, below)                    |
 | Sessions    | `sessions`, `session_counters`, `events`                                                                                   | one session per mission (`mission_id` unique); counters keyed `(session_id, risk_id, period_start)`; events are free-form `kind` + JSON details; `events.agent_label` (`0008`) is a copy of the label of a call event, made at insert, for the per-label timeline                                                                                                             |
-| Requests    | `requests`, `approvals`                                                                                                    | `kind claim\|approval`, `state open\|granted\|refused\|expired`; approval requests carry `tool`, `fingerprint`, encrypted `args_blob` (NULL on decision and on expiry); one approval per request, keyed `(mission, risk, tool, fingerprint)`, consumed via `consumed_at`                                                                                                      |
+| Requests    | `requests`, `approvals`                                                                                                    | `kind claim\|approval`, `state open\|granted\|refused\|expired`; approval requests carry `tool`, `fingerprint`, `risk_ids_json` (every gated risk of the call) and the encrypted `args_blob` (NULL on decision and on expiry); one approval per request, bound to `(mission, tool, fingerprint)` and listing the risks it covers, consumed via `consumed_at`                  |
 | Audit       | `audit`, `audit_risks`, `audit_purge_guard`                                                                                | see below                                                                                                                                                                                                                                                                                                                                                                     |
 
 SQLite-only constructs are marked `-- sqlite:` in the file (`STRICT`, `RAISE(ABORT)`);
@@ -250,10 +269,10 @@ transaction that never yields.
 
 ## Connections and resources
 
-Beyond the P0.3 primitives (`create`, `getById`, `list`, `listOwnedBy`,
+Beyond the first primitives (`create`, `getById`, `list`, `listOwnedBy`,
 `getCredential`, `transferOwner`, `setMetadata`,
 `listResources`, `getResource`, `setResourceEnv`), the repository
-carries the operations the connect flows need (P1.4, handbook
+carries the operations the connect flows need (handbook
 [connections](connections.md)). All are additive; the state changes are single
 conditional `UPDATE`s whose `changes` is the answer:
 
@@ -271,14 +290,14 @@ conditional `UPDATE`s whose `changes` is the answer:
 `setResourceEnv` also sets `env_source = 'owner'`. `ConnectionResourceRecord` exposes
 `envSource`, `metadata` (the effective merge `{ ...discovered, ...owner }`),
 `ownerMetadata`, `displayNameEdited`, `hidden`, `staleSince`; `listResources` returns
-every row, hidden and stale included. `replaceResources`, the P0.3 sync that deleted the
+every row, hidden and stale included. `replaceResources`, the first sync, which deleted the
 refs it was not given (cascading to `mission_resources`), was removed once its last
-callers (test fixtures) moved to `syncDiscoveredResources`. The P0.3 writers that set a
+callers (test fixtures) moved to `syncDiscoveredResources`. The first writers, which set a
 credential, a status or an owner without a condition, which no production code called,
 were removed the same way: every writer left names its transition and carries its
 condition in the statement.
 
-Ownership and the stored state that follows from authority (P2.2, handbook
+Ownership and the stored state that follows from authority (handbook
 [authority](authority.md)), all additive, covered by
 `tests/integration/store/ownership-and-orphans.test.ts`:
 
@@ -306,7 +325,7 @@ every reader derives the state (`MissionGrounds.inspect`, handbook
   (`Exclude<MissionStatus, 'orphaned'>`), and there is no `markOrphaned`;
 - a row is parsed with `STORED_MISSION_STATUSES` (`active`, `expired`, `revoked`): a
   row that carried `orphaned` would be an `InvariantError` at the read, not a silent verdict;
-- migration `0007` resets the rows the P2.2 image wrote (`status = 'active'`,
+- migration `0007` resets the rows an earlier image wrote (`status = 'active'`,
   `closed_at = NULL`; tokens were never retired by an orphaning) and creates
   `missions_orphaned_not_stored_insert` / `_update`, `BEFORE` triggers that abort a
   write of the value. The CHECK of `0001` still lists it: an applied migration is
@@ -379,7 +398,7 @@ service, handbook [missions](missions.md)), and for whom a token may be inserted
 
 ## Audit
 
-`store.audit.append(entry)` takes `@vaubaan/gateway-core`'s `AuditEntry` (P0.5 owns
+`store.audit.append(entry)` takes `@vaubaan/gateway-core`'s `AuditEntry` (gateway-core owns
 the shape, `packages/gateway-core/src/audit.ts`):
 
 - `CallAuditEntry` — `mission_id`, `session_id`, `connection_id`, `resource_ref`,
@@ -405,7 +424,7 @@ per-object advisory lock) for the read and the insert to stay one step.
 
 Reads: `getById(id)` and `list(filter)` with `AuditFilter { missionId?, kind?,
 since?, until?, limit? }` (default limit 1000, ordered by `ts, id`).
-`search(query)` is the Audit page's query (P1.8, handbook [audit](audit.md)): a
+`search(query)` is the Audit page's query (handbook [audit](audit.md)): a
 mandatory `AuditScope` (missions created by one user, connections owned by some
 principals, optionally every administrative entry) applied before the filters
 (`missionId`, `userIds`, `connectionId`, `tool`, `decision`, `agentLabel`, `kind`,
@@ -524,11 +543,12 @@ const result = await store.sessions.decideAndDecrement(
   { missionId, riskIds: risksTouched, periodStart },
   (ctx) => {
     // ctx.session, ctx.counters (consumed per risk this period), ctx.now
-    // ctx.findApproval({ riskId, tool, fingerprint })    -> ApprovalRecord | null   (non-consuming)
-    // ctx.consumeApproval({ riskId, tool, fingerprint }) -> ApprovalRecord | null   (single use)
-    // ctx.findOpenRequest({ kind, riskId, tool?, fingerprint? }) -> RequestRecord | null  (reuse on replay)
+    // ctx.findApprovals({ tool, fingerprint })           -> ApprovalRecord[]        (non-consuming)
+    // ctx.consumeApproval(approvalId)                    -> ApprovalRecord | null   (single use)
+    // ctx.findOpenRequest({ kind: 'claim', riskId } | { kind: 'approval', tool, fingerprint, riskIds })
+    //                                                     -> RequestRecord | null   (reuse on replay)
     // ctx.riskEvents({ kinds, riskIds, since }) -> EventRecord[]   (oldest first; gate openings)
-    // ctx.createRequest({ kind, riskId, tool?, fingerprint?, prepared?, expiresAt })
+    // ctx.createRequest({ kind, riskId, riskIds?, tool?, fingerprint?, prepared?, expiresAt })
     //   prepared = await store.requests.prepareArguments(args), sealed BEFORE the call
     // ctx.recordEvent({ kind, riskId?, actorUserId?, details? })
     //   stored as given (`UntypedNewEvent`); the gateway's writers build a typed
@@ -546,7 +566,7 @@ call), the outcome's event. A thrown callback rolls everything back,
 including the session creation. The accounting rules (period arithmetic, quota and
 rate comparison, gate) are the `SessionService` callback of
 [budget-and-sessions](budget-and-sessions.md); this module only guarantees the
-atomicity. `findApproval` / `findOpenRequest` are non-consuming lookups so that callback
+atomicity. `findApprovals` / `findOpenRequest` are non-consuming lookups so that callback
 can decide on every risk before it consumes an approval or drops a request. Rate-limit
 sliding windows are not stored here (in-memory, same handbook).
 
@@ -561,10 +581,11 @@ Additive, for the approval gate (handbook [requests](requests.md), "Approvals"):
   `recordEvent(event)`, then the conditional update that stores the decision and sets
   `args_blob` / `key_version` to NULL. A thrown `apply` writes nothing.
 - `store.requests.getArguments(id)` — `null` unless the request is `open` and unexpired.
-- `store.approvals` — `ApprovalKey { riskId, tool, fingerprint }` for `create`
-  and the in-transaction lookup and consumption (`DecideContext.findApproval` /
-  `consumeApproval`); `getByRequest(requestId)`; an approval with an empty
-  tool is never written and never matched.
+- `store.approvals` — bound to `ApprovedCall { tool, fingerprint }`, listing the risks
+  it covers (`riskIds`, never empty, each once) for `create`; the in-transaction lookup
+  and consumption are `DecideContext.findApprovals(call)` / `consumeApproval(id)` (an id
+  of another mission consumes nothing); `getByRequest(requestId)`; an approval with an
+  empty tool is never written and never matched.
 - `store.missions.issuersOf(missionIds)` — for the missions issued through the
   management door, the delegation and the client behind each (`MissionIssuerRecord`), by a
   join `missions.delegation_id` → `delegations` → `oauth_clients`; a mission issued in the
@@ -597,7 +618,7 @@ Additive, for the approval gate (handbook [requests](requests.md), "Approvals"):
 ## The claim decision primitive
 
 `store.requests.decideClaim(id, decidedByUserId, apply)` is the same pattern for the
-creator's answer to a claim (P1.7, handbook [requests](requests.md)): one
+creator's answer to a claim (handbook [requests](requests.md)): one
 `BEGIN IMMEDIATE` transaction holding the check that the request is an open, unexpired
 claim (an overdue one is flipped to `expired` there and reported `not-open`), the
 synchronous `apply(ctx)` callback, and the conditional `UPDATE … WHERE state = 'open'`
@@ -607,7 +628,7 @@ this transaction, so a rule that depends on them (no reset or extension of a mis
 revoked since the page was read, an expiry that never moves backwards on a stale read)
 is checked on the row the decision will write next to; `ApprovalDecisionContext` carries
 the same `mission`. The claim context offers `counters(periodStart)`,
-`resetCounters(periodStart)`, `creditCounter(periodStart, riskId, amount)` (refuses to
+`resetCounter(periodStart, riskId)` (one risk, back to zero), `creditCounter(periodStart, riskId, amount)` (refuses to
 take a counter below zero), `setMissionExpiry(iso)` (a mission stored `expired` becomes
 `active`, `closed_at` cleared) and `recordEvent(event)`. A thrown callback rolls
 everything back.
@@ -616,7 +637,7 @@ everything back.
 The requests and missions repositories do not prepare statements on those tables: the
 claim context, the sweeper and `MissionsRepo.setGate` (its `gate-changed` event) call
 `createSessionPrimitives(ctx)` (`sessionOfMission`, `recordEvent`, `countersOfPeriod`,
-`resetPeriod`, `creditCounter`, `riskEvents`), synchronous functions with no transaction of
+`creditCounter`, `riskEvents`), synchronous functions with no transaction of
 their own that run inside the caller's `BEGIN IMMEDIATE`. An event is therefore inserted and
 mapped by the same code whether it comes from a call decision, a claim decision, a gate
 change or the sweeper, and `recordEvent` always returns the stored row.
@@ -655,7 +676,7 @@ transaction takes the delegation from the code or from the rotated token.
 ## Repository methods at a glance
 
 Every method of the twelve repository interfaces, as declared in `repositories/*.ts`.
-Some P0.3 primitives are called by the store suites and the fixtures only (in production a
+Some early primitives are called by the store suites and the fixtures only (in production a
 request or an approval is born inside a decision transaction and a share through
 `replaceForTarget`); they are listed all the same: the list is the interface.
 
@@ -666,9 +687,9 @@ request or an approval is born inside a decision transaction and a share through
 | `connections` (`ConnectionsRepo`) | `create`, `getById`, `list`, `listOwnedBy`, `getCredential`, `transferOwner`, `assignOwnerlessTo`, `markOwnerlessUnowned`, `listOwnerless`, `setMetadata`, `listResources`, `getResource`, `setResourceEnv`, `reconnect`, `refreshCredential`, `markExpired`, `revoke`, `syncDiscoveredResources`, `setResourceDisplayName`, `setResourceHidden`, `setResourceOwnerMetadata`                                                                 |
 | `shares` (`SharesRepo`)           | `create`, `getById`, `listForConnection`, `listActiveForTargets`, `replaceForTarget`, `revoke`                                                                                                                                                                                                                                                                                                                                               |
 | `missions` (`MissionsRepo`)       | `create`, `getById`, `listForCreator`, `listForConnection`, `issuersOf`, `setStatus`, `setExpiresAt`, `replacePolicy`, `setGate`, `issueToken`, `findTokenByPrefix`, `getToken`, `listTokens`, `revokeTokens`, `revokeToken`, `revokeMemberTokensOf`, `markTokenUsed`, `listForMember`, `addMember`, `removeMember`, `getMember`, `listMembers`                                                                                              |
-| `sessions` (`SessionsRepo`)       | `getByMission`, `getOrCreate`, `decideAndDecrement`, `counters`, `recordEvent`, `listEvents`, `listRecentEvents`                                                                                                                                                                                                                                                                                                                             |
+| `sessions` (`SessionsRepo`)       | `getByMission`, `getOrCreate`, `decideAndDecrement`, `counters`, `recordEvent`, `listEvents`, `listRecentEvents`, `withHistoryBefore`, `purgeHistory` (retention of events and past-period counters: handbook [audit](audit.md))                                                                                                                                                                                                             |
 | `requests` (`RequestsRepo`)       | `create`, `prepareArguments`, `getById`, `listOpenForCreator`, `listForMission`, `getArguments`, `decideClaim`, `decideApproval`, `sweepExpired`                                                                                                                                                                                                                                                                                             |
-| `approvals` (`ApprovalsRepo`)     | `create`, `getByRequest`, `listActive` (lookup and consumption exist only inside `decideAndDecrement`: `DecideContext.findApproval` / `consumeApproval`)                                                                                                                                                                                                                                                                                     |
+| `approvals` (`ApprovalsRepo`)     | `create`, `getByRequest`, `listActive` (lookup and consumption exist only inside `decideAndDecrement`: `DecideContext.findApprovals` / `consumeApproval`)                                                                                                                                                                                                                                                                                    |
 | `delegations` (`DelegationsRepo`) | `registerClient`, `getClient`, `getClientByClientId`, `listClients`, `updateClientDocument`, `decideClient`, `disableClient`, `deleteUnusedClients`, `create`, `getById`, `listForUser`, `listForClient`, `revoke`, `revokeIfActive`, `activityOf`, `createCode`, `findCode`, `redeemCode`, `findRefreshToken`, `rotateRefreshToken`, `rotateSuccessorOf`, `createAccessToken`, `findActiveAccessToken`, `revokeAccessToken`, `purgeExpired` |
 | `audit` (`AuditRepo`)             | `append`, `appendUnlessLatest`, `getById`, `list`, `search`, `latestCall`, `agentLabels`, `agentLabelActivity`, `tokenHolderActivity`, `countAllowedTouches`, `purgeOlderThan`, `purgeByRetention`                                                                                                                                                                                                                                           |
 | `config` (`ConfigRepo`)           | `get`, `set`, `getSecret`, `setSecret`, `delete`, `apply`, `keys`                                                                                                                                                                                                                                                                                                                                                                            |
@@ -677,9 +698,10 @@ request or an approval is born inside a decision transaction and a share through
 `MissionsRepo.setStatus` is the mission's (it takes a `StoredMissionStatus`, see above);
 no other repository has a method that sets a status it is given. A request is decided
 through `decideClaim` or `decideApproval` only, and expires through `sweepExpired` (or
-inside a decision that finds it overdue); a session's counters are reset through
-`ClaimDecisionContext.resetCounters` only, inside the decision of the claim that grants
-the reset.
+inside a decision that finds it overdue); a session's counter goes down through
+`ClaimDecisionContext.resetCounter` and `creditCounter` only — both the one conditional
+`UPDATE … WHERE consumed >= ?` on one risk — inside the decision of the claim that grants
+it. Nothing sets every counter of a period.
 
 ## Backup
 
@@ -733,14 +755,14 @@ capture both files atomically are also fine.
   earlier image wrote (every token a member token of its creator, unchanged otherwise; no
   member row; the audit entry left without a holder; the new indexes), `holderColumns`,
   the timeline of one holder by keyset with `tokenHolderActivity`, the search by holder.
-  `missions.test.ts` (17) holds the repository's side: one active token per member, a
+  `missions.test.ts` (18) holds the repository's side: one active token per member, a
   rotation that retires its holder's token only, one token revoked on its own, a name
   identifying one active token, a token inserted only for a mission that serves and a
   holder who is on it (`TokenNotIssuableError`, checked in the insert), the schema's
   CHECKs, the columns of a token row (a hash, no secret), `markTokenUsed`, members added
   (a working token that predates the membership revoked), removed with their token and
   added again, `revokeMemberTokensOf`.
-- `tests/integration/store/approval-decisions.test.ts` (17) — migration 0005 (column and
+- `tests/integration/store/approval-decisions.test.ts` (20) — migration 0005 (column and
   index), `decideApproval` (decision, erasure and approval in one transaction; a thrown
   apply writes nothing; already decided; overdue; a claim; unknown), `getArguments` on an
   overdue request, the open request of a call by tool and fingerprint, `riskEvents`,

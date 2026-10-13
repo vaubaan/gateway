@@ -1,8 +1,15 @@
 ---
 title: API key Bot — format `vbn_live_*` + argon2id hash, visible 1×
-status: accepted
+status: superseded
 date: 2026-05-22
+superseded-by: mission-token-sha256-digest
+superseded-date: 2026-10-13
 ---
+
+> **Superseded 2026-10-13** by
+> [mission-token-sha256-digest](./mission-token-sha256-digest.md): the format
+> `vbn_live_<prefix>_<secret>` is kept, the argon2id hash is replaced by a
+> SHA-256 digest. Tokens stored as argon2id are still read.
 
 > **Pre-v5 document (French).** Not translated; read with the mapping in [[legacy-status-of-v4-adrs-and-handbooks]].
 

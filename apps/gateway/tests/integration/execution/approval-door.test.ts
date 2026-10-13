@@ -221,6 +221,54 @@ describe('approve an action through the execution door (GitHub developer preset)
     expect(await counters()).toEqual({ [UNGATED]: 1, [GATED]: 1 });
   });
 
+  it('a call touching two gated risks: one refusal, one request listing both, one grant, one replay', async () => {
+    // The creator also gates the branch write: the workflow write now touches two gated risks.
+    const gated = await rig.root.missions.service.setGate(
+      rig.ada,
+      rig.mission.mission.id,
+      UNGATED,
+      'approval',
+    );
+    expect(gated).toMatchObject({ ok: true, previous: 'auto' });
+
+    const refusal = refusalOf(await write());
+    expect(refusal).toMatchObject({ code: 'approval-required' });
+    expect([...(refusal.risk_ids as string[])].sort()).toEqual([UNGATED, GATED].sort());
+    expect((refusal.risk_ids as string[])[0]).toBe(refusal.risk_id);
+    expect(String(refusal.hint)).toContain('One approval request covers the whole call');
+    expect(writesUpstream()).toHaveLength(0);
+    const requestId = requestIdOf(refusal);
+
+    // One request in the inbox, both risks on it.
+    const inbox = await rig.root.requests.service.inbox(rig.ada);
+    expect(inbox.map((r) => r.id)).toEqual([requestId]);
+    expect(inbox[0]?.risks.map((r) => r.risk_id).sort()).toEqual([UNGATED, GATED].sort());
+    const viewed = await rig.root.requests.service.view(rig.ada, requestId);
+    if (viewed.outcome !== 'ok' || viewed.view.kind !== 'approval') {
+      throw new Error('expected the view of an approval request');
+    }
+    expect(viewed.view.gates.map((g) => g.policy)).toEqual(['approval', 'approval']);
+    expect(viewed.view.options.find((o) => o.resolution === 'grant')?.consequence).toContain(
+      'This one approval covers the 2 gated risks the call touches.',
+    );
+
+    // One grant approves the call.
+    expect(
+      await rig.root.requests.service.decide(rig.ada, requestId, { resolution: 'grant' }),
+    ).toMatchObject({ ok: true, request: { state: 'granted' } });
+    const replay = await write({ ...ARGS });
+    expect(replay.error).toBeUndefined();
+    expect(writesUpstream()).toHaveLength(1);
+    expect(await counters()).toEqual({ [UNGATED]: 1, [GATED]: 1 });
+    expect(await rig.root.store.approvals.listActive(rig.mission.mission.id)).toEqual([]);
+    expect(await rig.root.requests.service.inbox(rig.ada)).toEqual([]);
+
+    // Single use, for the call as a whole.
+    const second = refusalOf(await write());
+    expect(requestIdOf(second)).not.toBe(requestId);
+    expect(writesUpstream()).toHaveLength(1);
+  });
+
   it('one byte changed in the arguments asks again; the approval of the other call is left intact', async () => {
     const first = refusalOf(await write());
     await rig.root.requests.service.decide(rig.ada, requestIdOf(first), { resolution: 'grant' });

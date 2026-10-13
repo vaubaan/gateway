@@ -20,10 +20,12 @@ import {
 } from '@vaubaan/plugin-sdk';
 import {
   assertCatalogCoverage,
+  assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
   assertPresetsValid,
   mockFetch,
+  type ToolSamples,
 } from '@vaubaan/plugin-sdk/testing';
 import { resourceEnvResolver } from '@vaubaan/policy-engine';
 
@@ -157,52 +159,50 @@ describe('upstash-redis plugin — structural kit', () => {
     expect(auto).toContain('upstash-redis.create-database');
   });
 
+  const d = { databaseId: 'db-abc-123' };
+  // One table for the catalog coverage and for the identifier proof.
+  const SAMPLES: ToolSamples = {
+    upstash_redis__list_databases: [{ args: {} }],
+    upstash_redis__get_database: [{ args: d }, { args: {} }],
+    upstash_redis__get_database_stats: [{ args: d }],
+    upstash_redis__create_database: [{ args: { name: 'new-cache', region: 'eu-west-1' } }],
+    upstash_redis__delete_database: [{ args: d }],
+    upstash_redis__rename_database: [{ args: { ...d, name: 'renamed' } }],
+    upstash_redis__execute: [
+      { args: { ...d, command: ['GET', 'k'] } },
+      { args: { ...d, command: ['SET', 'k', 'v'] } },
+      { args: { ...d, command: ['DEL', 'k'] } },
+      { args: { ...d, command: ['EXPIRE', 'k', '0'] } },
+      { args: { ...d, command: ['FLUSHDB'] } },
+      { args: { ...d, command: ['CONFIG', 'SET', 'maxmemory', '0'] } },
+      { args: { ...d, command: ['EVAL', 'return 1', '0'] } },
+      { args: { ...d, command: [['MULTI'], ['SET', 'k', 'v'], ['DEL', 'j'], ['EXEC']] } },
+      { args: { ...d, command: [] } },
+      { args: { command: ['PING'] } },
+    ],
+    upstash_redis__get: [{ args: { ...d, key: 'session:1' } }, { args: { key: 'k' } }],
+    upstash_redis__set: [{ args: { ...d, key: 'k', value: 'v', ex: 60 } }],
+    upstash_redis__del: [{ args: { ...d, keys: ['k1'] } }, { args: { ...d, keys: ['k1', 'k2'] } }],
+    upstash_redis__keys: [{ args: { ...d, pattern: 'user:*' } }],
+    upstash_redis__scan: [{ args: { ...d, cursor: 0 } }],
+    upstash_redis__ttl: [{ args: { ...d, key: 'k' } }],
+    upstash_redis__expire: [
+      { args: { ...d, key: 'k', seconds: 60 } },
+      { args: { ...d, key: 'k', seconds: 0 } },
+    ],
+    upstash_redis__hset: [{ args: { ...d, key: 'h', fields: { f: 'v' } } }],
+    upstash_redis__hgetall: [{ args: { ...d, key: 'h' } }],
+    upstash_redis__lpush: [{ args: { ...d, key: 'l', values: ['a'] } }],
+    upstash_redis__lrange: [{ args: { ...d, key: 'l', start: 0, stop: -1 } }],
+    upstash_redis__sadd: [{ args: { ...d, key: 's', members: ['x'] } }],
+    upstash_redis__smembers: [{ args: { ...d, key: 's' } }],
+    upstash_redis__dbsize: [{ args: d }],
+  };
+
   test('every tool classifies to slices the catalog covers, every named risk is reached', () => {
-    const d = { databaseId: 'db-abc-123' };
-    const report = assertCatalogCoverage(
-      upstashRedisPlugin,
-      {
-        upstash_redis__list_databases: [{ args: {} }],
-        upstash_redis__get_database: [{ args: d }, { args: {} }],
-        upstash_redis__get_database_stats: [{ args: d }],
-        upstash_redis__create_database: [{ args: { name: 'new-cache', region: 'eu-west-1' } }],
-        upstash_redis__delete_database: [{ args: d }],
-        upstash_redis__rename_database: [{ args: { ...d, name: 'renamed' } }],
-        upstash_redis__execute: [
-          { args: { ...d, command: ['GET', 'k'] } },
-          { args: { ...d, command: ['SET', 'k', 'v'] } },
-          { args: { ...d, command: ['DEL', 'k'] } },
-          { args: { ...d, command: ['EXPIRE', 'k', '0'] } },
-          { args: { ...d, command: ['FLUSHDB'] } },
-          { args: { ...d, command: ['CONFIG', 'SET', 'maxmemory', '0'] } },
-          { args: { ...d, command: ['EVAL', 'return 1', '0'] } },
-          { args: { ...d, command: [['MULTI'], ['SET', 'k', 'v'], ['DEL', 'j'], ['EXEC']] } },
-          { args: { ...d, command: [] } },
-          { args: { command: ['PING'] } },
-        ],
-        upstash_redis__get: [{ args: { ...d, key: 'session:1' } }, { args: { key: 'k' } }],
-        upstash_redis__set: [{ args: { ...d, key: 'k', value: 'v', ex: 60 } }],
-        upstash_redis__del: [
-          { args: { ...d, keys: ['k1'] } },
-          { args: { ...d, keys: ['k1', 'k2'] } },
-        ],
-        upstash_redis__keys: [{ args: { ...d, pattern: 'user:*' } }],
-        upstash_redis__scan: [{ args: { ...d, cursor: 0 } }],
-        upstash_redis__ttl: [{ args: { ...d, key: 'k' } }],
-        upstash_redis__expire: [
-          { args: { ...d, key: 'k', seconds: 60 } },
-          { args: { ...d, key: 'k', seconds: 0 } },
-        ],
-        upstash_redis__hset: [{ args: { ...d, key: 'h', fields: { f: 'v' } } }],
-        upstash_redis__hgetall: [{ args: { ...d, key: 'h' } }],
-        upstash_redis__lpush: [{ args: { ...d, key: 'l', values: ['a'] } }],
-        upstash_redis__lrange: [{ args: { ...d, key: 'l', start: 0, stop: -1 } }],
-        upstash_redis__sadd: [{ args: { ...d, key: 's', members: ['x'] } }],
-        upstash_redis__smembers: [{ args: { ...d, key: 's' } }],
-        upstash_redis__dbsize: [{ args: d }],
-      },
-      { resources: [cache, foreign] },
-    );
+    const report = assertCatalogCoverage(upstashRedisPlugin, SAMPLES, {
+      resources: [cache, foreign],
+    });
     expect(report.toolsChecked).toBe(21);
     // Every named risk is reached by at least one tool ; no sample lands on
     // the fallback (ADR fallback-risk-only-when-uncategorized).
@@ -212,6 +212,24 @@ describe('upstash-redis plugin — structural kit', () => {
     expect(report.risksTouched).toEqual(named);
     expect(report.risksUntouched).toEqual([]);
     expect(report.fallbackHits).toEqual([]);
+  });
+
+  // What is executed is what was classified (SDK kit) : every string argument of
+  // every sample above is fed the hostile identifiers, through `classify` and
+  // through `execute`. The finer cases are in this plugin's identifier tests.
+  test('hostile identifiers are refused by classify and by execute, or named exactly', async () => {
+    const report = await assertIdentifiersRefused(upstashRedisPlugin, SAMPLES, {
+      resources: [cache, foreign],
+      context: (fetch, resources) => ctx(fetch, resources),
+    });
+    expect(report.toolsChecked).toBe(21);
+    // Found by running the samples : the arguments that are a segment of a request path.
+    expect([...new Set(report.pathIdentifiers.map((p) => p.argument))].sort()).toEqual([
+      'databaseId',
+    ]);
+    // Whatever classify refused, execute sent nothing for.
+    expect(report.refusedByClassify).toBeGreaterThan(0);
+    expect(report.nothingSent).toBeGreaterThanOrEqual(report.refusedByClassify);
   });
 });
 

@@ -113,8 +113,9 @@ deploy/config/                  gateway.example.yaml, .env.example (every key do
      so the address-keyed limits are shared by all callers)
      with `key`, `env` (`VAUBAAN_TRUSTED_PROXIES`), `affected` (the
      request page's per-IP window, the execution door's token-verification
-     window per token prefix — a flood of wrong secrets on a known prefix
-     holds a not-yet-verified agent at 429 —, the authorization server's
+     window per prefix of a token an earlier build stored as argon2id — a
+     flood of wrong secrets on such a prefix holds its agent at 429 until the
+     token has been used once —, the authorization server's
      registration window and token window, one each for everybody — one
      caller can hold every delegated client at 429 when it renews its
      token —, `client_ip` absent from the audit) and `remedy`. Nothing is bypassed and the boot continues: the
@@ -123,7 +124,7 @@ deploy/config/                  gateway.example.yaml, .env.example (every key do
    - `createEncryptor(config.encryption)` (awaits libsodium);
    - the plugin registry (`@vaubaan/plugin-sdk`'s `PluginRegistry`) from
      `RootDeps.buildRegistry`, by default `buildShippedRegistry`: the
-     ten plugins imported by `compose/shipped-plugins.ts` (P1.4). A
+     ten plugins imported by `compose/shipped-plugins.ts`. A
      plugin that fails `definePlugin` or a duplicate id fails the boot;
    - `checkProviderApps`: every `providers.<id>` must name a registered
      plugin, otherwise a `ConfigError` naming `providers.<id>` and
@@ -176,8 +177,8 @@ deploy/config/                  gateway.example.yaml, .env.example (every key do
      through `root.rateLimiter` and reads `trusted_proxies`;
    - `createAuditModule()` → `root.audit` (`query`, `sessions`,
      `retention`; handbook [audit](audit.md)); the root awaits
-     `retention.start()`, which purges the audit entries older than
-     `retention_days` once and then every hour, and `root.close()` stops
+     `retention.start()`, which purges the audit entries and the session
+     history older than `retention_days` once and then every hour, and `root.close()` stops
      that timer before closing the store;
    - the budget's `SessionService` → `root.budget` (claim and approval URLs
      come from `root.requests.requestUrl`; handbook
@@ -246,7 +247,7 @@ wall clock by default, a fixed instant in tests). `GatewayRoot` satisfies
 
 ## Framework
 
-`apps/gateway` runs on **Next.js 16.4.0** with React 19.3.0 (P0.6, from
+`apps/gateway` runs on **Next.js 16.4.0** with React 19.3.0 (from
 15.5.18 / 19.1.1). What the upgrade means for this module:
 
 - `next build` and `next dev` use **Turbopack**; nothing here depends on
@@ -335,12 +336,13 @@ default or a bound, change `KEYS` and this table together.
 | `bootstrap_token`                                 | secret     | required while `idp` is absent             | at least 32 characters; refused once `bootstrap.revoked_at` is set in the store                                                                                              | `VAUBAAN_BOOTSTRAP_TOKEN`, `VAUBAAN_BOOTSTRAP_TOKEN_FILE`                                                            | `auth/` (`BootstrapService`)                                                                                                                                                                       |
 | `telemetry.enabled`                               | boolean    | `false`                                    | —                                                                                                                                                                            | `VAUBAAN_TELEMETRY_ENABLED`                                                                                          | `telemetry/settings.ts`. Not set: off, and Admin → Telemetry decides; set (true or false): that value, and the Admin toggle is read-only (`TelemetryConfig.enabledSetByConfig`)                    |
 | `telemetry.collector_url`                         | URL        | `https://telemetry.vaubaan.com/v1/reports` | https; a query is allowed (the collector's public key as `?apikey=`)                                                                                                         | `VAUBAAN_TELEMETRY_COLLECTOR_URL`                                                                                    | `telemetry/`. The default is `DEFAULT_TELEMETRY_COLLECTOR_URL`, a placeholder the client refuses to send to                                                                                        |
-| `retention_days`                                  | integer    | `90`                                       | >= 1                                                                                                                                                                         | `VAUBAAN_RETENTION_DAYS`                                                                                             | `audit/retention.ts` (the purge of audit entries); shown on the Audit page                                                                                                                         |
+| `retention_days`                                  | integer    | `90`                                       | >= 1                                                                                                                                                                         | `VAUBAAN_RETENTION_DAYS`                                                                                             | `audit/retention.ts` (the purge of audit entries, and of the session events and past-period counters of the same age: handbook [audit](audit.md)); shown on the Audit page                         |
 | `requests.expiry`                                 | duration   | `24h`                                      | —                                                                                                                                                                            | `VAUBAAN_REQUEST_EXPIRY`                                                                                             | `budget/session-service.ts`: how long a request to the creator stays answerable, a claim and an approval request alike                                                                             |
 | `approvals.expiry`                                | duration   | `10m`                                      | —                                                                                                                                                                            | `VAUBAAN_APPROVAL_EXPIRY`                                                                                            | `requests/request-service.ts` (applied when the creator grants) and `budget/session-service.ts` (told to the executor as `approval_valid_seconds`): how long a granted approval stays usable       |
 | `mcp.rate_limit_per_minute`                       | integer    | `600`                                      | >= 1                                                                                                                                                                         | `VAUBAAN_MCP_RATE_LIMIT_PER_MINUTE`                                                                                  | `execution/door.ts`: requests per minute on the execution door, per mission (spec §6; key `mcp:mission:<id>`)                                                                                      |
 | `oauth.access_token_ttl`                          | duration   | `15m`                                      | at most 3600 s; that is `1h`                                                                                                                                                 | `VAUBAAN_OAUTH_ACCESS_TOKEN_TTL`                                                                                     | `oauth-as/token-service.ts`: lifetime of a delegated access token ([management-door](management-door.md))                                                                                          |
 | `oauth.refresh_token_ttl`                         | duration   | `30d`                                      | —; longer than `oauth.access_token_ttl`                                                                                                                                      | `VAUBAAN_OAUTH_REFRESH_TOKEN_TTL`                                                                                    | `oauth-as/token-service.ts`: lifetime of a refresh token; restarts at every renewal                                                                                                                |
+| `oauth.delegation_max_lifetime`                   | duration   | `90d`                                      | —; longer than `oauth.access_token_ttl`                                                                                                                                      | `VAUBAAN_OAUTH_DELEGATION_MAX_LIFETIME`                                                                              | `oauth-as/delegation-lifetime.ts`: absolute lifetime of a delegation, from the user's consent; past it the client must obtain the consent again                                                    |
 | `oauth.refresh_reuse_window_seconds`              | integer    | `30`                                       | 0 to 60; `0` disables the window                                                                                                                                             | `VAUBAAN_OAUTH_REFRESH_REUSE_WINDOW_SECONDS`                                                                         | `oauth-as/token-service.ts`: how long the refresh token rotated last may be presented once more (two sessions renewing together)                                                                   |
 | `oauth.client_registration.policy`                | enum       | `operator-approved`                        | `open`, `operator-approved`, `closed`                                                                                                                                        | `VAUBAAN_OAUTH_CLIENT_REGISTRATION_POLICY`                                                                           | `oauth-as/clients.ts`, `oauth-as/handlers.ts`: who may become an OAuth client                                                                                                                      |
 | `oauth.client_registration.auto_approve_loopback` | boolean    | `true`                                     | —                                                                                                                                                                            | `VAUBAAN_OAUTH_CLIENT_REGISTRATION_AUTO_APPROVE_LOOPBACK`                                                            | `oauth-as/clients.ts`: under `operator-approved`, loopback-only clients need no approval                                                                                                           |
@@ -491,21 +493,20 @@ Management door:
 Execution door, requests and approvals (`mcp.*`, `requests.*` and
 `approvals.*` have one key each):
 
-| What                                                                     | Value          | Constant                                                 | Module                                  |
-| ------------------------------------------------------------------------ | -------------- | -------------------------------------------------------- | --------------------------------------- |
-| Window of `mcp.rate_limit_per_minute`                                    | 1 min          | `SURFACE_RATE_WINDOW_MS`                                 | `execution/door.ts`                     |
-| A verified-token proof is kept after its last use                        | 15 min         | `VERIFIED_TOKEN_TTL_SECONDS`                             | `execution/token-verifier.ts`           |
-| Token verifications per token prefix and client address (`mcp-verify:…`) | 30 per minute  | `VERIFY_ATTEMPTS_PER_WINDOW`, `VERIFY_WINDOW_MS`         | `execution/token-verifier.ts`           |
-| Longest time a derived upstream credential is cached                     | 55 min         | `MAX_UPSTREAM_CREDENTIAL_TTL_SECONDS`                    | `execution/credential-cache.ts`         |
-| Longest agent label                                                      | 64 characters  | `AGENT_LABEL_MAX_LENGTH`                                 | `missions/bootstrap-kit.ts`             |
-| Longest `User-Agent` kept in the audit                                   | 256 characters | `USER_AGENT_MAX_LENGTH`                                  | `execution/request-meta.ts`             |
-| Longest upstream error summary kept in the audit                         | 200 characters | `UPSTREAM_ERROR_SUMMARY_MAX_LENGTH`                      | `packages/gateway-core/src/pipeline.ts` |
-| Longest structural rejection reason kept in the audit                    | 500 characters | `AUDIT_REASON_MAX_LENGTH`                                | `packages/gateway-core/src/pipeline.ts` |
-| Stack frames logged when a decision stage fails                          | 12             | `STACK_FRAMES_LOGGED`                                    | `execution/index.ts`                    |
-| A token's "last used" is written at most once per                        | 60 s           | `TOKEN_LAST_USED_GRANULARITY_SECONDS`                    | `execution/door.ts`                     |
-| Request page `/r/<id>` per client address (`request-page:ip:…`)          | 30 per minute  | `REQUEST_PAGE_RATE_LIMIT`, `REQUEST_PAGE_RATE_WINDOW_MS` | `requests/handlers.ts`                  |
-| Expiry sweep of claims and approval requests                             | every minute   | `REQUEST_SWEEP_INTERVAL_MS`                              | `requests/sweeper.ts`                   |
-| Session events shown on the request page                                 | 20             | `SESSION_EVENTS_SHOWN`                                   | `requests/request-service.ts`           |
+| What                                                                                    | Value          | Constant                                                 | Module                                  |
+| --------------------------------------------------------------------------------------- | -------------- | -------------------------------------------------------- | --------------------------------------- |
+| Window of `mcp.rate_limit_per_minute`                                                   | 1 min          | `SURFACE_RATE_WINDOW_MS`                                 | `execution/door.ts`                     |
+| argon2id verifications of a legacy token per prefix and client address (`mcp-verify:…`) | 30 per minute  | `VERIFY_ATTEMPTS_PER_WINDOW`, `VERIFY_WINDOW_MS`         | `execution/token-verifier.ts`           |
+| Longest time a derived upstream credential is cached                                    | 55 min         | `MAX_UPSTREAM_CREDENTIAL_TTL_SECONDS`                    | `execution/credential-cache.ts`         |
+| Longest agent label                                                                     | 64 characters  | `AGENT_LABEL_MAX_LENGTH`                                 | `missions/bootstrap-kit.ts`             |
+| Longest `User-Agent` kept in the audit                                                  | 256 characters | `USER_AGENT_MAX_LENGTH`                                  | `execution/request-meta.ts`             |
+| Longest upstream error summary kept in the audit                                        | 200 characters | `UPSTREAM_ERROR_SUMMARY_MAX_LENGTH`                      | `packages/gateway-core/src/pipeline.ts` |
+| Longest structural rejection reason kept in the audit                                   | 500 characters | `AUDIT_REASON_MAX_LENGTH`                                | `packages/gateway-core/src/pipeline.ts` |
+| Stack frames logged when a decision stage fails                                         | 12             | `STACK_FRAMES_LOGGED`                                    | `execution/index.ts`                    |
+| A token's "last used" is written at most once per                                       | 60 s           | `TOKEN_LAST_USED_GRANULARITY_SECONDS`                    | `execution/door.ts`                     |
+| Request page `/r/<id>` per client address (`request-page:ip:…`)                         | 30 per minute  | `REQUEST_PAGE_RATE_LIMIT`, `REQUEST_PAGE_RATE_WINDOW_MS` | `requests/handlers.ts`                  |
+| Expiry sweep of claims and approval requests                                            | every minute   | `REQUEST_SWEEP_INTERVAL_MS`                              | `requests/sweeper.ts`                   |
+| Session events shown on the request page                                                | 20             | `SESSION_EVENTS_SHOWN`                                   | `requests/request-service.ts`           |
 
 The execution door has no request-body size limit and no upstream call
 timeout of its own: no such constant exists.
@@ -594,22 +595,21 @@ bindings. `silentLogger` is for tests.
 
 ## Ports and their single-process implementations
 
-| Port             | Today                                                                                                                                                                                          | Hosted replacement                                                       |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `StoreLiveness`  | the embedded SQLite store of [store](store.md) (`openEmbeddedStore`)                                                                                                                           | Postgres behind the same repositories                                    |
-| `PluginRegistry` | `@vaubaan/plugin-sdk`'s registry over `SHIPPED_PLUGINS` (`compose/shipped-plugins.ts`)                                                                                                         | same (static)                                                            |
-| `RateLimiter`    | `SlidingWindowRateLimiter` (`server/rate-limit/`, handbook [budget-and-sessions](budget-and-sessions.md)): the same instance holds the budget's windows; `MemoryRateLimiter` remains for tests | one Redis sorted set per key                                             |
-| `CacheClient`    | `@vaubaan/gateway-core`'s `MemoryCacheClient` (TTL in seconds, bounded): verified-token proofs and the plugins' derived upstream credentials ([execution-door](execution-door.md))             | Redis for the proofs; upstream credentials stay per replica or encrypted |
-| `SessionStore`   | `store.webSessions` (`server/store/repositories/web-sessions.ts`, table `web_sessions`, migration 0003, rows keyed by SHA-256 of the id); `MemorySessionStore` remains for unit tests          | Redis, or Postgres rows behind the same port                             |
+| Port             | Today                                                                                                                                                                                          | Hosted replacement                                 |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `StoreLiveness`  | the embedded SQLite store of [store](store.md) (`openEmbeddedStore`)                                                                                                                           | Postgres behind the same repositories              |
+| `PluginRegistry` | `@vaubaan/plugin-sdk`'s registry over `SHIPPED_PLUGINS` (`compose/shipped-plugins.ts`)                                                                                                         | same (static)                                      |
+| `RateLimiter`    | `SlidingWindowRateLimiter` (`server/rate-limit/`, handbook [budget-and-sessions](budget-and-sessions.md)): the same instance holds the budget's windows; `MemoryRateLimiter` remains for tests | one Redis sorted set per key                       |
+| `CacheClient`    | `@vaubaan/gateway-core`'s `MemoryCacheClient` (TTL in seconds, bounded): the plugins' derived upstream credentials ([execution-door](execution-door.md))                                       | upstream credentials stay per replica or encrypted |
+| `SessionStore`   | `store.webSessions` (`server/store/repositories/web-sessions.ts`, table `web_sessions`, migration 0003, rows keyed by SHA-256 of the id); `MemorySessionStore` remains for unit tests          | Redis, or Postgres rows behind the same port       |
 
 `GatewayRoot.store` is the full store with its repositories
 (`StoreLiveness` of `ports.ts` is only the slice `/healthz` and `close()`
 need); the `globalThis` handle of `getRoot()` is per process by design
 (`// single-process only`: every replica builds its own root);
 `GatewayRoot.registry` is the SDK registry itself, so every provider list
-derives from one object; `GatewayRoot.auth` is the authentication module
-(P1.1); `GatewayRoot.providerApps` and `GatewayRoot.connections` are the
-provider-app settings and the connections module (P1.4), which share the
+derives from one object; `GatewayRoot.auth` is the authentication module; `GatewayRoot.providerApps` and `GatewayRoot.connections` are the
+provider-app settings and the connections module, which share the
 root's `SessionStore` (keys `connect:<state>` and `notice:<id>` next to
 `session:` and `login:`) and its `RateLimiter` (key `connect:<userId>`);
 `GatewayRoot.budget` and `GatewayRoot.execution` are the budget's session
@@ -617,15 +617,15 @@ service and the execution door (rate-limit keys `mission:<id>:risk:<id>`,
 `mcp:mission:<id>`, `mcp-verify:<prefix>:<client address>`; cache keys
 `mission-token:<hash>`, `upstream-credential:<connection>:…`);
 `GatewayRoot.authority`, `GatewayRoot.shares` and `GatewayRoot.groups` are
-the authority, share and local-group modules (P2.2); `GatewayRoot.users` is
+the authority, share and local-group modules; `GatewayRoot.users` is
 Administration → Users (the operator's deactivation and reactivation of a
 user);
-`GatewayRoot.telemetry` is community telemetry (P2.5; cache key
+`GatewayRoot.telemetry` is community telemetry (cache key
 `telemetry:plugin-stats`); `GatewayRoot.oauth` is the authorization server
-(P2.3; `SessionStore` key `oauth-consent:<id>`, rate-limit keys
+(`SessionStore` key `oauth-consent:<id>`, rate-limit keys
 `oauth:register:ip:<address>`, `oauth:register`, `oauth:token:ip:<address>`,
 `oauth:token:client:<id>`, `oauth:token:delegation:<id>`, `oauth:client-document:<requester>`) and
-`GatewayRoot.management` is the management door (P2.4; rate-limit keys
+`GatewayRoot.management` is the management door (rate-limit keys
 `mgmt:delegation:<id>` and `mgmt:delegation:<id>:mutations`). The request
 page keys its per-address limit on `request-page:ip:<address>`.
 Features plug their factories through `RootDeps`

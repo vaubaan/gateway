@@ -320,7 +320,7 @@ describe('RequestService', () => {
   });
 
   describe('reset the period', () => {
-    it('zeroes every counter of the period, records the event, and the replay passes', async () => {
+    it('zeroes the counter of the claimed risk and no other, records the event, and the replay passes', async () => {
       await call([READ]);
       const id = await exhaust();
       const decided = granted(await requests.decide(creator(), id, { resolution: 'reset-period' }));
@@ -332,10 +332,12 @@ describe('RequestService', () => {
           resolution: 'reset-period',
           period_start: ANCHOR,
           period_end: DAY1,
-          credits: { [READ]: 1, [WRITE]: 1 },
+          credits: { [WRITE]: 1 },
         },
       });
-      expect(await countersOf()).toEqual({ [READ]: 0, [WRITE]: 0 });
+      // Exactly the claimed risk: nothing else is in the credits, nothing else moved.
+      expect(decided.decision).toHaveProperty('credits', { [WRITE]: 1 });
+      expect(await countersOf()).toEqual({ [READ]: 1, [WRITE]: 0 });
 
       const session = await f.store.sessions.getByMission(f.mission.id);
       const [event] = await f.store.sessions.listEvents(session!.id, { kinds: ['reset'] });
@@ -343,12 +345,62 @@ describe('RequestService', () => {
         kind: 'reset',
         riskId: WRITE,
         actorUserId: f.creatorId,
-        details: { request_id: id, period_start: ANCHOR, credits: { [READ]: 1, [WRITE]: 1 } },
+        details: { request_id: id, period_start: ANCHOR, credits: { [WRITE]: 1 } },
       });
+      expect((event?.details as { credits: object }).credits).toEqual({ [WRITE]: 1 });
 
       // The token did not change; the executor replays its call.
       expect((await call([WRITE])).outcome).toBe('allowed');
       expect(await requests.inbox(creator())).toEqual([]);
+    });
+
+    it('a claim on one exhausted risk does not reopen another exhausted risk', async () => {
+      // Two risks with one action each, both exhausted: two open claims on one mission.
+      const mission = await f.createMission({
+        periodSeconds: DAY_SECONDS,
+        policy: [
+          { riskId: WRITE, quota: 1, rateLimit: 5, rateWindowSeconds: 60, gate: 'auto' },
+          { riskId: READ, quota: 1, rateLimit: 5, rateWindowSeconds: 60, gate: 'auto' },
+        ],
+        expiresAt: null,
+      });
+      const writeClaim = await exhaust(mission);
+      expect((await call([READ], mission)).outcome).toBe('allowed');
+      const readClaim = refused(await call([READ], mission)).request_id;
+      const counters = async () => {
+        const session = await f.store.sessions.getByMission(mission.id);
+        return Object.fromEntries(
+          (await f.store.sessions.counters(session!.id, ANCHOR)).map((c) => [c.riskId, c.consumed]),
+        );
+      };
+      expect(await counters()).toEqual({ [READ]: 1, [WRITE]: 1 });
+
+      const decided = granted(
+        await requests.decide(creator(), writeClaim, { resolution: 'reset-period' }),
+      );
+      expect(decided.decision).toMatchObject({ credits: { [WRITE]: 1 } });
+      expect((decided.decision as { credits: object }).credits).toEqual({ [WRITE]: 1 });
+
+      expect(await counters()).toEqual({ [READ]: 1, [WRITE]: 0 });
+      expect((await call([WRITE], mission)).outcome).toBe('allowed');
+      // READ is as exhausted as before, and its claim is still the creator's to answer.
+      expect((await call([READ], mission)).outcome).toBe('refused');
+      expect((await f.store.requests.getById(readClaim))?.state).toBe('open');
+      // A call that touches both is refused on the risk that was not claimed.
+      const both = await call([READ, WRITE], mission);
+      expect(both.outcome).toBe('refused');
+    });
+
+    it('with nothing consumed on the claimed risk a reset gives nothing back and touches nothing', async () => {
+      const id = await exhaust();
+      await call([READ]);
+      const session = await f.store.sessions.getByMission(f.mission.id);
+      f.store.db
+        .prepare('UPDATE session_counters SET consumed = 0 WHERE session_id = ? AND risk_id = ?')
+        .run(session!.id, WRITE);
+      const decided = granted(await requests.decide(creator(), id, { resolution: 'reset-period' }));
+      expect((decided.decision as { credits: object }).credits).toEqual({});
+      expect(await countersOf()).toEqual({ [READ]: 1, [WRITE]: 0 });
     });
 
     it('writes an admin audit entry naming the request', async () => {
@@ -705,7 +757,7 @@ describe('RequestService', () => {
       const id = await exhaust();
       await expect(
         f.store.requests.decideClaim(id, f.creatorId, (ctx) => {
-          ctx.resetCounters(ANCHOR);
+          ctx.resetCounter(ANCHOR, WRITE);
           ctx.recordEvent({
             kind: 'reset',
             details: { request_id: id, period_start: ANCHOR, period_end: null, credits: {} },

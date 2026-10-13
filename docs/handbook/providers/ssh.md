@@ -386,7 +386,7 @@ The v4 dispatcher's modules (`bash/parse.ts`, `bash/args.ts`, `bash/exec.ts`:
 a parser for `# @vaubaan: ring=… action=…` annotations, argument
 materialisation and a base64 `bash -s --` invocation builder) were carried
 into the plugin unwired, then deleted with their 24 tests at the end of
-Phase 1: nothing in v5 called them, they spoke the v4 vocabulary (rings,
+the first v5 cycle: nothing in v5 called them, they spoke the v4 vocabulary (rings,
 bindings, `host_slug`), the builder interpolated an unvalidated function
 name, and its output — `echo <b64> | base64 -d | bash -s` — is exactly the
 shape `classifySsh` treats as opaque.

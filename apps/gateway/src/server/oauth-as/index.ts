@@ -1,10 +1,10 @@
 /**
- * Authorization server of the management door (feature P2.3; spec §0
+ * Authorization server of the management door (spec §0
  * "Delegation", §4.1 bis, §6 "three credentials", "short, traceable delegated
  * tokens"). The instance issues delegated tokens itself, relying on the IdP
  * for the user's identity at consent time. Built once by the composition root
  * as `root.oauth`; `createManagementGate` is the admission of `/mcp/manage`,
- * in front of the door's tools (`server/management`, feature P2.4).
+ * in front of the door's tools (`server/management`).
  * Handbook: docs/handbook/management-door.md.
  * ADR: docs/decisions/management-door-authorization-server.md.
  */
@@ -22,6 +22,7 @@ import {
   type ClientDocumentFetcher,
 } from './client-metadata-document';
 import { ClientRegistry } from './clients';
+import { delegationLifetime } from './delegation-lifetime';
 import { DelegationService } from './delegations';
 import { oauthEndpoints, type OAuthEndpoints } from './endpoints';
 import {
@@ -95,6 +96,7 @@ export function createOAuthAsModule(deps: OAuthAsModuleDeps): OAuthAsModule {
     clock,
     logger,
   });
+  const lifetime = delegationLifetime(config.oauth.delegationMaxLifetimeSeconds, clock);
   const tokens = new TokenService({
     repo: store.delegations,
     users: store.users,
@@ -111,6 +113,7 @@ export function createOAuthAsModule(deps: OAuthAsModuleDeps): OAuthAsModule {
     repo: store.delegations,
     missions: store.missions,
     clients,
+    lifetime,
     audit,
     clock,
     logger,
@@ -119,6 +122,7 @@ export function createOAuthAsModule(deps: OAuthAsModuleDeps): OAuthAsModule {
     repo: store.delegations,
     users: store.users,
     clients,
+    lifetime,
   });
   const handlers = createOAuthHandlers({
     publicUrl: config.publicUrl,

@@ -42,6 +42,14 @@
  * `invalid_grant`: it may send the same request again, and nothing about the
  * failure looks like a replay.
  *
+ * **A delegation has an absolute lifetime** (`oauth.delegation_max_lifetime`,
+ * 90 days by default; `delegation-lifetime.ts`). Past it nothing is issued:
+ * the code grant and the refresh grant answer `invalid_grant`, and the client
+ * starts the authorization flow again — the user consents again. Before it,
+ * every token expires at the deadline at the latest, so a pair obtained the
+ * day before does not carry the delegation thirty days further. Nothing is
+ * written when the deadline passes: the state is derived wherever it is read.
+ *
  * Nothing here logs a token or a code: entries name the delegation and the
  * client.
  */
@@ -57,6 +65,7 @@ import type { MissionsRepo } from '../store/repositories/missions';
 import type { UsersRepo } from '../store/repositories/users';
 import type { DelegationRecord, DelegationRevokeReason, OAuthClientRecord } from '../store/types';
 import type { ClientRegistry } from './clients';
+import { delegationLifetime, type DelegationLifetime } from './delegation-lifetime';
 import { endDelegation } from './delegations';
 import {
   foreignResource,
@@ -118,11 +127,18 @@ export interface TokenServiceDeps {
   readonly endpoints: OAuthEndpoints;
   readonly config: Pick<
     OAuthConfig,
-    'accessTokenTtlSeconds' | 'refreshTokenTtlSeconds' | 'refreshReuseWindowSeconds'
+    | 'accessTokenTtlSeconds'
+    | 'refreshTokenTtlSeconds'
+    | 'refreshReuseWindowSeconds'
+    | 'delegationMaxLifetimeSeconds'
   >;
   readonly clock: Clock;
   readonly logger: Logger;
 }
+
+/** What the client is told once a delegation is past its absolute lifetime. */
+export const DELEGATION_LIFETIME_REACHED =
+  'this delegation reached its maximum lifetime; start the authorization flow again so that the user consents again';
 
 function invalidGrant(description: string): OAuthProtocolError {
   return new OAuthProtocolError('invalid_grant', description);
@@ -168,8 +184,11 @@ export class TokenService {
   // single-process only — when the last sweep ran. A replica that sweeps again
   // deletes nothing more: the purge is idempotent.
   private lastPurgeAt = 0;
+  private readonly lifetime: DelegationLifetime;
 
-  constructor(private readonly deps: TokenServiceDeps) {}
+  constructor(private readonly deps: TokenServiceDeps) {
+    this.lifetime = delegationLifetime(deps.config.delegationMaxLifetimeSeconds, deps.clock);
+  }
 
   /**
    * Who is calling. A public client is identified by its id alone (its proof
@@ -206,13 +225,17 @@ export class TokenService {
     this.checkResource(form);
     if (!isAuthorizationCodeShaped(code)) throw invalidGrant('unknown authorization code');
 
-    const { repo, config } = this.deps;
+    const { repo } = this.deps;
     const hash = digestOf(code);
     // Read for the one check the transaction cannot make (the user, another repository).
     const found = await repo.findCode(hash);
     if (!found) throw invalidGrant('unknown authorization code');
     const userProblem = await this.userProblem(found.delegation);
     const redirectUri = form.get('redirect_uri');
+    // Judged with the code spent, like every other refusal of this grant.
+    const lifetimeProblem = this.lifetime.isOver(found.delegation)
+      ? DELEGATION_LIFETIME_REACHED
+      : null;
 
     const refreshToken = mintRefreshToken();
     const accessToken = mintAccessToken();
@@ -230,14 +253,11 @@ export class TokenService {
         if (!verifyS256(verifier, spent.codeChallenge)) {
           return 'code_verifier does not match the code_challenge';
         }
-        return userProblem;
+        return userProblem ?? lifetimeProblem;
       },
       {
-        refresh: this.refreshRow(refreshToken),
-        access: {
-          tokenHash: digestOf(accessToken),
-          expiresAt: this.expiry(config.accessTokenTtlSeconds),
-        },
+        refresh: this.refreshRow(found.delegation, refreshToken),
+        access: this.accessRow(found.delegation, accessToken),
       },
     );
     switch (redeemed.outcome) {
@@ -286,6 +306,7 @@ export class TokenService {
       throw invalidGrant('this refresh token was issued to another client');
     }
     await this.requireLiveDelegation(found.delegation);
+    this.requireWithinLifetime(found.delegation, client);
     // The caller holds a refresh token of this client: from here on it spends
     // the delegation's own budget, and nobody else's.
     const budget = await this.deps.rateLimiter.take(
@@ -297,10 +318,11 @@ export class TokenService {
 
     const next = mintRefreshToken();
     const accessToken = mintAccessToken();
-    const rotated = await repo.rotateRefreshToken(hash, this.refreshRow(next), {
-      tokenHash: digestOf(accessToken),
-      expiresAt: this.expiry(this.deps.config.accessTokenTtlSeconds),
-    });
+    const rotated = await repo.rotateRefreshToken(
+      hash,
+      this.refreshRow(found.delegation, next),
+      this.accessRow(found.delegation, accessToken),
+    );
     if (!rotated) {
       // Expired or revoked — or rotated by a concurrent request since the read above.
       const again = await repo.findRefreshToken(hash);
@@ -335,14 +357,19 @@ export class TokenService {
   ): Promise<TokenResponse> {
     const { repo, config, clock, logger } = this.deps;
     const windowSeconds = config.refreshReuseWindowSeconds;
-    if (windowSeconds > 0 && delegation.clientId === client.id) {
+    // Past its lifetime a delegation issues nothing, reuse window or not: the
+    // replay below still ends the family.
+    const over = this.lifetime.isOver(delegation);
+    if (windowSeconds > 0 && delegation.clientId === client.id && !over) {
       const next = mintRefreshToken();
       const accessToken = mintAccessToken();
       const rotatedSince = toIso(new Date(clock.now().getTime() - windowSeconds * MS_PER_SECOND));
-      const reissued = await repo.rotateSuccessorOf(hash, rotatedSince, this.refreshRow(next), {
-        tokenHash: digestOf(accessToken),
-        expiresAt: this.expiry(config.accessTokenTtlSeconds),
-      });
+      const reissued = await repo.rotateSuccessorOf(
+        hash,
+        rotatedSince,
+        this.refreshRow(delegation, next),
+        this.accessRow(delegation, accessToken),
+      );
       if (reissued) {
         // A removed user gets nothing: the pair just written is never sent.
         await this.requireLiveDelegation(delegation);
@@ -411,14 +438,44 @@ export class TokenService {
     if (problem !== null) throw invalidGrant(problem);
   }
 
-  private expiry(ttlSeconds: number): string {
-    return toIso(new Date(this.deps.clock.now().getTime() + ttlSeconds * MS_PER_SECOND));
+  /**
+   * Refuses a renewal of a delegation past its absolute lifetime. Nothing is
+   * written: the delegation reads `expired` wherever it is shown, its tokens
+   * were minted to expire at the deadline, and the user's next consent creates
+   * a new delegation.
+   */
+  private requireWithinLifetime(delegation: DelegationRecord, client: OAuthClientRecord): void {
+    if (!this.lifetime.isOver(delegation)) return;
+    this.deps.logger.info('delegated tokens refused: the delegation reached its lifetime', {
+      delegation_id: delegation.id,
+      client_id: client.clientId,
+      consented_at: delegation.createdAt,
+    });
+    throw invalidGrant(DELEGATION_LIFETIME_REACHED);
   }
 
-  private refreshRow(refreshToken: string): { tokenHash: string; expiresAt: string } {
+  /** Expiry of a token minted now: its own lifetime, never past the delegation's deadline. */
+  private expiry(delegation: DelegationRecord, ttlSeconds: number): string {
+    return toIso(this.lifetime.expiryOf(delegation, ttlSeconds));
+  }
+
+  private refreshRow(
+    delegation: DelegationRecord,
+    refreshToken: string,
+  ): { tokenHash: string; expiresAt: string } {
     return {
       tokenHash: digestOf(refreshToken),
-      expiresAt: this.expiry(this.deps.config.refreshTokenTtlSeconds),
+      expiresAt: this.expiry(delegation, this.deps.config.refreshTokenTtlSeconds),
+    };
+  }
+
+  private accessRow(
+    delegation: DelegationRecord,
+    accessToken: string,
+  ): { tokenHash: string; expiresAt: string } {
+    return {
+      tokenHash: digestOf(accessToken),
+      expiresAt: this.expiry(delegation, this.deps.config.accessTokenTtlSeconds),
     };
   }
 
@@ -429,10 +486,16 @@ export class TokenService {
     refreshToken: string,
   ): Promise<TokenResponse> {
     await this.purgeNowAndThen();
+    // What the access token is really worth: its row expires at the delegation's
+    // deadline when that comes before its own lifetime.
+    const untilDeadline = Math.floor(
+      (this.lifetime.deadlineOf(delegation).getTime() - this.deps.clock.now().getTime()) /
+        MS_PER_SECOND,
+    );
     return {
       access_token: accessToken,
       token_type: 'Bearer',
-      expires_in: this.deps.config.accessTokenTtlSeconds,
+      expires_in: Math.max(0, Math.min(this.deps.config.accessTokenTtlSeconds, untilDeadline)),
       refresh_token: refreshToken,
       scope: delegation.scope,
     };

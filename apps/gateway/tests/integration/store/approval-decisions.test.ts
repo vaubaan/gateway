@@ -125,8 +125,23 @@ describe('store: the approval gate', () => {
           { sql: string }
         >("SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'approvals_lookup'")
         .get();
-      expect(index?.sql).toContain('(mission_id, risk_id, tool, fingerprint)');
+      // Migration 0013: an approval is looked up by the call, then by the risks it lists.
+      expect(index?.sql).toContain('(mission_id, tool, fingerprint)');
       expect(index?.sql).toContain('consumed_at IS NULL');
+    });
+  });
+
+  describe('migration 0013', () => {
+    it('adds the list of risks to requests and approvals, nullable and without a default', () => {
+      for (const table of ['requests', 'approvals']) {
+        const column = store.db
+          .prepare<[], { name: string; notnull: number; dflt_value: string | null }>(
+            `SELECT name, "notnull", dflt_value FROM pragma_table_info('${table}')`,
+          )
+          .all()
+          .find((c) => c.name === 'risk_ids_json');
+        expect(column, table).toEqual({ name: 'risk_ids_json', notnull: 0, dflt_value: null });
+      }
     });
   });
 
@@ -268,33 +283,23 @@ describe('store: the approval gate', () => {
   });
 
   describe('the open request of a call', () => {
-    it('an approval request is found by its risk, tool and fingerprint', async () => {
+    it('an approval request is found by its tool and fingerprint, when it covers the risks asked for', async () => {
       const request = await approvalRequest();
+      expect(request.riskIds).toEqual([MERGE]);
+      const lookup = {
+        kind: 'approval',
+        tool: TOOL,
+        fingerprint: 'fp-1',
+        riskIds: [MERGE],
+      } as const;
       const found = await inDecision((ctx) => ({
-        same: ctx.findOpenRequest({
-          kind: 'approval',
-          riskId: MERGE,
-          tool: TOOL,
-          fingerprint: 'fp-1',
-        }),
-        otherTool: ctx.findOpenRequest({
-          kind: 'approval',
-          riskId: MERGE,
-          tool: 'github__delete_branch',
-          fingerprint: 'fp-1',
-        }),
-        otherArguments: ctx.findOpenRequest({
-          kind: 'approval',
-          riskId: MERGE,
-          tool: TOOL,
-          fingerprint: 'fp-2',
-        }),
-        otherRisk: ctx.findOpenRequest({
-          kind: 'approval',
-          riskId: READ,
-          tool: TOOL,
-          fingerprint: 'fp-1',
-        }),
+        same: ctx.findOpenRequest(lookup),
+        otherTool: ctx.findOpenRequest({ ...lookup, tool: 'github__delete_branch' }),
+        otherArguments: ctx.findOpenRequest({ ...lookup, fingerprint: 'fp-2' }),
+        // The open request names MERGE alone: it does not cover another risk...
+        otherRisk: ctx.findOpenRequest({ ...lookup, riskIds: [READ] }),
+        // ...nor a call that needs both: granting it would not let that call through.
+        wider: ctx.findOpenRequest({ ...lookup, riskIds: [MERGE, READ] }),
         // A claim lookup never returns an approval request.
         claim: ctx.findOpenRequest({ kind: 'claim', riskId: MERGE }),
       }));
@@ -302,19 +307,89 @@ describe('store: the approval gate', () => {
       expect(found.otherTool).toBeNull();
       expect(found.otherArguments).toBeNull();
       expect(found.otherRisk).toBeNull();
+      expect(found.wider).toBeNull();
       expect(found.claim).toBeNull();
     });
 
-    it('an approval lookup without a tool or a fingerprint is a bug, not a broad match', async () => {
-      await approvalRequest();
+    it('a request that covers the call is found for the whole call and for a part of it', async () => {
+      const whole = await inDecision((ctx) =>
+        ctx.createRequest({
+          kind: 'approval',
+          riskId: MERGE,
+          riskIds: [MERGE, READ],
+          tool: TOOL,
+          fingerprint: 'fp-both',
+          expiresAt: '2026-10-14T09:00:00.000Z',
+        }),
+      );
+      expect(whole).toMatchObject({ riskId: MERGE, riskIds: [MERGE, READ] });
+      expect(
+        store.db.prepare('SELECT risk_id, risk_ids_json FROM requests WHERE id = ?').get(whole.id),
+      ).toEqual({ risk_id: MERGE, risk_ids_json: JSON.stringify([MERGE, READ]) });
+      const lookup = { kind: 'approval', tool: TOOL, fingerprint: 'fp-both' } as const;
+      const found = await inDecision((ctx) => ({
+        both: ctx.findOpenRequest({ ...lookup, riskIds: [READ, MERGE] }),
+        one: ctx.findOpenRequest({ ...lookup, riskIds: [READ] }),
+        more: ctx.findOpenRequest({ ...lookup, riskIds: [MERGE, READ, 'github.create-pr'] }),
+      }));
+      expect(found.both?.id).toBe(whole.id);
+      expect(found.one?.id).toBe(whole.id);
+      expect(found.more).toBeNull();
+    });
+
+    it('the risk of an approval request is the first of its risks; a claim lists none', async () => {
       await expect(
         inDecision((ctx) =>
-          ctx.findOpenRequest({ kind: 'approval', riskId: MERGE, fingerprint: 'fp-1' }),
+          ctx.createRequest({
+            kind: 'approval',
+            riskId: READ,
+            riskIds: [MERGE, READ],
+            tool: TOOL,
+            fingerprint: 'fp-x',
+            expiresAt: '2026-10-14T09:00:00.000Z',
+          }),
         ),
       ).rejects.toBeInstanceOf(InvariantError);
       await expect(
-        inDecision((ctx) => ctx.findOpenRequest({ kind: 'approval', riskId: MERGE, tool: TOOL })),
+        inDecision((ctx) =>
+          ctx.createRequest({
+            kind: 'claim',
+            riskId: MERGE,
+            riskIds: [MERGE],
+            expiresAt: '2026-10-14T09:00:00.000Z',
+          }),
+        ),
       ).rejects.toBeInstanceOf(InvariantError);
+      const claim = await inDecision((ctx) =>
+        ctx.createRequest({
+          kind: 'claim',
+          riskId: MERGE,
+          expiresAt: '2026-10-14T09:00:00.000Z',
+        }),
+      );
+      expect(claim.riskIds).toEqual([MERGE]);
+      expect(
+        store.db.prepare('SELECT risk_ids_json FROM requests WHERE id = ?').get(claim.id),
+      ).toEqual({ risk_ids_json: null });
+    });
+
+    it('an approval lookup without a tool, a fingerprint or a risk is a bug, not a broad match', async () => {
+      await approvalRequest();
+      const lookup = {
+        kind: 'approval',
+        tool: TOOL,
+        fingerprint: 'fp-1',
+        riskIds: [MERGE],
+      } as const;
+      for (const broken of [
+        { ...lookup, tool: '' },
+        { ...lookup, fingerprint: '' },
+        { ...lookup, riskIds: [] },
+      ]) {
+        await expect(inDecision((ctx) => ctx.findOpenRequest(broken))).rejects.toBeInstanceOf(
+          InvariantError,
+        );
+      }
     });
   });
 

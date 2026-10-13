@@ -20,10 +20,12 @@ import {
 } from '@vaubaan/plugin-sdk';
 import {
   assertCatalogCoverage,
+  assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
   assertPresetsValid,
   mockFetch,
+  type ToolSamples,
 } from '@vaubaan/plugin-sdk/testing';
 
 import { MALFORMED_WIDGET_ID } from '../../src/classify.ts';
@@ -50,24 +52,23 @@ describe('template plugin — structural kit', () => {
     assertNoWildcard(templatePlugin);
   });
 
+  // One table for the catalog coverage and for the identifier proof.
+  const SAMPLES: ToolSamples = {
+    [TOOL.listWidgets]: [{ args: { workspace: 'ws-stg' } }, { args: {} }],
+    [TOOL.getWidget]: [
+      { args: { workspace: 'ws-prd', widget_id: 'w1' }, resources: [staging, prod] },
+      // A workspace the mission does not hold is refused by the classifier.
+      { args: { workspace: 'ws-prd', widget_id: 'w1' }, expectDenied: true },
+    ],
+    [TOOL.updateWidget]: [
+      { args: { workspace: 'ws-stg', widget_id: 'w1', name: 'x' } },
+      { args: { widget_id: 'w1', name: 'x' }, resources: [staging, prod], expectDenied: true },
+    ],
+    [TOOL.deleteWidget]: [{ args: { workspace: 'ws-stg', widget_id: 'w1' } }],
+  };
+
   test('every tool classifies to slices the catalog covers', () => {
-    const report = assertCatalogCoverage(
-      templatePlugin,
-      {
-        [TOOL.listWidgets]: [{ args: { workspace: 'ws-stg' } }, { args: {} }],
-        [TOOL.getWidget]: [
-          { args: { workspace: 'ws-prd', widget_id: 'w1' }, resources: [staging, prod] },
-          // A workspace the mission does not hold is refused by the classifier.
-          { args: { workspace: 'ws-prd', widget_id: 'w1' }, expectDenied: true },
-        ],
-        [TOOL.updateWidget]: [
-          { args: { workspace: 'ws-stg', widget_id: 'w1', name: 'x' } },
-          { args: { widget_id: 'w1', name: 'x' }, resources: [staging, prod], expectDenied: true },
-        ],
-        [TOOL.deleteWidget]: [{ args: { workspace: 'ws-stg', widget_id: 'w1' } }],
-      },
-      { resources: [staging] },
-    );
+    const report = assertCatalogCoverage(templatePlugin, SAMPLES, { resources: [staging] });
     // A categorized write touches its entry alone ; the fallback is reachable
     // by design and left out of `risksUntouched` (ADR fallback-risk-only-when-uncategorized).
     // Expectations are derived from the catalog : every named risk is touched.
@@ -76,6 +77,25 @@ describe('template plugin — structural kit', () => {
     expect(report.risksTouched).toHaveLength(3);
     expect(report.risksUntouched).toEqual([]);
     expect(report.fallbackHits).toEqual([]);
+  });
+
+  // What is executed is what was classified : every string argument of every
+  // sample above is fed the hostile identifiers, through `classify` and through
+  // `execute`. Keep this test when you copy the template ; your samples feed it.
+  test('hostile identifiers are refused by classify and by execute, or named exactly', async () => {
+    const report = await assertIdentifiersRefused(templatePlugin, SAMPLES, {
+      resources: [staging],
+      context: (fetch, resources) => ({
+        credential: { kind: 'api-key', fields: { [API_KEY_FIELD]: 'k-123' }, metadata: {} },
+        appConfig: {},
+        fetch,
+        resources,
+      }),
+    });
+    expect(report.toolsChecked).toBe(templatePlugin.tools.length);
+    // The workspace and the widget id are segments of the request path.
+    expect(report.pathIdentifiers).toContainEqual({ tool: TOOL.getWidget, argument: 'widget_id' });
+    expect(report.pathIdentifiers).toContainEqual({ tool: TOOL.getWidget, argument: 'workspace' });
   });
 
   test('the catalog is read from a filesystem path next to the plugin module', () => {

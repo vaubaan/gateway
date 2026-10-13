@@ -7,7 +7,7 @@ tools) and adds four GraphQL-backed environment-variable tools, under the
 handbook: [`docs/handbook/providers/railway.md`](../../docs/handbook/providers/railway.md);
 decisions: [`railway-rewrap-remote-mcp`](../../docs/decisions/railway-rewrap-remote-mcp.md),
 [`plugin-arguments-closed-surface-and-typed-refusals`](../../docs/decisions/plugin-arguments-closed-surface-and-typed-refusals.md).
-Plugin version 3.0.0, catalog version 3.
+Plugin version 4.0.0, catalog version 3.
 
 ## Data model
 
@@ -71,14 +71,15 @@ denied by `classify` and refused by `execute` (`undeclaredArgument`).
 then written where the tool takes one and dropped where it does not.
 
 `execute` resolves the call with the classifier's own `resolveTarget` and
-`readVariableWrite` and writes `projectId`, `environmentId`, `serviceId` and
-`deploymentId` from their answer : a Railway id is `[A-Za-z0-9_-]{1,64}`,
-anything else is denied and refused before any request. No id reaches a URL
-(JSON-RPC arguments, GraphQL variables of a constant document).
-`deploymentId` is checked for its shape only and the `threadId` of
-`railway-agent` is forwarded as given : neither is bound to the mission's
-project, a deployment cannot be listed ahead of the call (handbook,
-"Identifiers" ; threat model, A18).
+`readVariableWrite` and writes `projectId`, `environmentId` and `serviceId`
+from their answer : a Railway id is `[A-Za-z0-9_-]{1,64}`, anything else is
+denied and refused before any request. No id reaches a URL (JSON-RPC
+arguments, GraphQL variables of a constant document). Every id that is
+forwarded is bound to the mission's project. Two arguments of the upstream
+tools cannot be — `deploymentId` of `get-logs` and `threadId` of
+`railway-agent` — and are refused, never forwarded (`UNBOUND_ARGUMENTS` in
+`src/tools.ts` ; handbook, "Identifiers") : the declared schemas do not offer
+them.
 
 What `execute` declines — an unknown tool, an undeclared argument, a target
 the mission cannot resolve, a malformed id or variable name — is an

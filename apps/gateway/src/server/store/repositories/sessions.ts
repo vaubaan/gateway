@@ -2,7 +2,7 @@
  * Sessions, durable counters, events — and the transactional decision primitive.
  *
  * Spec §3.3 and §6 ("authoritative, atomic counting"); plan §3.5. The accounting rules
- * (period arithmetic, quota and rate comparisons, gate handling) belong to feature P1.3
+ * (period arithmetic, quota and rate comparisons, gate handling) belong to the budget module
  * and arrive as the `decide` callback. This module guarantees that reading the
  * counters, deciding, consuming an approval, dropping a request, writing the event and
  * decrementing happen in one `BEGIN IMMEDIATE` transaction: two concurrent calls on the
@@ -37,7 +37,7 @@ import type {
   SessionCounterRecord,
   SessionRecord,
 } from '../types.ts';
-import { consumeApprovalSync, findApprovalSync, type ApprovalKey } from './approvals.ts';
+import { consumeApprovalSync, findApprovalsSync, type ApprovedCall } from './approvals.ts';
 import {
   DEFAULT_LIST_LIMIT,
   nowIso,
@@ -68,10 +68,13 @@ export interface DecideContext {
   /** Consumed count per requested risk in this period (0 when no row exists yet). */
   readonly counters: ReadonlyMap<RiskId, number>;
   readonly now: Iso;
-  /** Non-consuming lookup of a valid approval bound to `(mission, risk, tool, fingerprint)`. */
-  findApproval(key: ApprovalKey): ApprovalRecord | null;
-  /** Single-use approval consumption bound to `(mission, risk, tool, fingerprint)`. */
-  consumeApproval(key: ApprovalKey): ApprovalRecord | null;
+  /**
+   * Non-consuming lookup of the usable approvals of the mission for one call (tool and
+   * argument fingerprint), soonest-expiring first; each lists the gated risks it covers.
+   */
+  findApprovals(call: ApprovedCall): ApprovalRecord[];
+  /** Single-use consumption of one approval of the mission; `null` when it is not usable. */
+  consumeApproval(approvalId: string): ApprovalRecord | null;
   /**
    * Events of this session about some risks, oldest first — how the decision learns
    * that the creator opened a gate for the period (spec §3.5). Details are returned as
@@ -135,6 +138,31 @@ export interface SessionsRepo {
    * same first page; this one resumes after a position.
    */
   listRecentEvents(sessionId: string, options: RecentEventsOptions): Promise<EventRecord[]>;
+  /**
+   * The sessions that hold an event or a counter older than `cutoff`: what a retention
+   * sweep looks at. A superset of what it removes.
+   */
+  withHistoryBefore(cutoff: Iso): Promise<SessionRecord[]>;
+  /**
+   * Retention of one session's history, in one transaction. The only path that deletes
+   * an event or a counter while its mission exists; the caller computes the bounds from
+   * the mission's period (`budget/retention.ts`).
+   */
+  purgeHistory(sessionId: string, bounds: HistoryPurgeBounds): Promise<HistoryPurged>;
+}
+
+export interface HistoryPurgeBounds {
+  /** Events with `ts < eventsBefore` go… */
+  readonly eventsBefore: Iso;
+  /** …except those of these kinds written at or after `since`, whatever their age. */
+  readonly keep: { readonly kinds: readonly string[]; readonly since: Iso };
+  /** Counters with `period_start < countersBefore` go; `null` removes none. */
+  readonly countersBefore: Iso | null;
+}
+
+export interface HistoryPurged {
+  readonly events: number;
+  readonly counters: number;
 }
 
 export interface RecentEventsOptions {
@@ -257,8 +285,6 @@ export interface SessionPrimitives {
   recordEvent(sessionId: string, event: UntypedNewEvent, now: Iso): EventRecord;
   /** Every counter of the session in the period starting at `periodStart`, by risk id. */
   countersOfPeriod(sessionId: string, periodStart: Iso): SessionCounterRecord[];
-  /** Sets every counter of the period to zero; returns how many rows it touched. */
-  resetPeriod(sessionId: string, periodStart: Iso): number;
   /** Gives `amount` actions back on one risk; false (nothing written) when fewer were consumed. */
   creditCounter(sessionId: string, periodStart: Iso, riskId: RiskId, amount: number): boolean;
   /** Events of the session of some kinds about some risks since an instant, oldest first. */
@@ -294,9 +320,6 @@ export function createSessionPrimitives(ctx: RepoContext): SessionPrimitives {
     `SELECT ${COUNTER_COLUMNS} FROM session_counters
      WHERE session_id = ? AND period_start = ? ORDER BY risk_id`,
   );
-  const resetPeriod = db.prepare<[string, string]>(
-    'UPDATE session_counters SET consumed = 0 WHERE session_id = ? AND period_start = ?',
-  );
   const creditOne = db.prepare<[number, string, string, string, number]>(
     `UPDATE session_counters SET consumed = consumed - ?
      WHERE session_id = ? AND period_start = ? AND risk_id = ? AND consumed >= ?`,
@@ -326,9 +349,6 @@ export function createSessionPrimitives(ctx: RepoContext): SessionPrimitives {
     },
     countersOfPeriod(sessionId, periodStart) {
       return countersOfPeriod.all(sessionId, periodStart).map(counterToRecord);
-    },
-    resetPeriod(sessionId, periodStart) {
-      return resetPeriod.run(sessionId, periodStart).changes;
     },
     creditCounter(sessionId, periodStart, riskId, amount) {
       return creditOne.run(amount, sessionId, periodStart, riskId, amount).changes === 1;
@@ -457,9 +477,44 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
       : callsOfLabel.all(sessionId, label, limit);
   }
 
+  const withHistory = db.prepare<[string, string], SessionRow>(
+    `SELECT ${SESSION_COLUMNS} FROM sessions
+     WHERE EXISTS (SELECT 1 FROM events e WHERE e.session_id = sessions.id AND e.ts < ?)
+        OR EXISTS (SELECT 1 FROM session_counters c
+                   WHERE c.session_id = sessions.id AND c.period_start < ?)
+     ORDER BY id`,
+  );
+  const purgeEventsBefore = db.prepare<[string, string]>(
+    'DELETE FROM events WHERE session_id = ? AND ts < ?',
+  );
+  const purgeCountersBefore = db.prepare<[string, string]>(
+    'DELETE FROM session_counters WHERE session_id = ? AND period_start < ?',
+  );
+
   return {
     async getByMission(missionId) {
       return primitives.sessionOfMission(missionId);
+    },
+    async withHistoryBefore(cutoff) {
+      return withHistory.all(cutoff, cutoff).map(sessionToRecord);
+    },
+    async purgeHistory(sessionId, bounds) {
+      const { eventsBefore, keep, countersBefore } = bounds;
+      return withImmediateTransaction(db, () => {
+        const events =
+          keep.kinds.length === 0
+            ? purgeEventsBefore.run(sessionId, eventsBefore).changes
+            : db
+                .prepare<string[]>(
+                  `DELETE FROM events
+                   WHERE session_id = ? AND ts < ?
+                     AND NOT (ts >= ? AND kind IN (${placeholders(keep.kinds.length)}))`,
+                )
+                .run(sessionId, eventsBefore, keep.since, ...keep.kinds).changes;
+        const counters =
+          countersBefore === null ? 0 : purgeCountersBefore.run(sessionId, countersBefore).changes;
+        return { events, counters };
+      });
     },
     async getOrCreate(missionId) {
       const now = nowIso(ctx);
@@ -475,8 +530,8 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
           session,
           counters,
           now,
-          findApproval: (key) => findApprovalSync(ctx, input.missionId, key, now),
-          consumeApproval: (key) => consumeApprovalSync(ctx, input.missionId, key, now),
+          findApprovals: (call) => findApprovalsSync(ctx, input.missionId, call, now),
+          consumeApproval: (id) => consumeApprovalSync(ctx, input.missionId, id, now),
           riskEvents: (query) => primitives.riskEvents(session.id, query),
           findOpenRequest: (lookup) => findOpenRequestSync(ctx, input.missionId, lookup, now),
           createRequest: (request) =>

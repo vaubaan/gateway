@@ -123,7 +123,7 @@ const SESSION_ID_SHAPE = /^[A-Za-z0-9_-]{16,}$/;
 const TOOLS_CALL_METHOD = 'tools/call';
 const PROGRESS_NOTIFICATION = 'notifications/progress';
 
-/** Identifies a delegated token (management door, feature P2.3). Absent until then. */
+/** Identifies a delegated token (management door). Absent until then. */
 export interface DelegatedTokenResolver {
   resolve(bearer: string): Promise<DelegationContext | null>;
 }

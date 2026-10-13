@@ -1,7 +1,7 @@
 /**
  * Sessions and the transactional decision primitive. Spec §3.3, §6 "authoritative,
  * atomic counting", §10 "atomicity on the last credit, several agents concurrent on the
- * same token". The accounting rules themselves are P1.3; here the `decide` callbacks are
+ * same token". The accounting rules themselves are the budget module's; here the `decide` callbacks are
  * minimal stand-ins that compare counters to a quota.
  */
 
@@ -257,15 +257,13 @@ describe('sessions repository', () => {
     });
 
     const decide = (ctx: DecideContext) => {
-      // The same risk and arguments on another tool find nothing.
-      expect(
-        ctx.findApproval({ riskId: MERGE, tool: 'github__delete_branch', fingerprint: 'fp-1' }),
-      ).toBeNull();
-      const consumed = ctx.consumeApproval({
-        riskId: MERGE,
+      // The same arguments on another tool find nothing.
+      expect(ctx.findApprovals({ tool: 'github__delete_branch', fingerprint: 'fp-1' })).toEqual([]);
+      const [usable] = ctx.findApprovals({
         tool: 'github__merge_pull_request',
         fingerprint: 'fp-1',
       });
+      const consumed = usable ? ctx.consumeApproval(usable.id) : null;
       return { allow: consumed !== null, approvalId: consumed?.id ?? null, event: null };
     };
     const first = await store.sessions.decideAndDecrement(
@@ -317,7 +315,7 @@ describe('sessions repository', () => {
     expect(events[0]?.details).toEqual({ requestId: result.outcome.requestId });
   });
 
-  it('a granted claim resets the counters of the period, and events are listed since a timestamp', async () => {
+  it('a granted claim resets the counter of the claimed risk alone, and events are listed since a timestamp', async () => {
     const r = await store.sessions.decideAndDecrement(
       { missionId, riskIds: [READ, WRITE], periodStart: PERIOD },
       quotaDecider({ [READ]: 10, [WRITE]: 1 }),
@@ -333,17 +331,20 @@ describe('sessions repository', () => {
     const decided = await store.requests.decideClaim(claim.id, creator, (ctx) => ({
       state: 'granted' as const,
       decision: { resolution: 'reset-period' },
-      before: ctx.resetCounters(PERIOD),
+      given: ctx.resetCounter(PERIOD, WRITE),
+      // Nothing left on that risk: a second reset gives nothing back and writes nothing.
+      again: ctx.resetCounter(PERIOD, WRITE),
+      // A risk the session never counted, and a period that does not exist.
+      unknown: ctx.resetCounter(PERIOD, 'github.never-touched'),
+      elsewhere: ctx.resetCounter('2020-01-01T00:00:00.000Z', READ),
     }));
     if (decided.status !== 'decided') throw new Error('expected an open claim');
-    expect([...decided.outcome.before]).toEqual([
-      [READ, 1],
-      [WRITE, 1],
-    ]);
+    expect(decided.outcome).toMatchObject({ given: 1, again: 0, unknown: 0, elsewhere: 0 });
+    // The other risk of the period keeps what it consumed.
     expect(
       (await store.sessions.counters(r.session.id, PERIOD)).map((c) => [c.riskId, c.consumed]),
     ).toEqual([
-      [READ, 0],
+      [READ, 1],
       [WRITE, 0],
     ]);
 

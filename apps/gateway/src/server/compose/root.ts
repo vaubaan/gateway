@@ -57,42 +57,42 @@ export interface GatewayRoot {
   readonly configFile: string | null;
   readonly logger: Logger;
   readonly encryptor: Encryptor;
-  /** The embedded store with its repositories (P0.3); satisfies `StoreLiveness` of `ports.ts`. */
+  /** The embedded store with its repositories; satisfies `StoreLiveness` of `ports.ts`. */
   readonly store: Store;
-  /** The single provider list (P0.2): the plugins the image ships (`shipped-plugins.ts`). */
+  /** The single provider list: the plugins the image ships (`shipped-plugins.ts`). */
   readonly registry: PluginRegistry;
   readonly rateLimiter: RateLimiter;
   readonly cache: CacheClient;
   readonly sessions: SessionStore;
-  /** Human authentication: OIDC relying party, web sessions, bootstrap, admin rule (P1.1). */
+  /** Human authentication: OIDC relying party, web sessions, bootstrap, admin rule. */
   readonly auth: AuthModule;
-  /** The company's registered app per provider: mounted configuration or Admin page (P1.4). */
+  /** The company's registered app per provider: mounted configuration or Admin page. */
   readonly providerApps: ProviderAppsService;
-  /** Connect flows, resources, credential broker with the generic OAuth refresh (P1.4). */
+  /** Connect flows, resources, credential broker with the generic OAuth refresh. */
   readonly connections: ConnectionsModule;
-  /** Authority: owner or union of shares, mission grounds (`orphaned`, derived), membership settlement (P2.2). */
+  /** Authority: owner or union of shares, mission grounds (`orphaned`, derived), membership settlement. */
   readonly authority: AuthorityModule;
-  /** Shares of a connection to a user or a group, and the shares a user received (P2.2). */
+  /** Shares of a connection to a user or a group, and the shares a user received. */
   readonly shares: SharesModule;
-  /** Local groups kept by the operator (P2.2). */
+  /** Local groups kept by the operator. */
   readonly groups: GroupsModule;
-  /** Missions: authority, preview / issue / rotate / revoke, bootstrap kit (P1.5). */
+  /** Missions: authority, preview / issue / rotate / revoke, bootstrap kit. */
   readonly missions: MissionsModule;
-  /** Requests to the creator: inbox, claim decisions, expiry sweeper, request URL (P1.7). */
+  /** Requests to the creator: inbox, claim decisions, expiry sweeper, request URL. */
   readonly requests: RequestsModule;
-  /** Audit search, mission session view, retention sweeper (P1.8). */
+  /** Audit search, mission session view, retention sweeper. */
   readonly audit: AuditModule;
-  /** Budget: the session service deciding and counting every allowed call (P1.3). */
+  /** Budget: the session service deciding and counting every allowed call. */
   readonly budget: SessionService;
-  /** The execution MCP door: `/mcp`, `/mcp/catalog`, the call pipeline (P1.6). */
+  /** The execution MCP door: `/mcp`, `/mcp/catalog`, the call pipeline. */
   readonly execution: ExecutionModule;
-  /** Community telemetry: the pipeline's sink, the operator's toggle, the validation status (P2.5). */
+  /** Community telemetry: the pipeline's sink, the operator's toggle, the validation status. */
   readonly telemetry: TelemetryModule;
-  /** Authorization server of the management door: clients, consent, delegated tokens (P2.3). */
+  /** Authorization server of the management door: clients, consent, delegated tokens. */
   readonly oauth: OAuthAsModule;
   /** Administration → Users: the operator's deactivation and reactivation of a user. */
   readonly users: UsersModule;
-  /** `/mcp/manage`: its admission gate and, behind it, the door with its seven tools (P2.4). */
+  /** `/mcp/manage`: its admission gate and, behind it, the door with its seven tools. */
   readonly management: ManagementDoorModule;
   readonly build: BuildInfo;
   readonly startedAt: Date;
@@ -222,7 +222,7 @@ function warnWithoutTrustedProxies(logger: Logger, config: InstanceConfig): void
     env: 'VAUBAAN_TRUSTED_PROXIES',
     affected: [
       'request page: one per-IP window for everybody',
-      'execution door: one token-verification window per token prefix (a flood of wrong secrets on a known prefix holds a not-yet-verified agent at 429)',
+      'execution door, tokens issued by an earlier build only: one argon2id verification window per token prefix (a flood of wrong secrets on such a prefix holds its agent at 429 until the token has been used once)',
       'authorization server: one registration window and one token window for everybody (one caller can hold every delegated client at 429 when it renews its token)',
       'audit: client_ip is not recorded',
     ],
@@ -331,6 +331,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     authority: authority.service,
     grounds: authority.grounds,
     authenticator: auth.authenticator,
+    sessions,
     logger,
   });
   const groups = createGroupsModule({

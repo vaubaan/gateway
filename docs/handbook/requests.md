@@ -205,12 +205,12 @@ state, expiry, current period end, the risk's quota and what it consumed in
 the current period, and the request's own expiry (`request_expires_at`, for
 the sentence of an orphaned mission).
 
-| Resolution      | Effect                                                                                | Refused when                                                                                        |
-| --------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `reset-period`  | every counter of the mission's **current** period → 0 (all risks)                     | mission revoked / orphaned (`mission-closed`), expired (`mission-expired`), risk left the policy    |
-| `extend-quota`  | `amount` actions given back on the claimed risk, current period only                  | same, plus `nothing-consumed`; `amount` not an integer in `1 … consumed` (`invalid-amount`)         |
-| `extend-expiry` | `missions.expires_at` moved; a mission stored `expired` becomes `active` again        | `mission-closed`; no expiry (`no-expiry`); date not later than max(now, current) (`invalid-expiry`) |
-| `refuse`        | nothing; the risk stays exhausted until the next period, the other risks keep running | never                                                                                               |
+| Resolution      | Effect                                                                                            | Refused when                                                                                        |
+| --------------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `reset-period`  | the counter of the **claimed risk** in the mission's current period → 0; no other risk is touched | mission revoked / orphaned (`mission-closed`), expired (`mission-expired`), risk left the policy    |
+| `extend-quota`  | `amount` actions given back on the claimed risk, current period only                              | same, plus `nothing-consumed`; `amount` not an integer in `1 … consumed` (`invalid-amount`)         |
+| `extend-expiry` | `missions.expires_at` moved; a mission stored `expired` becomes `active` again                    | `mission-closed`; no expiry (`no-expiry`); date not later than max(now, current) (`invalid-expiry`) |
+| `refuse`        | nothing; the risk stays exhausted until the next period, the other risks keep running             | never                                                                                               |
 
 `orphaned` is derived, never stored ([authority](authority.md)): `own()`
 reads the mission through `grounds.derive` (`RequestServiceDeps.grounds`,
@@ -299,12 +299,12 @@ reset, no extension and no approval (`mission-closed`). The `orphaned` verdict
 itself stays a read of the instant before the transaction, and the policy
 (quota, gate) is the one `own()` read.
 
-| Resolution      | Request state | Session event                                                                               | Audit act         |
-| --------------- | ------------- | ------------------------------------------------------------------------------------------- | ----------------- |
-| `reset-period`  | `granted`     | `reset` `{ request_id, period_start, period_end, credits: { <risk>: n, … } }`               | `period-reset`    |
-| `extend-quota`  | `granted`     | `extension` `{ request_id, dimension: 'quota', amount, period_start, period_end, credits }` | `budget-extended` |
-| `extend-expiry` | `granted`     | `extension` `{ request_id, dimension: 'expiry', expires_at_before, expires_at }`            | `expiry-extended` |
-| `refuse`        | `refused`     | `request` `{ request_id, request_kind, state: 'refused' }`                                  | `request-refused` |
+| Resolution      | Request state | Session event                                                                                                       | Audit act         |
+| --------------- | ------------- | ------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| `reset-period`  | `granted`     | `reset` `{ request_id, period_start, period_end, credits: { <claimed risk>: n } }` (`{}` when nothing was consumed) | `period-reset`    |
+| `extend-quota`  | `granted`     | `extension` `{ request_id, dimension: 'quota', amount, period_start, period_end, credits }`                         | `budget-extended` |
+| `extend-expiry` | `granted`     | `extension` `{ request_id, dimension: 'expiry', expires_at_before, expires_at }`                                    | `expiry-extended` |
+| `refuse`        | `refused`     | `request` `{ request_id, request_kind, state: 'refused' }`                                                          | `request-refused` |
 
 Every event carries `riskId` (the claimed risk) and `actorUserId`. These shapes
 are the `reset`, `extension` and `request` members of `SessionEventDetails`
@@ -334,6 +334,27 @@ names a token, "The mission was revoked" otherwise.
 resolution posted to an approval request (or the reverse) is `invalid` /
 `invalid-decision`; `unsupported-kind` is what `decideClaim` answers for an
 approval request and `decideApproval` for a claim.
+
+### A claim is about one risk, and so is its answer
+
+"Reset the period" puts the counter of the **claimed risk** back to zero and
+leaves every other risk of the mission as it is (spec §3.4; product owner's
+decision of 2026-10-13, ADR
+[claim-reset-is-the-claimed-risk-only](../decisions/claim-reset-is-the-claimed-risk-only.md)).
+Until then it zeroed every counter of the period: answering a claim on
+"read code" also reopened "merge to a protected branch" if that one was
+exhausted too, without the creator being shown it. A second exhausted risk
+has its own claim, and its own answer.
+
+The quota extension keeps its cap: at most what the period consumed on the
+claimed risk. With both rules, the most a creator can grant on a claim is
+"this risk starts its period again" — a reset — and anything larger is a
+change of the mission. The two resolutions now differ by the amount only
+(all of it, or the number chosen) and by the event they leave (`reset`,
+`extension`).
+
+A `reset` event written before this rule lists every risk that had been
+consumed in `credits`; the counters-vs-audit check reads both shapes.
 
 ### Credits and the counters-vs-audit check
 
@@ -415,8 +436,9 @@ Additive, in `store/repositories/requests.ts` and `sessions.ts`:
   `apply(ctx)` is synchronous and gets a `ClaimDecisionContext`: `request`,
   `mission` (`StoredMissionFacts { status, expiresAt }`, the mission row read
   inside the transaction; the status is the stored one, never `orphaned`),
-  `session`, `now`, `counters(periodStart)`, `resetCounters(periodStart)`
-  (returns what each counter held), `creditCounter(periodStart, riskId,
+  `session`, `now`, `counters(periodStart)`, `resetCounter(periodStart,
+riskId)` (sets that one counter to zero and returns what it held; no other
+  risk is touched), `creditCounter(periodStart, riskId,
 amount)` (one conditional `UPDATE … WHERE consumed >= amount`; `false` and
   nothing written otherwise — a counter never goes below zero),
   `setMissionExpiry(iso)`, `recordEvent(event)`. Not a claim →
@@ -431,15 +453,20 @@ amount)` (one conditional `UPDATE … WHERE consumed >= amount`; `false` and
   that erases the blob.
 - `RequestsRepo.getArguments(id)` answers `null` unless the request is open
   and unexpired.
-- `OpenRequestLookup.tool`: an approval request is looked up by risk, tool
-  and fingerprint (both mandatory for that kind, `InvariantError` otherwise).
-- `ApprovalsRepo`: the key is `ApprovalKey { riskId, tool, fingerprint }`
-  (`create`; `DecideContext.findApproval` / `consumeApproval`, which run
-  `findApprovalSync` / `consumeApprovalSync` inside the decision transaction);
-  `getByRequest(requestId)`. Migration `0005_approval_bound_to_tool.sql` adds
-  `approvals.tool` (`NOT NULL DEFAULT ''`: a row older than the migration
-  matches no call) and recreates `approvals_lookup` on `(mission_id, risk_id,
-tool, fingerprint)`.
+- `OpenRequestLookup`: a claim is looked up by its risk; an approval request
+  by the call — tool and fingerprint, both mandatory — and by the gated risks
+  the call needs (`riskIds`, never empty): the oldest open request of that
+  call that lists them all. `InvariantError` otherwise.
+- `ApprovalsRepo`: an approval is bound to `ApprovedCall { tool, fingerprint }`
+  and lists the risks it covers (`riskIds`; `create`;
+  `DecideContext.findApprovals(call)` / `consumeApproval(id)`, which run
+  `findApprovalsSync` / `consumeApprovalSync` inside the decision
+  transaction); `getByRequest(requestId)`. Migration
+  `0005_approval_bound_to_tool.sql` adds `approvals.tool` (`NOT NULL DEFAULT
+''`: a row older than the migration matches no call); migration
+  `0013_request_covers_the_call.sql` adds `risk_ids_json` to `requests` and
+  `approvals` and recreates `approvals_lookup` on `(mission_id, tool,
+fingerprint)`.
 - `DecideContext.riskEvents({ kinds, riskIds, since })` and the same method on
   `SessionPrimitives`: the session's events about some risks, oldest first.
 - `AuditRepo.latestCall({ missionId, tool, argumentsHash, refusalCode? })`.
@@ -455,18 +482,18 @@ nothing and holds nothing: the creator answers, the executor replays.
 
 ### What is bound to what
 
-| Thing                | Bound to                                                              | Lives                                                                   |
-| -------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| the approval request | mission, risk, **tool**, fingerprint of the arguments                 | `requests.expiry` (default 24 h), then `expired`                        |
-| the sealed arguments | the request id (associated data `request:<id>` of the AEAD blob)      | while the request is open; `args_blob` is `NULL` on decision or expiry  |
-| the approval         | mission, risk, **tool**, fingerprint (`ApprovalKey`, migration 0005)  | `approvals.expiry` (`VAUBAAN_APPROVAL_EXPIRY`, default `10m`), one use  |
-| a gate opening       | the risk and the period current at the decision (`gate-opened` event) | until that period ends, or until the gate is edited on the mission page |
+| Thing                | Bound to                                                                                              | Lives                                                                   |
+| -------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| the approval request | mission, risk, **tool**, fingerprint of the arguments                                                 | `requests.expiry` (default 24 h), then `expired`                        |
+| the sealed arguments | the request id (associated data `request:<id>` of the AEAD blob)                                      | while the request is open; `args_blob` is `NULL` on decision or expiry  |
+| the approval         | mission, **tool**, fingerprint (`ApprovedCall`), and the gated risks it lists (migrations 0005, 0013) | `approvals.expiry` (`VAUBAAN_APPROVAL_EXPIRY`, default `10m`), one use  |
+| a gate opening       | the risk and the period current at the decision (`gate-opened` event)                                 | until that period ends, or until the gate is edited on the mission page |
 
 The fingerprint is `fingerprintArguments(args)`, the canonical SHA-256 also
 stored as the audit's `arguments_hash` (budget handbook). The tool is part of
 both keys: the same arguments on another tool that touches the same risk are
 another call — another request, and an approval they do not consume. That
-closes the Phase 1 security finding (approvals were keyed without the tool).
+closes a defect of the first key (approvals were keyed without the tool).
 A call whose arguments carry a number JSON has no text for (`1e999`, which
 canonical JSON would write `null`) never opens a request: the pipeline
 rejects it before any stage, so what the approver reads in the sealed copy is
@@ -530,11 +557,11 @@ to widen what is granted). `approvalOptions(situation)` returns the three,
 each with a one-line `consequence` and `unavailable`;
 `checkApprovalDecision` applies the same rules to a decision.
 
-| Resolution  | Effect                                                                                                    | Refused when                                                                                                                                                                  |
-| ----------- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `grant`     | one approval for the request's `(mission, risk, tool, fingerprint)`, valid `approvals.expiry`, single-use | mission revoked / orphaned (`mission-closed`), expired (`mission-expired`), risk left the policy (`risk-not-in-policy`)                                                       |
-| `open-gate` | the risk reads `auto` for every call until the current period ends, this call included                    | same, plus the gate is `auto` on the mission or already open (`gate-not-closed`), or the mission has a single period that never ends (`no-period-end`: edit the gate instead) |
-| `refuse`    | nothing; a replay is refused again and drops a new request                                                | never                                                                                                                                                                         |
+| Resolution  | Effect                                                                                                                                                        | Refused when                                                                                                                                                                             |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `grant`     | one approval for the request's call `(mission, tool, fingerprint)`, covering every risk the request lists, valid `approvals.expiry`, single-use               | mission revoked / orphaned (`mission-closed`), expired (`mission-expired`), a listed risk left the policy (`risk-not-in-policy`)                                                         |
+| `open-gate` | every listed risk whose gate is still closed reads `auto` for every call until the current period ends, this call included (one `gate-opened` event per risk) | same, plus no listed gate is closed any more — each is `auto` on the mission or already open (`gate-not-closed`) —, or the mission has a single period that never ends (`no-period-end`) |
+| `refuse`    | nothing; a replay is refused again and drops a new request                                                                                                    | never                                                                                                                                                                                    |
 
 No resolution edits `mission_policy`, and none bypasses the budget: the
 replay goes through `decide()` again, quota and rate first.
@@ -561,10 +588,46 @@ replay goes through `decide()` again, quota and rate first.
 | `open-gate` | `granted`     | `gate-opened` `{ request_id, period_start, period_end }`                | `gate-opened`      | `{ resolution, period_start, period_end }`         |
 | `refuse`    | `refused`     | `request` `{ request_id, request_kind: 'approval', state: 'refused' }`  | `request-refused`  | `{ resolution }`                                   |
 
+### One request covers the call
+
+A call may touch several risks gated `approval` (a workflow file written to a
+gated branch touches two). It drops **one** request, which lists them all,
+and one grant lets the identical replay through (spec §3.5; product owner's
+decision of 2026-10-13, ADR
+[one-approval-request-covers-the-call](../decisions/one-approval-request-covers-the-call.md)).
+Before, the refusal named the first gated risk without an approval; the
+creator granted, the replay was refused on the second risk, and so on: as
+many requests, decisions and replays as gated risks.
+
+- **`decide()`** refuses once with `details.gated_risks`: every risk of the
+  call whose gate asks now, in call order — a gate opened for the period is
+  not among them. `risk_id` is the first one no approval covers.
+- **The request** stores them in `requests.risk_ids_json`; `risk_id` is the
+  first. `RequestRecord.riskIds` is never empty (a claim: its one risk).
+  A replay before the decision reuses the open request of the call that
+  covers what it needs; an open request that lists fewer risks is neither
+  reused nor widened — the creator never comes to grant more than the page
+  showed them.
+- **The refusal** carries `risk_ids` (and `risk_id`, the first) and one
+  `approval_url`.
+- **The grant** writes one approval whose `risk_ids_json` is the request's
+  list. `open-gate` opens every listed gate still closed. `refuse` refuses
+  the call.
+- **The page** lists each gated risk with its gate, and says that the answer
+  covers them all; the inbox lists them under the request.
+
+Rows written by an earlier build name one risk and still mean what they
+said (migration `0013` backfills `risk_ids_json` from `risk_id`): an open
+request is granted for its risk, and approvals granted risk by risk are
+consumed together by the call they cover. A list that is absent or unreadable
+reads as the one risk of `risk_id` — the narrow reading.
+
 ### The replay
 
-`SessionService.recordCall` (budget handbook) looks the approval up by
-`ApprovalKey` inside the decision transaction and consumes it only when the
+`SessionService.recordCall` (budget handbook) looks up the usable approvals
+of the call (`ApprovedCall`: tool and fingerprint) inside the decision
+transaction, takes the one that covers every gated risk the call needs — or,
+failing that, one per risk — and consumes it only when the
 whole call is allowed: `consumed_at` is set, the counters of every touched
 risk gain one, the rate windows record the action, and the audit entry of the
 call carries `approval_id`. The second identical call finds no approval and
@@ -635,8 +698,11 @@ it once the request is decided.
 - **The replay is still `approval-required` after a grant** — the arguments
   differ (compare the refusal's `fingerprint` with `approvals.fingerprint`),
   the tool differs, the approval expired (`approvals.expires_at`, ten minutes
-  by default) or was already consumed (`consumed_at`), or the call touches a
-  second gated risk (the refusal names another `risk_id`).
+  by default) or was already consumed (`consumed_at`), or the approval does
+  not list every gated risk the call touches now (`approvals.risk_ids_json`
+  against the refusal's `risk_ids`: a gate was set to `approval` since, or
+  the approval comes from a request an earlier build dropped for one risk).
+  The refusal then points to one request that covers the call.
 - **The page shows "erased" arguments on an open-looking request** — it is
   past `expires_at`: its state reads `expired` before the sweeper's pass.
 - **A gate reads `approval` but calls pass** — it is open for the period:

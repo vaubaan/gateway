@@ -1,5 +1,5 @@
 /**
- * Structural test (spec §8 "one entry … per administrative act"; plan P1.8
+ * Structural test (spec §8 "one entry … per administrative act"
  * "every admin mutation path writes an admin audit entry — the test
  * enumerates the service methods").
  *
@@ -453,6 +453,7 @@ const RULES: Readonly<Record<string, Rule>> = {
     writes: { act: 'connection-revoked', object: 'connection', actor: 'alice' },
   },
   'ConnectionService.transferTargets': READ,
+  'ConnectionService.providerGrantOf': READ,
   'ConnectionService.listOwnerless': READ,
   'ConnectionService.reassignTargets': READ,
   'ConnectionService.transfer': {
@@ -486,11 +487,17 @@ const RULES: Readonly<Record<string, Rule>> = {
   'CredentialBroker.resolve': READ,
   'CredentialBroker.contextOf': READ,
   'CredentialBroker.oauthClient': READ,
+  'CredentialBroker.forRevocation': READ,
+  'CredentialBroker.withdrawAtProvider': exempt(
+    'a step of ConnectionService.revoke, whose connection-revoked entry carries what the provider answered (after.provider_grant); it writes nothing in the store itself',
+  ),
   'CredentialBroker.refresh': exempt(SYSTEM_REFRESH),
   'PendingConnectStore.create': exempt(SESSION_STATE),
   'PendingConnectStore.take': exempt(SESSION_STATE),
   'NoticeStore.put': exempt(SESSION_STATE),
   'NoticeStore.take': exempt(SESSION_STATE),
+  'PendingShareStore.put': exempt(SESSION_STATE),
+  'PendingShareStore.read': exempt(SESSION_STATE),
 
   // ── provider apps (the entry is written by the Administration handler) ────
   'ProviderAppsService.isReadOnly': READ,
@@ -553,8 +560,9 @@ const RULES: Readonly<Record<string, Rule>> = {
   'MissionService.issuanceContext': READ,
   'MissionService.preview': READ,
   'MissionService.draftFrom': READ,
-  'MissionService.verifyToken': READ,
-  'MissionService.provenToken': READ,
+  'MissionService.verifyToken': exempt(
+    'authentication of a call, not an administrative act; its one write replaces the stored hash of a token an earlier build stored as argon2id by the sha256 digest of the same secret (same row, same holder, same status), and is logged',
+  ),
   'MissionService.list': READ,
   'MissionService.get': READ,
   'MissionService.access': READ,
@@ -591,6 +599,7 @@ const RULES: Readonly<Record<string, Rule>> = {
       rig.root.missions.service.rotate(rig.alice.user, mission.id),
     writes: { act: 'mission-rotated', object: 'mission', actor: 'alice' },
   },
+  'MissionService.orphanedOn': READ,
   'MissionService.revoke': {
     kind: 'mutation',
     target: missions,
@@ -698,6 +707,8 @@ const RULES: Readonly<Record<string, Rule>> = {
   // direction. Only a watch around a human act writes, and it names that human.
   'MissionGrounds.inspect': READ,
   'MissionGrounds.derive': READ,
+  // What a share would restore, asked before it is made: nothing is written.
+  'MissionGrounds.forecastShare': READ,
   'MissionGrounds.watchConnection': {
     kind: 'mutation',
     target: (root) => root.authority.grounds,
@@ -744,6 +755,7 @@ const RULES: Readonly<Record<string, Rule>> = {
   // ── shares ────────────────────────────────────────────────────────────────
   'ShareService.contextFor': READ,
   'ShareService.received': READ,
+  'ShareService.forecast': READ,
   'ShareService.share': {
     kind: 'mutation',
     target: (root) => root.shares.service,

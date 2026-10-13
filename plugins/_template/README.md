@@ -95,9 +95,10 @@ the explicit list of risks, never a reference to the preset.
 
 ## Tests
 
-`npx vitest run plugins/_template` — 25 tests: the SDK kit
+`npx vitest run plugins/_template` — 26 tests: the SDK kit
 (`assertPluginWellFormed`, `assertCatalogCoverage`, `assertNoWildcard`,
-`assertPresetsValid`), the version and default-export check, the classifier
+`assertPresetsValid`, and `assertIdentifiersRefused` on the same samples),
+the version and default-export check, the classifier
 branch by branch (refusals, path-safe identifiers and the risks a deletion
 touches included), `execute` and
 `discoverResources` against `mockFetch`. No test calls a provider.

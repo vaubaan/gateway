@@ -64,6 +64,7 @@ export {
   type AuthoritySubject,
   type ConnectionAuthority,
   type ConnectionAuthorityDeps,
+  type SupposedShare,
 } from './authority-service';
 export { explicitRiskIdsOf, fullCatalogRiskIds, uncoveredRisks } from './catalog-authority';
 export { derivedMissionReads, type DerivedMissionReads } from './derived-missions';

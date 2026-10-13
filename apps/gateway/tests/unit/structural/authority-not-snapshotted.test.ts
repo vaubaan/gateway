@@ -269,6 +269,8 @@ describe('authority is recomputed, never snapshotted', () => {
       'audit/query-service.ts': 'reads names and creators only, never the status',
       'budget/budget-stage.ts':
         'reads the period anchor only; the status it decides on is the context’s, derived by the door',
+      'budget/retention.ts':
+        'reads the period anchor and length only, to know which period is the current one',
       'oauth-as/delegations.ts':
         'lists through the reads the composition root hands it (`derivedMissionReads`)',
     };
@@ -302,6 +304,7 @@ describe('authority is recomputed, never snapshotted', () => {
       for (const path of [
         'audit/query-service.ts',
         'budget/budget-stage.ts',
+        'budget/retention.ts',
         'missions/token-issuer.ts',
       ]) {
         // `record.status`, `mission.status`, `m.status`: none on a loaded record (the

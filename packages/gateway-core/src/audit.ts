@@ -8,7 +8,7 @@
  *
  * This module owns the entry shape and the `AuditWriter` contract. The
  * persistent writer (SQLite, append-only triggers) lives in the store of the
- * application (feature P0.3) and implements `AuditWriter`; `MemoryAuditWriter`
+ * application and implements `AuditWriter`; `MemoryAuditWriter`
  * serves tests. The interface name and the `write(entry)` signature are the
  * contract between the two and must stay stable.
  */
@@ -209,7 +209,7 @@ export type AuditEntry = CallAuditEntry | AdminAuditEntry;
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Stable contract with the store's writer (feature P0.3). A writer must not
+ * Stable contract with the store's writer. A writer must not
  * swallow failures: the pipeline treats a rejected `write` as an internal
  * error, so a call never completes without its audit entry.
  */

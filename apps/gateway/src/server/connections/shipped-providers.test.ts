@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import { SHIPPED_PLUGINS } from '../compose/shipped-plugins';
 import { PROVIDER_APP_FIELDS } from '../config/types';
 import { appConfigFieldsOf, APP_FIELD_NAME_PATTERN } from '../provider-apps';
+import { canWithdraw } from './credentials';
 import { connectionsHarness, stateOf } from './testing';
 
 describe('shipped plugins through the generic connect driver', () => {
@@ -29,6 +30,35 @@ describe('shipped plugins through the generic connect driver', () => {
         );
       }
     }
+  });
+
+  it('every shipped plugin says where a person removes the grant by hand', () => {
+    for (const plugin of SHIPPED_PLUGINS) {
+      expect(plugin.manualRevocation, plugin.id).toEqual(expect.any(String));
+      expect(plugin.manualRevocation!.length, plugin.id).toBeGreaterThan(30);
+      // A place in the provider's interface, not a promise of the gateway.
+      expect(plugin.manualRevocation, plugin.id).not.toMatch(/will be|automatically/i);
+    }
+  });
+
+  it('withdraws the provider-side grant for the providers that document an endpoint, and for no other', () => {
+    // The endpoints below are the ones read in the providers' documentation (ADR
+    // provider-side-revocation-on-connection-revoke). A plugin joins this table with
+    // its source, never by analogy.
+    const declared = new Map(
+      SHIPPED_PLUGINS.filter((plugin) => canWithdraw(plugin)).map((plugin) => [
+        plugin.id,
+        plugin.credential.kind === 'oauth2' ? plugin.credential.revocation : 'revoke()',
+      ]),
+    );
+    expect(Object.fromEntries(declared)).toEqual({
+      gmail: { url: 'https://oauth2.googleapis.com/revoke', format: 'token-form' },
+      supabase: {
+        url: 'https://api.supabase.com/v1/oauth/revoke',
+        format: 'client-credentials-json',
+      },
+    });
+    for (const plugin of SHIPPED_PLUGINS) expect(plugin.revoke, plugin.id).toBeUndefined();
   });
 
   it('ships no app-install plugin whose installations cannot be verified', () => {

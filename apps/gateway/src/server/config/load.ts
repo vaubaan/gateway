@@ -336,6 +336,14 @@ function readOAuth(r: Reader): OAuthConfig {
       envNamesFor('oauth.refresh_token_ttl'),
     );
   }
+  const delegationMaxLifetimeSeconds = r.duration(keySpec('oauth.delegation_max_lifetime'));
+  if (delegationMaxLifetimeSeconds <= accessTokenTtlSeconds) {
+    r.issues.add(
+      'oauth.delegation_max_lifetime',
+      'must be longer than oauth.access_token_ttl: a delegation that ends before its first token is useless',
+      envNamesFor('oauth.delegation_max_lifetime'),
+    );
+  }
   const refreshReuseWindowSeconds = r.int(keySpec('oauth.refresh_reuse_window_seconds'));
   if (refreshReuseWindowSeconds > MAX_OAUTH_REFRESH_REUSE_WINDOW_SECONDS) {
     r.issues.add(
@@ -347,6 +355,7 @@ function readOAuth(r: Reader): OAuthConfig {
   return {
     accessTokenTtlSeconds,
     refreshTokenTtlSeconds,
+    delegationMaxLifetimeSeconds,
     refreshReuseWindowSeconds,
     clientRegistration: {
       policy: readClientRegistrationPolicy(r),

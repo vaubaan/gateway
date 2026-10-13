@@ -17,11 +17,13 @@ import {
 } from '@vaubaan/plugin-sdk';
 import {
   assertCatalogCoverage,
+  assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
   assertPresetsValid,
   mockFetch,
   refusalText,
+  type ToolSamples,
 } from '@vaubaan/plugin-sdk/testing';
 
 import {
@@ -132,63 +134,62 @@ describe('railway plugin — structural kit', () => {
     for (const p of presets) for (const e of p.entries) expect(e.quota).toBeGreaterThan(0);
   });
 
-  test('every tool classifies to slices the catalog covers', () => {
-    const report = assertCatalogCoverage(
-      railwayPlugin,
+  // One table for the catalog coverage and for the identifier proof.
+  const SAMPLES: ToolSamples = {
+    railway__whoami: [{ args: {} }],
+    'railway__list-projects': [{ args: {} }],
+    'railway__create-project': [{ args: { name: 'new' } }],
+    'railway__list-services': [{ args: { projectId: PROJECT_STG } }, { args: {} }],
+    'railway__list-deployments': [{ args: { projectId: PROJECT_STG, limit: 10 } }],
+    'railway__get-status': [{ args: { projectId: PROJECT_STG, environmentId: ENV_STG } }],
+    'railway__get-logs': [
+      { args: { projectId: PROJECT_STG, serviceId: SERVICE, environmentId: ENV_STG } },
+    ],
+    railway__redeploy: [
+      { args: { projectId: PROJECT_STG, serviceId: SERVICE, environmentId: ENV_STG } },
       {
-        railway__whoami: [{ args: {} }],
-        'railway__list-projects': [{ args: {} }],
-        'railway__create-project': [{ args: { name: 'new' } }],
-        'railway__list-services': [{ args: { projectId: PROJECT_STG } }, { args: {} }],
-        'railway__list-deployments': [{ args: { projectId: PROJECT_STG, limit: 10 } }],
-        'railway__get-status': [{ args: { projectId: PROJECT_STG, environmentId: ENV_STG } }],
-        'railway__get-logs': [
-          { args: { projectId: PROJECT_STG, serviceId: SERVICE, environmentId: ENV_STG } },
-        ],
-        railway__redeploy: [
-          { args: { projectId: PROJECT_STG, serviceId: SERVICE, environmentId: ENV_STG } },
-          {
-            args: { projectId: PROJECT_PRD, serviceId: SERVICE, environmentId: ENV_PRD },
-            resources: [staging, prod],
-          },
-        ],
-        'railway__accept-deploy': [
-          { args: { environmentId: ENV_STG } },
-          // two projects, no projectId : resolved through the discovered environments.
-          { args: { environmentId: ENV_PRD }, resources: [staging, prod] },
-          // one project, an environment it does not own : outside the mission.
-          { args: { environmentId: ENV_PRD }, expectDenied: true },
-        ],
-        'railway__railway-agent': [
-          { args: { projectId: PROJECT_STG, environmentId: ENV_STG, message: 'scale the worker' } },
-        ],
-        'railway__list-variables': [{ args: { projectId: PROJECT_STG, environmentId: ENV_STG } }],
-        'railway__upsert-variable': [
-          { args: { projectId: PROJECT_STG, environmentId: ENV_STG, name: 'API_KEY', value: 'x' } },
-        ],
-        'railway__upsert-variables': [
-          { args: { projectId: PROJECT_STG, environmentId: ENV_STG, variables: { A: '1' } } },
-          {
-            args: {
-              projectId: PROJECT_STG,
-              environmentId: ENV_STG,
-              variables: { A: '1' },
-              replace: true,
-            },
-          },
-          // two projects, an environment none of them declares : ambiguous.
-          {
-            args: { environmentId: 'env-unknown', variables: { A: '1' } },
-            resources: [staging, prod],
-            expectDenied: true,
-          },
-        ],
-        'railway__delete-variable': [
-          { args: { projectId: PROJECT_STG, environmentId: ENV_STG, name: 'OLD' } },
-        ],
+        args: { projectId: PROJECT_PRD, serviceId: SERVICE, environmentId: ENV_PRD },
+        resources: [staging, prod],
       },
-      { resources: [staging] },
-    );
+    ],
+    'railway__accept-deploy': [
+      { args: { environmentId: ENV_STG } },
+      // two projects, no projectId : resolved through the discovered environments.
+      { args: { environmentId: ENV_PRD }, resources: [staging, prod] },
+      // one project, an environment it does not own : outside the mission.
+      { args: { environmentId: ENV_PRD }, expectDenied: true },
+    ],
+    'railway__railway-agent': [
+      { args: { projectId: PROJECT_STG, environmentId: ENV_STG, message: 'scale the worker' } },
+    ],
+    'railway__list-variables': [{ args: { projectId: PROJECT_STG, environmentId: ENV_STG } }],
+    'railway__upsert-variable': [
+      { args: { projectId: PROJECT_STG, environmentId: ENV_STG, name: 'API_KEY', value: 'x' } },
+    ],
+    'railway__upsert-variables': [
+      { args: { projectId: PROJECT_STG, environmentId: ENV_STG, variables: { A: '1' } } },
+      {
+        args: {
+          projectId: PROJECT_STG,
+          environmentId: ENV_STG,
+          variables: { A: '1' },
+          replace: true,
+        },
+      },
+      // two projects, an environment none of them declares : ambiguous.
+      {
+        args: { environmentId: 'env-unknown', variables: { A: '1' } },
+        resources: [staging, prod],
+        expectDenied: true,
+      },
+    ],
+    'railway__delete-variable': [
+      { args: { projectId: PROJECT_STG, environmentId: ENV_STG, name: 'OLD' } },
+    ],
+  };
+
+  test('every tool classifies to slices the catalog covers', () => {
+    const report = assertCatalogCoverage(railwayPlugin, SAMPLES, { resources: [staging] });
     expect(report.toolsChecked).toBe(14);
     // A categorized write touches its entry alone (ADR
     // fallback-risk-only-when-uncategorized) : the nine specific risks, no fallback.
@@ -205,6 +206,25 @@ describe('railway plugin — structural kit', () => {
     ]);
     expect(report.risksUntouched).toEqual([]);
     expect(report.fallbackHits).toEqual([]);
+  });
+
+  // What is executed is what was classified (SDK kit) : every string argument of
+  // every sample above is fed the hostile identifiers, through `classify` and
+  // through `execute`. The finer cases are in this plugin's identifier tests.
+  test('hostile identifiers are refused by classify and by execute, or named exactly', async () => {
+    const report = await assertIdentifiersRefused(railwayPlugin, SAMPLES, {
+      resources: [staging],
+      context: (fetch, resources) => execCtx(fetch, resources),
+      pathIdentifiers: {
+        none: 'every call is one JSON-RPC POST to the MCP endpoint: identifiers travel in its body',
+      },
+    });
+    expect(report.toolsChecked).toBe(14);
+    // Found by running the samples : the arguments that are a segment of a request path.
+    expect([...new Set(report.pathIdentifiers.map((p) => p.argument))].sort()).toEqual([]);
+    // Whatever classify refused, execute sent nothing for.
+    expect(report.refusedByClassify).toBeGreaterThan(0);
+    expect(report.nothingSent).toBeGreaterThanOrEqual(report.refusedByClassify);
   });
 });
 

@@ -114,6 +114,8 @@ export interface FixturePluginOptions {
   readonly experimental?: boolean;
   readonly discoverResources?: (ctx: ConnectionContext) => Promise<readonly Resource[]>;
   readonly refresh?: (ctx: ConnectionContext) => Promise<CredentialSecret>;
+  readonly revoke?: (ctx: ConnectionContext) => Promise<void>;
+  readonly manualRevocation?: string;
 }
 
 /** A valid plugin whose id is a slug without dashes (so the tool prefix is `<id>__`). */
@@ -209,6 +211,8 @@ export function fixturePlugin(options: FixturePluginOptions): ProviderPlugin {
     },
     discoverResources: options.discoverResources ?? (async () => []),
     ...(options.refresh ? { refresh: options.refresh } : {}),
+    ...(options.revoke ? { revoke: options.revoke } : {}),
+    ...(options.manualRevocation ? { manualRevocation: options.manualRevocation } : {}),
   });
 }
 

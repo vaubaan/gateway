@@ -188,7 +188,10 @@ person's authority is decided by a human in the interface.
   share one window, as they share one budget.
 - A member reads the whole session of the mission (spec §11.2 assumption). The
   **Audit page** stays scoped to the missions one created and the connections
-  one owns: a member reads the session, not the audit.
+  one owns: a member reads the session, not the audit. (Amended 2026-10-13 by
+  [audit-visibility-members-and-operators](./audit-visibility-members-and-operators.md):
+  a member also reads the audit entries of the mission, without the argument
+  fingerprint.)
 - `mission_tokens.last_used_at` is written at most once a minute per token —
   the door's only write outside the pipeline, and it never refuses a request.
 - Any signed-in creator can see the emails of the instance's active users in

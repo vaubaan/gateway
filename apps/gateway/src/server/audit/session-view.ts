@@ -7,7 +7,7 @@
  * sees": the whole session; arguments are never shown, and requests stay the
  * creator's): "does not exist" and "not yours" are the same answer, as on the
  * mission detail page. Open requests are listed by link to the creator's view
- * of the request (`/waiting/<id>`, P1.7): their arguments stay there, and a
+ * of the request (`/waiting/<id>`): their arguments stay there, and a
  * member is given no link (`path: null`) — only the creator answers. An event shows the fields named below and nothing
  * else of its details, read through `parseEventDetails` (`@vaubaan/shared`):
  * an event whose stored details do not have the shape of its kind is listed

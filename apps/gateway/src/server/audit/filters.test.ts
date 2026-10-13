@@ -8,7 +8,13 @@ import {
   parseInstant,
 } from './filters';
 import { holderParam, parseHolderParam } from './session-view';
-import { scopeOf, withoutArguments } from './query-service';
+import {
+  ARGUMENTS_NOT_SHOWN,
+  scopeOf,
+  standingOn,
+  withoutArguments,
+  type AuditViewer,
+} from './query-service';
 
 const EMPTY = {
   missionId: null,
@@ -205,33 +211,88 @@ describe('auditQueryString', () => {
 describe('scopeOf — the visibility rule', () => {
   const user = { id: 'u-1' };
 
-  it('a user: the missions they created, the connections they and their groups own', () => {
+  it('a user: the missions they created or are a member of, the connections they and their groups own', () => {
     expect(
       scopeOf({ kind: 'user', user, groups: [{ id: 'g-1' }, { id: 'g-2' }], isOperator: false }),
     ).toEqual({
       missionCreatorUserId: 'u-1',
+      missionMemberUserId: 'u-1',
       connectionOwners: [
         { kind: 'user', id: 'u-1' },
         { kind: 'group', id: 'g-1' },
         { kind: 'group', id: 'g-2' },
       ],
       allAdmin: false,
+      allCalls: false,
     });
   });
 
-  it('an operator: the same, and every administrative entry', () => {
+  it('an operator: the same, and every entry — administrative acts and calls', () => {
     expect(scopeOf({ kind: 'user', user, groups: [], isOperator: true })).toEqual({
       missionCreatorUserId: 'u-1',
+      missionMemberUserId: 'u-1',
       connectionOwners: [{ kind: 'user', id: 'u-1' }],
       allAdmin: true,
+      allCalls: true,
     });
   });
 
-  it('the bootstrap operator: administrative entries only', () => {
+  it('the bootstrap operator: administrative entries only, never a call', () => {
     expect(scopeOf({ kind: 'bootstrap' })).toEqual({
       missionCreatorUserId: null,
+      missionMemberUserId: null,
       connectionOwners: [],
       allAdmin: true,
+      allCalls: false,
+    });
+  });
+});
+
+describe('standingOn — who is shown the argument fingerprint', () => {
+  const ada: AuditViewer = { kind: 'user', user: { id: 'ada' }, groups: [], isOperator: false };
+  const mission = { creatorUserId: 'ada' };
+  const theirs = { creatorUserId: 'bob' };
+  const owned = { owner: { kind: 'user', id: 'ada' } } as const;
+  const groupOwned = { owner: { kind: 'group', id: 'g-1' } } as const;
+
+  it('the creator of the mission and an owner of the connection answer for the call', () => {
+    expect(standingOn(ada, mission, null)).toBe('responsible');
+    expect(standingOn(ada, theirs, owned)).toBe('responsible');
+    expect(standingOn({ ...ada, groups: [{ id: 'g-1' }] }, theirs, groupOwned)).toBe('responsible');
+  });
+
+  it('anybody else who was given the entry is a reader: a member, an operator, the bootstrap', () => {
+    expect(standingOn(ada, theirs, null)).toBe('reader');
+    expect(standingOn(ada, theirs, groupOwned)).toBe('reader');
+    expect(standingOn(ada, null, null)).toBe('reader');
+    expect(standingOn({ ...ada, isOperator: true }, theirs, groupOwned)).toBe('reader');
+    expect(standingOn({ kind: 'bootstrap' }, mission, owned)).toBe('reader');
+  });
+
+  it('being an operator takes nothing from somebody who also answers for the call', () => {
+    expect(standingOn({ ...ada, isOperator: true }, mission, null)).toBe('responsible');
+  });
+});
+
+describe('withoutArguments — a reader is not shown the fingerprint either', () => {
+  it('hides fingerprint keys for a reader, at any depth, and shows them to who answers for the call', () => {
+    const after = {
+      tool: 'github__merge',
+      fingerprint: 'f'.repeat(64),
+      nested: { arguments_hash: 'a'.repeat(64), Arguments_Fingerprint: 'b'.repeat(64) },
+      arguments: { x: 1 },
+    };
+    expect(withoutArguments(after, 'reader')).toEqual({
+      tool: 'github__merge',
+      fingerprint: ARGUMENTS_NOT_SHOWN,
+      nested: { arguments_hash: ARGUMENTS_NOT_SHOWN, Arguments_Fingerprint: ARGUMENTS_NOT_SHOWN },
+      arguments: ARGUMENTS_NOT_SHOWN,
+    });
+    expect(withoutArguments(after, 'responsible')).toEqual({
+      tool: 'github__merge',
+      fingerprint: 'f'.repeat(64),
+      nested: { arguments_hash: 'a'.repeat(64), Arguments_Fingerprint: 'b'.repeat(64) },
+      arguments: ARGUMENTS_NOT_SHOWN,
     });
   });
 });

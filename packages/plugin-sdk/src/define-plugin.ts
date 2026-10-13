@@ -16,12 +16,15 @@ import {
   toolPrefixFor,
   validateDataModel,
 } from '@vaubaan/shared';
+import { baseRiskId, isRiskId } from '@vaubaan/shared/risk-id';
 
 import { semanticIssues } from './catalog-loader.ts';
 import {
   CLIENT_ID_FIELD,
   CLIENT_SECRET_FIELD,
+  OAUTH2_REVOCATION_FORMATS,
   type AppInstallCredentialSpec,
+  type OAuth2CredentialSpec,
 } from './credential.ts';
 import type { ProviderPlugin } from './plugin.ts';
 
@@ -80,7 +83,59 @@ function tokenHandoutIssues(plugin: ProviderPlugin): string[] {
         );
       }
     }
+    const readOnly: unknown = handout.readOnlyRiskIds;
+    if (readOnly === undefined) return;
+    if (!isList(readOnly)) {
+      issues.push(`tokenHandouts[${i}].readOnlyRiskIds: expected a list when present`);
+      return;
+    }
+    for (const riskId of readOnly) {
+      if (typeof riskId !== 'string' || !handout.riskIds.includes(riskId)) {
+        issues.push(
+          `tokenHandouts[${i}].readOnlyRiskIds: '${String(riskId)}' is not one of its riskIds`,
+        );
+      }
+    }
   });
+  return [...issues, ...handoutGateIssues(plugin)];
+}
+
+/**
+ * The risks whose call hands the agent a token that can write at the provider :
+ * every handout risk the plugin did not declare read-only. Unqualified ids.
+ */
+export function writeHandoutRiskIds(plugin: Pick<ProviderPlugin, 'tokenHandouts'>): Set<string> {
+  const write = new Set<string>();
+  const handouts: unknown = plugin.tokenHandouts;
+  if (!isList(handouts)) return write;
+  for (const handout of handouts) {
+    if (!isRecord(handout) || !isList(handout.riskIds)) continue;
+    const readOnly = new Set(isList(handout.readOnlyRiskIds) ? handout.readOnlyRiskIds : []);
+    for (const riskId of handout.riskIds) {
+      if (typeof riskId === 'string' && !readOnly.has(riskId)) write.add(riskId);
+    }
+  }
+  return write;
+}
+
+/**
+ * Spec §2.4 : a preset that carries a token-handing risk which grants write gates
+ * it by approval. A preset is what a creator accepts in one click ; a token that
+ * writes outside the gateway is not handed on a click.
+ */
+function handoutGateIssues(plugin: ProviderPlugin): string[] {
+  const write = writeHandoutRiskIds(plugin);
+  if (write.size === 0) return [];
+  const issues: string[] = [];
+  for (const preset of plugin.catalog?.presets ?? []) {
+    for (const entry of preset.entries ?? []) {
+      if (typeof entry?.risk_id !== 'string' || !isRiskId(entry.risk_id)) continue;
+      if (!write.has(baseRiskId(entry.risk_id)) || entry.gate === 'approval') continue;
+      issues.push(
+        `catalog: preset '${preset.id}': '${entry.risk_id}' hands the agent a token that can write ; its gate must be 'approval' (declare it in tokenHandouts.readOnlyRiskIds if the token is read-only)`,
+      );
+    }
+  }
   return issues;
 }
 
@@ -101,6 +156,42 @@ function identityIssues(plugin: ProviderPlugin): string[] {
     } else if (plugin.summary.length > PLUGIN_SUMMARY_MAX_LENGTH) {
       issues.push(`summary: expected at most ${PLUGIN_SUMMARY_MAX_LENGTH} characters`);
     }
+  }
+  if (plugin.manualRevocation !== undefined) {
+    if (typeof plugin.manualRevocation !== 'string' || plugin.manualRevocation.trim() === '') {
+      issues.push('manualRevocation: expected a non-empty string when present');
+    } else if (plugin.manualRevocation.length > PLUGIN_MANUAL_REVOCATION_MAX_LENGTH) {
+      issues.push(
+        `manualRevocation: expected at most ${PLUGIN_MANUAL_REVOCATION_MAX_LENGTH} characters`,
+      );
+    }
+  }
+  if (plugin.revoke !== undefined && typeof plugin.revoke !== 'function') {
+    issues.push('revoke: expected a function when present');
+  }
+  return issues;
+}
+
+/** Upper bound of `ProviderPlugin.manualRevocation` : a sentence or two. */
+export const PLUGIN_MANUAL_REVOCATION_MAX_LENGTH = 400;
+
+function revocationIssues(spec: OAuth2CredentialSpec): string[] {
+  const revocation: unknown = spec.revocation;
+  if (!isRecord(revocation)) return ['credential.revocation: expected { url, format }'];
+  const issues: string[] = [];
+  if (!isHttpsUrl(revocation.url)) issues.push('credential.revocation.url: expected an https URL');
+  if (!(OAUTH2_REVOCATION_FORMATS as readonly unknown[]).includes(revocation.format)) {
+    issues.push(
+      `credential.revocation.format: expected one of ${OAUTH2_REVOCATION_FORMATS.join(' | ')}`,
+    );
+  }
+  if (
+    revocation.format === 'client-credentials-json' &&
+    (spec.clientAuthMethod === 'none' || !spec.refreshable)
+  ) {
+    issues.push(
+      "credential.revocation.format: 'client-credentials-json' needs a confidential client and refresh tokens",
+    );
   }
   return issues;
 }
@@ -192,9 +283,10 @@ function credentialSpecIssues(plugin: ProviderPlugin): string[] {
         issues.push('credential.scopes: expected a list (may be empty)');
       if (spec.clientAuthMethod === 'none' && !spec.pkce)
         issues.push('credential.pkce: a public client (clientAuthMethod none) must use PKCE');
+      if (spec.revocation !== undefined) issues.push(...revocationIssues(spec));
       // `refreshable: true` needs no `refresh()` : the host performs the
       // standard refresh_token grant from the spec (ADR plugin-contract D2 as
-      // amended by P1.2-align) ; `refresh` is an override for non-standard flows.
+      // as amended) ; `refresh` is an override for non-standard flows.
       break;
     case 'app-install':
       if (!Array.isArray(spec.appConfigFields) || spec.appConfigFields.length === 0) {

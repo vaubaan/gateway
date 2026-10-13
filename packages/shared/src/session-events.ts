@@ -61,6 +61,12 @@ export interface RequestDroppedEventDetails {
   readonly request_kind: RequestKind;
   readonly tool: string;
   readonly fingerprint: string;
+  /**
+   * An approval request: every gated risk of the call it covers (the event's own
+   * `risk_id` column is the first). Absent on a claim, and on an event written when
+   * a request named one risk.
+   */
+  readonly risk_ids?: readonly RiskId[];
 }
 
 export const REQUEST_CLOSED_STATES = ['refused', 'expired'] as const;
@@ -75,13 +81,16 @@ export interface RequestClosedEventDetails {
 
 export type RequestEventDetails = RequestDroppedEventDetails | RequestClosedEventDetails;
 
-/** A granted claim "reset the period": every counter of the period back to zero. */
+/** A granted claim "reset the period": the counter of the claimed risk back to zero, no other. */
 export interface ResetEventDetails {
   readonly request_id: string;
   readonly period_start: Iso8601;
   /** `null` for a one-off mission: its single period never ends. */
   readonly period_end: Iso8601 | null;
-  /** Actions given back, per risk. */
+  /**
+   * Actions given back, per risk: the claimed risk alone. Events written before a
+   * reset was narrowed to the claimed risk list every risk of the period.
+   */
   readonly credits: Readonly<Record<RiskId, number>>;
 }
 
@@ -115,6 +124,8 @@ export interface ApprovalEventDetails {
   readonly approval_id: string;
   readonly tool: string;
   readonly fingerprint: string;
+  /** Every gated risk of the call the approval covers; absent on an older event. */
+  readonly risk_ids?: readonly RiskId[];
   /** The first identical replay consumes the approval before this instant. */
   readonly expires_at: Iso8601;
 }
@@ -230,6 +241,11 @@ function isRequestClosedState(value: unknown): value is RequestClosedState {
   return isText(value) && (REQUEST_CLOSED_STATES as readonly string[]).includes(value);
 }
 
+/** A list added after the first stored events: absent, or a list of texts. */
+function isOptionalTextList(value: unknown): value is readonly string[] | undefined {
+  return value === undefined || isTextList(value);
+}
+
 /** A field added after the first stored events: absent, `null` or a text. */
 function isOptionalText(value: unknown): value is string | null | undefined {
   return value === undefined || isTextOrNull(value);
@@ -271,7 +287,7 @@ function isRequest(d: Fields): d is Fields & RequestEventDetails {
   if (!isText(d.request_id) || !isRequestKind(d.request_kind)) return false;
   // A closed request says how it closed; a dropped one names the call that asked.
   if (d.state !== undefined) return isRequestClosedState(d.state);
-  return isText(d.tool) && isText(d.fingerprint);
+  return isText(d.tool) && isText(d.fingerprint) && isOptionalTextList(d.risk_ids);
 }
 
 function hasPeriod(d: Fields): boolean {
@@ -296,7 +312,8 @@ function isApproval(d: Fields): d is Fields & ApprovalEventDetails {
     isText(d.approval_id) &&
     isText(d.tool) &&
     isText(d.fingerprint) &&
-    isText(d.expires_at)
+    isText(d.expires_at) &&
+    isOptionalTextList(d.risk_ids)
   );
 }
 

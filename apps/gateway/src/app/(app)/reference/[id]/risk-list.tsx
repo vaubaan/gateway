@@ -12,6 +12,7 @@ import { DEPRECATED_NOTE, FALLBACK_NOTE, noteBody } from '@/server/missions/cata
 import type { CatalogRisk } from '@/server/missions/model';
 import { riskReferencePath } from '@/server/providers/links';
 import {
+  TOKEN_ACCESS_BADGE,
   TOKEN_HANDOUT_NOTE,
   type RiskReference,
   type RiskReferenceGroup,
@@ -130,9 +131,9 @@ function RiskRow({
           </button>
           {shown && <SeverityBadge level={shown.level} />}
           <RiskMarkers fallback={entry.fallback} deprecated={entry.deprecated} />
-          {entry.hands_token && (
-            <Badge tone="danger">
-              <span title={TOKEN_HANDOUT_NOTE}>hands a token</span>
+          {entry.token_access && (
+            <Badge tone={entry.token_access === 'write' ? 'danger' : 'warning'}>
+              <span title={TOKEN_HANDOUT_NOTE}>{TOKEN_ACCESS_BADGE[entry.token_access]}</span>
             </Badge>
           )}
         </h3>
@@ -214,8 +215,16 @@ function RiskDetail({ entry }: { entry: RiskReference }) {
           )}
         </Callout>
       )}
-      {entry.hands_token && (
-        <Callout tone="danger" icon="key" title="Hands a token to the agent">
+      {entry.token_access && (
+        <Callout
+          tone={entry.token_access === 'write' ? 'danger' : 'warning'}
+          icon="key"
+          title={
+            entry.token_access === 'write'
+              ? 'Hands the agent a token that can write'
+              : 'Hands the agent a read-only token'
+          }
+        >
           {noteBody(TOKEN_HANDOUT_NOTE)}
         </Callout>
       )}

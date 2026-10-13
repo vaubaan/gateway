@@ -2,7 +2,7 @@
  * An ephemeral instance for the authorization-server tests (spec §10
  * "integration on an ephemeral instance with embedded store and simulated
  * IdP … OAuth delegation"): the real composition root on the `:memory:`
- * store, P1.1's in-process `FakeIdp` behind the relying party, and the
+ * store, the in-process `FakeIdp` behind the relying party, and the
  * instance's HTTP surface as one `fetch`-shaped function.
  *
  * `ROUTES` is that surface: each path with the host-agnostic handler its Next

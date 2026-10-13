@@ -176,8 +176,9 @@ listed again, as questions, in the [appendix](#appendix--decisions-to-confirm).
   GitHub personal-access-token path. Supabase `execute_sql` and the `list_*`
   tools go to the read-only endpoint.
 - **A quota extension is capped at what was consumed** in the period (quota
-  5, consumed 5 → at most 5 more), and "Reset the period" resets every risk of
-  the mission. A larger quota means a new mission: there is no edit screen,
+  5, consumed 5 → at most 5 more), and "Reset the period" resets the claimed
+  risk only: another exhausted risk has its own claim. A larger quota means a
+  new mission: there is no edit screen,
   "Duplicate" pre-fills the form, and the duplicate has its own token.
 - **Not built**: the stateless caps of the catalogs (items or bytes per call).
   No shipped catalog declares one any more and the door applies none
@@ -404,13 +405,13 @@ cutover; each is a default that can be changed, most in one place.
 | Question                                                                | Current behaviour                                                                                              |
 | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | Quota extension capped at the period's consumption — acceptable for M1? | Capped: a granted claim is a credit on the period counter. Lifting the cap needs a per-period extension table. |
-| "Reset the period" resets every risk of the mission — intended?         | Yes, every counter of the current period, not only the claimed risk.                                           |
+| "Reset the period" resets every risk of the mission — intended?         | **No** (decided 2026-10-13): it resets the claimed risk only; the extension cap stays.                         |
 | Time zone on the claim page                                             | Consequence lines show UTC, facts show the browser's local time.                                               |
 | Default expiry of a claim / of an approval                              | 24 h / 10 min, both configurable (`requests.expiry`, `approvals.expiry`).                                      |
 | The audit's argument hash as the approval fingerprint                   | Done: one canonical SHA-256 of the key-sorted JSON (64 hex).                                                   |
 | Session events and past-period counters under the audit's retention?    | No: `retention_days` purges the audit only; events and counters grow.                                          |
 | Should a one-off mission's period carry an anchor date?                 | No anchor for one-off periods.                                                                                 |
-| Granting an approval                                                    | Done (P2.1): grant, open the gate for the rest of the period, or refuse; the gate is editable after issuance.  |
+| Granting an approval                                                    | Done: grant, open the gate for the rest of the period, or refuse; the gate is editable after issuance.         |
 | A call touching two gated risks                                         | Asks once per gated risk, in turn (one request each); both approvals are consumed by the one replay.           |
 | "Open the gate for the rest of the period" on a one-off mission         | Unavailable: there is no period end to bound it. The creator sets the gate to `auto` on the mission instead.   |
 
@@ -477,7 +478,7 @@ cutover; each is a default that can be changed, most in one place.
 | Refuse `bootstrap_token` once an IdP is configured?                                         | Optional: harmless to leave set, refused once revoked.                                                                                                                                         |
 | Where do non-operators land after sign-in?                                                  | On the page they came from; without one, on `/login`, which shows who is signed in. `/` goes to `/missions`.                                                                                   |
 | How are acts done with the bootstrap token audited?                                         | Under the literal actor `bootstrap`.                                                                                                                                                           |
-| OAuth refresh-token replay on the management door (P2.3)                                    | Built: a replayed refresh token or authorization code revokes the delegation, except the token just rotated, accepted once more within `oauth.refresh_reuse_window_seconds` (30 s by default). |
+| OAuth refresh-token replay on the management door                                           | Built: a replayed refresh token or authorization code revokes the delegation, except the token just rotated, accepted once more within `oauth.refresh_reuse_window_seconds` (30 s by default). |
 
 ### Audit
 

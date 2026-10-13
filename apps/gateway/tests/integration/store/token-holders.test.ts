@@ -324,7 +324,13 @@ describe('token holders (migration 0010)', () => {
     await write('named', ada, 'by-a-name-spelled-like-ada');
     await write(null, null, 'unattributed');
 
-    const scope = { missionCreatorUserId: ada, connectionOwners: [], allAdmin: false };
+    const scope = {
+      missionCreatorUserId: ada,
+      missionMemberUserId: null,
+      connectionOwners: [],
+      allAdmin: false,
+      allCalls: false,
+    };
     const tools = async (tokenHolders: { kind: 'member' | 'named'; holders: string[] }) =>
       (await t.store.audit.search({ scope, limit: 50, tokenHolders }))
         .map((r) => (r.kind === 'call' ? r.tool : r.act))

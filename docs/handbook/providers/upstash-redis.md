@@ -16,7 +16,7 @@ tracks:
 
 # Upstash Redis provider — plugin and risk model
 
-`@vaubaan/plugin-upstash-redis` (`plugins/upstash-redis`, version 2.0.1),
+`@vaubaan/plugin-upstash-redis` (`plugins/upstash-redis`, version 3.0.0),
 written against the Plugin SDK. Spec: [`vaubaan-gateway.md`](../../spec/vaubaan-gateway.md)
 §5 (plugins), §3.2 (presets); [`gateway-risk-model.md`](../../spec/gateway-risk-model.md)
 §2, §4, §7. ADR: [[plugin-contract-and-credential-spec]]. Contributor guide:
@@ -84,25 +84,25 @@ an encoded form, an empty or overlong value is refused
 | `key` of a dedicated data tool                  | `KEY_IDENT` — `[a-zA-Z0-9_./~-]{1,128}` (private) | slice `key-space[K]` only; JSON array in the POST body | `key-space[*]`; the key is sent as is |
 | patterns, command words, values (`execute` too) | none — never part of a URL                        | JSON array in the POST body                            | —                                     |
 
-| Tool                                                       | Slice                                                        |
-| ---------------------------------------------------------- | ------------------------------------------------------------ |
-| `list_databases`                                           | `account.database[*].R`                                      |
-| `get_database`                                             | `database[D].R`                                              |
-| `get_database_stats`                                       | `database[D].stats.R`                                        |
-| `create_database`                                          | `account.database.W`                                         |
-| `delete_database`                                          | `account.database[D].delete.W`                               |
-| `rename_database`                                          | `database[D].credentials.W`                                  |
-| `get`, `ttl`, `hgetall`, `lrange`, `smembers`              | `database[D].key-space[K].R`                                 |
-| `keys`, `scan`, `dbsize`                                   | `database[D].key-space[*].R` (the whole key space, always)   |
-| `set`, `hset`, `lpush`, `sadd`                             | `database[D].key-space[K].W`                                 |
-| `expire` — `seconds` a strictly positive integer           | `database[D].key-space[K].W`                                 |
-| `expire` — `seconds` zero, negative, missing or unreadable | `database[D].key-space[K].delete.W`                          |
-| `del`                                                      | `database[D].key-space[K].delete.W` (`[*]` for several keys) |
-| `execute` — read command                                   | `database[D].key-space[*].R`                                 |
-| `execute` — write command                                  | `database[D].key-space[*].W`                                 |
-| `execute` — delete command                                 | `database[D].key-space[*].delete.W`                          |
-| `execute` — FLUSHDB / FLUSHALL                             | `database[D].key-space.flush.W`                              |
-| `execute` — script, administration, unknown or unreadable  | `database[D].key-space[*].execute.W`                         |
+| Tool                                                      | Slice                                                        |
+| --------------------------------------------------------- | ------------------------------------------------------------ |
+| `list_databases`                                          | `account.database[*].R`                                      |
+| `get_database`                                            | `database[D].R`                                              |
+| `get_database_stats`                                      | `database[D].stats.R`                                        |
+| `create_database`                                         | `account.database.W`                                         |
+| `delete_database`                                         | `account.database[D].delete.W`                               |
+| `rename_database`                                         | `database[D].credentials.W`                                  |
+| `get`, `ttl`, `hgetall`, `lrange`, `smembers`             | `database[D].key-space[K].R`                                 |
+| `keys`, `scan`, `dbsize`                                  | `database[D].key-space[*].R` (the whole key space, always)   |
+| `set` without `ex` / `px`, `hset`, `lpush`, `sadd`        | `database[D].key-space[K].W`                                 |
+| `set` with `ex` or `px` (whatever the value)              | `database[D].key-space[K].delete.W`                          |
+| `expire` (whatever `seconds` is)                          | `database[D].key-space[K].delete.W`                          |
+| `del`                                                     | `database[D].key-space[K].delete.W` (`[*]` for several keys) |
+| `execute` — read command                                  | `database[D].key-space[*].R`                                 |
+| `execute` — write command                                 | `database[D].key-space[*].W`                                 |
+| `execute` — delete command                                | `database[D].key-space[*].delete.W`                          |
+| `execute` — FLUSHDB / FLUSHALL                            | `database[D].key-space.flush.W`                              |
+| `execute` — script, administration, unknown or unreadable | `database[D].key-space[*].execute.W`                         |
 
 **Keys.** A key is embedded as `[K]` when it is a slice-DSL ident of at
 most 128 characters (`[a-zA-Z0-9_./~-]{1,128}`); glob patterns, braces,
@@ -121,29 +121,42 @@ catch-all. Every command belongs to exactly one class; the six sets are
 exported from `classify.ts`, and a verb listed in two of them fails the
 import (that is, the gateway boot).
 
-| Class       | Set                 | Marker     | Risk touched (next to `write-data` for every write)           | What is in it                                                                                                                                                 |
-| ----------- | ------------------- | ---------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `read`      | `KNOWN_READS`       | —          | `read-data` (next to `read-database-metadata`, as every read) | Commands that change nothing: GET, MGET, SCAN, HGETALL, LRANGE, ZRANGE, XRANGE, JSON.GET, INFO, PING…                                                         |
-| `write`     | `KNOWN_WRITES`      | —          | `write-data`                                                  | Create, overwrite, modify: SET, MSET, INCR, HSET, LPUSH, SADD, ZADD, RENAME, PERSIST, EXPIRE with a positive TTL, XADD, JSON.SET…                             |
-| `delete`    | `KNOWN_DELETES`     | `.delete`  | `delete-data`                                                 | Remove keys, fields, members or entries: DEL, UNLINK, GETDEL, HDEL, LPOP, RPOP, LREM, LTRIM, SREM, SPOP, ZREM, ZPOPMIN, XDEL, XTRIM, JSON.DEL…                |
-| `flush`     | `KNOWN_DESTRUCTIVE` | `.flush`   | `flush-database`                                              | FLUSHDB, FLUSHALL.                                                                                                                                            |
-| `arbitrary` | `KNOWN_ARBITRARY`   | `.execute` | `execute-arbitrary`                                           | Code and sequences the classifier does not see: EVAL, EVALSHA, FCALL, FUNCTION, SCRIPT, MODULE, and transaction control alone (MULTI, EXEC, DISCARD, WATCH…). |
-| `admin`     | `KNOWN_ADMIN`       | `.execute` | `execute-arbitrary`                                           | Server, connection and replication administration: CONFIG, ACL, CLIENT, DEBUG, SHUTDOWN, REPLICAOF, SWAPDB, MIGRATE, SELECT…                                  |
-| (unknown)   | none                | `.execute` | `execute-arbitrary`                                           | Any verb the table does not hold, and any `command` that is not one readable command.                                                                         |
+| Class       | Set                 | Marker     | Risk touched (next to `write-data` for every write)           | What is in it                                                                                                                                                                                                                                                                                                                   |
+| ----------- | ------------------- | ---------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `read`      | `KNOWN_READS`       | —          | `read-data` (next to `read-database-metadata`, as every read) | Commands that change nothing: GET, MGET, SCAN, HGETALL, LRANGE, ZRANGE, XRANGE, JSON.GET, INFO, PING…                                                                                                                                                                                                                           |
+| `write`     | `KNOWN_WRITES`      | —          | `write-data`                                                  | Create, overwrite, modify a value that stays: SET without an expiry, MSET, INCR, HSET, LPUSH, SADD, ZADD, PERSIST, COPY, XADD, JSON.SET…                                                                                                                                                                                        |
+| `delete`    | `KNOWN_DELETES`     | `.delete`  | `delete-data`                                                 | Remove keys, fields, members or entries, now or later: DEL, UNLINK, GETDEL, HDEL, LPOP, RPOP, LREM, LTRIM, SREM, SPOP, ZREM, ZPOPMIN, XDEL, XTRIM, JSON.DEL…; **every expiry** (EXPIRE, PEXPIRE, HEXPIRE, SETEX, PSETEX, the `…AT` forms, GETEX); **the moves** (RENAME, RENAMENX, LMOVE, RPOPLPUSH, BLMOVE, BRPOPLPUSH, SMOVE) |
+| `flush`     | `KNOWN_DESTRUCTIVE` | `.flush`   | `flush-database`                                              | FLUSHDB, FLUSHALL.                                                                                                                                                                                                                                                                                                              |
+| `arbitrary` | `KNOWN_ARBITRARY`   | `.execute` | `execute-arbitrary`                                           | Code and sequences the classifier does not see: EVAL, EVALSHA, FCALL, FUNCTION, SCRIPT, MODULE, and transaction control alone (MULTI, EXEC, DISCARD, WATCH…).                                                                                                                                                                   |
+| `admin`     | `KNOWN_ADMIN`       | `.execute` | `execute-arbitrary`                                           | Server, connection and replication administration: CONFIG, ACL, CLIENT, DEBUG, SHUTDOWN, REPLICAOF, SWAPDB, MIGRATE, SELECT…                                                                                                                                                                                                    |
+| (unknown)   | none                | `.execute` | `execute-arbitrary`                                           | Any verb the table does not hold, and any `command` that is not one readable command.                                                                                                                                                                                                                                           |
 
 Edge cases, all on the severe side:
 
-- **Deletions in disguise.** `KNOWN_DELETES` also holds the absolute expiries
-  (`EXPIREAT`, `PEXPIREAT`, `HEXPIREAT`, `HPEXPIREAT`, `GETEX`): an instant in
-  the past deletes at once, and the classifier is pure — it has no clock. It
-  holds the `*STORE` family and `BITOP` too: an empty result deletes the
-  destination key.
+- **Whatever makes data go away is a deletion, at once or later**
+  (decision of 2026-10-13). `KNOWN_DELETES`
+  holds **every expiry**, relative (`EXPIRE`, `PEXPIRE`, `HEXPIRE`,
+  `HPEXPIRE`, `SETEX`, `PSETEX`) and absolute (`EXPIREAT`, `PEXPIREAT`,
+  `HEXPIREAT`, `HPEXPIREAT`, `GETEX`): the key or the field is gone when the
+  time elapses, and a time to live of one second is a deletion in all but
+  name. It holds **the moves** (`RENAME`, `RENAMENX`, `LMOVE`, `RPOPLPUSH`,
+  `BLMOVE`, `BRPOPLPUSH`, `SMOVE`): the source key, or the element taken from
+  it, is no longer where it was. And the `*STORE` family and `BITOP`: an
+  empty result deletes the destination key. Before this decision a positive
+  TTL and a move were plain writes, so a mission that held `write-data` alone
+  could delete any key with `EXPIRE k 1`.
 - **Writes that become deletions on their arguments** (`ESCALATIONS`):
-  `EXPIRE` / `PEXPIRE` / `HEXPIRE` / `HPEXPIRE` whose TTL is not a strictly
-  positive decimal integer (zero, negative, missing, signed, fractional);
-  `SET … EXAT|PXAT`; `XADD … MAXLEN|MINID`; `SORT`, `GEORADIUS`,
-  `GEORADIUSBYMEMBER` with `STORE` / `STOREDIST`. An option name found where
-  a value may sit counts as the option.
+  `SET … EX|PX|EXAT|PXAT` (any expiry; `KEEPTTL` is not one);
+  `XADD … MAXLEN|MINID`; `SORT`, `GEORADIUS`, `GEORADIUSBYMEMBER` with
+  `STORE` / `STOREDIST`. An option name found where a value may sit counts
+  as the option. The dedicated `set` tool reads the same way: `ex` or `px`
+  present, whatever the value, is the `delete` marker — the executor appends
+  the option whenever the argument is present.
+- **What it costs.** A cache write with a time to live (`SET k v EX 300`,
+  `SETEX`) needs `delete-data` next to `write-data`. The `developer` and
+  `operator` presets hold both wherever they hold one; in `operator`,
+  `[prod].delete-data` is behind approval, so a TTL write on prod waits for
+  the creator.
 - **Reading the verb.** A command name is ASCII (`[A-Za-z][A-Za-z0-9._-]*`)
   and is then matched case-insensitively. Anything else — a space, a
   newline, a letter of another script that upper-cases to an ASCII one
@@ -169,18 +182,17 @@ Edge cases, all on the severe side:
   environment accepts everything a Redis command can do there. The `operator`
   preset therefore gates it like FLUSH (`approval` outside `development`).
 
-## 3. Catalog and presets (`src/risk-catalog.yaml`, v4)
+## 3. Catalog and presets (`src/risk-catalog.yaml`, v5)
 
 Risk ids are stable and never renamed. `write-data` (`key-space[**].W`) is
 deliberately broad: the deletion commands (DEL, UNLINK, the POP and REM
 families, an expiry at an absolute instant), FLUSH and arbitrary commands
 fire it next to their own, more severe risk, so a mission accepting
 `write-data` alone cannot run them, and a deletion needs both `write-data`
-and `delete-data`. `write-data` alone can still make a key go away without
-those commands, and the catalog entry says so: a positive TTL (EXPIRE,
-`SET … EX`) removes the key when it elapses, and RENAME, LMOVE or SMOVE
-take a key or an element out of its source — as an overwrite already
-destroys a value.
+and `delete-data`. So do the commands that make data go away later or
+elsewhere — any time to live (EXPIRE, SETEX, `SET … EX`) and the moves
+(RENAME, LMOVE, SMOVE): `write-data` alone writes and overwrites values that
+stay, nothing else.
 
 Ten named risks and the fallback: `read-database-metadata`, `read-stats`,
 `read-data`, `write-data`, `delete-data`, `flush-database`, `execute-arbitrary`,
@@ -199,7 +211,7 @@ staging, prod]`) except `create-database`, which is account-rooted (the
   unqualified risk (`upstash-redis.write-data`) or the misplaced one
   (`upstash-redis[dev].write-data`) and the accepted labels. Reads still pass.
 - The fallback `uncategorized-write` is env-scoped and counts only when no
-  specific entry matched (policy-engine rule, P1.2-SDK); no preset carries it.
+  specific entry matched (policy-engine rule); no preset carries it.
 - Presets: `read-only` (the three reads); `developer` (reads, `[development]`
   and `[staging]` `write-data` and `delete-data`, all `auto`); `operator`
   (everything: `prod` key writes `auto`, `[development].flush-database` and
@@ -295,9 +307,10 @@ and command words that stay in the JSON body), `data-model.test.ts` (1).
   hint reads "touched on a resource with no environment label") or a label
   outside `development` / `staging` / `prod` (`dev` is not `development`).
   Label it on the connection page.
-- **A `DEL`, an `LPOP` or an `EXPIRE k 0` through `execute` is refused with
-  `delete-data` missing** — intended: removing data needs `delete-data`
-  whichever tool carries the command.
+- **A `DEL`, an `LPOP`, an `EXPIRE k 60`, a `SET k v EX 60` or a `RENAME`
+  is refused with `delete-data` missing** — intended: removing data, now or
+  when a time to live elapses, needs `delete-data` whichever tool carries
+  the command. A cache that writes with a TTL needs both risks.
 - **`execute` lands on `execute-arbitrary` for a harmless verb** — the verb
   is not in the command table. Add it to exactly one set in `classify.ts`
   (`KNOWN_READS` only if no argument can make it write), add a row to

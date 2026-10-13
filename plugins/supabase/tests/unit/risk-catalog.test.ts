@@ -41,12 +41,12 @@ const patternsOf = (e: RiskEntry): readonly string[] =>
 describe('risk-catalog.yaml — loaded shape', () => {
   test('declares provider `supabase`, a version and a date', () => {
     expect(CATALOG.provider).toBe('supabase');
-    expect(CATALOG.catalog_version).toBe(3);
+    expect(CATALOG.catalog_version).toBe(4);
     expect(CATALOG.catalog_date).toBe('2026-10-13');
   });
 
-  test('exposes 24 named risks plus the fallback', () => {
-    expect(CATALOG.risks.length).toBe(25);
+  test('exposes 25 named risks plus the fallback', () => {
+    expect(CATALOG.risks.length).toBe(26);
   });
 
   test('every entry has the required fields and a 6-axis vector', () => {
@@ -80,15 +80,13 @@ describe('risk-catalog.yaml — loaded shape', () => {
     }
   });
 
-  test('every write risk is env-scoped ; reads are account-scoped except auth.read-users', () => {
+  test('every write risk is env-scoped ; reads are account-scoped except the two that reach identities and secrets', () => {
+    const envScopedReads = new Set(['supabase.auth.read-users', 'supabase.read-managed-schemas']);
     for (const e of CATALOG.risks) {
       const writes = patternsOf(e).every((p) => p.endsWith('.W'));
       const envScoped = (e.acceptable_in_envs?.length ?? 0) > 0;
       if (writes) expect(envScoped, `${e.id} should be env-scoped`).toBe(true);
-      else
-        expect(envScoped, `${e.id} should be account-scoped`).toBe(
-          e.id === 'supabase.auth.read-users',
-        );
+      else expect(envScoped, `${e.id} should be account-scoped`).toBe(envScopedReads.has(e.id));
     }
   });
 });
@@ -345,7 +343,38 @@ describe('risk-catalog.yaml — decision-level spot checks', () => {
       project_ref: STAGING_REF,
       query: 'DELETE FROM users WHERE 1=1;',
     });
-    expect(touched).toEqual(['supabase.read-data']);
+    // Not a plain query : the reader does not vouch for it, so both reads.
+    expect(touched).toEqual(['supabase.read-data', 'supabase.read-managed-schemas']);
+  });
+
+  test('execute_sql : a plain application query fires read-data alone, a managed schema fires both', () => {
+    const run = (query: string) =>
+      risksFor('supabase__execute_sql', { project_ref: STAGING_REF, query });
+    expect(run('select id, title from public.todo where done;')).toEqual(['supabase.read-data']);
+    expect(run('select email from auth.users;')).toEqual([
+      'supabase.read-data',
+      'supabase.read-managed-schemas',
+    ]);
+    // Never the user-listing risk of the auth admin API, never a write.
+    expect(run('select * from vault.decrypted_secrets;')).not.toContain('supabase.auth.read-users');
+  });
+
+  test('no read-only preset carries read-managed-schemas', () => {
+    for (const preset of CATALOG.presets ?? []) {
+      const ids = preset.entries.map((e) => e.risk_id);
+      const writes = ids.some((id) => /write|deploy|generate-link/.test(id));
+      if (!writes) {
+        expect(
+          ids.filter((id) => id.endsWith('.read-managed-schemas')),
+          preset.id,
+        ).toEqual([]);
+      }
+    }
+    expect(
+      (CATALOG.presets ?? [])
+        .find((p) => p.id === 'read-only-analyst')!
+        .entries.map((e) => e.risk_id),
+    ).toEqual(['supabase.read-data', 'supabase.storage.object-read']);
   });
 
   test('delete_bucket fires bucket-write and the bulk object cascade', () => {

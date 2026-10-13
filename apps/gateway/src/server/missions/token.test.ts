@@ -1,9 +1,14 @@
-import { API_KEY_PATTERN, parseApiKey } from '@vaubaan/shared';
+import { createHash } from 'node:crypto';
+
+import { API_KEY_PATTERN, hashApiKeyArgon2id, parseApiKey } from '@vaubaan/shared';
 import { describe, expect, it } from 'vitest';
 
 import { parseMissionDraft } from './draft-schema';
 import {
   bearerMatches,
+  digestOfBearer,
+  isLegacyTokenHash,
+  LEGACY_TOKEN_HASH_ALG,
   maskedToken,
   mintMissionToken,
   MISSION_TOKEN_HASH_ALG,
@@ -11,24 +16,57 @@ import {
 } from './token';
 
 describe('mission token', () => {
-  it('mints vbn_live_<8>_<32>, hashed with argon2id, with the prefix in clear', async () => {
+  it('mints vbn_live_<8>_<32>, stored as its sha256 digest, with the prefix in clear', async () => {
     const token = await mintMissionToken();
     expect(token.secret).toMatch(new RegExp(`^${API_KEY_PATTERN.source}$`));
     expect(token.secret.startsWith(`vbn_live_${token.prefix}_`)).toBe(true);
     expect(token.prefix).toMatch(/^[A-Za-z0-9]{8}$/);
     expect(parseApiKey(token.secret)).toMatchObject({ kind: 'live', prefix: token.prefix });
+    expect(MISSION_TOKEN_HASH_ALG).toBe('sha256');
     expect(token.hashAlg).toBe(MISSION_TOKEN_HASH_ALG);
-    expect(token.hash.startsWith('$argon2id$')).toBe(true);
-    expect(token.hash).not.toContain(token.secret);
+    expect(token.hash).toBe(createHash('sha256').update(token.secret).digest('hex'));
+    expect(token.hash).not.toContain(token.secret.slice(-32));
   });
 
-  it('verifies the secret against the hash and nothing else', async () => {
+  it('verifies the secret against the digest and nothing else', async () => {
     const token = await mintMissionToken();
-    expect(await bearerMatches(token.hash, token.secret)).toBe(true);
-    expect(await bearerMatches(token.hash, `  ${token.secret}\n`)).toBe(true);
+    expect(await bearerMatches(token, token.secret)).toBe(true);
+    expect(await bearerMatches(token, `  ${token.secret}\n`)).toBe(true);
     const tampered = `${token.secret.slice(0, -1)}${token.secret.endsWith('a') ? 'b' : 'a'}`;
-    expect(await bearerMatches(token.hash, tampered)).toBe(false);
-    expect(await bearerMatches('not-a-hash', token.secret)).toBe(false);
+    expect(await bearerMatches(token, tampered)).toBe(false);
+    for (const hash of ['not-a-digest', '', token.hash.toUpperCase(), `${token.hash}\n`]) {
+      expect(await bearerMatches({ hash, hashAlg: 'sha256' }, token.secret), hash).toBe(false);
+    }
+  });
+
+  it('still verifies a token an earlier build stored as argon2id', async () => {
+    const token = await mintMissionToken();
+    const legacy = {
+      hash: await hashApiKeyArgon2id(token.secret),
+      hashAlg: LEGACY_TOKEN_HASH_ALG,
+    };
+    expect(legacy.hash.startsWith('$argon2id$')).toBe(true);
+    expect(isLegacyTokenHash(legacy)).toBe(true);
+    expect(isLegacyTokenHash(token)).toBe(false);
+    expect(await bearerMatches(legacy, token.secret)).toBe(true);
+    expect(await bearerMatches(legacy, `${token.secret.slice(0, -1)}_`)).toBe(false);
+    // What replaces it is the digest a fresh mint of the same secret would store.
+    expect(digestOfBearer(` ${token.secret}\n`)).toEqual({ hash: token.hash, hashAlg: 'sha256' });
+  });
+
+  it('never reads a hash under the wrong algorithm, nor under one it does not know', async () => {
+    const token = await mintMissionToken();
+    const argon = await hashApiKeyArgon2id(token.secret);
+    expect(await bearerMatches({ hash: argon, hashAlg: 'sha256' }, token.secret)).toBe(false);
+    expect(await bearerMatches({ hash: token.hash, hashAlg: 'argon2id' }, token.secret)).toBe(
+      false,
+    );
+    for (const hashAlg of ['', 'plain', 'md5', 'SHA256']) {
+      expect(await bearerMatches({ hash: token.hash, hashAlg }, token.secret), hashAlg).toBe(false);
+      expect(await bearerMatches({ hash: token.secret, hashAlg }, token.secret), hashAlg).toBe(
+        false,
+      );
+    }
   });
 
   it('never mints the same token twice', async () => {

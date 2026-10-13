@@ -180,7 +180,7 @@ describe('connections repository', () => {
     await expect(store.connections.setResourceEnv('missing', null)).rejects.toThrow(/not found/);
   });
 
-  it('merges a discovery without touching owner edits, and never deletes (P1.4)', async () => {
+  it('merges a discovery without touching owner edits, and never deletes', async () => {
     const c = await store.connections.create({
       provider: 'resend',
       owner: { kind: 'user', id: owner },
@@ -274,7 +274,7 @@ describe('connections repository', () => {
     );
   });
 
-  it('refreshes, expires, reconnects and revokes without ever resurrecting a revoked connection (P1.4)', async () => {
+  it('refreshes, expires, reconnects and revokes without ever resurrecting a revoked connection', async () => {
     const c = await store.connections.create({
       provider: 'supabase',
       owner: { kind: 'user', id: owner },

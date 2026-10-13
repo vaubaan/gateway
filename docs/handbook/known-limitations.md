@@ -56,9 +56,12 @@ change that removes it.
   written and its Node scripts are tested, but no `v2.*` tag exists: no image was
   published, signed or attested by it. →
   [coding workflow, "Release"](../workflow/coding-workflow.md#release)
-- **The telemetry collector is not deployed.** The built-in collector URL is a
-  placeholder to which nothing is sent, and the collector's SQL under
-  `deploy/collector/` was applied to a local database only. →
+- **Telemetry is postponed until after the pilot.** It is off by default
+  (`telemetry.enabled: false`) and stays so; the collector is not deployed: the
+  built-in collector URL is a placeholder to which nothing is sent even when
+  telemetry is enabled, and the collector's SQL under `deploy/collector/` was
+  applied to a local database only. Nothing in the collector is being worked
+  on before the pilot has run (product owner's decision of 2026-10-13). →
   [telemetry, "Pointing an instance at a collector"](telemetry.md#pointing-an-instance-at-a-collector)
 
 ## Not enforced, or enforced more coarsely than one would expect
@@ -73,16 +76,17 @@ change that removes it.
   least one accepted risk is listed; a listed tool whose own risk the mission does not accept is refused
   `risk-not-accepted` when called. →
   [execution-door, "Discovery and catalog"](execution-door.md#discovery-and-catalog-toolsts)
-- **Railway: `deploymentId` and `threadId` are not bound to the mission's
-  project.** The first is checked for its shape only and the second is
-  forwarded as given, so a mission on one project can name a deployment or a
-  thread of another project the same credential reaches (threat model, accepted
-  risk A18). → [railway, "Identifiers"](providers/railway.md#identifiers)
+- **Railway: the logs of a named deployment, and the continuation of an agent
+  conversation, are not available.** `deploymentId` and `threadId` cannot be
+  bound to the mission's project, so the gateway refuses both rather than
+  forward them: `get-logs` reads the latest deployment of a service, and every
+  `railway-agent` call starts a new conversation. →
+  [railway, "Identifiers"](providers/railway.md#identifiers)
 - **Railway: `railway-agent` cannot be bound at all.** It hands a free-text
   request to Railway's own agent, which acts with the whole credential; the
   gateway classifies the call on the mission's project and requires the
   `agent-action`, `deploy` and both variable risks, but it cannot see or limit
-  what that agent then does. → [railway, "Classification"](providers/railway.md#classification)
+  what that agent then does (threat model, accepted risk A18). → [railway, "Classification"](providers/railway.md#classification)
 - **An administrative act and its audit entry are two writes.** A member
   removed, a token revoked or issued, a mission rotated or revoked: the store
   commits the act, then the entry is written. If that second write fails, the
@@ -94,7 +98,7 @@ change that removes it.
 
 - **Single process.** The state marked `// single-process only` in the code
   lives in the memory of one Node process: the rate-limit windows (the
-  budget's and the surfaces'), the verified-token proofs and their throttle,
+  budget's and the surfaces', the one on the argon2id check of legacy tokens),
   the cache of derived provider credentials, the one-at-a-time credential
   refresh per connection, the single use of a pending connection attempt and
   of a pending consent, the identity provider's discovery cache, the telemetry

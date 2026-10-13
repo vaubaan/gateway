@@ -12,7 +12,7 @@ import type {
   RiskId,
   SessionRecord,
 } from '../types.ts';
-import { insertApprovalSync } from './approvals.ts';
+import { insertApprovalSync, riskIdsColumn, riskIdsOf } from './approvals.ts';
 import {
   nowIso,
   parseEnum,
@@ -39,7 +39,13 @@ export interface RequestInput {
   readonly missionId: string;
   readonly sessionId?: string | null;
   readonly kind: RequestKind;
+  /** The claimed risk; for an approval request, the first of `riskIds` when given. */
   readonly riskId: RiskId;
+  /**
+   * Approval requests: every gated risk of the call (spec §3.5 "one request covers the
+   * call"). Absent: the one risk of `riskId`. Refused for a claim, which is about one risk.
+   */
+  readonly riskIds?: readonly RiskId[];
   /** Approval requests: the tool and the canonical-argument fingerprint are mandatory. */
   readonly tool?: string | null;
   readonly fingerprint?: string | null;
@@ -82,8 +88,11 @@ export interface ClaimDecisionContext {
   readonly now: Iso;
   /** Consumed count per risk in the period starting at `periodStart`. */
   counters(periodStart: Iso): ReadonlyMap<RiskId, number>;
-  /** Sets every counter of the period to zero; returns what each one held. */
-  resetCounters(periodStart: Iso): ReadonlyMap<RiskId, number>;
+  /**
+   * Sets the counter of ONE risk to zero in the period; returns what it held (0
+   * when there was nothing to give back, or no session). No other risk is touched.
+   */
+  resetCounter(periodStart: Iso, riskId: RiskId): number;
   /** Gives `amount` actions back on one risk; false (nothing written) when fewer were consumed. */
   creditCounter(periodStart: Iso, riskId: RiskId, amount: number): boolean;
   /** Moves the mission's expiry; a mission stored `expired` becomes `active` again. */
@@ -121,8 +130,8 @@ export interface ApprovalDecisionContext {
   readonly session: SessionRecord | null;
   readonly now: Iso;
   /**
-   * The approval a grant produces: bound to the request's mission, risk, tool and
-   * fingerprint, single-use, valid until `expiresAt`.
+   * The approval a grant produces: bound to the request's mission, tool and fingerprint,
+   * covering every risk the request lists, single-use, valid until `expiresAt`.
    */
   createApproval(expiresAt: Iso): ApprovalRecord;
   /** Events of the mission's session about some risks (empty when there is no session). */
@@ -183,6 +192,7 @@ interface RequestRow {
   kind: string;
   state: string;
   risk_id: string;
+  risk_ids_json: string | null;
   tool: string | null;
   fingerprint: string | null;
   has_args: number;
@@ -193,7 +203,7 @@ interface RequestRow {
   decision_json: string | null;
 }
 
-const COLUMNS = `r.id, r.mission_id, r.session_id, r.kind, r.state, r.risk_id, r.tool, r.fingerprint,
+const COLUMNS = `r.id, r.mission_id, r.session_id, r.kind, r.state, r.risk_id, r.risk_ids_json, r.tool, r.fingerprint,
   CASE WHEN r.args_blob IS NULL THEN 0 ELSE 1 END AS has_args, r.created_at, r.expires_at,
   r.decided_at, r.decided_by_user_id, r.decision_json`;
 
@@ -205,6 +215,7 @@ function toRecord(row: RequestRow): RequestRecord {
     kind: parseEnum(REQUEST_KINDS, row.kind, 'requests.kind'),
     state: parseEnum(REQUEST_STATES, row.state, 'requests.state'),
     riskId: row.risk_id,
+    riskIds: riskIdsOf(row.risk_id, row.risk_ids_json),
     tool: row.tool,
     fingerprint: row.fingerprint,
     hasArguments: row.has_args === 1,
@@ -230,33 +241,35 @@ export async function prepareRequestArguments(
 }
 
 const SELECT_BY_ID = `SELECT ${COLUMNS} FROM requests r WHERE r.id = ?`;
-const INSERT_OPEN = `INSERT INTO requests (id, mission_id, session_id, kind, state, risk_id, tool, fingerprint,
-    args_blob, key_version, created_at, expires_at)
-  VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?)`;
+const INSERT_OPEN = `INSERT INTO requests (id, mission_id, session_id, kind, state, risk_id, risk_ids_json,
+    tool, fingerprint, args_blob, key_version, created_at, expires_at)
+  VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?)`;
 
 function getRequestRecord(ctx: RepoContext, id: string): RequestRecord | null {
   const row = ctx.db.prepare<[string], RequestRow>(SELECT_BY_ID).get(id);
   return row ? toRecord(row) : null;
 }
 
-export interface OpenRequestLookup {
-  readonly kind: RequestKind;
-  readonly riskId: RiskId;
-  /**
-   * Approval requests are keyed by the call too — its tool and the fingerprint of its
-   * arguments, both mandatory for them; claims ignore both.
-   */
-  readonly tool?: string | null;
-  readonly fingerprint?: string | null;
-}
+/**
+ * Which open request a refusal may reuse. A claim is keyed by its risk. An approval
+ * request is keyed by the call — its tool and the fingerprint of its arguments — and
+ * must cover every gated risk the call needs approved (`riskIds`): an open request that
+ * lists fewer is not reused, since granting it would not let the call through.
+ */
+export type OpenRequestLookup =
+  | { readonly kind: 'claim'; readonly riskId: RiskId }
+  | {
+      readonly kind: 'approval';
+      readonly tool: string;
+      readonly fingerprint: string;
+      readonly riskIds: readonly RiskId[];
+    };
 
-// Two statements rather than one with `? IS NULL OR r.fingerprint = ?`: Postgres cannot
-// infer the type of a parameter that is only compared to NULL.
-const OPEN_OF_RISK = `r.mission_id = ? AND r.kind = ? AND r.risk_id = ? AND r.state = 'open' AND r.expires_at > ?`;
-const SELECT_OPEN = `SELECT ${COLUMNS} FROM requests r
-  WHERE ${OPEN_OF_RISK} ORDER BY r.created_at LIMIT 1`;
-const SELECT_OPEN_BY_CALL = `SELECT ${COLUMNS} FROM requests r
-  WHERE ${OPEN_OF_RISK} AND r.tool = ? AND r.fingerprint = ? ORDER BY r.created_at LIMIT 1`;
+const OPEN = `r.mission_id = ? AND r.kind = ? AND r.state = 'open' AND r.expires_at > ?`;
+const SELECT_OPEN_CLAIM = `SELECT ${COLUMNS} FROM requests r
+  WHERE ${OPEN} AND r.risk_id = ? ORDER BY r.created_at LIMIT 1`;
+const SELECT_OPEN_FOR_CALL = `SELECT ${COLUMNS} FROM requests r
+  WHERE ${OPEN} AND r.tool = ? AND r.fingerprint = ? ORDER BY r.created_at, r.id`;
 
 /**
  * Synchronous lookup of a still-open request, meant to run inside an already-open
@@ -269,19 +282,25 @@ export function findOpenRequestSync(
   lookup: OpenRequestLookup,
   now: Iso,
 ): RequestRecord | null {
-  if (lookup.kind !== 'approval') {
+  if (lookup.kind === 'claim') {
     const row = ctx.db
-      .prepare<[string, string, string, string], RequestRow>(SELECT_OPEN)
-      .get(missionId, lookup.kind, lookup.riskId, now);
+      .prepare<[string, string, string, string], RequestRow>(SELECT_OPEN_CLAIM)
+      .get(missionId, lookup.kind, now, lookup.riskId);
     return row ? toRecord(row) : null;
   }
   if (!lookup.tool || !lookup.fingerprint) {
     throw new InvariantError('an approval request is looked up by its tool and fingerprint');
   }
-  const row = ctx.db
-    .prepare<[string, string, string, string, string, string], RequestRow>(SELECT_OPEN_BY_CALL)
-    .get(missionId, lookup.kind, lookup.riskId, now, lookup.tool, lookup.fingerprint);
-  return row ? toRecord(row) : null;
+  if (lookup.riskIds.length === 0) {
+    throw new InvariantError('an approval request is looked up for the gated risks of a call');
+  }
+  // The oldest open request of this call that covers every risk asked for.
+  const covering = ctx.db
+    .prepare<[string, string, string, string, string], RequestRow>(SELECT_OPEN_FOR_CALL)
+    .all(missionId, lookup.kind, now, lookup.tool, lookup.fingerprint)
+    .map(toRecord)
+    .find((request) => lookup.riskIds.every((riskId) => request.riskIds.includes(riskId)));
+  return covering ?? null;
 }
 
 /** Synchronous insert, meant to run inside an already-open write transaction. */
@@ -293,6 +312,14 @@ export function insertRequestSync(
   if (input.kind === 'approval' && (!input.tool || !input.fingerprint)) {
     throw new InvariantError('an approval request carries a tool and a fingerprint');
   }
+  if (input.kind === 'claim' && input.riskIds !== undefined) {
+    throw new InvariantError('a claim is about one risk');
+  }
+  // An approval request lists its risks; a claim stores none (its risk is `risk_id`).
+  const risks = input.kind === 'approval' ? riskIdsColumn(input.riskIds ?? [input.riskId]) : null;
+  if (risks !== null && risks.riskId !== input.riskId) {
+    throw new InvariantError('the risk of an approval request is the first of its risks');
+  }
   const id = input.prepared?.requestId ?? ctx.newId();
   ctx.db
     .prepare<
@@ -302,6 +329,7 @@ export function insertRequestSync(
         string | null,
         string,
         string,
+        string | null,
         string | null,
         string | null,
         Buffer | null,
@@ -316,6 +344,7 @@ export function insertRequestSync(
       input.sessionId ?? null,
       input.kind,
       input.riskId,
+      risks?.json ?? null,
       input.tool ?? null,
       input.fingerprint ?? null,
       input.prepared?.blob ?? null,
@@ -409,10 +438,13 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
       session,
       now,
       counters: read,
-      resetCounters(periodStart) {
-        const before = read(periodStart);
-        if (session) sessions.resetPeriod(session.id, periodStart);
-        return before;
+      resetCounter(periodStart, riskId) {
+        if (!session) return 0;
+        const held = read(periodStart).get(riskId) ?? 0;
+        // The same conditional write as a quota credit: it gives back exactly what was
+        // read, or nothing — both happen inside this transaction.
+        if (held < 1 || !sessions.creditCounter(session.id, periodStart, riskId, held)) return 0;
+        return held;
       },
       creditCounter(periodStart, riskId, amount) {
         if (!session || !Number.isInteger(amount) || amount < 1) return false;
@@ -447,7 +479,7 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
           {
             missionId: request.missionId,
             requestId: request.id,
-            riskId: request.riskId,
+            riskIds: request.riskIds,
             tool,
             fingerprint,
             expiresAt,

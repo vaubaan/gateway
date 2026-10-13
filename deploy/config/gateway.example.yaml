@@ -145,9 +145,11 @@
 #   # (deploy/collector/README.md).
 #   collector_url: https://collector.example.net/rest/v1/plugin_reports?apikey=<public key>
 
-# Audit retention in days (integer >= 1): the sweeper deletes audit entries older than this
-# (at boot, then hourly). Only the audit trail is purged; session events,
-# decided requests and approvals are not, and stay for the life of the store.
+# Retention in days (integer >= 1): the sweeper deletes what is older than this (at boot,
+# then hourly) — audit entries, the events of the session timelines, and the counters of
+# periods that ended longer ago. The counters of a current period, the gates opened in it
+# and the credits granted in it are kept whatever their age. Decided requests and
+# approvals are not purged.
 # env: VAUBAAN_RETENTION_DAYS
 # retention_days: 90
 
@@ -183,6 +185,12 @@
 #   # left unused for this long ends by itself. Must be longer than access_token_ttl.
 #   # env: VAUBAAN_OAUTH_REFRESH_TOKEN_TTL
 #   refresh_token_ttl: 30d
+#   # Absolute lifetime of a delegation, counted from the day the user gave
+#   # their consent. Past it the client must ask for the consent again,
+#   # however recently it renewed its token: no agent keeps a standing
+#   # authorization forever. Must be longer than access_token_ttl.
+#   # env: VAUBAAN_OAUTH_DELEGATION_MAX_LIFETIME
+#   delegation_max_lifetime: 90d
 #   # For how many seconds the refresh token that was just rotated may be
 #   # presented once more without ending the delegation: two sessions of one
 #   # agent sharing a stored token and renewing at the same moment. Any other

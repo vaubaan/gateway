@@ -50,6 +50,7 @@ export const vercelPlugin = definePlugin({
     'Runtime hosting plane — projects, deployments, logs, env vars, custom domains, firewall, preview comments.',
   summary:
     "One connection is one Vercel access token pinned to a team; one resource is one project of that team. The environment is not a label you set: Vercel's own production, preview and development environments are read from each call, so the same project can be open on preview and gated on production.",
+  manualRevocation: 'Delete the access token in your Vercel account settings, under Tokens.',
   docsUrl:
     'https://github.com/sbw-vaubaan/vaubaan-gateway/blob/main/docs/handbook/providers/vercel.md',
   tools: vercelTools,

@@ -67,9 +67,10 @@ export default async function AuditPage({ searchParams }: Props) {
           <p className={styles.muted}>
             One entry per call, allowed or refused, and per administrative act
             {seesAdmin
-              ? ' — your missions, your connections and every administrative act.'
-              : ' — on your missions and your connections.'}{' '}
-            Kept {root.config.retentionDays} days. Arguments are never stored: only their hash.
+              ? ' — every call and every administrative act of this instance, as its operator.'
+              : ' — on the missions you created, the missions shared with you and your connections.'}{' '}
+            Kept {root.config.retentionDays} days. Arguments are never stored: only their
+            fingerprint, shown to the creator of the mission and the owners of the connection.
           </p>
         </div>
       </div>
@@ -329,9 +330,15 @@ function CallRow({ entry }: { entry: AuditCallView }) {
         )}
       </Td>
       <Td>
-        <div className={`${styles.mono} ${styles.hash}`} data-testid="arguments-hash">
-          {entry.arguments_hash}
-        </div>
+        {entry.arguments_hash === null ? (
+          <div className={styles.muted} data-testid="arguments-hash-hidden">
+            fingerprint not shown
+          </div>
+        ) : (
+          <div className={`${styles.mono} ${styles.hash}`} data-testid="arguments-hash">
+            {entry.arguments_hash}
+          </div>
+        )}
         {entry.upstream_error && <div>upstream failed: {entry.upstream_error}</div>}
         {entry.upstream_latency_ms !== null && (
           <div className={`${styles.muted} ${styles.nowrap}`}>

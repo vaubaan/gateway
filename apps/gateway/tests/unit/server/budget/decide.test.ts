@@ -143,7 +143,89 @@ describe('decide — refuse', () => {
       kind: 'refuse',
       code: 'approval-required',
       risk_id: MERGE,
-      details: { fingerprint: FP },
+      details: { fingerprint: FP, gated_risks: [MERGE] },
+    });
+  });
+
+  describe('a call touching several gated risks', () => {
+    const GATED: MissionPolicy = POLICY.map((entry) =>
+      entry.risk_id === WRITE ? { ...entry, gate: 'approval' } : entry,
+    );
+    const both = (overrides: Partial<DecideInput> = {}) =>
+      decide(input({ policy: GATED, risks_touched: [WRITE, READ, MERGE], ...overrides }));
+
+    it('is refused once, naming every gated risk in call order: one request covers the call', () => {
+      expect(both()).toEqual({
+        kind: 'refuse',
+        code: 'approval-required',
+        risk_id: WRITE,
+        details: { fingerprint: FP, gated_risks: [WRITE, MERGE] },
+      });
+    });
+
+    it('with an approval for one of them only, still lists them all and names the one not covered', () => {
+      expect(both({ approvals: new Map([[WRITE, 'apr_w']]) })).toEqual({
+        kind: 'refuse',
+        code: 'approval-required',
+        risk_id: MERGE,
+        details: { fingerprint: FP, gated_risks: [WRITE, MERGE] },
+      });
+    });
+
+    it('is allowed by one approval standing under every gated risk, or by one approval each', () => {
+      const whole = new Map([
+        [WRITE, 'apr_call'],
+        [MERGE, 'apr_call'],
+      ]);
+      expect(both({ approvals: whole })).toMatchObject({
+        kind: 'allow',
+        decrements: [WRITE, READ, MERGE],
+        approvals_to_consume: [
+          { risk_id: WRITE, approval_id: 'apr_call' },
+          { risk_id: MERGE, approval_id: 'apr_call' },
+        ],
+      });
+      const each = new Map([
+        [WRITE, 'apr_w'],
+        [MERGE, 'apr_m'],
+      ]);
+      expect(both({ approvals: each })).toMatchObject({
+        kind: 'allow',
+        approvals_to_consume: [
+          { risk_id: WRITE, approval_id: 'apr_w' },
+          { risk_id: MERGE, approval_id: 'apr_m' },
+        ],
+      });
+    });
+
+    it('a gate opened for the period is not asked about, and not listed', () => {
+      expect(both({ opened_gates: new Set([WRITE]) })).toEqual({
+        kind: 'refuse',
+        code: 'approval-required',
+        risk_id: MERGE,
+        details: { fingerprint: FP, gated_risks: [MERGE] },
+      });
+      expect(both({ opened_gates: new Set([WRITE, MERGE]) })).toMatchObject({
+        kind: 'allow',
+        approvals_to_consume: [],
+      });
+    });
+
+    it('an approval for a risk the call does not gate is not consumed', () => {
+      const outcome = decide(
+        input({
+          policy: GATED,
+          risks_touched: [MERGE],
+          approvals: new Map([
+            [MERGE, 'apr_m'],
+            [WRITE, 'apr_w'],
+          ]),
+        }),
+      );
+      expect(outcome).toMatchObject({
+        kind: 'allow',
+        approvals_to_consume: [{ risk_id: MERGE, approval_id: 'apr_m' }],
+      });
     });
   });
 

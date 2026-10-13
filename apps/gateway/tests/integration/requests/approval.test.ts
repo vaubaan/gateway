@@ -167,6 +167,7 @@ describe('approval gate: refusal, decision, replay', () => {
       expect(result.refusal).toEqual({
         code: 'approval-required',
         risk_id: MERGE,
+        risk_ids: [MERGE],
         fingerprint: fingerprintArguments(ARGS),
         approval_url: `https://gateway.example.com/r/${result.request_id}`,
         expires_at: request?.expiresAt,
@@ -502,20 +503,227 @@ describe('approval gate: refusal, decision, replay', () => {
       f.clock.advance(30_000);
       expect(refused(await call()).refusal.code).toBe('approval-required');
     });
+  });
 
-    it('a second gated risk of the same call asks in its turn; both approvals are consumed together', async () => {
-      const first = refused(await call({ risks: [MERGE, WRITE] }));
-      expect(first.refusal).toMatchObject({ risk_id: MERGE });
-      decided(await requests.decide(creator(), first.request_id, { resolution: 'grant' }));
-      // The approval of the first risk is not consumed by the refusal on the second.
-      const second = refused(await call({ risks: [MERGE, WRITE] }));
-      expect(second.refusal).toMatchObject({ code: 'approval-required', risk_id: WRITE });
+  // ───────────────────────────────────────────────────────────────────────────
+  // One request covers the call (spec §3.5)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  describe('a call touching several gated risks', () => {
+    const BOTH = [MERGE, WRITE] as const;
+    const requestRows = () =>
+      f.store.db
+        .prepare<
+          [string],
+          { id: string; risk_id: string; risk_ids_json: string | null; state: string }
+        >('SELECT id, risk_id, risk_ids_json, state FROM requests WHERE mission_id = ? ORDER BY created_at, id')
+        .all(mission.id);
+
+    it('drops ONE request listing every gated risk; granting it approves the call', async () => {
+      const first = refused(await call({ risks: [...BOTH, READ] }));
+      expect(first.refusal).toMatchObject({
+        code: 'approval-required',
+        risk_id: MERGE,
+        risk_ids: [MERGE, WRITE],
+      });
+      expect(first.refusal.hint).toContain('This call touches 2 risks');
+      expect(first.refusal.hint).toContain('One approval request covers the whole call');
+      expect(requestRows()).toEqual([
+        {
+          id: first.request_id,
+          risk_id: MERGE,
+          risk_ids_json: JSON.stringify([MERGE, WRITE]),
+          state: 'open',
+        },
+      ]);
+      expect(await requests.inbox(creator())).toHaveLength(1);
+
+      // The creator reads one request: both risks, each with its gate.
+      const view = await approvalView(first.request_id);
+      expect(view.request.risks.map((r) => r.risk_id)).toEqual([MERGE, WRITE]);
+      expect(view.gates.map((g) => [g.risk_id, g.policy, g.open_until])).toEqual([
+        [MERGE, 'approval', null],
+        [WRITE, 'approval', null],
+      ]);
+      // No audit entry in this rig (the pipeline writes it): the view falls back on the
+      // risks the request lists, each with its gate.
+      expect(view.call.risks.map((r) => [r.risk_id, r.gate])).toEqual([
+        [MERGE, 'approval'],
+        [WRITE, 'approval'],
+      ]);
+
+      const request = decided(
+        await requests.decide(creator(), first.request_id, { resolution: 'grant' }),
+      );
+      expect(request.decision).toMatchObject({ resolution: 'grant', risk_ids: [MERGE, WRITE] });
+      const [approval] = await f.store.approvals.listActive(mission.id);
+      expect(approval).toMatchObject({ riskIds: [MERGE, WRITE], tool: TOOL });
       expect(await f.store.approvals.listActive(mission.id)).toHaveLength(1);
-      decided(await requests.decide(creator(), second.request_id, { resolution: 'grant' }));
-      const replay = allowed(await call({ risks: [MERGE, WRITE] }));
-      expect(replay.approval_ids).toHaveLength(2);
-      expect(await countersOf()).toEqual({ [MERGE]: 1, [WRITE]: 1 });
+
+      // One decision, one replay: the call passes and the approval is spent.
+      const replay = allowed(await call({ risks: [...BOTH, READ] }));
+      expect(replay.approval_ids).toEqual([approval!.id]);
+      expect(await countersOf()).toEqual({ [MERGE]: 1, [READ]: 1, [WRITE]: 1 });
       expect(await f.store.approvals.listActive(mission.id)).toEqual([]);
+      // Single use: the same call asks again, with one new request.
+      const again = refused(await call({ risks: [...BOTH, READ] }));
+      expect(again.request_id).not.toBe(first.request_id);
+      expect(requestRows().map((r) => r.state)).toEqual(['granted', 'open']);
+    });
+
+    it('a replay before the decision reuses that one request', async () => {
+      const first = refused(await call({ risks: BOTH }));
+      const second = refused(await call({ risks: BOTH }));
+      // The order the risks are listed in does not make it another call.
+      const third = refused(await call({ risks: [WRITE, MERGE] }));
+      expect([second.request_id, third.request_id]).toEqual([first.request_id, first.request_id]);
+      expect(requestRows()).toHaveLength(1);
+      expect(f.encryptor.sealCalls).toContainEqual({
+        associatedData: `request:${first.request_id}`,
+      });
+    });
+
+    it('the grant is audited and recorded with every risk it covers, never an argument', async () => {
+      const first = refused(await call({ risks: BOTH }));
+      decided(await requests.decide(creator(), first.request_id, { resolution: 'grant' }));
+      const [entry] = (await adminEntries()).filter((e) => e.act === 'approval-granted');
+      expect(entry?.after).toMatchObject({ risk_id: MERGE, risk_ids: [MERGE, WRITE], tool: TOOL });
+      const approvalEvent = (await events()).find((e) => e.kind === 'approval');
+      expect(approvalEvent).toMatchObject({
+        riskId: MERGE,
+        details: { request_id: first.request_id, risk_ids: [MERGE, WRITE] },
+      });
+      const dropped = (await events()).find((e) => e.kind === 'request');
+      expect(dropped?.details).toMatchObject({
+        request_kind: 'approval',
+        risk_ids: [MERGE, WRITE],
+      });
+      expect(JSON.stringify([entry, await events()])).not.toContain(SECRET_TITLE);
+    });
+
+    it('refusing it refuses the call: nothing is approved for either risk', async () => {
+      const first = refused(await call({ risks: BOTH }));
+      decided(await requests.decide(creator(), first.request_id, { resolution: 'refuse' }));
+      expect(await f.store.approvals.listActive(mission.id)).toEqual([]);
+      const again = refused(await call({ risks: BOTH }));
+      expect(again.refusal).toMatchObject({ code: 'approval-required', risk_ids: [MERGE, WRITE] });
+      expect(again.request_id).not.toBe(first.request_id);
+    });
+
+    it('opening the gate opens every gate of the request, one event each', async () => {
+      const first = refused(await call({ risks: BOTH }));
+      const request = decided(
+        await requests.decide(creator(), first.request_id, { resolution: 'open-gate' }),
+      );
+      expect(request.decision).toMatchObject({
+        resolution: 'open-gate',
+        opened_risk_ids: [MERGE, WRITE],
+      });
+      const opened = (await events()).filter((e) => e.kind === 'gate-opened');
+      expect(opened.map((e) => e.riskId).sort()).toEqual([MERGE, WRITE].sort());
+      // Any call on either risk passes without asking, within the budget.
+      allowed(await call({ risks: BOTH, args: { pull_number: 7 } }));
+      allowed(await call({ risks: [WRITE], args: { pull_number: 8 } }));
+      const view = await approvalView(first.request_id);
+      expect(view.gates.map((g) => g.open_until)).toEqual([DAY1, DAY1]);
+    });
+
+    it('with one gate already open, the request names only the risk that still asks', async () => {
+      // The creator opened MERGE for the period on an earlier request.
+      const earlier = refused(await call({ risks: [MERGE] }));
+      decided(await requests.decide(creator(), earlier.request_id, { resolution: 'open-gate' }));
+      const first = refused(await call({ risks: BOTH, args: { pull_number: 7 } }));
+      expect(first.refusal).toMatchObject({ risk_id: WRITE, risk_ids: [WRITE] });
+      decided(await requests.decide(creator(), first.request_id, { resolution: 'grant' }));
+      allowed(await call({ risks: BOTH, args: { pull_number: 7 } }));
+    });
+
+    it('the approval of a call is not usable by the same arguments on another tool', async () => {
+      const first = refused(await call({ risks: BOTH }));
+      decided(await requests.decide(creator(), first.request_id, { resolution: 'grant' }));
+      expect(refused(await call({ risks: BOTH, tool: 'github__delete_branch' })).refusal.code).toBe(
+        'approval-required',
+      );
+      expect(await f.store.approvals.listActive(mission.id)).toHaveLength(1);
+      allowed(await call({ risks: BOTH }));
+    });
+
+    describe('what an earlier build left open', () => {
+      /** An open request as it was dropped when a request named one risk: MERGE alone. */
+      async function legacyRequest(): Promise<string> {
+        const session = await f.store.sessions.getOrCreate(mission.id);
+        const request = await f.store.requests.create({
+          missionId: mission.id,
+          sessionId: session.id,
+          kind: 'approval',
+          riskId: MERGE,
+          tool: TOOL,
+          fingerprint: fingerprintArguments(ARGS),
+          arguments: ARGS,
+          expiresAt: new Date(
+            f.clock.now().getTime() + REQUEST_EXPIRY_SECONDS * 1000,
+          ).toISOString(),
+        });
+        return request.id;
+      }
+
+      it('an open one-risk request keeps the meaning it had; the call gets one request that covers it', async () => {
+        const legacy = await legacyRequest();
+        expect((await f.store.requests.getById(legacy))?.riskIds).toEqual([MERGE]);
+
+        // The call needs both risks: the legacy request does not cover it, so it is
+        // not reused — and it is not widened behind the creator's back either.
+        const first = refused(await call({ risks: BOTH }));
+        expect(first.request_id).not.toBe(legacy);
+        expect(first.refusal).toMatchObject({ risk_ids: [MERGE, WRITE] });
+        expect((await f.store.requests.getById(legacy))?.riskIds).toEqual([MERGE]);
+        expect(requestRows().map((r) => r.state)).toEqual(['open', 'open']);
+
+        // Granting the legacy request approves what it named, no more: the call still asks.
+        decided(await requests.decide(creator(), legacy, { resolution: 'grant' }));
+        const still = refused(await call({ risks: BOTH }));
+        expect(still.refusal).toMatchObject({ risk_id: MERGE, risk_ids: [MERGE, WRITE] });
+        expect(still.request_id).toBe(first.request_id);
+
+        // Granting the covering request approves the call; its approval alone is spent.
+        decided(await requests.decide(creator(), first.request_id, { resolution: 'grant' }));
+        const replay = allowed(await call({ risks: BOTH }));
+        expect(replay.approval_ids).toHaveLength(1);
+        const left = await f.store.approvals.listActive(mission.id);
+        expect(left.map((a) => [a.requestId, a.riskIds])).toEqual([[legacy, [MERGE]]]);
+      });
+
+      it('a call that needs only the risk it named still reuses it', async () => {
+        const legacy = await legacyRequest();
+        expect(refused(await call({ risks: [MERGE] })).request_id).toBe(legacy);
+        decided(await requests.decide(creator(), legacy, { resolution: 'grant' }));
+        allowed(await call({ risks: [MERGE] }));
+      });
+
+      it('approvals granted risk by risk before the upgrade still let the call through, together', async () => {
+        const session = await f.store.sessions.getOrCreate(mission.id);
+        const fingerprint = fingerprintArguments(ARGS);
+        for (const riskId of BOTH) {
+          const request = await f.store.requests.create({
+            missionId: mission.id,
+            sessionId: session.id,
+            kind: 'approval',
+            riskId,
+            tool: TOOL,
+            fingerprint,
+            arguments: ARGS,
+            expiresAt: new Date(f.clock.now().getTime() + 3_600_000).toISOString(),
+          });
+          decided(await requests.decide(creator(), request.id, { resolution: 'grant' }));
+        }
+        expect((await f.store.approvals.listActive(mission.id)).map((a) => a.riskIds)).toEqual([
+          [MERGE],
+          [WRITE],
+        ]);
+        const replay = allowed(await call({ risks: BOTH }));
+        expect(replay.approval_ids).toHaveLength(2);
+        expect(await f.store.approvals.listActive(mission.id)).toEqual([]);
+      });
     });
   });
 

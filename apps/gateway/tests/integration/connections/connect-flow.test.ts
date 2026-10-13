@@ -372,6 +372,11 @@ describe('connections: provider app, connect, resources, revoke', () => {
       connectionId,
     );
     expect(location(revoked).pathname).toBe(`/accounts/${connectionId}`);
+    // This provider documents no revocation endpoint: the person is told, as a warning,
+    // that the access still stands there and is theirs to remove.
+    const told = await noticeOf(revoked, alice);
+    expect(told).toMatchObject({ tone: 'warning', title: 'Connection revoked' });
+    expect(told?.lines[1]).toMatch(/^Remove the access at .+ by hand\. /);
     const after = root.store.db
       .prepare<
         [string],

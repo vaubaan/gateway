@@ -1,6 +1,6 @@
 /**
  * "Exhaust and claim" in a browser, against an ephemeral instance with a
- * simulated IdP (spec §7.6, §3.4, §4.2 "Request inbox"; plan P1.7 definition
+ * simulated IdP (spec §7.6, §3.4, §4.2 "Request inbox" definition
  * of done).
  *
  * The executor is an MCP client holding the mission token: its calls go over
@@ -99,7 +99,7 @@ test('exhaust a budget, then the creator — and only the creator — answers th
 
   // Four actions, each with its consequence in one line.
   await expect(ada.getByTestId('action-reset-period')).toContainText(
-    'Every counter of this mission goes back to zero',
+    'The other risks of the mission keep what they consumed',
   );
   await expect(ada.getByTestId('action-extend-quota')).toContainText('for the current period only');
   await expect(ada.getByLabel('Actions to give back')).toHaveValue('2');

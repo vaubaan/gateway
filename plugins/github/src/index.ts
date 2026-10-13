@@ -32,14 +32,19 @@ export const githubPlugin = definePlugin({
     'Repositories, branches, files, pull requests, issues, releases and workflows of the GitHub App installation.',
   summary:
     "One connection is one installation of your company's GitHub App on an organisation; one resource is one repository. A mission picks repositories and the risks it accepts on them. GitHub has no environment label: protected branches (main, master, release-*) and working branches (feature/*, fix/*, …) are told apart by two different risks.",
+  manualRevocation:
+    "Uninstall your company's GitHub App from the organisation, in the organisation's settings under GitHub Apps, once no other connection of this instance uses that installation. The gateway never uninstalls it: one installation may serve several connections.",
   docsUrl:
     'https://github.com/sbw-vaubaan/vaubaan-gateway/blob/main/docs/handbook/providers/github.md',
   // The one tool that hands the agent a provider token (spec §2.4) : a short-lived
-  // installation token scoped to the mission's repositories, for git itself.
+  // installation token scoped to the mission's repositories, for git itself. The
+  // clone token carries `contents:read` only ; the push token writes, so a preset
+  // may leave the first on `auto` and must gate the second by approval.
   tokenHandouts: [
     {
       tool: 'github__mint_install_token',
       riskIds: ['github.mint-install-token-clone', 'github.mint-install-token-push'],
+      readOnlyRiskIds: ['github.mint-install-token-clone'],
     },
   ],
   tools: githubTools,

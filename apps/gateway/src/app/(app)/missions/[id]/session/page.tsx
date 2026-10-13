@@ -138,7 +138,8 @@ export default async function MissionSessionPage({ params, searchParams }: Props
             Session <StateBadge state={state} />
           </h1>
         </div>
-        {isCreator && <Link href={auditOfMission}>Audit of this mission</Link>}
+        {/* The creator and the members both read it (spec §4.2); a member is shown no fingerprint. */}
+        <Link href={auditOfMission}>Audit of this mission</Link>
       </div>
 
       <Card>
@@ -476,6 +477,12 @@ export default async function MissionSessionPage({ params, searchParams }: Props
         <CardHeader>
           <CardTitle>Timeline</CardTitle>
         </CardHeader>
+        <CardBody>
+          <p className={styles.muted} data-testid="timeline-retention">
+            Kept {session.root.config.retentionDays} days, like the audit: older events are deleted,
+            and so are the counters of periods that ended longer ago.
+          </p>
+        </CardBody>
         {filter.kind !== 'all' && (
           <CardBody>
             <p className={styles.muted} data-testid="timeline-filter">

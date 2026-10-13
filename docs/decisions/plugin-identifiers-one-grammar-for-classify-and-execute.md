@@ -98,7 +98,19 @@ classified resource.
 - Not closed, and listed in the threat model: Railway `serviceId` and
   `get-logs deploymentId` are shape-checked, but discovery stores only a
   project's environments, so the plugin cannot verify that a service or a
-  deployment belongs to the mission's project.
+  deployment belongs to the mission's project. _(Closed since: discovery
+  stores the services and `serviceId` is bound; `deploymentId` and `threadId`
+  are refused. What stays open is the Railway agent tool, threat model A18.)_
+- **Since 2026-10-13 the rule is also proven centrally, by behaviour.** The
+  SDK kit's `assertIdentifiersRefused` runs each plugin's `classify` and
+  `execute` on every string argument of its samples with the hostile values:
+  a value `classify` refuses must send nothing, no request may carry a dot
+  segment or a raw delimiter, and an accepted identifier must be the one the
+  request names. It finds the identifiers by running the samples, so no list
+  is kept by hand, and it fails when it found none. Every plugin directory,
+  the template included, must call it in a test that runs. The per-plugin
+  test files stay: they hold what the kit cannot see (refs, metadata, nested
+  fields, provider answers).
 
 ## Rejected alternatives
 

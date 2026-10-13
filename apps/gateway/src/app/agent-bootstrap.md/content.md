@@ -138,16 +138,16 @@ A refusal is a JSON-RPC error (code `-32603`) whose `data` is the refusal:
 its `code`, the fields of that code and a `hint`. Read the hint, then act
 according to the code:
 
-| Code                      | What happened                                      | What you do                                                                                                                |
-| ------------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `risk-not-accepted`       | The call touches risks the mission did not accept. | Do not look for another way to the same effect. Tell the human which risks are missing (`missing_risks`).                  |
-| `budget-exhausted`        | The quota of a risk is spent for the period.       | Stop that kind of action. Hand `claim_url` to the human; continue with work that does not need it. Do not retry in a loop. |
-| `approval-required`       | The risk is gated: a human approves each action.   | Nothing was executed. Hand `approval_url` to the human, wait, then replay the call with **exactly** the same arguments.    |
-| `resource-not-in-mission` | The arguments cite a resource outside the mission. | Use one of the refs in `allowed_resources`, or ask the human to have the resource added.                                   |
-| `rate-limited`            | Too many actions on a risk in a short window.      | Wait `retry_after_seconds`, retry once. The quota was not consumed.                                                        |
-| `connection-unavailable`  | The provider connection is expired or revoked.     | Nothing you can do fixes it. Tell the human who owns the connection (`owner`).                                             |
-| `mission-inactive`        | The mission is expired, orphaned or revoked.       | Stop calling with this token and report to the human.                                                                      |
-| `wrong-credential-kind`   | The token was presented on the wrong door.         | A mission token only opens the execution endpoint (`/mcp`).                                                                |
+| Code                      | What happened                                                                                                              | What you do                                                                                                                |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `risk-not-accepted`       | The call touches risks the mission did not accept.                                                                         | Do not look for another way to the same effect. Tell the human which risks are missing (`missing_risks`).                  |
+| `budget-exhausted`        | The quota of a risk is spent for the period.                                                                               | Stop that kind of action. Hand `claim_url` to the human; continue with work that does not need it. Do not retry in a loop. |
+| `approval-required`       | One or more risks of the call are gated: a human approves each action. `risk_ids` lists them; one request covers the call. | Nothing was executed. Hand `approval_url` to the human, wait, then replay the call with **exactly** the same arguments.    |
+| `resource-not-in-mission` | The arguments cite a resource outside the mission.                                                                         | Use one of the refs in `allowed_resources`, or ask the human to have the resource added.                                   |
+| `rate-limited`            | Too many actions on a risk in a short window.                                                                              | Wait `retry_after_seconds`, retry once. The quota was not consumed.                                                        |
+| `connection-unavailable`  | The provider connection is expired or revoked.                                                                             | Nothing you can do fixes it. Tell the human who owns the connection (`owner`).                                             |
+| `mission-inactive`        | The mission is expired, orphaned or revoked.                                                                               | Stop calling with this token and report to the human.                                                                      |
+| `wrong-credential-kind`   | The token was presented on the wrong door.                                                                                 | A mission token only opens the execution endpoint (`/mcp`).                                                                |
 
 **Never work around a refusal.** No other tool, no other token, no direct
 access to the provider, no splitting of an action to slip under a limit.

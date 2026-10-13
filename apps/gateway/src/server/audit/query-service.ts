@@ -1,14 +1,19 @@
 /**
  * `AuditQueryService` — what the Audit page reads (spec §4.2 "Audit", §8).
  *
- * Visibility: a user sees the entries about the missions they created and
- * about the connections they or their groups own; an operator sees every
- * administrative entry too. The scope is applied in the store's query, before
- * filters and paging, so a filter can only narrow it.
+ * Visibility (ADR audit-visibility-members-and-operators): a user sees the
+ * entries about the missions they created, about the missions they are a
+ * member of, and about the connections they or their groups own; an operator
+ * sees every entry, calls included. The scope is applied in the store's
+ * query, before filters and paging, so a filter can only narrow it.
  *
  * Arguments: an audit entry never holds them (`arguments_hash` only, spec §6
  * "no secret in logs"), and the views built here are explicit field lists, so
- * nothing else of a record reaches the page.
+ * nothing else of a record reaches the page. The fingerprint itself is the
+ * one trace of the arguments, and it can be guessed for low-entropy ones: it
+ * is shown to whoever answers for the call — the creator of its mission, an
+ * owner of its connection — and to nobody who reads the entry only as a
+ * member or as an operator (`standingOn`).
  */
 import {
   BOOTSTRAP_ACTOR_ID,
@@ -20,6 +25,7 @@ import {
 import type { MissionTokenKind, Principal, RefusalCode, RiskId } from '@vaubaan/shared';
 
 import type { AuditCursor, AuditRecord, AuditScope, AuditSearch, Store } from '../store';
+import type { ConnectionRecord, MissionRecord } from '../store/types';
 import type { AuditFilters } from './filters';
 import { parseHolderParam } from './session-view';
 
@@ -69,8 +75,12 @@ export interface AuditCallView {
   readonly connection: AuditConnectionRef | null;
   readonly resource_ref: string | null;
   readonly tool: string;
-  /** The only trace of the arguments: the canonical sha256 fingerprint (64 hex characters). */
-  readonly arguments_hash: string;
+  /**
+   * The only trace of the arguments: the canonical sha256 fingerprint (64 hex
+   * characters). `null` when this viewer is not shown it: they read the entry
+   * as a member of the mission or as an operator (spec §4.2 "never arguments").
+   */
+  readonly arguments_hash: string | null;
   readonly decision: AuditDecision;
   readonly refusal_code: RefusalCode | null;
   readonly refusal_reason: string | null;
@@ -138,14 +148,47 @@ export interface AuditQueryDeps {
 /** The store scope of a viewer. Exported for the tests of the rule itself. */
 export function scopeOf(viewer: AuditViewer): AuditScope {
   if (viewer.kind === 'bootstrap') {
-    // The bootstrap operator configures the instance and owns nothing.
-    return { missionCreatorUserId: null, connectionOwners: [], allAdmin: true };
+    // The bootstrap operator configures the instance and owns nothing. It reads the
+    // administrative entries and no call: it is a shared token, not a person, and it
+    // exists before the first user does — there is no call for it to read.
+    return {
+      missionCreatorUserId: null,
+      missionMemberUserId: null,
+      connectionOwners: [],
+      allAdmin: true,
+      allCalls: false,
+    };
   }
   return {
     missionCreatorUserId: viewer.user.id,
+    missionMemberUserId: viewer.user.id,
     connectionOwners: ownersOf(viewer),
     allAdmin: viewer.isOperator,
+    allCalls: viewer.isOperator,
   };
+}
+
+/**
+ * What a viewer is to the mission and the connection of an entry they were
+ * given: `responsible` when they created the mission or own the connection —
+ * they answer for the call —, `reader` otherwise (a member of the mission, an
+ * operator). A reader is shown everything but the argument fingerprint.
+ */
+export type AuditStanding = 'responsible' | 'reader';
+
+export function standingOn(
+  viewer: AuditViewer,
+  mission: { readonly creatorUserId: string } | null,
+  connection: { readonly owner: Principal } | null,
+): AuditStanding {
+  if (viewer.kind !== 'user') return 'reader';
+  if (mission !== null && mission.creatorUserId === viewer.user.id) return 'responsible';
+  if (connection !== null) {
+    const { owner } = connection;
+    const owns = ownersOf(viewer).some((p) => p.kind === owner.kind && p.id === owner.id);
+    if (owns) return 'responsible';
+  }
+  return 'reader';
 }
 
 function ownersOf(viewer: Extract<AuditViewer, { kind: 'user' }>): Principal[] {
@@ -156,21 +199,27 @@ function ownersOf(viewer: Extract<AuditViewer, { kind: 'user' }>): Principal[] {
 }
 
 const ARGUMENT_KEYS = new Set(['args', 'arguments', 'raw_arguments']);
+/** Keys under which an entry carries the fingerprint of a call's arguments. */
+const FINGERPRINT_KEYS = new Set(['fingerprint', 'arguments_hash', 'arguments_fingerprint']);
 export const ARGUMENTS_NOT_SHOWN = '[not shown]';
 
 /**
  * Defence in depth for `before` / `after`: an administrative entry must never
  * carry call arguments (gateway-core: "never a secret"), and if a writer ever
- * put some under an obvious key they are not shown.
+ * put some under an obvious key they are not shown. For a `reader`, the
+ * fingerprint of the arguments (the entries of an approval request carry it)
+ * is not shown either.
  */
-export function withoutArguments(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(withoutArguments);
+export function withoutArguments(value: unknown, standing: AuditStanding = 'responsible'): unknown {
+  if (Array.isArray(value)) return value.map((item) => withoutArguments(item, standing));
   if (typeof value !== 'object' || value === null) return value;
   return Object.fromEntries(
-    Object.entries(value).map(([key, inner]) => [
-      key,
-      ARGUMENT_KEYS.has(key.toLowerCase()) ? ARGUMENTS_NOT_SHOWN : withoutArguments(inner),
-    ]),
+    Object.entries(value).map(([key, inner]) => {
+      const name = key.toLowerCase();
+      const hidden =
+        ARGUMENT_KEYS.has(name) || (standing === 'reader' && FINGERPRINT_KEYS.has(name));
+      return [key, hidden ? ARGUMENTS_NOT_SHOWN : withoutArguments(inner, standing)];
+    }),
   );
 }
 
@@ -207,17 +256,24 @@ export class AuditQueryService {
     const last = page.at(-1);
     const names = new NameCache(this.deps.store);
     const entries: AuditEntryView[] = [];
-    for (const record of page) entries.push(await toView(record, names));
+    for (const record of page) entries.push(await toView(record, names, viewer));
     return {
       entries,
       next: records.length > pageSize && last ? { ts: last.ts, id: last.id } : null,
     };
   }
 
-  /** The missions and connections the viewer can filter on: their own. */
+  /**
+   * The missions and connections the viewer can filter on: the missions they
+   * created or are a member of, the connections they own. An operator reads
+   * every entry but is offered their own here: the list is a convenience, and
+   * any mission id can be typed in the address.
+   */
   async filterOptions(viewer: AuditViewer): Promise<AuditFilterOptions> {
     if (viewer.kind === 'bootstrap') return { missions: [], connections: [] };
-    const missions = await this.deps.store.missions.listForCreator(viewer.user.id);
+    const created = await this.deps.store.missions.listForCreator(viewer.user.id);
+    const shared = await this.deps.store.missions.listForMember(viewer.user.id);
+    const missions = [...created, ...shared];
     const connections = await this.deps.store.connections.listOwnedBy(ownersOf(viewer));
     return {
       missions: missions.map((m) => ({ id: m.id, name: m.name })).reverse(),
@@ -259,14 +315,26 @@ export class AuditQueryService {
 class NameCache {
   private readonly missions = new Map<string, Promise<AuditMissionRef>>();
   private readonly connections = new Map<string, Promise<AuditConnectionRef>>();
+  private readonly missionRecords = new Map<string, Promise<MissionRecord | null>>();
+  private readonly connectionRecords = new Map<string, Promise<ConnectionRecord | null>>();
   private readonly emails = new Map<string, Promise<string | null>>();
   private readonly labels = new Map<string, Promise<string | null>>();
 
   constructor(private readonly store: AuditQueryDeps['store']) {}
 
+  /** The mission row, or `null` when it no longer exists. */
+  missionRecord(id: string): Promise<MissionRecord | null> {
+    return memo(this.missionRecords, id, () => this.store.missions.getById(id));
+  }
+
+  /** The connection row, or `null` when it no longer exists. */
+  connectionRecord(id: string): Promise<ConnectionRecord | null> {
+    return memo(this.connectionRecords, id, () => this.store.connections.getById(id));
+  }
+
   mission(id: string): Promise<AuditMissionRef> {
     return memo(this.missions, id, async () => {
-      const mission = await this.store.missions.getById(id);
+      const mission = await this.missionRecord(id);
       if (!mission) return { id, name: null, creator_email: null };
       return { id, name: mission.name, creator_email: await this.email(mission.creatorUserId) };
     });
@@ -274,13 +342,22 @@ class NameCache {
 
   connection(id: string): Promise<AuditConnectionRef> {
     return memo(this.connections, id, async () => {
-      const connection = await this.store.connections.getById(id);
+      const connection = await this.connectionRecord(id);
       return {
         id,
         display_name: connection?.displayName ?? null,
         provider: connection?.provider ?? null,
       };
     });
+  }
+
+  /** The mission a request belongs to, or `null` when the request is gone. */
+  missionOfRequest(id: string): Promise<string | null> {
+    return memo(
+      this.labels,
+      `request-mission:${id}`,
+      async () => (await this.store.requests.getById(id))?.missionId ?? null,
+    );
   }
 
   email(userId: string): Promise<string | null> {
@@ -351,7 +428,38 @@ function memo<V>(cache: Map<string, Promise<V>>, key: string, load: () => Promis
   return value;
 }
 
-async function toView(record: AuditRecord, names: NameCache): Promise<AuditEntryView> {
+/**
+ * What the viewer is to an entry: decided from the mission and the connection
+ * as they are now, like the scope that gave them the entry.
+ */
+async function standingOf(
+  record: AuditRecord,
+  names: NameCache,
+  viewer: AuditViewer,
+): Promise<AuditStanding> {
+  if (record.kind === 'call') {
+    return standingOn(
+      viewer,
+      await names.missionRecord(record.mission_id),
+      record.connection_id ? await names.connectionRecord(record.connection_id) : null,
+    );
+  }
+  const { type, id } = record.object;
+  const missionId =
+    type === 'mission' ? id : type === 'request' ? await names.missionOfRequest(id) : null;
+  return standingOn(
+    viewer,
+    missionId === null ? null : await names.missionRecord(missionId),
+    type === 'connection' ? await names.connectionRecord(id) : null,
+  );
+}
+
+async function toView(
+  record: AuditRecord,
+  names: NameCache,
+  viewer: AuditViewer,
+): Promise<AuditEntryView> {
+  const standing = await standingOf(record, names, viewer);
   if (record.kind === 'call') {
     return {
       kind: 'call',
@@ -362,7 +470,7 @@ async function toView(record: AuditRecord, names: NameCache): Promise<AuditEntry
       connection: record.connection_id ? await names.connection(record.connection_id) : null,
       resource_ref: record.resource_ref,
       tool: record.tool,
-      arguments_hash: record.arguments_hash,
+      arguments_hash: standing === 'responsible' ? record.arguments_hash : null,
       decision: record.decision,
       refusal_code: record.refusal_code,
       refusal_reason: record.refusal_reason,
@@ -386,8 +494,8 @@ async function toView(record: AuditRecord, names: NameCache): Promise<AuditEntry
       id: record.object.id,
       label: await objectLabel(record.object, names),
     },
-    before: withoutArguments(record.before),
-    after: withoutArguments(record.after),
+    before: withoutArguments(record.before, standing),
+    after: withoutArguments(record.after, standing),
     delegated_client_id: record.delegated_client_id,
   };
 }

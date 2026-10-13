@@ -4,6 +4,7 @@ status: current
 date: 2026-10-13
 last_synced: 2026-10-13
 tracks:
+  - apps/gateway/src/server/budget/retention.ts
   - apps/gateway/src/server/audit/
   - apps/gateway/src/app/(app)/activity/
   - apps/gateway/src/app/(app)/missions/[id]/session/
@@ -49,20 +50,42 @@ apps/gateway/src/app/(app)/
 `root.audit` is the module (`compose/root.ts`). The pages are server components with no
 client code: the filters are a plain `GET` form, paging is a link.
 
-## Who sees what (`scopeOf`, `AuditRepo.search`)
+## Who sees what (`scopeOf`, `standingOn`, `AuditRepo.search`)
 
-`scopeOf(viewer)` turns the person behind the request into the store's `AuditScope`:
+`scopeOf(viewer)` turns the person behind the request into the store's `AuditScope`
+(spec §4.2 "Audit", §8; ADR
+[audit-visibility-members-and-operators](../decisions/audit-visibility-members-and-operators.md)):
 
-| Viewer                       | `missionCreatorUserId` | `connectionOwners`                  | `allAdmin` |
-| ---------------------------- | ---------------------- | ----------------------------------- | ---------- |
-| user                         | their id               | themselves and each of their groups | `false`    |
-| user matching the admin rule | their id               | themselves and each of their groups | `true`     |
-| bootstrap operator           | `null`                 | none                                | `true`     |
+| Viewer                       | `missionCreatorUserId` | `missionMemberUserId` | `connectionOwners`                  | `allAdmin` | `allCalls` |
+| ---------------------------- | ---------------------- | --------------------- | ----------------------------------- | ---------- | ---------- |
+| user                         | their id               | their id              | themselves and each of their groups | `false`    | `false`    |
+| user matching the admin rule | their id               | their id              | themselves and each of their groups | `true`     | `true`     |
+| bootstrap operator           | `null`                 | `null`                | none                                | `true`     | `false`    |
 
-A **member** of a mission is not in this table: the Audit page stays scoped to the
-missions one created and the connections one owns. A member reads the mission's
-**session** ("Mission session view" below), where every call is listed with its holder
-(spec §11.2 "What a member sees").
+- A **member** of a mission reads its entries — calls, acts on it, acts on its requests
+  — for as long as they are a member: the store reads `mission_members` rows whose
+  `removed_at` is null, so a removed member reads none of them, past ones included.
+- An **operator** reads every entry of the instance, calls included.
+- The **bootstrap operator** reads the administrative entries and no call: it is a shared
+  token, not a person, and exists before the first user does.
+
+**Nobody reads arguments.** An entry never holds them. What it holds is their
+fingerprint, an unsalted SHA-256, which can be guessed for low-entropy arguments
+(threat model, A9). `standingOn(viewer, mission, connection)` says what the viewer is
+to an entry they were given:
+
+| Standing      | Who                                                             | Fingerprint                                   |
+| ------------- | --------------------------------------------------------------- | --------------------------------------------- |
+| `responsible` | the creator of the entry's mission, an owner of its connection  | shown                                         |
+| `reader`      | anybody else the scope gave the entry to: a member, an operator | not shown: `arguments_hash: null` in the view |
+
+It is decided entry by entry, from the mission and the connection as they are now, so
+an operator who also created a mission reads the fingerprints of its calls, and a member
+who also owns the connection a call went through reads that call's. For a `reader`,
+`withoutArguments(value, 'reader')` also masks the keys `fingerprint`,
+`arguments_hash` and `arguments_fingerprint` of an administrative entry's `before` /
+`after` (the entries of an approval request carry one). The page prints "fingerprint
+not shown" in the Arguments column.
 
 `AuditViewer` is structurally the `Principal` of `server/auth`, so a page passes
 `currentPrincipal().principal` as is; the groups are the current ones, never a snapshot.
@@ -70,11 +93,13 @@ missions one created and the connections one owns. A member reads the mission's
 `store.audit.search(query)` applies the scope **first**, in SQL, then the filters, then
 the keyset position, so a filter can only narrow what the scope allows:
 
-- a **call** entry is visible when its `mission_id` is a mission the viewer created or its
-  `connection_id` is a connection the viewer (or one of their groups) owns;
-- an **administrative** entry is visible when `allAdmin`, or its object is such a mission
-  (`object_type = 'mission'`), such a connection (`'connection'`), a request of such a
-  mission (`'request'`, resolved through `requests.mission_id`), or a share of such a
+- a **call** entry is visible when `allCalls`, or its `mission_id` is a mission the viewer
+  created or is a current member of, or its `connection_id` is a connection the viewer
+  (or one of their groups) owns;
+- an **administrative** entry is visible when `allAdmin`, or its object is a mission the
+  viewer created or is a member of (`object_type = 'mission'`), a request of such a
+  mission (`'request'`, resolved through `requests.mission_id`), a connection they own
+  (`'connection'`), or a share of such a
   connection (`'share'`, resolved through `shares.connection_id`), or a delegation the
   viewer gave (`'delegation'`, through `delegations.user_id`) — so a user finds in their
   audit a delegation of theirs that an operator or the gateway revoked. Entries about a
@@ -101,10 +126,11 @@ and writes no administrative entry, in either direction: a change no service wat
 visible as refused, then allowed, call entries only. The two acts of one mission
 therefore need not come in pairs.
 
-An operator therefore sees every administrative act but not the calls of other people's
-missions. The statement is plain `IN` subqueries over `missions`, `connections`,
-`requests`, `shares` and `delegations` (`searchStatement` in
-`store/repositories/audit.ts`), the same on Postgres.
+The scope is one predicate, `scopePredicate` in `store/repositories/audit.ts`: plain
+`IN` subqueries over `missions`, `mission_members`, `connections`, `requests`, `shares`
+and `delegations`, the same on Postgres. Each piece carries its own placeholder values
+(`SqlPiece`), so a dimension added to the scope cannot shift the values of another; a
+dimension the scope does not hold is an always-false piece.
 
 ## Filters and paging (`filters.ts`)
 
@@ -337,7 +363,8 @@ the details (`parseEventDetails`); the column only selects the rows.
 ## Retention (`retention.ts`)
 
 `AuditRetentionSweeper` calls `store.audit.purgeByRetention(config.retentionDays)` —
-the store's only delete path, bounded by its cutoff and guarded by the triggers. The
+the audit's only delete path, bounded by its cutoff and guarded by the triggers — and
+then purges the session history of the same age (below). The
 composition root awaits `root.audit.retention.start()` before the instance serves (one
 sweep at boot), a timer repeats it every `RETENTION_SWEEP_INTERVAL_MS` (one hour), and
 `root.close()` stops the timer and waits for a sweep in flight before closing the store.
@@ -349,8 +376,43 @@ the error) and retried at the next interval; it never stops the instance. A purg
 removes something logs `audit retention: entries purged` with the count. The timer is
 `// single-process only`: a hosted deployment runs `sweep()` from one scheduled job.
 
-Only `audit` and `audit_risks` are purged. Session events and counters are not covered by
-`retention_days`.
+### The session history leaves with the audit
+
+The same sweep purges the session history of the same age (spec §6, §8; product
+owner's decision of 2026-10-13): a timeline says what the audit says — the tool, the
+instant, the holder, the agent label —, so `retention_days` is one promise wherever a
+call is written. `SessionHistoryRetention.purge(retentionDays)`
+(`budget/retention.ts`) asks the store for the sessions that hold something older than
+the cutoff (`SessionsRepo.withHistoryBefore`), computes each mission's current period
+(`currentPeriod`, as on every read) and removes, in one transaction per session
+(`SessionsRepo.purgeHistory`):
+
+| What               | Removed when                                                                             | Never removed                                                                                                                         |
+| ------------------ | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `events`           | `ts` older than N days                                                                   | an event of `PERIOD_STATE_EVENT_KINDS` (`gate-opened`, `gate-changed`, `reset`, `extension`) written since the current period started |
+| `session_counters` | the period is over **and** ended more than N days ago (`period_start + length < cutoff`) | the counters of the current period; every counter of a one-off mission (its one period never ends)                                    |
+
+The exception is what a decision reads back from the start of the period: a gate
+opened "until the period ends" (`openedGatesOf`) and the credits of granted claims
+(`countersAgreeWithAudit`). On a period shorter than the retention it never applies;
+on a yearly period with a 90-day retention it keeps those few events until the period
+turns. Once the period is over they are history and leave like the rest.
+
+Consequences to know:
+
+- The **Mission session** page shows the timeline and the past periods that are left:
+  after N days a quiet mission's timeline is empty and its "past periods" table starts
+  at the retention.
+- Requests are not purged: a decided request keeps its row (and never held arguments
+  past its decision).
+- `countersAgreeWithAudit` holds for a period younger than the retention. On a one-off
+  mission older than that, the audit lost entries the counters still count: the check
+  reports a mismatch that is the retention, not a fault.
+
+The two purges fail apart: one that throws is logged (`audit retention: purge failed`
+or `audit retention: session history purge failed`) and the other still runs. What the
+second removed is logged as `audit retention: session history purged` with `events`
+and `counters`. `sweep()` still returns the number of audit entries.
 
 ## Administrative entries: who writes what
 
@@ -367,11 +429,11 @@ Only `audit` and `audit_risks` are purged. Session events and counters are not c
 | `mission-member-added`, `mission-member-removed`                        | `MissionTeamService.addMember` / `removeMember` (the creator, in the interface) — `after` / `before`: `member_user_id`, `member_email`; a removal also `token_revoked_prefix`. Adding a member who still held a working token writes a `mission-token-revoked` entry after it ([missions](missions.md), "Members and tokens")                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | the mission                                                             |
 | `mission-token-issued`, `mission-token-revoked`                         | `MissionTeamService.generateToken` (a member's first token; a later one is `mission-rotated`), `createNamedToken`; `revokeToken` (`after.reason`: `by-holder` / `by-creator`), `addMember` when the user added still held a working token (`member-removed`) and `revokeTokensOfDeactivated` (`holder-deactivated`, in the operator's name, at a deactivation and for whatever a reactivation still finds) — `token_prefix`, `token_kind`, `holder`; never a secret. A token insert the store refused (`TokenNotIssuableError`) writes nothing                                                                                                                                                                                                                                                                | the mission                                                             |
 | `mission-issued`, `mission-rotated`, `mission-revoked`                  | `MissionService` (`issue` / `duplicate`, `rotate`, `revoke`), from the interface or from the management door's `issue_mission`, `rotate_mission_token`, `revoke_mission`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | the mission                                                             |
-| `gate-changed`                                                          | `MissionService.setGate` — `before` / `after`: `risk_id`, `gate`, and `open_for_period` (`true` → `false`) when `approval` was asked on a gated risk whose gate was open for the period, on an active or an expired mission; nothing when neither the gate nor an opening changed (P2.1, [missions](missions.md))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | the mission                                                             |
+| `gate-changed`                                                          | `MissionService.setGate` — `before` / `after`: `risk_id`, `gate`, and `open_for_period` (`true` → `false`) when `approval` was asked on a gated risk whose gate was open for the period, on an active or an expired mission; nothing when neither the gate nor an opening changed ([missions](missions.md))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | the mission                                                             |
 | `mission-orphaned`, `mission-restored`                                  | `MissionGrounds` (`watchConnection` / `watchCreator` → `settle(actorId)`), around a share, a revocation, a transfer, a reassignment, a group edit, a sign-in or the deactivation or reactivation of a user — `before` / `after`: `status` and, on the orphaned side, `cause`, `connection_id`, `uncovered`. Written through `AuditRepo.appendUnlessLatest`: when two acts under way at once see the same change, the entry is written once and names the act that settled first                                                                                                                                                                                                                                                                                                                               | the mission                                                             |
-| `period-reset`, `budget-extended`, `expiry-extended`, `request-refused` | `RequestService.decideClaim` (P1.7, [requests](requests.md))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | the request                                                             |
-| `approval-granted`, `gate-opened`, `request-refused`                    | `RequestService.decideApproval` — `after`: `mission_id`, `risk_id`, `tool`, `fingerprint`, the resolution and its approval or period; never the arguments (P2.1)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | the request                                                             |
-| `delegation-granted`                                                    | `AuthorizationService.decide` — the user approved a consent screen; `after`: `client_id`, `client_name`, `scope`, `redirect_uri`, `resource` (P2.3, [management-door](management-door.md))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | the delegation                                                          |
+| `period-reset`, `budget-extended`, `expiry-extended`, `request-refused` | `RequestService.decideClaim` ([requests](requests.md))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | the request                                                             |
+| `approval-granted`, `gate-opened`, `request-refused`                    | `RequestService.decideApproval` — `after`: `mission_id`, `risk_id`, `tool`, `fingerprint`, the resolution and its approval or period; never the arguments                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | the request                                                             |
+| `delegation-granted`                                                    | `AuthorizationService.decide` — the user approved a consent screen; `after`: `client_id`, `client_name`, `scope`, `redirect_uri`, `resource` ([management-door](management-door.md))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | the delegation                                                          |
 | `delegation-revoked`                                                    | `DelegationService.revoke` (the user), `TokenService` (the client signed out, or a refresh token or code was replayed), `ClientRegistry.decide` (an operator disabled the client), `DelegationService.revokeAllOf` (an operator deactivated the user) — `after.reason`: `user`, `client`, `refresh-token-replay`, `authorization-code-replay`, `operator`, `user-deactivated`; after a replay `after.missions_to_review` names the missions the delegation issued that still run ([management-door](management-door.md))                                                                                                                                                                                                                                                                                      | the delegation                                                          |
 | `oauth-client-approved`, `oauth-client-disabled`                        | `ClientRegistry.decide` (Administration → OAuth clients) — `before` / `after`: the status, the client id, name and redirect URIs                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | the OAuth client (`oauth-client`)                                       |
 | `user-deactivated`, `user-reactivated`                                  | `UserAdminService.deactivate` / `reactivate` (Administration → Users) — deactivation: `before`: `status`, `email`; `after`: `status`, `groups_left`, `delegations_revoked`, `member_tokens_revoked`; reactivation: `before`: `status`, `removed_at`; `after`: `status`, `email`. The delegations revoked, the member tokens revoked (`mission-token-revoked`) and the missions orphaned or restored have their own entries. A reactivation first closes what a half-failed deactivation left open (`closeHeldBy`): whatever it still finds is written as the same `delegation-revoked` / `mission-token-revoked` entries, before `user-reactivated`; when a closing step fails there is no `user-reactivated` entry — the user stays deactivated ([authentication](authentication.md), "Deactivating a user") | the user                                                                |
@@ -473,7 +535,7 @@ const removed = await root.audit.retention.sweep(); // number, or null when the 
 
 ## Tests
 
-- `src/server/audit/filters.test.ts` (20) — every filter, repeated and blank values,
+- `src/server/audit/filters.test.ts` (24) — every filter, repeated and blank values,
   closed sets, unreadable dates, reversed period, single day, oversized value, cursor
   round trip and refusals, `auditQueryString`, `scopeOf` for the three viewers,
   `withoutArguments`.
@@ -482,7 +544,7 @@ const removed = await root.audit.retention.sweep(); // number, or null when the 
   asked / refused / expired, an approval and its deadline, a gate opened and a gate
   edited, credits given back and an expiry moved, a rotation and a revocation, nothing
   for malformed details or a kind of a later version.
-- `tests/integration/audit/audit-query.test.ts` (25) — visibility (creator, connection
+- `tests/integration/audit/audit-query.test.ts` (35) — visibility (creator, connection
   owner, owning group, operator, bootstrap operator, requests of a mission), "a filter
   never widens the scope", the label of the object of an entry for each of the nine
   object types (and `null` for an object that is gone), each filter (the agent label:
@@ -506,6 +568,8 @@ const removed = await root.audit.retention.sweep(); // number, or null when the 
   string, not a call, malformed JSON, no details) and its index; the copy made at insert
   (`agentLabelColumn`); `listRecentEvents` filtered on a label and on no label, with the
   keyset.
+- `tests/integration/audit/session-history-retention.test.ts` (11) — the session history leaves with the audit:
+  events, past-period counters, what a current period keeps, one-off missions, the sweeper wiring
 - `tests/integration/audit/retention.test.ts` (10) — purge of entries older than N days
   and of nothing else (other tables untouched, boundary kept), triggers still forbidding
   update and delete, idempotence, configured days, scheduling (boot sweep, interval,

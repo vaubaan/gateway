@@ -21,9 +21,11 @@ import {
 } from '@vaubaan/plugin-sdk';
 import {
   assertCatalogCoverage,
+  assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
   assertPresetsValid,
+  type ToolSamples,
 } from '@vaubaan/plugin-sdk/testing';
 import {
   evaluateCall,
@@ -147,22 +149,21 @@ describe('ssh plugin — structural kit', () => {
     assertNoWildcard(sshPlugin);
   });
 
+  // One table for the catalog coverage and for the identifier proof.
+  const SAMPLES: ToolSamples = {
+    ssh__exec: [
+      { args: { cmd: 'uptime' } },
+      { args: { host: HOST, cmd: 'cat /etc/shadow' } },
+      { args: { cmd: 'touch /tmp/x' } },
+      { args: { cmd: 'rm -rf /srv/app/releases/old' } },
+      { args: { cmd: 'sudo apt-get install -y nginx' } },
+      { args: { cmd: 'systemctl restart nginx' } },
+      { args: { host: OTHER, cmd: 'ls' }, resources: [staging], expectDenied: true },
+    ],
+  };
+
   test('the single tool classifies to slices every catalog risk covers', () => {
-    const report = assertCatalogCoverage(
-      sshPlugin,
-      {
-        ssh__exec: [
-          { args: { cmd: 'uptime' } },
-          { args: { host: HOST, cmd: 'cat /etc/shadow' } },
-          { args: { cmd: 'touch /tmp/x' } },
-          { args: { cmd: 'rm -rf /srv/app/releases/old' } },
-          { args: { cmd: 'sudo apt-get install -y nginx' } },
-          { args: { cmd: 'systemctl restart nginx' } },
-          { args: { host: OTHER, cmd: 'ls' }, resources: [staging], expectDenied: true },
-        ],
-      },
-      { resources: [staging] },
-    );
+    const report = assertCatalogCoverage(sshPlugin, SAMPLES, { resources: [staging] });
     expect(report.toolsChecked).toBe(1);
     expect(report.risksUntouched).toEqual([]);
     expect(report.fallbackHits).toEqual([]);
@@ -175,6 +176,29 @@ describe('ssh plugin — structural kit', () => {
       'ssh.exec-service-control',
       'ssh.exec-sudo',
     ]);
+  });
+
+  // What is executed is what was classified (SDK kit) : every string argument of
+  // every sample above is fed the hostile identifiers, through `classify` and
+  // through `execute`. The finer cases are in this plugin's identifier tests.
+  test('hostile identifiers are refused by classify and by execute, or named exactly', async () => {
+    // The upstream is SSH : what `execute` sends is read from the transport.
+    const transport = fakeTransport();
+    const report = await assertIdentifiersRefused(createSshPlugin({ transport }), SAMPLES, {
+      resources: [staging],
+      context: (_fetch, resources) => execCtx(resources),
+      elsewhere: {
+        reset: () => transport.calls.splice(0),
+        sent: () => transport.calls.map(() => ({ method: 'SSH', url: 'ssh:' })),
+      },
+      pathIdentifiers: { none: 'the upstream is an SSH command, not an HTTP request' },
+    });
+    expect(report.toolsChecked).toBe(1);
+    // Found by running the samples : the arguments that are a segment of a request path.
+    expect([...new Set(report.pathIdentifiers.map((p) => p.argument))].sort()).toEqual([]);
+    // Whatever classify refused, execute sent nothing for.
+    expect(report.refusedByClassify).toBeGreaterThan(0);
+    expect(report.nothingSent).toBeGreaterThanOrEqual(report.refusedByClassify);
   });
 
   test('the fallback covers a write slice no dedicated risk matches, and only that', () => {

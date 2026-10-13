@@ -83,7 +83,15 @@ import type {
   SeverityLevel,
 } from './model';
 import { previewDraft } from './preview';
-import { bearerMatches, mintMissionToken, prefixOfBearer, type TokenMinter } from './token';
+import {
+  bearerMatches,
+  digestOfBearer,
+  isLegacyTokenHash,
+  mintMissionToken,
+  prefixOfBearer,
+  type TokenMinter,
+} from './token';
+import { reissueMemberToken } from './member-token';
 import { issueTokenTo, type IssuedSecret } from './token-issuer';
 
 const COPY_SUFFIX = ' (copy)';
@@ -102,7 +110,7 @@ export interface MissionServiceDeps {
   readonly publicUrl: URL;
   readonly clock: Clock;
   readonly logger: Logger;
-  /** Tests inject a deterministic minter; production hashes with argon2id. */
+  /** Tests inject a deterministic minter; production stores the SHA-256 digest. */
   readonly mint?: TokenMinter;
   /**
    * The budget's "load counters, derive state" read (`SessionService.stateOf`).
@@ -154,6 +162,20 @@ export type RotateResult =
 export type RevokeResult =
   | { readonly ok: true; readonly mission: MissionRecord; readonly tokensRevoked: number }
   | { readonly ok: false; readonly reason: 'not-found' };
+
+/** An orphaned mission as an owner of one of its connections reads it. */
+export interface OrphanedOnConnection {
+  readonly id: string;
+  readonly name: string;
+  /** Who issued it: the only other person who can close it. */
+  readonly creator_label: string;
+  readonly cause: OrphanCause;
+}
+
+/** Who may close a mission, and on what ground (spec §2.3). */
+type Closer =
+  | { readonly as: 'creator' }
+  | { readonly as: 'connection-owner'; readonly connectionId: string };
 
 export type SetGateResult =
   | {
@@ -214,6 +236,20 @@ export type TokenVerification =
       readonly token: VerifiedToken;
     }
   | { readonly outcome: 'unknown' };
+
+/**
+ * Asked before the one slow verification left: the argon2id check of a token
+ * stored by an earlier build. The caller owns the limiter and its key.
+ */
+export type LegacyHashGate = () => Promise<
+  { readonly allowed: true } | { readonly allowed: false; readonly retryAfterMs: number }
+>;
+
+/** The gate refused: nothing was computed, the Bearer was not judged. */
+export interface LegacyHashThrottled {
+  readonly outcome: 'throttled';
+  readonly retryAfterMs: number;
+}
 
 /** What a user is to a mission they can read (spec §0 "Mission member"). */
 export type MissionRole = 'creator' | 'member';
@@ -589,34 +625,21 @@ export class MissionService {
 
     let token: IssuedSecret;
     try {
-      token = await this.issueCreatorToken(mission);
+      // The one implementation of "a member's own token, issued or replaced"
+      // (`member-token.ts`), shared with `MissionTeamService.generateToken`.
+      token = await reissueMemberToken(
+        { store: this.deps.store, mint: this.mint, clock: this.deps.clock },
+        {
+          missionId: mission.id,
+          userId: user.id,
+          delegatedClientId: options.delegation?.clientId ?? null,
+        },
+      );
     } catch (err) {
       // Revoked while the hash was computed: the store refused the insert.
       if (!(err instanceof TokenNotIssuableError)) throw err;
       return { ok: false, reason: 'inactive', state: await this.stateAfterRefusal(mission.id) };
     }
-    const previous = token.replaced;
-    await this.deps.store.auditWriter.write({
-      kind: 'admin',
-      ts: toIso(this.deps.clock.now()),
-      user_id: user.id,
-      // The same rule as `MissionTeamService.generateToken`, the other way a creator gets
-      // a token of their own: a first token is issued, a replacement is a rotation.
-      act: previous ? 'mission-rotated' : 'mission-token-issued',
-      object: { type: 'mission', id: mission.id },
-      before: previous ? { token_prefix: previous.prefix } : null,
-      after: { token_prefix: token.prefix, token_kind: 'member', holder: user.id },
-      delegated_client_id: options.delegation?.clientId ?? null,
-    });
-    await this.recordEvent(mission.id, user.id, {
-      kind: 'rotation',
-      details: {
-        token_prefix: token.prefix,
-        token_kind: 'member',
-        holder: user.id,
-        replaced_prefix: previous?.prefix ?? null,
-      },
-    });
     this.deps.logger.info('mission token rotated', {
       mission_id: mission.id,
       token_prefix: token.prefix,
@@ -631,17 +654,48 @@ export class MissionService {
   }
 
   /**
+   * The orphaned missions that carry a connection, for someone who owns that
+   * connection now (spec §2.3: "the creator, or an owner of the connection, may close
+   * it"). Anyone else reads none. Derived at this instant, like every reading of
+   * `orphaned`.
+   */
+  async orphanedOn(user: AuthoritySubject, connectionId: string): Promise<OrphanedOnConnection[]> {
+    const connection = await this.deps.store.connections.getById(connectionId);
+    if (!connection || !(await this.owns(user, connection))) return [];
+    const orphaned: OrphanedOnConnection[] = [];
+    for (const mission of await this.deps.store.missions.listForConnection(connectionId)) {
+      const { orphan } = await this.deps.grounds.inspect(mission);
+      if (!orphan) continue;
+      const creator = await this.deps.store.users.getById(mission.creatorUserId);
+      orphaned.push({
+        id: mission.id,
+        name: mission.name,
+        creator_label: creator?.email ?? 'unknown user',
+        cause: orphan.cause,
+      });
+    }
+    return orphaned;
+  }
+
+  /**
    * The mission refuses everything from now on; every token of every holder is revoked.
-   * Idempotent. An orphaned mission is revoked like any other: this is how its
-   * creator closes it for good (the stored status goes `active` → `revoked`).
+   * Idempotent. An orphaned mission is revoked like any other: this is how it is
+   * closed for good (the stored status goes `active` → `revoked`).
+   *
+   * Who may (spec §2.3): the creator, always; and, **only while the mission is
+   * orphaned**, an owner of one of its connections — the authority that grounded it is
+   * gone, and it would serve again, with the token its agent holds, the day a share is
+   * made again. A mission that serves is its creator's alone. A delegated client acts
+   * for the creator only.
    */
   async revoke(
     user: AuthoritySubject,
     missionId: string,
     options: IssueOptions = {},
   ): Promise<RevokeResult> {
-    const mission = await this.ownMission(user, missionId);
-    if (!mission) return { ok: false, reason: 'not-found' };
+    const closing = await this.closableBy(user, missionId, options);
+    if (!closing) return { ok: false, reason: 'not-found' };
+    const { mission, closer } = closing;
     if (mission.status === 'revoked') return { ok: true, mission, tokensRevoked: 0 };
 
     const revoked = await this.deps.store.missions.setStatus(mission.id, 'revoked');
@@ -653,7 +707,14 @@ export class MissionService {
       act: 'mission-revoked',
       object: { type: 'mission', id: mission.id },
       before: { status: mission.status },
-      after: { status: revoked.status, tokens_revoked: tokensRevoked },
+      after: {
+        status: revoked.status,
+        tokens_revoked: tokensRevoked,
+        // Named only when it is not the creator: the entry says on what ground they acted.
+        ...(closer.as === 'connection-owner'
+          ? { closed_as: closer.as, connection_id: closer.connectionId }
+          : {}),
+      },
       delegated_client_id: options.delegation?.clientId ?? null,
     });
     await this.recordEvent(mission.id, user.id, {
@@ -662,9 +723,42 @@ export class MissionService {
     });
     this.deps.logger.info('mission revoked', {
       mission_id: mission.id,
+      closed_as: closer.as,
       delegated_client_id: options.delegation?.clientId ?? null,
     });
     return { ok: true, mission: revoked, tokensRevoked };
+  }
+
+  /**
+   * The mission as derived now, when `user` may close it, and on what ground.
+   * `null` — "not found" — for everyone else, so that an owner learns nothing about
+   * the missions of their connection that serve.
+   */
+  private async closableBy(
+    user: AuthoritySubject,
+    missionId: string,
+    options: IssueOptions,
+  ): Promise<{ mission: MissionRecord; closer: Closer } | null> {
+    const stored = await this.deps.store.missions.getById(missionId);
+    if (!stored) return null;
+    const { mission } = await this.deps.grounds.inspect(stored);
+    if (stored.creatorUserId === user.id) return { mission, closer: { as: 'creator' } };
+    // A delegation acts for the creator of the missions it issued, never as an owner.
+    if (options.delegation) return null;
+    // Orphaned now; or already closed, which is answered the same to who could close it.
+    if (mission.status !== 'orphaned' && mission.status !== 'revoked') return null;
+    for (const { connectionId } of stored.connections) {
+      const connection = await this.deps.store.connections.getById(connectionId);
+      if (connection && (await this.owns(user, connection))) {
+        return { mission, closer: { as: 'connection-owner', connectionId } };
+      }
+    }
+    return null;
+  }
+
+  /** The one definition of "owns the connection now": the authority's (`basis: 'owner'`). */
+  private async owns(user: AuthoritySubject, connection: ConnectionRecord): Promise<boolean> {
+    return (await this.deps.authority.authorityOf(user, connection)).basis === 'owner';
   }
 
   /**
@@ -747,30 +841,63 @@ export class MissionService {
   }
 
   /**
-   * Resolves a presented Bearer: prefix lookup, the argon2id check, then what
-   * the token is worth at this instant (`standingOf`). A malformed Bearer, an
-   * unknown prefix and a wrong secret are the same answer (`unknown`).
+   * Resolves a presented Bearer: prefix lookup, the comparison with the stored
+   * SHA-256 digest, then what the token is worth at this instant
+   * (`standingOf`). A malformed Bearer, an unknown prefix and a wrong secret
+   * are the same answer (`unknown`).
+   *
+   * A row an earlier build stored as an argon2id hash is checked with argon2id
+   * — the only slow path left. `legacyGate`, when given, is asked first and may
+   * refuse (`throttled`): the execution door passes its limiter there, so wrong
+   * secrets replayed on such a prefix cannot make the instance spend its CPU.
+   * When the Bearer matches, the stored value is replaced by the digest of that
+   * same Bearer, so the token never takes the slow path again. A write that
+   * fails is logged and the call goes on: the token is as valid as before, and
+   * the next call tries again.
    */
-  async verifyToken(bearer: string): Promise<TokenVerification> {
+  async verifyToken(bearer: string): Promise<TokenVerification>;
+  async verifyToken(
+    bearer: string,
+    legacyGate: LegacyHashGate,
+  ): Promise<TokenVerification | LegacyHashThrottled>;
+  async verifyToken(
+    bearer: string,
+    legacyGate?: LegacyHashGate,
+  ): Promise<TokenVerification | LegacyHashThrottled> {
     const prefix = prefixOfBearer(bearer);
     if (!prefix) return { outcome: 'unknown' };
     const found = await this.deps.store.missions.findTokenByPrefix(prefix);
     if (!found) return { outcome: 'unknown' };
-    if (!(await bearerMatches(found.token.hash, bearer))) return { outcome: 'unknown' };
+    const legacy = isLegacyTokenHash(found.token);
+    if (legacy && legacyGate) {
+      const gate = await legacyGate();
+      if (!gate.allowed) return { outcome: 'throttled', retryAfterMs: gate.retryAfterMs };
+    }
+    if (!(await bearerMatches(found.token, bearer))) return { outcome: 'unknown' };
+    if (legacy) await this.moveToDigest(found.token, bearer);
     return this.standingOf(found);
   }
 
-  /**
-   * What a token is worth now, for a Bearer whose secret was ALREADY proven to
-   * match the row `tokenId` (the execution door's verified-token cache keeps
-   * that proof, never the state). The row is re-read by prefix: a proof for a
-   * row that is gone, or whose prefix now names another row, is `unknown`.
-   * Never call this with a token id that did not come from a hash match.
-   */
-  async provenToken(prefix: string, tokenId: string): Promise<TokenVerification> {
-    const found = await this.deps.store.missions.findTokenByPrefix(prefix);
-    if (!found || found.token.id !== tokenId) return { outcome: 'unknown' };
-    return this.standingOf(found);
+  /** Replaces a matched legacy hash by the SHA-256 digest of the same Bearer. Never throws. */
+  private async moveToDigest(token: MissionTokenRecord, bearer: string): Promise<void> {
+    try {
+      const moved = await this.deps.store.missions.rehashToken(token.id, {
+        fromHash: token.hash,
+        ...digestOfBearer(bearer),
+      });
+      if (moved) {
+        this.deps.logger.info('mission token moved to its sha256 digest', {
+          mission_id: token.missionId,
+          token_prefix: token.prefix,
+        });
+      }
+    } catch (error) {
+      this.deps.logger.warn('mission token not moved to its sha256 digest', {
+        mission_id: token.missionId,
+        token_prefix: token.prefix,
+        error_class: error instanceof Error ? error.name : typeof error,
+      });
+    }
   }
 
   /**

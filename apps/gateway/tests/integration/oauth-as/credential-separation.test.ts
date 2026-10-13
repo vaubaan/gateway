@@ -8,6 +8,7 @@
  * session from the IdP sign-in — each presented at every surface that is not
  * its own, over the real doors and handlers.
  */
+import { hashApiKeyArgon2id } from '@vaubaan/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { SESSION_COOKIE } from '../../../src/server/auth';
@@ -220,8 +221,22 @@ describe('the three credentials never cross over', () => {
       expect(response.status).toBe(403);
     });
 
-    it('throttles the identification of mission tokens like the execution door does', async () => {
-      const wrong = `vbn_live_${missionToken.slice('vbn_live_'.length, 'vbn_live_'.length + 8)}_${'x'.repeat(32)}`;
+    const PREFIX = (): string => missionToken.slice('vbn_live_'.length, 'vbn_live_'.length + 8);
+
+    it('answers 401 to a wrong secret on a real mission-token prefix, however often: nothing slow is computed', async () => {
+      const wrong = `vbn_live_${PREFIX()}_${'x'.repeat(32)}`;
+      const statuses = new Set<number>();
+      for (let i = 0; i < 40; i += 1) {
+        statuses.add((await rpc(MANAGEMENT_URL, bearer(wrong))).response.status);
+      }
+      expect([...statuses]).toEqual([401]);
+    });
+
+    it('throttles the identification of a mission token an earlier build stored as argon2id, like the execution door does', async () => {
+      instance.root.store.db
+        .prepare("UPDATE mission_tokens SET hash = ?, hash_alg = 'argon2id' WHERE prefix = ?")
+        .run(await hashApiKeyArgon2id(missionToken), PREFIX());
+      const wrong = `vbn_live_${PREFIX()}_${'x'.repeat(32)}`;
       const statuses = new Set<number>();
       for (let i = 0; i < 40; i += 1) {
         statuses.add((await rpc(MANAGEMENT_URL, bearer(wrong))).response.status);

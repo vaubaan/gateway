@@ -6,7 +6,7 @@
 
 /** The instance's `public_url`: what the browser believes it is talking to. */
 export const PUBLIC_URL = 'https://gateway.e2e.test';
-/** The simulated identity provider (P1.1's `FakeIdp`). */
+/** The simulated identity provider (the in-process `FakeIdp`). */
 export const IDP_ISSUER = 'https://idp.e2e.test';
 /**
  * Test-only control endpoints of the launcher. They are served by the launcher's

@@ -20,6 +20,8 @@ import {
   classifyRailway,
   railwayPlugin,
 } from '../../src/index.ts';
+import { UNBOUND_ARGUMENTS } from '../../src/tools.ts';
+import upstreamTools from '../../src/upstream-tools.json' with { type: 'json' };
 
 const PROJECT = '00000000-0000-4000-8000-000000000001';
 const OTHER_PROJECT = '00000000-0000-4000-8000-000000000002';
@@ -155,11 +157,6 @@ const ID_POSITIONS: ReadonlyArray<{
     position: 'serviceId (GraphQL tool)',
     tool: 'railway__delete-variable',
     args: (serviceId) => ({ ...base, serviceId, name: 'K' }),
-  },
-  {
-    position: 'deploymentId (get-logs)',
-    tool: 'railway__get-logs',
-    args: (deploymentId) => ({ ...base, deploymentId }),
   },
 ];
 
@@ -358,13 +355,107 @@ describe('railway identifiers — execute runs on the target the classifier reso
   });
 
   test('the ids sent are the ids classified (rewrapped tool)', async () => {
-    const args = { ...base, serviceId: SERVICE, deploymentId: DEPLOYMENT, limit: 10 };
+    const args = { ...base, serviceId: SERVICE, limit: 10 };
     expect(slicesOf('railway__get-logs', args)).toEqual([
       `railway.project[${PROJECT}].environment[*].service[${SERVICE}].deployment[*].logs.R`,
     ]);
     const { url, payload } = await sent('railway__get-logs', args);
     expect(url).toBe(RAILWAY_MCP_URL);
     expect(payload).toEqual(args);
+  });
+
+  describe('an id nothing can bind to the project is refused, never forwarded', () => {
+    // The credential reaches every project of the workspace: a deployment or an agent
+    // thread of another project, forwarded, would be served on the mission's name.
+    const UNBOUND: readonly (readonly [string, string, Record<string, unknown>, string])[] = [
+      [
+        'railway__get-logs',
+        'deploymentId',
+        { ...base, serviceId: SERVICE },
+        'Give serviceId and environmentId instead',
+      ],
+      [
+        'railway__railway-agent',
+        'threadId',
+        { ...base, message: 'status?' },
+        'Every call starts a new conversation',
+      ],
+    ];
+    const VALUES: readonly unknown[] = [
+      DEPLOYMENT,
+      '00000000-0000-4000-8000-000000000000',
+      '',
+      null,
+      0,
+      ['x'],
+      { id: 'x' },
+      '../other',
+    ];
+
+    test.each(UNBOUND)(
+      '%s refuses %s whatever its value, in classify',
+      (tool, name, ok, instead) => {
+        for (const value of VALUES) {
+          const out = classifyRailway(tool, { ...ok, [name]: value }, [project]);
+          const refusal = 'denied' in out ? out.denied : null;
+          expect(refusal, String(value)).toBe(
+            `${name}: not accepted by '${tool}' — it cannot be bound to the mission's project, so it is not sent. ${UNBOUND_ARGUMENTS[tool]![name]}`,
+          );
+          expect(refusal).toContain(instead);
+        }
+        // Without it the call is classified as before.
+        expect(slicesOf(tool, ok).length).toBeGreaterThan(0);
+      },
+    );
+
+    test.each(UNBOUND)('%s refuses %s in execute too: nothing is sent', async (tool, name, ok) => {
+      for (const value of VALUES) {
+        const fetch = mockFetch([]);
+        const result = await railwayPlugin.execute(execCtx(fetch), tool, {
+          ...ok,
+          [name]: value,
+        });
+        expect(result.isError, String(value)).toBe(true);
+        expect(JSON.stringify(result.content)).toContain(`${name}: not accepted by '${tool}'`);
+        expect(fetch.calls).toHaveLength(0);
+      }
+    });
+
+    test('the schema the agent reads does not offer them, and says so', () => {
+      for (const [tool, name] of UNBOUND) {
+        const declared = railwayPlugin.tools.find((t) => t.name === tool)!;
+        expect(Object.keys(declared.inputSchema.properties ?? {}), tool).not.toContain(name);
+        expect(declared.description, tool).toContain(`This gateway does not accept ${name}.`);
+      }
+      // The table names arguments the upstream tools really have: nothing is refused by a typo.
+      const upstreamNames = new Map(
+        (upstreamTools as { name: string; inputSchema: { properties?: object } }[]).map((t) => [
+          t.name,
+          Object.keys(t.inputSchema.properties ?? {}),
+        ]),
+      );
+      for (const [tool, names] of Object.entries(UNBOUND_ARGUMENTS)) {
+        for (const name of Object.keys(names)) {
+          expect(upstreamNames.get(tool), `${tool}.${name}`).toContain(name);
+        }
+      }
+    });
+
+    test('no other declared argument of any tool is named like an id and left unbound', () => {
+      // Every `…Id` an agent may send is one the classifier binds (`resolveTarget`) or the
+      // account-level `workspaceId` of create-project, which names no resource of a mission.
+      const BOUND = new Set(['projectId', 'environmentId', 'serviceId']);
+      const ACCOUNT_LEVEL = new Set(['railway__create-project.workspaceId']);
+      for (const tool of railwayPlugin.tools) {
+        for (const name of Object.keys(tool.inputSchema.properties ?? {})) {
+          if (!/id$/i.test(name)) continue;
+          expect(
+            BOUND.has(name) || ACCOUNT_LEVEL.has(`${tool.name}.${name}`),
+            `${tool.name}.${name}`,
+          ).toBe(true);
+        }
+      }
+    });
   });
 
   test('the ids sent are the ids classified (GraphQL tool), as variables of a constant document', async () => {

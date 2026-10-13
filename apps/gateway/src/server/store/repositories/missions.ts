@@ -151,6 +151,18 @@ export interface MissionsRepo {
    * busy agent does not turn every call into a write. Returns whether a row was written.
    */
   markTokenUsed(tokenId: string, granularitySeconds: number): Promise<boolean>;
+  /**
+   * Replaces the stored proof of one token by another proof of the SAME secret
+   * (a row an earlier build stored as argon2id, moved to the SHA-256 digest once
+   * its Bearer matched). Written only while the row still holds `fromHash`, so
+   * two concurrent calls write once and a row changed meanwhile is left alone.
+   * Nothing else of the row moves: same id, prefix, status and holder. Returns
+   * whether a row was written.
+   */
+  rehashToken(
+    tokenId: string,
+    change: { readonly fromHash: string; readonly hash: string; readonly hashAlg: string },
+  ): Promise<boolean>;
 
   /**
    * Gives a user access to the mission. Adding a removed member again clears
@@ -468,6 +480,9 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
     `UPDATE mission_tokens SET last_used_at = ?
      WHERE id = ? AND (last_used_at IS NULL OR last_used_at < ?)`,
   );
+  const rehash = db.prepare<[string, string, string, string]>(
+    'UPDATE mission_tokens SET hash = ?, hash_alg = ? WHERE id = ? AND hash = ?',
+  );
   const memberOf = db.prepare<[string, string], MemberRow>(
     `SELECT ${MEMBER_COLUMNS} FROM mission_members WHERE mission_id = ? AND user_id = ?`,
   );
@@ -731,6 +746,9 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
     async markTokenUsed(tokenId, granularitySeconds) {
       const stale = new Date(ctx.clock.now().getTime() - granularitySeconds * MS_PER_SECOND);
       return markUsed.run(nowIso(ctx), tokenId, stale.toISOString()).changes === 1;
+    },
+    async rehashToken(tokenId, change) {
+      return rehash.run(change.hash, change.hashAlg, tokenId, change.fromHash).changes === 1;
     },
     async addMember(input) {
       const now = nowIso(ctx);

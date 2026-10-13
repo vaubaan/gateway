@@ -35,7 +35,7 @@ git history (`docs/handbook/providers/gmail.md` before 2026-10-13).
 | `classify`          | `src/classify.ts`       | Pure, fail-closed ; keyed on the mission's single mailbox resource and its `metadata`. Parsers : `src/q-parser.ts`, `src/address.ts`.                                                                  |
 | `execute`           | `src/execute.ts`        | Returns `{ isError: true, structuredContent: { error: 'not_implemented', plugin: 'gmail', experimental: true, tool, message } }` for every tool, the same payload as JSON text in `content` ; no call. |
 | `discoverResources` | `src/execute.ts`        | `GET /gmail/v1/users/me/profile` → one resource, `ref` = lower-cased address ; `UpstreamAuthError` on 401/403, `UpstreamHttpError` on another failed status.                                           |
-| `refresh`           | —                       | None : Google's refresh is the standard `refresh_token` grant the host performs from the spec (`refreshable: true`) ; P1.2-align.                                                                      |
+| `refresh`           | —                       | None : Google's refresh is the standard `refresh_token` grant the host performs from the spec (`refreshable: true`).                                                                                   |
 
 ## Classification rules
 
