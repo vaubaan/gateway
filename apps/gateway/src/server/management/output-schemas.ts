@@ -142,7 +142,14 @@ const missionsAnswer = z.looseObject({
         .looseObject({ period_start: isoInstant, period_end: isoInstant.nullable() })
         .nullable(),
       issued_via: z
-        .looseObject({ client_id: z.string(), client_name: z.string(), this_client: z.boolean() })
+        .looseObject({
+          client_id: z.string(),
+          client_name: z.string(),
+          this_client: z.boolean(),
+          this_delegation: z
+            .boolean()
+            .describe('True for the missions `rotate_mission_token` accepts from this caller.'),
+        })
         .nullable(),
       token_prefix: z.string().nullable().describe('Masked; the secret is never shown again.'),
       connection_ids: z.array(z.string()),

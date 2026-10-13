@@ -21,19 +21,13 @@ import type { Resource } from '@vaubaan/plugin-sdk';
 export const CLOUDFLARE_DNS_PROVIDER = 'cloudflare-dns';
 
 /**
- * Identifier chars a slice segment accepts ; anything else is refused rather
- * than escaped. Enough for a value that only ever lands in a slice (the
- * account id) — **not** for one that is interpolated into a URL path : `.`,
- * `..` and `/` pass it. Those go through `pathIdent`.
- */
-export const SAFE_IDENT = /^[a-zA-Z0-9_./~-]+$/;
-
-/**
- * An identifier interpolated into a URL path : exactly one path segment, no
- * dot, no separator, no escape. Cloudflare zone and record ids are 32 hex
- * characters. `encodeURIComponent` leaves `.` and `..` untouched and every
- * URL parser then removes them, so `/dns_records/..` would be sent as the
- * zone endpoint itself.
+ * An identifier of the provider : exactly one path segment, no dot, no
+ * separator, no escape. Cloudflare zone, record and account ids are 32 hex
+ * characters. It is the grammar of every identifier of this plugin, whether
+ * it is interpolated into a URL path (zone id, record id) or only embedded
+ * in a slice (account id). `encodeURIComponent` leaves `.` and `..`
+ * untouched and every URL parser then removes them, so `/dns_records/..`
+ * would be sent as the zone endpoint itself.
  */
 export const PATH_IDENT = /^[A-Za-z0-9_-]{1,64}$/;
 
@@ -44,6 +38,39 @@ export const PATH_IDENT = /^[A-Za-z0-9_-]{1,64}$/;
  */
 export function pathIdent(value: unknown): string | null {
   return typeof value === 'string' && PATH_IDENT.test(value) ? value : null;
+}
+
+/** One label of a DNS name : letters, digits, `_` and inner hyphens, 63 characters at most. */
+const DNS_LABEL = '[a-z0-9_](?:[a-z0-9_-]{0,61}[a-z0-9_])?';
+
+/**
+ * A DNS name as a record or a zone carries it, once lower-cased and without
+ * its trailing dots : dotted labels, an optional leading wildcard label
+ * (`*.dev.example.com`), 253 characters at most. Service labels
+ * (`_dmarc`, `_sip._tcp`) and punycode (`xn--…`) are names ; `@`, a bare
+ * `*`, an inner wildcard, an empty label, whitespace, a control or non-ASCII
+ * character, a separator or an escape are not.
+ */
+export const DNS_NAME = new RegExp(`^(?=.{1,253}$)(?:\\*\\.)?${DNS_LABEL}(?:\\.${DNS_LABEL})*$`);
+
+/**
+ * The value as a normalised DNS name (lower case, no trailing dot), or
+ * `null`. The one reading of a record name and of a zone name : two names
+ * are compared only when both are names. A record name never reaches a URL
+ * path — it travels in the JSON body, or percent-encoded in a query string.
+ */
+export function dnsName(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const name = value.toLowerCase().replace(/\.+$/, '');
+  return DNS_NAME.test(name) ? name : null;
+}
+
+/** A record type name (`A`, `AAAA`, `CNAME`, `HTTPS`…) : ASCII letters and digits only. */
+export const RECORD_TYPE = /^[A-Za-z][A-Za-z0-9]{0,15}$/;
+
+/** The value as an upper-cased record type, or `null`. ASCII only : no case folding from another script. */
+export function recordType(value: unknown): string | null {
+  return typeof value === 'string' && RECORD_TYPE.test(value) ? value.toUpperCase() : null;
 }
 
 /**
@@ -64,10 +91,13 @@ function metadataString(resource: Resource, key: string): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
-/** The Cloudflare account id a zone belongs to, when discovery recorded it. */
+/**
+ * The Cloudflare account id a zone belongs to, when discovery recorded one
+ * that is an identifier (`pathIdent`) ; `null` otherwise, which the
+ * classifier turns into the glob.
+ */
 export function accountIdOf(resource: Resource): string | null {
-  const id = metadataString(resource, 'account_id');
-  return id !== null && SAFE_IDENT.test(id) ? id : null;
+  return pathIdent(metadataString(resource, 'account_id'));
 }
 
 /** The zone name (`example.com`), from discovery metadata or the display name. */
@@ -108,26 +138,24 @@ export function resolveZoneResource(
   };
 }
 
-function normalizeDnsName(name: string): string {
-  return name.trim().toLowerCase().replace(/\.+$/, '');
-}
-
 /**
  * Is a record "critical" — apex (`example.com`, `@`), wildcard at the apex
  * (`*.example.com`, `*`), or of a critical type (MX, NS) ? Conservative :
- * when the zone name is unknown, when the name is empty, or when the record
- * name or the zone name carries non-ASCII characters (punycode is not
- * normalised here, so the two could never be compared), the record is
- * treated as critical.
+ * a record is ordinary only when its type is a type name (`recordType`),
+ * its name and the zone name are both DNS names (`dnsName`) and the two
+ * differ. Anything the grammars do not read — `@`, a bare `*`, an empty
+ * name, whitespace, a control or non-ASCII character (punycode is not
+ * normalised here, so the two could never be compared), a separator, an
+ * escape, an unknown zone name — is critical : the provider may read as the
+ * apex a name this function cannot compare with it.
  */
 export function isCriticalRecord(type: string, name: string, zoneName: string | null): boolean {
-  if (CRITICAL_RECORD_TYPES.has(type.trim().toUpperCase())) return true;
-  const n = normalizeDnsName(name);
-  if (n === '' || n === '@' || n === '*') return true;
-  if (/[^\x20-\x7e]/.test(n)) return true;
-  if (zoneName === null) return true;
-  const z = normalizeDnsName(zoneName);
-  if (/[^\x20-\x7e]/.test(z)) return true;
+  const t = recordType(type);
+  if (t === null || CRITICAL_RECORD_TYPES.has(t)) return true;
+  const n = dnsName(name);
+  if (n === null) return true;
+  const z = dnsName(zoneName);
+  if (z === null) return true;
   return n === z || n === `*.${z}`;
 }
 

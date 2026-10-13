@@ -42,14 +42,27 @@ describe('users repository', () => {
     expect(await store.users.getById('missing')).toBeNull();
   });
 
-  it('marks a user removed and reactivates them on a later login', async () => {
+  it('marks a user removed; a later login does not bring them back, `reactivate` does', async () => {
     const u = await store.users.upsertFromIdp({ subject: 's', email: 'e@x' });
+    expect(u.sessionsEndedAt).toBeNull();
     const removed = await store.users.markRemoved(u.id);
     expect(removed.status).toBe('removed');
-    expect(removed.removedAt).not.toBeNull();
-    const back = await store.users.upsertFromIdp({ subject: 's', email: 'e@x' });
-    expect(back.status).toBe('active');
-    expect(back.removedAt).toBeNull();
+    expect(removed.removedAt).toBe('2026-10-13T09:00:00.000Z');
+    expect(removed.sessionsEndedAt).toBe('2026-10-13T09:00:00.000Z');
+
+    // The identity provider still knows them: the row is refreshed, the status is not.
+    t.clock.advance(60_000);
+    const still = await store.users.upsertFromIdp({ subject: 's', email: 'e@new' });
+    expect(still).toMatchObject({ id: u.id, email: 'e@new', status: 'removed' });
+    expect(still.removedAt).toBe(removed.removedAt);
+
+    const back = await store.users.reactivate(u.id);
+    expect(back).toMatchObject({ status: 'active', removedAt: null });
+    // What was open before the deactivation stays closed.
+    expect(back?.sessionsEndedAt).toBe(removed.sessionsEndedAt);
+    // Only a removed user is reactivated; nothing is written otherwise.
+    expect(await store.users.reactivate(u.id)).toBeNull();
+    expect(await store.users.reactivate('missing')).toBeNull();
     await expect(store.users.markRemoved('missing')).rejects.toThrow(/not found/);
   });
 });
@@ -85,6 +98,21 @@ describe('groups repository', () => {
     expect((await store.groups.groupsOf(bob)).map((x) => x.id)).toEqual([g.id]);
     await store.groups.setMembers(g.id, []);
     expect(await store.groups.memberCount(g.id)).toBe(0);
+  });
+
+  it('removes a user from every group at once, local and IdP-sourced, and says which', async () => {
+    const local = await store.groups.getOrCreate('reviewers', 'local');
+    await store.groups.addMember(local.id, alice);
+    await store.groups.addMember(local.id, bob);
+    await store.groups.syncIdpMemberships(alice, ['dev']);
+    const left = await store.groups.removeAllMemberships(alice);
+    expect(left.map((g) => [g.name, g.source])).toEqual([
+      ['dev', 'idp'],
+      ['reviewers', 'local'],
+    ]);
+    expect(await store.groups.groupsOf(alice)).toEqual([]);
+    expect((await store.groups.listMembers(local.id)).map((u) => u.id)).toEqual([bob]);
+    expect(await store.groups.removeAllMemberships(alice)).toEqual([]);
   });
 
   it('adds and removes single members', async () => {

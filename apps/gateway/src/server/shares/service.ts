@@ -13,6 +13,10 @@
  *   - a restriction carries risks only: no quantity, no gate, no resource;
  *   - never a wildcard: the ids are checked one by one against the provider's
  *     catalog, and an empty list is refused rather than stored;
+ *   - never to someone who owns the connection now — its owner, or a current
+ *     member of the group that owns it: such a share grants nothing today and
+ *     would only outlive the membership (ADR
+ *     share-to-a-current-owner-refused);
  *   - one active share per `(connection, target)`: sharing again to the same
  *     target replaces the previous restriction (that is how it is edited);
  *   - a share that is revoked or narrowed leaves the missions it grounded
@@ -28,6 +32,7 @@ import {
   findActiveUserByEmail,
   fullCatalogRiskIds,
   principalLabel,
+  type AuthorityService,
   type GroundsShift,
   type MissionGrounds,
 } from '../authority';
@@ -136,6 +141,8 @@ export interface ShareServiceDeps {
   readonly store: Pick<Store, 'shares' | 'connections' | 'users' | 'groups'>;
   readonly registry: PluginRegistry;
   readonly connections: Pick<ConnectionService, 'get'>;
+  /** The one definition of "owns the connection now" (`basis: 'owner'`). */
+  readonly authority: Pick<AuthorityService, 'authorityOf'>;
   readonly grounds: Pick<MissionGrounds, 'watchConnection'>;
   readonly audit: AuditWriter;
   readonly clock: Clock;
@@ -345,6 +352,15 @@ export class ShareService {
     }
     // The owner holds the full catalog already: a share to the owner would grant nothing.
     if (target.kind === connection.owner.kind && target.id === connection.owner.id) {
+      throw new ShareError('target-is-owner');
+    }
+    // Neither would a share to a current member of the owner group — except later: it
+    // would keep the member's authority alive after they leave the group. Asked to the
+    // authority itself, so "owner" has one meaning here and at every check.
+    if (
+      target.kind === 'user' &&
+      (await this.deps.authority.authorityOf({ id: target.id }, connection)).basis === 'owner'
+    ) {
       throw new ShareError('target-is-owner');
     }
     return target;

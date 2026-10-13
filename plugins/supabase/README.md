@@ -90,9 +90,17 @@ Rules a reviewer must know (`src/classify.ts`) :
 - **Cascades.** `delete_bucket` emits the bucket write and the bulk object
   write (the objects go with it) ; `deploy_function` with a non-empty
   `files` bundle emits the body write on top of the deployment.
-- **Identifiers** (bucket id, path, email, phone, slug, secret name) must
-  match `[a-zA-Z0-9_.@+:/~-]+` ; anything else, or a missing required
-  identifier, is a denial — never a broad slice.
+- **Identifiers** have one grammar per kind, read by `readIdentifiers`
+  for the classifier and the executor alike, so the request names what the
+  slices named. Opaque ids and slugs (`user_id`, `provider_id`, `tpa_id`,
+  `function_slug`, `slug`, `type`) are one path segment
+  `[A-Za-z0-9_-]{1,64}` ; a bucket id may hold dots but is never `.` / `..`
+  nor a separator ; an object path is `/`-separated segments, none empty or
+  dot-only ; an email has one `@` and a dotted domain ; `project_ref` is a
+  host label ; `list_tables` schemas are unquoted SQL identifiers ;
+  `list_users` pages are positive integers ; `content_type` is a media
+  type ; the `type` of `get_advisors` is `security` or `performance`. Anything else, or a missing required identifier, is a denial and an
+  `isError` refusal before any request — never escaped, never a broad slice.
 
 `supabase__get_anon_key` returns the project URL and the anon key ;
 `service_role` is fetched gateway-side for the data-plane tools and never

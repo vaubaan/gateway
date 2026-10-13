@@ -119,6 +119,15 @@ metadata: { region, primary_region?, read_regions?, endpoint, state,
 database_type, tls } }`. No token is copied into the metadata. The owner
 labels `env`.
 
+The database ref is a segment of the Management API path
+(`/redis/database/{id}`), so it must be one path-safe segment:
+`^[A-Za-z0-9_-]{1,64}$` (`pathIdent` in `src/classify.ts`). `classify` and
+`execute` resolve it with the same `resolveDatabase`, from `databaseId` /
+`database_id` or from the mission's single database; `.`, `..`, a `/` or any
+other character is refused before any call. Redis keys, patterns and
+command words are not identifiers of a URL: a command is posted as a JSON
+array to the database's REST endpoint, so any string is a key.
+
 ## Tests
 
 ```

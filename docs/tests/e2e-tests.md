@@ -348,6 +348,13 @@ possible (spec §4, §5, §7):
 5. **Non-root** — the process runs as uid 10001.
 6. **No env file shipped** — the image contains no `apps/gateway/.env*`
    file (the build context excludes every `.env*`).
+7. **No test file shipped** — outside `node_modules`, `/app` holds no
+   `*.test.*`, `*.spec.*` or `*.bench.*` file, no `testing.ts` / `testing.js`,
+   no `vitest.config.*` or `playwright.config.*`, and no directory named
+   `tests`, `__tests__`, `e2e` or `fixtures`: a file trace that followed an
+   import from a test helper would carry tests, fixtures, the simulated
+   identity provider or the demo launcher into production. The step also
+   fails when the search looked at no file at all.
 
 Optional, when the caller knows what it built (the release pipeline sets
 the three): `SMOKE_EXPECT_VERSION` and `SMOKE_EXPECT_COMMIT` — `/healthz`
@@ -387,9 +394,13 @@ tester; `bootstrap_token` set, `idp` **not** set in the configuration.
    lands on `/admin` with the `Bootstrap operator` badge.
 2. **Configure** — `/admin/identity-provider`: issuer, client id, client
    secret, claim mapping (Entra ID: leave `groups`; the admin rule must
-   then name the group **object id** unless the app emits names; Google:
+   then name the group **object id** unless the app emits names, and the
+   groups claim must be limited to "Groups assigned to the application" —
+   a user above Entra's group limit is otherwise refused at sign-in with
+   `groups-overage`; Google:
    no groups, rely on `admin.emails`). Save → "Saved" banner; the page no
-   longer asks for the secret ("A secret is stored").
+   longer asks for the secret ("A secret is stored; leave blank to keep it.
+   It is asked again when the issuer changes.").
 3. **Test login** — the IdP consent screen appears, the browser comes back
    to `/admin/identity-provider?tested=1` with the "Test login result"
    banner: email, groups badges, `Operator: yes`. `/admin` now shows the
@@ -401,12 +412,22 @@ tester; `bootstrap_token` set, `idp` **not** set in the configuration.
    the `User` badge and no Administration link; `/admin` renders "Not an
    operator" naming the rule.
 6. **Session** — refresh after sign-in keeps the session; "Sign out" returns
-   to `/login` signed out; the cookie `vbn_session` is
-   `HttpOnly; Secure; SameSite=Lax` in the browser's storage inspector; the
+   to `/login` signed out; the cookie `__Host-vbn_session` is
+   `HttpOnly; Secure; SameSite=Lax`, `Path=/` and has no `Domain` in the
+   browser's storage inspector; the
    sign-in survives a container restart (rows in `web_sessions`).
 7. **Logs** — the server log carries `user signed in`,
    `bootstrap token revoked after the first operator sign-in`, and never
    the client secret or the bootstrap token.
+8. **Deactivation** — as the operator, Administration → Users lists
+   everyone who signed in; the operator's own card has no Deactivate button.
+   Deactivate the non-operator user of step 5: the notice says what was
+   revoked and left; in that user's window the next navigation lands on
+   `/login`, and signing in again at the IdP comes back with "This account
+   was deactivated on this instance by an operator". Reactivate: the user
+   signs in again with a new session. The automated counterpart is
+   `tests/integration/auth/deactivate-user.test.ts`
+   ([integration-tests](./integration-tests.md)).
 
 ### Connect a provider (P1.4)
 
@@ -542,7 +563,11 @@ Run it again after a change of Next.js version, of the MCP SDK, of
 
 - **No browser test of the bootstrap token and of the Identity provider
   page**, nor of an operator approving an OAuth client under
-  Administration → OAuth clients (see "Scenarios still to write"). The
+  Administration → OAuth clients (see "Scenarios still to write"), nor of
+  Administration → Users (deactivation and reactivation are driven in the
+  integration suite, through the two routes) and of the review banner a
+  replayed delegation shows on the Delegations page (the view behind it is
+  unit-tested). The
   management door's tools are driven by `delegate-agent.spec.ts` for one
   issuance; rotation and revocation through the door are covered by the
   integration suite only.

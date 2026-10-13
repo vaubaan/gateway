@@ -654,6 +654,8 @@ describe('TokenService', () => {
             reason: 'refresh-token-replay',
             client_id: client.clientId,
             client_name: client.name,
+            // It issued no mission: the list is there, and empty.
+            missions_to_review: [],
           },
           delegated_client_id: client.clientId,
         },

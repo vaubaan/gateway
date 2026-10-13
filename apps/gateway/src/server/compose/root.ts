@@ -42,6 +42,7 @@ import { createOAuthAsModule, type ClientDocumentFetcher, type OAuthAsModule } f
 import { createRequestsModule, type RequestsModule } from '../requests';
 import { SlidingWindowRateLimiter } from '../rate-limit';
 import { createSharesModule, type SharesModule } from '../shares';
+import { createUsersModule, type UsersModule } from '../users';
 import { createTelemetryModule, type TelemetryModule } from '../telemetry';
 import type { Store } from '../store';
 import type { CacheClient, RateLimiter, SessionStore } from './ports';
@@ -89,6 +90,8 @@ export interface GatewayRoot {
   readonly telemetry: TelemetryModule;
   /** Authorization server of the management door: clients, consent, delegated tokens (P2.3). */
   readonly oauth: OAuthAsModule;
+  /** Administration → Users: the operator's deactivation and reactivation of a user. */
+  readonly users: UsersModule;
   /** `/mcp/manage`: its admission gate and, behind it, the door with its seven tools (P2.4). */
   readonly management: ManagementDoorModule;
   readonly build: BuildInfo;
@@ -196,6 +199,34 @@ function logConfigurationSummary(
         ? 'enabled'
         : 'disabled',
     key_version: config.encryption.keyVersion,
+    trusted_proxies: config.trustedProxies.length,
+  });
+  warnWithoutTrustedProxies(logger, config);
+}
+
+/**
+ * The instance always sits behind a TLS terminator, so every request reaches it from
+ * that proxy: with `trusted_proxies` empty no client address is believed, and every
+ * limit keyed on the address is one window shared by all callers. Nothing is bypassed
+ * (a forged `X-Forwarded-For` is ignored), but one caller can then hold the others at
+ * 429: anybody on the request page, and — knowing a token prefix, which is not a
+ * secret — an agent whose token is not verified yet. Said once at boot, naming the key.
+ */
+export const NO_TRUSTED_PROXY_WARNING =
+  'trusted_proxies is empty: no client address is resolved, so the address-keyed limits are shared by all callers';
+
+function warnWithoutTrustedProxies(logger: Logger, config: InstanceConfig): void {
+  if (config.trustedProxies.length > 0) return;
+  logger.warn(NO_TRUSTED_PROXY_WARNING, {
+    key: 'trusted_proxies',
+    env: 'VAUBAAN_TRUSTED_PROXIES',
+    affected: [
+      'request page: one per-IP window for everybody',
+      'execution door: one token-verification window per token prefix (a flood of wrong secrets on a known prefix holds a not-yet-verified agent at 429)',
+      'audit: client_ip is not recorded',
+    ],
+    remedy:
+      'set it to the address or CIDR block of the reverse proxy in front of the instance (deploy/README.md)',
   });
 }
 
@@ -229,6 +260,7 @@ type RootModules = Pick<
   | 'execution'
   | 'telemetry'
   | 'oauth'
+  | 'users'
   | 'management'
 >;
 
@@ -295,6 +327,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     store,
     registry,
     connections,
+    authority: authority.service,
     grounds: authority.grounds,
     authenticator: auth.authenticator,
     logger,
@@ -365,6 +398,16 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     logger,
     fetchClientDocument: deps.clientDocumentFetch,
   });
+  // After the authorization server: deactivating a user revokes their delegations.
+  const users = createUsersModule({
+    config,
+    store,
+    membership: authority.membership,
+    delegations: oauth.delegations,
+    connections,
+    authenticator: auth.authenticator,
+    logger,
+  });
   const execution = createExecutionModule({
     config,
     store,
@@ -409,6 +452,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     execution,
     telemetry,
     oauth,
+    users,
     management,
   };
 }

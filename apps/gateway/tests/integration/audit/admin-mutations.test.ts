@@ -4,7 +4,7 @@
  * enumerates the service methods").
  *
  * The public methods of every class under `server/{connections,
- * provider-apps,missions,auth,requests,telemetry,authority,shares,groups,oauth-as,management}` are
+ * provider-apps,missions,auth,requests,telemetry,authority,shares,groups,users,oauth-as,management}` are
  * read from the source with the TypeScript
  * parser and each must be classified below as a read, a mutation or an
  * exemption with its reason. A method added tomorrow fails the first test
@@ -59,6 +59,7 @@ const SCANNED = [
   'authority',
   'shares',
   'groups',
+  'users',
   'oauth-as',
   'management',
 ];
@@ -799,6 +800,34 @@ const RULES: Readonly<Record<string, Rule>> = {
   'SessionService.takePending': exempt(SESSION_STATE),
   'SessionService.clearPendingCookie': READ,
 
+  // ── users (the caller authorizes: operator only) ──────────────────────────
+  'UserAdminService.list': READ,
+  'UserAdminService.deactivate': {
+    kind: 'mutation',
+    target: (root) => root.users.service,
+    drive: async (rig) =>
+      rig.root.users.handlers.deactivate(
+        await rig.operatorPost(`/admin/users/${rig.alice.user.id}/deactivate`, {}),
+        rig.alice.user.id,
+      ),
+    writes: { act: 'user-deactivated', object: 'user', actor: 'operator' },
+  },
+  'UserAdminService.reactivate': {
+    kind: 'mutation',
+    target: (root) => root.users.service,
+    prepare: (rig) =>
+      rig.root.users.service.deactivate(
+        { actorId: rig.operator.id, userId: rig.operator.id },
+        rig.alice.user.id,
+      ),
+    drive: async (rig) =>
+      rig.root.users.handlers.reactivate(
+        await rig.operatorPost(`/admin/users/${rig.alice.user.id}/reactivate`, {}),
+        rig.alice.user.id,
+      ),
+    writes: { act: 'user-reactivated', object: 'user', actor: 'operator' },
+  },
+
   // ── telemetry (the entry is written by the Administration handler) ────────
   'TelemetrySettingsService.isLocked': READ,
   'TelemetrySettingsService.state': READ,
@@ -879,6 +908,18 @@ const RULES: Readonly<Record<string, Rule>> = {
       rig.root.oauth.delegations.revoke(rig.alice.user, held.id),
     writes: { act: 'delegation-revoked', object: 'delegation', actor: 'alice' },
   },
+  'DelegationService.revokeAllOf': {
+    kind: 'mutation',
+    target: (root) => root.oauth.delegations,
+    prepare: (rig) => rig.delegation(),
+    // Reached through the one act that ends every delegation of a user: their deactivation.
+    drive: (rig) =>
+      rig.root.users.service.deactivate(
+        { actorId: rig.operator.id, userId: rig.operator.id },
+        rig.alice.user.id,
+      ),
+    writes: { act: 'delegation-revoked', object: 'delegation', actor: 'operator' },
+  },
   'DelegatedTokenVerifier.resolve': READ,
   'ManagementGate.admit': READ,
   // ── management door: an agent acting for the user, under a delegation ─────
@@ -906,10 +947,22 @@ const RULES: Readonly<Record<string, Rule>> = {
   'ManagementTools.rotateMissionToken': {
     kind: 'mutation',
     target: managementTools,
-    prepare: async (rig) => ({ mission: await rig.issue(), actor: await delegatedActor(rig) }),
-    drive: (rig, prepared: { mission: MissionRecord; actor: ManagementActor }) =>
+    // A delegation rotates only what it issued itself: the mission comes from the door.
+    prepare: async (rig) => {
+      const connection = await rig.connectByKey();
+      const actor = await delegatedActor(rig);
+      const issued = await rig.root.management.tools.issueMission(actor, {
+        name: 'Read the things',
+        connections: [{ connection_id: connection.id, preset: 'reader' }],
+        period: { kind: 'one-off' },
+        expires_at: null,
+      });
+      if (!issued.ok) throw new Error(`issue refused: ${issued.refusal.code}`);
+      return { missionId: issued.data.mission.mission_id, actor };
+    },
+    drive: (rig, prepared: { missionId: string; actor: ManagementActor }) =>
       rig.root.management.tools.rotateMissionToken(prepared.actor, {
-        mission_id: prepared.mission.id,
+        mission_id: prepared.missionId,
       }),
     writes: { act: 'mission-rotated', object: 'mission', actor: 'alice', delegated: true },
   },
@@ -964,6 +1017,7 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'delegation-granted',
       'delegation-revoked',
       'delegation-revoked',
+      'delegation-revoked',
       'gate-changed',
       'group-created',
       'group-member-added',
@@ -985,6 +1039,8 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'resources-discovered',
       'share-created',
       'share-revoked',
+      'user-deactivated',
+      'user-reactivated',
     ]);
   });
 

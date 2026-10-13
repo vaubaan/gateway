@@ -30,15 +30,15 @@ import {
 import { GITHUB_API_BASE, GITHUB_API_HEADERS } from './app-install.ts';
 import {
   MINT_TOOL,
-  NO_REPOSITORY_SELECTED,
+  PROVIDER,
   githubRepoRefs,
-  repositoryNotSelectedMessage,
-} from './classify.ts';
+  readGithubCall,
+  repoFullName,
+  type GithubCall,
+} from './call.ts';
 import { installationTokenFor } from './credential.ts';
 import { dispatchGithubTool, type OctokitLike } from './octokit-dispatch.ts';
 import { installationTokenForCall } from './token-cache.ts';
-
-const PROVIDER = 'github';
 
 /** Permission sets of `github__mint_install_token`, by purpose. */
 export const MINT_PERMISSIONS: Readonly<
@@ -65,13 +65,20 @@ export async function executeGithub(
   tool: string,
   args: Readonly<Record<string, unknown>>,
 ): Promise<McpToolResult> {
-  if (tool === MINT_TOOL) return mintInstallTokenTool(ctx, args);
+  // The reader the classifier used, over the same mission resources : the
+  // call that runs is the call that was classified, or nothing runs — not
+  // even the token mint.
+  const call = readGithubCall(tool, args, githubRepoRefs(ctx.resources));
+  if ('denied' in call) throw new Error(refusalOf(tool, call.denied));
+  if (call.tool === MINT_TOOL) return mintInstallTokenTool(ctx, call);
 
-  const repo = typeof args.repo === 'string' && args.repo.length > 0 ? args.repo : undefined;
   // Least privilege : the per-call token only sees the repository the call
   // names ; account-shaped tools (search) get an installation-wide token.
   // Reused across calls when the host provides a connection-scoped cache.
-  const token = await installationTokenForCall(ctx, repo);
+  const token = await installationTokenForCall(
+    ctx,
+    'target' in call ? call.target.repo : undefined,
+  );
   const octokit: OctokitLike = new Octokit({
     auth: token,
     request: { fetch: ctx.fetch, ...(ctx.signal ? { signal: ctx.signal } : {}) },
@@ -79,7 +86,7 @@ export async function executeGithub(
     log: octokitLog(ctx.logger),
   });
   try {
-    return json(await dispatchGithubTool(octokit, tool, args));
+    return json(await dispatchGithubTool(octokit, call, args));
   } catch (e: unknown) {
     const status = (e as { status?: number }).status;
     if (status === 401 || status === 403) {
@@ -91,36 +98,31 @@ export async function executeGithub(
 }
 
 /**
+ * What `execute` throws for a call the reader refuses : the classifier's
+ * sentence, led by the tool name (`tool 'x' requires …` → `x requires …`).
+ * Thrown, like every refusal of this executor — nothing was sent.
+ */
+function refusalOf(tool: string, denied: string): string {
+  const classifierLead = `tool '${tool}' `;
+  if (denied.startsWith(classifierLead)) return `${tool} ${denied.slice(classifierLead.length)}`;
+  return denied.startsWith(tool) ? denied : `${tool}: ${denied}`;
+}
+
+/**
  * Mint a short-lived installation token scoped to the mission's repositories
  * (or the one named by `repoFullName`) with the permission set of `purpose`.
- * The classifier already refused unknown purposes and foreign repositories ;
- * the checks are repeated here so the function is safe on its own.
+ * `call` comes from `readGithubCall` : an unknown purpose or a repository
+ * outside the mission never reaches this function, and the repositories of
+ * the token are the ones the slices named.
  */
 async function mintInstallTokenTool(
   ctx: ExecuteContext,
-  args: Readonly<Record<string, unknown>>,
+  call: Extract<GithubCall, { tool: typeof MINT_TOOL }>,
 ): Promise<McpToolResult> {
-  const purpose = args.purpose;
-  if (purpose !== 'clone' && purpose !== 'push') {
-    throw new Error(`${MINT_TOOL} requires purpose in ['clone','push'], got ${String(purpose)}.`);
-  }
-  const refs = githubRepoRefs(ctx.resources);
-  if (refs.length === 0) throw new Error(`${MINT_TOOL}: ${NO_REPOSITORY_SELECTED}`);
-
-  const repoFullName = typeof args.repoFullName === 'string' ? args.repoFullName : undefined;
-  let scoped: readonly string[];
-  if (repoFullName) {
-    if (!refs.includes(repoFullName)) {
-      throw new Error(`${MINT_TOOL}: ${repositoryNotSelectedMessage(repoFullName, refs)}`);
-    }
-    scoped = [repoFullName];
-  } else {
-    scoped = refs;
-  }
-
   const minted = await installationTokenFor(ctx, {
-    repositories: scoped.map(repoNameOf),
-    permissions: MINT_PERMISSIONS[purpose],
+    // The access_tokens endpoint takes names without owner.
+    repositories: call.repositories.map((r) => r.repo),
+    permissions: MINT_PERMISSIONS[call.purpose],
   });
   return json({
     token: minted.token,
@@ -147,6 +149,7 @@ export async function discoverGithubResources(
 ): Promise<readonly Resource[]> {
   const { token } = await installationTokenFor(ctx);
   const out: Resource[] = [];
+  let listed = 0;
   for (let page = 1; page <= DISCOVERY_MAX_PAGES; page++) {
     const url = `${GITHUB_API_BASE}/installation/repositories?per_page=${DISCOVERY_PAGE_SIZE}&page=${page}`;
     const res = await ctx.fetch(url, {
@@ -167,11 +170,22 @@ export async function discoverGithubResources(
       repositories?: readonly InstallationRepositoryDto[];
     };
     const repositories = body.repositories ?? [];
+    listed += repositories.length;
     for (const r of repositories) {
+      // A name the reader of the calls would refuse is of no use to a
+      // mission : it is left out, and said, instead of listing a resource no
+      // call can name.
+      const named = repoFullName(r.full_name);
+      if (named === null) {
+        ctx.logger?.warn('github: repository left out, its name is not owner/repo', {
+          full_name: String(r.full_name).slice(0, 200),
+        });
+        continue;
+      }
       out.push({
         provider: PROVIDER,
-        ref: r.full_name,
-        displayName: r.full_name,
+        ref: named.ref,
+        displayName: named.ref,
         metadata: {
           ...(r.default_branch !== undefined ? { default_branch: r.default_branch } : {}),
           ...(r.private !== undefined ? { private: r.private } : {}),
@@ -180,7 +194,7 @@ export async function discoverGithubResources(
       });
     }
     const total = body.total_count;
-    if (repositories.length < DISCOVERY_PAGE_SIZE || (total !== undefined && out.length >= total))
+    if (repositories.length < DISCOVERY_PAGE_SIZE || (total !== undefined && listed >= total))
       break;
   }
   return out;
@@ -196,12 +210,6 @@ function octokitLog(logger: PluginLogger | undefined): OctokitLog {
       logger[level](parts.map(String).join(' '), { source: 'octokit' });
     };
   return { debug: to('debug'), info: to('info'), warn: to('warn'), error: to('error') };
-}
-
-/** `owner/repo` → `repo` (the access_tokens endpoint takes names without owner). */
-function repoNameOf(fullName: string): string {
-  const slash = fullName.indexOf('/');
-  return slash >= 0 ? fullName.slice(slash + 1) : fullName;
 }
 
 function json(payload: unknown): McpToolResult {

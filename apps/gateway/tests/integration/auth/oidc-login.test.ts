@@ -8,7 +8,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BOOTSTRAP_ACTOR_ID } from '@vaubaan/gateway-core';
 
-import { BOOTSTRAP_REVOKED_KEY, IDP_CONFIG_KEYS, SESSION_COOKIE } from '../../../src/server/auth';
+import {
+  BOOTSTRAP_REVOKED_KEY,
+  IDP_CONFIG_KEYS,
+  LOGIN_COOKIE,
+  SESSION_COOKIE,
+} from '../../../src/server/auth';
 import { memoryStoreDeps } from '../../../src/server/compose/testing';
 import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
 import { loadInstanceConfig } from '../../../src/server/config';
@@ -119,9 +124,9 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
     expect(res.status).toBe(303);
     expect(res.headers.get('location')).toBe('/admin');
     expect(b.cookies.has(SESSION_COOKIE)).toBe(true);
-    expect(b.cookies.has('vbn_login')).toBe(false);
+    expect(b.cookies.has(LOGIN_COOKIE)).toBe(false);
     expect(res.headers.getSetCookie().join('\n')).toMatch(
-      /vbn_session=[^;]+; Path=\/; Max-Age=\d+; HttpOnly; Secure; SameSite=Lax/,
+      /^__Host-vbn_session=[^;]+; Path=\/; Max-Age=\d+; HttpOnly; Secure; SameSite=Lax/,
     );
 
     const user = await root.store.users.getBySubject('idp|ada');
@@ -346,7 +351,7 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
     );
     expect(tampered.headers.get('location')).toBe('/login?error=state-mismatch');
     expect(b.cookies.has(SESSION_COOKIE)).toBe(false);
-    expect(b.cookies.has('vbn_login')).toBe(false);
+    expect(b.cookies.has(LOGIN_COOKIE)).toBe(false);
 
     const expired = await root.auth.handlers.loginCallback(
       new Request(`${PUBLIC_URL}/auth/callback?code=c&state=s`),
@@ -395,6 +400,49 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
       email_verified: true,
     });
     expect(verified.headers.get('location')).toBe('/admin');
+  });
+
+  it('refuses a sign-in whose groups the IdP moved out of the token (Entra ID overage): memberships are kept, not emptied', async () => {
+    await configureIdp();
+    const b: Browser = { cookies: new Map() };
+    await signIn(b, { sub: 'idp|ada', email: 'ada@example.com', groups: ['team-a', ADMIN_GROUP] });
+    const ada = await root.store.users.getBySubject('idp|ada');
+    expect(ada).not.toBeNull();
+    if (!ada) return;
+    const before = (await root.store.groups.groupsOf(ada.id)).map((g) => g.name).sort();
+    expect(before).toEqual([ADMIN_GROUP, 'team-a'].sort());
+
+    // Ada joined her 201st group: the token carries a pointer instead of the list.
+    const second: Browser = { cookies: new Map() };
+    const res = await signIn(second, {
+      sub: 'idp|ada',
+      email: 'ada@example.com',
+      _claim_names: { groups: 'src1' },
+      _claim_sources: { src1: { endpoint: 'https://graph.example/getMemberObjects' } },
+    });
+    expect(res.headers.get('location')).toBe('/login?error=groups-overage');
+    expect(second.cookies.has(SESSION_COOKIE)).toBe(false);
+    // Nothing was synced: reading the pointer as "no groups" would have emptied these.
+    expect((await root.store.groups.groupsOf(ada.id)).map((g) => g.name).sort()).toEqual(before);
+    // The first session still stands, operator marker included.
+    const principal = await root.auth.authenticator.authenticate(headersOf(b));
+    expect(principal?.kind === 'user' && principal.isOperator).toBe(true);
+    // The operator finds the cause and the remedy in the log.
+    const logged = lines.find((line) => line.includes('groups-overage'));
+    expect(logged).toBeDefined();
+    expect(logged).toMatch(/Groups assigned to the application/);
+
+    // A user never seen before is not created either.
+    const res2 = await signIn(
+      { cookies: new Map() },
+      {
+        sub: 'idp|grace',
+        email: 'grace@example.com',
+        hasgroups: true,
+      },
+    );
+    expect(res2.headers.get('location')).toBe('/login?error=groups-overage');
+    expect(await root.store.users.getBySubject('idp|grace')).toBeNull();
   });
 
   it('a sign-in replaces the session the browser already had', async () => {

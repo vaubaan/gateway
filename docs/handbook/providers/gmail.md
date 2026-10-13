@@ -83,8 +83,8 @@ flowchart LR
   query.
 - **`get_thread`** is worst-case : `thread[id].message[*].R` +
   `from-zone[unknown].R` (the sender is unknown before the fetch). `id` is
-  required and must be an opaque id (`[A-Za-z0-9_-]+`) ; otherwise the call
-  is denied.
+  required and must be a `gmailId` (see "Identifiers" below) ; otherwise
+  the call is denied.
 - **Sensitive labels.** The labels of a thread are unknown before the fetch,
   so the marker is not opt-in. When the mailbox declares `sensitive_labels`,
   `get_thread` always emits `sensitive-label[*].R`, and a search emits
@@ -108,8 +108,9 @@ flowchart LR
   Otherwise : `draft.W` + `to-zone[self | internal | allowlist].W` ; no
   recipient at all is `self`.
 - **`label_*` / `unlabel_*`.** `thread_id`, `message_id` (message tools) and
-  `label` are required and validated ; a missing id is denied, never a
-  wildcard. `TRASH` and `SPAM` (any case) are denied : a deletion is not a
+  `label` are required and validated (`gmailId`, `labelRef`) ; a missing id
+  is denied, never a wildcard. `TRASH` and `SPAM` (any case) are denied : a
+  deletion is not a
   label write. The containment slice is `thread[t](.message[m]).label.W`. On
   a mailbox with `sensitive_labels`, a label that names one (or a label
   nested under it) adds `sensitive-label[l].W`, and any other label that is
@@ -117,6 +118,18 @@ flowchart LR
   `DRAFT`, `CHAT`, `CATEGORY_*`) adds `sensitive-label[*].W` — a user label
   id (`Label_42`) cannot be mapped to a name by a pure classifier. That slice
   matches only the fallback `gmail.uncategorized-write`.
+- **Identifiers.** One grammar function per kind, exported from
+  `classify.ts` ; a value outside its grammar is denied (`<arg>: malformed.`),
+  never escaped. The plugin executes nothing today : the two functions are
+  exported for the executor to come, which must take its path segments from
+  them and from nothing else (ADR
+  [`plugin-identifiers-one-grammar-for-classify-and-execute`](../../decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md)).
+
+  | Argument                                                         | Grammar                                                                                                                                                           | Where it lands                                                                |
+  | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+  | `id` (`get_thread`), `thread_id`, `message_id` (`label_*` tools) | `gmailId` — `[A-Za-z0-9_-]`, 1 to 64 characters (`MAX_GMAIL_ID_LENGTH`) : one path segment, no dot, no separator, no escape                                       | slice `thread[t]` / `message[m]` ; a request path once the plugin executes    |
+  | `label` (`label_*` / `unlabel_*` tools)                          | `labelRef` — `[A-Za-z0-9_./-]`, at most 225 characters (`MAX_LABEL_LENGTH`), `/` for nesting, no empty, `.` or `..` segment : a label id or a name without spaces | the sensitive-label verdict ; a request body or path once the plugin executes |
+
 - **Mailbox selection.** Exactly one gmail resource ; two or more are denied
   as ambiguous (v4 silently took the first binding ; that path is deleted).
 - **Metadata defaults.** Missing or ill-typed lists are empty, so an
@@ -179,7 +192,7 @@ and `sensitive_labels` on the resource (`GMAIL_METADATA_KEYS`).
 
 ## Tests
 
-`npx vitest run plugins/gmail` — 213 tests : `plugin.test.ts` (26 : SDK kit,
+`npx vitest run plugins/gmail` — 403 tests : `plugin.test.ts` (26 : SDK kit,
 experimental shape, coverage through a tool-exposing variant, mailbox
 selection, credential spec, absence of a plugin refresh, discovery and execute
 against `mockFetch`, presets), `risk-catalog.test.ts` (45 : loaded catalog
@@ -188,6 +201,8 @@ refused external draft), `classify.test.ts` (105 : the per-tool suite of
 `classifyGmail` — bounded and unbounded searches, sensitive labels,
 strict recipients, label writes, automated senders), `q-parser.test.ts`
 (32 : operators, disjunction / negation / unknown flags),
+`injection.test.ts` (190 : hostile values in every identifier position of
+the classifier, then the `gmailId` and `labelRef` grammars),
 `data-model.test.ts` (5).
 
 ## How to debug

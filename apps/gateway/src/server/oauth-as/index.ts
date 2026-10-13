@@ -96,6 +96,7 @@ export function createOAuthAsModule(deps: OAuthAsModuleDeps): OAuthAsModule {
   const tokens = new TokenService({
     repo: store.delegations,
     users: store.users,
+    missions: store.missions,
     clients,
     audit,
     rateLimiter: deps.rateLimiter,

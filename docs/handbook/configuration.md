@@ -103,7 +103,18 @@ deploy/config/                  gateway.example.yaml, .env.example (every key do
    - logger with a redactor fed by `secretValues(config)`; boot line
      `configuration loaded` (source, public origin, IdP origin or "not
      configured", admin rule kind, provider ids, telemetry flag (or "not set"),
-     key version — never a secret);
+     key version, `trusted_proxies` as the number of entries — never a
+     secret). When `trusted_proxies` is empty, one `warn` line follows
+     (`NO_TRUSTED_PROXY_WARNING`, whose message starts
+     `trusted_proxies is empty:` and says that no client address is resolved,
+     so the address-keyed limits are shared by all callers)
+     with `key`, `env` (`VAUBAAN_TRUSTED_PROXIES`), `affected` (the
+     request page's per-IP window, the execution door's token-verification
+     window per token prefix — a flood of wrong secrets on a known prefix
+     holds a not-yet-verified agent at 429 —, `client_ip` absent from the
+     audit) and `remedy`. Nothing is bypassed and the boot continues: the
+     shared window is an accepted risk that the instance states (ADR
+     [execution-door-json-faithful-arguments-and-shared-throttle](../decisions/execution-door-json-faithful-arguments-and-shared-throttle.md));
    - `createEncryptor(config.encryption)` (awaits libsodium);
    - the plugin registry (`@vaubaan/plugin-sdk`'s `PluginRegistry`) from
      `RootDeps.buildRegistry`, by default `buildShippedRegistry`: the
@@ -148,8 +159,9 @@ deploy/config/                  gateway.example.yaml, .env.example (every key do
      `handlers`; handbook [connections](connections.md)), with
      `RootDeps.providerFetch` for the outbound HTTP of the connect flows
      and of plugin discovery (tests inject `mockFetch`);
-   - `createSharesModule()` → `root.shares` (`service`, `handlers`) and
-     `createGroupsModule()` → `root.groups` (`service`, `handlers`): the
+   - `createSharesModule()` → `root.shares` (`service`, `handlers`), handed
+     `authority.service` (who owns a connection now) and `authority.grounds`,
+     and `createGroupsModule()` → `root.groups` (`service`, `handlers`): the
      shares of a connection and the operator's local groups (handbook
      [authority](authority.md));
    - `createRequestsModule()` → `root.requests` (`service`, `handlers`,
@@ -176,6 +188,11 @@ deploy/config/                  gateway.example.yaml, .env.example (every key do
      [management-door](management-door.md)), with
      `RootDeps.clientDocumentFetch` for the outbound fetch of Client ID
      Metadata Documents (unused unless enabled); then
+     `createUsersModule()` → `root.users` (`service`, `handlers`; handbook
+     [authentication](authentication.md), "Deactivating a user"), after the
+     authorization server because deactivating a user revokes their
+     delegations (`oauth.delegations`) and settles through
+     `authority.membership`; then
      `createExecutionModule()` → `root.execution` (`pipeline`,
      `credentialCache`, `tokens`, `door`, `handlers`; handbook
      [execution-door](execution-door.md)), which refuses delegated tokens
@@ -561,7 +578,9 @@ service and the execution door (rate-limit keys `mission:<id>:risk:<id>`,
 `mcp:mission:<id>`, `mcp-verify:<prefix>:<client address>`; cache keys
 `mission-token:<hash>`, `upstream-credential:<connection>:…`);
 `GatewayRoot.authority`, `GatewayRoot.shares` and `GatewayRoot.groups` are
-the authority, share and local-group modules (P2.2);
+the authority, share and local-group modules (P2.2); `GatewayRoot.users` is
+Administration → Users (the operator's deactivation and reactivation of a
+user);
 `GatewayRoot.telemetry` is community telemetry (P2.5; cache key
 `telemetry:plugin-stats`); `GatewayRoot.oauth` is the authorization server
 (P2.3; `SessionStore` key `oauth-consent:<id>`, rate-limit keys
@@ -595,7 +614,9 @@ equal to the loader's); crypto: round trip, AD mismatch, tampering,
 encryptor and a registry-backed catalog index, provider-app check as a
 warning then as a `ConfigError`, a failure after the store is opened closes
 the handle and stops the timers, `close()` does the same once, `getRoot()` memoisation, `bootOrExit()`
-exit codes, in-memory ports; http: `/healthz` states, `healthResponse` on
+exit codes, in-memory ports, one warning at boot when `trusted_proxies` is
+empty — naming the key, the variable and the 429 it costs — and none once it
+is set, with the count in the configuration line; http: `/healthz` states, `healthResponse` on
 plain `HealthDeps` with a fixed clock, and the client-address rule of
 `client-ip.ts` with `isTrustedProxyEntry`), the integration
 test `apps/gateway/tests/integration/compose/boot.test.ts` (the production
@@ -618,4 +639,6 @@ present, the same providers in both files) and
 without a build: the `/healthz` route trace lists the `argon2` and
 `better-sqlite3` binaries, and both load from the standalone
 `node_modules`). The container smoke test is `deploy/docker/smoke.sh`; it
-loads `argon2` and `better-sqlite3` inside the image.
+loads `argon2` and `better-sqlite3` inside the image, and its last step
+fails when a test, spec, fixture or demo file of the repository was shipped
+in it ([e2e-tests](../tests/e2e-tests.md), "Container smoke").

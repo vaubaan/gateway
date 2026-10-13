@@ -13,6 +13,8 @@ export const LOGIN_ERROR_CODES = [
   'claims-missing',
   'email-not-verified',
   'email-domain-not-allowed',
+  'groups-overage',
+  'account-deactivated',
   'bootstrap-refused',
   'bootstrap-unavailable',
 ] as const;
@@ -34,6 +36,10 @@ export const LOGIN_ERROR_MESSAGES: Readonly<Record<LoginErrorCode, string>> = {
   'email-not-verified':
     'The identity provider has not verified this email address. Verify it there, then sign in again.',
   'email-domain-not-allowed': 'This email domain is not allowed on this instance.',
+  'groups-overage':
+    'Your account belongs to more groups than the identity provider puts in a sign-in token, so this instance cannot read them and refuses the sign-in rather than ignore them. Ask the operator: the groups claim must be limited to the groups assigned to this application.',
+  'account-deactivated':
+    'This account was deactivated on this instance by an operator. Ask an operator to reactivate it.',
   'bootstrap-refused': 'The bootstrap token was not accepted.',
   'bootstrap-unavailable': 'Bootstrap sign-in is no longer available on this instance.',
 };

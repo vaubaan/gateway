@@ -51,9 +51,18 @@ has no such argument upstream and is always classified on `prod`.
 
 A second identifier is never trusted. A tool addressed by a deployment id or
 URL is forwarded only after the deployment was resolved through the REST API
-under the pinned team and found to belong to the mission's project. The five
-tools addressed by a toolbar thread id cannot be bound that way and are
-refused. See the handbook, §2 and §5.
+under the pinned team and found to belong to the mission's project ; a
+deployment argument the tool does not declare is refused. The five tools
+addressed by a toolbar thread id cannot be bound that way and are refused.
+See the handbook, §2 and §5.
+
+An identifier that reaches a request path has one grammar, shared by the
+classifier and the executor : `pathIdent` (`[A-Za-z0-9_-]{1,64}`) for the
+project ref and the env var id, `domainName` (dot-separated labels, optional
+leading `*.`) for a domain, `readDeploymentTargets` for a deployment id,
+hostname or URL. A value outside its grammar — `..`, a separator, an encoded
+form — is denied by `classify` and refused by `execute` before any request,
+never escaped.
 
 ## Credential
 
@@ -127,5 +136,7 @@ tool; `risk-catalog.test.ts` lints the YAML catalog against the classifier.
 `team-pin.test.ts` proves, over every declared tool, that each request
 carries the credential's team and that no team id comes from the arguments;
 `binding.test.ts` covers the deployment binding and the refused thread tools;
+`identifier-injection.test.ts` feeds dot segments, separators and encoded
+forms to every identifier position of `classify` and `execute`;
 `firewall.test.ts` covers the five firewall tools (slices, risks, request
 shapes). No test reaches the network.

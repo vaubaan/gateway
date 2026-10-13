@@ -198,6 +198,15 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       rig.seeded.ada.id,
     ),
   ),
+  'users.handlers.deactivate': form('operator', 303, (rig, headers) =>
+    rig.root.users.handlers.deactivate(
+      post(`/admin/users/${rig.seeded.bob.id}/deactivate`, headers, {}),
+      rig.seeded.bob.id,
+    ),
+  ),
+  'users.handlers.reactivate': form('operator', 303, (rig, headers) =>
+    rig.root.users.handlers.reactivate(post('/admin/users/none/reactivate', headers, {}), 'none'),
+  ),
   'connections.handlers.saveProviderApp': form('operator', 303, (rig, headers) =>
     rig.root.connections.handlers.saveProviderApp(
       post('/admin/provider-apps/github', headers, { action: 'clear' }),
@@ -283,6 +292,7 @@ const SURFACES = [
   'telemetry',
   'shares',
   'groups',
+  'users',
   'oauth',
 ] as const;
 const GUARDED = Object.entries(MUTATIONS);

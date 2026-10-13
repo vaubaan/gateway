@@ -37,14 +37,16 @@
  *      `update_subscription` scheduling a cancellation also emits `cancel.W`,
  *      `create_invoice` with `auto_advance` also emits `finalize.W`.
  *
- * Identifiers coming from the arguments are validated against `SAFE_IDENT`
- * before they are embedded ; a malformed id is `denied`, never escaped. A
- * missing optional id is the glob `*` (the call touches an unknown member).
+ * Identifiers coming from the arguments are read by `readIdArgs` (grammar
+ * `stripeId` : one path segment, no dot segment, no separator, no escape) —
+ * the function `execute` builds its request from ; a malformed id is
+ * `denied`, never escaped. A missing optional id is the glob `*` (the call
+ * touches an unknown member).
  */
 
 import type { ClassifyOutcome, Resource, Slice, SliceSegment } from '@vaubaan/plugin-sdk';
 
-import { SAFE_IDENT, STRIPE_PROVIDER, modeOf, resolveStripeResource } from './resources.ts';
+import { STRIPE_PROVIDER, modeOf, readIdArgs, resolveStripeResource } from './resources.ts';
 import { declaredArgsOf } from './tools.ts';
 
 type Args = Readonly<Record<string, unknown>>;
@@ -63,25 +65,9 @@ function ident(value: string): SliceSegment {
 
 const ANY_IDENT: SliceSegment = { kind: 'ident', value: '*' };
 
-/** `.` and `..` pass `SAFE_IDENT` but are collapsed by URL resolution into another endpoint. */
-const DOTS_ONLY = /^\.+$/;
-
-/** Arguments that name an object ; each is embedded in a slice and may end up in a path. */
-const ID_ARGS = ['id', 'product', 'customer', 'coupon', 'charge', 'payment_intent'] as const;
-type IdArg = (typeof ID_ARGS)[number];
-
-/** An ident segment from an optional string argument : glob when absent, `null` when unusable. */
-function identArg(args: Args, key: IdArg): SliceSegment | null {
-  const value = args[key];
-  if (value === undefined || value === null || value === '') return ANY_IDENT;
-  if (typeof value !== 'string' || !SAFE_IDENT.test(value) || DOTS_ONLY.test(value)) return null;
-  return ident(value);
-}
-
-function allUsable(
-  segments: Readonly<Record<IdArg, SliceSegment | null>>,
-): segments is Readonly<Record<IdArg, SliceSegment>> {
-  return ID_ARGS.every((key) => segments[key] !== null);
+/** The ident segment of an identifier argument : the glob when the call does not carry it. */
+function segmentOf(id: string | null): SliceSegment {
+  return id === null ? ANY_IDENT : ident(id);
 }
 
 /** The root every slice of a call hangs from, or the reason the call has none. */
@@ -140,20 +126,16 @@ export function classifyStripe(
   const root = rootOf(target.resource);
   if ('denied' in root) return root;
 
-  // The idents the tool may name ; the call is refused on the first malformed one.
-  const idents = {
-    id: identArg(args, 'id'),
-    product: identArg(args, 'product'),
-    customer: identArg(args, 'customer'),
-    coupon: identArg(args, 'coupon'),
-    charge: identArg(args, 'charge'),
-    payment_intent: identArg(args, 'payment_intent'),
-  };
-  if (!allUsable(idents)) {
-    const malformed = ID_ARGS.find((key) => idents[key] === null);
-    return { denied: `${malformed}: malformed identifier` };
-  }
-  const { id, product, customer, coupon, charge, payment_intent } = idents;
+  // The idents the tool may name ; the call is refused on the first malformed
+  // one. `readIdArgs` is the reading `execute` sends from.
+  const read = readIdArgs(args);
+  if ('denied' in read) return read;
+  const id = segmentOf(read.ids.id);
+  const product = segmentOf(read.ids.product);
+  const customer = segmentOf(read.ids.customer);
+  const coupon = segmentOf(read.ids.coupon);
+  const charge = segmentOf(read.ids.charge);
+  const payment_intent = segmentOf(read.ids.payment_intent);
 
   /** The overlay a mission must accept to receive customer fields in an answer. */
   const pii = (who: SliceSegment): Slice =>

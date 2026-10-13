@@ -12,6 +12,16 @@
  * refused: the address decides the admin rule and the domain filter, so it
  * must not rest on a claim the IdP calls unproven. An absent claim is
  * accepted (many IdPs never send it).
+ *
+ * **Group overage.** Entra ID leaves the groups out of a token once the user
+ * belongs to too many of them (200 in a JWT) and sends a pointer instead:
+ * `_claim_names` naming the claim (OpenID Connect Core §5.6.2, distributed
+ * claims), or `hasgroups: true` in the implicit flow. Reading that as "no
+ * groups" would silently strip the user of every group they hold — ownership
+ * of the connections their groups own, the shares made to them, the admin rule
+ * — and orphan their missions. The instance does not follow the pointer (it
+ * would need a Graph API permission of its own), so the sign-in is refused
+ * with a message for the operator; nothing is written.
  */
 import type { IdpClaimMapping } from '../config/types';
 import { LoginError } from './errors';
@@ -31,6 +41,29 @@ export interface IdentityClaims {
 const GROUP_DELIMITERS = /[\s,;]+/;
 /** The standard OIDC claim about the `email` claim (OpenID Connect Core §5.1). */
 const EMAIL_VERIFIED_CLAIM = 'email_verified';
+
+/** Distributed-claims pointer (OpenID Connect Core §5.6.2): claim name → source. */
+const CLAIM_NAMES_CLAIM = '_claim_names';
+/** Entra ID's own name for its groups claim, and its implicit-flow overage marker. */
+const ENTRA_GROUPS_CLAIM = 'groups';
+const ENTRA_HAS_GROUPS_CLAIM = 'hasgroups';
+
+function saysTrue(value: unknown): boolean {
+  return value === true || (typeof value === 'string' && value.trim().toLowerCase() === 'true');
+}
+
+/**
+ * True when the IdP says the groups exist but are not in the token. Judged on
+ * the configured claim name; a partial list next to the pointer does not
+ * count as the list.
+ */
+export function groupsMovedOutOfToken(raw: RawClaims, groupsClaim: string): boolean {
+  const names = raw[CLAIM_NAMES_CLAIM];
+  if (typeof names === 'object' && names !== null && !Array.isArray(names)) {
+    if (Object.hasOwn(names, groupsClaim)) return true;
+  }
+  return groupsClaim === ENTRA_GROUPS_CLAIM && saysTrue(raw[ENTRA_HAS_GROUPS_CLAIM]);
+}
 
 /** True for an explicit negative, in the boolean form or the string form some IdPs send. */
 function saysUnverified(value: unknown): boolean {
@@ -74,6 +107,16 @@ export function mapClaims(raw: RawClaims, mapping: IdpClaimMapping): IdentityCla
     throw new LoginError(
       'email-not-verified',
       `the identity provider marks the email of subject '${subject}' as unverified ('${EMAIL_VERIFIED_CLAIM}' is false)`,
+    );
+  }
+  if (groupsMovedOutOfToken(raw, mapping.groups)) {
+    throw new LoginError(
+      'groups-overage',
+      `the identity provider left the '${mapping.groups}' claim of subject '${subject}' out of the token ` +
+        `(group overage: '${CLAIM_NAMES_CLAIM}' or '${ENTRA_HAS_GROUPS_CLAIM}' points elsewhere) and this instance does not fetch it; ` +
+        'the sign-in is refused rather than read as "no groups". At the identity provider, limit the groups claim ' +
+        'to the groups assigned to the application (Entra ID: Token configuration → groups claim → ' +
+        '"Groups assigned to the application"), or map idp.claims.groups to a claim that is always complete',
     );
   }
   return {

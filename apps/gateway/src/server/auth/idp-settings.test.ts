@@ -63,6 +63,41 @@ describe('IdpSettingsService', () => {
     expect(again.clientSecret).toBe('s3cret');
   });
 
+  it('asks for the secret again when the issuer changes: the stored one is never sent to another identity provider', async () => {
+    const s = new IdpSettingsService(null, t.store.config);
+    await s.save(INPUT);
+    // Another host, and the same host under another path (another realm, another tenant).
+    for (const issuer of [
+      'https://login.attacker.example/realms/acme',
+      'https://login.example.com/realms/other',
+    ]) {
+      const refused: unknown = await s
+        .save({ ...INPUT, issuer, clientSecret: '  ' })
+        .catch((err: unknown) => err);
+      expect(refused, issuer).toBeInstanceOf(IdpSettingsError);
+      expect((refused as IdpSettingsError).problems).toEqual([
+        'client secret is required when the issuer changes: the stored secret belongs to the previous identity provider',
+      ]);
+    }
+    // Nothing moved.
+    expect((await s.current())?.settings.issuer.href).toBe(INPUT.issuer);
+    expect((await s.current())?.settings.clientSecret).toBe('s3cret');
+    // The same issuer, written differently, is the same issuer: blank still keeps the secret.
+    const same = await s.save({
+      ...INPUT,
+      issuer: 'HTTPS://LOGIN.example.com/realms/acme',
+      clientSecret: '',
+    });
+    expect(same.clientSecret).toBe('s3cret');
+    // With its secret, the new issuer is saved.
+    const moved = await s.save({
+      ...INPUT,
+      issuer: 'https://login.example.com/realms/other',
+      clientSecret: 'other-secret',
+    });
+    expect(moved).toMatchObject({ clientSecret: 'other-secret' });
+  });
+
   it('lists every problem at once and refuses http issuers unless allowed (tests)', async () => {
     const s = new IdpSettingsService(null, t.store.config);
     await expect(

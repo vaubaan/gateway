@@ -149,9 +149,9 @@ function syntheticArgsForTool(tool: string): Array<Record<string, unknown>> {
     case 'vercel__list_env_vars':
       return [{ ...base }, { ...base, decrypt: true }];
     case 'vercel__get_access_to_vercel_url':
-      return [{ url: 'dep-foo' }];
+      return [{ url: 'https://dep-foo.vercel.app/' }];
     case 'vercel__web_fetch_vercel_url':
-      return [{ url: 'dep-foo' }];
+      return [{ url: 'https://dep-foo.vercel.app/' }];
     case 'vercel__get_deployment':
       return [{ ...base, idOrUrl: 'dep_xyz' }];
     case 'vercel__get_deployment_build_logs':

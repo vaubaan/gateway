@@ -30,12 +30,10 @@
 import { parseSlice, type ClassifyOutcome, type Resource, type Slice } from '@vaubaan/plugin-sdk';
 
 import { MAX_CMD_LENGTH, profileCommandLine } from './command-classes.ts';
+import { hostRef } from './credential.ts';
 import { SSH_EXEC } from './tools.ts';
 
 export const PROVIDER = 'ssh';
-
-/** Identifier chars a slice segment accepts ; a host ref outside it is refused, never escaped. */
-const SAFE_IDENT = /^[a-zA-Z0-9_./~-]+$/;
 
 export interface ExecArgs {
   readonly host: string;
@@ -97,22 +95,32 @@ export function classifySsh(
   return { slices };
 }
 
+/**
+ * The host a call targets. Whether it comes from the `host` argument or from
+ * the mission's single SSH resource, the ref goes through `hostRef` — the
+ * grammar of the credential's own `host` field — before it reaches a slice :
+ * only a hostname or an IPv4 address names a host, and anything else is
+ * refused, never escaped.
+ */
 function resolveHost(
   args: Readonly<Record<string, unknown>>,
   resources: readonly Resource[],
 ): { ref: string } | { denied: string } {
   const own = resources.filter((r) => r.provider === PROVIDER);
-  const explicit = args.host;
-  if (explicit !== undefined) {
-    if (typeof explicit !== 'string' || !SAFE_IDENT.test(explicit)) {
-      return { denied: 'host: malformed ref' };
-    }
+  if (args.host !== undefined) {
+    const explicit = hostRef(args.host);
+    if (explicit === null) return { denied: 'host: malformed ref' };
     if (!own.some((r) => r.ref === explicit)) {
       return { denied: `host '${explicit}' is not a host of this mission` };
     }
     return { ref: explicit };
   }
-  if (own.length === 1) return { ref: own[0]!.ref };
+  if (own.length === 1) {
+    const single = hostRef(own[0]!.ref);
+    return single === null
+      ? { denied: "host: the ref of the mission's SSH host is malformed" }
+      : { ref: single };
+  }
   return {
     denied:
       own.length === 0

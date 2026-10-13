@@ -9,9 +9,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { SESSION_COOKIE } from '../../../src/server/auth';
 import { ConnectError } from '../../../src/server/connections';
-import type { GroupRecord } from '../../../src/server/store/types';
+import type { GroupRecord, UserRecord } from '../../../src/server/store/types';
 import { FakeIdp } from '../auth/fake-idp';
-import { authorityRig, PURGE, READ, type AuthorityRig } from './support';
+import { authorityRig, OPERATOR_EMAIL, PURGE, READ, type AuthorityRig } from './support';
 
 const PUBLIC_URL = 'https://gateway.example.com';
 const CLIENT = { clientId: 'vaubaan-gateway', clientSecret: 'client-secret-for-tests' };
@@ -58,6 +58,74 @@ describe('ownership: transfer, unowned, operator reassignment', () => {
     ).toEqual([rig.connection.id]);
     // A later member issues missions on the full catalog, with no share.
     expect((await rig.read(await rig.issueFor(rig.bob, [READ, PURGE]))).result).toBeDefined();
+  });
+
+  describe('a co-owner cannot keep a share for the day they leave the group (ADR share-to-a-current-owner-refused)', () => {
+    const shareAs = async (actor: UserRecord, email: string) =>
+      rig.root.shares.service.share(await rig.actor(actor), rig.connection.id, {
+        target: { kind: 'user', email },
+        riskIds: [READ, PURGE],
+      });
+
+    beforeEach(async () => {
+      await rig.root.groups.service.addMember(rig.operator.id, admins.id, 'bob@example.com');
+      await transferToAdmins();
+    });
+
+    it('refuses a share to oneself and to a fellow member, and stores nothing', async () => {
+      await expect(shareAs(rig.bob, 'bob@example.com')).rejects.toMatchObject({
+        code: 'target-is-owner',
+      });
+      // Two members cannot do it for each other either: the target owns the connection now.
+      await expect(shareAs(rig.ada, 'bob@example.com')).rejects.toMatchObject({
+        code: 'target-is-owner',
+      });
+      expect(await rig.root.store.shares.listForConnection(rig.connection.id)).toEqual([]);
+      expect(await rig.adminEntries('share-created')).toEqual([]);
+      // Somebody outside the group is still a target.
+      expect((await shareAs(rig.bob, OPERATOR_EMAIL)).share.target).toEqual({
+        kind: 'user',
+        id: rig.operator.id,
+      });
+    });
+
+    it('leaving the owner group therefore ends the authority: missions orphaned, no new issuance', async () => {
+      await expect(shareAs(rig.bob, 'bob@example.com')).rejects.toMatchObject({
+        code: 'target-is-owner',
+      });
+      const mission = await rig.issueFor(rig.bob, [READ]);
+      expect((await rig.read(mission)).result).toBeDefined();
+
+      await rig.root.groups.service.removeMember(rig.operator.id, admins.id, rig.bob.id);
+
+      const current = (await rig.root.store.connections.getById(rig.connection.id))!;
+      expect(await rig.root.missions.authority.authorityOf(rig.bob, current)).toMatchObject({
+        basis: 'none',
+        riskIds: [],
+      });
+      expect(await rig.statusOf(mission)).toBe('orphaned');
+      expect((await rig.read(mission)).error?.data).toMatchObject({ code: 'mission-inactive' });
+      expect((await rig.tryIssue(rig.bob, [READ])).ok).toBe(false);
+    });
+
+    it('a share an owner makes to a former member, after they left, is an ordinary share', async () => {
+      await rig.root.groups.service.removeMember(rig.operator.id, admins.id, rig.bob.id);
+      const outcome = await shareAs(rig.ada, 'bob@example.com');
+      expect(outcome.share.target).toEqual({ kind: 'user', id: rig.bob.id });
+      const current = (await rig.root.store.connections.getById(rig.connection.id))!;
+      expect((await rig.root.missions.authority.authorityOf(rig.bob, current)).basis).toBe('share');
+    });
+
+    it('a share to a group is not refused because the sharer belongs to it', async () => {
+      const team = await rig.root.groups.service.create(rig.operator.id, 'team');
+      await rig.root.groups.service.addMember(rig.operator.id, team.id, 'bob@example.com');
+      const outcome = await rig.root.shares.service.share(
+        await rig.actor(rig.bob),
+        rig.connection.id,
+        { target: { kind: 'group', groupId: team.id }, riskIds: [READ] },
+      );
+      expect(outcome.targetLabel).toBe('group team');
+    });
   });
 
   it('refuses a transfer to a group the owner is not in, and by anyone who is not an owner', async () => {

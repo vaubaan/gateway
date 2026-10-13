@@ -55,7 +55,7 @@ plugins/ssh/src/
   policy.ts            the read allow-list on whole argument vectors : matchRead, readMatchOf, isReadAllowed ; parseOptions
   command-classes.ts   splitCommandLine, looksLikeSecretFileRead, stripPrivilegePrefix, isDestructive, isPackageInstall, isServiceControl, profileCommandLine
   classify.ts          classifySsh, resolveExecArgs — pure
-  credential.ts        sshCredential (ssh-key spec), sshTarget, fingerprintOf, hostKeyMatches, normalizeFingerprint
+  credential.ts        sshCredential (ssh-key spec), sshTarget, hostRef (SSH_HOST_PATTERN), fingerprintOf, hostKeyMatches, normalizeFingerprint
   transport.ts         SshTransport, ssh2Transport, SshHostKeyMismatchError, SshHostKeyNotPinnedError, output caps
   execute.ts           createSshRuntime → execute, discoverResources ; hostResource
 ```
@@ -98,10 +98,29 @@ matched, and is never in a preset.
 
 **Host resolution.** `host` must be a resource of the mission; absent, the
 mission's single SSH host applies; several hosts and no argument, a host the
-mission does not hold, or a ref outside `[a-zA-Z0-9_./~-]+` are `denied`.
-An empty `cmd`, one longer than 16 KiB, or a non-positive `timeout_s` is
-`denied` too. `execute` additionally refuses a host that is not the
-credential's host (one connection = one host).
+mission does not hold, or a ref that is not a host (`host: malformed ref`)
+are `denied`. An empty `cmd`, one longer than 16 KiB, or a non-positive
+`timeout_s` is `denied` too. `execute` additionally refuses a host that is
+not the credential's host (one connection = one host).
+
+**Identifiers.** A host has one grammar, `hostRef` in `credential.ts`
+(`SSH_HOST_PATTERN`: a hostname or an IPv4 address that starts and ends
+with a letter or a digit, letters, digits, `.` and `-` in between, at most
+253 characters). It is never an option (`-oProxyCommand=…`), never `.` or
+`..`, and holds no separator, blank or control character. A value outside
+it is refused, never escaped (ADR
+[`plugin-identifiers-one-grammar-for-classify-and-execute`](../../decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md)).
+
+| Value                                    | Read by                                                                         | Where it lands                             | Outside the grammar                                    |
+| ---------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------ |
+| `host` argument of `ssh__exec`           | `hostRef`, in `resolveHost`                                                     | slice `host[H]`                            | `host: malformed ref`                                  |
+| ref of the mission's single SSH resource | `hostRef`, in `resolveHost`                                                     | slice `host[H]`                            | `host: the ref of the mission's SSH host is malformed` |
+| `host` field of the credential           | `hostRef`, in `sshTarget` (and the pattern of the field in the credential spec) | what the transport dials; the resource ref | `sshTarget` throws; no connection                      |
+| `cmd`                                    | not an identifier: the classified line                                          | sent to the transport as it was classified | —                                                      |
+
+`classify` and `execute` both go through `resolveExecArgs`, so the host the
+slices name is the host the call runs on, and a refused value opens no
+connection.
 
 ### Fail-closed rule
 
@@ -149,6 +168,11 @@ over the shell's special characters, a `command_not_found_handle` recording
 each argv): every command bash ran on a non-opaque line was seen with the
 same argument vector. Four desynchronisations found that way are pinned by
 tests (`''2>f`, `2"">f`, `$\<newline>'…'`, `>&--rf`).
+
+A word carries one "bare" flag per UTF-16 unit of its text, and `hasGlob` /
+`hasBrace` walk it by unit, never by code point: a quoted character outside
+the BMP (an emoji) does not shift the flags of what follows, so it cannot
+hide a bare `*` or `{`.
 
 **Normalisation** (`command-classes.ts`). Before the detectors look at a
 write, the command word loses its quotes and its directory (`/bin/rm`,
@@ -299,7 +323,8 @@ sequenceDiagram
 ```
 
 - **Credential** (`credential.ts`): kind `ssh-key`, `algorithm: 'ed25519'`,
-  fields `host` (hostname or IPv4 — IPv6 literals cannot be a slice ident),
+  fields `host` (hostname or IPv4, at most 253 characters, read by `hostRef`
+  — IPv6 literals cannot be a slice ident),
   `port` (optional, 22), `user`, `host_key_fingerprint` (`SHA256:<base64>`,
   padding tolerated, **required**). `sshTarget(secret)` narrows with
   `expectCredentialKind` and refuses a missing or malformed field — the
@@ -424,11 +449,12 @@ design is in [`bash-provider.md`](../legacy/bash-provider.md). Until then
 
 ## References
 
-- Code: `plugins/ssh/src/`; tests `plugins/ssh/tests/unit/` (609 tests:
+- Code: `plugins/ssh/src/`; tests `plugins/ssh/tests/unit/` (696 tests:
   299 kit / classifier / evaluated presets / lexer / allow-list /
   credential / fake transport in `plugin.test.ts`, 181 adversarial lines in
-  `adversarial.test.ts`, 90 in `classify.test.ts`, 37 on the real
-  transport in `host-key-pinning.test.ts`, 2 data model).
+  `adversarial.test.ts`, 90 in `classify.test.ts`, 87 hostile `host` and
+  `cmd` values fed to `classify` and to `execute` in `injection.test.ts`,
+  37 on the real transport in `host-key-pinning.test.ts`, 2 data model).
 - Neighbours: [[plugin-sdk]], [[policy-engine]],
   [`providers/README.md`](./README.md); legacy [`railway-ssh.md`](../legacy/railway-ssh.md) §2,
   [`bash-provider.md`](../legacy/bash-provider.md).

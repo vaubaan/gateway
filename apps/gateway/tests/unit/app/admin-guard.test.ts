@@ -132,6 +132,7 @@ describe('the Administration surface authorizes in every page and route', () => 
         'page.tsx',
         'provider-apps/page.tsx',
         'telemetry/page.tsx',
+        'users/page.tsx',
       ].sort(),
     );
     expect(ROUTES.length).toBeGreaterThan(0);

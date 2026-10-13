@@ -69,9 +69,10 @@ flowchart TB
 `src/upstream-tools.json`), 13 custom REST (`src/custom-tools.ts`). The
 classifier (`src/classify.ts`) is pure and emits one or more slices per call.
 
-**Project resolution.** `projectId` must be a resource of the mission;
-absent, the mission's single Vercel project applies; several projects and no
-argument, a project the mission does not hold, or a malformed ref are refused.
+**Project resolution.** `projectId` must be a `pathIdent` and a resource of
+the mission; absent, the mission's single Vercel project applies, provided
+its ref is a `pathIdent` too; several projects and no argument, a project
+the mission does not hold, or a malformed ref are refused.
 Four account-level tools need no project (`search_vercel_documentation`,
 `list_teams`, `list_projects`, `check_domain_availability_and_price`) but
 still refuse a foreign `projectId`. `execute` resolves the project with the
@@ -92,12 +93,32 @@ the risk here and be ignored there. `delete_env_var` always emits the three
 environments plus the marker: the Vercel API removes the variable from every
 environment it lives in, whatever the hint.
 
-**Identifiers.** Deployment (`idOrUrl`, `deploymentId`, `url`), domain, rule
-and env-var ids are embedded when slice-safe (`[a-zA-Z0-9_/-]+`) and replaced
-by `[*]` otherwise (URLs, FQDNs). Catalog patterns match any ident there, so
-only audit precision is lost. The deployment segment is not proof of
-ownership: `execute` verifies it before the upstream call (§5, "Deployment
-binding").
+**Identifiers.** An identifier that reaches a request path has one grammar
+function per kind, exported from `classify.ts` and called by `execute` too:
+a value outside its grammar — `..`, a separator, an encoded form — is denied
+by `classify` and refused by `execute` before any request, never escaped
+(ADR
+[`plugin-identifiers-one-grammar-for-classify-and-execute`](../../decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md)).
+
+| Value                                                             | Grammar                                                                                                                                                             | Where it lands                                                                             | Outside the grammar                                                                     |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| `projectId`, the project resource ref                             | `pathIdent` — `PATH_IDENT = ^[A-Za-z0-9_-]{1,64}$`, inside `resolveProject`                                                                                         | REST path `/projects/{id}`, query or arguments of the upstream tool, slice `project[P]`    | `projectId: malformed project ref`                                                      |
+| `id` of `delete_env_var`                                          | `pathIdent`                                                                                                                                                         | REST path `/env/{id}`, slice `env-var[ID]`                                                 | `id: missing or malformed env var id`                                                   |
+| `domain` of `verify_project_domain` / `remove_project_domain`     | `domainName` — dot-separated labels of letters, digits and inner hyphens, optional leading `*.`, at most 253 characters                                             | REST path `/domains/{domain}` (as it is), slice `domain[*]` or `domain[N]`                 | `domain: missing or malformed domain name`                                              |
+| `name` of `add_project_domain`                                    | `domainName`                                                                                                                                                        | JSON body, slice `domain[*]` or `domain[N]`                                                | `name: missing or malformed domain name`                                                |
+| `idOrUrl`, `deploymentId`, `url` of a rewrapped tool              | `readDeploymentTargets` — a deployment id or hostname (`[A-Za-z0-9][A-Za-z0-9._-]{0,252}`), or a plain `http(s)` URL without credentials whose host is one of those | REST path of the ownership lookup (§5), then the upstream arguments; slice `deployment[D]` | `<arg>: malformed deployment id.` and its siblings; `<arg>: not an argument of <tool>.` |
+| `key` of `upsert_env_var`, `ruleId`, `id` of `manage_ip_blocking` | none required — JSON body only                                                                                                                                      | JSON body; slice ident when a `pathIdent`, `[*]` otherwise                                 | —                                                                                       |
+
+`readDeploymentTargets` is schema-driven: every deployment argument the tool
+declares is read (a required one must be there), and one the tool does
+**not** declare is a denial, since it would be forwarded without the
+ownership check. In a slice, a secondary identifier is embedded when it is a
+`pathIdent` and replaced by `[*]` otherwise (a dotted domain, a deployment
+hostname or URL, several deployment arguments). Catalog patterns match any
+ident there, so only audit precision is lost. `manage_ip_blocking` embeds
+`id` on a `remove` only: `execute` does not send it on an `insert`. The
+deployment segment is not proof of ownership: `execute` verifies it before
+the upstream call (§5, "Deployment binding").
 
 **Refused tools.** Five declared tools address a toolbar thread by id
 (`get_toolbar_thread`, `change_toolbar_thread_resolve_status`,
@@ -130,7 +151,7 @@ them needs a verified thread → project lookup.
 | `add_project_domain` / `verify_project_domain` / `remove_project_domain` | `project[P].domain[N].W`                                                    | domain-write                                        |
 | `toggle_firewall`                                                        | `project[P].firewall.W`                                                     | firewall-write                                      |
 | `upsert_firewall_rule` / `remove_firewall_rule`                          | `project[P].firewall.firewall-rule[R].W`                                    | firewall-rule-write                                 |
-| `manage_ip_blocking`                                                     | `project[P].firewall.ip-rule[I].W`                                          | ip-rule-write                                       |
+| `manage_ip_blocking`                                                     | `project[P].firewall.ip-rule[I].W` (`ip-rule[*]` on an `insert`)            | ip-rule-write                                       |
 | `get_toolbar_thread` and the four thread-addressed writes                | — (denied)                                                                  | —                                                   |
 
 Every read also touches `read-account`, whose pattern is `vercel.[**].R`; the
@@ -226,7 +247,11 @@ the list against the schemas, so a tool added later is covered or fails.
   The upstream result is already an `McpToolResult` and is passed through.
 - Custom tools: REST on `https://api.vercel.com` (`/v9/projects`,
   `/v10/projects/{id}/env`, `/v9|v10/projects/{id}/domains`,
-  `/v1/security/firewall/config`), bodies whitelisted field by field.
+  `/v1/security/firewall/config`), bodies whitelisted field by field. The
+  project, the env var id and the domain are read again with the
+  classifier's `pathIdent` / `domainName` and interpolated as they are —
+  nothing is percent-encoded, since `encodeURIComponent` leaves `.` and `..`
+  untouched.
 - Argument pinning (`pinArgs`, no network): an unknown tool and the five
   thread-addressed tools are refused; `teamId` is checked against the
   credential (§4); the project is resolved by `resolveProject`, the function
@@ -250,10 +275,12 @@ the list against the schemas, so a tool added later is covered or fails.
   nothing is forwarded either. `idOrUrl` and
   `deploymentId` are replaced by the verified deployment id; `url` must be a
   plain `http(s)` URL without credentials and is forwarded re-serialised, so
-  the host that was verified is the host the upstream tool receives. A
-  malformed argument costs no network call. The check is schema-driven: a
-  tool added upstream with one of these arguments is bound without a code
-  change. Cost: one REST call per deployment-addressed call. A custom domain
+  the host that was verified is the host the upstream tool receives. The
+  arguments are read by the classifier's own `readDeploymentTargets` (§2):
+  what it denies is refused here before the first lookup, so a malformed or
+  undeclared deployment argument costs no network call. The check is
+  schema-driven: a tool added upstream with one of these arguments is bound
+  without a code change. Cost: one REST call per deployment-addressed call. A custom domain
   or alias the lookup does not resolve is refused (fail closed). A 403 on
   the lookup does not expire the connection; a 401 does.
 - Errors: a provider failure is **thrown** — 401/403 → `UpstreamAuthError`,
@@ -267,7 +294,9 @@ the list against the schemas, so a tool added later is covered or fails.
   or malformed argument of a custom tool. A rewrapped tool whose upstream
   answers an `isError` result is passed through as it is.
 - `discoverResources`: `GET /v2/teams/{team_id}` then `GET /v10/projects`
-  paged by `pagination.next` → `until`, 100 per page, 10 pages at most.
+  paged by `pagination.next` → `until`, 100 per page, 10 pages at most. A
+  project whose id is not a `pathIdent` fails discovery (`project id "…" is
+not a path-safe identifier`): no call could name it.
 
 ### Edge cases carried from v4 (all implemented, all tested)
 
@@ -317,8 +346,10 @@ the list against the schemas, so a tool added later is covered or fails.
 
 ## References
 
-- Code: `plugins/vercel/src/`, tests `plugins/vercel/tests/unit/` (293 tests:
-  35 `plugin.test.ts`, 42 `classify.test.ts`, 55 `risk-catalog.test.ts`,
+- Code: `plugins/vercel/src/`, tests `plugins/vercel/tests/unit/` (609 tests:
+  35 `plugin.test.ts`, 43 `classify.test.ts`, 55 `risk-catalog.test.ts`,
   99 `team-pin.test.ts`, 50 `binding.test.ts`, 11 `firewall.test.ts`,
+  315 `identifier-injection.test.ts` — dot segments, separators and encoded
+  forms in every identifier position of `classify` and `execute` —,
   1 `data-model.test.ts`; shared fixtures in `fixtures.ts`).
 - Neighbours: [[plugin-sdk]], [[policy-engine]], [`providers/README.md`](./README.md).

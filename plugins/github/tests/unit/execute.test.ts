@@ -172,11 +172,12 @@ describe('execute — Octokit over the injected fetch', () => {
     ).rejects.toMatchObject({ name: 'UpstreamAuthError', upstreamStatus: 403 });
   });
 
-  test('an unknown tool fails after the mint, as a plain error', async () => {
+  test('an unknown tool fails as a plain error, before the mint', async () => {
     const fetch = mockFetch([mintRoute()]);
     await expect(
       githubPlugin.execute(executeCtx(fetch), 'github__nonsense', { owner: 'acme', repo: 'app' }),
-    ).rejects.toThrow(/Unknown GitHub MCP tool/);
+    ).rejects.toThrow("github__nonsense: unknown github tool 'github__nonsense'");
+    expect(fetch.calls).toHaveLength(0);
   });
 });
 
@@ -332,7 +333,7 @@ describe('execute — merge_pull_request is bound to the declared base', () => {
 });
 
 describe('execute — push_files reads `files` like the classifier', () => {
-  test('refuses a malformed entry before any call to the repository', async () => {
+  test('refuses a malformed entry before any call, the token mint included', async () => {
     const fetch = mockFetch([mintRoute()]);
     await expect(
       githubPlugin.execute(executeCtx(fetch), 'github__push_files', {
@@ -345,7 +346,7 @@ describe('execute — push_files reads `files` like the classifier', () => {
     ).rejects.toThrow(
       "github__push_files requires 'files' to be a non-empty array of { path, content } strings",
     );
-    expect(fetch.calls.map((c) => c.url)).toEqual([MINT_URL]);
+    expect(fetch.calls).toHaveLength(0);
   });
 });
 
@@ -414,7 +415,7 @@ describe('execute — github__mint_install_token', () => {
     );
     await expect(
       githubPlugin.execute(ctx, 'github__mint_install_token', { purpose: 'merge' }),
-    ).rejects.toThrow(/purpose in \['clone','push'\]/);
+    ).rejects.toThrow("github__mint_install_token requires purpose 'clone' or 'push'");
     await expect(
       githubPlugin.execute(executeCtx(fetch, []), 'github__mint_install_token', {
         purpose: 'clone',

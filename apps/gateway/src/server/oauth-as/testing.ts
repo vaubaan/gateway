@@ -131,6 +131,7 @@ export async function openOAuthRig(options: OAuthRigOptions = {}): Promise<OAuth
   const tokens = new TokenService({
     repo: store.delegations,
     users: store.users,
+    missions: store.missions,
     clients,
     audit,
     rateLimiter,

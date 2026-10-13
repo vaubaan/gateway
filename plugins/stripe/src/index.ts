@@ -74,9 +74,13 @@ export { classifyStripe, stripeDataModel, stripeTools };
 export { STRIPE_API_BASE, discoverStripeResources, executeStripe } from './execute.ts';
 export {
   KEY_FIELD_BY_MODE,
+  STRIPE_ACCOUNT_REF,
+  STRIPE_ID,
   STRIPE_MODES,
   modeOf,
   resolveStripeResource,
+  stripeAccountRef,
+  stripeId,
   stripeResourceRef,
   type StripeMode,
 } from './resources.ts';

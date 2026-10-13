@@ -386,8 +386,9 @@ describe('classifyResend — domains, segments, contacts', () => {
     expect(denied('resend__get_segment', { segment_id: 'seg_other' })).toBe(
       "segment_id: 'seg_other' is not a segment of this mission",
     );
-    expect(denied('resend__get_segment', { segment_id: 'notifications.acme.com' })).toMatch(
-      /not a segment/,
+    // A domain ref is not a segment id : a dotted name is not one path segment.
+    expect(denied('resend__get_segment', { segment_id: 'notifications.acme.com' })).toBe(
+      'segment_id: missing or malformed ref',
     );
   });
 

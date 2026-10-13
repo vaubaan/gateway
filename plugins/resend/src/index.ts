@@ -71,11 +71,17 @@ export {
 } from './execute.ts';
 export {
   EMPTY_ZONE_CONFIG,
+  CONTACT_EMAIL,
+  DOMAIN_NAME,
+  PATH_IDENT,
   RESOURCE_KINDS,
-  SAFE_IDENT,
+  contactSelector,
+  domainIdOf,
+  domainName,
   domainRef,
   domainResources,
   kindOf,
+  pathIdent,
   resolveDomain,
   resolveDomainArg,
   resolveSegmentArg,

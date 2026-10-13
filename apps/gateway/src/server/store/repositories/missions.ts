@@ -75,7 +75,13 @@ export interface MissionsRepo {
     riskId: RiskId,
     gate: Gate,
     actorUserId: string,
-  ): Promise<{ readonly mission: MissionRecord; readonly previous: Gate } | null>;
+    options?: SetGateOptions,
+  ): Promise<{
+    readonly mission: MissionRecord;
+    readonly previous: Gate;
+    /** A `gate-changed` event was recorded although the stored gate did not move. */
+    readonly openingClosed: boolean;
+  } | null>;
   /** Issues a new token; the previously active one, if any, becomes `rotated`. */
   issueToken(input: IssueTokenInput): Promise<MissionTokenRecord>;
   findTokenByPrefix(
@@ -84,6 +90,16 @@ export interface MissionsRepo {
   listTokens(missionId: string): Promise<MissionTokenRecord[]>;
   /** Revokes every non-retired token of the mission; returns how many were revoked. */
   revokeTokens(missionId: string): Promise<number>;
+}
+
+export interface SetGateOptions {
+  /**
+   * The caller found the gate of this risk open for the period (a `gate-opened` event
+   * later than its last `gate-changed`): when the stored gate is already `approval`
+   * and `approval` is asked, a `gate-changed` event is still recorded, which is what
+   * ends an opening. Without it the edit would be a silent no-op and the opening stay.
+   */
+  readonly closeOpening?: boolean;
 }
 
 interface MissionRow {
@@ -412,15 +428,16 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
         return requireMission(id);
       });
     },
-    async setGate(id, riskId, gate, actorUserId) {
+    async setGate(id, riskId, gate, actorUserId, options = {}) {
       const now = nowIso(ctx);
       return withImmediateTransaction(db, () => {
         const mission = requireMission(id);
         const row = gateOf.get(id, riskId);
         if (!row) return null;
         const previous = parseEnum(GATES, row.gate, 'mission_policy.gate');
-        if (previous === gate) return { mission, previous };
-        setGateStmt.run(gate, id, riskId);
+        const closing = previous === gate && gate === 'approval' && options.closeOpening === true;
+        if (previous === gate && !closing) return { mission, previous, openingClosed: false };
+        if (!closing) setGateStmt.run(gate, id, riskId);
         touch.run(now, id);
         const session = sessions.sessionOfMission(id);
         if (session) {
@@ -435,7 +452,11 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
             now,
           );
         }
-        return { mission: requireMission(id), previous };
+        return {
+          mission: requireMission(id),
+          previous,
+          openingClosed: closing && session !== null,
+        };
       });
     },
     async issueToken(input) {

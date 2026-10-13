@@ -126,7 +126,8 @@ the right-most `X-Forwarded-For` hop that is not a trusted proxy (addresses
 or CIDR blocks, IPv4 and IPv6, `node:net` `BlockList`). With no
 `trusted_proxies` configured the header is ignored and every caller shares
 the key `unknown`: the limit is then global to `/r/*` rather than bypassable
-with a forged header. Only `/r/*` is limited; the inbox and the decision
+with a forged header, and the instance says so in one warning at boot
+([configuration](configuration.md), "Boot sequence"). Only `/r/*` is limited; the inbox and the decision
 endpoint are not, so a flood on the forwarded URL never keeps a signed-in
 creator from answering.
 
@@ -447,6 +448,12 @@ stored as the audit's `arguments_hash` (budget handbook). The tool is part of
 both keys: the same arguments on another tool that touches the same risk are
 another call — another request, and an approval they do not consume. That
 closes the Phase 1 security finding (approvals were keyed without the tool).
+A call whose arguments carry a number JSON has no text for (`1e999`, which
+canonical JSON would write `null`) never opens a request: the pipeline
+rejects it before any stage, so what the approver reads in the sealed copy is
+what the fingerprint binds and what the plugin receives
+([gateway-core](gateway-core.md), "Order of a call"; ADR
+[execution-door-json-faithful-arguments-and-shared-throttle](../decisions/execution-door-json-faithful-arguments-and-shared-throttle.md)).
 
 A call touching several risks of which one is gated is refused as a whole; the
 one approval lets the whole call through, and every risk it touches is then
@@ -554,7 +561,10 @@ session's `gate-opened` and `gate-changed` events of the period, the set
 matches the new period's start: the gate reads `approval` again with nothing
 to run. An edit of the gate on the mission page (`gate-changed`,
 [missions](missions.md) "Editing a gate") ends an opening granted before it —
-on an equal timestamp the edit wins. The request page and the mission page
+on an equal timestamp the edit wins. So does `approval` asked again through
+`POST /api/missions/<id>/gate` on a risk that is gated and open for the
+period: the stored gate does not move, and the `gate-changed` event is
+recorded all the same. The request page and the mission page
 show `open until <period end>` from the same derivation.
 
 ### The page
@@ -578,7 +588,8 @@ it once the request is decided.
   `missions.creator_user_id` (an owner of the connection is not enough), or
   they are signed in with the bootstrap token.
 - **429 on `/r/…` for everybody** — no `trusted_proxies`: all callers share
-  one key. Set it to the address or CIDR of the TLS terminator.
+  one key (the boot log has `trusted_proxies is empty: …` at `warn`). Set it
+  to the address or CIDR of the TLS terminator.
 - **`request-not-open`** — already decided, or past `expires_at`
   (`requests.state`, `decided_at`, `decision_json`). The executor's next
   refused call opens a new claim. A request whose mission was orphaned for
@@ -633,7 +644,7 @@ it once the request is decided.
   `tests/integration/budget/pipeline-consistency.test.ts` (credits vs audit)
   and the `listEvents` options in `tests/integration/store/sessions.test.ts`.
 - The store primitives: `tests/integration/store/approval-decisions.test.ts`
-  (16) and `requests-approvals.test.ts`.
+  (17) and `requests-approvals.test.ts`.
 - Through the real door: `tests/integration/execution/approval-door.test.ts`
   (7: the GitHub plugin's `developer` preset as shipped, a workflow file
   write approved over `/mcp`).

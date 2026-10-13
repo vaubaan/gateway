@@ -99,11 +99,23 @@ export function evaluateCall(input: EvaluateCallInput): RiskDecision {
     );
   }
 
-  const { risks_touched, not_acceptable_here } = collectQualifiedRisks(
+  const { risks_touched, not_acceptable_here, uncovered } = collectQualifiedRisks(
     executed_slices,
     catalog,
     resolverOf(input),
   );
+
+  // Each slice is something the call does. One that no catalog entry matches is an
+  // effect nobody priced: it must not ride on the risks of the slices next to it.
+  if (uncovered.length > 0) {
+    return denied(
+      executed_slices,
+      [],
+      risks_touched.filter(accepted),
+      `no risk in the '${catalog.provider}' catalog matches ${uncovered.map(serializeSlice).join(' ; ')}. ` +
+        `Every slice of a call must be covered: add a catalog entry — at minimum extend the '<provider>.uncategorized-*' fallback.`,
+    );
+  }
 
   if (not_acceptable_here.length > 0) {
     const refused = new Set(not_acceptable_here.map((r) => r.id));
@@ -182,6 +194,8 @@ interface QualifiedRisks {
   readonly risks_touched: RiskId[];
   /** The touched env-scoped risks whose `acceptable_in_envs` excludes the slice's environment. */
   readonly not_acceptable_here: RiskOutsideItsEnvs[];
+  /** The slices no entry of the catalog matches. */
+  readonly uncovered: Slice[];
 }
 
 /**
@@ -206,9 +220,12 @@ function collectQualifiedRisks(
   const seen = new Set<RiskId>();
   const risks_touched: RiskId[] = [];
   const not_acceptable_here: RiskOutsideItsEnvs[] = [];
+  const uncovered: Slice[] = [];
   for (const slice of slices) {
     const env = resolver === null ? null : resolver.resolveEnv(slice);
-    for (const baseId of risksTouchedBy(slice, catalog)) {
+    const touched = risksTouchedBy(slice, catalog);
+    if (touched.length === 0) uncovered.push(slice);
+    for (const baseId of touched) {
       const entry = findRiskEntry(catalog, baseId);
       const qualified = qualifyRiskId(baseId, env, entry);
       if (seen.has(qualified)) continue;
@@ -223,7 +240,7 @@ function collectQualifiedRisks(
       }
     }
   }
-  return { risks_touched, not_acceptable_here };
+  return { risks_touched, not_acceptable_here, uncovered };
 }
 
 interface RiskOutsideItsEnvs {

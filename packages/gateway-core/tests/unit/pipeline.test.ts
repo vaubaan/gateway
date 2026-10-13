@@ -300,6 +300,65 @@ describe('CallPipeline', () => {
     expect(typeof e.upstream_latency_ms).toBe('number');
   });
 
+  test('an argument JSON cannot carry (Infinity) is rejected before any stage: the approver would have read `null`', async () => {
+    let touched = false;
+    const { p, audit } = pipeline({
+      resources: {
+        resolve: async () => {
+          touched = true;
+          return { ok: true, target: { connection, resource } };
+        },
+      },
+    });
+    // `1e999` in a JSON-RPC body parses to Infinity; serialized again it reads `null`.
+    const args = JSON.parse('{"query":"select 1","limit":1e999}') as Record<string, unknown>;
+    const out = await p.execute(ctx, { ...call, args });
+    expect(out.kind).toBe('rejected');
+    if (out.kind !== 'rejected') return;
+    expect(out.reason).toContain('limit');
+    expect(out.reason).toContain('Infinity');
+    expect(touched).toBe(false);
+    expect(audit.calls).toHaveLength(1);
+    expect(audit.calls[0]).toMatchObject({
+      decision: 'refused',
+      refusal_code: null,
+      refusal_reason: out.reason,
+      connection_id: null,
+      remaining_budget: null,
+    });
+  });
+
+  test('a classifier denial that quotes an argument: the agent reads it whole, the audit entry holds no argument value', async () => {
+    const secretPath = 'secrets/prod.env';
+    const reason = `path: '${secretPath}' is not a file of this mission (asked by ops@acme.example)`;
+    const { p, audit } = pipeline({
+      risks: { evaluate: async () => ({ kind: 'classify-denied', reason }) },
+    });
+    const out = await p.execute(ctx, {
+      ...call,
+      args: { path: secretPath, nested: { by: ['ops@acme.example'] }, n: 12, ok: 'a' },
+    });
+    expect(out.kind).toBe('rejected');
+    if (out.kind !== 'rejected') return;
+    // The caller sent the arguments: it reads its own values back.
+    expect(out.reason).toBe(reason);
+    // The audit is read by others, for as long as retention says: by fingerprint only.
+    const stored = audit.calls[0]!.refusal_reason ?? '';
+    expect(stored).not.toContain(secretPath);
+    expect(stored).not.toContain('ops@acme.example');
+    expect(stored).toBe("path: '[argument]' is not a file of this mission (asked by [argument])");
+    expect(out.audit.refusal_reason).toBe(stored);
+  });
+
+  test('the audit copy of a structural reason is bounded', async () => {
+    const { p, audit } = pipeline({
+      risks: { evaluate: async () => ({ kind: 'classify-denied', reason: 'x'.repeat(5000) }) },
+    });
+    const out = await p.execute(ctx, call);
+    expect(out.kind === 'rejected' && out.reason.length).toBe(5000);
+    expect(audit.calls[0]!.refusal_reason!.length).toBeLessThanOrEqual(500);
+  });
+
   test('inactive mission: refused first, nothing else consulted, audited with the code', async () => {
     let touched = false;
     const { p, audit } = pipeline({

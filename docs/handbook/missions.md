@@ -25,7 +25,11 @@ policy on selected resources — and receives its token once. Spec:
 Budget, Gate, Preset, Resource), §3.1, §3.2, §4.2 "Missions", §4.4, §7.4,
 §7.8. Decisions: pivot ADR D4 (nullable expiry, mandatory budget),
 [api-key-format-vbn-live-argon2id](../decisions/api-key-format-vbn-live-argon2id.md),
-[fallback-risk-only-when-uncategorized](../decisions/fallback-risk-only-when-uncategorized.md).
+[fallback-risk-only-when-uncategorized](../decisions/fallback-risk-only-when-uncategorized.md),
+[execution-door-json-faithful-arguments-and-shared-throttle](../decisions/execution-door-json-faithful-arguments-and-shared-throttle.md)
+(a repeated `approval` ends an opening),
+[management-door-rotation-scope-and-replay-trace](../decisions/management-door-rotation-scope-and-replay-trace.md)
+(rotation through a delegation).
 Built on the [store](store.md) repositories, the
 [plugin SDK](plugin-sdk.md) registry (catalogs, presets, `experimental`,
 `envOf`), [connections](connections.md) (resources, their `env` labels, hidden
@@ -104,7 +108,7 @@ basis, riskIds }`, implemented by `ConnectionAuthorityService`
 - a **beneficiary** holds the union of the restrictions of the active shares
   of that connection made to them or to one of their current groups
   (`basis: 'share'`), kept to the ids the catalog still lists;
-- everyone else, a user the IdP removed, and any connection whose provider has
+- everyone else, a user an operator deactivated, and any connection whose provider has
   no registered plugin, hold `basis: 'none'`, `riskIds: []`.
 
 `connectionsOf(user)` lists the candidates of an issuance: owned connections
@@ -409,6 +413,13 @@ preference of the owner); a stale one is dropped by all three.
 - **`rotate`** — creator only; the mission must be `active` and unexpired
   (`deriveMissionState`); the old token becomes `rotated`; audit
   `mission-rotated`; a `rotation` session event when the session exists.
+  Through a delegation (`options.delegation`, the management door) only a
+  mission that very delegation issued is rotated: any other answers
+  `reason: 'not-issued-by-delegation'`, before the state is derived
+  ([management-door](management-door.md), "Rotation reaches only what the
+  delegation issued"). The human rotates any of their missions; the HTTP
+  handler, which passes no delegation, maps that reason to 404 like
+  `not-found`.
 - **`revoke`** — creator only, idempotent; status `revoked`, active tokens
   `revoked`; audit `mission-revoked`; `revocation` session event.
 - **`verifyToken(bearer)`** — `prefixOfBearer` (a `vbn_live_` key only) →
@@ -503,8 +514,20 @@ and reloads the page's data.
   has a session, records `gate-changed { gate, gate_before }` in the same transaction: an
   opening "for the rest of the period" granted earlier on that risk stops there
   ([budget-and-sessions](budget-and-sessions.md), "Gates opened for the period").
+- **Asking `approval` on a gated risk that is open for the period closes the opening.**
+  The stored gate is already `approval` and does not move, so the service looks for the
+  opening with the budget's own derivation (`openGatesOf`) and passes
+  `{ closeOpening: true }` to the store, which records the `gate-changed` event without
+  touching the row. The result carries `opening_closed: true` (`previous` equals `gate`)
+  and the mission page shows the gate closed again (`gate_open_until: null`). ADR
+  [execution-door-json-faithful-arguments-and-shared-throttle](../decisions/execution-door-json-faithful-arguments-and-shared-throttle.md).
 - **One audit entry per change**: act `gate-changed`, object the mission, `before` /
-  `after` `{ risk_id, gate }`. Setting the gate a risk already has writes nothing.
+  `after` `{ risk_id, gate }`; when an opening was closed, `before` also carries
+  `open_for_period: true` and `after` `open_for_period: false`. Setting the gate a risk
+  already has, with no opening to close, writes nothing (`opening_closed: false`).
+
+`SetGateResult` is `{ ok: true, mission, risk_id, gate, previous, opening_closed }`; the
+route answers `{ mission, risk_id, gate, previous }`.
 
 `MissionService.get()` gives each policy line `gate_open_until`: the end of the period the
 creator opened the gate for, or `null`; the page shows it next to the gate.
@@ -634,11 +657,12 @@ Unit, beside the code (133): `authority/authority-service.test.ts` (20),
 `app/(app)/missions/message-of.test.ts` (2: the sentence a mission page shows
 for a refusal of the mission API).
 
-Integration, `tests/integration/missions/` (53) on the real root over
+Integration, `tests/integration/missions/` (54) on the real root over
 `:memory:`: `mission-lifecycle.test.ts` (28), `mission-handlers.test.ts` (8) and
-`gate.test.ts` (17: both directions and what the next call answers, the audit entry and
-the session event, a no-op, creator only, the refusals, `gate_open_until`, the route's
-statuses).
+`gate.test.ts` (18: both directions and what the next call answers, the audit entry and
+the session event, a no-op, `approval` asked on a gate open for the period closing the
+opening with one entry and one event, creator only, the refusals, `gate_open_until`, the
+route's statuses).
 The lifecycle suite builds the pipeline's view with the door's own
 `loadMissionContext`, pins the `mission-issued` payload, and checks that the
 detail and the kit list what the door reaches (no resource at issuance then a

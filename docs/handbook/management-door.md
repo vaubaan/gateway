@@ -30,8 +30,10 @@ tracks:
 How an agent comes to act **on behalf of a user** (spec §0 "Delegation",
 §4.1 bis, §6 "separation of the three credentials", "short, traceable
 delegated tokens"): the instance is an OAuth authorization server for one
-resource, the management MCP door `/mcp/manage`. ADR
-[management-door-authorization-server](../decisions/management-door-authorization-server.md).
+resource, the management MCP door `/mcp/manage`. ADRs
+[management-door-authorization-server](../decisions/management-door-authorization-server.md)
+and
+[management-door-rotation-scope-and-replay-trace](../decisions/management-door-rotation-scope-and-replay-trace.md).
 Built on [authentication](authentication.md) (the human session, the mutation
 guard), the [store](store.md) (`store.delegations`), the
 [configuration](configuration.md) (`oauth.*`, the `SessionStore` and
@@ -57,7 +59,7 @@ apps/gateway/src/server/oauth-as/        host-agnostic, never imports `next`
   clients.ts                  ClientRegistry: dynamic registration, document clients, registration policy, operator decisions
   authorization.ts            AuthorizationService: client + redirect URI, request validation, pending consent, the answer
   token-service.ts            TokenService: client authentication, code grant, refresh rotation, replay, revocation, sweep
-  delegations.ts              DelegationService: a user's delegations with client and missions; revoke. endDelegation(): the one revoke-and-audit
+  delegations.ts              DelegationService: a user's delegations with client and missions; revoke, revokeAllOf. endDelegation(): the one revoke-and-audit; missionsToReview()
   verifier.ts                 DelegatedTokenVerifier: resolve(bearer)
   management-gate.ts          ManagementGate.admit(request): the resource-server check of /mcp/manage
   pages.ts                    the consent screen and the message pages, as self-contained HTML
@@ -363,8 +365,10 @@ document with `Origin: null`, which the mutation guard refuses — the browser
 test `delegate-agent.spec.ts` clicks the real button). Every client-supplied value goes through `escapeHtml`. It says
 who asks ("an application that calls itself …", not verified), for whom, the
 client id and how it registered, the scope `mgmt`, what the delegation can do
-and can never do (spec §4.1 bis), and where the access goes with a warning per
-kind. The form carries the consent id and nothing of the request; "Deny" is
+— read the user's connections, shares and missions; preview and issue
+missions in their name; "rotate the token of the missions it issued, and
+revoke any of your missions" — and can never do (spec §4.1 bis), and where
+the access goes with a warning per kind. The form carries the consent id and nothing of the request; "Deny" is
 the first button.
 
 `POST /oauth/authorize/decision` (`handlers.decide` →
@@ -483,24 +487,46 @@ whatever its state.
 
 **One function ends a delegation and leaves its trace**
 (`endDelegation(deps, id, { reason, actorId, viaClient })` in
-`delegations.ts`), for the three callers — the token service (a replay, the
-client signing out), `DelegationService.revoke` (the user) and, through
+`delegations.ts`), for the four callers — the token service (a replay, the
+client signing out), `DelegationService.revoke` (the user),
+`DelegationService.revokeAllOf(userId, by)` (every active delegation of one
+user, each with its own entry: an operator deactivating that user, handbook
+[authentication](authentication.md), "Deactivating a user") and, through
 `recordDelegationEnded`, `ClientRegistry.decide` (the operator, whose
 revocations are part of the `disableClient` transaction). The store's
 `revokeIfActive` answers only to the call that actually revoked, so a
 revocation is audited once however many requests noticed it. The
 `delegation-revoked` entry:
 
-| Field                      | Value                                                                             |
-| -------------------------- | --------------------------------------------------------------------------------- |
-| `user_id`                  | who acted: the delegating user, or the operator                                   |
-| `after.reason`             | `user`, `client`, `operator`, `refresh-token-replay`, `authorization-code-replay` |
-| `after.client_id`, `_name` | the client that held the delegation                                               |
-| `after.delegating_user_id` | the delegating user, **only when somebody else acted** (the operator)             |
-| `delegated_client_id`      | the client, when the act came through it (sign-out, replay); else `null`          |
+| Field                      | Value                                                                                                                                               |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `user_id`                  | who acted: the delegating user, or the operator                                                                                                     |
+| `after.reason`             | `user`, `client`, `operator` (the client was disabled), `user-deactivated`, `refresh-token-replay`, `authorization-code-replay`                     |
+| `after.client_id`, `_name` | the client that held the delegation                                                                                                                 |
+| `after.delegating_user_id` | the delegating user, **only when somebody else acted** (the operator)                                                                               |
+| `after.missions_to_review` | **after a replay only**: `{ mission_id, name }` of each mission the delegation issued that still runs; left out when the missions could not be read |
+| `delegated_client_id`      | the client, when the act came through it (sign-out, replay); else `null`                                                                            |
 
-It is logged as `delegation revoked`, at `warn` for a replay and at `info`
-otherwise (the client signed out, the user or an operator revoked).
+It is logged as `delegation revoked`, at `warn` for a replay (with the ids
+of the missions to review) and at `info` otherwise (the client signed out,
+the user or an operator revoked).
+
+**A replay names the missions to review; it revokes none** (ADR
+[management-door-rotation-scope-and-replay-trace](../decisions/management-door-rotation-scope-and-replay-trace.md)).
+Two parties held the delegation, and whoever stole it may have issued a
+mission and still hold its mission token. `endedByReplay(reason)` is true for
+the two replay reasons; `missionsToReview(delegation, missionsOfUser, now)`
+keeps the missions whose `delegation_id` is the delegation's and that still
+run — not `revoked`, not `expired`, not past `expires_at`; an `orphaned` one
+counts, since its authority may return. `endDelegation` reads them once the
+delegation is revoked (`MissionsRepo.listForCreator`, the `missions`
+dependency of `EndDelegationDeps` and `TokenServiceDeps`) and passes them to
+`recordDelegationEnded`. When that read fails, the revocation and its entry
+stand: `could not list the missions of a delegation revoked for a replay` is
+logged at `error` and the entry carries no `missions_to_review` key — absent,
+not empty. Nothing is stored for the list: the Delegations page derives it
+again at every read (`DelegationView.replayed`, `toReview`), so it shrinks as
+the user revokes missions or they expire.
 
 **`POST /oauth/revoke`** (RFC 7009): the client authenticates like above; a
 refresh token of that client ends its delegation (reason `client`, audited); an
@@ -620,20 +646,34 @@ between two requests.
 
 ### The seven tools (`definitions.ts`, `tools.ts`)
 
-| Tool                   | Kind     | `ManagementTools` method | Reads / writes through                                                 |
-| ---------------------- | -------- | ------------------------ | ---------------------------------------------------------------------- |
-| `list_my_connections`  | read     | `listMyConnections`      | `missions.issuanceContext(user)`                                       |
-| `get_catalog`          | read     | `getCatalog`             | `catalog.get(provider)`, `issuanceContext` for `connection_id`         |
-| `list_my_missions`     | read     | `listMyMissions`         | `missions.list(user)`, or `missions.get` with `mission_id`             |
-| `preview_policy`       | preview  | `previewPolicy`          | `missions.preview(user, draft)`                                        |
-| `issue_mission`        | mutation | `issueMission`           | `missions.preview`, then `missions.issue(user, draft, { delegation })` |
-| `rotate_mission_token` | mutation | `rotateMissionToken`     | `missions.get`, then `missions.rotate(user, id, { delegation })`       |
-| `revoke_mission`       | mutation | `revokeMission`          | `missions.get`, then `missions.revoke(user, id, { delegation })`       |
+| Tool                   | Kind     | `ManagementTools` method | Reads / writes through                                                                 |
+| ---------------------- | -------- | ------------------------ | -------------------------------------------------------------------------------------- |
+| `list_my_connections`  | read     | `listMyConnections`      | `missions.issuanceContext(user)`                                                       |
+| `get_catalog`          | read     | `getCatalog`             | `catalog.get(provider)`, `issuanceContext` for `connection_id`                         |
+| `list_my_missions`     | read     | `listMyMissions`         | `missions.list(user)`, or `missions.get` with `mission_id`                             |
+| `preview_policy`       | preview  | `previewPolicy`          | `missions.preview(user, draft)`                                                        |
+| `issue_mission`        | mutation | `issueMission`           | `missions.preview`, then `missions.issue(user, draft, { delegation })`                 |
+| `rotate_mission_token` | mutation | `rotateMissionToken`     | `missions.get`, the delegation check, then `missions.rotate(user, id, { delegation })` |
+| `revoke_mission`       | mutation | `revokeMission`          | `missions.get`, then `missions.revoke(user, id, { delegation })`                       |
 
 `user` is always `{ id: actor.userId }`: every act is the delegating user's,
 checked against their **current** authority by the mission service — owner,
 or the union of their direct and group shares (handbook
 [authority](authority.md)). The door decides nothing about authority itself.
+
+**Rotation reaches only what the delegation issued** (ADR
+[management-door-rotation-scope-and-replay-trace](../decisions/management-door-rotation-scope-and-replay-trace.md)).
+`rotate_mission_token` answers with the new token, so rotating a mission is
+obtaining its token. A mission the user issued in the interface, or that
+another client or an earlier delegation of the same client issued, is refused
+`mission-not-issued-here` before anything is read of its state and before the
+mutation budget is touched: `mission.delegationId` must equal the delegation
+of the call. The same rule is held a second time by
+`MissionService.rotate` itself (`not-issued-by-delegation` whenever a
+`delegation` option names another delegation than the mission's), so the door
+cannot reach a wider rotation through its one `rotate` port. `revoke_mission`
+keeps reaching every mission of the user: ending a mission enlarges nothing.
+The human rotates any of their missions on the mission's page.
 
 **Inputs** are Zod schemas, advertised as JSON Schema by `tools/list` and
 validated by the SDK before the method runs; unknown keys are refused
@@ -647,15 +687,16 @@ advertises (next section). A "no" is a tool error — `isError: true`
 with `structuredContent: { error: { code, message, hint, … } }` — so the
 model reads it and corrects itself:
 
-| `error.code`         | When                                                                                  | Extra fields                     |
-| -------------------- | ------------------------------------------------------------------------------------- | -------------------------------- |
-| `draft-refused`      | `issue_mission` on a draft the preview does not accept                                | `uncovered`, `issues`, `preview` |
-| `mission-not-found`  | no such mission of this user (another user's reads the same)                          | `mission_id`                     |
-| `mission-inactive`   | `rotate_mission_token` on a revoked, expired or orphaned mission                      | `mission_id`, `state`, `orphan`  |
-| `unknown-provider`   | `get_catalog` on a provider the instance does not ship                                | `providers`                      |
-| `unknown-connection` | `get_catalog` with a `connection_id` the user holds nothing on                        | `connection_id`                  |
-| `rate-limited`       | the delegation's mutation budget is spent                                             | `retry_after_seconds`            |
-| `internal-error`     | the method threw (logged `management tool failed`); the message never carries details |                                  |
+| `error.code`              | When                                                                                  | Extra fields                     |
+| ------------------------- | ------------------------------------------------------------------------------------- | -------------------------------- |
+| `draft-refused`           | `issue_mission` on a draft the preview does not accept                                | `uncovered`, `issues`, `preview` |
+| `mission-not-found`       | no such mission of this user (another user's reads the same)                          | `mission_id`                     |
+| `mission-inactive`        | `rotate_mission_token` on a revoked, expired or orphaned mission                      | `mission_id`, `state`, `orphan`  |
+| `mission-not-issued-here` | `rotate_mission_token` on a mission of the user that this delegation did not issue    | `mission_id`                     |
+| `unknown-provider`        | `get_catalog` on a provider the instance does not ship                                | `providers`                      |
+| `unknown-connection`      | `get_catalog` with a `connection_id` the user holds nothing on                        | `connection_id`                  |
+| `rate-limited`            | the delegation's mutation budget is spent                                             | `retry_after_seconds`            |
+| `internal-error`          | the method threw (logged `management tool failed`); the message never carries details |                                  |
 
 A call that fails the input schema is a tool error whose text is the SDK's
 validation message; a tool name that does not exist is the JSON-RPC error
@@ -733,7 +774,8 @@ What each answer contains (`views.ts`):
   `revoked`) and `orphan` (`cause`, `connection_id`, `uncovered`,
   `can_come_back`) exactly as `MissionService.list` derives them at this
   read; `policy` with `remaining` per risk; `session` (current period);
-  `exhausted`; `issued_via` (`client_id`, `client_name`, `this_client`);
+  `exhausted`; `issued_via` (`client_id`, `client_name`, `this_client`,
+  `this_delegation` — true for the missions `rotate_mission_token` accepts);
   the masked `token_prefix`. Revoked and expired missions are left out
   unless `include_closed` (`hidden_closed` counts them). With `mission_id`: plus `connections` with the
   resources reached and `policy_details` (label, `gate_open_until`).
@@ -745,7 +787,8 @@ What each answer contains (`views.ts`):
   `issued_via_client_id`), `token` (`secret`, `prefix`, `env_var`,
   `shown_once`), `bootstrap_kit` (`endpoint`, `env`, `mcp_json`,
   `agent_instructions`, `verify`), `policy`, `summary`, `notices`.
-- **`rotate_mission_token`** — the new `token` and `bootstrap_kit`.
+- **`rotate_mission_token`** — the new `token` and `bootstrap_kit`, for a
+  mission this delegation issued.
 - **`revoke_mission`** — `state: revoked`, `tokens_revoked`,
   `already_revoked` (a second call changes nothing and writes nothing).
 
@@ -799,8 +842,9 @@ Through the `RateLimiter` port, on keys the root prefixes with `mgmt:`
 | `mgmt:delegation:<id>:mutations` | `MANAGEMENT_MUTATIONS_PER_WINDOW` 60/h   | tool error `rate-limited`                  |
 
 The mutation budget is taken after the checks that need no write: a draft the
-preview refuses, a mission that is not found or not active, a mission
-already revoked do not spend it.
+preview refuses, a mission that is not found, not active or not issued by
+the delegation that asks to rotate it, a mission already revoked do not spend
+it.
 
 ### The hard deny is the dependency list (`ports.ts`, `compose/management.ts`)
 
@@ -847,7 +891,7 @@ with a real mission token, a real delegated token and a real web session:
 - a mission token at `/mcp/manage` → 403 `wrong-credential-kind`
   (`presented: mission-token`, the hint names the execution door);
 - a session at `/mcp/manage`, as cookie or bearer → 403;
-- a delegated token as a bearer or in the `vbn_session` cookie is nobody for
+- a delegated token as a bearer or in the `__Host-vbn_session` cookie is nobody for
   the interface (`Authenticator.authenticate` → `null`; issuing or revoking a
   mission, revoking a delegation, answering a consent → 401);
 - a delegated token cannot answer a request, even next to the creator's
@@ -897,8 +941,9 @@ since, next, access?)` — with `access`, the access token of the renewal is
 - No method revokes one refresh token alone: a rotation replaces it, a
   revocation ends the family.
 
-`DELEGATION_REVOKE_REASONS`: `user`, `client`, `operator`,
-`refresh-token-replay`, `authorization-code-replay`.
+`DELEGATION_REVOKE_REASONS`: `user`, `client`, `operator` (an operator
+disabled the client), `user-deactivated` (an operator deactivated the user
+who gave it), `refresh-token-replay`, `authorization-code-replay`.
 
 The audit search scope (`store/repositories/audit.ts`) shows a user the
 administrative entries whose object is one of **their** delegations.
@@ -913,10 +958,21 @@ administrative entries whose object is one of **their** delegations.
   claim), its client id, where its access goes, the scope, when it was
   granted and last renewed, its state, the missions it issued (with their
   derived status) and a **Revoke** button (`POST /delegations/<id>/revoke`, one click).
+  The introduction says what a delegated application can do: read the user's
+  connections and missions, issue missions in their name, rotate the token of
+  the missions it issued and revoke any of their missions.
   States: `active` (a token is live), `idle` (the consent stands but no token
   is left: never redeemed, or unused past the refresh lifetime), `revoked`
-  with the reason in words. Another user's delegation id answers
-  `?problem=not-found`.
+  with the reason in words (one sentence per `DelegationRevokeReason`,
+  `user-deactivated` included). A delegation revoked for a replay
+  (`view.replayed`) carries a banner: `danger`, "Review the mission(s) this
+  delegation issued", while `view.toReview` is not empty — it says the
+  missions below are still running and were **not** revoked, lists each with
+  a link to `/missions/<id>` and its status, and tells the user to revoke
+  those they do not recognise and rotate the token of those they keep;
+  `warning`, "A token of this delegation was held by two parties", once none
+  of the missions it issued is still running. Another user's delegation id
+  answers `?problem=not-found`.
 - **`/admin/oauth-clients`** (operator): every client with its status, who
   decided (an operator or the policy), its redirect URIs, how it registered;
   **Approve** and **Disable and revoke its delegations**
@@ -986,7 +1042,11 @@ refused` carries the error code and the client id; the description in the
   token store and one of them kept renewing with a token the other had
   replaced, or the token leaked. `delegated tokens issued` lines with
   `reuse_window: true` just before tell the first case. The audit entry `delegation-revoked` carries the reason; the log
-  has `delegation revoked` at `warn`.
+  has `delegation revoked` at `warn`. The missions the delegation issued were
+  not revoked: the entry (`after.missions_to_review`) and the banner on the
+  Delegations page list the ones still running, for the user to revoke or to
+  rotate on each mission's page. A client authorized again holds a new
+  delegation and cannot rotate them.
 - **`server_error` (500) at the token endpoint.** A write failed and the grant
   was rolled back: the log has `oauth request failed unexpectedly` with the
   error. Nothing was spent — the client sends the same request again.
@@ -1010,6 +1070,12 @@ refused` carries the error code and the client id; the description in the
   plugin is experimental (`include_experimental`).
 - **`mission-inactive` on a rotation.** `error.state` says which; for
   `orphaned`, `error.orphan` gives the cause and the uncovered risks.
+- **`mission-not-issued-here` on a rotation.** The mission is the user's but
+  this delegation did not issue it: the user issued it in the interface,
+  another client did, or an earlier authorization of the same client did
+  (`issued_via.this_client` true, `this_delegation` false in
+  `list_my_missions`). The user rotates it on the mission's page; the client
+  may revoke it or issue a new one.
 - **A tool answers `Output validation error …`.** The answer departed from the
   schema the tool advertises, and the SDK replaced it — after the tool ran:
   for a mutation, read the state again (`list_my_missions`) before retrying.
@@ -1058,7 +1124,8 @@ exception and its limits); metadata documents (URL rules, the address filter
 table, the lookup that fails on one private address, the document's rules,
 cache lifetimes, name cleaning); the discovery documents, the execution
 door's one, and the scope and resource rules by name; the consent screen
-(content, escaping of hostile values, headers, nonce, Deny first); the client
+(content — what the delegation can and can never do —, escaping of hostile
+values, headers, nonce, Deny first); the client
 registry (registration and its refusals, the three policies, policy evaluated
 at every use, operator decisions and their audit, disabling revokes
 delegations, **disabling interrupted by a store fault changes nothing**,
@@ -1081,7 +1148,12 @@ credentials, sweep); the delegation service and the
 verifier (**revoke cascades**, another user's delegation, states, **the
 client's status at every verification**: a tightened policy, an operator's
 approval, a client marked disabled, redirect URIs that left the loopback;
-`endDelegation`: the entry of each kind of actor, once).
+`endDelegation`: the entry of each kind of actor, once; **a replay surfaces
+the missions the delegation issued and revokes none**: the entry names the
+ones still running, the view lists them until each is revoked or expires,
+nothing of the kind for a delegation the user, the client or an operator
+ended, the entry written without the list when the missions cannot be read,
+an authorization code presented twice surfaced the same way).
 
 The faults are real ones: a SQLite trigger that aborts the insert or the
 update (`RAISE(ABORT, …)`) on the `:memory:` store, so what is asserted is
@@ -1092,8 +1164,12 @@ The door's tools, beside the code (`src/server/management/`):
 the delegation; refusal before issuance with the uncovered list; **the
 mission service decides last** (an issuance refused after the preview passed,
 an unknown outcome, a rotation answered not-found or inactive after `get` saw
-the mission active); the mutation budget; every refusal code against the
-handbook's table; the views (exact restriction, env usability, presets
+the mission active); **rotation reaches only the missions this delegation
+issued** (the user's own, another client's and an earlier delegation's are
+refused `mission-not-issued-here` with the budget untouched; the service's
+own `not-issued-by-delegation` reads the same; revocation still reaches every
+mission; the listing says `this_delegation`); the mutation budget; every
+refusal code against the handbook's table; the views (exact restriction, env usability, presets
 against the authority, masked token) **and that each is the mission module's
 rule** (`expandPreset`, `isResolvable`, `explainOrphan` for every cause); the
 descriptions state the rules of issuance; the schemas refuse unknown keys.
@@ -1112,7 +1188,11 @@ beneficiary's authority; catalog; preview within and beyond; **issue within
 the authority → creator, `issued_via`, token once, kit, audit naming user and
 client, the token on `/mcp`**; **refusal beyond with the uncovered list**; a
 share narrowed after consent; rotate, revoke, an orphaned mission (not
-rotated, restored with the share, revocable), another user's mission; the
+rotated, restored with the share, revocable), another user's mission;
+**rotation only of what the calling delegation issued** (the user's own
+mission and another delegation's refused, their tokens still working; the
+mission service refusing a rotation asked in the name of another
+delegation); the
 forbidden families neither listed nor callable; `wrong-credential-kind` for a
 mission token and a session; both rate limits. `output-schemas.test.ts` —
 every real answer of every tool against its advertised schema, and refusals
@@ -1137,6 +1217,10 @@ table against the route files. `tests/integration/store/oauth-clients.test.ts`
 `tests/integration/store/delegations.test.ts` — the repository, with
 `redeemCode`, the rotations that carry an access token and `disableClient`
 each proven atomic under a fault.
+`tests/integration/auth/deactivate-user.test.ts` — an operator deactivating
+a user revokes their delegations (reason `user-deactivated`): the access
+token is refused at the door, the refresh token at the token endpoint, and
+the delegation stays revoked after a reactivation.
 
 Structural: `tests/unit/server/auth/mutation-guard.test.ts` (the three human
 mutations through the one guard, the three protocol endpoints session-blind),
@@ -1158,7 +1242,8 @@ see "How to use it".
 ## References
 
 - Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §0, §4.1 bis, §4.2, §6, §8, §10.
-- ADR: [management-door-authorization-server](../decisions/management-door-authorization-server.md).
+- ADRs: [management-door-authorization-server](../decisions/management-door-authorization-server.md),
+  [management-door-rotation-scope-and-replay-trace](../decisions/management-door-rotation-scope-and-replay-trace.md).
 - MCP authorization specification, revision 2026-07-28; OAuth 2.1 (draft);
   RFC 7591, 7636, 7009, 8252, 8414, 8707, 9207, 9700, 9728; OAuth Client ID
   Metadata Document (draft).

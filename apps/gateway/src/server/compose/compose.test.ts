@@ -8,7 +8,7 @@ import { bootOrExit, EXIT_CONFIG_ERROR } from './boot';
 import { silentLogger } from '../logging';
 import { MemoryRateLimiter, MemorySessionStore } from './memory';
 import { buildEmptyRegistry, checkProviderApps, RegistryCatalogIndex } from './registry';
-import { buildRoot, getRoot, resetRoot, type RootDeps } from './root';
+import { buildRoot, getRoot, NO_TRUSTED_PROXY_WARNING, resetRoot, type RootDeps } from './root';
 import { SHIPPED_PLUGINS } from './shipped-plugins';
 import { fakePlugin, memoryStoreDeps } from './testing';
 
@@ -29,7 +29,7 @@ describe('buildRoot', () => {
     expect(root.configFile).toBeNull();
     expect(root.encryptor.currentKeyVersion).toBe(1);
     expect(root.store.kind).toBe('memory');
-    expect(root.store.schemaVersion).toBe(8);
+    expect(root.store.schemaVersion).toBe(9);
     expect(root.registry.size).toBe(SHIPPED_PLUGINS.length);
     expect(root.registry.ids).toEqual(SHIPPED_PLUGINS.map((p) => p.id));
     expect(new Set(root.registry.ids).size).toBe(root.registry.size);
@@ -90,7 +90,9 @@ describe('buildRoot', () => {
       logWrite: (_lvl, line) => lines.push(line),
       buildRegistry: buildEmptyRegistry,
     });
-    const warnings = lines.filter((l) => l.includes('"level":"warn"'));
+    const warnings = lines.filter(
+      (l) => l.includes('"level":"warn"') && !l.includes(NO_TRUSTED_PROXY_WARNING),
+    );
     expect(warnings).toHaveLength(2);
     expect(warnings.join('\n')).toContain('providers.github');
     expect(warnings.join('\n')).toContain('providers.nope');
@@ -121,6 +123,32 @@ describe('buildRoot', () => {
     let code: number | null = null;
     await bootOrExit(deps, { stderr: () => undefined, exit: (c) => (code = c) });
     expect(code).toBe(EXIT_CONFIG_ERROR);
+  });
+
+  it('warns at boot when trusted_proxies is empty, naming the key and what it costs; says nothing once it is set', async () => {
+    const bootLog = async (env: Record<string, string>): Promise<string[]> => {
+      const lines: string[] = [];
+      const root = await buildRoot({
+        ...quiet,
+        loadConfig: () => loadInstanceConfig({ env: validEnv(env) }),
+        logWrite: (_level, line) => lines.push(line),
+      });
+      await root.close();
+      return lines;
+    };
+
+    const without = (await bootLog({})).filter((line) => line.includes(NO_TRUSTED_PROXY_WARNING));
+    expect(without).toHaveLength(1);
+    expect(JSON.parse(without[0] ?? '{}')).toMatchObject({
+      level: 'warn',
+      key: 'trusted_proxies',
+      env: 'VAUBAAN_TRUSTED_PROXIES',
+    });
+    expect(without[0]).toContain('429');
+
+    const withProxy = await bootLog({ VAUBAAN_TRUSTED_PROXIES: '10.0.0.0/8' });
+    expect(withProxy.some((line) => line.includes(NO_TRUSTED_PROXY_WARNING))).toBe(false);
+    expect(withProxy.join('')).toContain('"trusted_proxies":1');
   });
 
   it('never writes a secret to the boot log', async () => {

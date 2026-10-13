@@ -23,8 +23,26 @@ import {
   type SshKeyCredentialSpec,
 } from '@vaubaan/plugin-sdk';
 
-/** Hostname or IPv4 literal. IPv6 literals are not accepted : the ref must fit a slice identifier. */
-export const SSH_HOST_PATTERN = '^[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?$';
+/** Longest host accepted : the length of a fully qualified DNS name. */
+export const SSH_HOST_MAX_LENGTH = 253;
+/**
+ * Hostname or IPv4 literal, at most `SSH_HOST_MAX_LENGTH` characters. IPv6
+ * literals are not accepted : the ref must fit a slice identifier.
+ */
+export const SSH_HOST_PATTERN = `^(?=.{1,${SSH_HOST_MAX_LENGTH}}$)[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?$`;
+const SSH_HOST = new RegExp(SSH_HOST_PATTERN);
+
+/**
+ * The value as a host, or `null`. The one grammar of a host of this plugin :
+ * the `host` field of the credential (what the transport dials), the ref of
+ * the resource discovery returns, the `host` argument of `ssh__exec` and the
+ * `host[<ref>]` segment of every slice all go through it. It starts and ends
+ * with a letter or a digit, so it is never an option (`-oProxyCommand=…`),
+ * never `.` or `..`, and holds no separator, blank or control character.
+ */
+export function hostRef(value: unknown): string | null {
+  return typeof value === 'string' && SSH_HOST.test(value) ? value : null;
+}
 export const SSH_PORT_PATTERN =
   '^(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$';
 export const SSH_USER_PATTERN = '^[a-z_][a-z0-9_-]{0,31}\\$?$';
@@ -90,12 +108,12 @@ export interface SshTarget {
  */
 export function sshTarget(secret: CredentialSecret): SshTarget {
   const key = expectCredentialKind('ssh', secret, 'ssh-key');
-  const host = key.fields.host;
+  const host = hostRef(key.fields.host);
   const user = key.fields.user;
   const rawPort = key.fields.port;
   const fingerprint = key.fields.host_key_fingerprint;
 
-  if (typeof host !== 'string' || !new RegExp(SSH_HOST_PATTERN).test(host)) {
+  if (host === null) {
     throw new Error("ssh credential: field 'host' is missing or is not a hostname / IPv4 address");
   }
   if (typeof user !== 'string' || !new RegExp(SSH_USER_PATTERN).test(user)) {

@@ -41,6 +41,8 @@ apps/gateway/migrations/
                                   refuse the value (schema version 7, P2.2b)
   0008_events_agent_label.sql     events: the agent label of a call event as a column, backfilled,
                                   and the index of the per-label timeline (schema version 8)
+  0009_user_sessions_ended_at.sql users: `sessions_ended_at`, the instant of the user's last
+                                  deactivation (schema version 9)
 apps/gateway/src/server/store/
   index.ts                        openStore() / openMemoryStore(), Store type, re-exports
   db.ts                           openDb() — better-sqlite3 handle, pragmas, MIN_SQLITE_VERSION,
@@ -183,9 +185,9 @@ five-id catalog).
   with no resource…), driver errors (`SqliteError` with `code`) for constraint
   violations the schema catches (`UNIQUE`, `FOREIGN KEY`, `CHECK`).
 
-## Schema (`0001_schema.sql` … `0008_events_agent_label.sql`)
+## Schema (`0001_schema.sql` … `0009_user_sessions_ended_at.sql`)
 
-Schema version 8. `0001` creates every table and trigger; `0002` only replaces the
+Schema version 9. `0001` creates every table and trigger; `0002` only replaces the
 `audit_risks` delete trigger (see Audit); `0003` adds `web_sessions`; `0004` adds the
 owner-curation columns of `connection_resources` (plain `ADD COLUMN`s); `0005` adds
 `approvals.tool` (`NOT NULL DEFAULT ''`: a row written before it matches no call) and
@@ -197,13 +199,17 @@ hold (see "Missions: `orphaned` is not stored" below); `0008` adds `events.agent
 the label a call event carried (`NULL` for a call without one and for every other kind of
 event), backfills it from the stored details of the call events an earlier image wrote, and
 creates the index `events_session_label_ts` on `(session_id, agent_label, ts, id)` (see
-"The timeline of one agent label" below).
+"The timeline of one agent label" below); `0009` adds `users.sessions_ended_at` (one
+nullable `ADD COLUMN`, no default, no backfill): the instant of the user's last
+deactivation, kept after a reactivation — `removed_at` cannot carry it, since it is
+cleared when the user is active again (handbook [authentication](authentication.md),
+"Deactivating a user").
 
 | Area        | Tables                                                                                                                     | Notes                                                                                                                                                                                                                                                                                                                                                                         |
 | ----------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Instance    | `instance_config`, `schema_migrations`                                                                                     | key → clear `value` **or** `secret_blob`+`key_version`, never both                                                                                                                                                                                                                                                                                                            |
 | Web session | `web_sessions`                                                                                                             | `id` = SHA-256 (hex) of the session key — the cookie value is a bearer and is never stored; `value_json`, `expires_at`; repository `store.webSessions` (`repositories/web-sessions.ts`), which is the composition root's `SessionStore` port (handbook [authentication](authentication.md)); expired rows swept on write                                                      |
-| Identities  | `users`, `groups`, `group_members`                                                                                         | `users.subject` unique (IdP), `status active\|removed`; `groups.source idp\|local`                                                                                                                                                                                                                                                                                            |
+| Identities  | `users`, `groups`, `group_members`                                                                                         | `users.subject` unique (IdP), `status active\|removed` (set by an operator's deactivation, never by a sign-in), `sessions_ended_at` (migration `0009`); `groups.source idp\|local`                                                                                                                                                                                            |
 | Delegations | `oauth_clients`, `oauth_client_redirect_uris`, `delegations`, `oauth_codes`, `oauth_refresh_tokens`, `oauth_access_tokens` | all secrets stored as hashes by the caller; codes single-use; refresh tokens chain through `replaced_by_id`; `oauth_clients.operator_decision` (`approved`\|`disabled`, NULL while the registration policy decides), `registration` (`dynamic`\|`metadata-document`); `delegations.revoke_reason`; repository and its replay lookups in [management-door](management-door.md) |
 | Connections | `connections`, `connection_resources`                                                                                      | owner = `owner_kind` + `owner_user_id`/`owner_group_id` with a CHECK; status `active\|expired\|revoked\|unowned`; resources unique per `(connection_id, ref)` with an `env` label, its `env_source` (`owner`\|`plugin`), `metadata_json` (provider facts) and `owner_metadata_json` (owner edits), `display_name_edited`, `hidden`, `stale_since` (see Connections below)     |
 | Shares      | `shares`, `share_restrictions`                                                                                             | target principal like owner; one `risk_id` row per restriction entry                                                                                                                                                                                                                                                                                                          |
@@ -264,8 +270,8 @@ Ownership and the stored state that follows from authority (P2.2, handbook
 
 | Method                                     | What                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `connections.markOwnerlessUnowned()`       | `active` → `unowned` for every connection whose owner group has no member; returns the ones changed                                                                                                                                                                                                                                                                                                                                            |
-| `connections.listOwnerless()`              | `unowned`, or not revoked with an empty owner group                                                                                                                                                                                                                                                                                                                                                                                            |
+| `connections.markOwnerlessUnowned()`       | `active` → `unowned` for every connection nobody owns any more — its owner group has no member, or its owner user is not `active`; returns the ones changed                                                                                                                                                                                                                                                                                    |
+| `connections.listOwnerless()`              | `unowned`, or not revoked with an empty owner group or an owner user who is not `active`                                                                                                                                                                                                                                                                                                                                                       |
 | `connections.assignOwnerlessTo(id, owner)` | the connection must be ownerless and a new owner group must have a member, checked in the write transaction; then new owner, `unowned` → `active` (an `expired` one stays `expired`). Answers `{ outcome: 'assigned', previous, connection }` — `previous` is the row read inside the transaction, what the audit entry records as `before` — or `not-ownerless` / `owner-group-empty` with nothing written; `NotFoundError` for an unknown id |
 | `connections.markExpired(id)`              | now from any serving status (`active` or `unowned`)                                                                                                                                                                                                                                                                                                                                                                                            |
 | `shares.replaceForTarget(input)`           | revokes the active share of the same `(connection, target)` and creates the new one, one transaction                                                                                                                                                                                                                                                                                                                                           |
@@ -427,10 +433,22 @@ Additive, for the approval gate (handbook [requests](requests.md), "Approvals"):
   of a refresh rotation: when the named token was rotated at or after `rotatedSince` and its
   successor is still the live head of the family, rotates that head in one transaction and
   returns the new token; `null` otherwise (handbook [management-door](management-door.md)).
-- `store.missions.setGate(id, riskId, gate, actorUserId)` — one risk's gate, and the
+- `store.missions.setGate(id, riskId, gate, actorUserId, options?)` — one risk's gate, and the
   `gate-changed` session event in the same transaction when the mission has a session;
-  `{ mission, previous }`, or `null` when the risk is not in the policy; the gate the risk
-  already has writes nothing.
+  `{ mission, previous, openingClosed }`, or `null` when the risk is not in the policy; the
+  gate the risk already has writes nothing — except with `{ closeOpening: true }` on a gate
+  that is and stays `approval`: the row is not touched, the mission's `updated_at` moves and
+  the `gate-changed` event is recorded, which is what ends an opening for the period
+  (`openingClosed: true` when the mission has a session). The caller finds the opening; the
+  option does nothing to a gate that is `auto` or being set to `auto` (handbook
+  [missions](missions.md), "Editing a gate after issuance").
+- `store.users.markRemoved(id)` — `status = 'removed'`, `removed_at` and `sessions_ended_at`
+  = now (idempotent on the status; the instants move). `store.users.reactivate(id)` —
+  `removed` → `active`, `removed_at` cleared, `sessions_ended_at` kept; `null` when the user
+  is unknown or was not removed (nothing written). `upsertFromIdp` refreshes email, display
+  name and last login and never changes the status.
+- `store.groups.removeAllMemberships(userId)` — removes the user from every group, local
+  and IdP-sourced, in one transaction, and returns the groups they were in.
 - `store.audit.latestCall({ missionId, tool, argumentsHash, refusalCode? })` — the most
   recent call entry for a tool and a fingerprint, with its slices and risks.
 
@@ -500,8 +518,8 @@ request or an approval is born inside a decision transaction and a share through
 
 | Repository                        | Methods                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `users` (`UsersRepo`)             | `upsertFromIdp`, `getById`, `getBySubject`, `findByEmail`, `list`, `markRemoved`                                                                                                                                                                                                                                                                                                                                                             |
-| `groups` (`GroupsRepo`)           | `getOrCreate`, `createLocal`, `getById`, `getByName`, `list`, `setMembers`, `syncIdpMemberships`, `addMember`, `removeMember`, `listMembers`, `memberCount`, `groupsOf`                                                                                                                                                                                                                                                                      |
+| `users` (`UsersRepo`)             | `upsertFromIdp`, `getById`, `getBySubject`, `findByEmail`, `list`, `markRemoved`, `reactivate`                                                                                                                                                                                                                                                                                                                                               |
+| `groups` (`GroupsRepo`)           | `getOrCreate`, `createLocal`, `getById`, `getByName`, `list`, `setMembers`, `syncIdpMemberships`, `addMember`, `removeMember`, `removeAllMemberships`, `listMembers`, `memberCount`, `groupsOf`                                                                                                                                                                                                                                              |
 | `connections` (`ConnectionsRepo`) | `create`, `getById`, `list`, `listOwnedBy`, `getCredential`, `transferOwner`, `assignOwnerlessTo`, `markOwnerlessUnowned`, `listOwnerless`, `setMetadata`, `listResources`, `getResource`, `setResourceEnv`, `reconnect`, `refreshCredential`, `markExpired`, `revoke`, `syncDiscoveredResources`, `setResourceDisplayName`, `setResourceHidden`, `setResourceOwnerMetadata`                                                                 |
 | `shares` (`SharesRepo`)           | `create`, `getById`, `listForConnection`, `listActiveForTargets`, `replaceForTarget`, `revoke`                                                                                                                                                                                                                                                                                                                                               |
 | `missions` (`MissionsRepo`)       | `create`, `getById`, `listForCreator`, `listForConnection`, `issuersOf`, `setStatus`, `setExpiresAt`, `replacePolicy`, `setGate`, `issueToken`, `findTokenByPrefix`, `listTokens`, `revokeTokens`                                                                                                                                                                                                                                            |
@@ -534,7 +552,7 @@ capture both files atomically are also fine.
   uniqueness.
 - `tests/unit/server/store/migrate.test.ts` — file naming, ordering, duplicate
   versions, idempotent re-run, incremental apply, checksum immutability, rollback of a
-  failing file, downgrade refused (a recorded migration with no file), the eight shipped
+  failing file, downgrade refused (a recorded migration with no file), the nine shipped
   files.
 - `tests/unit/server/store/db.test.ts` — `isSqliteVersionAtLeast`.
 - `tests/integration/store/schema.test.ts` — all 29 tables, every table `STRICT`,
@@ -554,14 +572,16 @@ capture both files atomically are also fine.
   transaction is open, then success), an unknown mission as `NotFoundError`,
   in-transaction approval consumption and request drop, the
   counters-vs-audit structural check, argument erasure on decision and expiry,
-  the `listEvents` kind filter and descending order. `decideClaim` and
+  the `listEvents` kind filter and descending order, a removed user whom a later login
+  does not bring back and `reactivate` does, `removeAllMemberships`. `decideClaim` and
   `sweepExpired` are exercised by `tests/integration/requests/request-service.test.ts`
   (handbook [requests](requests.md)).
-- `tests/integration/store/approval-decisions.test.ts` (16) — migration 0005 (column and
+- `tests/integration/store/approval-decisions.test.ts` (17) — migration 0005 (column and
   index), `decideApproval` (decision, erasure and approval in one transaction; a thrown
   apply writes nothing; already decided; overdue; a claim; unknown), `getArguments` on an
   overdue request, the open request of a call by tool and fingerprint, `riskEvents`,
-  `setGate`, `latestCall`. `search`, `agentLabels` and `listRecentEvents`
+  `setGate` (with `closeOpening`: the event that ends an opening and nothing else),
+  `latestCall`. `search`, `agentLabels` and `listRecentEvents`
   are exercised by `tests/integration/audit/{audit-query,mission-session,events-agent-label}.test.ts`
   (handbook [audit](audit.md)).
 - `tests/integration/store/audit-guarded-append.test.ts` (10) — `appendUnlessLatest`: writes

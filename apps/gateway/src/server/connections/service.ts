@@ -987,7 +987,12 @@ export class ConnectionService {
    */
   private async looksOwnerless(connection: ConnectionRecord): Promise<boolean> {
     if (connection.status === 'unowned') return true;
-    if (connection.status === 'revoked' || connection.owner.kind !== 'group') return false;
+    if (connection.status === 'revoked') return false;
+    if (connection.owner.kind === 'user') {
+      // An owner the operator deactivated holds nothing: the connection is ownerless.
+      const owner = await this.deps.store.users.getById(connection.owner.id);
+      return owner?.status !== 'active';
+    }
     return (await this.deps.store.groups.memberCount(connection.owner.id)) === 0;
   }
 

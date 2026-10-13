@@ -6,7 +6,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
-import { canonicalJson, fingerprintArguments } from '../../src/index.ts';
+import { canonicalJson, fingerprintArguments, unfaithfulArgument } from '../../src/index.ts';
 
 describe('canonicalJson', () => {
   it('sorts object keys recursively and keeps array order', () => {
@@ -32,6 +32,48 @@ describe('canonicalJson', () => {
 
   it('refuses BigInt like JSON does', () => {
     expect(() => canonicalJson({ n: 1n })).toThrow(TypeError);
+  });
+});
+
+describe('unfaithfulArgument', () => {
+  it('finds nothing in what JSON carries as is', () => {
+    expect(unfaithfulArgument(undefined)).toBeNull();
+    expect(unfaithfulArgument(null)).toBeNull();
+    expect(
+      unfaithfulArgument({
+        a: 1,
+        b: -0.5,
+        c: 'x',
+        d: [true, null, { e: 1e21 }],
+        f: Number.MAX_VALUE,
+      }),
+    ).toBeNull();
+  });
+
+  it('names the first number JSON would rewrite as null, with its path', () => {
+    // What `JSON.parse('{"limit":1e999}')` yields: a number no JSON text can carry back.
+    expect(unfaithfulArgument(JSON.parse('{"limit":1e999}'))).toEqual({
+      kind: 'non-finite-number',
+      path: 'limit',
+      value: 'Infinity',
+    });
+    expect(unfaithfulArgument({ a: { b: [0, -Infinity] } })).toEqual({
+      kind: 'non-finite-number',
+      path: 'a.b[1]',
+      value: '-Infinity',
+    });
+    expect(unfaithfulArgument([NaN])).toMatchObject({ path: '[0]', value: 'NaN' });
+    expect(unfaithfulArgument(Infinity)).toMatchObject({ path: '(arguments)', value: 'Infinity' });
+  });
+
+  it('names a BigInt, which has no JSON form at all', () => {
+    expect(unfaithfulArgument({ n: 1n })).toEqual({ kind: 'bigint', path: 'n', value: 'a BigInt' });
+  });
+
+  it('is why the fingerprint cannot be trusted on such a value: Infinity and null collide', () => {
+    expect(fingerprintArguments({ limit: Infinity })).toBe(fingerprintArguments({ limit: null }));
+    expect(unfaithfulArgument({ limit: Infinity })).not.toBeNull();
+    expect(unfaithfulArgument({ limit: null })).toBeNull();
   });
 });
 

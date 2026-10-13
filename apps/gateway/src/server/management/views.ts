@@ -267,6 +267,18 @@ export interface IssuedViaView {
   readonly client_name: string;
   /** True when it is the client making this very call. */
   readonly this_client: boolean;
+  /**
+   * True when the delegation making this very call issued it: the only missions
+   * `rotate_mission_token` accepts. A client that was authorized again holds a new
+   * delegation, so `this_client` may be true while this is false.
+   */
+  readonly this_delegation: boolean;
+}
+
+/** Who is reading: the client and the delegation of the call (`ManagementActor`). */
+export interface MissionViewer {
+  readonly clientId: string;
+  readonly delegationId: string;
 }
 
 export interface MissionView {
@@ -290,18 +302,19 @@ export interface MissionView {
   readonly exhausted: readonly RiskId[];
 }
 
-function issuedViaView(issuer: MissionIssuer | null, clientId: string): IssuedViaView | null {
+function issuedViaView(issuer: MissionIssuer | null, viewer: MissionViewer): IssuedViaView | null {
   if (!issuer) return null;
   return {
     client_id: issuer.client_id,
     client_name: issuer.client_name,
-    this_client: issuer.client_id === clientId,
+    this_client: issuer.client_id === viewer.clientId,
+    this_delegation: issuer.delegation_id === viewer.delegationId,
   };
 }
 
 export function missionView(
   overview: MissionOverview,
-  clientId: string,
+  viewer: MissionViewer,
   maskToken: (prefix: string) => string,
 ): MissionView {
   const { mission, state } = overview;
@@ -320,7 +333,7 @@ export function missionView(
     session: serving
       ? { period_start: serving.period.start, period_end: serving.period.end }
       : null,
-    issued_via: issuedViaView(overview.issuedVia, clientId),
+    issued_via: issuedViaView(overview.issuedVia, viewer),
     token_prefix: overview.token ? maskToken(overview.token.prefix) : null,
     connection_ids: mission.connections.map((c) => c.connectionId),
     policy: mission.policy.map((entry) => ({
@@ -353,11 +366,11 @@ export interface MissionDetailView extends MissionView {
 
 export function missionDetailView(
   detail: MissionDetail,
-  clientId: string,
+  viewer: MissionViewer,
   maskToken: (prefix: string) => string,
 ): MissionDetailView {
   return {
-    ...missionView(detail, clientId, maskToken),
+    ...missionView(detail, viewer, maskToken),
     connections: detail.connections.map((c) => ({
       connection_id: c.id,
       provider: c.provider,

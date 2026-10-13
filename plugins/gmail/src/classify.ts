@@ -194,23 +194,51 @@ function sensitiveLabelSlice(action: 'R' | 'W', label: string | null): Slice {
 
 // ─── Argument validation ───────────────────────────────────────────────────
 
-/** Gmail thread and message ids are opaque tokens ; anything else is refused before it reaches a slice. */
-const GMAIL_ID = /^[A-Za-z0-9_-]+$/;
-/** A label argument : a system label id, a user label id, or a label name without spaces. */
-const LABEL_ARG = /^[A-Za-z0-9_./-]+$/;
+/** Longest thread or message id accepted (Gmail's are 16 hexadecimal digits). */
+export const MAX_GMAIL_ID_LENGTH = 64;
+/** Longest label accepted (Gmail caps a label name at 225 characters). */
+export const MAX_LABEL_LENGTH = 225;
+
+const GMAIL_ID = new RegExp(`^[A-Za-z0-9_-]{1,${MAX_GMAIL_ID_LENGTH}}$`);
+const LABEL_CHARS = /^[A-Za-z0-9_./-]+$/;
 /** What a bracket identifier of a slice may hold (the slice grammar of the policy engine). */
 const SLICE_IDENT = /^[A-Za-z0-9_./~-]+$/;
 
-/** A required id argument, or the denial that names it. */
+/**
+ * A Gmail thread or message id, or `null` : an opaque token of one path
+ * segment — no dot, no separator, no escape, bounded. The id lands in a slice
+ * today and in a request path (`users/me/threads/{id}`) once the plugin
+ * executes, where `encodeURIComponent` would leave `.` and `..` for a URL
+ * parser to remove ; a value outside the grammar is refused, never escaped.
+ * The one check `classify` and the executor to come share.
+ */
+export function gmailId(value: unknown): string | null {
+  return typeof value === 'string' && GMAIL_ID.test(value) ? value : null;
+}
+
+/**
+ * A label argument, or `null` : a system label id (`INBOX`), a user label id
+ * (`Label_42`) or a label name without spaces, nested with `/`
+ * (`Legal/Contracts`), bounded. No segment is empty, `.` or `..` : whatever
+ * the executor to come does with the value — a request body, or a path
+ * segment (`users/me/labels/{id}`) — no URL parser can read a dot segment in
+ * it. Shared with that executor, like `gmailId`.
+ */
+export function labelRef(value: unknown): string | null {
+  if (typeof value !== 'string' || value.length > MAX_LABEL_LENGTH) return null;
+  if (!LABEL_CHARS.test(value)) return null;
+  return value.split('/').every((seg) => seg !== '' && seg !== '.' && seg !== '..') ? value : null;
+}
+
+/** A required identifier argument checked by its grammar, or the denial that names it. */
 function requireArg(
   args: Readonly<Record<string, unknown>>,
   key: string,
-  shape: RegExp,
+  grammar: (value: unknown) => string | null,
 ): string | { denied: string } {
   const value = args[key];
   if (typeof value !== 'string' || value.length === 0) return { denied: `${key}: missing.` };
-  if (!shape.test(value)) return { denied: `${key}: malformed.` };
-  return value;
+  return grammar(value) ?? { denied: `${key}: malformed.` };
 }
 
 // ─── Labels ────────────────────────────────────────────────────────────────
@@ -269,7 +297,7 @@ function sensitiveLabelWritten(label: string, md: GmailMailboxMetadata): Slice |
 function requireWritableLabel(
   args: Readonly<Record<string, unknown>>,
 ): string | { denied: string } {
-  const label = requireArg(args, 'label', LABEL_ARG);
+  const label = requireArg(args, 'label', labelRef);
   if (typeof label !== 'string') return label;
   if (DELETING_LABELS.has(label.toUpperCase())) {
     return { denied: `label: '${label.toUpperCase()}' deletes mail ; this is not a label write.` };
@@ -362,7 +390,7 @@ export function classifyGmail(
 
     // Worst case : neither the sender nor the labels are known until the thread is fetched.
     case 'gmail__get_thread': {
-      const tid = requireArg(args, 'id', GMAIL_ID);
+      const tid = requireArg(args, 'id', gmailId);
       if (typeof tid !== 'string') return tid;
       const slices: Slice[] = [
         slice('R', [name('mailbox'), name('thread'), ident(tid), name('message'), ANY_IDENT]),
@@ -400,9 +428,9 @@ export function classifyGmail(
 
     case 'gmail__label_message':
     case 'gmail__unlabel_message': {
-      const tid = requireArg(args, 'thread_id', GMAIL_ID);
+      const tid = requireArg(args, 'thread_id', gmailId);
       if (typeof tid !== 'string') return tid;
-      const mid = requireArg(args, 'message_id', GMAIL_ID);
+      const mid = requireArg(args, 'message_id', gmailId);
       if (typeof mid !== 'string') return mid;
       const label = requireWritableLabel(args);
       if (typeof label !== 'string') return label;
@@ -412,7 +440,7 @@ export function classifyGmail(
 
     case 'gmail__label_thread':
     case 'gmail__unlabel_thread': {
-      const tid = requireArg(args, 'thread_id', GMAIL_ID);
+      const tid = requireArg(args, 'thread_id', gmailId);
       if (typeof tid !== 'string') return tid;
       const label = requireWritableLabel(args);
       if (typeof label !== 'string') return label;

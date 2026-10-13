@@ -35,6 +35,19 @@ export function auditActorId(principal: Principal): string {
   return principal.kind === 'user' ? principal.user.id : BOOTSTRAP_ACTOR_ID;
 }
 
+/**
+ * A session opened at or before the user's last deactivation is over, also once the
+ * user is active again: reactivation lets them sign in, it does not reopen what the
+ * deactivation closed. Both instants are ISO-8601 UTC of the same clock, so the
+ * strings compare as the instants do.
+ */
+function endedByDeactivation(
+  session: Pick<UserSessionRecord, 'createdAt'>,
+  user: Pick<UserRecord, 'sessionsEndedAt'>,
+): boolean {
+  return user.sessionsEndedAt !== null && session.createdAt <= user.sessionsEndedAt;
+}
+
 export type AdminDecision =
   | { readonly ok: true; readonly principal: Principal }
   | { readonly ok: false; readonly status: 401 | 403; readonly reason: string };
@@ -59,7 +72,7 @@ export class Authenticator {
       return null;
     }
     const user = await this.store.users.getById(session.record.userId);
-    if (!user || user.status !== 'active') {
+    if (!user || user.status !== 'active' || endedByDeactivation(session.record, user)) {
       await this.sessions.destroyById(session.id);
       return null;
     }

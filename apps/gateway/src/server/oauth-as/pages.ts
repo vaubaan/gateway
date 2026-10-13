@@ -143,7 +143,7 @@ export function consentPage(view: ConsentView): Response {
 <ul>
 <li>read your connections, what was shared with you, and your missions with their budgets;</li>
 <li>preview and <strong>issue missions in your name</strong>, within what you yourself may do;</li>
-<li>rotate the token of your missions and revoke them.</li>
+<li>rotate the token of the missions it issued, and revoke any of your missions.</li>
 </ul>
 
 <h2>It will never be able to</h2>

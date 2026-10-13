@@ -3,6 +3,11 @@
  * `users` upsert, IdP-sourced memberships replaced, bootstrap token revoked
  * on the first operator sign-in. Authority is never cached here: callers
  * recompute it with `currentAuthority()` on every check (spec §10).
+ *
+ * A user an operator deactivated does not sign in: the identity provider
+ * still vouching for them is exactly the case deactivation exists for. The
+ * refusal comes before anything is written (no row refreshed, no group
+ * synced, no bootstrap revocation).
  */
 import type { AdminRule } from '../config/types';
 import type { Logger } from '../logging';
@@ -12,6 +17,7 @@ import type { GroupRecord, UserRecord } from '../store/types';
 import { isOperator } from './admin-rule';
 import type { BootstrapService } from './bootstrap';
 import type { IdentityClaims } from './claims';
+import { LoginError } from './errors';
 
 export interface Authority {
   readonly groups: readonly GroupRecord[];
@@ -84,6 +90,14 @@ export async function completeLogin(
   deps: LoginDeps,
   claims: IdentityClaims,
 ): Promise<LoginOutcome> {
+  const known = await deps.store.users.getBySubject(claims.subject);
+  if (known && known.status !== 'active') {
+    throw new LoginError(
+      'account-deactivated',
+      `user ${known.id} was deactivated on this instance (${known.removedAt ?? 'date unknown'}); ` +
+        'an operator reactivates them under Administration → Users',
+    );
+  }
   const user = await deps.store.users.upsertFromIdp({
     subject: claims.subject,
     email: claims.email,

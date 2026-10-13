@@ -139,6 +139,8 @@ export type RotateResult =
       readonly kit: BootstrapKit;
     }
   | { readonly ok: false; readonly reason: 'not-found' }
+  /** A delegated client asked for a mission its delegation did not issue. */
+  | { readonly ok: false; readonly reason: 'not-issued-by-delegation' }
   | { readonly ok: false; readonly reason: 'inactive'; readonly state: MissionState['kind'] };
 
 export type RevokeResult =
@@ -151,8 +153,13 @@ export type SetGateResult =
       readonly mission: MissionRecord;
       readonly risk_id: RiskId;
       readonly gate: Gate;
-      /** The gate before the edit; equal to `gate` when nothing changed. */
+      /** The gate before the edit; equal to `gate` when the stored gate did not move. */
       readonly previous: Gate;
+      /**
+       * `approval` was asked on a risk already gated whose gate the creator had
+       * opened for the period: the opening is over (the stored gate did not move).
+       */
+      readonly opening_closed: boolean;
     }
   | { readonly ok: false; readonly reason: 'not-found' }
   | { readonly ok: false; readonly reason: 'invalid-gate' }
@@ -512,7 +519,16 @@ export class MissionService {
     throw new Error(`could not draw an unused token prefix in ${MAX_MINT_ATTEMPTS} attempts`);
   }
 
-  /** New token, same mission, same session, same budget (spec §7.8). */
+  /**
+   * New token, same mission, same session, same budget (spec §7.8).
+   *
+   * Through a delegation (`options.delegation`, the management door) only a
+   * mission that very delegation issued is rotated: the new token is handed to
+   * the caller, so rotating a mission the human issued — wider, perhaps with a
+   * gate they opened — would hand a delegated client an authority nobody
+   * issued to it (ADR management-door-rotation-scope-and-replay-trace). The
+   * human rotates any of their missions in the interface.
+   */
   async rotate(
     user: AuthoritySubject,
     missionId: string,
@@ -520,6 +536,9 @@ export class MissionService {
   ): Promise<RotateResult> {
     const mission = await this.ownMission(user, missionId);
     if (!mission) return { ok: false, reason: 'not-found' };
+    if (options.delegation && mission.delegationId !== options.delegation.id) {
+      return { ok: false, reason: 'not-issued-by-delegation' };
+    }
     const state = await this.stateOf(mission);
     if (state.kind !== 'active') return { ok: false, reason: 'inactive', state: state.kind };
 
@@ -603,27 +622,46 @@ export class MissionService {
     if (!isGate(gate)) return { ok: false, reason: 'invalid-gate' };
     const blocked = gateEditBlockedBy(mission);
     if (blocked) return { ok: false, reason: 'inactive', state: blocked };
-    const changed = await this.deps.store.missions.setGate(mission.id, riskId, gate, user.id);
+    // "Ask me again" on a risk that is gated but open for the period must end the
+    // opening: the stored gate would not move, so the store is told what was found.
+    const openNow =
+      gate === 'approval' &&
+      (await this.openGatesOf(mission, await this.stateOf(mission))).has(riskId);
+    const changed = await this.deps.store.missions.setGate(mission.id, riskId, gate, user.id, {
+      closeOpening: openNow,
+    });
     if (!changed) return { ok: false, reason: 'risk-not-in-policy' };
-    const { previous } = changed;
-    if (previous !== gate) {
+    const { previous, openingClosed } = changed;
+    if (previous !== gate || openingClosed) {
       await this.deps.store.auditWriter.write({
         kind: 'admin',
         ts: toIso(this.deps.clock.now()),
         user_id: user.id,
         act: 'gate-changed',
         object: { type: 'mission', id: mission.id },
-        before: { risk_id: riskId, gate: previous },
-        after: { risk_id: riskId, gate },
+        before: {
+          risk_id: riskId,
+          gate: previous,
+          ...(openingClosed ? { open_for_period: true } : {}),
+        },
+        after: { risk_id: riskId, gate, ...(openingClosed ? { open_for_period: false } : {}) },
         delegated_client_id: null,
       });
       this.deps.logger.info('mission gate changed', {
         mission_id: mission.id,
         risk_id: riskId,
         gate,
+        opening_closed: openingClosed,
       });
     }
-    return { ok: true, mission: changed.mission, risk_id: riskId, gate, previous };
+    return {
+      ok: true,
+      mission: changed.mission,
+      risk_id: riskId,
+      gate,
+      previous,
+      opening_closed: openingClosed,
+    };
   }
 
   /** Session events exist only once the session does (born on the first call). */

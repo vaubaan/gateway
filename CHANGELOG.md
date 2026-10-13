@@ -510,6 +510,32 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Security
 
+- **Hardening pass before 2.0.** What changes for you:
+  - _Plugins: what is executed is what was classified._ In several plugins an identifier
+    such as `..` passed the classifier and was then sent to another endpoint (a Supabase
+    object path leaving its bucket, a Vercel domain or a GitHub workflow id collapsing to the
+    parent resource, an Upstash database id). Every plugin now validates each identifier with
+    one grammar used by the classifier and the executor, and refuses what does not fit
+    instead of escaping it; some unusual values are refused that used to pass (an object path
+    with `..`, a tag written `refs/tags/…`, a recipient list inside one address string).
+  - _Operators can deactivate a user_ (Administration → Users): no sign-in, sessions ended,
+    delegated applications cut off, the user's missions refused, their connections handed
+    back for reassignment — without waiting for the identity provider. A sign-in no longer
+    reactivates a removed user.
+  - _Everyone signs in again once after the upgrade_: the session cookie is now
+    `__Host-vbn_session`, which a sibling subdomain cannot plant.
+  - _Entra ID_: a user in more groups than a token carries is refused at sign-in with a
+    message for the operator, instead of silently losing every group.
+  - _Management door_: a delegated application rotates the token of the missions it issued,
+    no longer of any of your missions (new refusal `mission-not-issued-here`, new field
+    `issued_via.this_delegation`). After a token replay, the Delegations page lists the
+    missions that delegation issued for you to review.
+  - A member of a group that owns a connection can no longer share it to themselves and keep
+    it after leaving the group. A call whose arguments are not JSON values (`1e999`) is
+    rejected. The instance warns at start-up when `trusted_proxies` is empty.
+  - CI and releases are gated by a dependency audit with a reviewed allowlist; the image is
+    checked for stray test files. The threat model — actors, controls, the test behind each,
+    accepted risks — is `docs/handbook/threat-model.md`.
 - **The image no longer contains the test suite.** A computed path in the plugin SDK made
   the build copy the whole `apps/gateway` directory into the standalone output, tests and
   their fixtures included (an identity provider without passwords among them, inert there).

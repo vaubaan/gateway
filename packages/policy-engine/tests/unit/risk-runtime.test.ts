@@ -223,6 +223,52 @@ describe('evaluateCall — multi-slice scenarios', () => {
   });
 });
 
+describe('evaluateCall — every slice must be covered, not the union', () => {
+  test('a slice no catalog entry matches denies the call, although another slice is covered and accepted', () => {
+    // `issue[…].R` matches nothing (the fallback is write-only): carried by the read
+    // of a file next to it, the call used to be allowed on `read-code` alone.
+    const d = evaluateCall({
+      executed_slices: [
+        parseSlice('github.repo[foo].file[a.ts].R'),
+        parseSlice('github.repo[foo].issue[7].R'),
+      ],
+      token_accepted_risks: new Set(['github.read-code']),
+      catalog: idx,
+    });
+    expect(d.outcome).toBe('denied');
+    if (d.outcome !== 'denied') return;
+    expect(d.hint).toContain('github.repo[foo].issue[7].R');
+    expect(d.hint).toContain('catalog matches');
+    expect(d.missing_risks).toEqual([]);
+    // What the other slice touches is still reported.
+    expect(d.covered_risks).toEqual(['github.read-code']);
+  });
+
+  test('a slice of another provider is not dropped: it denies', () => {
+    const d = evaluateCall({
+      executed_slices: [
+        parseSlice('github.repo[foo].file[a.ts].R'),
+        parseSlice('stripe.account[acct].customer[*].R'),
+      ],
+      token_accepted_risks: new Set(['github.read-code']),
+      catalog: idx,
+    });
+    expect(d.outcome).toBe('denied');
+  });
+
+  test('with every slice covered the call is decided as before', () => {
+    const d = evaluateCall({
+      executed_slices: [
+        parseSlice('github.repo[foo].file[a.ts].R'),
+        parseSlice('github.repo[foo].file[b.ts].R'),
+      ],
+      token_accepted_risks: new Set(['github.read-code']),
+      catalog: idx,
+    });
+    expect(d).toEqual({ outcome: 'allowed', risks_touched: ['github.read-code'] });
+  });
+});
+
 describe('evaluateCallSimple — convenience wrapper', () => {
   test('end-to-end happy path', () => {
     const d = evaluateCallSimple(

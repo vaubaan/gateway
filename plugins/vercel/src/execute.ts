@@ -47,9 +47,15 @@ import {
 } from '@vaubaan/plugin-sdk';
 
 import {
+  domainName,
   isAccountTool,
   isClassifiedTool,
+  MALFORMED_DOMAIN,
+  MALFORMED_DOMAIN_NAME,
+  MALFORMED_ENV_VAR_ID,
+  pathIdent,
   PROVIDER,
+  readDeploymentTargets,
   resolveProject,
   unboundToolDenial,
   UNBOUND_TOOLS,
@@ -71,14 +77,7 @@ import {
   UPSERT_FIREWALL_RULE,
   VERIFY_DOMAIN,
 } from './custom-tools.ts';
-import {
-  isCustomTool,
-  toUpstreamName,
-  toolAcceptsArgument,
-  toolDeclaresProperty,
-  toolRequiresProperty,
-  vercelToolByName,
-} from './tools.ts';
+import { isCustomTool, toUpstreamName, toolAcceptsArgument, vercelToolByName } from './tools.ts';
 
 /** The official Vercel MCP server (rewrapped tools). A fact about the provider. */
 export const VERCEL_MCP_URL = 'https://mcp.vercel.com/';
@@ -105,13 +104,6 @@ export const TEAMLESS_UPSTREAM_TOOLS: Readonly<Record<string, string>> = {
   vercel__web_fetch_vercel_url:
     'Addressed by URL : the deployment is first resolved through the REST API under the pinned team and must belong to the mission project.',
 };
-
-/** Arguments of a rewrapped tool that name a deployment (by id, hostname or URL). */
-const DEPLOYMENT_ARGS = ['idOrUrl', 'deploymentId', 'url'] as const;
-type DeploymentArg = (typeof DEPLOYMENT_ARGS)[number];
-
-/** A deployment id or a hostname : what the REST lookup accepts in its path. */
-const DEPLOYMENT_KEY = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 /**
  * A call this executor declines itself : nothing failed at the provider. The
@@ -213,6 +205,15 @@ export async function discoverVercelResources(
     until = next;
   }
 
+  // A ref the classifier would refuse is of no use to a mission : say so at
+  // connection time instead of listing a resource no call can name.
+  const unusable = projects.find((p) => pathIdent(p.id) === null);
+  if (unusable) {
+    throw new Error(
+      `${PROVIDER}: project id ${JSON.stringify(unusable.id)} is not a path-safe identifier`,
+    );
+  }
+
   return projects.map((p) => ({
     provider: PROVIDER,
     ref: p.id,
@@ -286,45 +287,6 @@ function pinArgs(
 // Deployment binding : the deployment a call names belongs to the mission project
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface DeploymentTarget {
-  readonly arg: DeploymentArg;
-  /** Deployment id or hostname, looked up under the pinned team. */
-  readonly key: string;
-  /** The normalised URL to forward, for a URL-addressed tool ; `null` to forward the verified id. */
-  readonly href: string | null;
-}
-
-/**
- * Read one deployment argument. A URL is reduced to its hostname for the
- * lookup and re-serialised for the forward, so the host that is verified is
- * the host the upstream tool receives. Throws on anything else than a
- * deployment id, a hostname or a plain http(s) URL.
- */
-function readDeploymentArg(arg: DeploymentArg, value: unknown): DeploymentTarget {
-  if (typeof value !== 'string' || value.length === 0) {
-    throw new ExecutorRefusal(`${arg}: expected a deployment id or URL.`);
-  }
-  if (arg !== 'url' && !value.includes('://')) {
-    if (!DEPLOYMENT_KEY.test(value)) throw new ExecutorRefusal(`${arg}: malformed deployment id.`);
-    return { arg, key: value, href: null };
-  }
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    throw new ExecutorRefusal(`${arg}: expected an absolute http(s) URL of a deployment.`);
-  }
-  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
-    throw new ExecutorRefusal(`${arg}: expected an http(s) URL.`);
-  }
-  if (url.username !== '' || url.password !== '') {
-    throw new ExecutorRefusal(`${arg}: a URL with credentials is refused.`);
-  }
-  if (!DEPLOYMENT_KEY.test(url.hostname))
-    throw new ExecutorRefusal(`${arg}: malformed deployment host.`);
-  return { arg, key: url.hostname, href: arg === 'url' ? url.href : null };
-}
-
 function isRecord(x: unknown): x is Readonly<Record<string, unknown>> {
   return typeof x === 'object' && x !== null && !Array.isArray(x);
 }
@@ -381,9 +343,10 @@ async function verifiedDeploymentId(
 /**
  * For a rewrapped tool, verify every deployment argument its schema declares
  * and rewrite it : the verified deployment id for `idOrUrl` / `deploymentId`,
- * the normalised URL for `url`. Schema-driven, so a tool added upstream with
- * one of these arguments is bound without a code change. All arguments are
- * read before the first lookup : an unreadable one costs no network call.
+ * the normalised URL for `url`. The arguments are read by the classifier's
+ * own `readDeploymentTargets` (schema-driven, so a tool added upstream with
+ * one of these arguments is bound without a code change) : what it denied
+ * there is refused here, before the first lookup, at no network cost.
  */
 async function bindDeployments(
   call: VercelCall,
@@ -392,17 +355,9 @@ async function bindDeployments(
   projectRef: string | null,
 ): Promise<Record<string, unknown>> {
   const out: Record<string, unknown> = { ...args };
-  if (isCustomTool(tool)) return out;
-
-  const targets: DeploymentTarget[] = [];
-  for (const arg of DEPLOYMENT_ARGS) {
-    if (!toolDeclaresProperty(tool, arg)) continue;
-    if (args[arg] === undefined) {
-      if (toolRequiresProperty(tool, arg)) throw new ExecutorRefusal(`${arg}: argument missing.`);
-      continue;
-    }
-    targets.push(readDeploymentArg(arg, args[arg]));
-  }
+  const read = readDeploymentTargets(tool, args);
+  if ('denied' in read) throw new ExecutorRefusal(read.denied);
+  const { targets } = read;
   if (targets.length === 0) return out;
   if (projectRef === null) {
     throw new ExecutorRefusal(
@@ -606,10 +561,13 @@ async function executeCustom(
   args: Readonly<Record<string, unknown>>,
 ): Promise<unknown> {
   // `pinArgs` wrote the project the classifier resolved ; the team is the credential's.
-  const projectId = typeof args.projectId === 'string' ? args.projectId : '';
-  if (!projectId) throw new ExecutorRefusal(`Vercel custom tool ${tool}: projectId is required.`);
+  // Every identifier below went through the classifier's own grammar
+  // (`pathIdent`, `domainName`) : one path segment each, interpolated as it is.
+  const project = pathIdent(args.projectId);
+  if (project === null) {
+    throw new ExecutorRefusal(`Vercel custom tool ${tool}: projectId is required.`);
+  }
   const query: Record<string, string> = { teamId: call.teamId };
-  const project = encodeURIComponent(projectId);
 
   if (tool === UPDATE_PROJECT_SETTINGS) {
     const body = pickDefined(args, PROJECT_SETTINGS_FIELDS);
@@ -625,60 +583,50 @@ async function executeCustom(
     return callRest(call, 'GET', `/v10/projects/${project}/env`, query, null);
   }
   if (tool === DELETE_ENV_VAR) {
-    const envVarId = typeof args.id === 'string' ? args.id : '';
-    if (!envVarId) throw new ExecutorRefusal(`Vercel custom tool ${tool}: id is required.`);
-    return callRest(
-      call,
-      'DELETE',
-      `/v9/projects/${project}/env/${encodeURIComponent(envVarId)}`,
-      query,
-      null,
-    );
+    if (args.id === undefined) {
+      throw new ExecutorRefusal(`Vercel custom tool ${tool}: id is required.`);
+    }
+    const envVarId = pathIdent(args.id);
+    if (envVarId === null) throw new ExecutorRefusal(MALFORMED_ENV_VAR_ID);
+    return callRest(call, 'DELETE', `/v9/projects/${project}/env/${envVarId}`, query, null);
   }
   if (tool === LIST_DOMAINS) {
     return callRest(call, 'GET', `/v9/projects/${project}/domains`, query, null);
   }
   if (tool === ADD_DOMAIN) {
-    if (typeof args.name !== 'string') {
+    if (args.name === undefined) {
       throw new ExecutorRefusal(`Vercel custom tool ${tool}: name is required.`);
     }
+    if (domainName(args.name) === null) throw new ExecutorRefusal(MALFORMED_DOMAIN_NAME);
     const body = pickDefined(args, ADD_DOMAIN_FIELDS);
     return callRest(call, 'POST', `/v10/projects/${project}/domains`, query, body);
   }
-  if (tool === VERIFY_DOMAIN) {
-    const domain = typeof args.domain === 'string' ? args.domain : '';
-    if (!domain) throw new ExecutorRefusal(`Vercel custom tool ${tool}: domain is required.`);
-    return callRest(
-      call,
-      'POST',
-      `/v9/projects/${project}/domains/${encodeURIComponent(domain)}/verify`,
-      query,
-      {},
-    );
-  }
-  if (tool === REMOVE_DOMAIN) {
-    const domain = typeof args.domain === 'string' ? args.domain : '';
-    if (!domain) throw new ExecutorRefusal(`Vercel custom tool ${tool}: domain is required.`);
-    return callRest(
-      call,
-      'DELETE',
-      `/v9/projects/${project}/domains/${encodeURIComponent(domain)}`,
-      query,
-      null,
-    );
+  if (tool === VERIFY_DOMAIN || tool === REMOVE_DOMAIN) {
+    if (args.domain === undefined) {
+      throw new ExecutorRefusal(`Vercel custom tool ${tool}: domain is required.`);
+    }
+    // A domain is dotted : `domainName` rules out dot-only values and
+    // separators, which is what keeps it one path segment ; every character
+    // of the grammar (`*` of a wildcard domain included) is literal in a path.
+    const domain = domainName(args.domain);
+    if (domain === null) throw new ExecutorRefusal(MALFORMED_DOMAIN);
+    const path = `/v9/projects/${project}/domains/${domain}`;
+    return tool === VERIFY_DOMAIN
+      ? callRest(call, 'POST', `${path}/verify`, query, {})
+      : callRest(call, 'DELETE', path, query, null);
   }
 
   // ─── Firewall / WAF tools ───────────────────────────────────────────────
 
   if (tool === GET_FIREWALL_CONFIG) {
-    query.projectId = projectId;
+    query.projectId = project;
     return callRest(call, 'GET', '/v1/security/firewall/config/active', query, null);
   }
   if (tool === TOGGLE_FIREWALL) {
     if (typeof args.enabled !== 'boolean') {
       throw new ExecutorRefusal(`Vercel custom tool ${tool}: enabled (boolean) is required.`);
     }
-    query.projectId = projectId;
+    query.projectId = project;
     return callRest(call, 'PATCH', '/v1/security/firewall/config', query, {
       action: 'firewallEnabled',
       value: args.enabled,
@@ -688,7 +636,7 @@ async function executeCustom(
     if (typeof args.name !== 'string') {
       throw new ExecutorRefusal(`Vercel custom tool ${tool}: name is required.`);
     }
-    query.projectId = projectId;
+    query.projectId = project;
     const ruleValue = pickDefined(args, [
       'name',
       'description',
@@ -705,7 +653,7 @@ async function executeCustom(
   if (tool === REMOVE_FIREWALL_RULE) {
     const ruleId = typeof args.ruleId === 'string' ? args.ruleId : '';
     if (!ruleId) throw new ExecutorRefusal(`Vercel custom tool ${tool}: ruleId is required.`);
-    query.projectId = projectId;
+    query.projectId = project;
     return callRest(call, 'PATCH', '/v1/security/firewall/config', query, {
       action: 'rules.remove',
       id: ruleId,
@@ -718,7 +666,7 @@ async function executeCustom(
         `Vercel custom tool ${tool}: operation must be 'insert' or 'remove'.`,
       );
     }
-    query.projectId = projectId;
+    query.projectId = project;
     if (operation === 'insert') {
       if (typeof args.ip !== 'string' || !args.ip) {
         throw new ExecutorRefusal(`Vercel custom tool ${tool}: ip is required for insert.`);

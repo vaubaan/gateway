@@ -43,6 +43,7 @@ const REVOKE_REASON: Readonly<Record<DelegationRevokeReason, string>> = {
   user: 'revoked by you',
   client: 'ended by the application (it signed out)',
   operator: 'revoked by an operator, who disabled the application',
+  'user-deactivated': 'revoked by an operator, who deactivated your account',
   'refresh-token-replay':
     'revoked by the gateway: a refresh token that had already been used was presented again, which means two parties held it',
   'authorization-code-replay':
@@ -126,6 +127,42 @@ function DelegationCard({ view }: { view: DelegationView }) {
             )}
           </dl>
 
+          {view.replayed && (
+            <Banner
+              tone={view.toReview.length > 0 ? 'danger' : 'warning'}
+              title={
+                view.toReview.length > 0
+                  ? `Review ${view.toReview.length === 1 ? 'the mission' : `the ${view.toReview.length} missions`} this delegation issued`
+                  : 'A token of this delegation was held by two parties'
+              }
+            >
+              {view.toReview.length > 0 ? (
+                <>
+                  <p>
+                    The gateway revoked this delegation because one of its tokens was presented
+                    twice: somebody other than the application may have held it, and may have issued
+                    missions in your name. The missions below are still running and were{' '}
+                    <strong>not</strong> revoked. Open each one: revoke those you do not recognise,
+                    and rotate the token of those you keep.
+                  </p>
+                  <ul className={styles.missions} aria-label="Missions to review">
+                    {view.toReview.map((mission) => (
+                      <li key={mission.id}>
+                        <Link href={`/missions/${mission.id}`}>{mission.name}</Link>{' '}
+                        <Badge>{mission.status}</Badge>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : (
+                <p>
+                  The gateway revoked this delegation because one of its tokens was presented twice.
+                  None of the missions it issued is still running.
+                </p>
+              )}
+            </Banner>
+          )}
+
           <div>
             <h3 className={styles.sub}>Missions it issued</h3>
             {missions.length === 0 ? (
@@ -182,8 +219,9 @@ export default async function DelegationsPage({
         <p className={styles.muted}>
           The applications you authorized to manage your missions on your behalf, through the
           management door <Code>{door}</Code>. A delegated application can read your connections and
-          missions and issue, rotate or revoke missions in your name; it can never answer a request,
-          touch a connection or call a provider.
+          missions, issue missions in your name, rotate the token of the missions it issued and
+          revoke any of your missions; it can never answer a request, touch a connection or call a
+          provider.
         </p>
       </div>
 

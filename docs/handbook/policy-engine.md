@@ -260,12 +260,21 @@ evaluateCall({
 
 ```
 executed_slices empty                                → denied (classification gap)
+one slice matches no catalog entry                   → denied (catalog gap — add a fallback)
 an env-scoped risk touched outside its envs          → denied (not acceptable here)
-risks_touched empty                                  → denied (catalog gap — add a fallback)
 any touched risk ∈ token_denied_risks                → denied (explicit deny, legacy input)
 risks_touched ⊄ token_accepted_risks                 → denied (missing_risks)
 otherwise                                            → allowed (risks_touched)
 ```
+
+**Every slice must be covered, not the union.** Each slice is something the
+call does. A slice that no entry of the catalog matches — or a slice of
+another provider — denies the call (`uncovered` in `collectQualifiedRisks`),
+whatever the other slices touch: an effect nobody priced must not ride on the
+risks of the slices next to it. The denial lists the uncovered slices in its
+hint, `missing_risks` empty and the accepted risks of the other slices in
+`covered_risks` (ADR
+[execution-door-json-faithful-arguments-and-shared-throttle](../decisions/execution-door-json-faithful-arguments-and-shared-throttle.md)).
 
 The mode is decided by the `envResolver` input alone, never by which
 object is passed:

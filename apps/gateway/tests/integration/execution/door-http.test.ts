@@ -527,6 +527,24 @@ describe('execution door over HTTP: real GitHub plugin, mocked upstream', () => 
       expect(verify).toHaveBeenCalledTimes(VERIFY_ATTEMPTS_PER_WINDOW);
     }, 60_000);
 
+    it('accepted risk: with no trusted proxy, an agent not verified yet is held at 429 while its prefix is flooded — and is back with the window', async () => {
+      // Threat-model handbook, "Accepted risks": every caller shares the `unknown`
+      // window of a prefix, and a prefix is not a secret. The boot log says so
+      // (`NO_TRUSTED_PROXY_WARNING`); the remedy is `trusted_proxies` (test above).
+      const mission = await instance.issueGithub();
+      for (let i = 0; i < VERIFY_ATTEMPTS_PER_WINDOW; i++) {
+        const wrong = `vbn_live_${mission.prefix}_${String(i).padStart(32, 'd')}`;
+        expect((await instance.rpc(wrong, LIST)).status).toBe(401);
+      }
+      const cold = await instance.rpc(mission.token, LIST);
+      expect(cold.status).toBe(429);
+      expect(Number(cold.headers.get('retry-after'))).toBeGreaterThan(0);
+      // Nothing was learnt and nothing was changed: the mission and its token stand.
+      expect((await instance.root.store.missions.getById(mission.mission.id))?.status).toBe(
+        'active',
+      );
+    }, 60_000);
+
     it('applies the surface rate limit per mission, not per agent', async () => {
       const limited = await githubInstance({ VAUBAAN_MCP_RATE_LIMIT_PER_MINUTE: '3' });
       try {
@@ -549,6 +567,31 @@ describe('execution door over HTTP: real GitHub plugin, mocked upstream', () => 
         await limited.close();
       }
     });
+  });
+
+  it('rejects a call whose arguments JSON cannot carry (`1e999`): the approver would have read `null`', async () => {
+    const mission = await instance.issueGithub('read-only');
+    // Written by hand: `JSON.stringify` would already have turned the number into `null`.
+    const body =
+      '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"github__list_branches",' +
+      '"arguments":{"owner":"acme","repo":"app","per_page":1e999}}}';
+    const response = await instance.root.execution.handlers.mcp(
+      new Request('https://gateway.example.com/mcp', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json, text/event-stream',
+          authorization: `Bearer ${mission.token}`,
+        },
+        body,
+      }),
+    );
+    const answer = (await response.json()) as { error?: { code: number; message: string } };
+    expect(answer.error?.code).toBe(-32602);
+    expect(answer.error?.message).toContain("argument 'per_page' is Infinity");
+    expect(instance.upstream.calls).toHaveLength(0);
+    const [entry] = await instance.root.store.audit.list({ kind: 'call' });
+    expect(entry).toMatchObject({ decision: 'refused', refusal_code: null });
   });
 
   it('writes no secret and no argument to the logs: token by prefix, arguments by hash', async () => {

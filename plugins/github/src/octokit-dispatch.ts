@@ -5,6 +5,13 @@
  * sequence for `create_branch` and `push_files`, which the REST API has no
  * one-shot endpoint for). The result is the raw Octokit `data` payload.
  *
+ * The dispatcher takes the `GithubCall` the classifier was given
+ * (`call.ts`) : every identifier that reaches a request path, a query string
+ * or a ref — repository, branch, path, revision, number — comes from the
+ * call, checked by its grammar, never from the raw arguments. `args` only
+ * supplies what is neither classified nor an identifier : contents, titles,
+ * messages, flags, page sizes.
+ *
  * The Octokit instance is built by the caller (`execute.ts` injects
  * `ctx.fetch` and `ctx.signal`), so this module never touches the global
  * fetch.
@@ -12,135 +19,119 @@
 
 import type { Octokit as OctokitType } from '@octokit/rest';
 
-import { FILES_SHAPE, declaredMergeBase, readFileEntries } from './classify.ts';
+import { branchName, type GithubCall, type MINT_TOOL, type RepoCall } from './call.ts';
 
 export type OctokitLike = Pick<OctokitType, 'rest' | 'request'>;
 
-const repoArgs = (a: Readonly<Record<string, unknown>>) =>
-  ({
-    owner: a.owner as string,
-    repo: a.repo as string,
-  }) as const;
+/** Every call but the credential mint, which `execute.ts` answers itself. */
+export type DispatchedCall = Exclude<GithubCall, { tool: typeof MINT_TOOL }>;
+
+type Args = Readonly<Record<string, unknown>>;
+
+const perPageOf = (args: Args): number | undefined =>
+  typeof args.per_page === 'number' ? args.per_page : undefined;
 
 export async function dispatchGithubTool(
   octokit: OctokitLike,
-  tool: string,
-  args: Readonly<Record<string, unknown>>,
+  call: DispatchedCall,
+  args: Args,
 ): Promise<unknown> {
-  switch (tool) {
+  // Account-shaped : `q` is the whole request, sent in the query string.
+  if (!('target' in call)) {
+    const q = args.q as string;
+    const { data } =
+      call.tool === 'github__search_code'
+        ? await octokit.rest.search.code({ q })
+        : await octokit.rest.search.issuesAndPullRequests({ q });
+    return data;
+  }
+  const repo = { owner: call.target.owner, repo: call.target.repo } as const;
+  switch (call.tool) {
     case 'github__list_branches': {
-      const { data } = await octokit.rest.repos.listBranches({ ...repoArgs(args) });
+      const { data } = await octokit.rest.repos.listBranches({ ...repo });
       return data;
     }
     case 'github__list_commits': {
       const { data } = await octokit.rest.repos.listCommits({
-        ...repoArgs(args),
-        sha: args.sha as string | undefined,
-        per_page: typeof args.per_page === 'number' ? args.per_page : undefined,
+        ...repo,
+        sha: call.sha,
+        per_page: perPageOf(args),
       });
       return data;
     }
     case 'github__list_pull_requests': {
       const { data } = await octokit.rest.pulls.list({
-        ...repoArgs(args),
+        ...repo,
         state: (args.state as 'open' | 'closed' | 'all') ?? 'open',
       });
       return data;
     }
     case 'github__list_issues': {
       const { data } = await octokit.rest.issues.listForRepo({
-        ...repoArgs(args),
+        ...repo,
         state: (args.state as 'open' | 'closed' | 'all') ?? 'open',
       });
       return data;
     }
     case 'github__get_file_contents': {
       const { data } = await octokit.rest.repos.getContent({
-        ...repoArgs(args),
-        path: args.path as string,
-        ref: args.ref as string | undefined,
+        ...repo,
+        path: call.path,
+        ref: call.ref,
       });
       return data;
     }
     case 'github__get_pull_request': {
-      const { data } = await octokit.rest.pulls.get({
-        ...repoArgs(args),
-        pull_number: args.pull_number as number,
-      });
+      const { data } = await octokit.rest.pulls.get({ ...repo, pull_number: call.pullNumber });
       return data;
     }
     case 'github__get_issue': {
-      const { data } = await octokit.rest.issues.get({
-        ...repoArgs(args),
-        issue_number: args.issue_number as number,
-      });
+      const { data } = await octokit.rest.issues.get({ ...repo, issue_number: call.issueNumber });
       return data;
     }
     case 'github__get_commit': {
-      const { data } = await octokit.rest.repos.getCommit({
-        ...repoArgs(args),
-        ref: args.sha as string,
-      });
-      return data;
-    }
-    case 'github__search_code': {
-      const { data } = await octokit.rest.search.code({ q: args.q as string });
-      return data;
-    }
-    case 'github__search_issues': {
-      const { data } = await octokit.rest.search.issuesAndPullRequests({ q: args.q as string });
+      const { data } = await octokit.rest.repos.getCommit({ ...repo, ref: call.sha });
       return data;
     }
     case 'github__create_branch': {
       // No one-shot create_branch : resolve the base ref SHA, then create a new ref.
-      const baseBranch =
-        (args.from_branch as string | undefined) ??
-        (await octokit.rest.repos.get({ ...repoArgs(args) })).data.default_branch;
-      const baseRef = await octokit.rest.git.getRef({
-        ...repoArgs(args),
-        ref: `heads/${baseBranch}`,
-      });
+      const baseBranch = call.fromBranch ?? (await defaultBranchOf(octokit, call));
+      const baseRef = await octokit.rest.git.getRef({ ...repo, ref: `heads/${baseBranch}` });
       const { data } = await octokit.rest.git.createRef({
-        ...repoArgs(args),
-        ref: `refs/heads/${args.branch as string}`,
+        ...repo,
+        ref: `refs/heads/${call.branch}`,
         sha: baseRef.data.object.sha,
       });
       return data;
     }
     case 'github__create_or_update_file': {
       const { data } = await octokit.rest.repos.createOrUpdateFileContents({
-        ...repoArgs(args),
-        path: args.path as string,
+        ...repo,
+        path: call.path,
         message: args.message as string,
         content: Buffer.from(args.content as string, 'utf8').toString('base64'),
-        branch: args.branch as string,
+        branch: call.branch,
         sha: args.sha as string | undefined,
       });
       return data;
     }
     case 'github__push_files': {
-      // Same reader as the classifier : what was classified is what is pushed.
-      const files = readFileEntries(args);
-      if (!files) throw new Error(`github__push_files requires ${FILES_SHAPE}`);
-      const branch = args.branch as string;
+      const { branch, files } = call;
       const message = args.message as string;
-      const ref = await octokit.rest.git.getRef({ ...repoArgs(args), ref: `heads/${branch}` });
+      const ref = await octokit.rest.git.getRef({ ...repo, ref: `heads/${branch}` });
       const headSha = ref.data.object.sha;
-      const baseCommit = await octokit.rest.git.getCommit({
-        ...repoArgs(args),
-        commit_sha: headSha,
-      });
+      const baseCommit = await octokit.rest.git.getCommit({ ...repo, commit_sha: headSha });
       const blobs = await Promise.all(
         files.map((f) =>
           octokit.rest.git.createBlob({
-            ...repoArgs(args),
+            ...repo,
             content: Buffer.from(f.content, 'utf8').toString('base64'),
             encoding: 'base64',
           }),
         ),
       );
       const tree = await octokit.rest.git.createTree({
-        ...repoArgs(args),
+        ...repo,
         base_tree: baseCommit.data.tree.sha,
         tree: files.map((f, i) => ({
           path: f.path,
@@ -150,13 +141,13 @@ export async function dispatchGithubTool(
         })),
       });
       const commit = await octokit.rest.git.createCommit({
-        ...repoArgs(args),
+        ...repo,
         message,
         tree: tree.data.sha,
         parents: [headSha],
       });
       await octokit.rest.git.updateRef({
-        ...repoArgs(args),
+        ...repo,
         ref: `heads/${branch}`,
         sha: commit.data.sha,
       });
@@ -164,78 +155,75 @@ export async function dispatchGithubTool(
     }
     case 'github__create_pull_request': {
       const { data } = await octokit.rest.pulls.create({
-        ...repoArgs(args),
+        ...repo,
         title: args.title as string,
         body: args.body as string | undefined,
-        head: args.head as string,
-        base: args.base as string,
+        head: call.head,
+        base: call.base,
         draft: (args.draft as boolean | undefined) ?? false,
       });
       return data;
     }
     case 'github__add_issue_comment': {
       const { data } = await octokit.rest.issues.createComment({
-        ...repoArgs(args),
-        issue_number: args.issue_number as number,
+        ...repo,
+        issue_number: call.issueNumber,
         body: args.body as string,
       });
       return data;
     }
     case 'github__merge_pull_request': {
-      const pullNumber = args.pull_number as number;
-      await assertPullRequestTargetsDeclaredBase(octokit, args, pullNumber);
+      await assertPullRequestTargetsDeclaredBase(octokit, call);
       const { data } = await octokit.rest.pulls.merge({
-        ...repoArgs(args),
-        pull_number: pullNumber,
+        ...repo,
+        pull_number: call.pullNumber,
         merge_method: (args.merge_method as 'merge' | 'squash' | 'rebase' | undefined) ?? 'merge',
       });
       return data;
     }
     case 'github__delete_file': {
       const { data } = await octokit.rest.repos.deleteFile({
-        ...repoArgs(args),
-        path: args.path as string,
+        ...repo,
+        path: call.path,
         message: args.message as string,
-        branch: args.branch as string,
+        branch: call.branch,
         sha: args.sha as string,
       });
       return data;
     }
     case 'github__list_workflows': {
-      const { data } = await octokit.rest.actions.listRepoWorkflows({ ...repoArgs(args) });
+      const { data } = await octokit.rest.actions.listRepoWorkflows({ ...repo });
       return data;
     }
     case 'github__list_workflow_runs': {
-      const workflowId = args.workflow_id;
-      const branch = args.branch as string | undefined;
-      const perPage = typeof args.per_page === 'number' ? args.per_page : undefined;
+      const { workflowId, branch } = call;
       if (workflowId !== undefined) {
         const { data } = await octokit.rest.actions.listWorkflowRuns({
-          ...repoArgs(args),
-          workflow_id: workflowId as string | number,
+          ...repo,
+          workflow_id: workflowId,
           branch,
-          per_page: perPage,
+          per_page: perPageOf(args),
         });
         return data;
       }
       const { data } = await octokit.rest.actions.listWorkflowRunsForRepo({
-        ...repoArgs(args),
+        ...repo,
         branch,
-        per_page: perPage,
+        per_page: perPageOf(args),
       });
       return data;
     }
     case 'github__get_branch_protection': {
       const { data } = await octokit.rest.repos.getBranchProtection({
-        ...repoArgs(args),
-        branch: args.branch as string,
+        ...repo,
+        branch: call.branch,
       });
       return data;
     }
     case 'github__update_branch_protection': {
       const { data } = await octokit.rest.repos.updateBranchProtection({
-        ...repoArgs(args),
-        branch: args.branch as string,
+        ...repo,
+        branch: call.branch,
         required_status_checks: args.required_status_checks as never,
         enforce_admins: args.enforce_admins as never,
         required_pull_request_reviews: args.required_pull_request_reviews as never,
@@ -251,23 +239,20 @@ export async function dispatchGithubTool(
     }
     case 'github__list_releases': {
       const { data } = await octokit.rest.repos.listReleases({
-        ...repoArgs(args),
-        per_page: typeof args.per_page === 'number' ? args.per_page : undefined,
+        ...repo,
+        per_page: perPageOf(args),
       });
       return data;
     }
     case 'github__list_tags': {
-      const { data } = await octokit.rest.repos.listTags({
-        ...repoArgs(args),
-        per_page: typeof args.per_page === 'number' ? args.per_page : undefined,
-      });
+      const { data } = await octokit.rest.repos.listTags({ ...repo, per_page: perPageOf(args) });
       return data;
     }
     case 'github__create_release': {
       const { data } = await octokit.rest.repos.createRelease({
-        ...repoArgs(args),
-        tag_name: args.tag_name as string,
-        target_commitish: args.target_commitish as string | undefined,
+        ...repo,
+        tag_name: call.tagName,
+        target_commitish: call.targetCommitish,
         name: args.name as string | undefined,
         body: args.body as string | undefined,
         draft: args.draft as boolean | undefined,
@@ -277,31 +262,48 @@ export async function dispatchGithubTool(
       return data;
     }
     case 'github__delete_release': {
-      await octokit.rest.repos.deleteRelease({
-        ...repoArgs(args),
-        release_id: args.release_id as number,
-      });
-      return { deleted: true, release_id: args.release_id };
+      await octokit.rest.repos.deleteRelease({ ...repo, release_id: call.releaseId });
+      return { deleted: true, release_id: call.releaseId };
     }
-    default:
-      throw new Error(`Unknown GitHub MCP tool: ${tool}`);
   }
 }
 
 /**
+ * The default branch of the repository, for a `create_branch` that names no
+ * base. GitHub's answer lands in a request path like an argument would, so
+ * it goes through the same grammar.
+ */
+async function defaultBranchOf(octokit: OctokitLike, call: RepoCall): Promise<string> {
+  const { data } = await octokit.rest.repos.get({
+    owner: call.target.owner,
+    repo: call.target.repo,
+  });
+  const branch = branchName(data.default_branch);
+  if (branch === null) {
+    throw new Error(
+      `${call.tool}: the default branch GitHub answered for ${call.target.ref} is not a branch name; nothing created. Name the base with 'from_branch'.`,
+    );
+  }
+  return branch;
+}
+
+/**
  * `merge_pull_request` is classified on the base branch the caller declares
- * (`declaredMergeBase`), and GitHub's merge endpoint takes no base : it
- * merges into the pull request's own. Read the pull request first and refuse
- * the merge unless the two agree, so a declared `feature/x` can never merge
- * into `main` under the risks of a feature branch.
+ * (`call.base`), and GitHub's merge endpoint takes no base : it merges into
+ * the pull request's own. Read the pull request first and refuse the merge
+ * unless the two agree, so a declared `feature/x` can never merge into `main`
+ * under the risks of a feature branch.
  */
 async function assertPullRequestTargetsDeclaredBase(
   octokit: OctokitLike,
-  args: Readonly<Record<string, unknown>>,
-  pullNumber: number,
+  call: Extract<RepoCall, { tool: 'github__merge_pull_request' }>,
 ): Promise<void> {
-  const declared = declaredMergeBase(args);
-  const pull = await octokit.rest.pulls.get({ ...repoArgs(args), pull_number: pullNumber });
+  const { pullNumber, base: declared } = call;
+  const pull = await octokit.rest.pulls.get({
+    owner: call.target.owner,
+    repo: call.target.repo,
+    pull_number: pullNumber,
+  });
   const actual = baseRefOf(pull.data);
   if (actual === undefined) {
     throw new Error(

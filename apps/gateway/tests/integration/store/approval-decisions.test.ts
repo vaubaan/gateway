@@ -376,8 +376,29 @@ describe('store: the approval gate', () => {
       const before = await store.missions.getById(missionId);
       t.clock.advance(1_000);
       const same = await store.missions.setGate(missionId, MERGE, 'approval', creator);
-      expect(same).toEqual({ mission: before, previous: 'approval' });
+      expect(same).toEqual({ mission: before, previous: 'approval', openingClosed: false });
       expect(await eventsOf()).toEqual([]);
+    });
+
+    it('`closeOpening` on a gate already `approval`: the event that ends an opening, and nothing else', async () => {
+      await store.sessions.getOrCreate(missionId);
+      t.clock.advance(1_000);
+      const closed = await store.missions.setGate(missionId, MERGE, 'approval', creator, {
+        closeOpening: true,
+      });
+      expect(closed).toMatchObject({ previous: 'approval', openingClosed: true });
+      expect((await store.missions.getById(missionId))?.policy).toEqual(
+        expect.arrayContaining([expect.objectContaining({ riskId: MERGE, gate: 'approval' })]),
+      );
+      expect(await eventsOf()).toMatchObject([
+        { kind: 'gate-changed', riskId: MERGE, actorUserId: creator },
+      ]);
+      // It only ever closes: it does nothing to a gate that is `auto`, or being set to `auto`.
+      const auto = await store.missions.setGate(missionId, READ, 'auto', creator, {
+        closeOpening: true,
+      });
+      expect(auto).toMatchObject({ previous: 'auto', openingClosed: false });
+      expect(await eventsOf()).toHaveLength(1);
     });
 
     it('a risk outside the policy is null; an unknown mission is a NotFoundError', async () => {

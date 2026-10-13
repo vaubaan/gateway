@@ -54,6 +54,7 @@ export const MANAGEMENT_REFUSAL_CODES = [
   'draft-refused',
   'mission-not-found',
   'mission-inactive',
+  'mission-not-issued-here',
   'unknown-provider',
   'unknown-connection',
   'rate-limited',
@@ -189,6 +190,15 @@ function missionNotFound(missionId: string): ManagementRefusal {
   };
 }
 
+function notIssuedHere(missionId: string): ManagementRefusal {
+  return {
+    code: 'mission-not-issued-here',
+    message: `Mission "${missionId}" was not issued through this delegation; its token is not rotated here.`,
+    hint: 'You rotate only the missions this delegation issued (`issued_via.this_delegation` in `list_my_missions`). The user rotates any of their missions in the web interface, on the mission’s page. You may still end this mission with `revoke_mission`, or issue a new one.',
+    mission_id: missionId,
+  };
+}
+
 export class ManagementTools {
   constructor(private readonly deps: ManagementToolsDeps) {}
 
@@ -260,12 +270,12 @@ export class ManagementTools {
       const detail = await this.deps.missions.get(user, input.mission_id);
       if (!detail) return refused(missionNotFound(input.mission_id));
       return done({
-        missions: [missionDetailView(detail, actor.clientId, maskedToken)],
+        missions: [missionDetailView(detail, actor, maskedToken)],
         hidden_closed: 0,
       });
     }
     const all = (await this.deps.missions.list(user)).map((overview) =>
-      missionView(overview, actor.clientId, maskedToken),
+      missionView(overview, actor, maskedToken),
     );
     const shown = all.filter(
       (m) => input.include_closed === true || (m.state !== 'revoked' && m.state !== 'expired'),
@@ -338,10 +348,14 @@ export class ManagementTools {
   }
 
   /**
-   * A new token for one of the user's missions; the previous one stops
-   * working. Only a mission that serves calls is rotated: a revoked, expired
-   * or orphaned one is refused — orphaned as the user's authority stands now
-   * (the mission service derives it at every read).
+   * A new token for a mission this delegation issued; the previous one stops
+   * working. A mission of the user that the delegation did not issue — the
+   * human's own, another client's, an earlier delegation's — is refused: the
+   * answer carries the new token, and a delegated client must not come to hold
+   * the token of a mission nobody issued to it. Only a mission that serves
+   * calls is rotated: a revoked, expired or orphaned one is refused — orphaned
+   * as the user's authority stands now (the mission service derives it at
+   * every read).
    */
   async rotateMissionToken(
     actor: ManagementActor,
@@ -350,13 +364,17 @@ export class ManagementTools {
     const user = { id: actor.userId };
     const detail = await this.deps.missions.get(user, input.mission_id);
     if (!detail) return refused(missionNotFound(input.mission_id));
+    if (detail.mission.delegationId !== actor.delegationId) {
+      this.log('rotate_mission_token', actor, 'mission-not-issued-here', detail.mission.id);
+      return refused(notIssuedHere(detail.mission.id));
+    }
     if (detail.state.kind !== 'active') {
       this.log('rotate_mission_token', actor, 'mission-inactive', detail.mission.id);
       return refused(
         inactive(
           detail.mission.id,
           detail.state.kind,
-          missionView(detail, actor.clientId, maskedToken).orphan,
+          missionView(detail, actor, maskedToken).orphan,
         ),
       );
     }
@@ -367,6 +385,9 @@ export class ManagementTools {
     });
     if (!result.ok) {
       if (result.reason === 'not-found') return refused(missionNotFound(input.mission_id));
+      if (result.reason === 'not-issued-by-delegation') {
+        return refused(notIssuedHere(input.mission_id));
+      }
       return refused(inactive(input.mission_id, result.state, null));
     }
     this.log('rotate_mission_token', actor, 'rotated', result.mission.id);
