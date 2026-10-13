@@ -1,0 +1,139 @@
+/**
+ * An ephemeral instance for the mission tests: the real composition root on
+ * the `:memory:` store, with a registry of real plugins (their catalogs and
+ * presets are what issuance is about) and connections seeded straight through
+ * the repositories. Shared by the vitest integration suite and the Playwright
+ * launcher. Not for production: the root's own default registry is wired by
+ * the features that own the provider list.
+ */
+import cloudflareDnsPlugin from '@vaubaan/plugin-cloudflare-dns';
+import githubPlugin from '@vaubaan/plugin-github';
+import gmailPlugin from '@vaubaan/plugin-gmail';
+import railwayPlugin from '@vaubaan/plugin-railway';
+import { PluginRegistry } from '@vaubaan/plugin-sdk';
+import sshPlugin from '@vaubaan/plugin-ssh';
+import stripePlugin from '@vaubaan/plugin-stripe';
+import supabasePlugin from '@vaubaan/plugin-supabase';
+import vercelPlugin from '@vaubaan/plugin-vercel';
+
+import { SESSION_COOKIE } from '../../../src/server/auth';
+import { buildRoot, type GatewayRoot, type RootDeps } from '../../../src/server/compose/root';
+import { memoryStoreDeps } from '../../../src/server/compose/testing';
+import { loadInstanceConfig } from '../../../src/server/config';
+import { validEnv } from '../../../src/server/config/testing';
+import { seedConnection, type SeededConnection } from '../../../src/server/missions/testing';
+import type { UserRecord } from '../../../src/server/store/types';
+
+export const PUBLIC_URL = 'https://gateway.example.com';
+
+/** The plugins the gateway app depends on, as a test registry. */
+export function testRegistry(): PluginRegistry {
+  return new PluginRegistry([
+    githubPlugin,
+    supabasePlugin,
+    vercelPlugin,
+    gmailPlugin,
+    stripePlugin,
+    railwayPlugin,
+    sshPlugin,
+    cloudflareDnsPlugin,
+  ]);
+}
+
+export interface TestInstanceOptions {
+  readonly publicUrl?: string;
+  readonly deps?: RootDeps;
+  readonly env?: Record<string, string | undefined>;
+}
+
+export async function buildTestRoot(options: TestInstanceOptions = {}): Promise<GatewayRoot> {
+  return buildRoot({
+    loadConfig: () =>
+      loadInstanceConfig({
+        env: validEnv({ VAUBAAN_PUBLIC_URL: options.publicUrl ?? PUBLIC_URL, ...options.env }),
+      }),
+    buildRegistry: async () => testRegistry(),
+    logWrite: () => undefined,
+    ...memoryStoreDeps,
+    ...options.deps,
+  });
+}
+
+export interface SeededInstance {
+  readonly ada: UserRecord;
+  readonly bob: UserRecord;
+  readonly github: SeededConnection;
+  readonly supabase: SeededConnection;
+  readonly vercel: SeededConnection;
+  readonly gmail: SeededConnection;
+}
+
+export const ADA = { subject: 'idp|ada', email: 'ada@example.com', displayName: 'Ada' } as const;
+export const BOB = { subject: 'idp|bob', email: 'bob@example.com', displayName: 'Bob' } as const;
+
+/**
+ * Ada owns four connections: GitHub (three repositories), Supabase (a
+ * staging and a prod project), Vercel (two projects, no label: the plugin
+ * derives the env from the call) and Gmail (experimental plugin, no
+ * resource). Bob owns nothing.
+ */
+export async function seedInstance(root: GatewayRoot): Promise<SeededInstance> {
+  const { store } = root;
+  const ada = await store.users.upsertFromIdp(ADA);
+  const bob = await store.users.upsertFromIdp(BOB);
+  const owner = { kind: 'user', id: ada.id } as const;
+  const github = await seedConnection(store, {
+    provider: 'github',
+    owner,
+    displayName: 'acme-org',
+    resources: [
+      { ref: 'acme/app', displayName: 'acme/app' },
+      { ref: 'acme/web', displayName: 'acme/web' },
+      { ref: 'acme/infra', displayName: 'acme/infra' },
+    ],
+  });
+  const supabase = await seedConnection(store, {
+    provider: 'supabase',
+    owner,
+    displayName: 'Acme Supabase',
+    resources: [
+      { ref: 'stgprojectref', displayName: 'app-staging', env: 'staging' },
+      { ref: 'prdprojectref', displayName: 'app-prod', env: 'prod' },
+    ],
+  });
+  const vercel = await seedConnection(store, {
+    provider: 'vercel',
+    owner,
+    displayName: 'Acme Vercel',
+    resources: [
+      { ref: 'prj_app', displayName: 'app' },
+      { ref: 'prj_web', displayName: 'web' },
+    ],
+  });
+  const gmail = await seedConnection(store, {
+    provider: 'gmail',
+    owner,
+    displayName: 'ops mailbox',
+    resources: [],
+  });
+  return { ada, bob, github, supabase, vercel, gmail };
+}
+
+/** Headers of a same-origin browser request carrying the user's session. */
+export async function sessionHeaders(
+  root: GatewayRoot,
+  user: UserRecord,
+  extra: Record<string, string> = {},
+): Promise<Headers> {
+  const session = await root.auth.sessions.create({
+    kind: 'user',
+    userId: user.id,
+    login: { email: user.email, groups: [] },
+  });
+  return new Headers({
+    cookie: `${SESSION_COOKIE}=${session.id}`,
+    origin: root.config.publicUrl.origin,
+    'content-type': 'application/json',
+    ...extra,
+  });
+}
