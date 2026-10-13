@@ -600,6 +600,7 @@ const RULES: Readonly<Record<string, Rule>> = {
     writes: { act: 'mission-rotated', object: 'mission', actor: 'alice' },
   },
   'MissionService.orphanedOn': READ,
+  'MissionService.onConnection': READ,
   'MissionService.revoke': {
     kind: 'mutation',
     target: missions,
@@ -755,6 +756,7 @@ const RULES: Readonly<Record<string, Rule>> = {
   // ── shares ────────────────────────────────────────────────────────────────
   'ShareService.contextFor': READ,
   'ShareService.received': READ,
+  'ShareService.holders': READ,
   'ShareService.forecast': READ,
   'ShareService.share': {
     kind: 'mutation',

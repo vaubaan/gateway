@@ -2,7 +2,7 @@
 title: Web app — route map, layouts, shell, design system
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - apps/gateway/src/app/layout.tsx
   - apps/gateway/src/app/(app)/page.tsx
@@ -20,7 +20,8 @@ tracks:
   - apps/gateway/src/lib/theme-server.ts
   - apps/gateway/src/app/(app)/design/
   - apps/gateway/src/app/(app)/settings/
-  - apps/gateway/src/app/(app)/delegations/layout.tsx
+  - apps/gateway/src/app/(app)/settings/connected-apps/layout.tsx
+  - apps/gateway/src/components/settings/
   - apps/gateway/src/components/LocalDate.tsx
   - apps/gateway/src/components/auth/NeedsUser.tsx
   - apps/gateway/src/components/auth/AuthPage.tsx
@@ -75,9 +76,10 @@ endpoints behind them, and the agent-facing MCP door from the same process.
   from the browser.
 - **Client components are the exception** (`'use client'`): the mission
   creation form with its preset panel and its Custom editor, the mission actions, the gate control
-  of the mission page (`GateControl`), its "Members and tokens" section (`TeamSection`), the bootstrap kit view, the share form
-  (`ShareForm`), `RevokeConnection`, `LocalDate`, the body of
-  a service's reference (`ProviderView` and its sections), the gallery of
+  of the mission page (`GateControl`), its "Members and tokens" section (`TeamSection`), the bootstrap kit view, the "Give access" dialog
+  (`GiveAccessDialog`), the confirmations of the account page (`RemoveAccess`, `TransferOwnership`,
+  `RevokeConnection`, `CloseOrphanedMission`), `LocalDate` and the time of an activity line (`When`), the body of
+  a service's reference (`ServiceView` and its sections), the gallery of
   `/design`, the parts of the shell that need the browser (`NavLinks`,
   `UserMenu`, `ThemeToggle`) and the components of the design system that hold
   state or read the path (marked "client" in
@@ -115,7 +117,6 @@ endpoints behind them, and the agent-facing MCP door from the same process.
 | `/admin/telemetry`, `POST /api/admin/telemetry`                                                                             | `admin/(guarded)/telemetry/page.tsx`, `api/admin/telemetry/route.ts`                                          | [telemetry](telemetry.md)                                                                    |
 | `/accounts`, `/accounts/new`, `/accounts/new/<provider>`, `/accounts/<id>`                                                  | `(app)/accounts/**/page.tsx`                                                                                  | [connections](connections.md)                                                                |
 | `/accounts/<id>/share`, `POST /accounts/<id>/shares`, `…/shares/<id>/revoke`, `…/transfer`                                  | `(app)/accounts/[id]/share/`, `shares/`, `transfer/`                                                          | [authority](authority.md)                                                                    |
-| `/shares`                                                                                                                   | `(app)/shares/page.tsx`                                                                                       | [authority](authority.md)                                                                    |
 | `/admin/users`, `POST /admin/users/<id>/deactivate`, `…/<id>/reactivate`                                                    | `admin/(guarded)/users/**`                                                                                    | [authentication](authentication.md)                                                          |
 | `/admin/groups`, `POST /admin/groups/create`, `…/<id>/members[/<userId>/remove]`                                            | `admin/(guarded)/groups/**`                                                                                   | [authority](authority.md)                                                                    |
 | `/admin/connections`, `POST /admin/connections/<id>/reassign`                                                               | `admin/(guarded)/connections/**`                                                                              | [authority](authority.md)                                                                    |
@@ -135,7 +136,7 @@ endpoints behind them, and the agent-facing MCP door from the same process.
 | `GET /.well-known/oauth-authorization-server`, `GET /.well-known/oauth-protected-resource/mcp/manage`                       | `.well-known/oauth-authorization-server/route.ts`, `.well-known/oauth-protected-resource/mcp/manage/route.ts` | [management-door](management-door.md)                                                        |
 | `POST /oauth/register`, `GET /oauth/authorize`, `POST /oauth/authorize/decision`, `POST /oauth/token`, `POST /oauth/revoke` | `oauth/**/route.ts`                                                                                           | [management-door](management-door.md)                                                        |
 | `GET, POST, DELETE /mcp/manage`                                                                                             | `mcp/manage/route.ts`                                                                                         | [management-door](management-door.md)                                                        |
-| `/delegations`, `POST /delegations/<id>/revoke`                                                                             | `(app)/delegations/**`                                                                                        | [management-door](management-door.md)                                                        |
+| `/settings/connected-apps`, `POST …/<id>/revoke`                                                                            | `(app)/settings/connected-apps/**`                                                                            | [management-door](management-door.md)                                                        |
 | `/admin/oauth-clients`, `POST /admin/oauth-clients/<id>`                                                                    | `admin/(guarded)/oauth-clients/**`                                                                            | [management-door](management-door.md)                                                        |
 | `GET /healthz`                                                                                                              | `healthz/route.ts`                                                                                            | [configuration](configuration.md)                                                            |
 
@@ -150,7 +151,7 @@ export `HEAD` and `OPTIONS`, and `POST /oauth/register`, `/oauth/token` and
 `/oauth/revoke` also export `OPTIONS`, on the same handler
 ([management-door](management-door.md)). A segment that holds only a
 `route.ts` has no page: `/accounts/<id>/shares`, `/accounts/connect/…`,
-`/delegations/<id>/revoke` and the `admin/(guarded)` mutations answer `POST`
+`/settings/connected-apps/<id>/revoke` and the `admin/(guarded)` mutations answer `POST`
 only.
 
 ## Layouts
@@ -178,7 +179,7 @@ only.
 - **`(app)/layout.tsx`** — the human surface: `currentPrincipal()`; no
   principal → `redirect('/login')`; otherwise
   `<AppShell principal instance>`, `instance` being the host of the public URL.
-- **`(app)/delegations/layout.tsx`** — connected apps are part of Settings: the
+- **`(app)/settings/connected-apps/layout.tsx`** — connected apps are a page of Settings: the
   page inside `SettingsFrame` (the local navigation of Settings).
 - **`admin/(guarded)/layout.tsx`** — `adminDecision()`; no session → the
   admin sign-in; an administrator → `<AdminShell principal instance>`, the
@@ -203,8 +204,11 @@ under `(app)/` carry the same names; the modules under `src/server/` keep the
 protocol's (`connections`, `requests`, `audit`, `providers`).
 
 `LEGACY_REDIRECTS` in `next.config.ts` is the list of the paths the interface
-had before (`/accounts`, `/accounts/<anything but callback>/**`,
-`/waiting/**`, `/activity`, `/reference/**`); `redirects()` answers each with a
+had before (`/connections`, `/connections/<anything but callback>/**`,
+`/requests/**`, `/audit`, `/providers/**`, and the two pages that were folded
+into another: `/shares` → `/accounts`, `/delegations` →
+`/settings/connected-apps` with `POST /delegations/<id>/revoke`);
+`redirects()` answers each with a
 permanent redirect. Next sends 308: a form post keeps its method and its body,
 and the query string is carried over. A redirect is answered before any page
 or route is looked up.
@@ -219,9 +223,11 @@ Three kinds of path are never redirected, because they are part of a protocol:
   creator to `/waiting/<id>` through `inboxRequestPath`;
 - `/mcp/**`, `/api/**`, `/oauth/**`, `/auth/**`, `/.well-known/**`.
 
-`/shares` and `/delegations` keep their paths until their pages are redesigned;
-neither has a navigation entry: the first is linked from Accounts, the second
-is in the local navigation of Settings.
+What a colleague gave access to is a region of `/accounts` ("Shared with
+you"), and connected apps are a page of Settings, under its path
+(`ROUTES.connectedApps`, the server's `DELEGATIONS_PAGE`). The pages of the
+administration keep `/admin/**` (ADR
+[redesigned-pages-accounts-reference-activity-settings](../decisions/redesigned-pages-accounts-reference-activity-settings.md)).
 
 ## Session helpers — `lib/auth/session.ts`
 
@@ -237,15 +243,15 @@ authority is recomputed on every request.
 | `requireOperator()`  | every page under `admin/(guarded)`                                   | redirect to the admin sign-in | the principal while the token is active   | the principal if operator, else "not found" |
 
 - `currentUser()` is the single answer to "the bootstrap operator opened a page
-  that needs a user": Missions, the mission session, Connections (the share
-  page included), Shares received, Requests and Delegations all render
-  `NeedsUser` (`components/auth/NeedsUser.tsx`), one warning banner
-  that says the bootstrap token owns no mission, connection or request and
-  links to Administration → Identity provider. No page redirects the bootstrap
+  that needs a user": Missions, the mission session, Accounts (the "Give
+  access" dialog included), Waiting for you and Connected apps all render
+  `NeedsUser` (`components/auth/NeedsUser.tsx`), one note
+  that says the install token owns no mission, account or request and
+  links to Settings → Sign-in. No page redirects the bootstrap
   operator elsewhere.
 - `currentActor()` (`lib/connections/session.ts`) is `currentUser()` plus the
-  `Actor` (`{ user, groups }`) the connection service expects; the Connections,
-  share and Shares received pages use it. The same file holds `firstParam`,
+  `Actor` (`{ user, groups }`) the connection service expects; the Accounts
+  pages use it. The same file holds `firstParam`,
   `PageSearchParams` and `takeNotice`.
 - `adminDecision()` is the undecorated answer behind `requireOperator()`
   (`{ root, decision }`): the `admin/(guarded)` layout uses it to render the
@@ -291,8 +297,8 @@ seven is the budget (style guide §1).
   strong weight.
 - **Which entry is current** is `sectionOf(pathname)` (`nav.ts`, pure): the
   home is its own path only; any other entry is its path and what is under
-  it; and the pages that have no entry belong to one — `/shares` to Accounts,
-  `/delegations`, `/admin/**` and `/design` to Settings. Outside the
+  it; and the pages that have no entry belong to one — `/admin/**` and
+  `/design` to Settings (connected apps are under `/settings` itself). Outside the
   application (`/login`) it is `null`.
 - **The count** of "Waiting for you" is `OpenRequestCount` (server component):
   the number of open requests awaiting the signed-in person as creator, in
@@ -332,7 +338,7 @@ wide table asks for the wide measure from its own style sheet
 
 **Settings.** `settingsNav(administrator)` (`settings-nav.ts`, pure) gives the
 groups of the local navigation: **You** — Preferences (`/settings`), Connected
-apps (`/delegations`) — and, for an administrator
+apps (`/settings/connected-apps`) — and, for an administrator
 (`isOperatorPrincipal(principal)`, `components/auth/principal.ts`),
 **Administration** — Setup (`/admin`), Sign-in (`/admin/identity-provider`),
 Company apps (`/admin/provider-apps`), People (`/admin/users`), Teams
@@ -340,9 +346,15 @@ Company apps (`/admin/provider-apps`), People (`/admin/users`), Teams
 Registered apps (`/admin/oauth-clients`), in the order a gateway is set up.
 No label is used for two things. `SettingsFrame({ principal, children })`
 renders it beside its children (`SubNavFrame` + `SubNav`); the
-`admin/(guarded)` layout (through `AdminShell`), the `delegations` layout and
-the Settings page use it. Until the settings pages are redesigned, the
-entries lead to the pages that exist, under their earlier titles.
+`admin/(guarded)` layout (through `AdminShell`), the layout of connected
+apps and the Settings page use it. Each page under it opens with a
+`PageHeader` whose title is its entry (`SETTINGS_PAGES` in
+`lib/vocabulary.ts`) and shares `components/settings/settings.module.css`;
+what each one shows is in the handbook of its feature
+([authentication](authentication.md): Setup, Sign-in, People;
+[connections](connections.md): Company apps; [authority](authority.md): Teams,
+Accounts without owner; [telemetry](telemetry.md);
+[management-door](management-door.md): Connected apps, Registered apps).
 
 `/settings` (`(app)/settings/page.tsx`, `requirePrincipal()`) holds the theme
 as three named options (`ThemeChoiceControl`, `data-testid="settings-theme"`),
@@ -661,6 +673,8 @@ each one is in its file header and on the gallery.
 | `ToastProvider`, `useToast`, `ToastCard`                                   | client. Mounted once by the shell; `useToast()` returns `toast({ title, description?, tone? })`; announced politely; leaves after five seconds unless it is a failure                                                                                                                                                                                                    |
 | `Disclosure`, `DetailScope`, `DetailToggle`, `DetailOnly`, `useRemembered` | client. Details on demand, remembered in `localStorage` under `vaubaan:open:<id>` (`id` names the page and the region). A scope flips `data-details` on a wrapper: the `detail` columns of a `DataTable` and any `DetailOnly` block inside follow it, even when rendered by the server                                                                                   |
 | `TabList`, `TabPanel`, `TabItem`                                           | client. Tabs with the ARIA roles and keyboard; the state belongs to the caller                                                                                                                                                                                                                                                                                           |
+| `PickGrid`, `PickCard`                                                     | a handful of choices of the same kind as quiet bordered cards — a mark, a name, one line that says how; `unavailable` is dashed and says why. The one exception to "rows, not cards": the cards are the action (the services an account can be connected to)                                                                                                             |
+| `ConfirmSubmit`                                                            | client. A button whose act is a plain form post, asked first: it opens a `ConfirmDialog` with a required `consequence` and submits the form (`action`, hidden `fields`) on confirmation. For an act that stops, removes or hands over something                                                                                                                          |
 | `Segmented`, `FilterChips`, `SearchField`, `FilterOption`                  | client. One choice among a few; facets that add up; a search field. An option with `href` is a link (the filter lives in the URL), otherwise a button                                                                                                                                                                                                                    |
 | `Field`, `Input`, `Textarea`, `Select`, `Checkbox`, `Radio`, `Switch`      | `Field` takes `label`, `htmlFor`, `shape` (the expected shape, said in the label), `optional`, `hint`, `error`; it gives its control `aria-describedby` and, with an error, `aria-invalid`. Controls take `size="sm"` and `mono`                                                                                                                                         |
 | `Code`, `CodeBlock`, `CodeTone`, `CopyButton`                              | inline code; a dark block with a Copy button that copies `copy` (or the text when it is a plain string); a keyword, a string or a comment inside a block; a copy button on its own                                                                                                                                                                                       |
@@ -726,20 +740,13 @@ and removed with the last page that imports them:
 
 Shared by the pages that used to carry a copy each:
 
-- `components/risk/RiskExplain.tsx`: how a risk is explained everywhere —
-  `RiskExplain` (a compact row: label and class, id and one line of reason
-  that unfolds, the vector strip), `VectorStrip`, `VectorLegend`,
-  `RiskIdLink`, `RiskClassTag`, `RiskReason`, `RiskMarkers`, `RiskMarkerNotes` (handbook
-  [missions](missions.md), "How a risk is explained"). The Custom editor of
-  mission creation, the Share dialog, the mission page and the provider
-  reference render a risk through it; the Requests pages, the session page,
-  Audit, Shares received and the connection page print each risk id with
-  `RiskIdLink`, a `Slug` of kind `risk`;
-
-- `components/risk/RiskBadges.tsx`: `SeverityBadge({ level })`, the catalog
-  severity with its tone (Shares received, the Share dialog, the mission form),
-  and `GateBadge({ gate })`, `approval` as a warning badge and `auto` as the
-  plain word (mission page, session page, request page);
+- `components/risk/RiskExplain.tsx` (`RiskExplain`, `VectorStrip`,
+  `VectorLegend`, `RiskIdLink`, `RiskClassTag`, `RiskReason`, `RiskMarkers`,
+  `RiskMarkerNotes`) and `components/risk/RiskBadges.tsx` (`SeverityBadge`,
+  `GateBadge`): how a risk was explained before the redesign. No page imports
+  them any more — a permission is a `PermissionRow`, a `PermissionTable`, a
+  `PermissionList` (`components/connections/`) or its id in `Mono` — and only
+  `tests/unit/app/risk-explain.test.tsx` renders them;
 - `app/(app)/missions/message-of.ts`: `messageOf(body, status)`, the `message`
   of a JSON refusal of the mission API or "The instance answered `<status>`."
   (the "ask me first" switch, the acts of a mission page, the mission form);
@@ -749,42 +756,52 @@ Shared by the pages that used to carry a copy each:
 `components/LocalDate.tsx` (client) renders a timestamp: the ISO form on the
 server, the browser's locale after hydration, without a hydration mismatch.
 `dateOnly` drops the time. The Missions list, the mission page, its session
-page, the Requests pages, Audit, Delegations and three Administration pages
-(`/admin`, `/admin/bootstrap`, `/admin/oauth-clients`) and Shares received
-use it; the Connections list and the connection page still print the UTC day
-(`iso.slice(0, 10)`).
+page, Connected apps and three Administration pages (`/admin`,
+`/admin/bootstrap`, `/admin/oauth-clients`) use it. The accounts pages print a
+short day (`shortDate` of `lib/vocabulary.ts`: "14 Sep", UTC) or how long ago
+(`ago`); the activity record prints the time of a line with its own `When`
+(`activity/when.tsx`: the clock time, the day under it).
 
 The other shared components belong to one feature and are described in its
 handbook:
 
-- `components/connections/parts.tsx` (server): `StateBadge({ status })` for a
-  connection status, `ExperimentalBadge`, `NoticeBanner({ notice })` for the
-  one-time notice a redirect left, `credentialKindLabel(kind)` and
-  `CredentialFieldInputs` with `credentialFieldId`
+- `components/connections/parts.tsx` (server): `AccountState({ status })` (a
+  mark only for an exception: "Needs reconnecting", "Needs an owner"; a plain
+  word otherwise), `ExperimentalBadge`, `NoticeBanner({ notice })` for the
+  one-time note a redirect left, `credentialKindLabel(kind)` and
+  `CredentialFieldInputs` with `credentialFieldId`, which says the shape a
+  field expects in its label (`shape.ts`: `shapeOfPattern`)
   ([connections](connections.md));
-- `components/connections/RevokeConnection.tsx` (client): the Revoke button of
-  a connection, a `DangerConfirm` whose phrase is the connection name and
-  whose confirmation submits a plain POST form;
+- `components/connections/ServicePicker.tsx` (the services an account can be
+  connected to, as `PickCard`s) and `PermissionList.tsx` (the explicit list
+  behind a count such as "12 of 17");
+- `components/connections/RevokeConnection.tsx` (client): "Disconnect this
+  account…", a `DangerConfirm` whose phrase is the name of the account, which
+  says how many missions stop and whose confirmation submits a plain POST
+  form; `CloseOrphanedMission.tsx` (client): "Close" on a mission that
+  stopped for want of an owner, typed too;
 - `components/telemetry/ValidationBadge.tsx`: the community validation status
-  on the Connections list and the connection page, nothing when there is no
-  status ([telemetry](telemetry.md));
+  as a quiet tag (the details of an account, the reference), nothing when
+  there is no status ([telemetry](telemetry.md));
 - `app/(app)/missions/mission-view.ts`: `missionMark(state, waiting)`, the
   state of a mission in words, with a tone only for an exception
   ([missions](missions.md), "The mission pages");
 - `components/auth/AuthPage.tsx`: `AuthPage` and `AuthHeading`, the frame of a
   page outside the shell ([Pages outside the shell](#pages-outside-the-shell)).
 
-## The provider reference — `/reference`
+## The reference — `/reference`
 
-Documentation of the instance inside the instance (spec §4.2 "Providers"): what
-each shipped plugin connects to and what a mission can accept on it. Both pages
+Documentation of the gateway inside the gateway (spec §4.2 "Providers"): what
+each shipped plugin connects to and what a mission can hold on it. Both pages
 call `requirePrincipal()`: any session reads them, the bootstrap operator
-included; they show no connection, no mission and no credential. The
-structural test of the surface (`tests/unit/app/app-guard.test.ts`) lists them
-with `/activity` among the pages open to any session.
+included; they show no account, no mission and no credential. The structural
+test of the surface (`tests/unit/app/app-guard.test.ts`) lists them with
+`/activity` among the pages open to any session. The pages say **service** for
+a provider, **permission** for a risk and **part** for a plane; ids, tool
+names and patterns are printed as the protocol spells them, in mono.
 
 Everything is generated from the plugin registry by
-`src/server/providers/reference.ts` (pure, no IO); no provider has a
+`src/server/providers/reference.ts` (pure, no IO); no service has a
 hand-written page, and a plugin added to the registry has its page.
 
 | Function                               | Gives                                                                                                                                                                    |
@@ -804,100 +821,104 @@ anchor), the tools the plugin declares for it (`declared_tools`, from
 reference has `plane_filters` (slug, description, counts), empty when the
 model has one plane.
 
-**The index** (`providers/page.tsx`) is a grid of cards. A card differs from
-its neighbours by what it holds: the name, the credential kind, the one-line
-description, the planes of the model as `plane` slugs, the environments the
-catalog knows, `experimental` and the community validation badge, and three
-counts with the glyph of their kind (presets, risks, tools). The lead is one
-line; the rest, with the legend of the glyphs, is behind "More".
+**The frame** (`reference/frame.tsx`, `ReferenceFrame`): the `PageHeader` of
+the place ("Reference", on the wide measure) and the services as a local
+navigation beside the content (`SubNav`: "All services", then one entry per
+plugin with its `ServiceMark`).
 
-**`/reference/<id>`** is a compact header rendered by the server (`[id]/page.tsx`)
-and a client body (`[id]/provider-view.tsx`):
+**The index** (`reference/page.tsx`) is a quiet list, one row per service: its
+mark, its name (a link; "experimental" and the community validation tag where
+they apply), the plugin's one-line description, and "15 permissions · 3 presets
+· 26 tools" at the end (`catalogSize`). `data-testid="provider-<id>"`.
 
-- **Header** — name, `experimental`, the community validation badge
-  (`root.telemetry.stats.statusFor`, absent when telemetry gives none); plugin
-  and catalog versions and the maintainer handbook link (`docsUrl`) on one
-  monospace line; the plugin's `summary` (plain words: what a connection is,
-  what a resource is, where the environment comes from —
-  [plugin-sdk](plugin-sdk.md)); three facts in one row: what it connects to,
-  the credential kind, the environments with where they come from.
+**`/reference/<id>`** is rendered by the server (`[id]/page.tsx`) down to the
+tabs, then by a client body (`[id]/service-view.tsx`, `ServiceView`):
+
+- **Header** — a `PageHeader` at level 2 (the `h1` stays "Reference"): the
+  mark, the name, "experimental", and the plugin's `summary` as the lede
+  (plain words: what an account is, what a resource is, where the environment
+  comes from — [plugin-sdk](plugin-sdk.md)). Under it one line of counts and
+  how an account connects, and "About this service" (a `Disclosure`): what it
+  connects to, the credential, the environments and where they come from, the
+  plugin and catalog versions with the maintainer notes (`docsUrl`), the
+  community validation tag.
 - **Tabs** (`TabList`, sticky under the top of the window) — one section in
-  view at a time, in the order a reader needs them: **Presets** (the default),
-  **Risks**, **Data model**, **Tools**; Presets, Risks and Tools carry a count.
-  Selecting a tab writes its fragment (`#presets`, `#risks`, `#data-model`, `#tools`).
-- **Plane control** — only when the model has several planes (today
-  Supabase): native radios drawn as pills, "All", one per plane, and `other`
-  when something is filed there. It slices every tab at once: the rows of the
-  matrix, the risk list, the outline, the tools, and the counts on the tabs.
-  `data-testid="plane-control"`.
-- **Help** — "How to read this page" (`useHelp('provider-reference')`,
-  `#legend` opens it): presets and risks in one paragraph, how to read a risk
-  with the legend of the six axes and the two markers, what the glyphs mean
-  (`KindLegend`: the glyph of each kind — kinds carry no colour any more), how planes are read. Closed by default.
+  view at a time: **Permissions** (the default), **Tools**, **How it is
+  modelled**; the first two carry a count that follows the filters. Selecting
+  a tab writes its fragment (`#permissions`, `#tools`, `#data-model`).
+- **Filters**, under the tabs — a `SearchField` that narrows the permissions
+  (label, id, reason, declared tools) or the tools (name, description); and,
+  only when the model has several planes (today Supabase), a `Segmented`
+  "part of the service": "All", one per plane, and `other` when something is
+  filed there. It slices every tab at once. `data-testid="plane-control"`.
+- **How to read this page** — closed by default, remembered
+  (`useRemembered('reference:how-to-read')`; the fragment `#legend` opens it):
+  what a permission, a preset and "risk" are, the six words behind a severity
+  with the question each answers (`WhyCells`), permissions that exist once per
+  environment, "anything not named" and "being retired", and how parts are
+  read when there are several.
 
-The four sections, one file each beside the page:
+The three sections, one file each beside the page:
 
-1. **Presets** (`preset-matrix.tsx`, `#presets`) — one table: a column per
-   preset (`<th id="preset-<id>">`, a band, its label, its
-   counts, its description on three lines), a row per catalog entry grouped
-   into reads, writes and irreversible writes. A cell is the budget the preset
-   gives the risk — quota, rate limit, gate (`approval` as a badge) — once per
-   environment for an env-scoped risk, or a dash ("not included" to assistive
-   technology). The risk label and its id link to its entry in the Risks tab.
-   `data-testid`: `preset-matrix`, `preset-<id>`,
-   `cell-<preset id>-<risk id>`.
-2. **Risks** (`risk-list.tsx`, `#risks`) — the three groups, each under a
-   title that sticks below the tabs, as compact rows
-   (`<article id="risk-<id>">`): the label as a disclosure button, the severity
-   and the markers; the vector strip of its most severe variant; then the id,
-   one line of reason, the environments and the presets that include it as
-   `preset` slugs. Unfolded: the whole reason, a `Callout` per note (fallback,
-   deprecated with its replacement, token hand-out), the scope with the
-   explicit id per environment, the profile per environment when an override
-   changes it, each pattern in words with the pattern under it, the declared
-   tools, the plugin's rate ceiling. "Expand all" unfolds the list. An entry is
-   listed once, under the kind of its most severe variant, so its anchor is
-   unique. Fifteen entries, collapsed, measure about one and a half viewports
-   at 1280×800 (the browser test bounds it at 1.75).
-3. **Data model** (`data-model.tsx`, `#data-model`) — where the environment of
-   a call comes from (`EnvironmentReference.source`: `none` when the catalog has
-   no env-scoped entry; otherwise `call` when the plugin declares `envOf`, and
-   `resource-label` when it does not), then each plane as an outline with connectors: the
-   entity, its cardinalities as small annotations, its description; the
-   carrier of the environment has a badge and a band.
-4. **Tools** (`tool-table.tsx`, `#tools`) — a dense table: the name as a
-   `tool` slug, the description, required and optional arguments, the plane
-   when the model has several, and the risks. The columns have fixed shares
-   of the width (`reference.module.css`: tool 29 %, arguments 16 %, plane
-   10 %, risks 19 %, the description taking the rest), so that a qualified
-   risk id (`github.mint-install-token-clone`) holds on two lines at most. The
-   "Risks" column reads "by
-   arguments": a plugin classifies a call from its arguments and declares no
-   table of the risks of each tool; the page says so in one line and the rest
-   (`TOOL_RISKS_NOTE`: `tools/list` is filtered per provider, a listed tool can
-   still be refused, the catalog endpoint of the execution door is the precise
-   source) is behind "More". The one exception is a tool the plugin declares
-   in `tokenHandouts` ([plugin-sdk](plugin-sdk.md)): its row lists the
-   declared risks under a **"hands a token to the agent"** badge, a callout
-   above the table states `TOKEN_HANDOUT_NOTE` (spec §2.4), and each of those
-   risks carries a badge that says what the token can do —
-   **"hands a read-only token"** (warning tone) or **"hands a write token"**
-   (danger tone), from `RiskReference.token_access`, which follows the
-   plugin's `readOnlyRiskIds` — and, unfolded, the callout and the tool. The
-   note says the preset rule: a token that can write is handed only after the
-   creator approves the call, a read-only one may be handed without asking.
-   Today that is `github__mint_install_token`, `github.mint-install-token-clone`
-   (read-only, `auto` in the Developer preset) and
-   `github.mint-install-token-push` (write, `approval`).
+1. **Permissions** (`permissions.tsx`, `PermissionComparison`) — one table,
+   the permissions against the presets. Columns: the permission, its severity
+   (`SeverityChip` of its most severe variant), then one per preset
+   (`<th id="preset-<id>">`: its name, a link to its own column, and what it
+   holds — "10 · 2 ask", `presetHolds`). Rows are grouped by kind
+   (`PERMISSION_KINDS`: reads, writes, writes that cannot be undone); a row
+   (`<tr id="risk-<id>">`) is what the entry allows in words, its id in mono,
+   the environments it exists in, the tags "anything not named", "being
+   retired", "hands a read-only token" / "hands a write token", one line of
+   reason, and "why?". A cell is the limit the preset gives the entry — the
+   quota, with "asks first" when the gate is `approval`, once per environment
+   for an entry held per environment (the per-minute rate is the cell's
+   `title`) — or a dash ("not included" to assistive technology).
+   "why?" unfolds the entry under its row: the whole reason; the six words of
+   its vector (`WhyCells`; one set per environment when an override changes
+   it); the token hand-out note when it hands one; whether it is held once or
+   once per environment, with the explicit id of each; what it covers — each
+   pattern in words with the pattern after it; the tools the plugin declares
+   for it; its limits in each preset that includes it (per period, per minute,
+   runs freely or ask me first); the plugin's rate ceiling; the notes of the
+   fallback and of a deprecated entry with its replacement. "Unfold every
+   why" opens the list. An entry is listed once, under the kind of its most
+   severe variant, so its anchor is unique. The table has a fixed layout: the
+   presets and the severity keep their width, the permission takes the rest.
+   Fifteen entries, folded, measure about one and a half viewports at
+   1280×800 (the browser test bounds it at 1.75).
+   `data-testid`: `permission-comparison`, `preset-matrix`, `preset-<id>`,
+   `risk-<id>`, `cell-<preset id>-<risk id>`.
+2. **Tools** (`tools.tsx`, `ToolList`) — a `DataTable`: the name in mono, the
+   description, required and optional arguments, the part when the model has
+   several, and the permissions. That last column reads "by arguments": a
+   plugin classifies a call from its arguments and declares no table of the
+   permissions of each tool; the page says so in one line and the rest
+   (`TOOL_RISKS_NOTE`) is behind "Why no permission is listed per tool". The
+   one exception is a tool the plugin declares in `tokenHandouts`
+   ([plugin-sdk](plugin-sdk.md)): its row lists the declared ids under a
+   **"hands a token to the agent"** tag, each a link to its row in
+   Permissions, and a note above the table states `TOKEN_HANDOUT_NOTE` (spec
+   §2.4): a token that can write is handed only after the creator approves the
+   call, a read-only one may be handed without asking. Today that is
+   `github__mint_install_token`, `github.mint-install-token-clone` (read-only,
+   `auto` in the Developer preset) and `github.mint-install-token-push`
+   (write, `approval`). `data-testid`: `tool-table`, a row is
+   `tr[data-row="<tool name>"]`, `token-handout-note`.
+3. **How it is modelled** (`data-model.tsx`, `DataModelSection`) — where the
+   environment of a call comes from (`EnvironmentReference.source`: `none`
+   when the catalog has no entry held per environment; otherwise `call` when
+   the plugin declares `envOf`, and `resource-label` when it does not), then
+   each plane as an outline with connectors: the thing, its cardinalities as
+   small annotations, its description; what carries the environment is tagged.
 
-**Fragments.** `ProviderView` reads the fragment when the page opens and on
-every `hashchange` (`destinationOf`): a section id selects its tab;
-`#risk-<id>` selects Risks, unfolds the entry, scrolls to it and outlines it,
-and — when the plane in view does not show it — opens the entry's own plane;
-`#preset-<id>` selects Presets and outlines the column. Links inside the page
-call the same function, so the same link works twice in a row. What takes
-focus or is scrolled to stays clear of the sticky bar (`scroll-margin-top` from
-the measured height of the bar, `--bar-height`).
+**Fragments.** `ServiceView` reads the fragment when the page opens and on
+every `hashchange` (`destinationOf`): a tab id selects its tab, and so do the
+sections of the earlier page — `#presets` and `#risks` both select Permissions
+(`TAB_ALIASES`); `#risk-<id>` selects Permissions, clears the text filter,
+unfolds the entry, scrolls to it and marks it, and — when the part in view
+does not show it — opens the entry's own; `#preset-<id>` selects Permissions
+and marks the column. Links inside the page call the same function, so the
+same link works twice in a row.
 
 **Planes** (`server/providers/planes.ts`, pure and browser-safe). Nothing is
 declared per risk or per tool, so the plane is read from what is declared and
@@ -914,11 +935,11 @@ name says nothing of a plane (`get_project`, `execute_sql`, the
 `src/server/providers/links.ts` (browser-safe) is the only place that builds
 those URLs and anchors: `providerPath`, `riskReferencePath`,
 `presetReferencePath`, `sectionPath`, `riskAnchor`, `presetAnchor`. The
-reference is linked from the connection page ("Provider" row), the "Connect a
-provider" picker (under each card) and the connect form, the Share dialog,
-mission creation (page lead, each preset, the Custom toolbar, each risk id),
-the mission page (each provider name, each risk id), the Requests pages, the
-session page and Shares received.
+reference is linked from the account page (its details), the connect picker
+and the connect form, the "Give access" dialog (each "why?"), the lists of
+permissions on the accounts pages (`PermissionList`), the detail of an
+activity line, mission creation, the mission page, the Waiting for you pages
+and the session page.
 
 ## What the standalone output carries
 

@@ -338,7 +338,7 @@ describe('connections: provider app, connect, resources, revoke', () => {
       post(`/accounts/${connectionId}/discover`, alice),
       connectionId,
     );
-    expect(await noticeOf(refreshed, alice)).toMatchObject({ title: 'Discovery refreshed' });
+    expect(await noticeOf(refreshed, alice)).toMatchObject({ title: 'Refreshed' });
     const curated = await root.store.connections.listResources(connectionId);
     expect(curated.map((r) => [r.ref, r.displayName, r.env, r.staleSince !== null])).toEqual([
       ['proj-a', 'Main project', 'prod', false],
@@ -358,7 +358,7 @@ describe('connections: provider app, connect, resources, revoke', () => {
       post(`/accounts/${connectionId}/revoke`, bob),
       connectionId,
     );
-    expect((await noticeOf(stranger, bob))?.title).toBe('Not revoked');
+    expect((await noticeOf(stranger, bob))?.title).toBe('Not disconnected');
     const crossOrigin = await handlers.revoke(
       post(`/accounts/${connectionId}/revoke`, alice, {}, 'https://evil.example.net'),
       connectionId,
@@ -375,7 +375,7 @@ describe('connections: provider app, connect, resources, revoke', () => {
     // This provider documents no revocation endpoint: the person is told, as a warning,
     // that the access still stands there and is theirs to remove.
     const told = await noticeOf(revoked, alice);
-    expect(told).toMatchObject({ tone: 'warning', title: 'Connection revoked' });
+    expect(told).toMatchObject({ tone: 'warning', title: 'Account disconnected' });
     expect(told?.lines[1]).toMatch(/^Remove the access at .+ by hand\. /);
     const after = root.store.db
       .prepare<
@@ -448,7 +448,7 @@ describe('connections: provider app, connect, resources, revoke', () => {
       keyId,
       live.id,
     );
-    expect((await noticeOf(refused, alice))?.lines[0]).toContain('set by the provider plugin');
+    expect((await noticeOf(refused, alice))?.lines[0]).toContain('set by the service');
     expect((await root.store.connections.getResource(live.id))!.env).toBe('live');
   });
 
@@ -482,7 +482,7 @@ describe('connections: provider app, connect, resources, revoke', () => {
     expect(location(stolen).pathname).toBe('/accounts');
     const stolenNotice = await noticeOf(stolen, mallory);
     expect(stolenNotice).toMatchObject({ tone: 'danger', title: 'Not connected' });
-    expect(stolenNotice?.lines[0]).toContain('did not confirm that your account has access');
+    expect(stolenNotice?.lines[0]).toContain('did not confirm that you have access');
 
     // ── …or replays the callback shape without any authorization code ───────
     const noCode = await install(mallory, { installation_id: '1003' });
@@ -621,7 +621,9 @@ describe('connections: provider app, connect, resources, revoke', () => {
       'oauthco',
     );
     expect(location(unconfigured).pathname).toBe('/accounts/new/oauthco');
-    expect((await noticeOf(unconfigured, alice))?.lines[0]).toContain('operator must register');
+    expect((await noticeOf(unconfigured, alice))?.lines[0]).toContain(
+      'administrator must register',
+    );
 
     await root.providerApps.save('oauthco', { client_id: 'cid', client_secret: CLIENT_SECRET });
     const foreign = await handlers.connect(
@@ -630,7 +632,7 @@ describe('connections: provider app, connect, resources, revoke', () => {
     );
     expect(location(foreign).origin).toBe(PUBLIC_URL);
     expect(location(foreign).pathname).toBe('/accounts/new/oauthco');
-    expect((await noticeOf(foreign, alice))?.lines[0]).toContain('outside this instance');
+    expect((await noticeOf(foreign, alice))?.lines[0]).toContain('outside this gateway');
 
     const unknown = await handlers.connect(post('/accounts/connect/nope', alice), 'nope');
     expect(location(unknown).pathname).toBe('/accounts/new');
@@ -662,7 +664,7 @@ describe('connections: provider app, connect, resources, revoke', () => {
     expect(await noticeOf(unknown, operator)).toMatchObject({
       tone: 'danger',
       title: 'Not saved',
-      lines: ['This provider is not available on this instance.'],
+      lines: ['This service is not available on this gateway.'],
     });
 
     // The store failing is not "provider unknown": the error reaches the caller.

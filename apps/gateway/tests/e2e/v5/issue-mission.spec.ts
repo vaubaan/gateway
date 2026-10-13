@@ -472,7 +472,7 @@ test('start from an agent’s proposal, then duplicate the mission', async ({ pa
   expect(await checkToken(request, second)).toMatchObject({ outcome: 'verified' });
 });
 
-test('the provider reference explains each plugin: model, risks, presets, tools', async ({
+test('the reference explains each service: permissions against presets, tools, model', async ({
   page,
 }) => {
   await signIn(page);
@@ -481,18 +481,18 @@ test('the provider reference explains each plugin: model, risks, presets, tools'
     .getByRole('link', { name: 'Reference' })
     .click();
   await expect(page.getByRole('heading', { name: 'Reference', level: 1 })).toBeVisible();
-  // One card per shipped plugin, from the registry; the experimental one says so.
-  await expect(page.getByTestId('provider-github')).toContainText('App installation');
-  await expect(page.getByTestId('provider-github')).toContainText('15 risks');
+  // One line per shipped plugin, from the registry; the experimental one says so.
+  await expect(page.getByTestId('provider-github')).toContainText('15 permissions');
   await expect(page.getByTestId('provider-github')).toContainText('3 presets');
-  // A card says what tells it apart: the planes of its model, the environments it knows.
-  await expect(page.getByTestId('provider-supabase').locator('[data-kind="plane"]')).toHaveText([
-    /db/,
-    /storage/,
-    /auth/,
-    /functions/,
-  ]);
-  await expect(page.getByTestId('provider-supabase')).toContainText('staging');
+  await expect(page.getByTestId('provider-github')).toContainText('26 tools');
+  await expect(page.getByTestId('provider-gmail')).toContainText('experimental');
+  // The services are a local navigation beside the content.
+  const services = page.getByRole('navigation', { name: 'Services' });
+  await expect(services.getByRole('link', { name: 'All services' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+  await expect(services.getByRole('link', { name: 'Supabase' })).toBeVisible();
   // The side navigation marks the current section.
   const nav = page.getByRole('navigation', { name: 'Main' });
   await expect(nav.getByRole('link', { name: 'Reference' })).toHaveAttribute(
@@ -506,149 +506,192 @@ test('the provider reference explains each plugin: model, risks, presets, tools'
   await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: 'Sign out' })).toBeHidden();
-  await expect(page.getByTestId('provider-gmail')).toContainText('experimental');
   await snap(page, 'providers-index');
 
-  await page.getByTestId('provider-supabase').click();
-  await expect(page.getByRole('heading', { name: 'Supabase', level: 1 })).toBeVisible();
+  await page.getByTestId('provider-supabase').getByRole('link', { name: 'Supabase' }).click();
+  // The place keeps its title; the service is the heading under it.
+  await expect(page.getByRole('heading', { name: 'Reference', level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Supabase', level: 2 })).toBeVisible();
+  await expect(services.getByRole('link', { name: 'Supabase' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
   await expect(page.getByTestId('provider-summary')).toContainText('one resource is one project');
 
-  // One section in view at a time, behind tabs; the presets come first.
+  // One section in view at a time, behind tabs; the permissions come first.
   const tabs = page.getByRole('tablist', { name: 'Supabase reference' });
-  await expect(tabs.getByRole('tab')).toHaveText([/Presets/, /Risks/, /Data model/, /Tools/]);
-  await expect(tabs.getByRole('tab', { name: /Presets/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(tabs.getByRole('tab')).toHaveText([/Permissions/, /Tools/, /How it is modelled/]);
+  await expect(tabs.getByRole('tab', { name: /Permissions/ })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
   await expect(page.getByRole('tabpanel')).toHaveCount(1);
-  // Help is on demand: collapsed by default, and remembered once opened.
+  // Help is on demand: closed by default, and remembered once opened.
   const help = page.getByTestId('reference-help');
   await expect(help).toBeHidden();
   await page.getByRole('button', { name: 'How to read this page' }).click();
-  await expect(help.getByText('Can it be undone, and at what price?')).toBeVisible();
-  await expect(help.getByTestId('kind-legend').locator('[data-kind]')).toHaveCount(9);
+  await expect(help.getByText('can it be undone, and at what price?')).toBeVisible();
+  await expect(help).toContainText('runs freely');
   await page.reload();
   await expect(help).toBeVisible();
-  await page.getByRole('button', { name: 'How to read this page' }).click();
+  await page.getByRole('button', { name: 'Hide how to read this page' }).click();
   await expect(help).toBeHidden();
 
-  // The presets side by side: one column each against the risks, a cell per budget.
+  // The permissions against the presets: one column each, a cell per limit.
   const matrix = page.getByTestId('preset-matrix');
   const preset = page.getByTestId('preset-staging-developer');
   await expect(preset).toContainText('Staging developer');
-  await expect(preset).toHaveAttribute('data-kind', 'preset');
-  await expect(preset).toContainText(/\d+ risks · \d+ left out/);
-  await expect(matrix.getByRole('columnheader')).toHaveCount(4);
+  await expect(preset).toContainText(/\d+ permissions|\d+ · \d+ ask/);
+  await expect(matrix.getByRole('columnheader')).toHaveText([
+    'Permission',
+    'Risk',
+    /Read-only analyst/,
+    /Staging developer/,
+    /Migration operator/,
+  ]);
   const bulkCell = page.getByTestId('cell-staging-developer-supabase.bulk-row-write');
   await expect(bulkCell).toContainText('staging');
-  await expect(bulkCell).toContainText(/\d+\/min/);
+  await expect(bulkCell).toContainText(/\d/);
   await expect(page.getByTestId('cell-read-only-analyst-supabase.bulk-row-write')).toContainText(
     'not included',
   );
   await expect(page.getByTestId('cell-migration-operator-supabase.migration-write')).toContainText(
-    'approval',
+    'asks first',
   );
   await snap(page, 'provider-presets');
 
-  // The planes of the data model slice every section at once.
+  // A text filter narrows the list in view.
+  const rows = matrix.locator('tr[data-risk]');
+  const all = await rows.count();
+  await page.getByLabel('Filter the permissions').fill('migration');
+  await expect(rows.first()).toContainText(/migration/i);
+  expect(await rows.count()).toBeLessThan(all);
+  await page.getByLabel('Filter the permissions').fill('no such permission');
+  await expect(page.getByText('Nothing matches.')).toBeVisible();
+  await page.getByLabel('Filter the permissions').fill('');
+  await expect(rows).toHaveCount(all);
+
+  // The parts of the service slice every tab at once.
   const planes = page.getByTestId('plane-control');
-  await expect(planes.getByRole('radio')).toHaveCount(6);
-  await planes.getByRole('radio', { name: /^storage/ }).check();
-  await expect(matrix.locator('tr[data-risk]')).toHaveCount(6);
+  await expect(planes.getByRole('button')).toHaveText([
+    'All',
+    'db',
+    'storage',
+    'auth',
+    'functions',
+    'other',
+  ]);
+  await planes.getByRole('button', { name: 'storage' }).click();
+  await expect(rows).toHaveCount(6);
   await expect(matrix).not.toContainText('Apply a migration');
   await tabs.getByRole('tab', { name: /Tools/ }).click();
   await expect(page).toHaveURL(/#tools$/);
-  await expect(page.getByTestId('tool-supabase__list_buckets')).toBeVisible();
-  await expect(page.getByTestId('tool-supabase__list_users')).toHaveCount(0);
-  await expect(page.getByTestId('tool-supabase__list_buckets')).toContainText('by arguments');
-  await expect(
-    page.getByTestId('tool-supabase__list_buckets').locator('[data-kind="tool"]'),
-  ).toHaveText(/supabase__list_buckets/);
-  // What no plane can be read for is under "other", not guessed.
-  await planes.getByRole('radio', { name: /^other/ }).check();
-  await expect(page.getByTestId('tool-supabase__execute_sql')).toBeVisible();
+  const tool = (name: string) => page.getByTestId('tool-table').locator(`tr[data-row="${name}"]`);
+  await expect(tool('supabase__list_buckets')).toBeVisible();
+  await expect(tool('supabase__list_users')).toHaveCount(0);
+  await expect(tool('supabase__list_buckets')).toContainText('by arguments');
+  // What no part can be read for is under "other", not guessed.
+  await planes.getByRole('button', { name: 'other' }).click();
+  await expect(tool('supabase__execute_sql')).toBeVisible();
   // The keyboard moves between tabs.
-  await tabs.getByRole('tab', { name: /Tools/ }).press('ArrowLeft');
-  await expect(tabs.getByRole('tab', { name: /Data model/ })).toBeFocused();
-  await expect(tabs.getByRole('tab', { name: /Data model/ })).toHaveAttribute(
+  await tabs.getByRole('tab', { name: /Tools/ }).press('ArrowRight');
+  await expect(tabs.getByRole('tab', { name: /How it is modelled/ })).toBeFocused();
+  await expect(tabs.getByRole('tab', { name: /How it is modelled/ })).toHaveAttribute(
     'aria-selected',
     'true',
   );
-  await planes.getByRole('radio', { name: 'All' }).check();
-  // The data model as an outline, with the entity that carries the environment.
-  await expect(page.getByRole('region', { name: 'Plane db' })).toContainText('schema');
+  await planes.getByRole('button', { name: 'All' }).click();
+  // The model as an outline, with what carries the environment.
+  await expect(page.getByRole('region', { name: 'Part db' })).toContainText('schema');
   await expect(page.getByTestId('provider-environment')).toContainText(
-    'the label the connection owner puts on each resource',
+    'the label the owner of the account puts on each resource',
   );
   await expect(page.getByText('carries the environment').first()).toBeVisible();
   await snap(page, 'provider-data-model');
 
-  // A risk anchor opens the Risks tab on a plane that shows the entry, and unfolds it.
-  await planes.getByRole('radio', { name: /^auth/ }).check();
+  // An anchor of a permission opens Permissions on a part that shows the entry, and unfolds it.
+  await planes.getByRole('button', { name: 'auth' }).click();
   await page.goto('/reference/supabase#risk-supabase.bulk-row-write');
-  await expect(tabs.getByRole('tab', { name: /Risks/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(tabs.getByRole('tab', { name: /Permissions/ })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
   const entry = page.getByTestId('risk-supabase.bulk-row-write');
   await expect(entry).toBeInViewport();
-  await expect(entry.getByRole('button', { name: 'Bulk write on a table' })).toHaveAttribute(
+  await expect(entry.getByRole('button', { name: /Bulk write on a table/ })).toHaveAttribute(
     'aria-expanded',
     'true',
   );
   await expect(entry).toContainText('supabase.bulk-row-write');
-  await expect(entry).toContainText('Environment-scoped');
-  await expect(entry).toContainText('supabase[staging].bulk-row-write');
-  await expect(entry.locator('[aria-label^="Reversibility:"]').first()).toBeVisible();
-  await expect(entry).toContainText('Write: project');
-  await expect(entry).toContainText('supabase.project');
-  // It names the presets that include it, and each leads to its column.
-  await expect(entry.locator('[data-kind="preset"]')).toHaveText([
-    /Staging developer/,
-    /Migration operator/,
-  ]);
-  // The reader was on `auth`, which does not show this entry: its own plane was opened.
-  await expect(planes.getByRole('radio', { name: /^db/ })).toBeChecked();
+  const unfolded = page.locator('[id="risk-supabase.bulk-row-write-detail"]');
+  await expect(unfolded).toContainText('once per environment');
+  await expect(unfolded).toContainText('supabase[staging].bulk-row-write');
+  // The six words behind the severity, what it covers, and its limits in each preset.
+  await expect(unfolded.getByText('Blast radius').first()).toBeVisible();
+  await expect(unfolded).toContainText('Write: project');
+  await expect(unfolded).toContainText('supabase.project');
+  await expect(unfolded).toContainText('Staging developer');
+  await expect(unfolded).toContainText('Migration operator');
+  await expect(unfolded).toContainText(/\d+\/min/);
+  // The reader was on `auth`, which does not show this entry: its own part was opened.
+  await expect(planes.getByRole('button', { name: 'db' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByTestId('risk-supabase.auth.generate-link')).toHaveCount(0);
-  await planes.getByRole('radio', { name: 'All' }).check();
-  // A row is compact until asked: collapsed, the patterns are not on the page.
-  const collapsed = page.getByTestId('risk-supabase.read-data');
-  await expect(collapsed.getByRole('button', { name: 'Read data and schema' })).toHaveAttribute(
+  await planes.getByRole('button', { name: 'All' }).click();
+  // A row is compact until asked: folded, what it covers is not on the page.
+  const folded = page.getByTestId('risk-supabase.read-data');
+  await expect(folded.getByRole('button', { name: /Read data and schema/ })).toHaveAttribute(
     'aria-expanded',
     'false',
   );
-  await expect(collapsed).not.toContainText('Read anything in supabase');
-  await collapsed.getByRole('button', { name: 'Read data and schema' }).click();
-  await expect(collapsed).toContainText('Read anything in supabase');
-  // The fallback is explained where it is listed, in a callout, once unfolded.
+  await expect(page.getByText('Read anything in supabase')).toHaveCount(0);
+  await folded.getByRole('button', { name: /Read data and schema/ }).click();
+  await expect(page.locator('[id="risk-supabase.read-data-detail"]')).toContainText(
+    'Read anything in supabase',
+  );
+  // "Anything not named" is explained where it is listed, once unfolded.
   const fallback = page.getByTestId('risk-supabase.uncategorized-write');
+  await expect(fallback).toContainText('anything not named');
   await fallback.getByRole('button', { name: /Uncategorized Supabase write/ }).click();
-  await expect(fallback.getByRole('note')).toContainText(
+  await expect(page.locator('[id="risk-supabase.uncategorized-write-detail"]')).toContainText(
     'Counts only for a write no other entry of the catalog names',
   );
   await snap(page, 'provider-risks');
-  await entry.locator('[data-kind="preset"]', { hasText: 'Migration operator' }).click();
+  // The name of a preset is the link to its column.
+  await page.getByTestId('preset-migration-operator').getByRole('link').click();
   await expect(page).toHaveURL(/#preset-migration-operator$/);
   await expect(page.getByTestId('preset-migration-operator')).toBeInViewport();
 
-  // A preset anchor, as mission creation links to it; a single-plane provider has no plane control.
+  // A preset anchor, as mission creation links to it; a service with one part has no filter by part.
   await page.goto('/reference/github#preset-developer');
   await expect(page.getByTestId('preset-developer')).toBeInViewport();
   await expect(page.getByTestId('plane-control')).toHaveCount(0);
   await expect(page.getByTestId('preset-matrix')).toContainText('Modify a GitHub Actions workflow');
   await expect(page.getByTestId('cell-developer-github.workflow-write-via-file')).toContainText(
-    'approval',
+    'asks first',
   );
-  // Fifteen risks, collapsed, read in about one and a half screens.
+  // The earlier sections still lead somewhere: `#risks` and `#presets` open Permissions.
+  // Fifteen permissions, folded, read in about one and a half screens.
   await page.goto('/reference/github#risks');
-  await expect(page.locator('article[data-testid^="risk-github."]')).toHaveCount(15);
+  await expect(page.getByRole('tab', { name: /Permissions/ })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(page.locator('tr[data-testid^="risk-github."]')).toHaveCount(15);
   const first = await page.getByTestId('risk-github.read-code').boundingBox();
   const last = await page.getByTestId('risk-github.delete-release').boundingBox();
   const viewport = page.viewportSize();
-  if (!first || !last || !viewport) throw new Error('the risk list is not laid out');
+  if (!first || !last || !viewport) throw new Error('the list of permissions is not laid out');
   expect((last.y + last.height - first.y) / viewport.height).toBeLessThan(1.75);
-  // The one tool that hands a provider token to the agent, and its risks, say so.
+  // The page does not scroll sideways at this width.
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1280);
+  // The one tool that hands a token of the service to the agent, and its permissions, say so.
   await page.goto('/reference/github#tools');
   await expect(page.getByRole('tab', { name: /Tools/ })).toHaveAttribute('aria-selected', 'true');
-  const mint = page.getByRole('row', { name: /github__mint_install_token/ });
+  const mint = page.getByTestId('tool-table').locator('tr[data-row="github__mint_install_token"]');
   await expect(mint).toContainText('hands a token to the agent');
   await expect(mint.getByRole('link', { name: 'github.mint-install-token-push' })).toHaveAttribute(
     'href',
-    '/reference/github#risk-github.mint-install-token-push',
+    '#risk-github.mint-install-token-push',
   );
   await expect(page.getByTestId('token-handout-note')).toContainText(
     'What the agent then does with that token is outside the gateway',
@@ -659,15 +702,17 @@ test('the provider reference explains each plugin: model, risks, presets, tools'
   await mint.getByRole('link', { name: 'github.mint-install-token-push' }).click();
   const push = page.getByTestId('risk-github.mint-install-token-push');
   await expect(push).toBeInViewport();
-  // The badge says what the token can do: a preset hands a write token after approval only.
+  // The tag says what the token can do: a preset hands a write token after a yes only.
   await expect(push).toContainText('hands a write token');
-  await expect(push.locator('[data-kind="tool"]')).toHaveText(/github__mint_install_token/);
+  await expect(page.locator('[id="risk-github.mint-install-token-push-detail"]')).toContainText(
+    'github__mint_install_token',
+  );
   await expect(page.getByTestId('risk-github.mint-install-token-clone')).toContainText(
     'hands a read-only token',
   );
   await expect(page.getByTestId('risk-github.read-code')).not.toContainText('hands a');
   await snap(page, 'provider-token-handouts');
-  // An unknown provider is not found.
+  // An unknown service is not found.
   const missing = await page.goto('/reference/no-such-provider');
   expect(missing?.status()).toBe(404);
 });

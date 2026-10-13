@@ -2,7 +2,7 @@
 title: Audit — search, mission session view, retention, administrative entries
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - apps/gateway/src/server/budget/retention.ts
   - apps/gateway/src/server/audit/
@@ -20,7 +20,8 @@ tracks:
 
 # Audit — search, mission session view, retention, administrative entries
 
-How what happened is made visible: the Audit page's search, the Mission session page,
+How what happened is made visible: the search of the Activity page (`/activity`), the
+activity of one mission (`/missions/<id>/session`),
 the retention sweeper, and the rule that every administrative mutation leaves an entry.
 Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §4.2 ("Mission session", "Audit"),
 §6 ("Immutable audit", "No secret in logs"), §8 (fields, retention), §3.3 (the session),
@@ -42,13 +43,14 @@ apps/gateway/src/server/audit/
   session-event-detail.ts  eventDetailLines(), isSessionEventKind()  (pure: the Detail column)
   retention.ts      AuditRetentionSweeper (start / stop / sweep)
 apps/gateway/src/app/(app)/
-  audit/page.tsx                  /activity
-  activity/activity.module.css          shared by both pages
+  activity/page.tsx               /activity   ("Activity": the record)
+  activity/when.tsx               the time of a line (client: the reader's own clock after hydration)
+  activity/activity.module.css
   missions/[id]/session/page.tsx  /missions/<id>/session
 ```
 
-`root.audit` is the module (`compose/root.ts`). The pages are server components with no
-client code: the filters are a plain `GET` form, paging is a link.
+`root.audit` is the module (`compose/root.ts`). The pages are server components: the
+filters are a plain `GET` form, paging and the detail of a line are links.
 
 ## Who sees what (`scopeOf`, `standingOn`, `AuditRepo.search`)
 
@@ -155,6 +157,48 @@ oversized value, unreadable cursor) is dropped and listed in `problems`, which t
 shows; it never widens the search. An unknown email matches nothing, exactly like a known
 user with no entry, so the filter does not reveal who has an account.
 
+### The Activity page (`activity/page.tsx`)
+
+The record as a person reads it. The words are the interface's
+(`lib/vocabulary.ts`: `ACTIVITY_WORDS`, `ACT_WORDS` per administrative act,
+`REFUSAL_WORDS` per refusal code, `DECISION_WORDS`); the protocol's names are
+in the detail of a line, in mono.
+
+- **Filters**, one `GET` form. On the first line: the period as four segments
+  (Today, Yesterday, 7 days, All — links that set `from` / `to` as UTC days; a
+  period typed by hand highlights none), the mission, the account, the
+  decision, the exact tool name, "Apply", and "Clear" when a filter is set.
+  Behind "More filters" (a `Disclosure`, remembered, open when one of them is
+  set): person, key holder, agent, kind, from, to.
+- **Counts** of the page shown — calls, refused, asked first, changes — and
+  one sentence saying whose record this is (a person's missions and accounts,
+  or everything for an administrator).
+- **The table** (`DataTable`, `columnBudget={6}`: the documented exception):
+  Time (`When`), Who (the key holder with the label the agent gave itself; a
+  machine key as a dashed square with "machine key"; for a change, who made
+  it and through which app), Action (the tool in mono, or the act in words),
+  On (the resource and its account, or the object of the change), Permission
+  (the label of the first risk touched, "+n" for more), Decision. A seventh
+  column, Mission, is a detail column: "Show details" (`DetailScope`
+  `activity:columns`, remembered).
+- **Decision**: "allowed" in the quiet ink ("· after a yes" when the call
+  consumed an approval); "refused" in red with the reason in words; a call
+  refused `approval-required` is not red: it reads "asked you" (or "asked
+  <creator>") in amber, and its row is tinted amber instead of red; a change
+  reads "change".
+- **The detail of a line** opens under it through its "detail" link, which
+  adds `?open=<entry id>` to the current filters and position — a line has an
+  address. For a call: the mission and its creator, the key and the agent
+  label, the tool, each permission touched with its id and what is left, the
+  arguments ("never stored", then their fingerprint, or the sentence that says
+  who is shown it when `arguments_hash` is `null`: `standingOn`), the refusal
+  code with what the agent was told, and the technical facts (a yes used,
+  latency, the service's error, the client address). For a change: the act
+  and its object as the protocol names them, who made it, and `before` /
+  `after` as stored.
+- **Paging**: "Earlier" follows `page.next`; "Newest" returns to the first
+  page.
+
 ### Token holders
 
 Every call entry names the token it presented and its holder (spec §8; ADR
@@ -165,9 +209,9 @@ Unlike the agent label it is not a claim of the caller.
 
 - **The view.** `AuditCallView.token` is `{ kind, key, label }`: `label` is the member's
   email (their id when the user row is gone) or the token's name; `null` on an entry
-  written before tokens had a holder, which the page shows as "not attributed". The page
-  has a "Token holder" column next to "Mission, agent label / actor"; a named token
-  carries a "named token" badge.
+  written before tokens had a holder, which the page shows as "not attributed". It is
+  the "Who" column of the Activity page, with the label the agent gave itself under it;
+  a named token is drawn as a dashed square and says "machine key".
 - **The filter.** `holder`, as typed (`AuditQueryService.holdersOf`): the exact form the
   session page links with (`member:<user id>`, `named:<name>` — `holderParam` /
   `parseHolderParam`), otherwise an email names a member (a token name never contains
@@ -177,7 +221,7 @@ Unlike the agent label it is not a claim of the caller.
 
 Order is `ts DESC, id DESC`. `AuditQueryService.search(viewer, filters, cursor, pageSize
 = AUDIT_PAGE_SIZE /* 50 */)` asks the store for one row more than the page; when it comes
-back, `next` is the `(ts, id)` of the last entry shown, and the "Older" link carries it as
+back, `next` is the `(ts, id)` of the last entry shown, and the "Earlier" link carries it as
 `cursor` (`encodeCursor`: base64url of `<ts>|<id>`). The store resumes with
 `ts < ? OR (ts = ? AND id < ?)`: an entry written while paging does not shift the
 following pages, and entries with the same timestamp are neither repeated nor skipped.
@@ -264,79 +308,74 @@ date. `countersAgreeWithAudit` is the check `counted + credited == audited`.
 **The gate of a risk is two facts.** `gate` is the mission's own setting (`auto` or
 `approval`); `gate_open_until` is the end of the period the creator opened it for
 ("open the gate for the rest of the period", spec §3.5), `null` otherwise. Both come
-from `MissionDetailRisk` ([missions](missions.md)). The Gate cell of the budget table
-prints the badge and, under it, "open until <date>": `approval` alone would be wrong
-while calls pass. The cell carries `data-testid="gate-<risk id>"`.
+from `MissionDetailRisk` ([missions](missions.md)). The row of the permission
+(`data-permission="<risk id>"`, under "Permissions and usage") says "runs freely" or
+"ask me first" and, while the gate is open for the period, "runs freely until
+`<date>`": "ask me first" alone would be wrong while calls pass.
 
-> **The page was redesigned** (handbook [missions](missions.md), "The activity of a
-> mission"). `/missions/<id>/session` now reads as "Activity of `<mission>`": what waits,
-> who called per key holder and per agent label, the timeline in five columns
-> (`ActivityTable`), and — one click away — the permissions with what was used and the
-> earlier periods. A gate is said "runs freely" / "ask me first" on the row of its
-> permission (`data-permission="<risk id>"`), with "runs freely until `<date>`" while it
-> is open for the period. What a row says of an event is `eventWords`
-> (`app/(app)/missions/[id]/session/event-words.ts`). The sections below describe the
-> view the page reads (`MissionSessionView`), which did not change, and — where they
-> name a card, a column or a sentence — the page as it was before.
+### The page (`app/(app)/missions/[id]/session/page.tsx`)
 
-### The Detail column (`session-event-detail.ts`)
+`/missions/<id>/session` reads as "Activity of `<mission>`", on the wide measure
+(handbook [missions](missions.md), "The activity of a mission", for its composition):
+what waits (`open-requests`), who called per key holder (`holder-activity`) and per
+agent label (`label-activity`), the timeline (`timeline`, an `ActivityTable` of five
+columns: when, who, action, permission, outcome), and — one click away — the
+permissions with what was used (`session-permissions`) and the earlier periods
+(`session-periods`). The link "Full record of this mission" leads to
+`/activity?mission=<id>`.
 
-`eventDetailLines(event, { requestOpen })` turns the typed fields of a `SessionEventView`
-into the lines of the Detail column: `{ text, at, mono }`, where `at` is an instant the
-page prints after the text in the reader's time zone (`LocalDate`) and `mono` marks an
-identifier. It is pure and switches over `SessionEventKind` with no `default`, so a new
-kind fails to compile until it says what it shows; the page's badge tones (`EVENT_TONE`)
-are a `Record<SessionEventKind, BadgeTone>` for the same reason. A kind written by a
-later version (`isSessionEventKind` is false) shows no detail and a neutral badge.
+What a row of the timeline says of an event is `eventWords(event, { requestOpen })`
+(`session/event-words.ts`, pure): the outcome in words with its tone, and detail lines
+(`{ text, at, mono }`: `at` is an instant the page prints in the reader's time zone,
+`mono` marks an identifier such as a refusal code or a masked key). It switches over
+`SessionEventKind`; a kind a later version wrote (`isSessionEventKind` is false) is
+printed as it is stored.
 
-| Kind                       | Detail                                                                                                                                                                                                                                                                                   |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `call-allowed`             | `approval consumed` when the call used one, nothing otherwise                                                                                                                                                                                                                            |
-| `call-refused`             | the link `open claim` / `open approval` while its request is open; then `claim (closed)` / `approval request (closed)`. The kind of the request follows from the refusal code (`budget-exhausted` → claim, `approval-required` → approval request); a `rate-limited` call has no request |
-| `request`, dropped         | `claim asked` / `approval request asked`, with the link while open, `… asked (closed)` after                                                                                                                                                                                             |
-| `request`, closed          | `claim refused by the creator`, `approval request expired unanswered` (`request_state`)                                                                                                                                                                                                  |
-| `approval`                 | `one call approved, usable until <date>`                                                                                                                                                                                                                                                 |
-| `gate-opened`              | `gate open until <date>` (the end of the period)                                                                                                                                                                                                                                         |
-| `gate-changed`             | `gate set to <gate> (was <gate before>)`                                                                                                                                                                                                                                                 |
-| `reset`, quota `extension` | one line per risk: `<risk id> +N given back`                                                                                                                                                                                                                                             |
-| expiry `extension`         | `expiry moved to <date>`                                                                                                                                                                                                                                                                 |
-| `rotation`                 | `token <prefix>…`, then `member <email>` or `named token "<name>"`, then `replaces <prefix>…` when the holder had a token before                                                                                                                                                         |
-| `revocation` (one token)   | `token <prefix>… revoked`, then `member <email>` or `named token "<name>"`                                                                                                                                                                                                               |
-| `revocation`               | `<n> token(s) revoked`                                                                                                                                                                                                                                                                   |
+| Kind                       | The row says                                                                                                                                                                              |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `call-allowed`             | "allowed" (and that a yes was used, when the call consumed an approval)                                                                                                                   |
+| `call-refused`             | "asked first" in amber for `approval-required`, "limit reached" for `budget-exhausted`, otherwise "refused" in red, with the code in mono                                                 |
+| `request`                  | "asked for a yes" / "asked for more room", amber while it waits, with the link to the page that answers it for the creator; once closed, "refused by the creator" or "expired unanswered" |
+| `approval`                 | "approved", usable until an instant                                                                                                                                                       |
+| `gate-opened`              | "runs freely" until the end of the period                                                                                                                                                 |
+| `gate-changed`             | "set to “ask me first”" or "set to “runs freely”", with what it was                                                                                                                       |
+| `reset`, quota `extension` | "limits reset" / "limit raised", one line per risk with what was given back                                                                                                               |
+| expiry `extension`         | "given more time", with the new date                                                                                                                                                      |
+| `rotation`                 | "key generated" / "key replaced", with the masked key and its holder                                                                                                                      |
+| `revocation`               | "key revoked" for one key, "mission stopped" for all of them                                                                                                                              |
 
-The request page words the same events as sentences (`describeEvent`,
-`server/requests/events.ts`, [requests](requests.md)); the two are kept aligned by hand.
+A member reads the same timeline without the links that answer a request
+(`open_requests[].path` is `null` for them): the page says that requests are the
+creator's (`requests-are-the-creators`).
 
-The links `open claim` / `open approval` are the creator's. A member reads the same
-timeline with `claim waiting for the creator` / `approval waiting for the creator` in
-their place (`open_requests[].path` is `null` for them).
+`eventDetailLines` (`session-event-detail.ts`) is the earlier wording of the same
+events, kind by kind. No page reads it any more; it is still exported and tested
+(`session-event-detail.test.ts`).
 
-The timeline card takes the width of the window like the audit table (`.wide`), its
-risk ids wrap (`.wraps`), its Token holder cell wraps (`.holder`) and its Detail cell
-wraps (`.detail`), so the seven columns are on
-screen at 1280 px; the browser suite asserts it, on the seeded day and on a timeline
-that holds gate and approval details.
+The table has a fixed budget of five columns and its ids and details wrap, so every
+column is on screen at 1280 px; the browser suite asserts it, on the seeded day and on
+a timeline that holds gate and approval details.
 
 ### Token holders on the session page
 
 Who called, authenticated by the token (spec §4.2 "Mission session … and calls per token
 holder"). Two reads, both informational, the counterparts of the agent-label ones below:
 
-- **Calls per token holder — current period** (`holder_activity`). Counts of the
+- **Who called — current period** (`holder_activity`). Counts of the
   mission's audit entries of the current period grouped by `(token_kind, token_holder)`
-  and decision. **Not a budget**: every token of a mission draws from the same counters
-  (spec §3.2), and the card says so. Each row links to the timeline of that holder and,
-  for the creator, to the Audit page filtered on it.
+  and decision. **Counts, not limits**: every token of a mission draws from the same
+  counters (spec §3.2), and the section says so. Each row links to the timeline of that
+  holder and, for the creator, to the Activity page filtered on it.
 - **Timeline filter**: `/missions/<id>/session?holder=member:<user id>` or
   `?holder=named:<name>` lists the call events made with a token of that holder
   (`SessionTimelineFilter` kind `holder`). It is a keyset read on the columns
   `events.token_kind` / `events.token_holder` (migration `0010`, index
   `events_session_holder_ts`), like the per-label one.
 
-The timeline has a "Token holder" column: the member's email, or the token's name with a
-"named token" badge — on a call, and on a `rotation` or a `revocation` of one token (whose
-Detail column names the holder as well). It shows "—" for every other event, for a
-mission-wide `revocation`, and for a call stored before tokens had a holder. The holder of
+The "who" column of the timeline names the holder: the member's email, or the name of
+a machine key — on a call, and on a `rotation` or a `revocation` of one token. It is
+empty for every other event, for a mission-wide `revocation`, and for a call stored
+before tokens had a holder. The holder of
 an event is read from its details through `parseEventDetails` (`holderRefOf`) and resolved
 to a label by the service; the columns only select rows.
 
@@ -347,14 +386,15 @@ A label is what a caller declared about itself (handbook
 no effect on what is allowed or counted. The page says so where it shows one, and both
 reads below are informational.
 
-- **Calls per agent label — current period** (`label_activity`). Counts of audit entries
+- **Agents — current period** (`label_activity`). Counts of audit entries
   of the mission with `ts` in the current period (`[period.start, period.end)`, open-ended
   for a one-off mission), grouped by `agent_label` and decision. It is **not a budget**:
   the quota is per risk and shared by every agent (spec §3.2), a call touching two risks
   is one call here and two decrements there, and a granted claim lowers a counter without
-  removing a call. The card states it, and the budget table above it is unchanged by any
-  filter. Each row links to the timeline of that label and, for the creator and a
-  labelled row, to the Audit page filtered on it.
+  removing a call. The section states it ("not verified, and it decides nothing"), and
+  the permissions with what was used are unchanged by any filter. Each row links to the
+  timeline of that label and, for the creator and a labelled row, to the Activity page
+  filtered on it.
 - **Timeline filter**: `/missions/<id>/session?agent=<label>` lists the call events
   (`call-allowed`, `call-refused`) that carried that label, `?unlabelled=1` those that
   carried none (`SessionTimelineFilter`: `all` | `label` | `unlabelled`). Requests,
@@ -367,7 +407,7 @@ and the migration backfilled the rows written before. A filtered page is therefo
 same read as the plain timeline — `SessionsRepo.listRecentEvents(sessionId, { before?,
 limit, calls: { agentLabel } })`, `agentLabel: null` for the unlabelled calls — with the
 same order (`ts DESC, id DESC`), the same keyset and the same page size, served by the
-index `events_session_label_ts`. There is no scan and no bound: "Older" is offered when,
+index `events_session_label_ts`. There is no scan and no bound: the link to earlier events is offered when,
 and only when, an older matching call exists. The event view still reads the label from
 the details (`parseEventDetails`); the column only selects the rows.
 
@@ -459,15 +499,15 @@ The actor of an administrative entry is stored as `user_id`: a user id, or
 `BOOTSTRAP_ACTOR_ID` (`'bootstrap'`, `packages/gateway-core/src/audit.ts`) for the holder
 of the bootstrap token, who has no user row. `AuditAdminView.actor` is
 `{ id, email, label }`, built by `actorView` (`query-service.ts`); `label` is what the
-Audit page prints: the user's email, else `BOOTSTRAP_ACTOR_LABEL` ("Bootstrap operator")
+Activity page prints: the user's email, else `BOOTSTRAP_ACTOR_LABEL` ("Bootstrap operator")
 when the id is `BOOTSTRAP_ACTOR_ID` (its `email` is `null`), else the raw id (a user
 whose row is gone).
 
 An act that came through the management door keeps the user as its actor and also
 carries `delegated_client_id`, the OAuth client that performed it
 ([management-door](management-door.md)); it is `null` for an act of the interface.
-`AuditAdminView.delegated_client_id` exposes it and the Audit page prints "through
-client <id>" under the entry.
+`AuditAdminView.delegated_client_id` exposes it and the Activity page says "through
+`<client id>`" under who made the change.
 
 `AuditAdminView.object` is `{ type, id, label }`. `label` names the object when it still
 exists (`objectLabel` in `query-service.ts`, looked up once per page through `NameCache`);
@@ -534,13 +574,13 @@ const removed = await root.audit.retention.sweep(); // number, or null when the 
   timer runs.
 - **A new service method breaks `admin-mutations.test.ts`** → classify it in `RULES`;
   if it changes state on behalf of a user, write the entry and add its driver.
-- **Counters on the session page disagree with the audit** → `countersAgreeWithAudit`
+- **What a permission used on the mission's activity page disagrees with the record** → `countersAgreeWithAudit`
   ([budget-and-sessions](budget-and-sessions.md)).
 - **A call is missing from the timeline of its label** → the filter reads the column,
   not the details: `SELECT kind, agent_label, details_json FROM events WHERE id = ?`.
   A call event whose `agent_label` column is `NULL` while its details carry a label was
   written outside the sessions repository (the only writer, which fills the column).
-- **A gate reads `approval` and calls pass** → `gate_open_until` on the risk row: the
+- **A permission reads "ask me first" and calls pass** → `gate_open_until` on the risk row: the
   creator opened the gate for the period; the `gate-opened` event of the timeline says
   until when, and a later `gate-changed` ends it.
 
@@ -593,13 +633,14 @@ const removed = await root.audit.retention.sweep(); // number, or null when the 
   by each of its three resolutions through either entry point (3), plus `before` /
   `after` of a resource edit and a failed discovery.
 - `tests/e2e/v5/audit-session.spec.ts` (4, Playwright on the ephemeral instance) — a day
-  of calls on the session page (the calls per agent label beside the shared budget, the
-  timeline of one label and back to the whole one) and on the audit page (ten filters in three named
-  groups — what, who, when — on two rows, the agent label among them; a tool name and a
-  risk id wrap between their words, never inside one); every column of the audit table on screen at
-  1280 px with no sideways scroll (the fingerprint cell wraps; the check is a plain
-  test, no longer an expected failure); every column of the session timeline on screen
-  at 1280 px; 404 for a mission that is not the user's.
+  of calls on the mission's activity page (what waits, who called per agent label, the
+  timeline of one label and back to the whole one) and on the Activity page (the words
+  of a line, "asked you" for a call that had to ask, six columns and a seventh behind
+  "Show details", the detail of a line at its own address with the fingerprint, the
+  period and four controls on one line with the rest behind "More filters"); every
+  column of the record on screen at 1280 px with a detail open and no sideways scroll;
+  every column of the mission's timeline on screen at 1280 px; 404 for a mission that
+  is not the user's.
 - `tests/e2e/v5/approve-action.spec.ts` (1) asserts the rest of this page in a browser:
   the Gate cell reading "open until" while the gate is open, what the `gate-opened`,
   `gate-changed`, `approval`, `call-allowed` and `request` events say in the Detail

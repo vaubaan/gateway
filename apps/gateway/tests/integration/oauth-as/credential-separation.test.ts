@@ -267,7 +267,7 @@ describe('the three credentials never cross over', () => {
       );
       expect(revoke.status).toBe(401);
       const ownDelegation = await root.oauth.handlers.revokeDelegation(
-        mutation(`/delegations/${delegated.delegationId}/revoke`, headers, {}),
+        mutation(`/settings/connected-apps/${delegated.delegationId}/revoke`, headers, {}),
         delegated.delegationId,
       );
       expect(ownDelegation.status).toBe(401);

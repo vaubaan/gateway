@@ -166,7 +166,7 @@ describe('the reference of the shipped plugins', () => {
 
   it('every shipped plugin says in plain words what it connects to', () => {
     for (const reference of references) {
-      expect(reference.summary, `${reference.id}: summary`).toMatch(/One connection is /);
+      expect(reference.summary, `${reference.id}: summary`).toMatch(/One account is /);
       expect(reference.summary, `${reference.id}: summary`).toMatch(/resource/);
     }
   });

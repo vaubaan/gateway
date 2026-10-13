@@ -1,21 +1,26 @@
 'use client';
 /**
- * "Revoke" with a type-to-confirm dialog (revocation is terminal, spec §2.3).
- * The confirmation submits a plain POST form, so the handler's origin check
- * applies like on every other mutation.
+ * "Disconnect" (the protocol's revocation of a connection, final: spec §2.3)
+ * behind a type-to-confirm dialog that says what stops and what happens at the
+ * service. The confirmation submits a plain POST form, so the handler's origin
+ * check applies like on every other mutation.
  */
 import { useRef, useState } from 'react';
 
 import { Button, DangerConfirm } from '@/components/ui';
+import { ACCOUNT_ACTIONS, count, TERMS } from '@/lib/vocabulary';
 
 export function RevokeConnection({
   action,
   name,
+  running,
   atProvider,
 }: {
   action: string;
   name: string;
-  /** What the revocation does to the access granted at the provider, in one or two sentences. */
+  /** How many missions use the account and still run: they stop for good. */
+  running: number;
+  /** What disconnecting does to the access granted at the service, in one or two sentences. */
   atProvider: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -24,24 +29,32 @@ export function RevokeConnection({
   return (
     <>
       <form ref={formRef} method="post" action={action} hidden />
-      <Button type="button" variant="danger" size="sm" onClick={() => setOpen(true)}>
-        Revoke
+      <Button
+        type="button"
+        variant="danger"
+        size="sm"
+        onClick={() => setOpen(true)}
+        data-testid="disconnect-account"
+      >
+        {ACCOUNT_ACTIONS.disconnect} this account…
       </Button>
       {open && (
         <DangerConfirm
-          title="Revoke this connection"
+          title={`${ACCOUNT_ACTIONS.disconnect} ${name}?`}
           body={
             <>
-              Revocation is final: the stored credential is erased and every mission that carries
-              this connection refuses its calls from now on. To use the provider again you will
-              create a new connection.
+              The stored credential is erased, and{' '}
+              {running === 0
+                ? 'no mission uses this account today'
+                : `the ${count(running, TERMS.mission)} that ${running === 1 ? 'uses' : 'use'} this account ${running === 1 ? 'stops' : 'stop'} for good`}
+              . This cannot be undone: to use the service again you connect a new account.
               <br />
               <br />
               {atProvider}
             </>
           }
           phrase={name}
-          confirmLabel="Revoke"
+          confirmLabel={ACCOUNT_ACTIONS.disconnect}
           busy={busy}
           onCancel={() => setOpen(false)}
           onConfirm={() => {

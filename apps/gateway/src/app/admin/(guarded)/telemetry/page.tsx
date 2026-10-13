@@ -1,23 +1,25 @@
 /**
- * `/admin/telemetry` — community telemetry (spec §9, §4.2 Administration):
- * the operator's toggle, the collector URL in use, and the exact payload of
- * a report as this instance would send it. Off at installation. Read-only
- * when the mounted configuration sets `telemetry.enabled` (the file wins).
+ * `/admin/telemetry` — community telemetry (spec §9, §4.2 "Administration"):
+ * the administrator's switch, where reports go, and the exact payload of a
+ * report as this gateway would send it. Off at installation. Read-only when
+ * the mounted configuration sets `telemetry.enabled` (the file wins).
  */
 import { PLUGIN_REPORT_KEYS } from '@vaubaan/telemetry';
 
-import styles from '@/components/auth/auth.module.css';
+import styles from '@/components/settings/settings.module.css';
 import {
-  Badge,
-  Banner,
   Button,
-  Card,
-  CardBody,
-  CardHeader,
-  CardTitle,
-  Stack,
+  Callout,
+  CodeBlock,
+  Hint,
+  KeyValue,
+  Mono,
+  PageHeader,
+  Section,
+  Tag,
 } from '@/components/ui';
 import { requireOperator } from '@/lib/auth/session';
+import { CONFIG_WORDS, formatNumber, SETTINGS_ACTIONS, SETTINGS_PAGES } from '@/lib/vocabulary';
 import {
   ENABLED_FIELD,
   PROBLEM_PARAM,
@@ -33,14 +35,14 @@ interface Props {
 
 const PROBLEMS: Readonly<Record<TelemetryProblem, string>> = {
   locked:
-    'The mounted configuration sets telemetry.enabled; change it there. The toggle is read-only.',
-  invalid: 'The request did not say whether to enable or disable telemetry.',
+    'The mounted configuration sets telemetry.enabled; change it there. The switch is read-only here.',
+  invalid: 'The request did not say whether to turn telemetry on or off.',
 };
 
-const SOURCE_LABEL = {
-  config: 'set by the mounted configuration',
+const SOURCE_WORDS = {
+  config: CONFIG_WORDS.file,
   admin: 'set from this page',
-  default: 'default (never enabled)',
+  default: 'never turned on',
 } as const;
 
 function isProblem(value: unknown): value is TelemetryProblem {
@@ -55,114 +57,103 @@ export default async function TelemetryPage({ searchParams }: Props) {
   const { state } = overview;
 
   return (
-    <Stack gap="var(--space-6)">
-      <div>
-        <h1>Telemetry</h1>
-        <p className={styles.muted}>
-          Plugins cannot be tested against real providers by the project. When you opt in, this
-          instance tells the project&apos;s collector whether each call a plugin executed succeeded,
-          so that a plugin version can be deemed validated by its users. Nothing is sent until you
-          enable it.
-        </p>
-      </div>
+    <>
+      <PageHeader
+        title={SETTINGS_PAGES.telemetry.title}
+        lede={SETTINGS_PAGES.telemetry.lede}
+        status={<Tag>{state.enabled ? 'on' : 'off'}</Tag>}
+      />
 
-      {problem && (
-        <Banner tone="danger" title="Not changed">
-          {PROBLEMS[problem]}
-        </Banner>
+      {(problem || (state.enabled && overview.placeholderCollector)) && (
+        <div className={styles.notes}>
+          {problem && (
+            <Callout tone="bad" title="Not changed">
+              {PROBLEMS[problem]}
+            </Callout>
+          )}
+          {state.enabled && overview.placeholderCollector && (
+            <Callout tone="warn" title="On, but nothing is sent">
+              The collector address is still the placeholder: nothing listens behind it, so this
+              gateway sends nothing. Set <Mono>telemetry.collector_url</Mono> (or{' '}
+              <Mono>VAUBAAN_TELEMETRY_COLLECTOR_URL</Mono>) to a real collector to contribute.
+            </Callout>
+          )}
+        </div>
       )}
 
-      {state.enabled && overview.placeholderCollector && (
-        <Banner tone="warning" title="Enabled, but nothing is sent">
-          The collector URL is still the placeholder default: no collector exists behind it, so this
-          instance sends nothing. Set <code>telemetry.collector_url</code> (or{' '}
-          <code>VAUBAAN_TELEMETRY_COLLECTOR_URL</code>) to a real collector to contribute.
-        </Banner>
-      )}
+      <Section first>
+        <KeyValue
+          items={[
+            {
+              term: 'State',
+              value: `${state.enabled ? 'on' : 'off'} · ${SOURCE_WORDS[state.source]}`,
+            },
+            {
+              term: 'Reports go to',
+              value: (
+                <>
+                  <Mono>{overview.collectorUrl}</Mono>
+                  {overview.placeholderCollector && ' · the placeholder'}
+                  {overview.collectorKeySet && ' · with a public key, sent as a header'}
+                </>
+              ),
+            },
+            {
+              term: 'Sending',
+              value:
+                overview.client === 'sending'
+                  ? 'yes'
+                  : overview.client === 'disabled'
+                    ? 'no: telemetry is off'
+                    : 'no: no collector is configured',
+            },
+            {
+              term: 'Since start',
+              value: `${formatNumber(overview.queue.delivered)} sent, ${formatNumber(overview.queue.queued)} queued, ${formatNumber(overview.queue.dropped)} dropped`,
+            },
+          ]}
+        />
+        {overview.locked ? (
+          <Hint>{CONFIG_WORDS.fileReadOnly}</Hint>
+        ) : (
+          <form method="post" action={TELEMETRY_ACTION} className={styles.formActions}>
+            <Button
+              type="submit"
+              name={ENABLED_FIELD}
+              value={state.enabled ? 'false' : 'true'}
+              variant={state.enabled ? 'secondary' : 'primary'}
+            >
+              {state.enabled ? SETTINGS_ACTIONS.turnOff : SETTINGS_ACTIONS.turnOn}
+            </Button>
+          </form>
+        )}
+        <Hint>
+          The project cannot test plugins against real services. When you turn this on, the gateway
+          tells the project’s collector whether each call a plugin executed succeeded, so that a
+          plugin version can be deemed validated by the people who use it.
+        </Hint>
+      </Section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Opt-in</CardTitle>
-          {state.enabled ? <Badge tone="success">enabled</Badge> : <Badge>disabled</Badge>}
-        </CardHeader>
-        <CardBody>
-          <Stack gap="var(--space-4)">
-            <dl className={styles.dl}>
-              <dt>State</dt>
-              <dd>
-                {state.enabled ? 'enabled' : 'disabled'} — {SOURCE_LABEL[state.source]}
-              </dd>
-              <dt>Collector URL</dt>
-              <dd>
-                <code>{overview.collectorUrl}</code>
-                {overview.placeholderCollector && ' (placeholder default)'}
-              </dd>
-              <dt>Collector key</dt>
-              <dd>
-                {overview.collectorKeySet
-                  ? 'a public key is configured (sent as a header)'
-                  : 'none'}
-              </dd>
-              <dt>Sending</dt>
-              <dd>
-                {overview.client === 'sending' && 'yes'}
-                {overview.client === 'disabled' && 'no — telemetry is disabled'}
-                {overview.client === 'placeholder-collector' && 'no — no collector is configured'}
-              </dd>
-              <dt>Since start</dt>
-              <dd>
-                {overview.queue.delivered} sent, {overview.queue.queued} queued,{' '}
-                {overview.queue.dropped} dropped
-              </dd>
-            </dl>
-            {overview.locked ? (
-              <p className={styles.muted}>
-                The mounted configuration sets <code>telemetry.enabled</code>; it takes precedence
-                and the toggle is read-only here.
-              </p>
-            ) : (
-              <form method="post" action={TELEMETRY_ACTION}>
-                <Button
-                  type="submit"
-                  name={ENABLED_FIELD}
-                  value={state.enabled ? 'false' : 'true'}
-                  variant={state.enabled ? 'ghost' : 'primary'}
-                >
-                  {state.enabled ? 'Disable telemetry' : 'Enable telemetry'}
-                </Button>
-              </form>
-            )}
-          </Stack>
-        </CardBody>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>What a report contains</CardTitle>
-        </CardHeader>
-        <CardBody>
-          <Stack gap="var(--space-4)">
-            <p>
-              One report per call a plugin executed, sent in batches. This is the exact request body
-              for one report from this instance — {PLUGIN_REPORT_KEYS.length} fields and nothing
-              else:
-            </p>
-            <pre data-testid="telemetry-sample">
-              <code>{overview.samplePayload}</code>
-            </pre>
-            <p className={styles.muted}>
-              <code>outcome</code> is one of success, upstream-error, classification-error,
-              execution-error; <code>error_class</code> is a fixed keyword or an HTTP status, never
-              a message.
-            </p>
-            <p>
-              Never sent: the arguments of a call or a hash of them, resource references, mission
-              identifiers, user identifiers, any identifier of this instance, its address or its
-              host name, the text of a provider&apos;s error.
-            </p>
-          </Stack>
-        </CardBody>
-      </Card>
-    </Stack>
+      <Section title="What a report contains">
+        <div className={styles.prose}>
+          <p>
+            One report per call a plugin executed, sent in batches. This is the exact request body
+            for one report from this gateway — {PLUGIN_REPORT_KEYS.length} fields and nothing else:
+          </p>
+        </div>
+        <div className={styles.block}>
+          <CodeBlock label="One report" testId="telemetry-sample" copy={false}>
+            {overview.samplePayload}
+          </CodeBlock>
+        </div>
+        <Hint>
+          <Mono>outcome</Mono> is one of success, upstream-error, classification-error,
+          execution-error; <Mono>error_class</Mono> is a fixed keyword or an HTTP status, never a
+          message. Never sent: the arguments of a call or a hash of them, resource references,
+          mission identifiers, user identifiers, any identifier of this gateway, its address or its
+          host name, the text of a service’s error.
+        </Hint>
+      </Section>
+    </>
   );
 }

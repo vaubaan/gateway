@@ -1,32 +1,28 @@
 /**
- * `/accounts/new` — "Connect a provider": the providers a user can connect
- * right now, that is the registered plugins whose company app is configured
- * (or that need none). The list is the plugin registry's; nothing is
- * enumerated here.
+ * `/accounts/new` — choose the service of the account to connect. The same
+ * picker as the last region of `/accounts`, on a page of its own for whoever
+ * arrives from elsewhere (the mission being written keeps its `return_to`).
+ * The list is the plugin registry's; nothing is enumerated here.
  */
 import Link from 'next/link';
-import { PAGES } from '@/lib/vocabulary';
 
 import { NeedsUser } from '@/components/auth/NeedsUser';
-import styles from '@/components/connections/connections.module.css';
-import {
-  credentialKindLabel,
-  ExperimentalBadge,
-  NoticeBanner,
-} from '@/components/connections/parts';
-import { Banner, Stack } from '@/components/ui';
+import { NoticeBanner } from '@/components/connections/parts';
+import { ServicePicker } from '@/components/connections/ServicePicker';
+import { Callout, Hint, PageHeader, Section } from '@/components/ui';
 import {
   currentActor,
   firstParam,
   takeNotice,
   type PageSearchParams,
 } from '@/lib/connections/session';
-import { CONNECTIONS_PATH, NEW_CONNECTION_PATH, PROVIDER_APPS_PAGE } from '@/server/connections';
-import { providerPath, PROVIDERS_PATH } from '@/server/providers/links';
+import { ACCOUNT_PAGES, PAGES, ROUTES } from '@/lib/vocabulary';
+import { PROVIDER_APPS_PAGE } from '@/server/connections';
+import { PROVIDERS_PATH } from '@/server/providers/links';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ConnectProviderPage({
+export default async function ConnectAccountPage({
   searchParams,
 }: {
   searchParams: PageSearchParams;
@@ -37,79 +33,43 @@ export default async function ConnectProviderPage({
   const params = await searchParams;
   const notice = await takeNotice(root, principal.sessionId, params);
   const providers = await root.connections.service.providers();
-  const available = providers.filter((p) => p.configured);
-  const unavailable = providers.filter((p) => !p.configured);
-  const returnTo = firstParam(params.return_to);
-  const suffix = returnTo ? `?return_to=${encodeURIComponent(returnTo)}` : '';
+  const none = providers.every((provider) => !provider.configured);
 
   return (
-    <Stack gap="var(--space-6)">
-      <div>
-        <p className={styles.muted}>
-          <Link href={CONNECTIONS_PATH}>{PAGES.accounts.title}</Link> / Connect a provider
-        </p>
-        <h1>Connect a provider</h1>
-        <p className={styles.muted}>
-          You authenticate at the provider through the app your company registered; the credential
-          comes back to this instance, is encrypted, and stays under your name. What a mission can
-          then do with each provider — its risks, its presets — is described in the{' '}
-          <Link href={PROVIDERS_PATH} className={styles.refLink}>
-            provider reference
-          </Link>
-          .
-        </p>
-      </div>
-
+    <>
+      <PageHeader
+        crumbs={[
+          { label: PAGES.accounts.title, href: ROUTES.accounts },
+          { label: ACCOUNT_PAGES.connect.title },
+        ]}
+        title={ACCOUNT_PAGES.connect.title}
+        lede={ACCOUNT_PAGES.connect.lede}
+      />
       <NoticeBanner notice={notice} />
-
-      {available.length === 0 ? (
-        <Banner tone="warning" title="No provider can be connected yet">
-          An operator must register the company app of at least one provider
-          {principal.isOperator ? (
-            <>
-              {' '}
-              — <Link href={PROVIDER_APPS_PAGE}>Administration → Provider apps</Link>.
-            </>
-          ) : (
-            '.'
-          )}
-        </Banner>
-      ) : (
-        <ul className={styles.providerList}>
-          {available.map((p) => (
-            <li key={p.id}>
-              <Link
-                href={`${NEW_CONNECTION_PATH}/${encodeURIComponent(p.id)}${suffix}`}
-                className={styles.providerCard}
-              >
-                <span className={styles.providerName}>
-                  {p.displayName}
-                  {p.experimental && <ExperimentalBadge />}
-                </span>
-                {p.description && <span className={styles.muted}>{p.description}</span>}
-                <span className={styles.muted}>{credentialKindLabel(p.kind)}</span>
-              </Link>
-              <Link href={providerPath(p.id)} className={styles.providerRef}>
-                Risks and presets of {p.displayName}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {unavailable.length > 0 && (
-        <p className={styles.muted}>
-          Not available yet (no company app registered):{' '}
-          {unavailable.map((p) => p.displayName).join(', ')}.
-          {principal.isOperator && (
-            <>
-              {' '}
-              <Link href={PROVIDER_APPS_PAGE}>Register them in Administration → Provider apps</Link>
-              .
-            </>
-          )}
-        </p>
-      )}
-    </Stack>
+      <Section first>
+        {none && (
+          <Callout tone="warn" title="No service can be connected yet" testId="no-service">
+            Each of them needs a company app, which an administrator registers once
+            {principal.isOperator ? (
+              <>
+                {' '}
+                — <Link href={PROVIDER_APPS_PAGE}>Settings → Company apps</Link>.
+              </>
+            ) : (
+              '.'
+            )}
+          </Callout>
+        )}
+        <ServicePicker
+          providers={providers}
+          administrator={principal.isOperator}
+          returnTo={firstParam(params.return_to)}
+        />
+        <Hint>
+          What an agent can then do on each service, permission by permission, is in the{' '}
+          <Link href={PROVIDERS_PATH}>{PAGES.reference.title}</Link>.
+        </Hint>
+      </Section>
+    </>
   );
 }

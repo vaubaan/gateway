@@ -81,6 +81,11 @@ export const LEGACY_REDIRECTS: readonly {
   { source: '/audit', destination: '/activity' },
   { source: '/providers', destination: '/reference' },
   { source: '/providers/:path*', destination: '/reference/:path*' },
+  // What a colleague gave access to is the second region of Accounts ("Shared with you").
+  { source: '/shares', destination: '/accounts' },
+  // Connected apps ("delegations") are a page of Settings.
+  { source: '/delegations', destination: '/settings/connected-apps' },
+  { source: '/delegations/:id/revoke', destination: '/settings/connected-apps/:id/revoke' },
 ];
 
 const nextConfig: NextConfig = {

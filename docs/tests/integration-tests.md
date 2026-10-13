@@ -92,9 +92,10 @@ this table says where each requirement lives, and what is not written yet.
 | --------------------------------------------------------------------------------------------------------- | -------: |
 | `apps/gateway/src/app/(app)/missions/[id]/session/event-words.test.ts`                                    |        8 |
 | `apps/gateway/src/app/(app)/missions/message-of.test.ts`                                                  |        2 |
-| `apps/gateway/src/app/(app)/missions/mission-view.test.ts`                                                |       15 |
+| `apps/gateway/src/app/(app)/missions/mission-view.test.ts`                                                |       12 |
 | `apps/gateway/src/app/(app)/missions/new/form-state.test.ts`                                              |       40 |
 | `apps/gateway/src/components/auth/principal.test.ts`                                                      |        2 |
+| `apps/gateway/src/components/connections/shape.test.ts`                                                   |        5 |
 | `apps/gateway/src/server/audit/filters.test.ts`                                                           |       24 |
 | `apps/gateway/src/server/audit/session-event-detail.test.ts`                                              |       10 |
 | `apps/gateway/src/server/auth/admin-rule.test.ts`                                                         |        5 |
@@ -179,6 +180,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/authority/close-orphaned.test.ts`                                         |       11 |
 | `apps/gateway/tests/integration/authority/door-latency.bench.test.ts`                                     |        1 |
 | `apps/gateway/tests/integration/authority/handlers.test.ts`                                               |       11 |
+| `apps/gateway/tests/integration/authority/missions-on-connection.test.ts`                                 |        8 |
 | `apps/gateway/tests/integration/authority/ownership.test.ts`                                              |       13 |
 | `apps/gateway/tests/integration/authority/rules-read-by-pages.test.ts`                                    |        7 |
 | `apps/gateway/tests/integration/authority/share-and-orphan.test.ts`                                       |       19 |
@@ -239,14 +241,14 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/store/web-sessions.test.ts`                                               |        8 |
 | `apps/gateway/tests/integration/telemetry/telemetry.test.ts`                                              |       18 |
 | `apps/gateway/tests/unit/app/admin-guard.test.ts`                                                         |       63 |
-| `apps/gateway/tests/unit/app/app-guard.test.ts`                                                           |      136 |
+| `apps/gateway/tests/unit/app/app-guard.test.ts`                                                           |      131 |
 | `apps/gateway/tests/unit/app/build-footer.test.tsx`                                                       |        3 |
 | `apps/gateway/tests/unit/app/design-system.test.tsx`                                                      |       33 |
 | `apps/gateway/tests/unit/app/design-tokens.test.ts`                                                       |       62 |
 | `apps/gateway/tests/unit/app/field.test.tsx`                                                              |        6 |
 | `apps/gateway/tests/unit/app/now-and-waiting.test.tsx`                                                    |       28 |
 | `apps/gateway/tests/unit/app/risk-explain.test.tsx`                                                       |        9 |
-| `apps/gateway/tests/unit/app/shell-and-vocabulary.test.ts`                                                |       18 |
+| `apps/gateway/tests/unit/app/shell-and-vocabulary.test.ts`                                                |       23 |
 | `apps/gateway/tests/unit/server/auth/mutation-guard.test.ts`                                              |      287 |
 | `apps/gateway/tests/unit/server/budget/decide.test.ts`                                                    |       20 |
 | `apps/gateway/tests/unit/server/budget/gates.test.ts`                                                     |        9 |
@@ -263,7 +265,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/structural/example-config-providers.test.ts`                                     |       10 |
 | `apps/gateway/tests/unit/structural/index.test.ts`                                                        |      100 |
 | `apps/gateway/tests/unit/structural/no-arguments-in-logs.test.ts`                                         |        3 |
-| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`                                          |      377 |
+| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`                                          |      416 |
 | `apps/gateway/tests/unit/structural/persisted-enumerations.test.ts`                                       |       10 |
 | `apps/gateway/tests/unit/structural/plugin-identifier-tests.test.ts`                                      |       25 |
 | `apps/gateway/tests/unit/structural/shipped-presets.test.ts`                                              |       41 |
@@ -374,12 +376,12 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/vercel/tests/unit/team-pin.test.ts`                                                              |       99 |
 | `scripts/audit-gate.test.mjs`                                                                             |       29 |
 | `scripts/release-lib.test.mjs`                                                                            |       50 |
-| **TOTAL** (`npx vitest run --reporter=json`, 2026-10-14, with a build; 277 files; 9746 passed, 1 skipped) | **9747** |
+| **TOTAL** (`npx vitest run --reporter=json`, 2026-10-14, with a build; 286 files; 9881 passed, 1 skipped) | **9882** |
 
 The table is generated from the JSON report of one run of the whole suite
 (`npx vitest run --reporter=json`). A count is the number of tests the file
 declares, `it.each` expanded, **skipped tests included**: the TOTAL is the
-report's number of tests, of which 9746 passed and 1 was skipped in that
+report's number of tests, of which 9881 passed and 1 was skipped in that
 run, made with a build (as `npm run ci` does). The one skipped whatever the
 build is the latency measurement of the authority re-check
 (`door-latency.bench.test.ts`, run with `VAUBAAN_BENCH=1`). Without a build 27
@@ -1304,7 +1306,7 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   nothing**. The three protocol endpoints of the authorization server
   (`token`, `revoke`, `register`) are held to reading no session.
 - **`tests/unit/app/admin-guard.test.ts`** (63) and
-  **`tests/unit/app/app-guard.test.ts`** (136) — **structural: every page and
+  **`tests/unit/app/app-guard.test.ts`** (131) — **structural: every page and
   route authenticates itself; the layout is not the boundary.** The pages
   and routes of `/admin` and of the `(app)` surface are discovered from the
   file tree. Each admin page calls `requireOperator()` and renders nothing
@@ -1328,7 +1330,7 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   is below it on purpose); a white letter holds on every mark hue; every
   style refers only to tokens that exist, every token is used, no style sheet
   holds a raw colour, and a font size is a token or relative.
-- **`tests/unit/app/shell-and-vocabulary.test.ts`** (18) — the side
+- **`tests/unit/app/shell-and-vocabulary.test.ts`** (23) — the words of the accounts, reference, activity and settings pages (who owns an account and who else holds it, the confirming button of "Give access", a short date, what a preset holds, the retention in the lede of the record, the setup count; a word for every refusal code and every administrative act, none of them a protocol word), the two pages that were folded into another (`/shares`, `/delegations`) and the server's constant of connected apps; and the side
   navigation holds seven entries in the order of the redesign, each leading
   to a page that exists; every page is under exactly one entry; the local
   navigation of Settings leads to pages that exist and uses no label twice;
@@ -1357,6 +1359,12 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   `RiskExplain` in three lines, the class left out of a list already grouped
   by class; help rendered closed with its button; a callout with a title, an
   icon and the role of a note.
+- **`src/components/connections/shape.test.ts`** (5) — `shapeOfPattern`, the
+  shape a credential field expects, read from the plugin's pattern and said
+  in its label: a literal prefix, a choice of prefixes each written whole
+  ("starts with sk*test* or rk*test*"), a minimum, exact or bounded length,
+  digits only; and nothing for a pattern it cannot read whole or that states
+  no shape.
 - **`src/components/auth/principal.test.ts`** (2) — `isOperatorPrincipal`,
   the interface's one statement of who is shown as an operator (the
   Administration link, the Audit page's sentence): true for the bootstrap
@@ -2095,7 +2103,7 @@ included` equals the catalog; where the environment comes from (Vercel: the
   draft is a custom policy. **The Custom editor**: `editorRows` lists every
   explicit id with why one cannot be ticked; `filterRows` by words and by
   status ("Available to you" is what may be ticked and what is ticked).
-- **`src/app/(app)/missions/mission-view.test.ts`** (15) — what the mission
+- **`src/app/(app)/missions/mission-view.test.ts`** (12) — what the mission
   pages say: **the state of a mission in words** (a running mission is
   written plainly; a waiting request wins over a reached limit and is amber,
   with whose answer it waits for on a teammate's page; "Needs an owner" and
@@ -2549,6 +2557,20 @@ Unit, beside the code (102):
   every mission shares and restores; one that misses a mission, or names
   something else, comes back again; a share that restores nothing is made
   at once.
+- **`tests/integration/authority/missions-on-connection.test.ts`** (8) — **what
+  an owner reads about a connection** (ADR
+  owner-reads-missions-and-holders-of-a-connection).
+  `MissionService.onConnection`: the missions of everyone on the connection
+  with what each uses there (the creator, the derived state, how many accepted
+  risks of this provider and how many under approval, the resources of this
+  connection only, whether the reader may open the mission); a mission that
+  reads `orphaned` with its cause, then `revoked` once closed; nothing to who
+  holds only a share, to an operator, or for an unknown id; a member of the
+  owner group reads it and a former member does not. `ShareService.holders`:
+  the owner and each active share with the people behind it (a person, a
+  group with its members) and who made the share; the members of the owner
+  group, a revoked share left out; a deactivated person is said so; anyone
+  but an owner reads `not-found`.
 - **`tests/integration/authority/close-orphaned.test.ts`** (11) — **closing an
   orphaned mission** (spec §2.3): **an owner of the connection revokes it** —
   stored `revoked`, every token stopped, the door answers `mission-inactive`

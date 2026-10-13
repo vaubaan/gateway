@@ -18,17 +18,17 @@ export const GROUP_NAME_MAX_LENGTH = 80;
 export type GroupErrorCode = (typeof GROUP_ERROR_CODES)[number];
 
 export const GROUP_ERROR_MESSAGES: Readonly<Record<GroupErrorCode, string>> = {
-  'not-found': 'This group or this member does not exist.',
-  'name-invalid': `A group name is 1 to ${GROUP_NAME_MAX_LENGTH} characters, without control characters.`,
+  'not-found': 'This team or this member does not exist.',
+  'name-invalid': `A team name is 1 to ${GROUP_NAME_MAX_LENGTH} characters, without control characters.`,
   'name-taken':
-    'A group already has this name (local, or claimed by the identity provider). A name designates one group.',
+    'A team already has this name (local, or sent by the identity provider). A name designates one team.',
   'name-reserved':
-    'This is the group of the admin rule: its membership is granted by the identity provider only.',
+    'This is the team of the administrator rule: its members come from the identity provider only.',
   'not-local':
-    'This group comes from the identity provider: its members are replaced at each sign-in and cannot be edited here.',
+    'This team comes from the identity provider: its members are replaced at each sign-in and cannot be edited here.',
   'user-unknown':
-    'No active user has this email. A user is known to the instance once they have signed in.',
-  'user-ambiguous': 'Several users carry this email; none was added.',
+    'Nobody active has this email. A person is known to the gateway once they have signed in.',
+  'user-ambiguous': 'Several people carry this email; none was added.',
 };
 
 const STATUS_BY_CODE: Readonly<Record<GroupErrorCode, number>> = {

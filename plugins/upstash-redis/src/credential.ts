@@ -46,7 +46,7 @@ export const upstashRedisCredential: ApiKeyCredentialSpec = {
       name: 'api_key',
       label: 'Management API key',
       secret: true,
-      help: 'Create a key in the Upstash console → Account → Management API. The key does not expire ; revoke it in the console to end the connection.',
+      help: 'Create a key in the Upstash console → Account → Management API. The key does not expire; revoke it in the console to end what this account can do.',
     },
   ],
 };

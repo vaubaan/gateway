@@ -33,37 +33,36 @@ export const CONNECT_ERROR_CODES = [
 export type ConnectErrorCode = (typeof CONNECT_ERROR_CODES)[number];
 
 export const CONNECT_ERROR_MESSAGES: Readonly<Record<ConnectErrorCode, string>> = {
-  'provider-unknown': 'This provider is not available on this instance.',
+  'provider-unknown': 'This service is not available on this gateway.',
   'app-not-configured':
-    'An operator must register the company app for this provider first (Administration → Provider apps).',
+    'An administrator must register the company app of this service first (Settings → Company apps).',
   'invalid-input': 'Some values are missing or do not have the expected format.',
-  'return-url-refused': 'The return address is outside this instance and was refused.',
-  'rate-limited': 'Too many connection attempts. Wait a minute and retry.',
+  'return-url-refused': 'The return address is outside this gateway and was refused.',
+  'rate-limited': 'Too many attempts to connect. Wait a minute and retry.',
   'state-invalid':
-    'This authorization attempt has expired, was already used, or was started by another session. Start again from Connections.',
-  'provider-denied': 'The provider did not grant the authorization.',
-  'token-exchange-failed': 'The provider refused to exchange the authorization for a credential.',
+    'This authorization attempt has expired, was already used, or was started by another session. Start again from Accounts.',
+  'provider-denied': 'The service did not grant the authorization.',
+  'token-exchange-failed': 'The service refused to exchange the authorization for a credential.',
   'installation-not-verified':
-    'The provider did not confirm that your account has access to this installation; nothing was connected.',
+    'The service did not confirm that you have access to this installation; nothing was connected.',
   'installation-unverifiable':
-    'This provider cannot prove who performed an installation. An operator must explicitly accept unverified installations for it (Administration → Provider apps).',
-  'credential-rejected': 'The provider rejected this credential.',
-  'provider-unreachable': 'The provider could not be reached. Retry in a moment.',
-  'not-found': 'This connection does not exist or is not yours.',
-  'connection-revoked': 'This connection is revoked; revocation is final. Create a new connection.',
+    'This service cannot prove who performed an installation. An administrator must explicitly accept unverified installations for it (Settings → Company apps).',
+  'credential-rejected': 'The service rejected this credential.',
+  'provider-unreachable': 'The service could not be reached. Retry in a moment.',
+  'not-found': 'This account does not exist or is not yours.',
+  'connection-revoked': 'This account is disconnected, for good. Connect a new one.',
   'connection-unowned':
-    'This connection has no owner any more. It keeps serving its missions, but it cannot be reconnected until an operator reassigns an owner.',
-  'provider-mismatch': 'This connection belongs to another provider.',
-  'label-read-only':
-    'The environment of this resource is set by the provider plugin and cannot be edited.',
+    'This account has no owner any more. It keeps serving its missions, but it cannot be reconnected until an administrator names a new owner.',
+  'provider-mismatch': 'This account belongs to another service.',
+  'label-read-only': 'The environment of this resource is set by the service and cannot be edited.',
   'transfer-not-member':
-    'A connection can only be transferred to a group you belong to: you would otherwise lose it by mistake.',
+    'An account can only be transferred to a team you belong to: you would otherwise lose it by mistake.',
   'not-ownerless':
-    'This connection still has an owner. An operator only reassigns a connection that has none left.',
+    'This account still has an owner. An administrator only names an owner for an account that has none left.',
   'owner-unknown':
-    'No active user has this email. A user is known to the instance once they have signed in.',
+    'Nobody active has this email. A person is known to the gateway once they have signed in.',
   'owner-group-empty':
-    'This group does not exist or has no member: the connection would still have no owner.',
+    'This team does not exist or has no member: the account would still have no owner.',
 };
 
 const STATUS_BY_CODE: Readonly<Record<ConnectErrorCode, number>> = {

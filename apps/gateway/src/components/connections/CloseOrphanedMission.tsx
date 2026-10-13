@@ -1,25 +1,27 @@
 'use client';
 
 /**
- * "Close" on an orphaned mission, for an owner of one of its connections (spec
- * §2.3: "the creator, or an owner of the connection, may close it"). Closing is
- * the mission's revocation — same route, same entry in the audit — and is
- * final, so the owner types the mission's name first.
+ * "Close" on a mission that stopped for want of an owner (the protocol's
+ * `orphaned`), for an owner of one of its accounts (spec §2.3: "the creator,
+ * or an owner of the connection, may close it"). Closing is the mission's
+ * revocation — same route, same entry in the activity — and is final, so the
+ * owner types the mission's name first.
  */
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { Button, DangerConfirm } from '@/components/ui';
+import { ACCOUNT_ACTIONS } from '@/lib/vocabulary';
 
 function messageOf(body: unknown, status: number): string {
   // The API answers "not found" to whoever may not close the mission: say what changed.
   if (status === 404) {
-    return 'This mission is no longer orphaned, or is no longer on a connection you own.';
+    return 'This mission runs again, or is no longer on an account you own.';
   }
   if (typeof body === 'object' && body !== null && 'message' in body) {
     if (typeof body.message === 'string') return body.message;
   }
-  return 'The instance answered ' + String(status) + '.';
+  return 'The gateway answered ' + String(status) + '.';
 }
 
 export function CloseOrphanedMission({ missionId, name }: { missionId: string; name: string }) {
@@ -42,7 +44,7 @@ export function CloseOrphanedMission({ missionId, name }: { missionId: string; n
       setConfirming(false);
       router.refresh();
     } catch {
-      setError('The instance could not be reached.');
+      setError('The gateway could not be reached.');
     } finally {
       setBusy(false);
     }
@@ -58,12 +60,12 @@ export function CloseOrphanedMission({ missionId, name }: { missionId: string; n
         disabled={busy}
         aria-label={`Close mission ${name}`}
       >
-        Close
+        {ACCOUNT_ACTIONS.closeMission}
       </Button>
       {confirming && (
         <DangerConfirm
-          title="Close this orphaned mission"
-          body="The mission is revoked: every token of it stops for good, and no share brings it back. Its creator issues a new mission to continue the work."
+          title={`Close ${name}?`}
+          body="The mission is stopped for good: every key of it is refused from now on, and giving access again will not bring it back. Its creator writes a new mission to continue the work."
           phrase={name}
           confirmLabel="Close mission"
           busy={busy}

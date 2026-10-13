@@ -317,13 +317,21 @@ test('a gated action of the developer preset: refused, approved by its creator o
   // ── What the audit keeps: the acts and the fingerprint, never the arguments ──
   await hedy.goto(`/activity?mission=${issued.mission_id}`);
   await expect(hedy.getByRole('heading', { name: 'Activity', level: 1 })).toBeVisible();
-  const entries = hedy.locator('table tbody tr');
-  await expect(entries.filter({ hasText: 'approval-granted' })).toHaveCount(1);
-  await expect(entries.filter({ hasText: 'gate-opened' })).toHaveCount(1);
-  await expect(entries.filter({ hasText: 'request-refused' })).toHaveCount(1);
-  await expect(entries.filter({ hasText: 'gate-changed' })).toHaveCount(2);
-  await expect(entries.filter({ hasText: 'approval consumed' })).toHaveCount(1);
-  await expect(entries.filter({ hasText: 'approval-required' }).first()).toContainText(TOOL);
+  // One line per call and per change, in words; the protocol's names are in a line's detail.
+  const entries = hedy.getByTestId('audit-table').locator('tbody tr[data-row]');
+  await expect(entries.filter({ hasText: 'approved a call' })).toHaveCount(1);
+  await expect(
+    entries.filter({ hasText: 'let a permission run freely for the period' }),
+  ).toHaveCount(1);
+  await expect(entries.filter({ hasText: 'refused a request' })).toHaveCount(1);
+  await expect(entries.filter({ hasText: 'changed “ask me first”' })).toHaveCount(2);
+  // The one call that used her yes says so on its line.
+  await expect(entries.filter({ hasText: 'after a yes' })).toHaveCount(1);
+  // A call that had to ask is not "refused" in red: it asked her.
+  const asked = entries.filter({ hasText: 'asked you' });
+  await expect(asked.first()).toContainText(TOOL);
+  await asked.first().getByTestId('entry-detail-link').click();
+  await expect(hedy.getByTestId('entry-detail')).toContainText('approval-required');
   expect(await hedy.content()).not.toContain(MARKER);
   await snap(hedy, 'approval-audit');
 

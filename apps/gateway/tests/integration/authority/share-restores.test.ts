@@ -223,8 +223,8 @@ describe('a share that would bring orphaned missions back', () => {
         session,
         url.searchParams.get(NOTICE_PARAM),
       );
-      expect(notice).toMatchObject({ tone: 'success', title: 'Shared' });
-      expect(notice?.lines.join(' ')).toContain('1 orphaned mission is covered again');
+      expect(notice).toMatchObject({ tone: 'success', title: 'Access given' });
+      expect(notice?.lines.join(' ')).toContain('1 stopped mission is covered again');
       expect((await activeShares()).map((s) => s.restriction)).toEqual([[READ]]);
       expect(await rig.statusOf(reader)).toBe('active');
       expect((await rig.read(reader)).result).toBeDefined();

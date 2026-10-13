@@ -52,7 +52,7 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
     return {
       tone: 'danger',
       title,
-      lines: ['An unexpected error occurred. The instance log has the detail.'],
+      lines: ['An unexpected error occurred. The log of the gateway has the detail.'],
     };
   }
 
@@ -84,27 +84,27 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
 
   return {
     deactivate(request, userId) {
-      return act(request, 'User not deactivated', async (actor) => {
+      return act(request, 'Not deactivated', async (actor) => {
         const done = await deps.users.deactivate(actor, userId);
         const lines = [
-          'They can no longer sign in, their open sessions are over, and they hold no authority on any connection.',
+          'They can no longer sign in, their open sessions are over, and they hold nothing on any account.',
         ];
         if (done.delegationsRevoked > 0) {
           lines.push(
-            `${done.delegationsRevoked} ${plural(done.delegationsRevoked, 'delegation was', 'delegations were')} revoked: the applications acting on their behalf lost their access.`,
+            `${done.delegationsRevoked} ${plural(done.delegationsRevoked, 'connected app was', 'connected apps were')} disconnected: the apps acting for them lost their access.`,
           );
         }
         if (done.groupsLeft.length > 0) {
-          lines.push(`Removed from ${done.groupsLeft.map((name) => `"${name}"`).join(', ')}.`);
+          lines.push(`Removed from ${done.groupsLeft.map((name) => `“${name}”`).join(', ')}.`);
         }
         if (done.orphaned > 0) {
           lines.push(
-            `${done.orphaned} of their missions ${plural(done.orphaned, 'is', 'are')} now orphaned: every call is refused.`,
+            `${done.orphaned} of their missions ${plural(done.orphaned, 'is', 'are')} stopped: every call is refused.`,
           );
         }
         if (done.unowned > 0) {
           lines.push(
-            `${done.unowned} ${plural(done.unowned, 'connection has', 'connections have')} no owner left: reassign ${plural(done.unowned, 'it', 'them')} under Administration → Connections.`,
+            `${done.unowned} ${plural(done.unowned, 'account has', 'accounts have')} no owner left: name one under Settings → Accounts without owner.`,
           );
         }
         return {
@@ -116,10 +116,10 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
     },
 
     reactivate(request, userId) {
-      return act(request, 'User not reactivated', async (actor) => {
+      return act(request, 'Not reactivated', async (actor) => {
         const done = await deps.users.reactivate(actor, userId);
         const lines = [
-          'They can sign in again. Their groups from the identity provider return at that sign-in; local groups, delegations and reassigned connections do not come back by themselves.',
+          'They can sign in again. Their teams from the identity provider return at that sign-in; local teams, connected apps and accounts given to someone else do not come back by themselves.',
         ];
         if (done.restored > 0) {
           lines.push(

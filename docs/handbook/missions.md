@@ -1133,8 +1133,8 @@ read by a page.
 ### How a risk is explained elsewhere (`components/risk/RiskExplain.tsx`)
 
 The mission pages no longer use it: a permission is a `PermissionRow` there.
-It remains for the pages not redesigned yet (the Share dialog's checklist, the
-reference): `RiskExplain`, `VectorStrip`, `VectorLegend`, `RiskIdLink`,
+No page uses it any more (the "Give access" dialog and the reference were
+redesigned too); the file still exports `RiskExplain`, `VectorStrip`, `VectorLegend`, `RiskIdLink`,
 `RiskClassTag`, `RiskReason`, `RiskMarkers`, `RiskMarkerNotes`.
 
 `CatalogRisk` carries what both need: `vector` (resolved for the id's
@@ -1261,7 +1261,7 @@ discovery; every resource hidden; a resource turned stale).
 Scenarios in [integration-tests](../tests/integration-tests.md).
 
 The mission pages add two pure suites beside the code:
-`app/(app)/missions/mission-view.test.ts` (15: the state of a mission in
+`app/(app)/missions/mission-view.test.ts` (12: the state of a mission in
 words, Can / Asks first / Cannot, the limit that is near) and
 `app/(app)/missions/[id]/session/event-words.test.ts` (8: what a row of the
 activity says of each kind of event). The components they are built from are

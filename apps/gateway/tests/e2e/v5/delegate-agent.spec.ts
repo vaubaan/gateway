@@ -302,22 +302,39 @@ test('an agent obtains a delegation, prepares and issues a mission, and the user
   await expect(page.getByTestId('issued-via')).toContainText('it is not verified');
   await snap(page, 'mission-delegated');
 
-  // ── The user sees the delegation and revokes it in one click ───────────────
+  // ── The user sees the connected app and disconnects it ─────────────────────
+  // The earlier path of the page still leads to it.
   await page.goto(`${PUBLIC_URL}/delegations`);
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Delegations');
-  const card = page.locator(`[id]`, { hasText: CLIENT_NAME }).first();
-  await expect(card).toContainText('active');
-  await expect(card).toContainText(provider.information?.client_id ?? 'no client id');
-  await expect(card).toContainText('127.0.0.1:43217');
-  await expect(card.getByRole('link', { name: MISSION_NAME })).toBeVisible();
-  await expect(card).toContainText('issued in your name');
-  // A consent does not last for ever: the page says when it ends (90 days by default).
-  await expect(card).toContainText('Consent ends');
+  await expect(page).toHaveURL(/\/settings\/connected-apps$/);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Connected apps');
+  const app = page
+    .getByTestId('connected-apps')
+    .locator('tbody tr[data-row]')
+    .filter({ hasText: CLIENT_NAME });
+  await expect(app).toContainText('connected');
+  // A consent does not last for ever: the line says how long (90 days by default).
+  await expect(app).toContainText('valid 90 days');
+  await expect(app).toContainText(MISSION_NAME);
+  // The facts of the app are one click away, with an address of their own.
+  await app.getByRole('link', { name: CLIENT_NAME }).click();
+  await expect(page).toHaveURL(/[?&]app=/);
+  const facts = page.getByTestId('app-detail');
+  await expect(facts).toContainText(provider.information?.client_id ?? 'no client id');
+  await expect(facts).toContainText('127.0.0.1:43217');
+  await expect(facts).toContainText('not verified');
+  await expect(facts.getByRole('link', { name: MISSION_NAME })).toBeVisible();
+  await expect(facts).toContainText('in your name');
+  await expect(facts).toContainText('Consent ends');
   await snap(page, 'delegations');
 
-  await card.getByRole('button', { name: 'Revoke' }).click();
-  await expect(page.getByText('Delegation revoked')).toBeVisible();
-  await expect(page.locator('body')).toContainText('revoked by you');
+  // Disconnecting is asked first, and says what stays.
+  await page.getByRole('button', { name: `Disconnect ${CLIENT_NAME}` }).click();
+  const confirm = page.getByTestId('disconnect-app-dialog');
+  await expect(confirm).toContainText('The app loses its access at once');
+  await expect(confirm).toContainText('The missions it prepared are yours and keep running');
+  await confirm.getByRole('button', { name: 'Disconnect', exact: true }).click();
+  await expect(page.getByText('App disconnected')).toBeVisible();
+  await expect(page.locator('body')).toContainText('disconnected by you');
   await snap(page, 'delegations-revoked');
 
   // ── The agent is locked out at its next request, and asks the user again ───
@@ -347,7 +364,7 @@ test('connected apps are part of Settings, and an empty page says how to authori
   const context = await browser.newContext();
   await routeToInstance(context);
   const page = await context.newPage();
-  await page.goto(`${PUBLIC_URL}/auth/login?return_to=/delegations`);
+  await page.goto(`${PUBLIC_URL}/auth/login?return_to=/settings/connected-apps`);
   await expect(
     page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Settings' }),
   ).toHaveAttribute('aria-current', 'page');
@@ -356,7 +373,8 @@ test('connected apps are part of Settings, and an empty page says how to authori
       .getByRole('navigation', { name: 'Settings' })
       .getByRole('link', { name: 'Connected apps' }),
   ).toHaveAttribute('aria-current', 'page');
-  await expect(page.getByText('You authorized no application.')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Connected apps', level: 1 })).toBeVisible();
+  await expect(page.getByTestId('no-app')).toContainText('You connected no app.');
   await expect(page.locator('body')).toContainText(`${PUBLIC_URL}/mcp/manage`);
   await context.close();
 });

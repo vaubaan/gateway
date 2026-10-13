@@ -134,7 +134,7 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
     return {
       tone: 'danger',
       title,
-      lines: ['An unexpected error occurred. The instance log has the detail.'],
+      lines: ['An unexpected error occurred. The log of the gateway has the detail.'],
     };
   }
 
@@ -197,13 +197,13 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
             tone: 'warning',
             title: `${after.displayName}: unverified installations are now accepted`,
             lines: [
-              'Any signed-in user who knows the id of an installation of this app can connect it. Turn this off as soon as the plugin can verify installations.',
+              'Anyone signed in who knows the id of an installation of this app can connect it. Turn this off as soon as the plugin can verify installations.',
             ],
           }
         : {
             tone: 'success',
             title: `${after.displayName}: unverified installations are refused`,
-            lines: ['Existing connections are unchanged; new ones are refused.'],
+            lines: ['The accounts already connected are unchanged; new ones are refused.'],
           },
     };
   }
@@ -215,7 +215,7 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
   ): Promise<ProviderAppChange> {
     if (deps.providerApps.isReadOnly(providerId)) {
       throw new ProviderAppError([
-        `${before.displayName} is set by the mounted configuration; edit it there`,
+        `${before.displayName} is set in the mounted configuration; edit it there`,
       ]);
     }
     await deps.providerApps.clear(providerId);
@@ -225,8 +225,8 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
       after,
       notice: {
         tone: 'success',
-        title: `${after.displayName}: settings removed`,
-        lines: ['Users can no longer start new connections to this provider.'],
+        title: `${after.displayName}: company app removed`,
+        lines: ['Nobody can connect a new account of this service until it is registered again.'],
       },
     };
   }
@@ -324,7 +324,7 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
         return redirectWithNotice(
           who.principal,
           CONNECTIONS_PATH,
-          failureNotice(err, 'Discovery not refreshed'),
+          failureNotice(err, 'Not refreshed'),
         );
       }
     },
@@ -339,9 +339,9 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
         return await redirectWithNotice(who.principal, connectionPath(revoked.id), {
           // The act succeeded either way; the tone says whether something is left to do.
           tone: grant.actionNeeded ? 'warning' : 'success',
-          title: 'Connection revoked',
+          title: 'Account disconnected',
           lines: [
-            'The stored credential was erased. Missions that carry this connection are now orphaned and refuse every call; a revoked connection never comes back, so they stay orphaned.',
+            'The stored credential was erased. The missions that used this account are stopped and refuse every call; a disconnected account never comes back, so they stay stopped.',
             `${grant.title}. ${grant.text}`,
           ],
         });
@@ -349,7 +349,7 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
         return redirectWithNotice(
           who.principal,
           CONNECTIONS_PATH,
-          failureNotice(err, 'Not revoked'),
+          failureNotice(err, 'Not disconnected'),
         );
       }
     },
@@ -365,10 +365,10 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
         const group = who.actor.groups.find((g) => g.id === groupId);
         return await redirectWithNotice(who.principal, connectionPath(connectionId), {
           tone: 'success',
-          title: `Transferred to group ${group?.name ?? ''}`.trimEnd(),
+          title: group ? `Transferred to the ${group.name} team` : 'Transferred',
           lines: [
-            'Every member of this group, now and later, is a full owner: they may share, reconnect, transfer or revoke.',
-            'The shares of this connection are unchanged.',
+            'Every member of this team, now and later, is a full owner: they may give access, reconnect, transfer or disconnect.',
+            'The accesses already given are unchanged.',
           ],
         });
       } catch (err) {
@@ -396,18 +396,18 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
         );
         return await redirectWithNotice(guard.principal, OWNERLESS_CONNECTIONS_PAGE, {
           tone: 'success',
-          title: `${reassigned.displayName}: owner reassigned`,
+          title: `${reassigned.displayName} has a new owner`,
           lines: [
             reassigned.status === 'expired'
-              ? 'The connection is expired: its new owner must reconnect it.'
-              : 'The connection is active again; its new owner may share, reconnect, transfer or revoke it.',
+              ? 'The account needs reconnecting: its new owner must reconnect it.'
+              : 'The account takes an owner’s acts again: its new owner may give access, reconnect, transfer or disconnect it.',
           ],
         });
       } catch (err) {
         return redirectWithNotice(
           guard.principal,
           OWNERLESS_CONNECTIONS_PAGE,
-          failureNotice(err, 'Not reassigned'),
+          failureNotice(err, 'No owner named'),
         );
       }
     },
@@ -433,7 +433,7 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
         return await redirectWithNotice(who.principal, connectionPath(connectionId), {
           tone: 'success',
           title: 'Resource saved',
-          lines: [`${resource.ref} — your edits are kept across discovery refreshes.`],
+          lines: [`${resource.ref} — your edits are kept when the account is refreshed.`],
         });
       } catch (err) {
         const missing = err instanceof ConnectError && err.code === 'not-found';
@@ -501,27 +501,24 @@ function connectedNotice(result: Connected): Notice {
     return {
       tone: 'info',
       title,
-      lines: [
-        stored,
-        'Install the public key shown below on the host, then use "Refresh discovery".',
-      ],
+      lines: [stored, 'Install the public key shown below on the host, then use “Refresh”.'],
     };
   }
   if (!result.discovery.ok) {
     return {
       tone: 'warning',
-      title: `${title}, but resource discovery failed`,
+      title: `${title}, but looking for what it reaches failed`,
       lines: [
         stored,
-        result.discovery.error ?? 'The provider gave no reason.',
-        'Fix the cause, then use "Refresh discovery".',
+        result.discovery.error ?? 'The service gave no reason.',
+        'Fix the cause, then use “Refresh”.',
       ],
     };
   }
   return {
     tone: 'success',
     title,
-    lines: [stored, `${countLabel(result.discovery.count)} discovered. Label their environments.`],
+    lines: [stored, `${countLabel(result.discovery.count)} found.`],
   };
 }
 
@@ -529,17 +526,17 @@ function discoveryNotice(outcome: DiscoveryRecord): Notice {
   return outcome.ok
     ? {
         tone: 'success',
-        title: 'Discovery refreshed',
+        title: 'Refreshed',
         lines: [
-          `${countLabel(outcome.count)} reachable. Your labels, names and hidden flags are unchanged.`,
+          `${countLabel(outcome.count)} found. Your names, labels and hidden marks are unchanged.`,
         ],
       }
     : {
         tone: 'danger',
-        title: 'Discovery failed',
+        title: 'Refresh failed',
         lines: [
-          outcome.error ?? 'The provider gave no reason.',
-          'The known resources are unchanged.',
+          outcome.error ?? 'The service gave no reason.',
+          'What was found before is unchanged.',
         ],
       };
 }

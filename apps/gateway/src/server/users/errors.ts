@@ -12,11 +12,11 @@ export const USER_ADMIN_ERROR_CODES = [
 export type UserAdminErrorCode = (typeof USER_ADMIN_ERROR_CODES)[number];
 
 export const USER_ADMIN_ERROR_MESSAGES: Readonly<Record<UserAdminErrorCode, string>> = {
-  'not-found': 'This user does not exist on this instance.',
-  'already-deactivated': 'This user is already deactivated; nothing was changed.',
-  'not-deactivated': 'This user is active; there is nothing to reactivate.',
+  'not-found': 'This person does not exist on this gateway.',
+  'already-deactivated': 'This person is already deactivated; nothing was changed.',
+  'not-deactivated': 'This person is active; there is nothing to reactivate.',
   'cannot-deactivate-self':
-    'You cannot deactivate your own account: you would lose the session this very act needs. Ask another operator.',
+    'You cannot deactivate yourself: you would lose the session this very act needs. Ask another administrator.',
 };
 
 const STATUS_BY_CODE: Readonly<Record<UserAdminErrorCode, number>> = {

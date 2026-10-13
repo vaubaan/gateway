@@ -226,8 +226,11 @@ describe('an MCP client obtains a delegation with no configuration', () => {
 
     const ada = await instance.root.store.users.getByIdentity(instance.idp.iss, ADA.sub);
     const [delegation] = await instance.root.store.delegations.listForUser(ada?.id ?? '');
-    const revoked = await browser.post(`/delegations/${delegation?.id ?? ''}/revoke`, {});
-    expect(revoked.headers.get('location')).toBe('/delegations?revoked=1');
+    const revoked = await browser.post(
+      `/settings/connected-apps/${delegation?.id ?? ''}/revoke`,
+      {},
+    );
+    expect(revoked.headers.get('location')).toBe('/settings/connected-apps?revoked=1');
 
     // The stored tokens are dead: the client tries its refresh token, is told
     // `invalid_grant`, and asks for the browser again.

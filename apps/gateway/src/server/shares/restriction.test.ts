@@ -50,16 +50,16 @@ describe('the restriction of a share, as the dialog shows it', () => {
 
   it('summarizes in one line: how many, per level, and the most severe', () => {
     expect(summarizeRestriction(RISKS, new Set())).toBe(
-      'No risk selected: the share would authorize nothing.',
+      'Nothing ticked: this access would allow nothing.',
     );
     const one = summarizeRestriction(RISKS, new Set(['depot.read']));
-    expect(one).toMatch(/^1 of 6 risks · 1 \w+ · most severe: Read items \(\w+\)$/);
+    expect(one).toMatch(/^1 of 6 permissions · 1 \w+ · most severe: Read items \(\w+\)$/);
     const all = summarizeRestriction(RISKS, new Set(selectAllIds(RISKS)));
-    expect(all).toMatch(/^5 of 6 risks · /);
+    expect(all).toMatch(/^5 of 6 permissions · /);
     expect(all).toContain('most severe: Purge a space');
     expect(all.split('\n')).toHaveLength(1);
     // An id that is not in the catalog counts for nothing.
-    expect(summarizeRestriction(RISKS, new Set(['depot.nope']))).toMatch(/^No risk selected/);
+    expect(summarizeRestriction(RISKS, new Set(['depot.nope']))).toMatch(/^Nothing ticked/);
   });
 
   describe('environment notes (env-qualified risks are refused on unlabelled resources)', () => {
@@ -99,7 +99,7 @@ describe('the restriction of a share, as the dialog shows it', () => {
     it('counts the unlabelled resources the shared env-qualified risks will be refused on', () => {
       const [one] = envNotes(RISKS, prodWrite, { ...LABELLED, unlabelledResources: 1 });
       expect(one).toBe(
-        '1 resource has no environment label: environment-qualified risks are refused on it until you label it.',
+        '1 resource has no environment label: permissions tied to an environment are refused on it until you label it.',
       );
       const both = envNotes(RISKS, new Set(['depot[prod].write', 'depot[staging].write']), {
         derivesEnv: false,

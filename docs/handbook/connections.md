@@ -2,7 +2,7 @@
 title: Connections — connect flows, resources, credential refresh, provider apps
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - apps/gateway/src/server/connections/
   - apps/gateway/src/server/provider-apps/
@@ -10,8 +10,7 @@ tracks:
   - apps/gateway/src/server/store/repositories/connections.ts
   - apps/gateway/migrations/0004_connection_resource_curation.sql
   - apps/gateway/src/app/(app)/accounts/
-  callback/[provider]/route.ts       GET  /connections/callback/<provider>   registered at the provider: kept its path
-apps/gateway/src/app/(app)/accounts/   (was connections/; the old paths redirect, handbook web-app)
+  - apps/gateway/src/app/(app)/connections/callback/
   - apps/gateway/src/app/(app)/layout.tsx
   - apps/gateway/src/app/admin/(guarded)/provider-apps/
   - apps/gateway/src/components/connections/
@@ -78,8 +77,10 @@ apps/gateway/src/app/(app)/accounts/
   [id]/revoke/route.ts               POST /accounts/<id>/revoke
   [id]/resources/[resourceId]/route.ts  POST /accounts/<id>/resources/<resourceId>
   [id]/transfer/route.ts             POST /accounts/<id>/transfer          (handbook authority)
-  [id]/share/page.tsx                /accounts/<id>/share                  the Share dialog (handbook authority)
-  [id]/share/share-form.tsx          the dialog's client form (handbook authority)
+  [id]/account-view.tsx              loadAccount + AccountView: the page of one account, shared with the dialog
+  [id]/account-actions.tsx           RemoveAccess, TransferOwnership (client)
+  [id]/share/page.tsx                /accounts/<id>/share                  "Give access", a dialog over the account page (handbook authority)
+  [id]/share/give-access-dialog.tsx  the dialog (client)
   [id]/shares/route.ts               POST /accounts/<id>/shares            → root.shares.handlers.share
   [id]/shares/[shareId]/revoke/route.ts  POST /accounts/<id>/shares/<shareId>/revoke → root.shares.handlers.revoke
 apps/gateway/src/app/admin/(guarded)/connections/
@@ -648,60 +649,114 @@ explicitly and refuses a stale one (handbook [missions](missions.md),
 
 ## Pages
 
-- **`/accounts`** — table: name (link), provider label with the
-  `experimental` badge, state badge (`active` green, `expired` / `unowned`
-  amber, `revoked` neutral), owner (email or `group <name>`), date. Button
-  "Connect a provider". Beside the provider label, `<ValidationBadge>`
-  shows the community validation status of the plugin version the instance
-  runs (`root.telemetry.stats.statusFor(provider)`, one lookup per distinct
-  provider); it renders nothing unless telemetry is sending and the
-  collector has statistics for that version (handbook
-  [telemetry](telemetry.md)).
-- **`/accounts/new`** — one card per provider that is connectable now
-  (`ConnectableProvider.configured`: the company app is complete, or none
-  is needed), with description, credential kind and the `experimental`
-  badge; the others are named in one muted line. `?return_to=` is passed
-  on.
-- **`/accounts/new/<provider>`** — the form: optional connection name,
-  then a "Continue to …" button (redirect flows) or the declared fields
-  (`field.<name>` inputs, secrets masked, the plugin's `help` under each).
-  Experimental providers carry a warning banner.
-- **`/accounts/<id>`** — state (with the same `<ValidationBadge>`), owner, credential kind, the non-secret
-  fields, last discovery; the public key card for `ssh-key`; the resources
-  table (ref with `stale since` badge and a folded "Settings" block for the
-  editable lists, display name input, environment input or `set by the
-plugin` badge, hidden checkbox, Save — inputs reach their per-row form
-  through the `form` attribute); "Refresh discovery", "Reconnect", and
-  "Revoke" (`RevokeConnection`: type the connection name, then a form POST;
-  the dialog says beforehand what the revocation does at the provider —
-  "the gateway will also ask <provider> to withdraw the access", or "the
-  gateway cannot withdraw the access at <provider>: you remove it there
-  yourself" with the plugin's sentence). A revoked connection keeps a
-  second banner under "Revoked": green "Access withdrawn at <provider>", or
-  amber "Remove the access at <provider> by hand" / "Access NOT withdrawn at
-  <provider>" with where to do it, for as long as the connection is listed.
-  An `unowned` connection has no "Reconnect" action (the server refuses it,
-  `connection-unowned`); the page says so instead.
-  The owner also gets a **Shares** card (target, the restriction as a folded
-  list of risk ids, date, Revoke, and — unless the connection is `revoked`
-  or `unowned` — Edit and a "Share" link to `/accounts/<id>/share`) and,
-  when they belong to a group other than the current owner
-  (`ConnectionService.transferTargets`) and the connection is neither
-  `revoked` nor `unowned`, an **Ownership** card whose form posts `group_id`
-  to `/accounts/<id>/transfer` (handbook [authority](authority.md)).
-- **Shell.** `app/(app)/layout.tsx` renders `AppShell` for a web session
-  (`currentPrincipal()`, a user or the bootstrap operator) and redirects
-  anyone else to `/login`. `APP_NAV` in `AppShell.tsx` is the list of pages
-  in the bar (Connections, Shares, Missions, Requests, Audit, Delegations,
-  Providers); operators also get the Admin link
-  ([web-app](web-app.md), "The shell"). The pages under `/admin` — Provider
-  apps and the ownerless connections among them — are rendered in the same
-  shell with Administration's entries (`AdminShell`, `ADMIN_NAV`; handbook
-  [authentication](authentication.md), "Pages").
+The pages say **account** for a connection, **service** for a provider,
+**access** for a share and **disconnect** for a revocation (spec
+[style-guide](../spec/style-guide.md) §2); the routes, the handlers, the
+stored states and the audit keep the protocol's names. Words and sentence
+patterns are in `lib/vocabulary.ts` (`ACCOUNT_PAGES`, `ACCOUNT_ACTIONS`,
+`ACCOUNT_WORDS`, `ACCOUNT_STATES`, `ownedBy`, `besidesOwners`, `shortDate`).
+
+- **`/accounts`** (`accounts/page.tsx`) — three regions.
+  - **Yours** (`ConnectionService.listFor`): one row per account the person
+    owns, alone or through a team. Five columns: the account (the mark of
+    its service, its name as a link, "GitHub · you own it with Platform"),
+    what it reaches ("4 resources · 1 without an environment label", the
+    second part only where a permission depends on a label and the plugin
+    does not read the environment from the call), who has access ("3 besides
+    owners", "only you"), the missions that run on it ("5 · 1 at its limit ·
+    1 stopped", from `MissionService.onConnection`), and when it was last
+    checked — replaced by the state when it is an exception (`AccountState`:
+    "Needs reconnecting", "Needs an owner", "disconnected") or by "Check
+    failed". A disconnected account is a quiet row.
+  - **Shared with you** (`ShareService.received`, one row per account, the
+    accesses to it added up): what the person may allow ("12 of 17", a link
+    that unfolds the exact list under the row — `?access=<connection id>`,
+    `PermissionList`), who gave it and when, the person's own running
+    missions on it, its state. This region is what `/shares` was: that path
+    answers with a permanent redirect. It is left out when nothing was
+    shared.
+  - **Connect an account**: `ServicePicker`, a grid of `PickCard`s from
+    `ConnectionService.providers()` — the mark, the name and how the account
+    is connected (`howToConnect`: "sign in at Supabase", "install your
+    company’s GitHub app", "paste: test-mode key and live-mode key"). A
+    service whose company app is not registered is dashed and says who to
+    ask; for an administrator the card leads to Company apps. The primary
+    action of the page jumps to this region.
+  - With no account and nothing shared the first region is one sentence
+    (`EmptyState`) and the picker follows.
+- **`/accounts/new`** — the same picker on a page of its own, for whoever
+  arrives from the mission being written (`?return_to=` is passed on).
+- **`/accounts/new/<provider>`** — the form, on the narrow measure: an
+  optional name, then a "Continue to …" button (redirect flows) or the
+  declared fields (`CredentialFieldInputs`: `field.<name>` inputs, secrets
+  masked). **A field says its shape before the person types**: the label
+  carries what `shapeOfPattern(field.pattern)` reads from the plugin's
+  pattern ("starts with sk*test* or rk*test*", "20 characters or more",
+  "digits only"; nothing when the pattern has another form), the plugin's
+  `placeholder` is in the field and its `help` under it, and a field that
+  may stay empty says "optional". The how-to is folded by default
+  (`Disclosure`, remembered per kind of credential). `?connection=<id>`
+  turns the page into "Reconnect".
+- **`/accounts/<id>`** (`accounts/[id]/page.tsx` → `account-view.tsx`:
+  `loadAccount`, `AccountView`) — for an owner; anyone else reads "not
+  found".
+  - **Header**: the mark, the name, the state when it is an exception, and
+    one line: the service, who owns it ("owned by the Platform team (Bob,
+    you)"), when it was connected and last checked. Actions: "Show details"
+    (`DetailScope` `account:details`: service with the link to its
+    reference, kind of credential, the non-secret fields, the last check;
+    and the "Given by" and "Since" columns of the first table), "Reconnect",
+    and the primary "Give access" — the last two only while
+    `ShareContext.unshareable` is `null`.
+  - **Notes**: needs reconnecting, no owner, the last check failed, and for
+    a disconnected account one note that says it and what became of the
+    access at the service (`providerGrantReport`). The note of the act
+    itself carries the same sentence: on the visit that follows the
+    disconnection it is said once, by the notice.
+  - **Who has access** (`ShareService.holders`): the owner first ("all 15"),
+    then each access — who (a person, or a team with how many people; "no
+    sign-in since 20 Sep", "deactivated"), what they may allow ("12 of 15 ·
+    read only", a link that unfolds the explicit list, `?access=<share id>`),
+    how many of their missions run on the account. Row actions: "Transfer
+    ownership" on the owner's row when `transferTargets` lists a team
+    (`TransferOwnership`, a dialog with the team and the consequence), "Edit"
+    and "Remove" on an access (`RemoveAccess`: `ConfirmSubmit`, which states
+    how many missions stop).
+  - **Resources**: the ref in mono, its name when it differs, "hidden from
+    new missions", "no longer found since …"; the environment label where
+    the service has environments (`EnvTag`, dashed "no label" when one is
+    missing); how many running missions name it. "Edit" opens the form of
+    one resource under its row (`?resource=<id>`: name, environment unless
+    the plugin sets it, hidden, the plugin's editable lists) which posts to
+    `POST /accounts/<id>/resources/<resourceId>`. "Refresh" posts to
+    `…/discover`. Ten rows, then "All N".
+  - **Missions using this account** (`MissionService.onConnection`): each
+    mission that runs or stopped for want of an owner — its name (a link
+    when the person may open it), who created it, the resources it names,
+    how many permissions, "Limit reached" or "Needs an owner" with the cause
+    and **Close** (`CloseOrphanedMission`); the ones that ended are behind
+    "Show the N that ended".
+  - **Disconnect**, as the last line: `RevokeConnection`, a typed
+    confirmation that says how many missions stop and what happens at the
+    service (`providerGrantForecast`).
+  - An SSH account shows its public key in a copyable block above the lists.
+- **`/accounts/<id>/share`** — "Give access", a dialog over the same page
+  (handbook [authority](authority.md)).
 - **Notices.** A handler never puts a message in a URL: it stores a
   `Notice { tone, title, lines }` in the `NoticeStore` (`notice:<id>`,
   5 min, readable once, only by the web session it was written for) and
-  redirects with `?notice=<id>`; the page calls `takeNotice()`.
+  redirects with `?notice=<id>`; the page calls `takeNotice()` and renders
+  `NoticeBanner` (a `Callout`). The sentences are written in the handlers
+  (`handlers.ts`, `errors.ts`, `provider-grant.ts`) in the words of the
+  interface.
+
+Two read-only queries feed these pages, both for an owner only:
+`MissionService.onConnection(user, connectionId)` (every mission that carries
+the connection, with its derived state, the resources of this connection it
+names and how many accepted risks belong to this provider; nothing to anyone
+else) and `ShareService.holders(actor, connectionId)` (the owner and every
+active share with the people behind each). ADR
+[owner-reads-missions-and-holders-of-a-connection](../decisions/owner-reads-missions-and-holders-of-a-connection.md).
 
 Every mutation handler checks `isSameOrigin(headers, publicUrl)` then the
 session (401 without one, 403 for the bootstrap principal on user

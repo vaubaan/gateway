@@ -1,9 +1,10 @@
 /**
- * The data model as an outline: each plane a tree with connectors, in a
- * monospace block; the entity that carries the environment is marked, and the
- * cardinalities are small annotations next to the name.
+ * How a service is modelled: where the environment of a call comes from, then
+ * each plane as an outline with connectors, in the monospace face. The entity
+ * that carries the environment is marked; the cardinalities are small
+ * annotations next to the name.
  */
-import { Badge, Slug } from '@/components/ui';
+import { EnvTag, KeyValue, Mono, Tag } from '@/components/ui';
 import {
   CARDINALITY_WORDS,
   type EntityNode,
@@ -43,63 +44,67 @@ export function DataModelSection({
   environment: EnvironmentReference;
 }) {
   return (
-    <div className={styles.section}>
-      <p className={styles.sectionLine}>
-        How the plugin pictures the provider: the things that exist there and how they nest. Every
-        risk is written over these entities; a resource of a connection is one of them, named by its
-        ref.
+    <section aria-label="How the service is modelled">
+      <p className={styles.note}>
+        The things that exist at the service and how they nest. Every permission is written over
+        these; a resource of an account is one of them, named by its ref.
       </p>
-      <dl className={styles.envFacts} data-testid="provider-environment">
-        <dt>Environment</dt>
-        <dd>{environment.explanation}</dd>
-        {environment.envs.length > 0 && (
-          <>
-            <dt>Known</dt>
-            <dd className={styles.badges}>
-              {environment.envs.map((env) => (
-                <Badge key={env} mono>
-                  {env}
-                </Badge>
-              ))}
-            </dd>
-          </>
-        )}
-        <dt>Carried by</dt>
-        <dd>
-          {environment.carriers.length === 0
-            ? 'no entity of the model'
-            : environment.carriers.map((carrier) => (
-                <Slug key={carrier} kind="plane" className={styles.inlineSlug}>
-                  {carrier}
-                </Slug>
-              ))}
-          {environment.carriers.length > 0 && environment.source === 'none' && (
-            <span className={styles.muted}>
-              {' '}
-              — in the model only: no risk of this catalog is environment-scoped
-            </span>
-          )}
-        </dd>
-      </dl>
+      <div className={styles.callout} data-testid="provider-environment">
+        <KeyValue
+          items={[
+            { term: 'Environment', value: environment.explanation },
+            ...(environment.envs.length > 0
+              ? [
+                  {
+                    term: 'Known',
+                    value: (
+                      <span className={styles.inline}>
+                        {environment.envs.map((env) => (
+                          <EnvTag key={env} env={env} />
+                        ))}
+                      </span>
+                    ),
+                  },
+                ]
+              : []),
+            {
+              term: 'Carried by',
+              value:
+                environment.carriers.length === 0 ? (
+                  'nothing in the model'
+                ) : (
+                  <span className={styles.inline}>
+                    {environment.carriers.map((carrier) => (
+                      <Mono key={carrier}>{carrier}</Mono>
+                    ))}
+                    {environment.source === 'none' && (
+                      <span className={styles.quiet}>
+                        in the model only: no permission of this service depends on an environment
+                      </span>
+                    )}
+                  </span>
+                ),
+            },
+          ]}
+        />
+      </div>
       {planes.map((plane) => (
         <section
           key={plane.slug}
-          aria-label={`Plane ${plane.slug}`}
-          className={styles.planeBlock}
-          data-kind="plane"
+          aria-label={`Part ${plane.slug}`}
+          className={styles.plane}
           data-testid={`plane-${plane.slug}`}
         >
-          <h2 className={styles.planeTitle}>
-            <Slug kind="plane">{plane.slug}</Slug>
-            <span className={styles.muted}>{plural(plane.entity_count, 'entity', 'entities')}</span>
-            {plane.description && <span className={styles.planeText}>{plane.description}</span>}
-          </h2>
+          <h3 className={styles.planeTitle}>
+            <Mono>{plane.slug}</Mono>
+            <span className={styles.quiet}>
+              {plural(plane.entity_count, 'thing', 'things')}
+              {plane.description ? ` · ${plane.description}` : ''}
+            </span>
+          </h3>
           <ul className={styles.outline}>
             {outlineOf(plane.roots).map(({ node, prefix }) => (
-              <li
-                key={`${prefix}${node.name}`}
-                className={node.carries_env ? styles.outlineEnv : undefined}
-              >
+              <li key={`${prefix}${node.name}`}>
                 <span className={styles.outlineName}>
                   <span className={styles.connector} aria-hidden="true">
                     {prefix}
@@ -113,7 +118,7 @@ export function DataModelSection({
                   >
                     {node.cardinalities.join(' · ')}
                   </span>
-                  {node.carries_env && <Badge tone="info">carries the environment</Badge>}
+                  {node.carries_env && <Tag tone="info">carries the environment</Tag>}
                 </span>
                 <span className={styles.outlineText}>{node.description}</span>
               </li>
@@ -121,13 +126,13 @@ export function DataModelSection({
           </ul>
         </section>
       ))}
-      <p className={styles.muted}>
-        Cardinalities:{' '}
+      <p className={styles.note}>
+        How many of a thing there can be:{' '}
         {Object.entries(CARDINALITY_WORDS)
           .map(([name, words]) => `${name} — ${words}`)
           .join('; ')}
         .
       </p>
-    </div>
+    </section>
   );
 }

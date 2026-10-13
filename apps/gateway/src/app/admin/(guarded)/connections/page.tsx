@@ -1,31 +1,101 @@
 /**
- * `/admin/connections` — the connections that have no owner left (spec §2.3):
- * their owner group emptied. They keep serving their missions, but nobody can
- * share or reconnect them until the operator names a new owner here. This is
- * the operator's only act on the domain: nothing else of a connection — its
- * credential, its shares, its missions — is reachable from Administration.
+ * `/admin/connections` — Accounts without owner (spec §2.3): the accounts
+ * whose owners all left. They keep serving their missions, but nobody can
+ * give access to them or reconnect them until an administrator names a new
+ * owner here. This is the administrator's only act on an account: nothing
+ * else of it — its credential, who has access, its missions — is reachable
+ * from the administration.
  */
-import styles from '@/components/connections/connections.module.css';
-import { NoticeBanner, StateBadge } from '@/components/connections/parts';
+import shared from '@/components/connections/account.module.css';
+import { AccountState, NoticeBanner } from '@/components/connections/parts';
+import styles from '@/components/settings/settings.module.css';
 import {
   Button,
-  Card,
-  CardBody,
-  CardHeader,
-  CardTitle,
+  DataTable,
+  EmptyState,
   Field,
+  Hint,
   Input,
+  PageHeader,
+  Section,
   Select,
-  Slug,
-  Stack,
+  ServiceMark,
+  type Column,
 } from '@/components/ui';
 import { requireOperator } from '@/lib/auth/session';
 import { takeNotice, type PageSearchParams } from '@/lib/connections/session';
+import { holderWords, SETTINGS_ACTIONS, SETTINGS_PAGES } from '@/lib/vocabulary';
 import { OWNERLESS_CONNECTIONS_PAGE, type ConnectionView } from '@/server/connections';
 
 export const dynamic = 'force-dynamic';
 
-export default async function OwnerlessConnectionsPage({
+function OwnerForm({
+  view,
+  teams,
+}: {
+  view: ConnectionView;
+  teams: readonly { id: string; name: string }[];
+}) {
+  const { connection } = view;
+  const id = `reassign-${connection.id}`;
+  return (
+    <form
+      method="post"
+      action={`${OWNERLESS_CONNECTIONS_PAGE}/${encodeURIComponent(connection.id)}/reassign`}
+      className={styles.form}
+      data-testid={id}
+    >
+      <Field label="New owner" htmlFor={`${id}-kind`}>
+        <Select id={`${id}-kind`} name="owner_kind" defaultValue="user">
+          <option value="user">A person (fill the email)</option>
+          <option value="group" disabled={teams.length === 0}>
+            A team (pick it below)
+          </option>
+        </Select>
+      </Field>
+      <Field
+        label="Email"
+        shape="when the new owner is a person"
+        htmlFor={`${id}-email`}
+        hint="They must have signed in once."
+      >
+        <Input
+          id={`${id}-email`}
+          name="owner_email"
+          type="email"
+          autoComplete="off"
+          placeholder="owner@example.com"
+        />
+      </Field>
+      {teams.length > 0 && (
+        <Field
+          label="Team"
+          shape="when the new owner is a team"
+          htmlFor={`${id}-group`}
+          hint="Only teams that have members are listed."
+        >
+          <Select id={`${id}-group`} name="owner_group">
+            {teams.map((team) => (
+              <option key={team.id} value={team.id}>
+                {team.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      )}
+      <div className={styles.formActions}>
+        <Button type="submit" variant="primary" size="sm">
+          {SETTINGS_ACTIONS.nameOwner}
+        </Button>
+        <span className={styles.formHint}>
+          The new owner holds every permission of the account and decides who else may use it.
+        </span>
+      </div>
+    </form>
+  );
+}
+
+export default async function OwnerlessAccountsPage({
   searchParams,
 }: {
   searchParams: PageSearchParams;
@@ -34,107 +104,60 @@ export default async function OwnerlessConnectionsPage({
   const params = await searchParams;
   const notice = await takeNotice(root, principal.sessionId, params);
   const ownerless = await root.connections.service.listOwnerless();
-  // The groups `reassign` accepts, as the service states them.
-  const groups = await root.connections.service.reassignTargets();
+  // The teams `reassign` accepts, as the service states them.
+  const teams = await root.connections.service.reassignTargets();
 
-  return (
-    <Stack gap="var(--space-6)">
-      <div>
-        <h1>Connections without owner</h1>
-        <p className={styles.muted}>
-          A connection whose owner group has no member left. Its missions keep running, but nobody
-          can share it or reconnect it. Name a new owner: a user, or a group that has members.
-        </p>
-      </div>
-
-      <NoticeBanner notice={notice} />
-
-      {ownerless.length === 0 && (
-        <Card>
-          <div className={styles.empty}>Every connection has an owner.</div>
-        </Card>
-      )}
-
-      {ownerless.map((view) => (
-        <OwnerlessCard key={view.connection.id} view={view} groups={groups} />
-      ))}
-    </Stack>
-  );
-}
-
-function OwnerlessCard({
-  view,
-  groups,
-}: {
-  view: ConnectionView;
-  groups: readonly { id: string; name: string }[];
-}) {
-  const { connection } = view;
-  const id = `reassign-${connection.id}`;
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          <Slug kind="connection" mono={false}>
-            {connection.displayName}
-          </Slug>
-        </CardTitle>
-        <span className={styles.badges}>
-          <span>{view.providerLabel}</span>
-          <StateBadge status={connection.status} />
-          <span className={styles.muted}>was owned by {view.ownerLabel}</span>
+  const columns: readonly Column<ConnectionView>[] = [
+    {
+      id: 'account',
+      header: 'Account',
+      cell: (view) => (
+        <span className={shared.named}>
+          <ServiceMark name={view.providerLabel} />
+          <span className={shared.namedText}>
+            <span className={shared.name}>{view.connection.displayName}</span>
+            <span className={shared.sub}>{view.providerLabel}</span>
+          </span>
         </span>
-      </CardHeader>
-      <CardBody>
-        <form
-          method="post"
-          action={`${OWNERLESS_CONNECTIONS_PAGE}/${encodeURIComponent(connection.id)}/reassign`}
-        >
-          <Stack gap="var(--space-3)">
-            <Field label="New owner" htmlFor={`${id}-kind`}>
-              <Select id={`${id}-kind`} name="owner_kind" defaultValue="user">
-                <option value="user">A user (fill the email)</option>
-                <option value="group" disabled={groups.length === 0}>
-                  A group (pick it below)
-                </option>
-              </Select>
-            </Field>
-            <Field
-              label="User email"
-              htmlFor={`${id}-email`}
-              hint="Used when the new owner is a user. They must have signed in once."
-            >
-              <Input
-                id={`${id}-email`}
-                name="owner_email"
-                type="email"
-                autoComplete="off"
-                placeholder="owner@example.com"
-              />
-            </Field>
-            {groups.length > 0 && (
-              <Field
-                label="Group"
-                htmlFor={`${id}-group`}
-                hint="Used when the new owner is a group. Only groups that have members are listed."
-              >
-                <Select id={`${id}-group`} name="owner_group">
-                  {groups.map((group) => (
-                    <option key={group.id} value={group.id}>
-                      {group.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-            )}
-            <div>
-              <Button type="submit" size="sm">
-                Reassign
-              </Button>
-            </div>
-          </Stack>
-        </form>
-      </CardBody>
-    </Card>
+      ),
+    },
+    {
+      id: 'owner',
+      header: 'Was owned by',
+      cell: (view) => holderWords(view.ownerLabel),
+    },
+    {
+      id: 'state',
+      header: 'State',
+      nowrap: true,
+      cell: (view) => <AccountState status={view.connection.status} />,
+    },
+  ];
+
+  return (
+    <>
+      <PageHeader title={SETTINGS_PAGES.ownerless.title} lede={SETTINGS_PAGES.ownerless.lede} />
+      <NoticeBanner notice={notice} />
+      <Section first>
+        {ownerless.length === 0 ? (
+          <EmptyState title="Every account has an owner." testId="no-ownerless" />
+        ) : (
+          <>
+            <DataTable
+              caption="The accounts that have no owner left"
+              columns={columns}
+              rows={ownerless}
+              rowKey={(view) => view.connection.id}
+              rowDetail={(view) => <OwnerForm view={view} teams={teams} />}
+              testId="ownerless-accounts"
+            />
+            <Hint>
+              Name a person, or a team that has members. Nothing else of an account is reachable
+              from here: not its credential, not who has access, not its missions.
+            </Hint>
+          </>
+        )}
+      </Section>
+    </>
   );
 }

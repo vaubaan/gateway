@@ -100,5 +100,9 @@ export {
   type ShareServiceDeps,
   type ShareTargetInput,
   type ShareView,
+  type ConnectionHolders,
+  type HeldShare,
+  type HolderPerson,
+  type HolderView,
   type UnshareableReason,
 } from './service';

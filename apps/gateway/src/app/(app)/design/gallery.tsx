@@ -9,6 +9,7 @@
 import { Callout, PageHeader, SubNav, SubNavFrame } from '@/components/ui';
 import { PAGES } from '@/lib/vocabulary';
 
+import { AccountSections } from './sections-accounts';
 import { ListSections, PermissionSections } from './sections-data';
 import { GallerySection } from './specimen';
 import { FormSections, LegacySections, OverlaySections, StateSections } from './sections-feedback';
@@ -84,6 +85,13 @@ export const GALLERY_SECTIONS: readonly {
     ],
   },
   { group: 'Mission pages', items: MISSION_SECTION_ITEMS },
+  {
+    group: 'Accounts and settings',
+    items: [
+      { id: 'pick', label: 'Choice cards' },
+      { id: 'confirm-submit', label: 'Asked first' },
+    ],
+  },
 ];
 
 export function Gallery() {
@@ -125,6 +133,7 @@ export function Gallery() {
         <LegacySections />
         <WaitingSections />
         <MissionSections />
+        <AccountSections />
       </SubNavFrame>
     </>
   );

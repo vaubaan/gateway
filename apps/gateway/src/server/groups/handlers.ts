@@ -53,7 +53,7 @@ export function createGroupHandlers(deps: GroupHandlerDeps): GroupHandlers {
     return {
       tone: 'danger',
       title,
-      lines: ['An unexpected error occurred. The instance log has the detail.'],
+      lines: ['An unexpected error occurred. The log of the gateway has the detail.'],
     };
   }
 
@@ -84,12 +84,12 @@ export function createGroupHandlers(deps: GroupHandlerDeps): GroupHandlers {
       if (principal instanceof Response) return principal;
       const form = await readForm(request);
       if (!form) return notAFormResponse();
-      return act(principal, 'Group not created', async (actorId) => {
+      return act(principal, 'Team not created', async (actorId) => {
         const group = await deps.groups.create(actorId, field(form, 'name'));
         return {
           tone: 'success',
-          title: `Group "${group.name}" created`,
-          lines: ['Add its members below. A sign-in never changes a local group.'],
+          title: `Team “${group.name}” created`,
+          lines: ['Add its members below. A sign-in never changes a local team.'],
         };
       });
     },
@@ -106,14 +106,14 @@ export function createGroupHandlers(deps: GroupHandlerDeps): GroupHandlers {
           field(form, 'email'),
         );
         const lines = [
-          'They now own the connections this group owns and receive the shares made to it.',
+          'They now own the accounts this team owns and hold the accesses given to it.',
         ];
         if (restored > 0) {
           lines.push(
-            `${restored} of their orphaned missions ${restored === 1 ? 'is' : 'are'} covered again and ${restored === 1 ? 'serves' : 'serve'} calls from now on.`,
+            `${restored} of their stopped missions ${restored === 1 ? 'is' : 'are'} covered again and ${restored === 1 ? 'serves' : 'serve'} calls from now on.`,
           );
         }
-        return { tone: 'success', title: `${user.email} added to "${group.name}"`, lines };
+        return { tone: 'success', title: `${user.email} added to “${group.name}”`, lines };
       });
     },
 
@@ -122,20 +122,20 @@ export function createGroupHandlers(deps: GroupHandlerDeps): GroupHandlers {
       if (principal instanceof Response) return principal;
       return act(principal, 'Member not removed', async (actorId) => {
         const removal = await deps.groups.removeMember(actorId, groupId, userId);
-        const lines = ['What this membership granted is withdrawn from the next check on.'];
+        const lines = ['What the team gave them is withdrawn at once.'];
         if (removal.orphaned > 0) {
           lines.push(
-            `${removal.orphaned} of their missions lost ${removal.orphaned === 1 ? 'its' : 'their'} authority and ${removal.orphaned === 1 ? 'is' : 'are'} now orphaned, until that authority comes back.`,
+            `${removal.orphaned} of their missions ${removal.orphaned === 1 ? 'is' : 'are'} stopped and ${removal.orphaned === 1 ? 'refuses' : 'refuse'} every call, until they hold the permissions again.`,
           );
         }
         if (removal.unowned > 0) {
           lines.push(
-            `${removal.unowned} ${removal.unowned === 1 ? 'connection has' : 'connections have'} no owner left: reassign ${removal.unowned === 1 ? 'it' : 'them'} under Administration → Connections.`,
+            `${removal.unowned} ${removal.unowned === 1 ? 'account has' : 'accounts have'} no owner left: name one under Settings → Accounts without owner.`,
           );
         }
         return {
           tone: removal.unowned > 0 ? 'warning' : 'success',
-          title: `${removal.user.email} removed from "${removal.group.name}"`,
+          title: `${removal.user.email} removed from “${removal.group.name}”`,
           lines,
         };
       });

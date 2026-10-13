@@ -34,8 +34,8 @@ export const templatePlugin = definePlugin({
   // The paragraph of the provider reference (`/providers/<id>`), in plain words: what one
   // connection is, what one resource is, where the environment of a call comes from.
   summary:
-    'One connection is one API key of the template provider; one resource is one workspace. The connection owner labels each workspace with an environment (staging, prod), and writes are accepted per label.',
-  manualRevocation: "Delete the API key in the provider's dashboard.",
+    'One account is one API key of the template service; one resource is one workspace. The owner of the account labels each workspace with an environment (staging, prod), and writes are held per label.',
+  manualRevocation: "Delete the API key in the service's dashboard.",
   // Add `docsUrl` once the provider handbook exists (docs/handbook/providers/<id>.md).
   tools: templateTools,
   dataModel: templateDataModel,

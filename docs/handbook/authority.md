@@ -2,7 +2,7 @@
 title: Authority — owners, shares, local groups, orphaned missions, unowned connections
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - apps/gateway/src/server/authority/
   - apps/gateway/src/server/shares/
@@ -21,7 +21,6 @@ tracks:
   - apps/gateway/src/app/(app)/accounts/[id]/share/
   - apps/gateway/src/app/(app)/accounts/[id]/shares/
   - apps/gateway/src/app/(app)/accounts/[id]/transfer/
-  - apps/gateway/src/app/(app)/shares/
   - apps/gateway/src/app/admin/(guarded)/groups/
   - apps/gateway/src/app/admin/(guarded)/connections/
   - apps/gateway/tests/integration/authority/
@@ -574,18 +573,34 @@ group overage) never reaches the sync: the sign-in is refused with
 
 ### Pages and routes
 
-| Path                                                                            | What                                                                                                                                                                                                                                                                                     | Guard    |
-| ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| `/accounts/<id>`                                                                | "Shares" card (target, restriction on demand, Edit, Revoke), "Orphaned missions" card when there are some (name, issued by, why, Close), "Ownership" card (transfer)                                                                                                                     | owner    |
-| `/accounts/<id>/share[?share=<id>][?confirm=<id>]`                              | the Share dialog (`share-form.tsx`, client): the checklist open under its summary, each risk a compact `RiskExplain` row ([missions](missions.md)), the helper text behind "More"; with `confirm`, the orphaned missions the pending share would bring back and the button that makes it | owner    |
-| `POST /accounts/<id>/shares`                                                    | `shares.handlers.share` (makes the share, or sends back to the dialog to confirm what it would restore)                                                                                                                                                                                  | user     |
-| `POST /accounts/<id>/shares/<shareId>/revoke`                                   | `shares.handlers.revoke`                                                                                                                                                                                                                                                                 | user     |
-| `POST /accounts/<id>/transfer`                                                  | `connections.handlers.transfer` (`group_id`)                                                                                                                                                                                                                                             | user     |
-| `/shares`                                                                       | Shares received                                                                                                                                                                                                                                                                          | user     |
-| `/admin/groups`                                                                 | groups, members                                                                                                                                                                                                                                                                          | operator |
-| `POST /admin/groups/create`, `…/<id>/members`, `…/<id>/members/<userId>/remove` | `groups.handlers.*`                                                                                                                                                                                                                                                                      | operator |
-| `/admin/connections`                                                            | connections without owner                                                                                                                                                                                                                                                                | operator |
-| `POST /admin/connections/<id>/reassign`                                         | `connections.handlers.reassign` (`owner_kind`, `owner_email` / `owner_group`)                                                                                                                                                                                                            | operator |
+The pages say **access** for a share, **permission** for a risk, **team** for a
+group and **administrator** for an operator; routes, handlers, stored states
+and audit acts keep the protocol's names ([connections](connections.md),
+"Pages").
+
+| Path                                                                            | What                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Guard    |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| `/accounts`                                                                     | "Shared with you": what `ShareService.received` returns, one row per account (several accesses to one account add up), the explicit list on demand. `/shares` redirects here                                                                                                                                                                                                                                                                                                                      | user     |
+| `/accounts/<id>`                                                                | "Who has access" (`ShareService.holders`: the owner, then each access with what it may allow, Edit, Remove — asked first — and "Transfer ownership" on the owner's row); "Missions using this account" (`MissionService.onConnection`), where a mission that reads `orphaned` carries "Needs an owner", its cause and **Close**                                                                                                                                                                   | owner    |
+| `/accounts/<id>/share[?share=<id>][?confirm=<id>]`                              | "Give access", a dialog over the page of the account (`give-access-dialog.tsx`, client): who (a person by email, or a team), the presets of the service as starting points, "Select all N" / "Clear", the checklist as a `PermissionTable` (`pick`) grouped by kind with a tick per group and a "why?" per line, the one-line summary (`summarizeRestriction`), the environment notes (`envNotes`); with `confirm`, the missions the pending access would bring back and the button that gives it | owner    |
+| `POST /accounts/<id>/shares`                                                    | `shares.handlers.share` (makes the share, or sends back to the dialog to confirm what it would restore)                                                                                                                                                                                                                                                                                                                                                                                           | user     |
+| `POST /accounts/<id>/shares/<shareId>/revoke`                                   | `shares.handlers.revoke`                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | user     |
+| `POST /accounts/<id>/transfer`                                                  | `connections.handlers.transfer` (`group_id`)                                                                                                                                                                                                                                                                                                                                                                                                                                                      | user     |
+| `/admin/groups`                                                                 | Teams: one row per group (who keeps it, its members, what it owns); a local team shows its members, "Add someone" and "Remove" (asked first); "Add a local team" is folded under the list                                                                                                                                                                                                                                                                                                         | operator |
+| `POST /admin/groups/create`, `…/<id>/members`, `…/<id>/members/<userId>/remove` | `groups.handlers.*`                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | operator |
+| `/admin/connections`                                                            | Accounts without owner: one row per account with who owned it and its state, and under it the form that names an owner (a person by email, or a team that has members: `reassignTargets`)                                                                                                                                                                                                                                                                                                         | operator |
+| `POST /admin/connections/<id>/reassign`                                         | `connections.handlers.reassign` (`owner_kind`, `owner_email` / `owner_group`)                                                                                                                                                                                                                                                                                                                                                                                                                     | operator |
+
+**The dialog and the presets.** A preset button ticks the explicit ids the
+preset stands for on the whole catalog (`presetReferenceOf`: its `auto` and
+`approval` lines); nothing is posted but the ticked ids, one `risk` field
+each. The quantities and gates of the preset are not part of an access.
+
+**The confirmation.** When the first post comes back with `?confirm=<id>`, the
+dialog opens on "Give access and bring N stopped missions back?" with the
+list (`data-testid="share-restores"`); "Change the permissions" returns to
+the checklist as it was posted; the confirming button posts the same target
+and ids with one `restore` field per mission listed.
 
 Every POST is a form post answered by a `303` to a page with `?notice=<id>`
 (`createNoticeRedirect`, the connections' `NoticeStore`), except a share that
@@ -628,7 +643,7 @@ A page that catches a service error matches it by shape (`isShareError(err,
 | `tests/integration/store/ownership-and-orphans.test.ts`   | the repository transitions; migration `0007` (reset, triggers)                                                                                                                                                                                                                                                                                                   |
 | `tests/integration/store/audit-guarded-append.test.ts`    | `AuditRepo.appendUnlessLatest`: two writers, one entry; per object, within the guarded acts, not for an older equal entry                                                                                                                                                                                                                                        |
 | `tests/unit/structural/authority-not-snapshotted.test.ts` | spec §10: no state in the module, every check follows the store; no stored orphan verdict, every reader of a mission record classified                                                                                                                                                                                                                           |
-| `tests/e2e/v5/share-and-orphan.spec.ts`                   | the dialog, Shares received, revocation, restoration by a new share, the ownership loop (browser)                                                                                                                                                                                                                                                                |
+| `tests/e2e/v5/share-and-orphan.spec.ts`                   | the Give access dialog, Shared with you, removal (asked first), restoration by a new access, the ownership loop (browser)                                                                                                                                                                                                                                        |
 
 ## How to debug
 
@@ -659,7 +674,7 @@ at the execution door` with the same fields. Do not look for `orphaned` in
   page and the post (a mission was orphaned meanwhile), or the pending share
   expired (10 minutes) and the form was posted without `restore` values.
 - **A beneficiary cannot tick a risk at issuance.** It is outside
-  `authorityOf`: compare `/shares` (what they received, each `via`) with the
+  `authorityOf`: compare "Shared with you" on `/accounts` (what they received) with the
   owner's "Shares" card. A share made to a group reaches them only while
   `groupsOf(user)` lists the group.
 - **"Not shared: … not in this provider's catalog".** The form posted an id

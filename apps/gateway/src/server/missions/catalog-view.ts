@@ -244,7 +244,7 @@ export function vectorBadges(vector: RiskVector): VectorBadge[] {
 
 /** How each kind reads as the title of a group, and the one line under it. */
 export const RISK_KIND_GROUPS: Readonly<Record<RiskKind, { title: string; hint: string }>> = {
-  read: { title: 'Reads', hint: 'Look without changing anything at the provider.' },
+  read: { title: 'Reads', hint: 'Look without changing anything at the service.' },
   write: { title: 'Writes', hint: 'Change something that can be undone, sometimes at a price.' },
   destructive: {
     title: 'Irreversible writes',
