@@ -8,4 +8,8 @@
  */
 import { randomBytes } from 'node:crypto';
 
-process.stdout.write(randomBytes(32).toString('base64') + '\n');
+// Same size as KEY_BYTES in apps/gateway/src/server/crypto/aead.ts (the AEAD key);
+// a plain script cannot import the TypeScript constant.
+const MASTER_KEY_BYTES = 32;
+
+process.stdout.write(randomBytes(MASTER_KEY_BYTES).toString('base64') + '\n');

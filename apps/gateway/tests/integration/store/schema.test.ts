@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import BetterSqlite3 from 'better-sqlite3';
-import type { Store as StorePort } from '../../../src/server/compose/ports.ts';
+import type { StoreLiveness } from '../../../src/server/compose/ports.ts';
 import {
   journalMode,
   openStore,
@@ -86,7 +86,7 @@ describe('store schema v1', () => {
   it('creates every table of the plan on an in-memory database', () => {
     const { store } = openTestStore();
     opened.push(store);
-    expect(store.schemaVersion).toBe(1);
+    expect(store.schemaVersion).toBe(2);
     expect(tableNames(store)).toEqual(EXPECTED_TABLES);
   });
 
@@ -105,7 +105,7 @@ describe('store schema v1', () => {
   it('satisfies the composition root Store port (kind, ping, close)', async () => {
     const { store } = openTestStore();
     opened.push(store);
-    const port: StorePort = store;
+    const port: StoreLiveness = store;
     expect(port.kind).toBe('memory');
     await expect(port.ping()).resolves.toBeUndefined();
     await port.close();
@@ -125,10 +125,10 @@ describe('store schema v1', () => {
     opened.splice(opened.indexOf(first), 1);
 
     const second = fileStore(path);
-    expect(second.schemaVersion).toBe(1);
+    expect(second.schemaVersion).toBe(2);
     expect(
       second.db.prepare<[], { n: number }>('SELECT COUNT(*) AS n FROM schema_migrations').get()?.n,
-    ).toBe(1);
+    ).toBe(2);
   });
 
   it('serializes two writers on the same file with BEGIN IMMEDIATE', async () => {

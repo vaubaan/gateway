@@ -14,8 +14,8 @@
  *     configuration with the registered ids.
  */
 import { PluginRegistry } from '@vaubaan/plugin-sdk';
-import { findRiskEntry, isEnvScopedEntry } from '@vaubaan/policy-engine';
-import { formatRiskId, parseRiskId, type RiskId } from '@vaubaan/shared';
+import { findRiskEntry, isAcceptableInEnv, isEnvScopedEntry } from '@vaubaan/policy-engine';
+import { baseRiskId, parseRiskId, type RiskId } from '@vaubaan/shared';
 
 import { ConfigError, providerEnvName, type ConfigIssue, type InstanceConfig } from '../config';
 import type { Logger } from '../logging';
@@ -42,13 +42,10 @@ export class RegistryCatalogIndex implements CatalogIndex {
     if (!parsed) return false;
     const registered = this.registry.get(parsed.provider);
     if (!registered) return false;
-    const entry = findRiskEntry(
-      registered.catalog,
-      formatRiskId({ provider: parsed.provider, name: parsed.name }),
-    );
+    const entry = findRiskEntry(registered.catalog, baseRiskId(riskId));
     if (!entry) return false;
     if (parsed.env === null) return true;
-    return isEnvScopedEntry(entry) && (entry.acceptable_in_envs ?? []).includes(parsed.env);
+    return isEnvScopedEntry(entry) && isAcceptableInEnv(entry, parsed.env);
   }
 }
 

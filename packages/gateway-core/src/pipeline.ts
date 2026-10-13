@@ -30,9 +30,15 @@
  * `refusalToRpcError` / `rpcSuccess`.
  */
 
-import { acceptedRisksOf, type RiskId } from '@vaubaan/shared';
+import { acceptedRisksOf, type MissionStatus, type RiskId } from '@vaubaan/shared';
 import { hashArguments, type AuditWriter, type CallAuditEntry } from './audit.ts';
-import { AuthError, refuse, type Refusal } from './errors.ts';
+import {
+  AuthError,
+  isRefusal,
+  isUnavailableConnectionStatus,
+  refuse,
+  type Refusal,
+} from './errors.ts';
 import type { CallVerdict } from './risk-gateway.ts';
 import type {
   BearerKind,
@@ -114,7 +120,7 @@ export class DoorAuthenticator {
     authorizationHeader: string | null | undefined,
   ): Promise<MissionContext | Refusal> {
     const outcome = await this.authenticate(authorizationHeader, 'execution');
-    if ('code' in outcome) return outcome;
+    if (isRefusal(outcome)) return outcome;
     if (outcome.kind !== 'mission-token') {
       // Unreachable: checkDoor guarantees the kind. Kept for the type system.
       return refuse.wrongCredentialKind({
@@ -131,19 +137,22 @@ export class DoorAuthenticator {
 // Mission and connection state (pure)
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Why a mission is inactive, per status. Keyed by status so a new status
+ *  fails to compile until it has its reason. */
+const INACTIVE_MISSION_REASON: Readonly<
+  Record<Exclude<MissionStatus, 'active'>, (expires_at: string | null) => string>
+> = {
+  expired: (expires_at) => `the mission expired at ${expires_at ?? 'an unknown time'}`,
+  orphaned: () =>
+    'the authority behind the mission vanished (share or connection revoked, creator gone)',
+  revoked: () => 'the mission was revoked by its creator',
+};
+
 /** `mission-inactive` when the mission's status or expiry says so. */
 export function checkMissionActive(ctx: MissionContext, now: Date): Refusal | null {
   const { status, expires_at } = ctx.mission;
   if (status !== 'active') {
-    return refuse.missionInactive({
-      status,
-      reason:
-        status === 'expired'
-          ? `the mission expired at ${expires_at ?? 'an unknown time'}`
-          : status === 'orphaned'
-            ? 'the authority behind the mission vanished (share or connection revoked, creator gone)'
-            : 'the mission was revoked by its creator',
-    });
+    return refuse.missionInactive({ status, reason: INACTIVE_MISSION_REASON[status](expires_at) });
   }
   if (expires_at !== null && Date.parse(expires_at) <= now.getTime()) {
     return refuse.missionInactive({
@@ -154,9 +163,11 @@ export function checkMissionActive(ctx: MissionContext, now: Date): Refusal | nu
   return null;
 }
 
-/** `connection-unavailable` when the connection is not `active`. */
+/** `connection-unavailable` when the connection is `expired` or `revoked`.
+ *  An `unowned` connection keeps serving its missions (spec §2: "missions
+ *  keep running, but nobody can share or reconnect"). */
 export function checkConnectionAvailable(connection: MissionConnection): Refusal | null {
-  if (connection.status === 'active') return null;
+  if (!isUnavailableConnectionStatus(connection.status)) return null;
   return refuse.connectionUnavailable({
     connection: { id: connection.id, name: connection.display_name },
     status: connection.status,
@@ -308,7 +319,11 @@ export class CallPipeline {
         return this.rejected(targeted, verdict.reason);
       case 'deny':
         return this.refused(
-          { ...targeted, slices_executed: verdict.executed_slices },
+          {
+            ...targeted,
+            slices_executed: verdict.executed_slices,
+            risks_touched: verdict.risks_touched,
+          },
           refuse.riskNotAccepted({
             missing_risks: verdict.missing_risks,
             executed_slices: verdict.executed_slices,
@@ -339,17 +354,17 @@ export class CallPipeline {
       remaining_budget: budget.remaining,
     };
 
-    const t0 = Date.now();
+    const t0 = this.now().getTime();
     try {
       const result = await this.deps.upstream.execute(ctx, call, target);
-      const entry: CallAuditEntry = { ...decided, upstream_latency_ms: Date.now() - t0 };
+      const entry: CallAuditEntry = { ...decided, upstream_latency_ms: this.now().getTime() - t0 };
       await this.deps.audit.write(entry);
       return { kind: 'allowed', result, audit: entry };
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
       const entry: CallAuditEntry = {
         ...decided,
-        upstream_latency_ms: Date.now() - t0,
+        upstream_latency_ms: this.now().getTime() - t0,
         upstream_error: error,
       };
       await this.deps.audit.write(entry);

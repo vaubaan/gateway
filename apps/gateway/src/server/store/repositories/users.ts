@@ -1,6 +1,6 @@
 import { NotFoundError } from '../errors.ts';
 import type { UserRecord, UserStatus } from '../types.ts';
-import { nowIso, type RepoContext } from './context.ts';
+import { nowIso, requireRow, type RepoContext } from './context.ts';
 
 export interface UpsertUserInput {
   readonly subject: string;
@@ -80,9 +80,7 @@ export function createUsersRepo(ctx: RepoContext): UsersRepo {
     async upsertFromIdp(input) {
       const now = nowIso(ctx);
       upsert.run(ctx.newId(), input.subject, input.email, input.displayName ?? null, now, now);
-      const row = bySubject.get(input.subject);
-      if (!row) throw new NotFoundError('user', input.subject);
-      return toRecord(row);
+      return toRecord(requireRow(bySubject.get(input.subject), 'user', input.subject));
     },
     async getById(id) {
       const row = getUserRow(ctx, id);
@@ -104,6 +102,13 @@ export function createUsersRepo(ctx: RepoContext): UsersRepo {
       return requireUser(ctx, id);
     },
   };
+}
+
+/** The user column list under alias `u`, for joins (`group_members`). */
+export function userColumns(alias: string): string {
+  return COLUMNS.split(', ')
+    .map((c) => `${alias}.${c}`)
+    .join(', ');
 }
 
 export { toRecord as userRowToRecord, type UserRow };

@@ -6,7 +6,8 @@
  * `NNNN_name.sql` that is not yet recorded in `schema_migrations` runs inside one
  * transaction and is recorded with its checksum. Re-running is a no-op. A file whose
  * checksum no longer matches its recorded one aborts the boot: applied migrations are
- * immutable, fixes are new files.
+ * immutable, fixes are new files. A database that records a migration this image does
+ * not ship (an older image started on a newer volume) aborts the boot too, naming it.
  */
 
 import { createHash } from 'node:crypto';
@@ -94,8 +95,14 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
   applied_at  TEXT    NOT NULL
 ) STRICT`; // sqlite: STRICT
 
-export function listApplied(db: StoreDb): AppliedMigration[] {
+/** Creates `schema_migrations` when the database is new. Idempotent. */
+export function ensureMigrationsTable(db: StoreDb): void {
   db.exec(BOOTSTRAP_SQL);
+}
+
+/** Applied migrations in version order (creates the table on a new database). */
+export function listApplied(db: StoreDb): AppliedMigration[] {
+  ensureMigrationsTable(db);
   return db
     .prepare<[], { version: number; name: string; checksum: string; applied_at: string }>(
       'SELECT version, name, checksum, applied_at FROM schema_migrations ORDER BY version',
@@ -115,6 +122,7 @@ export function runMigrations(
   clock: Clock,
 ): MigrationResult {
   const applied = new Map(listApplied(db).map((m) => [m.version, m]));
+  assertNoUnknownMigration(applied, migrations);
   const ran: Migration[] = [];
   const record = db.prepare<[number, string, string, string]>(
     'INSERT INTO schema_migrations (version, name, checksum, applied_at) VALUES (?, ?, ?, ?)',
@@ -139,4 +147,19 @@ export function runMigrations(
 
   const versions = [...applied.keys(), ...ran.map((m) => m.version)];
   return { applied: ran, currentVersion: versions.length ? Math.max(...versions) : 0 };
+}
+
+/** Downgrade protection: every recorded migration must have a file in this image. */
+function assertNoUnknownMigration(
+  applied: ReadonlyMap<number, AppliedMigration>,
+  migrations: readonly Migration[],
+): void {
+  const shipped = new Set(migrations.map((m) => m.version));
+  const unknown = [...applied.values()].filter((m) => !shipped.has(m.version));
+  if (unknown.length === 0) return;
+  const names = unknown.map((m) => `${String(m.version).padStart(4, '0')}_${m.name}`);
+  throw new MigrationError(
+    `database carries migrations this image does not know: ${names.join(', ')}; ` +
+      'start an image at least as new as the one that wrote the database',
+  );
 }

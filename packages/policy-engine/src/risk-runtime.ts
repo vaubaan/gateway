@@ -25,7 +25,7 @@ import {
   type IndexedRiskCatalog,
 } from './risk-evaluator.ts';
 import { bindingsEnvResolver } from './legacy-bindings.ts';
-import { noEnvResolver, qualifyRiskId, type EnvResolver } from './qualify.ts';
+import { isAcceptableInEnv, noEnvResolver, qualifyRiskId, type EnvResolver } from './qualify.ts';
 import { serializeSlice } from './slice-dsl.ts';
 
 export interface EvaluateCallInput {
@@ -96,11 +96,7 @@ export function evaluateCall(input: EvaluateCallInput): RiskDecision {
       // sharing a pattern with disjoint acceptable_in_envs) would produce
       // phantom qualified ids that no mission can ever contain. Skipped in
       // the test/legacy mode where env qualification is disabled entirely.
-      if (qualifying && entry?.acceptable_in_envs && entry.acceptable_in_envs.length > 0) {
-        if (env === null || !entry.acceptable_in_envs.includes(env)) {
-          continue;
-        }
-      }
+      if (qualifying && !isAcceptableInEnv(entry, env)) continue;
       const qualified = qualifyRiskId(baseId, env, entry);
       if (!seen.has(qualified)) {
         seen.add(qualified);

@@ -22,6 +22,15 @@ const PREFIX_LIVE = 'vbn_live_';
 const PREFIX_TEST = 'vbn_test_';
 const PREFIX_LEN = 8;
 const SECRET_LEN = 32;
+
+/**
+ * Shape of a token of either flavour, for finding tokens inside free text
+ * (log redaction). Group 1 = flavour, group 2 = prefix. Not global : callers
+ * that scan a whole text build `new RegExp(API_KEY_PATTERN.source, 'g')`.
+ */
+export const API_KEY_PATTERN = new RegExp(
+  `vbn_(live|test)_([A-Za-z0-9]{${PREFIX_LEN}})_[A-Za-z0-9]{${SECRET_LEN}}`,
+);
 const BASE62 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 
 const ARGON2_OPTS = {

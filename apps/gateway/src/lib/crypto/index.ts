@@ -9,6 +9,8 @@ import { createEncryptor, type Encryptor } from '@/server/crypto';
 import { MASTER_KEY_BYTES } from '@/server/config';
 
 const LEGACY_ENV = 'ENCRYPTION_MASTER_KEY';
+// single-process only — module-level memo of the v4 encryptor; the v5 replacement is the
+// `Encryptor` held by the composition root (`getRoot()`), deleted with this shim in Phase 1.
 let legacyEncryptor: Promise<Encryptor> | null = null;
 
 function legacy(): Promise<Encryptor> {

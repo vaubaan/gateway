@@ -59,7 +59,7 @@ export function createSharesRepo(ctx: RepoContext): SharesRepo {
   const risksOf = db.prepare<[string], { risk_id: string }>(
     'SELECT risk_id FROM share_restrictions WHERE share_id = ? ORDER BY risk_id',
   );
-  const revoke = db.prepare<[string, string]>(
+  const revokeActive = db.prepare<[string, string]>(
     `UPDATE shares SET status = 'revoked', revoked_at = ? WHERE id = ? AND status = 'active'`,
   );
 
@@ -76,7 +76,7 @@ export function createSharesRepo(ctx: RepoContext): SharesRepo {
     };
   }
 
-  function require(id: string): ShareRecord {
+  function requireShare(id: string): ShareRecord {
     const row = byId.get(id);
     if (!row) throw new NotFoundError('share', id);
     return toRecord(row);
@@ -100,7 +100,7 @@ export function createSharesRepo(ctx: RepoContext): SharesRepo {
         );
         for (const riskId of unique) insertRisk.run(id, riskId);
       });
-      return require(id);
+      return requireShare(id);
     },
     async getById(id) {
       const row = byId.get(id);
@@ -119,10 +119,11 @@ export function createSharesRepo(ctx: RepoContext): SharesRepo {
         .map(toRecord);
     },
     async revoke(id) {
-      const current = require(id);
-      if (current.status !== 'active') throw new InvariantError(`share ${id} is already revoked`);
-      revoke.run(nowIso(ctx), id);
-      return require(id);
+      // The conditional UPDATE is the check; the re-read only picks the error.
+      const changed = revokeActive.run(nowIso(ctx), id).changes;
+      const current = requireShare(id);
+      if (changed === 0) throw new InvariantError(`share ${id} is already revoked`);
+      return current;
     },
   };
 }

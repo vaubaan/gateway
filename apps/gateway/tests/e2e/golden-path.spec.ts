@@ -18,7 +18,7 @@ import { expect, test } from '@playwright/test';
 
 const BASE = process.env.E2E_BASE_URL ?? 'https://vaubaan.com';
 const EMAIL = process.env.E2E_USER_EMAIL ?? 'test@vaubaan.com';
-const PASSWORD = process.env.E2E_USER_PASSWORD ?? 'VaubanTest!2026';
+const PASSWORD = process.env.E2E_USER_PASSWORD ?? '';
 
 test.describe('Vaubaan golden path', () => {
   test('login → dashboard → org → project → roles', async ({ page }) => {

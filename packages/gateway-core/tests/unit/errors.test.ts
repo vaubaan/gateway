@@ -5,11 +5,18 @@ import { describe, expect, test } from 'vitest';
 import type { Slice } from '@vaubaan/shared';
 
 import {
+  AUTH_REQUIRED_HTTP_STATUS,
+  AUTH_REQUIRED_RPC_CODE,
+  AuthError,
+  GatewayError,
   REFUSAL_CODES,
   REFUSAL_RPC_CODE,
   isRefusal,
+  isUnavailableConnectionStatus,
   refuse,
   refusalToRpcError,
+  rpcError,
+  rpcSuccess,
   type Refusal,
   type RefusalCode,
 } from '../../src/index.ts';
@@ -31,6 +38,7 @@ const SAMPLES: Record<RefusalCode, () => Refusal> = {
     refuse.riskNotAccepted({
       missing_risks: ['github.merge-protected'],
       executed_slices: [slice],
+      hint: 'this mission does not accept [github.merge-protected]. Ask the mission creator to re-issue with these risks accepted, or restrict the operation.',
     }),
   'budget-exhausted': () =>
     refuse.budgetExhausted({
@@ -100,7 +108,7 @@ describe('refusal codes', () => {
 });
 
 describe('refusal fields', () => {
-  test('risk-not-accepted: missing risks, executed slices, default hint names the risks', () => {
+  test('risk-not-accepted: missing risks, executed slices, the engine hint names the risks', () => {
     const r = SAMPLES['risk-not-accepted']();
     expect(r.code).toBe('risk-not-accepted');
     if (r.code !== 'risk-not-accepted') return;
@@ -229,6 +237,50 @@ describe('isRefusal', () => {
     expect(isRefusal({ code: 'not-a-code', hint: 'x' })).toBe(false);
     expect(isRefusal({ code: 'rate-limited' })).toBe(false);
     expect(isRefusal({ code: 'rate-limited', hint: '' })).toBe(false);
+  });
+});
+
+describe('connection statuses', () => {
+  test('only expired and revoked make a connection unavailable', () => {
+    expect(isUnavailableConnectionStatus('expired')).toBe(true);
+    expect(isUnavailableConnectionStatus('revoked')).toBe(true);
+    expect(isUnavailableConnectionStatus('active')).toBe(false);
+    expect(isUnavailableConnectionStatus('unowned')).toBe(false);
+  });
+});
+
+describe('rpcError / rpcSuccess', () => {
+  test('rpcError omits data when undefined and keeps it otherwise', () => {
+    expect(rpcError(1, -32601, 'Method not found')).toEqual({
+      jsonrpc: '2.0',
+      id: 1,
+      error: { code: -32601, message: 'Method not found' },
+    });
+    expect(rpcError('a', -32602, 'Invalid params', { field: 'x' }).error.data).toEqual({
+      field: 'x',
+    });
+  });
+
+  test('rpcSuccess wraps the result', () => {
+    expect(rpcSuccess(null, { ok: true })).toEqual({
+      jsonrpc: '2.0',
+      id: null,
+      result: { ok: true },
+    });
+  });
+});
+
+describe('transport errors', () => {
+  test('AuthError carries the -32001 code and the 401 status', () => {
+    const e = new AuthError('unknown bearer');
+    expect(e).toBeInstanceOf(GatewayError);
+    expect(e).toBeInstanceOf(Error);
+    expect(e.name).toBe('AuthError');
+    expect(e.code).toBe(AUTH_REQUIRED_RPC_CODE);
+    expect(e.code).toBe(-32001);
+    expect(e.httpStatus).toBe(AUTH_REQUIRED_HTTP_STATUS);
+    expect(e.httpStatus).toBe(401);
+    expect(e.message).toBe('unknown bearer');
   });
 });
 

@@ -2,7 +2,9 @@
 title: Policy engine
 status: current
 date: 2026-10-13
+last_synced: 2026-10-13
 tracks:
+  - packages/policy-engine/src/index.ts
   - packages/policy-engine/src/slice-dsl.ts
   - packages/policy-engine/src/slice-matcher.ts
   - packages/policy-engine/src/risk-evaluator.ts
@@ -33,18 +35,22 @@ quarantined.
 
 ## Modules
 
-| Module               | Responsibility                                                                                                                         | Called from                                         |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| `slice-dsl.ts`       | Parse / serialize the slice grammar (path on the data model + action `R`/`W`).                                                         | catalog loader (SDK), classifiers, audit, tests     |
-| `slice-matcher.ts`   | Predicates `matches` / `covers` / `intersects` between slice patterns.                                                                 | `risk-evaluator`, lints                             |
-| `risk-evaluator.ts`  | `indexCatalog` (parse every `matches` once, unique ids) + `risksTouchedBy[All]` for executed slices.                                   | `risk-runtime`, SDK registry, test kit              |
-| `risk-policy.ts`     | `checkAcceptableInEnv` (issuance-time structural restriction) + `prepareCatalog` (boot checks, injectable `warn`) + `hasFallbackRisk`. | SDK catalog loader, issuance                        |
-| `qualify.ts`         | Env-qualify a `RiskId` (`provider.name` → `provider[env].name`) and back ; `EnvResolver` + `resourceEnvResolver` ; `resolveVector`.    | `risk-runtime`, issuance UI, SDK                    |
-| `risk-runtime.ts`    | `evaluateCall` — the pure risk step of the call decision : strict-fail if `risks_touched ⊄ accepted`.                                  | gateway-core `risk-gateway.ts` (with `envResolver`) |
-| `legacy-bindings.ts` | **Quarantined.** `resourceFromBinding` / `bindingsEnvResolver(ProviderBinding[])` bridge for the v4 app. Deleted at P1.6.              | `apps/gateway/src/lib/gateway/legacy-v4-gateway.ts` |
-| `scope-injection.ts` | **Quarantined.** v4 auto-fill of owner/repo, projectId, project_ref, teamId. Returns `null` unless `{ enabled: true }` (plan §8-Q4).   | gateway-core v4 `gateway.ts`                        |
+| Module               | Responsibility                                                                                                                                              | Called from                                         |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| `slice-dsl.ts`       | Parse / serialize the slice grammar (path on the data model + action `R`/`W`).                                                                              | catalog loader (SDK), classifiers, audit, tests     |
+| `slice-matcher.ts`   | Predicates `matches` / `covers` / `intersects` between slice patterns.                                                                                      | `risk-evaluator`, lints                             |
+| `risk-evaluator.ts`  | `indexCatalog` (parse every `matches` once, unique ids) + `risksTouchedBy[All]` for executed slices.                                                        | `risk-runtime`, SDK registry, test kit              |
+| `risk-policy.ts`     | `checkAcceptableInEnv` (issuance-time structural restriction) + `prepareCatalog` (boot checks, injectable `warn`) + `hasFallbackRisk`.                      | SDK catalog loader, issuance                        |
+| `qualify.ts`         | Env-qualify a `RiskId` (`provider.name` → `provider[env].name`) and back ; `EnvResolver` + `resourceEnvResolver` ; `resolveVector`.                         | `risk-runtime`, issuance UI, SDK                    |
+| `risk-runtime.ts`    | `evaluateCall` — the pure risk step of the call decision : strict-fail if `risks_touched ⊄ accepted`.                                                       | gateway-core `risk-gateway.ts` (with `envResolver`) |
+| `legacy-bindings.ts` | **Quarantined.** `resourceFromBinding` / `bindingsEnvResolver(ProviderBinding[])` bridge for the v4 app. Deleted at P1.2 / P1.6 with `shared/legacy-v4.ts`. | `apps/gateway/src/lib/gateway/legacy-v4-gateway.ts` |
+| `scope-injection.ts` | **Quarantined.** v4 auto-fill of owner/repo, projectId, project_ref, teamId. Returns `null` unless `{ enabled: true }` (plan §8-Q4).                        | `apps/gateway/src/lib/gateway/legacy-v4-gateway.ts` |
 
-The barrel `src/index.ts` re-exports all eight.
+The barrel `src/index.ts` re-exports all eight. The listing below names
+functions; the exported types travel with them (`SliceSegment` lives in
+`@vaubaan/shared`, plus `QualifiableRiskEntry`, `PrepareCatalogOptions`,
+`EvaluateCallInput`, `ScopeInjectionFlags`, `InjectionPlan`, `ScopeContext`
+and the `SCOPE_INJECTION_DEFAULT_FLAGS` constant).
 
 ```
 packages/policy-engine/
@@ -53,13 +59,13 @@ packages/policy-engine/
     slice-matcher.ts      matches / covers / intersects
     risk-evaluator.ts     indexCatalog / risksTouchedBy / risksTouchedByAll / findRiskEntry
     risk-policy.ts        checkAcceptableInEnv / prepareCatalog / hasFallbackRisk / fallbackRiskPrefix
-    qualify.ts            isEnvScopedEntry / qualifyRiskId / unqualifyRiskId / EnvResolver /
-                          noEnvResolver / resourceEnvResolver / resolveVector
+    qualify.ts            isEnvScopedEntry / isAcceptableInEnv / qualifyRiskId / unqualifyRiskId /
+                          EnvResolver / noEnvResolver / resourceEnvResolver / resolveVector
     risk-runtime.ts       evaluateCall / evaluateCallSimple
     legacy-bindings.ts    resourceFromBinding / bindingsEnvResolver            (quarantine)
     scope-injection.ts    injectionPlanFor / stripInjectedArgs / mergeInjectedArgs (quarantine, flag)
   tests/unit/
-    slice-dsl (23)  slice-matcher (26)  risk-evaluator (11)  risk-policy (8)
+    slice-dsl (23)  slice-matcher (29)  risk-evaluator (11)  risk-policy (9)
     qualify (21)    risk-runtime (17)   scope-injection (13)
 ```
 
@@ -89,7 +95,7 @@ they never run on a denied call.
 slice    ::= provider '.' segment ('.' segment)* '.' action
 segment  ::= ident | '[' inner ']' | '*' | '**'
 inner    ::= ident | ident (',' ident)* | '*' | '**'
-ident    ::= [a-zA-Z0-9_/-]+   (glob `*` allowed inside brackets)
+ident    ::= [a-zA-Z0-9_/-]+   (inside brackets: [a-zA-Z0-9_./~-]+, glob `*` allowed)
 action   ::= 'R' | 'W'
 ```
 
@@ -111,8 +117,14 @@ carries `input`, `position` and a short message.
   wildcard (`service-var[*].W`).
 
 Segment-by-segment matching ; `[**]` consumes zero or more segments with
-backtracking ; the in-bracket glob `*` matches `[a-zA-Z0-9_/-]+`. Known
-heuristic in glob-vs-glob `intersects` (`expandGlob`) ; not blocking.
+backtracking ; the in-bracket glob `*` expands over `BRACKET_IDENT_CHAR_CLASS`
+(exported by `slice-dsl.ts`, `[a-zA-Z0-9_./~-]`), the same class the parser
+accepts, so `branch[release-*]` matches `release-1.2` and `file[*]` matches
+`a.ts` : a pattern never accepts less than an identifier may contain.
+Glob × glob `intersects` is exact for globs with one `*` each (literal
+prefixes and suffixes must extend one another) and fails closed (`true`)
+when both sides carry several `*` ; `covers` uses the same split (a glob
+covers itself and any glob whose literals extend its own).
 
 ### `risk-evaluator.ts`
 
@@ -127,17 +139,26 @@ slice ; empty means the catalog has no fallback for that slice.
 ### `risk-policy.ts`
 
 - `checkAcceptableInEnv(entry, env)` — refuses at issuance when the entry
-  declares `acceptable_in_envs` and the resource's environment label is
-  absent or not in the list. Returns a message or `null`.
-- `prepareCatalog(catalog, { warn? })` — `indexCatalog` + duplicate ids +
-  RiskId grammar (`isRiskId` from `@vaubaan/shared`) ; a missing
+  is env-scoped and the resource's environment label is absent or not in
+  the list. Returns a message or `null`. Built on `isAcceptableInEnv`.
+- `prepareCatalog(catalog, { warn? })` — `indexCatalog` (patterns parsed,
+  ids unique) + RiskId grammar (`isRiskId` from `@vaubaan/shared`) ; a missing
   `<provider>.uncategorized-*` fallback calls `warn` (default
-  `console.warn`). The SDK loader passes a collecting `warn` and turns the
-  finding into a hard error ; here it stays a warning so partial catalogs
-  can be indexed in tests and tooling.
+  `console.warn`). The SDK loader silences `warn` and re-checks the fallback
+  itself (`semanticIssues`, a hard error) ; the SDK registry silences it
+  too ; here it stays a warning so partial catalogs can be indexed in tests
+  and tooling.
 - `hasFallbackRisk(catalog)`, `fallbackRiskPrefix(provider)`.
 
 ### `qualify.ts`
+
+`isAcceptableInEnv(entry, env)` is the one rule for `acceptable_in_envs` :
+an entry that is not env-scoped (no list, or an empty one) is acceptable
+anywhere ; an env-scoped entry only in a listed env, never without an env.
+Issuance (`checkAcceptableInEnv`), the runtime (`evaluateCall`), the plugin
+SDK's preset checks and the store's `RegistryCatalogIndex` all call it, so
+the four places cannot disagree (an empty list used to be refused by one of
+them).
 
 - `isEnvScopedEntry(entry)` — true iff `acceptable_in_envs` is non-empty ;
   that is the marker of an env-scoped risk.
@@ -185,7 +206,8 @@ never produce phantom qualified ids. Every denial carries
 `code: 'risk-not-accepted'` (the only code this step emits) and a `hint`
 saying what to do (ask the mission creator to re-issue, or restrict the
 operation) ; the structured refusal body is gateway-core's job (P0.5).
-`evaluateCallSimple(catalog, slices, accepted)` is for tests only.
+`evaluateCallSimple(catalog, slices, accepted)` is for tests and
+integration code ; never on the hot path (pre-index at boot).
 
 ### Quarantined modules
 
@@ -194,7 +216,7 @@ operation) ; the structured refusal body is gateway-core's job (P0.5).
 `metadata`) and wraps `resourceEnvResolver`. `risk-runtime` uses it only
 when a caller still passes `bindings` (none in v5) ; the legacy v4 app
 uses `resourceFromBinding` to feed gateway-core's decision core. Deleted
-at P1.6 with the v4 pipeline.
+at P1.2 / P1.6 with the v4 pipeline and `shared/legacy-v4.ts`.
 
 `scope-injection.ts` keeps the v4 behaviour (auto-fill `owner`/`repo`,
 `projectId`, `project_ref`, `teamId` when a token has exactly one binding
@@ -219,6 +241,7 @@ if ('denied' in outcome) return refuse(outcome.denied);
 const decision = evaluateCall({
   executed_slices: outcome.slices,
   token_accepted_risks: new Set(acceptedRisksOf(mission)),
+  token_denied_risks: new Set(), // v5 missions deny nothing explicitly
   catalog: registry.catalogOf(providerId),
   envResolver: resourceEnvResolver(missionResources),
 });

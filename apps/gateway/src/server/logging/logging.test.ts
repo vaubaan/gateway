@@ -54,6 +54,16 @@ describe('createLogger', () => {
     expect(lines[0]!.line.endsWith('\n')).toBe(true);
   });
 
+  it('keeps time, level and msg when a field carries the same name', () => {
+    const { logger, lines } = capture();
+    logger.info('hello', { level: 'fatal', msg: 'spoofed', time: 0 });
+    expect(JSON.parse(lines[0]!.line)).toMatchObject({
+      time: '2026-10-13T12:00:00.000Z',
+      level: 'info',
+      msg: 'hello',
+    });
+  });
+
   it('honours the threshold and routes errors separately', () => {
     const { logger, lines } = capture('warn');
     logger.debug('no');

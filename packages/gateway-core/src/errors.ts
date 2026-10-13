@@ -23,11 +23,12 @@ import {
   type JsonRpcError,
   type JsonRpcSuccess,
   type MissionStatus,
+  type RateLimit,
   type RefusalCode,
   type RiskId,
   type Slice,
 } from '@vaubaan/shared';
-import type { BearerKind, Door } from './types.ts';
+import type { BearerKind, ConnectionOwner, Door } from './types.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Refusal shapes — one per code
@@ -82,15 +83,30 @@ export interface ResourceNotInMissionRefusal extends RefusalBase<'resource-not-i
 
 export interface RateLimitedRefusal extends RefusalBase<'rate-limited'> {
   readonly risk_id: RiskId;
-  readonly limit: { readonly max: number; readonly window_seconds: number };
+  readonly limit: RateLimit;
   readonly retry_after_seconds: number;
+}
+
+/** Statuses that make a connection unusable. An `unowned` connection (its
+ *  owning group emptied) keeps serving its missions until someone reconnects
+ *  or revokes it (spec §2). */
+export const UNAVAILABLE_CONNECTION_STATUSES = [
+  'expired',
+  'revoked',
+] as const satisfies readonly ConnectionStatus[];
+export type UnavailableConnectionStatus = (typeof UNAVAILABLE_CONNECTION_STATUSES)[number];
+
+export function isUnavailableConnectionStatus(
+  status: ConnectionStatus,
+): status is UnavailableConnectionStatus {
+  return (UNAVAILABLE_CONNECTION_STATUSES as readonly ConnectionStatus[]).includes(status);
 }
 
 export interface ConnectionUnavailableRefusal extends RefusalBase<'connection-unavailable'> {
   readonly connection: { readonly id: string; readonly name: string };
-  readonly status: Exclude<ConnectionStatus, 'active'>;
+  readonly status: UnavailableConnectionStatus;
   /** Who can reconnect: the owner (user email or group name). */
-  readonly owner: { readonly kind: 'user' | 'group'; readonly display: string };
+  readonly owner: Pick<ConnectionOwner, 'kind' | 'display'>;
 }
 
 export interface MissionInactiveRefusal extends RefusalBase<'mission-inactive'> {
@@ -136,21 +152,29 @@ export function isRefusal(value: unknown): value is Refusal {
 const HAND_TO_HUMAN =
   'Hand this URL to the human steering you; do not retry in a loop and do not try to work around the refusal.';
 
+/** What the agent can expect next for each inactive mission status. Keyed
+ *  by status so a new status fails to compile until it has its sentence. */
+const INACTIVE_MISSION_NEXT_STEP: Readonly<Record<Exclude<MissionStatus, 'active'>, string>> = {
+  expired: 'Only the mission creator can extend it.',
+  orphaned:
+    'The authority behind it vanished; the creator or a connection owner must close it and issue a new one.',
+  revoked: 'A new mission must be issued.',
+};
+
 export const refuse = {
   riskNotAccepted(input: {
     missing_risks: readonly RiskId[];
     executed_slices: readonly Slice[];
-    /** Optional hint computed by the policy engine; a default is composed
-     *  when absent. */
-    hint?: string;
+    /** The hint composed by the policy engine (`evaluateCall`), which owns
+     *  the wording of this refusal: it knows which slices were executed and
+     *  why nothing, or not enough, matched. */
+    hint: string;
   }): RiskNotAcceptedRefusal {
     return {
       code: 'risk-not-accepted',
       missing_risks: input.missing_risks,
       executed_slices: input.executed_slices,
-      hint:
-        input.hint ??
-        `This mission does not accept [${input.missing_risks.join(', ')}]. Ask the mission creator to issue a mission that accepts these risks, or restrict the operation to what the mission accepts.`,
+      hint: input.hint,
     };
   },
 
@@ -211,7 +235,7 @@ export const refuse = {
 
   rateLimited(input: {
     risk_id: RiskId;
-    limit: { max: number; window_seconds: number };
+    limit: RateLimit;
     retry_after_seconds: number;
   }): RateLimitedRefusal {
     return {
@@ -225,8 +249,8 @@ export const refuse = {
 
   connectionUnavailable(input: {
     connection: { id: string; name: string };
-    status: Exclude<ConnectionStatus, 'active'>;
-    owner: { kind: 'user' | 'group'; display: string };
+    status: UnavailableConnectionStatus;
+    owner: Pick<ConnectionOwner, 'kind' | 'display'>;
   }): ConnectionUnavailableRefusal {
     const who =
       input.owner.kind === 'group'
@@ -245,12 +269,7 @@ export const refuse = {
     status: Exclude<MissionStatus, 'active'>;
     reason: string;
   }): MissionInactiveRefusal {
-    const next =
-      input.status === 'expired'
-        ? 'Only the mission creator can extend it.'
-        : input.status === 'orphaned'
-          ? 'The authority behind it vanished; the creator or a connection owner must close it and issue a new one.'
-          : 'A new mission must be issued.';
+    const next = INACTIVE_MISSION_NEXT_STEP[input.status];
     return {
       code: 'mission-inactive',
       status: input.status,
@@ -280,6 +299,9 @@ export const refuse = {
 
 /** JSON-RPC error code carried by every refusal (and by upstream errors). */
 export const REFUSAL_RPC_CODE = -32603;
+/** JSON-RPC error code and HTTP status of an `AuthError` (unknown or malformed bearer). */
+export const AUTH_REQUIRED_RPC_CODE = -32001;
+export const AUTH_REQUIRED_HTTP_STATUS = 401;
 
 export function rpcError(
   id: string | number | null,
@@ -325,7 +347,7 @@ export class GatewayError extends Error {
  *  `-32001`. Not a refusal: a refusal presupposes an identified credential. */
 export class AuthError extends GatewayError {
   constructor(message: string) {
-    super(message, -32001, 401);
+    super(message, AUTH_REQUIRED_RPC_CODE, AUTH_REQUIRED_HTTP_STATUS);
     this.name = 'AuthError';
   }
 }

@@ -5,7 +5,8 @@ import { ConfigError, loadInstanceConfig } from '../config';
 import { validEnv } from '../config/testing';
 import { openMemoryStore, type CatalogIndex } from '../store';
 import { bootOrExit, EXIT_CONFIG_ERROR } from './boot';
-import { MemoryCache, MemoryRateLimiter, MemorySessionStore } from './memory';
+import { silentLogger } from '../logging';
+import { MemoryRateLimiter, MemorySessionStore } from './memory';
 import { checkProviderApps, RegistryCatalogIndex } from './registry';
 import { buildRoot, getRoot, resetRoot, type RootDeps } from './root';
 import { fakePlugin, memoryStoreDeps } from './testing';
@@ -27,7 +28,7 @@ describe('buildRoot', () => {
     expect(root.configFile).toBeNull();
     expect(root.encryptor.currentKeyVersion).toBe(1);
     expect(root.store.kind).toBe('memory');
-    expect(root.store.schemaVersion).toBe(1);
+    expect(root.store.schemaVersion).toBe(2);
     expect(root.registry.size).toBe(0);
     expect(root.registry.labels()).toEqual([]);
     expect(root.build).toEqual({ version: 'dev', commit: 'dev' });
@@ -118,11 +119,12 @@ describe('buildRoot', () => {
   it('never writes a secret to the boot log', async () => {
     const lines: string[] = [];
     const env = validEnv();
-    await buildRoot({
+    const root = await buildRoot({
       ...quiet,
       loadConfig: () => loadInstanceConfig({ env }),
       logWrite: (_lvl, line) => lines.push(line),
     });
+    await root.close();
     const all = lines.join('');
     expect(all).toContain('configuration loaded');
     expect(all).toContain('composition root ready');
@@ -132,7 +134,7 @@ describe('buildRoot', () => {
 });
 
 describe('checkProviderApps', () => {
-  const logger = { warn: () => undefined } as unknown as Parameters<typeof checkProviderApps>[2];
+  const logger = silentLogger;
 
   it('passes when every provider app names a registered plugin', () => {
     const { config } = loadInstanceConfig({
@@ -226,21 +228,6 @@ describe('in-memory ports (single-process only)', () => {
     expect((await rl.take('other', 2, 1_000)).allowed).toBe(true);
     t += 600;
     expect((await rl.take('k', 2, 1_000)).allowed).toBe(true);
-  });
-
-  it('MemoryCache expires entries and evicts the oldest when full', async () => {
-    let t = 0;
-    const cache = new MemoryCache(2, () => t);
-    await cache.set('a', 1, 100);
-    await cache.set('b', 2, 100);
-    await cache.set('c', 3, 100); // evicts a
-    expect(await cache.get('a')).toBeUndefined();
-    expect(await cache.get('b')).toBe(2);
-    t = 100;
-    expect(await cache.get('b')).toBeUndefined();
-    await cache.set('d', 4, 50);
-    await cache.delete('d');
-    expect(await cache.get('d')).toBeUndefined();
   });
 
   it('MemorySessionStore returns null for unknown or expired sessions', async () => {

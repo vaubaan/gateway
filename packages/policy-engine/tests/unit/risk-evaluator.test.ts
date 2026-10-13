@@ -14,8 +14,8 @@ const githubCatalog: RiskCatalog = {
   risks: [
     {
       id: 'github.read-code',
-      label: 'Lire le code',
-      reason: 'Lectures du code, peuvent contenir des secrets via commits.',
+      label: 'Read code',
+      reason: 'Code reads ; commits may contain secrets.',
       matches: 'github.repo[**].file[**].R',
       vector: {
         reversibility: 'reversible',
@@ -28,8 +28,8 @@ const githubCatalog: RiskCatalog = {
     },
     {
       id: 'github.feature-branch-write',
-      label: 'Branches feature',
-      reason: 'Réversible.',
+      label: 'Feature branches',
+      reason: 'Reversible.',
       matches: 'github.repo[**].branch[feature/*,fix/*].file[**].W',
       vector: {
         reversibility: 'reversible',
@@ -223,7 +223,7 @@ describe('indexCatalog', () => {
 
 describe('findRiskEntry', () => {
   test('finds by id', () => {
-    expect(findRiskEntry(indexed, 'github.read-code')?.label).toBe('Lire le code');
+    expect(findRiskEntry(indexed, 'github.read-code')?.label).toBe('Read code');
   });
   test('returns undefined for unknown', () => {
     expect(findRiskEntry(indexed, 'github.no-such')).toBeUndefined();

@@ -12,8 +12,8 @@ export type {
   RateLimitDecision,
   RateLimiter,
   SessionStore,
-  Store as StorePort,
+  StoreLiveness,
 } from './ports';
-export { MemoryCache, MemoryRateLimiter, MemorySessionStore } from './memory';
+export { MemoryRateLimiter, MemorySessionStore } from './memory';
 export { buildEmptyRegistry, checkProviderApps, RegistryCatalogIndex } from './registry';
 export { openEmbeddedStore, type StoreContext } from './store';

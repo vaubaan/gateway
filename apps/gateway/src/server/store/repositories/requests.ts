@@ -1,8 +1,8 @@
 import { withImmediateTransaction } from '../db.ts';
-import { openText, sealText, type Encryptor } from '../encryptor.ts';
+import { openSealedColumn, sealText, type Encryptor } from '../encryptor.ts';
 import { InvariantError, NotFoundError } from '../errors.ts';
 import type { Iso, RequestKind, RequestRecord, RequestState, RiskId } from '../types.ts';
-import { nowIso, parseJson, toJson, type RepoContext } from './context.ts';
+import { nowIso, parseJsonObject, requireRow, toJson, type RepoContext } from './context.ts';
 
 /**
  * Approval-request arguments sealed ahead of a transaction. The request id is fixed
@@ -93,11 +93,11 @@ function toRecord(row: RequestRow): RequestRecord {
     expiresAt: row.expires_at,
     decidedAt: row.decided_at,
     decidedByUserId: row.decided_by_user_id,
-    decision: parseJson<Record<string, unknown>>(row.decision_json),
+    decision: parseJsonObject(row.decision_json, 'requests.decision_json'),
   };
 }
 
-export function requestAd(id: string): string {
+function requestAd(id: string): string {
   return `request:${id}`;
 }
 
@@ -110,10 +110,13 @@ export async function prepareRequestArguments(
   return { requestId, blob: sealed.blob, keyVersion: sealed.keyVersion };
 }
 
-export function getRequestRecord(ctx: RepoContext, id: string): RequestRecord | null {
-  const row = ctx.db
-    .prepare<[string], RequestRow>(`SELECT ${COLUMNS} FROM requests r WHERE r.id = ?`)
-    .get(id);
+const SELECT_BY_ID = `SELECT ${COLUMNS} FROM requests r WHERE r.id = ?`;
+const INSERT_OPEN = `INSERT INTO requests (id, mission_id, session_id, kind, state, risk_id, tool, fingerprint,
+    args_blob, key_version, created_at, expires_at)
+  VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?)`;
+
+function getRequestRecord(ctx: RepoContext, id: string): RequestRecord | null {
+  const row = ctx.db.prepare<[string], RequestRow>(SELECT_BY_ID).get(id);
   return row ? toRecord(row) : null;
 }
 
@@ -142,11 +145,7 @@ export function insertRequestSync(
         string,
         string,
       ]
-    >(
-      `INSERT INTO requests (id, mission_id, session_id, kind, state, risk_id, tool, fingerprint,
-         args_blob, key_version, created_at, expires_at)
-       VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?)`,
-    )
+    >(INSERT_OPEN)
     .run(
       id,
       input.missionId,
@@ -160,9 +159,7 @@ export function insertRequestSync(
       now,
       input.expiresAt,
     );
-  const record = getRequestRecord(ctx, id);
-  if (!record) throw new NotFoundError('request', id);
-  return record;
+  return requireRow(getRequestRecord(ctx, id) ?? undefined, 'request', id);
 }
 
 export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
@@ -177,7 +174,7 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
   const blobOf = db.prepare<[string], { args_blob: Buffer | null; key_version: number | null }>(
     'SELECT args_blob, key_version FROM requests WHERE id = ?',
   );
-  const decide = db.prepare<[string, string, string, string | null, string]>(
+  const decideOpen = db.prepare<[string, string, string, string | null, string]>(
     `UPDATE requests SET state = ?, decided_at = ?, decided_by_user_id = ?, decision_json = ?,
        args_blob = NULL, key_version = NULL
      WHERE id = ? AND state = 'open'`,
@@ -209,25 +206,25 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
       return forMission.all(missionId).map(toRecord);
     },
     async getArguments(id) {
-      const row = blobOf.get(id);
-      if (!row) throw new NotFoundError('request', id);
-      if (!row.args_blob || row.key_version === null) return null;
-      const text = await openText(ctx.encryptor, requestAd(id), {
-        blob: row.args_blob,
-        keyVersion: row.key_version,
-      });
-      return JSON.parse(text) as unknown;
+      const row = requireRow(blobOf.get(id), 'request', id);
+      const text = await openSealedColumn(
+        ctx.encryptor,
+        requestAd(id),
+        row.args_blob,
+        row.key_version,
+      );
+      return text === null ? null : (JSON.parse(text) as unknown);
     },
     async decide(id, state, decidedByUserId, decision = null) {
+      // One conditional UPDATE decides; the re-read only chooses the error. Atomic on any
+      // driver, not just the synchronous one.
+      const changed = decideOpen.run(state, nowIso(ctx), decidedByUserId, toJson(decision), id);
       const current = getRequestRecord(ctx, id);
       if (!current) throw new NotFoundError('request', id);
-      if (current.state !== 'open') {
+      if (changed.changes === 0) {
         throw new InvariantError(`request ${id} is already ${current.state}`);
       }
-      decide.run(state, nowIso(ctx), decidedByUserId, toJson(decision), id);
-      const updated = getRequestRecord(ctx, id);
-      if (!updated) throw new NotFoundError('request', id);
-      return updated;
+      return current;
     },
     async expireOpen() {
       return expire.run(nowIso(ctx)).changes;

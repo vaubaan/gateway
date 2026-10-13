@@ -71,8 +71,15 @@ export interface Store {
 export function openStore(options: StoreOptions): Store {
   const db = openDb({ path: options.path, busyTimeoutMs: options.busyTimeoutMs });
   const clock = options.clock ?? systemClock;
-  const migrations = loadMigrations(options.migrationsDir ?? DEFAULT_MIGRATIONS_DIR);
-  const { currentVersion } = runMigrations(db, migrations, clock);
+  let currentVersion: number;
+  try {
+    const migrations = loadMigrations(options.migrationsDir ?? DEFAULT_MIGRATIONS_DIR);
+    currentVersion = runMigrations(db, migrations, clock).currentVersion;
+  } catch (err) {
+    // A refused boot must not leave the file (and its -wal) locked by this process.
+    db.close();
+    throw err;
+  }
 
   const ctx: RepoContext = {
     db,
@@ -115,19 +122,27 @@ export function openMemoryStore(options: Omit<StoreOptions, 'path'>): Store {
   return openStore({ ...options, path: MEMORY_PATH });
 }
 
-export { MEMORY_PATH, withImmediateTransaction, journalMode } from './db.ts';
+export {
+  DEFAULT_BUSY_TIMEOUT_MS,
+  MEMORY_PATH,
+  MIN_SQLITE_VERSION,
+  isSqliteVersionAtLeast,
+  withImmediateTransaction,
+  journalMode,
+} from './db.ts';
 export type { StoreDb } from './db.ts';
 export { ManualClock, systemClock, toIso } from './clock.ts';
 export type { Clock } from './clock.ts';
 export { newId, isUuidV7, idTimestampMs } from './ids.ts';
 export type { IdGenerator } from './ids.ts';
-export { openText, sealText } from './encryptor.ts';
+export { openSealedColumn, openText, sealText } from './encryptor.ts';
 export type { EncryptedBlob, Encryptor, SealedBlob } from './encryptor.ts';
 export { SetCatalogIndex, assertKnownRiskIds } from './catalog-index.ts';
 export type { CatalogIndex } from './catalog-index.ts';
 export {
   DEFAULT_MIGRATIONS_DIR,
   checksumOf,
+  ensureMigrationsTable,
   listApplied,
   loadMigrations,
   runMigrations,

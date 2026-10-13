@@ -50,7 +50,9 @@ describe.skipIf(!hasBuild)('standalone output keeps the native addons (Next buil
     const trace = JSON.parse(readFileSync(healthzTrace, 'utf8')) as NftTrace;
     const nodeBinaries = trace.files.filter((f) => f.endsWith('.node'));
     expect(
-      nodeBinaries.some((f) => /argon2\/prebuilds\/linux-x64\/argon2\.glibc\.node$/.test(f)),
+      nodeBinaries.some((f) =>
+        new RegExp(`argon2/prebuilds/${process.platform}-${process.arch}/argon2\\..*node$`).test(f),
+      ),
     ).toBe(true);
     expect(
       nodeBinaries.some((f) => /better-sqlite3\/build\/Release\/better_sqlite3\.node$/.test(f)),

@@ -3,11 +3,15 @@
 #
 #   deploy/docker/smoke.sh <image>
 #
-# 1. incomplete configuration  -> the container exits non-zero and names the key
+# 1. incomplete configuration  -> the container exits 78 (EX_CONFIG) and names the key
 # 2. http public URL           -> same, naming public_url
-# 3. complete configuration    -> /healthz answers 200 within the start period
+# 3. complete configuration    -> /healthz answers 200 within the start period, no secret logged
 # 4. native addons traced      -> argon2 and better-sqlite3 (prebuilt .node) load inside the image
+# 5. non-root                  -> the process runs as uid 10001
+# 6. no env file shipped       -> the standalone output carries no apps/gateway/.env*
 set -euo pipefail
+
+EXIT_CONFIG_ERROR=78
 
 IMAGE="${1:?usage: smoke.sh <image>}"
 PORT="${SMOKE_PORT:-3999}"
@@ -18,15 +22,15 @@ BOOTSTRAP="smoke-$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
 cleanup() { docker rm -f "$NAME" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 
-fail() { echo "SMOKE FAIL: $*" >&2; exit 1; }
-pass() { echo "SMOKE OK:   $*"; }
+fail() { printf 'SMOKE FAIL: %b\n' "$*" >&2; exit 1; }
+pass() { printf 'SMOKE OK:   %s\n' "$*"; }
 
 # 1. Incomplete configuration must exit with a named key.
 set +e
 out="$(docker run --rm -e VAUBAAN_PUBLIC_URL=https://gateway.example.com "$IMAGE" 2>&1)"
 code=$?
 set -e
-[ "$code" -ne 0 ] || fail "container started with an incomplete configuration"
+[ "$code" -eq "$EXIT_CONFIG_ERROR" ] || fail "incomplete configuration exited $code, expected $EXIT_CONFIG_ERROR:\n$out"
 echo "$out" | grep -q 'encryption.master_key: missing required key (env: VAUBAAN_MASTER_KEY or VAUBAAN_MASTER_KEY_FILE)' \
   || fail "exit message does not name VAUBAAN_MASTER_KEY:\n$out"
 echo "$out" | grep -q 'store.path: missing required key' || fail "exit message does not name store.path"
@@ -44,7 +48,7 @@ out="$(docker run --rm \
   "$IMAGE" 2>&1)"
 code=$?
 set -e
-[ "$code" -ne 0 ] || fail "container accepted an http public URL"
+[ "$code" -eq "$EXIT_CONFIG_ERROR" ] || fail "http public URL exited $code, expected $EXIT_CONFIG_ERROR:\n$out"
 echo "$out" | grep -q 'public_url: must use https' || fail "exit message does not refuse http:\n$out"
 pass "http public URL refused"
 
@@ -69,8 +73,12 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 curl -fsS "http://127.0.0.1:${PORT}/healthz" >/dev/null || fail "/healthz never answered"
-docker logs "$NAME" 2>&1 | grep -q "$MASTER_KEY" && fail "master key leaked into the logs"
-docker logs "$NAME" 2>&1 | grep -q "$BOOTSTRAP" && fail "bootstrap token leaked into the logs"
+# Capture the logs once: `docker logs | grep -q` under pipefail can die of SIGPIPE
+# on a match and turn a leak into a false pass.
+logs="$(docker logs "$NAME" 2>&1)" || fail "cannot read the container logs"
+[ -n "$logs" ] || fail "the container logged nothing"
+if grep -qF -- "$MASTER_KEY" <<<"$logs"; then fail "master key leaked into the logs"; fi
+if grep -qF -- "$BOOTSTRAP" <<<"$logs"; then fail "bootstrap token leaked into the logs"; fi
 pass "no secret in the container logs"
 
 # 4. Native addons are present in the traced output and load. The image has
@@ -83,8 +91,14 @@ docker exec "$NAME" node -e "const D=require('better-sqlite3');const r=new D(':m
   || fail "better-sqlite3 does not load inside the image (check outputFileTracingIncludes)"
 pass "better-sqlite3 loads inside the image (in-memory query ran)"
 
-# Non-root.
+# 5. Non-root.
 [ "$(docker exec "$NAME" id -u)" = "10001" ] || fail "process is not running as uid 10001"
 pass "process runs as non-root"
+
+# 6. No env file shipped: Next copies apps/gateway/.env* into the standalone
+#    output, so the build context must have excluded them.
+shipped="$(docker exec "$NAME" sh -c 'ls apps/gateway/.env* 2>/dev/null' || true)"
+[ -z "$shipped" ] || fail "env file shipped inside the image: $shipped"
+pass "no env file inside the image"
 
 echo "SMOKE PASSED"

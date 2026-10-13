@@ -32,7 +32,9 @@ encryption:
   # REQUIRED. 32 random bytes, base64 (`npm run gen-master-key`). Every
   # connection credential is encrypted with a key derived from it.
   # env: VAUBAAN_MASTER_KEY or VAUBAAN_MASTER_KEY_FILE
-  master_key: ${file:/run/secrets/vaubaan_master_key}
+  # With compose.yaml the value comes from deploy/config/.env; with Docker or
+  # Kubernetes secrets write `${file:/run/secrets/vaubaan_master_key}` instead.
+  master_key: ${VAUBAAN_MASTER_KEY}
   # Version stamped on new blobs. Increase it when you rotate the key.
   # env: VAUBAAN_MASTER_KEY_VERSION
   key_version: 1
@@ -88,7 +90,8 @@ admin:
 # REQUIRED while idp is not configured. At least 32 characters; lets the
 # operator sign in and configure the instance. Revoke it once the IdP works.
 # env: VAUBAAN_BOOTSTRAP_TOKEN or VAUBAAN_BOOTSTRAP_TOKEN_FILE
-bootstrap_token: ${file:/run/secrets/vaubaan_bootstrap_token}
+# (or `${file:/run/secrets/vaubaan_bootstrap_token}` with a secrets mount)
+bootstrap_token: ${VAUBAAN_BOOTSTRAP_TOKEN}
 
 # Community telemetry (spec §9): anonymous plugin success/failure counts.
 # Off by default; the collector URL has a built-in default and may be

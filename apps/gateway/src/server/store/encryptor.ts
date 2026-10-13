@@ -42,3 +42,17 @@ export async function openText(
 ): Promise<string> {
   return encryptor.decrypt(associatedData, { keyVersion: sealed.keyVersion, blob: sealed.blob });
 }
+
+/**
+ * Opens an encrypted column pair as the repositories store it: `null` when the row holds
+ * no blob (or no key version), the clear text otherwise. One place for the null rule.
+ */
+export async function openSealedColumn(
+  encryptor: Encryptor,
+  associatedData: string,
+  blob: Buffer | null,
+  keyVersion: number | null,
+): Promise<string | null> {
+  if (!blob || keyVersion === null) return null;
+  return openText(encryptor, associatedData, { blob, keyVersion });
+}

@@ -328,7 +328,7 @@ describe('evaluateCall — acceptable_in_envs runtime filter', () => {
     risks: [
       {
         id: 'railway.upsert-variable',
-        label: 'Modifier une env var',
+        label: 'Modify an env var',
         reason: 'r',
         matches: 'railway.project[**].environment[**].service-var[**].W',
         acceptable_in_envs: ['staging', 'preview', 'dev', 'prod'],

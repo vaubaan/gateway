@@ -14,15 +14,25 @@ import type {
   AuditDecision,
   AuditEntry,
   CallAuditEntry,
-  RefusalCode,
 } from '@vaubaan/gateway-core';
-import type { Slice } from '@vaubaan/shared';
+import { isRefusalCode, type Slice } from '@vaubaan/shared';
 import { withImmediateTransaction } from '../db.ts';
-import { InvariantError, NotFoundError } from '../errors.ts';
+import { InvariantError } from '../errors.ts';
 import type { Iso, RiskId } from '../types.ts';
-import { parseJson, toJson, type RepoContext } from './context.ts';
+import {
+  DEFAULT_LIST_LIMIT,
+  MS_PER_DAY,
+  parseEnum,
+  parseJson,
+  placeholders,
+  requireColumn,
+  requireRow,
+  toJson,
+  type RepoContext,
+} from './context.ts';
 
 export const DEFAULT_AUDIT_RETENTION_DAYS = 90;
+const AUDIT_DECISIONS = ['allowed', 'refused'] as const satisfies readonly AuditDecision[];
 
 /** One `audit_risks` row: a risk's place in the call entry. */
 export interface AuditRiskRow {
@@ -98,74 +108,101 @@ interface RiskRow {
   remaining: number | null;
 }
 
-const COLUMNS = `id, ts, kind, mission_id, session_id, connection_id, resource_ref, tool, arguments_hash,
-  slices_json, decision, refusal_code, refusal_reason, approval_id, agent_label, upstream_latency_ms,
-  upstream_error, client_ip, client_user_agent, user_id, act, object_type, object_id, before_json,
-  after_json, delegated_client_id`;
-const COLUMN_COUNT = 26;
+/** The one ordered column list: SELECTs, the INSERT and its parameters derive from it. */
+const AUDIT_COLUMNS = [
+  'id',
+  'ts',
+  'kind',
+  'mission_id',
+  'session_id',
+  'connection_id',
+  'resource_ref',
+  'tool',
+  'arguments_hash',
+  'slices_json',
+  'decision',
+  'refusal_code',
+  'refusal_reason',
+  'approval_id',
+  'agent_label',
+  'upstream_latency_ms',
+  'upstream_error',
+  'client_ip',
+  'client_user_agent',
+  'user_id',
+  'act',
+  'object_type',
+  'object_id',
+  'before_json',
+  'after_json',
+  'delegated_client_id',
+] as const satisfies readonly (keyof AuditRow)[];
+type AuditColumn = (typeof AUDIT_COLUMNS)[number];
+const COLUMNS = AUDIT_COLUMNS.join(', ');
 
 type SqlParams = (string | number | null)[];
 
+/** Positional parameters in `AUDIT_COLUMNS` order; columns the entry kind does not set are null. */
+function toParams(values: Partial<Record<AuditColumn, string | number | null>>): SqlParams {
+  return AUDIT_COLUMNS.map((column) => values[column] ?? null);
+}
+
 function callParams(id: string, e: CallAuditEntry): SqlParams {
-  return [
+  return toParams({
     id,
-    e.ts,
-    'call',
-    e.mission_id,
-    e.session_id,
-    e.connection_id,
-    e.resource_ref,
-    e.tool,
-    e.arguments_hash,
-    toJson(e.slices_executed),
-    e.decision,
-    e.refusal_code,
-    e.refusal_reason,
-    e.approval_id,
-    e.agent_label,
-    e.upstream_latency_ms,
-    e.upstream_error,
-    e.client_ip,
-    e.client_user_agent,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-  ];
+    ts: e.ts,
+    kind: 'call',
+    mission_id: e.mission_id,
+    session_id: e.session_id,
+    connection_id: e.connection_id,
+    resource_ref: e.resource_ref,
+    tool: e.tool,
+    arguments_hash: e.arguments_hash,
+    slices_json: toJson(e.slices_executed),
+    decision: e.decision,
+    refusal_code: e.refusal_code,
+    refusal_reason: e.refusal_reason,
+    approval_id: e.approval_id,
+    agent_label: e.agent_label,
+    upstream_latency_ms: e.upstream_latency_ms,
+    upstream_error: e.upstream_error,
+    client_ip: e.client_ip,
+    client_user_agent: e.client_user_agent,
+  });
 }
 
 function adminParams(id: string, e: AdminAuditEntry): SqlParams {
-  return [
+  return toParams({
     id,
-    e.ts,
-    'admin',
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    e.user_id,
-    e.act,
-    e.object.type,
-    e.object.id,
-    toJson(e.before ?? null),
-    toJson(e.after ?? null),
-    e.delegated_client_id,
-  ];
+    ts: e.ts,
+    kind: 'admin',
+    user_id: e.user_id,
+    act: e.act,
+    object_type: e.object.type,
+    object_id: e.object.id,
+    before_json: toJson(e.before ?? null),
+    after_json: toJson(e.after ?? null),
+    delegated_client_id: e.delegated_client_id,
+  });
+}
+
+function isSlice(value: unknown): value is Slice {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as { provider?: unknown; path?: unknown; action?: unknown };
+  return (
+    typeof v.provider === 'string' &&
+    Array.isArray(v.path) &&
+    (v.action === 'R' || v.action === 'W')
+  );
+}
+
+function parseSlices(text: string | null): Slice[] {
+  const value = parseJson(text);
+  if (value === null) return [];
+  if (!Array.isArray(value) || !value.every(isSlice)) {
+    throw new InvariantError('audit.slices_json: expected a list of slices');
+  }
+  return value;
 }
 
 /** One row per risk in the accepted snapshot or touched by the call. */
@@ -184,7 +221,7 @@ function riskRows(e: CallAuditEntry): AuditRiskRow[] {
 export function createAuditRepo(ctx: RepoContext): AuditRepo {
   const { db } = ctx;
   const insert = db.prepare<SqlParams>(
-    `INSERT INTO audit (${COLUMNS}) VALUES (${Array.from({ length: COLUMN_COUNT }, () => '?').join(', ')})`,
+    `INSERT INTO audit (${COLUMNS}) VALUES (${placeholders(AUDIT_COLUMNS.length)})`,
   );
   const insertRisk = db.prepare<[string, string, number, number, number | null]>(
     'INSERT INTO audit_risks (audit_id, risk_id, accepted, touched, remaining) VALUES (?, ?, ?, ?, ?)',
@@ -208,19 +245,29 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
   const purge = db.prepare<[string]>('DELETE FROM audit WHERE ts < ?');
 
   function toRecord(row: AuditRow): AuditRecord {
-    if (row.kind === 'admin') {
-      return {
-        id: row.id,
-        kind: 'admin',
-        ts: row.ts,
-        user_id: row.user_id ?? '',
-        act: row.act as AdminAct,
-        object: { type: row.object_type as AdminObjectType, id: row.object_id ?? '' },
-        before: parseJson<unknown>(row.before_json),
-        after: parseJson<unknown>(row.after_json),
-        delegated_client_id: row.delegated_client_id,
-      };
-    }
+    return row.kind === 'admin' ? toAdminRecord(row) : toCallRecord(row);
+  }
+
+  function toAdminRecord(row: AuditRow): AuditRecord {
+    // `act` and `object_type` have no schema CHECK: gateway-core's unions are the only
+    // definition, so the store trusts what it wrote (the writer is typed).
+    return {
+      id: row.id,
+      kind: 'admin',
+      ts: row.ts,
+      user_id: requireColumn(row.user_id, 'audit.user_id'),
+      act: requireColumn(row.act, 'audit.act') as AdminAct,
+      object: {
+        type: requireColumn(row.object_type, 'audit.object_type') as AdminObjectType,
+        id: requireColumn(row.object_id, 'audit.object_id'),
+      },
+      before: parseJson(row.before_json),
+      after: parseJson(row.after_json),
+      delegated_client_id: row.delegated_client_id,
+    };
+  }
+
+  function toCallRecord(row: AuditRow): AuditRecord {
     const risks: AuditRiskRow[] = risksOf.all(row.id).map((r) => ({
       riskId: r.risk_id,
       accepted: r.accepted === 1,
@@ -228,21 +275,29 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
       remaining: r.remaining,
     }));
     const remaining = risks.filter((r) => r.remaining !== null);
+    const refusalCode = row.refusal_code;
+    if (refusalCode !== null && !isRefusalCode(refusalCode)) {
+      throw new InvariantError(`audit.refusal_code: unexpected value '${refusalCode}'`);
+    }
     return {
       id: row.id,
       kind: 'call',
       ts: row.ts,
-      mission_id: row.mission_id ?? '',
+      mission_id: requireColumn(row.mission_id, 'audit.mission_id'),
       session_id: row.session_id,
       connection_id: row.connection_id,
       resource_ref: row.resource_ref,
-      tool: row.tool ?? '',
-      arguments_hash: row.arguments_hash ?? '',
-      slices_executed: parseJson<Slice[]>(row.slices_json) ?? [],
+      tool: requireColumn(row.tool, 'audit.tool'),
+      arguments_hash: requireColumn(row.arguments_hash, 'audit.arguments_hash'),
+      slices_executed: parseSlices(row.slices_json),
       risks_touched: risks.filter((r) => r.touched).map((r) => r.riskId),
       accepted_risks_snapshot: risks.filter((r) => r.accepted).map((r) => r.riskId),
-      decision: row.decision as AuditDecision,
-      refusal_code: row.refusal_code as RefusalCode | null,
+      decision: parseEnum(
+        AUDIT_DECISIONS,
+        requireColumn(row.decision, 'audit.decision'),
+        'audit.decision',
+      ),
+      refusal_code: refusalCode,
       refusal_reason: row.refusal_reason,
       approval_id: row.approval_id,
       remaining_budget: remaining.length
@@ -257,10 +312,20 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
     };
   }
 
-  function require(id: string): AuditRecord {
-    const row = byId.get(id);
-    if (!row) throw new NotFoundError('audit', id);
-    return toRecord(row);
+  function requireEntry(id: string): AuditRecord {
+    return toRecord(requireRow(byId.get(id), 'audit', id));
+  }
+
+  async function purgeOlderThan(cutoff: Iso): Promise<number> {
+    return withImmediateTransaction(db, () => {
+      openWindow.run(cutoff);
+      try {
+        purgeRisks.run(cutoff);
+        return purge.run(cutoff).changes;
+      } finally {
+        closeWindow.run();
+      }
+    });
   }
 
   return {
@@ -274,7 +339,7 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
           insertRisk.run(id, r.riskId, r.accepted ? 1 : 0, r.touched ? 1 : 0, r.remaining);
         }
       });
-      return require(id);
+      return requireEntry(id);
     },
     async getById(id) {
       const row = byId.get(id);
@@ -299,7 +364,7 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
         where.push('ts < ?');
         params.push(filter.until);
       }
-      params.push(filter.limit ?? 1000);
+      params.push(filter.limit ?? DEFAULT_LIST_LIMIT);
       const sql = `SELECT ${COLUMNS} FROM audit ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY ts, id LIMIT ?`;
       return db
         .prepare<(string | number)[], AuditRow>(sql)
@@ -309,23 +374,13 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
     async countAllowedTouches(missionId, riskId, since, until) {
       return countTouches.get(missionId, riskId, since, until)?.n ?? 0;
     },
-    async purgeOlderThan(cutoff) {
-      return withImmediateTransaction(db, () => {
-        openWindow.run(cutoff);
-        try {
-          purgeRisks.run(cutoff);
-          return purge.run(cutoff).changes;
-        } finally {
-          closeWindow.run();
-        }
-      });
-    },
+    purgeOlderThan,
     async purgeByRetention(retentionDays = DEFAULT_AUDIT_RETENTION_DAYS) {
       if (!Number.isInteger(retentionDays) || retentionDays < 1) {
         throw new InvariantError('retention must be a positive number of days');
       }
-      const cutoff = new Date(ctx.clock.now().getTime() - retentionDays * 86_400_000);
-      return this.purgeOlderThan(cutoff.toISOString());
+      const cutoff = new Date(ctx.clock.now().getTime() - retentionDays * MS_PER_DAY);
+      return purgeOlderThan(cutoff.toISOString());
     },
   };
 }

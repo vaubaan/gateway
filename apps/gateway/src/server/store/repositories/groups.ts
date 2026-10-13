@@ -2,7 +2,7 @@ import { withImmediateTransaction } from '../db.ts';
 import { NotFoundError } from '../errors.ts';
 import type { GroupRecord, GroupSource, UserRecord } from '../types.ts';
 import { nowIso, placeholders, type RepoContext } from './context.ts';
-import { userRowToRecord, type UserRow } from './users.ts';
+import { userColumns, userRowToRecord, type UserRow } from './users.ts';
 
 export interface GroupsRepo {
   getOrCreate(name: string, source: GroupSource): Promise<GroupRecord>;
@@ -27,8 +27,7 @@ interface GroupRow {
 }
 
 const COLUMNS = 'id, name, source, created_at';
-const USER_COLUMNS =
-  'u.id, u.subject, u.email, u.display_name, u.status, u.created_at, u.last_login_at, u.removed_at';
+const USER_COLUMNS = userColumns('u');
 
 function toRecord(row: GroupRow): GroupRecord {
   return {
@@ -47,11 +46,11 @@ export function createGroupsRepo(ctx: RepoContext): GroupsRepo {
   const insert = db.prepare<[string, string, string, string]>(
     'INSERT INTO groups (id, name, source, created_at) VALUES (?, ?, ?, ?)',
   );
-  const addMember = db.prepare<[string, string, string]>(
+  const addMemberStmt = db.prepare<[string, string, string]>(
     `INSERT INTO group_members (group_id, user_id, added_at) VALUES (?, ?, ?)
      ON CONFLICT (group_id, user_id) DO NOTHING`,
   );
-  const removeMember = db.prepare<[string, string]>(
+  const removeMemberStmt = db.prepare<[string, string]>(
     'DELETE FROM group_members WHERE group_id = ? AND user_id = ?',
   );
   const members = db.prepare<[string], UserRow>(
@@ -102,15 +101,15 @@ export function createGroupsRepo(ctx: RepoContext): GroupsRepo {
             `DELETE FROM group_members WHERE group_id = ? AND user_id NOT IN (${placeholders(userIds.length)})`,
           ).run(groupId, ...userIds);
         }
-        for (const userId of userIds) addMember.run(groupId, userId, now);
+        for (const userId of userIds) addMemberStmt.run(groupId, userId, now);
       });
     },
     async addMember(groupId, userId) {
       requireGroup(groupId);
-      addMember.run(groupId, userId, nowIso(ctx));
+      addMemberStmt.run(groupId, userId, nowIso(ctx));
     },
     async removeMember(groupId, userId) {
-      return removeMember.run(groupId, userId).changes > 0;
+      return removeMemberStmt.run(groupId, userId).changes > 0;
     },
     async listMembers(groupId) {
       return members.all(groupId).map(userRowToRecord);

@@ -43,6 +43,22 @@ export function isEnvScopedEntry(entry: QualifiableRiskEntry | undefined): boole
 }
 
 /**
+ * The one rule for "may this risk be accepted or touched in this env" : an
+ * entry that is not env-scoped (no list, or an empty one) is acceptable
+ * anywhere ; an env-scoped entry only in a listed env, so never without an
+ * env. Issuance (`checkAcceptableInEnv`), the runtime (`evaluateCall`), the
+ * plugin SDK's preset checks and the store's catalog index all call it.
+ */
+export function isAcceptableInEnv(
+  entry: QualifiableRiskEntry | undefined,
+  env: string | null | undefined,
+): boolean {
+  if (!isEnvScopedEntry(entry)) return true;
+  const envs = entry?.acceptable_in_envs ?? [];
+  return typeof env === 'string' && envs.includes(env);
+}
+
+/**
  * Turn a non-env-qualified `RiskId` (e.g. `supabase.bulk-row-write`) into
  * its env-qualified form (`supabase[staging].bulk-row-write`) when the
  * catalog entry declares the risk as env-scoped. Non-env-scoped entries

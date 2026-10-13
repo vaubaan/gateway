@@ -2,6 +2,7 @@
 title: Gateway core
 status: current
 date: 2026-10-13
+last_synced: 2026-10-13
 tracks:
   - packages/gateway-core/src/
   - packages/gateway-core/tests/unit/
@@ -9,6 +10,8 @@ tracks:
   - packages/shared/src/domain.ts
   - packages/shared/src/refusal.ts
   - packages/shared/src/risk.ts
+  - packages/shared/src/mcp.ts
+  - apps/gateway/src/lib/gateway/legacy-v4-gateway.ts
 ---
 
 # Gateway core — `@vaubaan/gateway-core`
@@ -82,31 +85,40 @@ A refusal is **data returned by the pipeline**, not an exception. Eight
 codes, one builder each under `refuse.*`, every refusal carrying its
 `code`, the fields the spec lists, and an agent-readable `hint`:
 
-| Code                      | Fields                                                                     | Hint says                                                  |
-| ------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `risk-not-accepted`       | `missing_risks`, `executed_slices`                                         | which risks the mission lacks; ask the creator to re-issue |
-| `budget-exhausted`        | `risk_id`, `quota`, `consumed`, `period_end` (null = one-off), `claim_url` | hand the claim URL to the human, do not loop               |
-| `approval-required`       | `risk_id`, `fingerprint`, `approval_url`, `expires_at`                     | nothing executed; replay identically once approved         |
-| `resource-not-in-mission` | `cited_ref`, `connection {id,name}`, `allowed_resources[]`                 | which refs the mission may touch                           |
-| `rate-limited`            | `risk_id`, `limit {max, window_seconds}`, `retry_after_seconds`            | wait N seconds; quota not consumed                         |
-| `connection-unavailable`  | `connection {id,name}`, `status`, `owner {kind, display}`                  | who can reconnect                                          |
-| `mission-inactive`        | `status` (expired/orphaned/revoked), `reason`                              | stop calling, report to the human                          |
-| `wrong-credential-kind`   | `door`, `presented`, `expected` (`BearerKind`)                             | credentials never cross over                               |
+| Code                      | Fields                                                                             | Hint says                                                   |
+| ------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `risk-not-accepted`       | `missing_risks`, `executed_slices`                                                 | the policy engine's hint (required input), naming the risks |
+| `budget-exhausted`        | `risk_id`, `quota`, `consumed`, `period_end` (null = one-off), `claim_url`         | hand the claim URL to the human, do not loop                |
+| `approval-required`       | `risk_id`, `fingerprint`, `approval_url`, `expires_at`                             | nothing executed; replay identically once approved          |
+| `resource-not-in-mission` | `cited_ref`, `connection {id,name}`, `allowed_resources[]`                         | which refs the mission may touch                            |
+| `rate-limited`            | `risk_id`, `limit: RateLimit`, `retry_after_seconds`                               | wait N seconds; quota not consumed                          |
+| `connection-unavailable`  | `connection {id,name}`, `status` (`expired` \| `revoked`), `owner {kind, display}` | who can reconnect                                           |
+| `mission-inactive`        | `status` (expired/orphaned/revoked), `reason`                                      | stop calling, report to the human                           |
+| `wrong-credential-kind`   | `door`, `presented`, `expected` (`BearerKind`)                                     | credentials never cross over                                |
 
 `isRefusal(value)` is the type guard (`isRefusalCode(code)` and a non-empty
-hint). The unit test asserts exactly eight codes in `REFUSAL_CODES` and one
+hint); `RefusalOf<C>` narrows a `Refusal` to one code.
+`UNAVAILABLE_CONNECTION_STATUSES` / `isUnavailableConnectionStatus` pin
+which connection statuses refuse: `expired` and `revoked`. An `unowned`
+connection (its owning group emptied) keeps serving its missions until
+someone reconnects or revokes it (spec §2). The wording per inactive
+mission status lives in status-keyed records, so a new status fails to
+compile until it has its sentence. The unit test asserts exactly eight codes in `REFUSAL_CODES` and one
 sample per code.
 
 **JSON-RPC mapping** — unchanged since v4: `refusalToRpcError(id, refusal)`
 yields `{ code: -32603, message: 'Vaubaan refused the call: <code>', data: <refusal> }`.
-`REFUSAL_RPC_CODE` exports the constant. The whole refusal, hint
+`REFUSAL_RPC_CODE` exports the constant. `rpcError(id, code, message, data?)`
+and `rpcSuccess(id, result)` are the generic builders the door uses for the
+rest of the envelope. The whole refusal, hint
 included, travels in `data`; the door must forward `data` to the MCP
 client (the v4 `/mcp` route only forwarded `message`, which lost the
 fields — a point for P1.6).
 
-**Not refusals** — `AuthError` (`-32001`, HTTP 401) for a missing,
-malformed, unknown or revoked bearer: nothing was identified, so there is
-no credential to refuse. `GatewayError` is its base.
+**Not refusals** — `AuthError` (`AUTH_REQUIRED_RPC_CODE` = `-32001`,
+`AUTH_REQUIRED_HTTP_STATUS` = 401) for a missing, malformed, unknown or
+revoked bearer: nothing was identified, so there is no credential to
+refuse. `GatewayError` is its base.
 
 ## Audit (`audit.ts`)
 
@@ -136,7 +148,9 @@ upstream_error IS NOT NULL`.
 connection created/reconnected/transferred/revoked, share created/revoked,
 mission issued/rotated/revoked/closed, budget extended, period reset,
 expiry extended, gate opened, approval granted, request refused,
-delegation granted/revoked, config changed), `object {type, id}`,
+delegation granted/revoked, config changed), `object {type, id}` with
+`type: AdminObjectType` (`connection | share | mission | request |
+delegation | instance-config`),
 `before`, `after`, `delegated_client_id` (set when the act came through
 the management door).
 
@@ -150,7 +164,8 @@ lets a rejected `write` propagate, so no call completes without its entry
 {}))` truncated to 16 hex characters. It is not canonical (key order
 matters); the canonical fingerprint that binds approvals is P1.3's.
 
-`MemoryAuditWriter` keeps entries in memory for tests (`.calls`, `.admin`).
+`MemoryAuditWriter` keeps entries in memory for tests (`.entries`, `.calls`,
+`.admin`).
 
 ## Mission context (`types.ts`)
 
@@ -216,11 +231,15 @@ upstream.execute(ctx, call, target) mint + forward           (UpstreamStage — 
 audit.write(entry)                  always, exactly once     (AuditWriter — P0.3)
 ```
 
-`CallPipeline.execute(ctx, call)` returns a `CallOutcome`:
+`CallPipeline` is built from `CallPipelineDeps` (`resources`, `risks`,
+`budget`, `upstream`, `audit`, optional `now` clock; the budget stage
+returns a `BudgetDecision`). `CallPipeline.execute(ctx, call)` returns a
+`CallOutcome`:
 
 - `allowed` — provider result + audit entry;
 - `refused` — a typed `Refusal` + audit entry (`refusal_code` set,
-  `refusal_reason` = the hint);
+  `refusal_reason` = the hint; a `risk-not-accepted` entry also records
+  the `risks_touched` the decision core computed, covered and missing);
 - `rejected` — structural, no code (classifier denial, catalog missing);
   fail closed;
 - `failed` — allowed, then the provider threw (`decision: 'allowed'`,
@@ -251,9 +270,9 @@ exactly one audit entry; an audit write failure propagates.
 `evaluateCallForToken({ tool, args, resources, token, adapter, catalog,
 envResolver? })` classifies through the plugin, intersects with the
 `IndexedRiskCatalog` (`evaluateCall` of the policy engine) and returns a
-`CallVerdict`: `allow` (risks touched, slices), `deny` (`code`, missing
-risks, slices, hint), `classify-denied` (plugin reason), `no-catalog` (fail
-closed). The decision itself is unchanged by the pivot; its inputs are v5:
+`CallVerdict`: `allow` (risks touched, slices), `deny` (`code:
+'risk-not-accepted'`, missing risks, risks touched, slices, hint),
+`classify-denied` (plugin reason), `no-catalog` (fail closed). The decision itself is unchanged by the pivot; its inputs are v5:
 
 - `adapter: Classifier = Pick<ProviderPlugin, 'classify'>` — a registered
   plugin satisfies it as-is; tests pass a stub. `classify(tool, args,
@@ -268,10 +287,13 @@ resources)` returns the SDK's `ClassifyOutcome` (`{ slices }` or
 - `token: AcceptedRisksSnapshot` — `{ id, accepted_risks, denied_risks }`;
   v5 missions carry no explicit denies, pass `[]`.
 
-The policy engine's `RiskDecision` (denied) carries `code: RefusalCode`;
-the verdict forwards it and the pipeline's refusal is built with that
-code. `denyResponseBody` formats the v4 body (`error: <code>`, missing
-risks, slices, hint); the pipeline uses `refuse.riskNotAccepted` instead.
+The policy engine's `RiskDecision` (denied) carries `code:
+'risk-not-accepted'` (the only code the risk step emits) and the hint; the
+verdict forwards both and the pipeline's refusal is built from them (the
+engine owns the wording, gateway-core never composes a fallback).
+`denyResponseBody` (deprecated) formats the v4 body (`error: <code>`,
+missing risks, slices, hint) for the legacy gateway only; the pipeline uses
+`refuse.riskNotAccepted`.
 The v4 `ProviderBinding` input and the `V4*` aliases are gone; the legacy
 app (`apps/gateway/src/lib/gateway/legacy-v4-gateway.ts`) maps its
 bindings to resources with the quarantined `resourceFromBinding` until
@@ -280,10 +302,13 @@ P1.6 deletes it.
 ## Cache (`cache.ts`)
 
 `CacheClient { get, set(key, value, ttlSeconds), del }` is the interface
-the door uses to keep a verified mission context for a few seconds.
+the door uses to keep a verified mission context for a few seconds; it is
+the only cache port of the code base (the composition root re-exports it
+and builds `MemoryCacheClient`, see [configuration](configuration.md)).
 `MemoryCacheClient` is bounded (`maxEntries`, default 10 000; the oldest
 entry is evicted after a sweep of expired ones; re-setting a key makes it
-the newest) and takes an injectable clock.
+the newest), exposes `size` and takes an injectable clock
+(`MemoryCacheOptions`).
 
 `// single-process only` — a multi-replica deployment swaps in a shared
 implementation of `CacheClient`; nothing else changes. The v4
@@ -303,7 +328,8 @@ pivot D1; the Upstash ADR is superseded).
   files are deleted with the rest of the v4 app code.
 - `venv-store.ts` — project-scoped secret transfer; no v5 counterpart
   (plan §8-Q5). The Vercel and Supabase adapters keep their own
-  structural `VenvStoreReader` until P1.2 migrates them.
+  structural reader interface (`VenvStoreReader` in Vercel, `VenvStoreLike`
+  in Supabase) until P1.2 migrates them.
 - `SupabaseAuditWriter`, `RedisCacheClient`, `buildCacheClient`, and the
   `@supabase/supabase-js`, `@upstash/redis`, `@vaubaan/plugin-github`
   dependencies (declared, never imported).
@@ -316,9 +342,10 @@ pivot D1; the Upstash ADR is superseded).
 
 `packages/gateway-core/tests/unit/`, vitest, no network, no store:
 
-- `errors.test.ts` (24) — eight codes, one sample each, every field, hint
-  non-empty and serializable; `isRefusal`; `refusalToRpcError` (-32603,
-  data = refusal).
+- `errors.test.ts` (28) — eight codes, one sample each, every field, hint
+  non-empty and serializable; `isRefusal`; `isUnavailableConnectionStatus`;
+  `rpcError` / `rpcSuccess`; `AuthError` code and status;
+  `refusalToRpcError` (-32603, data = refusal).
 - `audit.test.ts` (6) — `hashArguments` sha256/16 with a known vector,
   determinism; `MemoryAuditWriter` over both kinds; the call entry carries
   every §8 field.
@@ -327,8 +354,9 @@ pivot D1; the Upstash ADR is superseded).
 - `authenticate.test.ts` (11) — door table, pure `checkDoor` on every
   mismatch, `parseBearer`, `DoorAuthenticator` for mission token vs
   delegated token vs session at each door, unknown bearer → `AuthError`.
-- `pipeline.test.ts` (15) — `checkMissionActive` (status, passed and
-  future `expires_at`), `checkConnectionAvailable`, then the pipeline over
+- `pipeline.test.ts` (16) — `checkMissionActive` (status, passed and
+  future `expires_at`), `checkConnectionAvailable` (`unowned` passes,
+  `expired` and `revoked` refuse), then the pipeline over
   a shared-shaped context (`ConnectionResource`, policy entries, one-off
   period): happy path with the full audit entry, inactive mission
   short-circuit, resource refusal before risk, expired connection,

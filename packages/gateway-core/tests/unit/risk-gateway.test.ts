@@ -267,6 +267,7 @@ describe('denyResponseBody', () => {
       kind: 'deny',
       code: 'risk-not-accepted',
       missing_risks: ['supabase.bulk-row-write'],
+      risks_touched: ['supabase.bulk-row-write'],
       executed_slices: [
         {
           provider: 'supabase',

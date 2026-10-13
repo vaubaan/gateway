@@ -15,15 +15,29 @@ function resolveCommitSha(): string {
   }
 }
 
+function readPackageJson(path: string): Record<string, unknown> {
+  const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'));
+  return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : {};
+}
+
 function resolveVersion(): string {
   try {
-    const pkg = JSON.parse(readFileSync(resolve(__dirname, '../../package.json'), 'utf8')) as {
-      version?: string;
-    };
-    return pkg.version ?? '0.0.0';
+    const version = readPackageJson(resolve(__dirname, '../../package.json')).version;
+    return typeof version === 'string' ? version : '0.0.0';
   } catch {
     return '0.0.0';
   }
+}
+
+/**
+ * Every `@vaubaan/*` workspace this app depends on, read from its own
+ * package.json: one source for the packages Next must transpile (they are
+ * imported as TypeScript source), never a second provider list.
+ */
+function workspaceDependencies(): string[] {
+  const deps = readPackageJson(resolve(__dirname, 'package.json')).dependencies;
+  if (typeof deps !== 'object' || deps === null) return [];
+  return Object.keys(deps).filter((name) => name.startsWith('@vaubaan/'));
 }
 
 const commitSha = resolveCommitSha();
@@ -36,17 +50,7 @@ const nextConfig: NextConfig = {
   },
   // apps/gateway imports TS source directly from sibling workspace packages.
   // Tell Next.js to transpile those packages on the server side.
-  transpilePackages: [
-    '@vaubaan/shared',
-    '@vaubaan/policy-engine',
-    '@vaubaan/plugin-github',
-    '@vaubaan/plugin-vercel',
-    '@vaubaan/plugin-supabase',
-    '@vaubaan/plugin-railway',
-    '@vaubaan/gateway-core',
-    '@vaubaan/plugin-sdk',
-    '@vaubaan/plugin-ssh',
-  ],
+  transpilePackages: workspaceDependencies(),
   // The harness owns AGENTS.md / CLAUDE.md in this repository; keep `next dev`
   // from writing its own agent-rules file next to the app.
   agentRules: false,
@@ -56,9 +60,9 @@ const nextConfig: NextConfig = {
   // Native addons must not be bundled. argon2 and better-sqlite3 are in Next's
   // default external list; ssh2 is not. argon2's prebuilt .node binaries are
   // traced explicitly because nft does not follow node-gyp-build lookups.
-  // better-sqlite3 is listed with its runtime files (lib, bindings) because
-  // nothing in the route graph imports the store yet, so nft never reaches
-  // the package; the globs become redundant, not harmful, once it does.
+  // better-sqlite3 is reached through /healthz → composition root → store, so
+  // nft traces it on its own; its runtime files (lib, bindings) stay listed as
+  // the guarantee for the prebuilt binary, whatever the route graph becomes.
   serverExternalPackages: ['ssh2'],
   outputFileTracingIncludes: {
     '/*': [
@@ -76,16 +80,11 @@ const nextConfig: NextConfig = {
   generateBuildId: () => commitSha,
   // The TLS terminator compresses (see deploy/caddy/Caddyfile); keeping Next's
   // gzip off avoids buffering streamed MCP responses.
+  // Behind the reverse proxy Next compares Origin with X-Forwarded-Host (the
+  // Caddyfile forwards it); no allowed-origins list is configured here because
+  // next.config values are frozen at build time and would not follow the
+  // instance configuration (ADR docker-image-and-config-format).
   compress: false,
-  experimental: {
-    serverActions: {
-      // Behind a reverse proxy, Next compares Origin with X-Forwarded-Host; an
-      // explicit list is only needed for unusual setups.
-      allowedOrigins: process.env.ALLOWED_ORIGINS
-        ? process.env.ALLOWED_ORIGINS.split(',')
-        : undefined,
-    },
-  },
 };
 
 export default nextConfig;

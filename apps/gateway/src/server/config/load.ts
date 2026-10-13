@@ -7,6 +7,7 @@
  */
 import { isIP } from 'node:net';
 
+import { KEY_BYTES } from '../crypto/aead';
 import { parseDuration } from './duration';
 import { ConfigError, IssueList } from './errors';
 import { type EnvSource, type FileReader, defaultFileReader } from './secret-refs';
@@ -25,14 +26,19 @@ import {
   type EncryptionConfig,
   type IdpConfig,
   type InstanceConfig,
+  LOG_LEVELS,
   type LogLevel,
+  PROVIDER_APP_FIELD_PROPERTY,
   PROVIDER_APP_FIELDS,
   type ProviderAppConfig,
-  type ProviderAppField,
+  isLogLevel,
+  isProviderAppField,
 } from './types';
 
-export const MASTER_KEY_BYTES = 32;
+/** The master key is the AEAD key: one size, defined by the crypto module. */
+export const MASTER_KEY_BYTES = KEY_BYTES;
 const MIN_BOOTSTRAP_TOKEN_LENGTH = 32;
+const DEFAULT_LOG_LEVEL: LogLevel = 'info';
 const DEFAULTS = {
   keyVersion: 1,
   claimSub: 'sub',
@@ -41,9 +47,7 @@ const DEFAULTS = {
   retentionDays: 90,
   requestExpiry: '24h',
   approvalExpiry: '10m',
-  logLevel: 'info' as LogLevel,
 } as const;
-const LOG_LEVELS: readonly LogLevel[] = ['debug', 'info', 'warn', 'error'];
 
 export interface LoadOptions {
   /** Defaults to `process.env`. */
@@ -185,43 +189,14 @@ function validate(raw: RawTree, issues: IssueList): InstanceConfig | null {
   const r = new Reader(raw, issues);
   const before = issues.items.length;
 
-  const publicUrl = r.url('public_url', { required: true, https: true });
-  if (publicUrl) {
-    if (publicUrl.search || publicUrl.hash) {
-      issues.add(
-        'public_url',
-        'must not carry a query string or fragment',
-        envNamesFor('public_url'),
-      );
-    }
-    publicUrl.pathname = publicUrl.pathname.replace(/\/+$/, '');
-  }
-
-  const trustedProxies = r.stringList('trusted_proxies');
-  for (const entry of trustedProxies) {
-    if (!isIpOrCidr(entry)) {
-      issues.add(
-        'trusted_proxies',
-        `"${entry}" is neither an IP address nor a CIDR block`,
-        envNamesFor('trusted_proxies'),
-      );
-    }
-  }
-
+  const publicUrl = readPublicUrl(r);
+  const trustedProxies = readTrustedProxies(r);
   const storePath = r.string('store.path', { required: true });
   const encryption = readEncryption(r);
   const idp = readIdp(r);
   const admin = readAdmin(r);
   const providers = readProviders(r);
-
-  const bootstrapToken = r.string('bootstrap_token', { required: idp === null }) ?? null;
-  if (bootstrapToken !== null && bootstrapToken.length < MIN_BOOTSTRAP_TOKEN_LENGTH) {
-    issues.add(
-      'bootstrap_token',
-      `must be at least ${MIN_BOOTSTRAP_TOKEN_LENGTH} characters long`,
-      envNamesFor('bootstrap_token'),
-    );
-  }
+  const bootstrapToken = readBootstrapToken(r, idp);
 
   const telemetryEnabled = r.bool('telemetry.enabled', false);
   const collectorUrl = r.url('telemetry.collector_url', {
@@ -232,13 +207,7 @@ function validate(raw: RawTree, issues: IssueList): InstanceConfig | null {
   const retentionDays = r.int('retention_days', DEFAULTS.retentionDays);
   const requestExpiry = r.duration('requests.expiry', DEFAULTS.requestExpiry);
   const approvalExpiry = r.duration('approvals.expiry', DEFAULTS.approvalExpiry);
-
-  const level = r.string('log.level', { fallback: DEFAULTS.logLevel }) ?? DEFAULTS.logLevel;
-  if (!LOG_LEVELS.includes(level as LogLevel)) {
-    issues.add('log.level', `expected one of ${LOG_LEVELS.join(', ')}, got "${level}"`, [
-      ...envNamesFor('log.level'),
-    ]);
-  }
+  const level = readLogLevel(r);
 
   if (issues.items.length > before) return null;
   if (!publicUrl || !storePath || !encryption || !admin || !collectorUrl) return null;
@@ -256,8 +225,59 @@ function validate(raw: RawTree, issues: IssueList): InstanceConfig | null {
     retentionDays,
     requests: { expirySeconds: requestExpiry },
     approvals: { expirySeconds: approvalExpiry },
-    log: { level: level as LogLevel },
+    log: { level },
   };
+}
+
+/** https, no query or fragment, trailing slash stripped (a sub-path is kept). */
+function readPublicUrl(r: Reader): URL | undefined {
+  const publicUrl = r.url('public_url', { required: true, https: true });
+  if (!publicUrl) return undefined;
+  if (publicUrl.search || publicUrl.hash) {
+    r.issues.add(
+      'public_url',
+      'must not carry a query string or fragment',
+      envNamesFor('public_url'),
+    );
+  }
+  publicUrl.pathname = publicUrl.pathname.replace(/\/+$/, '');
+  return publicUrl;
+}
+
+function readTrustedProxies(r: Reader): string[] {
+  const trustedProxies = r.stringList('trusted_proxies');
+  for (const entry of trustedProxies) {
+    if (!isIpOrCidr(entry)) {
+      r.issues.add(
+        'trusted_proxies',
+        `"${entry}" is neither an IP address nor a CIDR block`,
+        envNamesFor('trusted_proxies'),
+      );
+    }
+  }
+  return trustedProxies;
+}
+
+/** Required while no IdP is configured; long enough to resist guessing. */
+function readBootstrapToken(r: Reader, idp: IdpConfig | null): string | null {
+  const bootstrapToken = r.string('bootstrap_token', { required: idp === null }) ?? null;
+  if (bootstrapToken !== null && bootstrapToken.length < MIN_BOOTSTRAP_TOKEN_LENGTH) {
+    r.issues.add(
+      'bootstrap_token',
+      `must be at least ${MIN_BOOTSTRAP_TOKEN_LENGTH} characters long`,
+      envNamesFor('bootstrap_token'),
+    );
+  }
+  return bootstrapToken;
+}
+
+function readLogLevel(r: Reader): LogLevel {
+  const level = r.string('log.level', { fallback: DEFAULT_LOG_LEVEL }) ?? DEFAULT_LOG_LEVEL;
+  if (isLogLevel(level)) return level;
+  r.issues.add('log.level', `expected one of ${LOG_LEVELS.join(', ')}, got "${level}"`, [
+    ...envNamesFor('log.level'),
+  ]);
+  return DEFAULT_LOG_LEVEL;
 }
 
 function readEncryption(r: Reader): EncryptionConfig | null {
@@ -369,10 +389,10 @@ function readProviders(r: Reader): ReadonlyMap<string, ProviderAppConfig> {
       r.issues.add(base, `expected a mapping of app fields, got ${typeName(value)}`);
       continue;
     }
-    const app: Record<string, string> = {};
+    const app: { -readonly [K in keyof ProviderAppConfig]?: string } = {};
     for (const [field, fieldValue] of Object.entries(value)) {
       const path = `${base}.${field}`;
-      if (!PROVIDER_APP_FIELDS.includes(field as ProviderAppField)) {
+      if (!isProviderAppField(field)) {
         r.issues.add(
           path,
           `unknown provider app field; expected one of ${PROVIDER_APP_FIELDS.join(', ')}`,
@@ -387,7 +407,7 @@ function readProviders(r: Reader): ReadonlyMap<string, ProviderAppConfig> {
         );
         continue;
       }
-      app[toCamel(field)] = fieldValue;
+      app[PROVIDER_APP_FIELD_PROPERTY[field]] = fieldValue;
     }
     out.set(providerId, app);
   }
@@ -407,10 +427,6 @@ function isIpOrCidr(entry: string): boolean {
   const prefix = Number(entry.slice(slash + 1));
   const max = family === 4 ? 32 : 128;
   return Number.isInteger(prefix) && prefix >= 0 && prefix <= max;
-}
-
-function toCamel(snake: string): string {
-  return snake.replace(/_([a-z])/g, (_m, c: string) => c.toUpperCase());
 }
 
 function typeName(value: unknown): string {

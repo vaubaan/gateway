@@ -4,7 +4,11 @@ import { ConfigError, formatIssue } from './errors';
 import { loadInstanceConfig } from './load';
 import { CONFIG_FILE_ENV } from './sources';
 import { DEFAULT_TELEMETRY_COLLECTOR_URL } from './telemetry-default';
+import { KEYS, parseProviderEnvName } from './sources';
 import { TEST_BOOTSTRAP_TOKEN, TEST_MASTER_KEY, fakeFiles, validEnv } from './testing';
+import { secretValues } from './types';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 function failure(env: Record<string, string>, files: Record<string, string> = {}): ConfigError {
   try {
@@ -366,6 +370,58 @@ describe('loadInstanceConfig — YAML file and precedence', () => {
     ]);
   });
 
+  it('never echoes a malformed previous-keys entry (it may be a bare key)', () => {
+    const err = failure(validEnv({ VAUBAAN_MASTER_KEY_PREVIOUS: oldKey }));
+    expect(paths(err)).toEqual(['encryption.previous_keys']);
+    expect(err.message).not.toContain(oldKey);
+    expect(err.message).toContain('entry #1');
+  });
+
+  it('rejects a non-numeric previous key version and an empty key_version', () => {
+    expect(paths(failure(validEnv({ VAUBAAN_MASTER_KEY_PREVIOUS: `one=${oldKey}` })))).toEqual([
+      'encryption.previous_keys',
+    ]);
+    expect(paths(failure(validEnv({ VAUBAAN_MASTER_KEY_VERSION: '' })))).toEqual([
+      'encryption.key_version',
+    ]);
+  });
+
+  it('reports an unsupported ${...} syntax in the YAML instead of keeping it literally', () => {
+    const err = failure(validEnv({ [CONFIG_FILE_ENV]: '/etc/gw.yaml' }), {
+      '/etc/gw.yaml':
+        'idp:\n  issuer: https://idp.example.com\n  client_id: a\n  client_secret: ${IDP_SECRET:-fallback}\n',
+    });
+    expect(paths(err)).toContain('idp.client_secret');
+    expect(err.message).toContain('unsupported ${...} reference');
+  });
+
+  it('lists every secret of the configuration for the redactor', () => {
+    const { config } = loadInstanceConfig({
+      env: validEnv({
+        VAUBAAN_MASTER_KEY_VERSION: '2',
+        VAUBAAN_MASTER_KEY_PREVIOUS: `1=${oldKey}`,
+        VAUBAAN_IDP_ISSUER: 'https://idp.example.com',
+        VAUBAAN_IDP_CLIENT_ID: 'gw',
+        VAUBAAN_IDP_CLIENT_SECRET: 'idp-s3cret',
+        VAUBAAN_PROVIDER_GITHUB_PRIVATE_KEY: 'pem-body',
+        VAUBAAN_PROVIDER_VERCEL_CLIENT_SECRET: 'vercel-s3cret',
+        VAUBAAN_PROVIDER_VERCEL_CLIENT_ID: 'public-id',
+      }),
+    });
+    const secrets = secretValues(config);
+    expect(secrets).toEqual(
+      expect.arrayContaining([
+        TEST_MASTER_KEY,
+        oldKey,
+        TEST_BOOTSTRAP_TOKEN,
+        'idp-s3cret',
+        'pem-body',
+        'vercel-s3cret',
+      ]),
+    );
+    expect(secrets).not.toContain('public-id');
+  });
+
   it('refuses a secret given both directly and by _FILE', () => {
     const err = failure(validEnv({ VAUBAAN_MASTER_KEY_FILE: '/run/secrets/key' }), {
       '/run/secrets/key': TEST_MASTER_KEY,
@@ -380,5 +436,40 @@ describe('loadInstanceConfig — YAML file and precedence', () => {
       readFile: fakeFiles({ '/run/secrets/key': TEST_MASTER_KEY + '\n' }),
     });
     expect(Buffer.from(config.encryption.masterKey).toString('base64')).toBe(TEST_MASTER_KEY);
+  });
+});
+
+describe('provider environment names', () => {
+  it('splits VAUBAAN_PROVIDER_<ID>_<FIELD> with hyphenated ids and the longest field', () => {
+    expect(parseProviderEnvName('VAUBAAN_PROVIDER_GITHUB_APP_ID')).toEqual({
+      providerId: 'github',
+      field: 'app_id',
+    });
+    expect(parseProviderEnvName('VAUBAAN_PROVIDER_CLOUDFLARE_DNS_CLIENT_SECRET')).toEqual({
+      providerId: 'cloudflare-dns',
+      field: 'client_secret',
+    });
+    expect(parseProviderEnvName('VAUBAAN_PROVIDER_CLIENT_ID')).toBeNull();
+    expect(parseProviderEnvName('VAUBAAN_PROVIDER_GITHUB_TOKEN')).toBeNull();
+    expect(parseProviderEnvName('OTHER_GITHUB_APP_ID')).toBeNull();
+  });
+});
+
+describe('KEYS and the example files stay in sync', () => {
+  const configDir = resolve(__dirname, '../../../../../deploy/config');
+  const envExample = readFileSync(resolve(configDir, '.env.example'), 'utf8');
+  const yamlExample = readFileSync(resolve(configDir, 'gateway.example.yaml'), 'utf8');
+
+  it('every environment variable appears in .env.example', () => {
+    const missing = KEYS.map((k) => k.env).filter((env) => !envExample.includes(env));
+    expect(missing).toEqual([]);
+  });
+
+  it('every YAML leaf appears in gateway.example.yaml', () => {
+    const missing = KEYS.map((k) => k.path).filter((path) => {
+      const leaf = path.split('.').pop() ?? path;
+      return !new RegExp(`(^|\\n)\\s*#?\\s*${leaf}:`).test(yamlExample);
+    });
+    expect(missing).toEqual([]);
   });
 });

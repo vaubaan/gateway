@@ -19,8 +19,9 @@ export type IdGenerator = () => string;
 const COUNTER_BITS = 12;
 const COUNTER_MAX = (1 << COUNTER_BITS) - 1;
 
-// single-process only: the monotonic counter lives in this module. A multi-process
-// deployment would order by timestamp plus a per-writer sequence instead.
+// single-process only: the monotonic counter lives in this module. The replacement seam
+// is the injectable `IdGenerator` (`StoreOptions.newId`): a multi-process deployment
+// plugs a generator ordering by timestamp plus a per-writer sequence.
 let lastMs = -1;
 let counter = 0;
 

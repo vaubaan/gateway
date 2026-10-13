@@ -50,11 +50,11 @@ describe('composition root over the embedded SQLite store', () => {
 
     expect(existsSync(path)).toBe(true);
     expect(root.store.kind).toBe('sqlite');
-    expect(root.store.schemaVersion).toBe(1);
+    expect(root.store.schemaVersion).toBe(2);
     expect(
       root.store.db.prepare<[], { n: number }>('SELECT COUNT(*) AS n FROM schema_migrations').get()
         ?.n,
-    ).toBe(1);
+    ).toBe(2);
     await expect(root.store.ping()).resolves.toBeUndefined();
     expect(root.registry.size).toBe(0);
 
@@ -67,7 +67,7 @@ describe('composition root over the embedded SQLite store', () => {
 
     const log = lines.join('\n');
     expect(log).toContain('"msg":"store opened"');
-    expect(log).toContain('"schema_version":1');
+    expect(log).toContain('"schema_version":2');
     expect(log).toContain('"msg":"composition root ready"');
   });
 
@@ -88,12 +88,12 @@ describe('composition root over the embedded SQLite store', () => {
 
     // Same master key (validEnv is stable per process), same file: the secret opens.
     const second = await boot(path);
-    expect(second.store.schemaVersion).toBe(1);
+    expect(second.store.schemaVersion).toBe(2);
     expect(
       second.store.db
         .prepare<[], { n: number }>('SELECT COUNT(*) AS n FROM schema_migrations')
         .get()?.n,
-    ).toBe(1);
+    ).toBe(2);
     await expect(second.store.config.getSecret('idp.client_secret')).resolves.toBe('s3cret-value');
   });
 
@@ -122,7 +122,8 @@ describe('composition root over the embedded SQLite store', () => {
     let code: number | null = null;
     await bootOrExit(depsFor(missingDir), { stderr: (t) => (out += t), exit: (c) => (code = c) });
     expect(code).toBe(EXIT_BOOT_ERROR);
-    expect(out).toContain("store.path '" + missingDir + "'");
-    expect(out).toContain('VAUBAAN_STORE_PATH');
+    expect(out).toContain('store.path: cannot open the embedded store at ');
+    expect(out).toContain(missingDir);
+    expect(out).toContain('(env: VAUBAAN_STORE_PATH)');
   });
 });
