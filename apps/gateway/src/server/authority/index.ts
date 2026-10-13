@@ -70,6 +70,7 @@ export {
   type ConnectionAuthorityDeps,
 } from './authority-service';
 export { explicitRiskIdsOf, fullCatalogRiskIds } from './catalog-authority';
+export { derivedMissionReads, type DerivedMissionReads } from './derived-missions';
 export {
   MembershipSettler,
   type MembershipSettlement,

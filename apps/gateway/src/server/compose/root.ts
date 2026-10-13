@@ -17,7 +17,7 @@ import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import { createAuditModule, type AuditModule } from '../audit';
 import { createAuthModule, type AuthModule, type OidcOptions } from '../auth';
-import { createAuthorityModule, type AuthorityModule } from '../authority';
+import { createAuthorityModule, derivedMissionReads, type AuthorityModule } from '../authority';
 import { SessionService } from '../budget';
 import { createConnectionsModule, type ConnectionsModule } from '../connections';
 import {
@@ -355,7 +355,15 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
   // a delegated token by kind, the management door admits nothing else.
   const oauth = createOAuthAsModule({
     config,
-    store,
+    // The Delegations page shows the status of the missions a delegation issued:
+    // it lists them with the derived status (`orphaned` is never stored).
+    store: {
+      ...store,
+      missions: {
+        ...store.missions,
+        ...derivedMissionReads(store.missions, authority.grounds),
+      },
+    },
     sessions,
     authenticator: auth.authenticator,
     rateLimiter,

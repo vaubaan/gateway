@@ -8,7 +8,9 @@
  * mission on it — her creation screen offers nothing beyond the restriction —
  * and an MCP client holding that mission's token reads a file through the
  * door. Hedy revokes the share: the same client is refused
- * `mission-inactive` (orphaned), and Joan sees why her mission stopped.
+ * `mission-inactive` (orphaned), and Joan sees why her mission stopped. Hedy
+ * shares again: the state was derived, never stored, so the same client with
+ * the same token is served again and Joan's mission reads active.
  *
  * The second test is the ownership loop: transfer to a group, the group
  * empties, the connection has no owner, the operator reassigns one.
@@ -56,7 +58,7 @@ async function browserOf(
   return page;
 }
 
-test('share two risks, issue within them, revoke the share: the mission is orphaned', async ({
+test('share two risks, issue within them, revoke the share: the mission is orphaned; share again: it is restored', async ({
   browser,
   request,
 }) => {
@@ -148,7 +150,9 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await hedy.getByRole('button', { name: `Revoke the share to ${E2E_SHARE_TARGET.email}` }).click();
   await expect(hedy.getByText('Share revoked', { exact: true })).toBeVisible();
   await expect(
-    hedy.getByText('1 mission that depended on it is now orphaned and refuses every call.'),
+    hedy.getByText(
+      '1 mission that depended on it is now orphaned and refuses every call, until a share covers it again.',
+    ),
   ).toBeVisible();
   await expect(hedy.getByText('Not shared.')).toBeVisible();
 
@@ -165,6 +169,54 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   );
   await joan.goto('/shares');
   await expect(joan.getByText('Nobody has shared a connection with you yet.')).toBeVisible();
+  // Her mission page says why, that it can come back, and still lets her close it.
+  await joan.goto('/missions');
+  await joan.getByRole('link', { name: 'Read hedy-org' }).click();
+  await expect(
+    joan.getByText('Orphaned: you no longer hold the authority this mission was issued under'),
+  ).toBeVisible();
+  await expect(
+    joan.getByText(/you no longer cover this accepted risk: github\.read-code/),
+  ).toBeVisible();
+  await expect(
+    joan.getByText(/serves calls again as soon as that authority is back/),
+  ).toBeVisible();
+  await expect(joan.getByRole('button', { name: 'Revoke mission' })).toBeVisible();
+  await expect(joan.getByRole('button', { name: 'Rotate token' })).toHaveCount(0);
+  await snap(joan, 'mission-orphaned');
+  const missionUrl = joan.url();
+
+  // ── The owner shares again: the mission is restored ─────────────────────
+  await hedy.getByRole('link', { name: 'Share', exact: true }).click();
+  await hedy.getByLabel('Email').fill(E2E_SHARE_TARGET.email);
+  await hedy.getByText(/^Risks \(\d+\)$/).click();
+  await hedy.getByLabel(`Share risk ${READ_CODE}`).check();
+  await hedy.getByRole('button', { name: 'Share', exact: true }).click();
+  await expect(hedy.getByText('Shared', { exact: true })).toBeVisible();
+  await expect(
+    hedy.getByText(
+      '1 orphaned mission is covered again and serves calls from now on, with its session and counters as they were.',
+    ),
+  ).toBeVisible();
+
+  // The same client, the same token: no new mission, no new kit.
+  expect(await read()).toMatchObject({ outcome: 'allowed' });
+
+  await joan.goto('/missions');
+  const restored = joan.getByRole('row').filter({ hasText: 'Read hedy-org' });
+  await expect(restored).toContainText('active');
+  await expect(restored).not.toContainText('orphaned');
+  await joan.goto(missionUrl);
+  await expect(joan.getByText(/^Orphaned:/)).toHaveCount(0);
+  await expect(joan.getByRole('button', { name: 'Rotate token' })).toBeVisible();
+  // The session kept its history across the gap: two calls served, one refused.
+  await joan.getByRole('link', { name: 'Session', exact: true }).click();
+  await expect(joan.getByRole('heading', { name: /Session/ })).toContainText('active');
+  await snap(joan, 'mission-restored-session');
+  // Both acts of the owner are in the creator's audit.
+  await joan.getByRole('link', { name: 'Audit of this mission' }).click();
+  await expect(joan.getByText('mission-orphaned').first()).toBeVisible();
+  await expect(joan.getByText('mission-restored').first()).toBeVisible();
 });
 
 test('transfer to a group; the group empties; the operator reassigns the connection', async ({
