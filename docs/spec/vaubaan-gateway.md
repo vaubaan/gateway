@@ -169,11 +169,13 @@ Twenty-eight terms, distinct and not interchangeable.
   IdP, can answer it. Two kinds:
   - **Claim** — when the budget is exhausted: reset or extension.
   - **Approval request** — when the action touches a risk whose gate is
-    `approval`: grant or refusal for that precise action.
+    `approval`: grant or refusal for that precise action. One request
+    covers the call, however many gated risks it touches.
 - **Approval** — the positive answer to an approval request. Bound to
-  the mission, the risk, the tool, and the exact fingerprint of the call's
-  arguments. Single-use, valid for a short time. The identical replayed
-  call passes; any other call asks again.
+  the mission, the tool, and the exact fingerprint of the call's
+  arguments, and covering every gated risk that call touches. Single-use,
+  valid for a short time. The identical replayed call passes; any other
+  call asks again.
 
 **Cross-cutting**
 
@@ -295,7 +297,7 @@ Instance                          (one company, one trust domain)
 | **Session**        | History of the mission. Counters per `RiskId` and per period. Created on the first call, never recreated.                                                                                         |
 | **Event**          | Session entry: allowed call, refused call, request, extension, reset, approval, rotation, revocation.                                                                                             |
 | **Request**        | Claim (reset or extension) or approval request (one precise action), addressed to the creator. States: open, granted, refused, expired.                                                           |
-| **Approval**       | Creator's grant for one action: `(mission, RiskId, tool, argument fingerprint)`. Single-use, short-lived.                                                                                         |
+| **Approval**       | Creator's grant for one action: `(mission, tool, argument fingerprint)`, covering the gated risks of that call. Single-use, short-lived.                                                          |
 | **Audit**          | One entry per call and per administrative act. Append-only.                                                                                                                                       |
 
 ### 2.3 States
@@ -515,8 +517,9 @@ the risk's gate to `approval` at issuance, or later.
   for the lifetime of the request, then erased; only their fingerprint
   remains in the audit.
 - The creator grants or refuses. A grant produces an **approval** bound
-  to `(mission, RiskId, tool, argument fingerprint)`, single-use, valid for a
-  short time configured by the operator.
+  to `(mission, tool, argument fingerprint)`, covering the gated risks the
+  request lists, single-use, valid for a short time configured by the
+  operator.
 - The executor replays the call **identically**. The gateway finds the
   approval, consumes it, decrements the budget, executes. A call with
   different arguments, even by one byte, asks again.
@@ -526,6 +529,11 @@ the risk's gate to `approval` at issuance, or later.
 - A call touching several risks of which only one is gated `approval` is
   refused as a whole; the approval covers the call, not the isolated
   risk.
+- **A call touching several gated risks creates one request**, which
+  lists them all. The creator answers once: granting it approves the
+  call, refusing it refuses the call, and opening the gate opens the
+  gate of each listed risk. The executor is never sent back and forth
+  for one call.
 - The gate does not replace the budget: an approved action counts
   against the risk's quota and rate limit.
 
@@ -568,9 +576,10 @@ JSON-RPC, authenticated by `Authorization: Bearer <mission token>`.
     Unchanged since v4.
   - `budget-exhausted`: `RiskId`, quota for the period, consumed, end of
     period, **claim URL**.
-  - `approval-required`: `RiskId`, argument fingerprint, **approval
-    request URL**, validity delay, and the instruction to replay the call
-    identically once approved.
+  - `approval-required`: every gated `RiskId` the call touches, argument
+    fingerprint, **approval request URL** (one, for the call), validity
+    delay, and the instruction to replay the call identically once
+    approved.
   - `resource-not-in-mission`: the ref cited, the connection, and the
     resources the mission may touch.
   - `rate-limited`: `RiskId`, limit, delay before retry.
@@ -1021,7 +1030,8 @@ automated suite. Trust comes from usage.
 - Every request, claim or approval, reserved to the mission creator,
   through the IdP, never holding a call.
 - Gate per risk, `auto` by default, `approval` bound to the argument
-  fingerprint, single use.
+  fingerprint, single use; one request and one approval per call,
+  whatever the number of gated risks it touches.
 - Two MCP doors: execution by mission token, management by OAuth
   delegated token. Three credentials that never cross. Requests are
   granted only in a human session.

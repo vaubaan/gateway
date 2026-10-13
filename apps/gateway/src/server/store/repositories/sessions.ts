@@ -37,7 +37,7 @@ import type {
   SessionCounterRecord,
   SessionRecord,
 } from '../types.ts';
-import { consumeApprovalSync, findApprovalSync, type ApprovalKey } from './approvals.ts';
+import { consumeApprovalSync, findApprovalsSync, type ApprovedCall } from './approvals.ts';
 import {
   DEFAULT_LIST_LIMIT,
   nowIso,
@@ -68,10 +68,13 @@ export interface DecideContext {
   /** Consumed count per requested risk in this period (0 when no row exists yet). */
   readonly counters: ReadonlyMap<RiskId, number>;
   readonly now: Iso;
-  /** Non-consuming lookup of a valid approval bound to `(mission, risk, tool, fingerprint)`. */
-  findApproval(key: ApprovalKey): ApprovalRecord | null;
-  /** Single-use approval consumption bound to `(mission, risk, tool, fingerprint)`. */
-  consumeApproval(key: ApprovalKey): ApprovalRecord | null;
+  /**
+   * Non-consuming lookup of the usable approvals of the mission for one call (tool and
+   * argument fingerprint), soonest-expiring first; each lists the gated risks it covers.
+   */
+  findApprovals(call: ApprovedCall): ApprovalRecord[];
+  /** Single-use consumption of one approval of the mission; `null` when it is not usable. */
+  consumeApproval(approvalId: string): ApprovalRecord | null;
   /**
    * Events of this session about some risks, oldest first — how the decision learns
    * that the creator opened a gate for the period (spec §3.5). Details are returned as
@@ -467,8 +470,8 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
           session,
           counters,
           now,
-          findApproval: (key) => findApprovalSync(ctx, input.missionId, key, now),
-          consumeApproval: (key) => consumeApprovalSync(ctx, input.missionId, key, now),
+          findApprovals: (call) => findApprovalsSync(ctx, input.missionId, call, now),
+          consumeApproval: (id) => consumeApprovalSync(ctx, input.missionId, id, now),
           riskEvents: (query) => primitives.riskEvents(session.id, query),
           findOpenRequest: (lookup) => findOpenRequestSync(ctx, input.missionId, lookup, now),
           createRequest: (request) =>

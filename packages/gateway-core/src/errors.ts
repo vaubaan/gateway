@@ -60,7 +60,13 @@ export interface BudgetExhaustedRefusal extends RefusalBase<'budget-exhausted'> 
 }
 
 export interface ApprovalRequiredRefusal extends RefusalBase<'approval-required'> {
+  /** The first of `risk_ids`. */
   readonly risk_id: RiskId;
+  /**
+   * Every risk of the call that waits for the creator's approval. One request
+   * covers them all: granting it approves the call (spec §3.5).
+   */
+  readonly risk_ids: readonly RiskId[];
   /** Fingerprint of the call's arguments the approval will be bound to. */
   readonly fingerprint: string;
   /** Where the mission creator grants or refuses this precise action. */
@@ -212,19 +218,28 @@ export const refuse = {
 
   approvalRequired(input: {
     risk_id: RiskId;
+    /** Every gated risk the request covers; `[risk_id]` when absent. */
+    risk_ids?: readonly RiskId[];
     fingerprint: string;
     approval_url: string;
     expires_at: string;
     approval_valid_seconds: number;
   }): ApprovalRequiredRefusal {
+    const riskIds = input.risk_ids && input.risk_ids.length > 0 ? input.risk_ids : [input.risk_id];
+    const [only] = riskIds;
+    const asked =
+      riskIds.length === 1
+        ? `'${only}' requires the mission creator's approval for each action.`
+        : `This call touches ${riskIds.length} risks that each require the mission creator's approval: ${riskIds.map((r) => `'${r}'`).join(', ')}. One approval request covers the whole call.`;
     return {
       code: 'approval-required',
       risk_id: input.risk_id,
+      risk_ids: riskIds,
       fingerprint: input.fingerprint,
       approval_url: input.approval_url,
       expires_at: input.expires_at,
       approval_valid_seconds: input.approval_valid_seconds,
-      hint: `'${input.risk_id}' requires the mission creator's approval for each action. Nothing was executed and nothing is held. An approval request is open at ${input.approval_url} until ${input.expires_at}. Once granted, replay this call with the same tool and exactly the same arguments within ${input.approval_valid_seconds}s of the grant: the approval is used once, and any change of the arguments asks again. ${HAND_TO_HUMAN}`,
+      hint: `${asked} Nothing was executed and nothing is held. An approval request is open at ${input.approval_url} until ${input.expires_at}. Once granted, replay this call with the same tool and exactly the same arguments within ${input.approval_valid_seconds}s of the grant: the approval is used once, and any change of the arguments asks again. ${HAND_TO_HUMAN}`,
     };
   },
 

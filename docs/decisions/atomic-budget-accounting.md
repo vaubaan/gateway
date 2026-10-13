@@ -183,6 +183,12 @@ hash, and the creator's view finds the entry of a refused call by it.
 
 ### An approval is bound to `(mission, risk, tool, fingerprint)`
 
+> **Amended 2026-10-13** by
+> [one-approval-request-covers-the-call](./one-approval-request-covers-the-call.md):
+> the binding is `(mission, tool, fingerprint)` and the approval lists the gated
+> risks of the call it covers, so that one request and one grant serve a call
+> that touches several. The tool stays in the key for the reason given below.
+
 The spec says `(mission, RiskId, argument fingerprint)`. The tool is added to the key of
 the approval and of the open approval request (store migration 0005). Two tools can touch
 the same risk with byte-identical arguments — a file write and a file delete on the same

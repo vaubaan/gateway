@@ -6,8 +6,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   InvariantError,
-  type ApprovalKey,
   type ApprovalRecord,
+  type ApprovedCall,
   type Store,
 } from '../../../src/server/store/index.ts';
 import {
@@ -187,11 +187,13 @@ describe('approvals repository', () => {
   let store: Store;
   let missionId: string;
   let requestId: string;
+  let creator: string;
+  let connectionId: string;
 
   beforeEach(async () => {
     t = openTestStore();
     store = t.store;
-    const creator = (
+    creator = (
       await store.users.upsertFromIdp({
         issuer: 'http://idp.test',
         subject: 'c',
@@ -204,6 +206,7 @@ describe('approvals repository', () => {
       displayName: 'gh',
       credential: null,
     });
+    connectionId = connection.id;
     missionId = (
       await store.missions.create({
         name: 'm',
@@ -228,57 +231,137 @@ describe('approvals repository', () => {
   });
   afterEach(() => store.close());
 
-  const KEY = { riskId: MERGE, tool: 't', fingerprint: 'fp' };
+  const CALL: ApprovedCall = { tool: 't', fingerprint: 'fp' };
   const PERIOD = '2026-10-13T00:00:00.000Z';
-  const grant = () =>
+  const READ = 'github.code-read';
+  const grant = (riskIds: readonly string[] = [MERGE]) =>
     store.approvals.create({
       missionId,
       requestId,
-      ...KEY,
+      ...CALL,
+      riskIds,
       expiresAt: '2026-10-13T09:10:00.000Z',
     });
   /**
-   * Consumption as production does it: `DecideContext.consumeApproval`, inside the
-   * transaction of a call's decision. The call is allowed only when an approval was
-   * consumed, as the approval gate does.
+   * Consumption as production does it: `DecideContext.findApprovals`, then
+   * `consumeApproval` of the one that covers the risk, inside the transaction of a
+   * call's decision. The call is allowed only when an approval was consumed.
    */
-  const consume = async (key: ApprovalKey): Promise<ApprovalRecord | null> => {
+  const consume = async (
+    call: ApprovedCall = CALL,
+    riskId: string = MERGE,
+  ): Promise<ApprovalRecord | null> => {
     const result = await store.sessions.decideAndDecrement(
       { missionId, riskIds: [MERGE], periodStart: PERIOD },
       (ctx) => {
-        const consumed = ctx.consumeApproval(key);
+        const found = ctx.findApprovals(call).find((a) => a.riskIds.includes(riskId));
+        const consumed = found ? ctx.consumeApproval(found.id) : null;
         return { allow: consumed !== null, consumed };
       },
     );
     return result.outcome.consumed;
   };
 
-  it('is single-use and bound to the exact risk, tool and fingerprint', async () => {
+  it('is single-use and bound to the exact tool and fingerprint, and covers the risks it lists', async () => {
     const approval = await grant();
-    expect(approval).toMatchObject({ ...KEY, missionId, requestId, consumedAt: null });
+    expect(approval).toMatchObject({
+      ...CALL,
+      riskId: MERGE,
+      riskIds: [MERGE],
+      missionId,
+      requestId,
+      consumedAt: null,
+    });
     expect((await store.approvals.listActive(missionId)).map((a) => a.id)).toEqual([approval.id]);
     expect(await store.approvals.getByRequest(requestId)).toEqual(approval);
-    expect(await consume({ ...KEY, fingerprint: 'fp-different' })).toBe(null);
-    expect(await consume({ ...KEY, riskId: 'github.code-read' })).toBe(null);
-    const consumed = await consume(KEY);
+    expect(await consume({ ...CALL, fingerprint: 'fp-different' })).toBe(null);
+    expect(await consume(CALL, READ)).toBe(null);
+    const consumed = await consume();
     expect(consumed?.id).toBe(approval.id);
     expect(consumed?.consumedAt).toBe(t.clock.now().toISOString());
-    expect(await consume(KEY)).toBeNull();
+    expect(await consume()).toBeNull();
     expect(await store.approvals.listActive(missionId)).toEqual([]);
+  });
+
+  it('one approval covers every gated risk of the call it lists, and is consumed once', async () => {
+    const approval = await grant([MERGE, READ]);
+    expect(approval).toMatchObject({ riskId: MERGE, riskIds: [MERGE, READ] });
+    expect(
+      store.db
+        .prepare('SELECT risk_id, risk_ids_json FROM approvals WHERE id = ?')
+        .get(approval.id),
+    ).toEqual({ risk_id: MERGE, risk_ids_json: JSON.stringify([MERGE, READ]) });
+    // Found for either risk of the call...
+    expect((await consume(CALL, READ))?.id).toBe(approval.id);
+    // ...and gone for both once used.
+    expect(await consume(CALL, MERGE)).toBeNull();
+    expect(await consume(CALL, READ)).toBeNull();
+  });
+
+  it('an approval lists at least one risk, each once', async () => {
+    await expect(grant([])).rejects.toBeInstanceOf(InvariantError);
+    const approval = await grant([MERGE, MERGE, READ]);
+    expect(approval.riskIds).toEqual([MERGE, READ]);
+  });
+
+  it('cannot be consumed through another mission, nor by an id that is not an approval', async () => {
+    const approval = await grant();
+    const elsewhere = await store.missions.create({
+      name: 'other',
+      creatorUserId: creator,
+      periodSeconds: null,
+      connections: [{ connectionId, resourceScope: 'all', resourceIds: [] }],
+      policy: [{ riskId: MERGE, quota: 5, rateLimit: 1, rateWindowSeconds: 60, gate: 'approval' }],
+    });
+    const stolen = await store.sessions.decideAndDecrement(
+      { missionId: elsewhere.id, riskIds: [MERGE], periodStart: PERIOD },
+      (ctx) => ({
+        allow: false,
+        found: ctx.findApprovals(CALL).length,
+        consumed: ctx.consumeApproval(approval.id),
+        unknown: ctx.consumeApproval('not-an-approval'),
+      }),
+    );
+    expect(stolen.outcome).toMatchObject({ found: 0, consumed: null, unknown: null });
+    expect((await store.approvals.getByRequest(requestId))?.consumedAt).toBeNull();
+    expect((await consume())?.id).toBe(approval.id);
+  });
+
+  it('a row written before a request covered the call covers the one risk it named', async () => {
+    // What migration 0013 leaves: `risk_ids_json` backfilled from `risk_id`, or NULL on a
+    // row an older image wrote meanwhile. Unreadable JSON reads the same narrow way.
+    for (const [id, json] of [
+      ['backfilled', JSON.stringify([MERGE])],
+      ['null-list', null],
+      ['broken', '{not json'],
+      ['empty', '[]'],
+    ] as const) {
+      store.db.prepare('DELETE FROM approvals').run();
+      store.db
+        .prepare(
+          `INSERT INTO approvals (id, mission_id, request_id, risk_id, risk_ids_json, tool, fingerprint, created_at, expires_at)
+           VALUES (?, ?, ?, ?, ?, 't', 'fp', '2026-10-13T09:00:00.000Z', '2026-10-13T09:10:00.000Z')`,
+        )
+        .run(id, missionId, requestId, MERGE, json);
+      expect((await store.approvals.getByRequest(requestId))?.riskIds, id).toEqual([MERGE]);
+      expect(await consume(CALL, READ), id).toBeNull();
+      expect((await consume(CALL, MERGE))?.id, id).toBe(id);
+    }
   });
 
   it('the same arguments on another tool touching the same risk do not consume it', async () => {
     // The Phase 1 security finding: the key had no tool.
     const approval = await grant();
-    expect(await consume({ ...KEY, tool: 'other_tool' })).toBeNull();
+    expect(await consume({ ...CALL, tool: 'other_tool' })).toBeNull();
     expect((await store.approvals.getByRequest(requestId))?.consumedAt).toBeNull();
-    expect((await consume(KEY))?.id).toBe(approval.id);
+    expect((await consume())?.id).toBe(approval.id);
   });
 
   it('an approval without a tool is never written, and never matched', async () => {
     await expect(
       store.approvals.create({
-        ...KEY,
+        ...CALL,
+        riskIds: [MERGE],
         missionId,
         requestId,
         tool: '',
@@ -293,14 +376,14 @@ describe('approvals repository', () => {
       )
       .run(missionId, requestId, MERGE);
     expect(await store.approvals.getByRequest(requestId)).toMatchObject({ id: 'legacy', tool: '' });
-    expect(await consume({ ...KEY, tool: '' })).toBeNull();
-    expect(await consume(KEY)).toBeNull();
+    expect(await consume({ ...CALL, tool: '' })).toBeNull();
+    expect(await consume()).toBeNull();
   });
 
   it('expires', async () => {
     await grant();
     t.clock.set('2026-10-13T09:10:00.000Z');
-    expect(await consume(KEY)).toBeNull();
+    expect(await consume()).toBeNull();
     expect(await store.approvals.listActive(missionId)).toEqual([]);
   });
 

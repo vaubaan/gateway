@@ -581,8 +581,10 @@ tool and that hash; the entry of the approved replay carries `approval_id`.
 
 ### `approval-required`
 
-A call touching a risk gated `approval` is refused whole: `risk_id`,
-`fingerprint`, `approval_url` (`<public_url>/r/<id>`), `expires_at` (the
+A call touching a risk gated `approval` is refused whole: `risk_ids` (every
+gated risk the call touches; `risk_id` is the first), `fingerprint`,
+`approval_url` (`<public_url>/r/<id>` — one request for the call, however
+many gated risks it touches), `expires_at` (the
 request's), `approval_valid_seconds` (`approvals.expiry`) and a hint that
 tells the agent to hand the URL to its human and to replay the same tool with
 exactly the same arguments within that delay of the grant. The door does

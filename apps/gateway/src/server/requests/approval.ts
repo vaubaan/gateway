@@ -4,10 +4,15 @@
  * Three resolutions:
  *
  *   grant       one approval for the call the creator read — this tool, these exact
- *               arguments — single-use, valid for the delay the operator configured
- *   open-gate   the risk's gate reads `auto` until the current period ends, for every
- *               call (this one included), then `approval` again
+ *               arguments — covering every gated risk the request lists, single-use,
+ *               valid for the delay the operator configured
+ *   open-gate   the gate of every listed risk still closed reads `auto` until the
+ *               current period ends, for every call (this one included), then
+ *               `approval` again
  *   refuse      nothing runs; a replay is refused again and asks again
+ *
+ * A request covers the call (spec §3.5): when the call touches several gated risks,
+ * the creator answers once for all of them.
  *
  * None of them edits the policy, and none of them bypasses the budget: an approved
  * action counts against the quota and the rate limit of every risk it touches.
@@ -25,17 +30,23 @@ export interface ApprovalDecision {
   readonly resolution: ApprovalResolution;
 }
 
+/** One risk a request covers, as the mission holds it at decision time. */
+export interface ApprovalRiskSituation {
+  readonly risk_id: RiskId;
+  /** The risk's gate in the mission's policy now; `null` when the risk left the policy. */
+  readonly gate: Gate | null;
+  /** The gate is already open for the current period. */
+  readonly gate_open: boolean;
+}
+
 /** Everything the choice depends on, read at decision time. */
 export interface ApprovalSituation {
   readonly mission_state: ClaimMissionState;
   /** End of the current period; `null` for a one-off mission. */
   readonly period_end: Iso8601 | null;
-  readonly risk_id: RiskId;
+  /** Every gated risk of the call the request covers, in its order. Never empty. */
+  readonly risks: readonly ApprovalRiskSituation[];
   readonly tool: string;
-  /** The risk's gate in the mission's policy now; `null` when the risk left the policy. */
-  readonly gate: Gate | null;
-  /** The gate is already open for the current period. */
-  readonly gate_open: boolean;
   /** How long a granted approval stays usable (`approvals.expiry`). */
   readonly approval_valid_seconds: number;
   /** When the request itself expires (`requests.expiry` after it was dropped). */
@@ -108,28 +119,48 @@ function missionProblem(situation: ApprovalSituation): ApprovalProblem | null {
       message: 'The mission is expired: every call is refused until its expiry is extended.',
     };
   }
-  if (situation.gate === null) {
+  const gone = situation.risks.filter((risk) => risk.gate === null).map((risk) => risk.risk_id);
+  if (gone.length > 0) {
     return {
       code: 'risk-not-in-policy',
-      message: `'${situation.risk_id}' is no longer accepted by the mission.`,
+      message: `${quoted(gone)} ${gone.length === 1 ? 'is' : 'are'} no longer accepted by the mission.`,
     };
   }
   return null;
 }
 
+/** `'a'`, `'a' and 'b'`, `'a', 'b' and 'c'`. */
+export function quoted(riskIds: readonly RiskId[]): string {
+  const names = riskIds.map((riskId) => `'${riskId}'`);
+  const last = names.pop();
+  if (last === undefined) return '';
+  return names.length === 0 ? last : `${names.join(', ')} and ${last}`;
+}
+
+/** The listed risks whose gate would ask again: `approval` on the mission, not open now. */
+export function closedGates(situation: ApprovalSituation): RiskId[] {
+  return situation.risks
+    .filter((risk) => risk.gate === 'approval' && !risk.gate_open)
+    .map((risk) => risk.risk_id);
+}
+
 function openGateProblem(situation: ApprovalSituation): ApprovalProblem | null {
   const problem = missionProblem(situation);
   if (problem) return problem;
-  if (situation.gate !== 'approval') {
+  if (closedGates(situation).length === 0) {
+    const [only] = situation.risks;
+    if (situation.risks.length === 1 && only) {
+      return {
+        code: 'gate-not-closed',
+        message:
+          only.gate !== 'approval'
+            ? `The gate of '${only.risk_id}' is already auto on the mission: calls pass without asking.`
+            : `The gate of '${only.risk_id}' is already open for this period.`,
+      };
+    }
     return {
       code: 'gate-not-closed',
-      message: `The gate of '${situation.risk_id}' is already auto on the mission: calls pass without asking.`,
-    };
-  }
-  if (situation.gate_open) {
-    return {
-      code: 'gate-not-closed',
-      message: `The gate of '${situation.risk_id}' is already open for this period.`,
+      message: `No gate is closed any more among ${quoted(situation.risks.map((risk) => risk.risk_id))}: each is auto on the mission or already open for this period.`,
     };
   }
   if (situation.period_end === null) {
@@ -144,20 +175,28 @@ function openGateProblem(situation: ApprovalSituation): ApprovalProblem | null {
 
 /** The three actions, always in the same order, each with its one-line consequence. */
 export function approvalOptions(situation: ApprovalSituation): ApprovalOption[] {
-  const { risk_id: risk, tool, period_end: periodEnd } = situation;
+  const { tool, period_end: periodEnd } = situation;
+  const all = situation.risks.map((risk) => risk.risk_id);
+  const closed = closedGates(situation);
+  // What opening would open: the gates still closed; all of them when none is, for the sentence.
+  const opened = closed.length > 0 ? closed : all;
   const validity = formatDelay(situation.approval_valid_seconds);
   const until = periodEnd ? `until the period ends (${formatUtc(periodEnd)})` : 'for the period';
+  const covers =
+    all.length === 1
+      ? ''
+      : ` This one approval covers the ${all.length} gated risks the call touches.`;
   return [
     {
       resolution: 'grant',
       label: LABELS.grant,
-      consequence: `The executor may replay this exact call — ${tool} with the arguments shown — once, within ${validity}. It counts against the quota and the rate limit of every risk it touches; any other call on '${risk}' asks again.`,
+      consequence: `The executor may replay this exact call — ${tool} with the arguments shown — once, within ${validity}.${covers} It counts against the quota and the rate limit of every risk it touches; any other call on ${quoted(all)} asks again.`,
       unavailable: missionProblem(situation),
     },
     {
       resolution: 'open-gate',
       label: LABELS['open-gate'],
-      consequence: `Every call touching '${risk}' passes without asking you ${until}, this one included and whatever its arguments, within the budget. The gate is approval again from the next period.`,
+      consequence: `Every call touching ${quoted(opened)} passes without asking you ${until}, this one included and whatever its arguments, within the budget. ${opened.length === 1 ? 'The gate is' : 'The gates are'} approval again from the next period.`,
       unavailable: openGateProblem(situation),
     },
     {

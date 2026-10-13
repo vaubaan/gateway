@@ -4,25 +4,44 @@ import {
   APPROVAL_RESOLUTIONS,
   approvalOptions,
   checkApprovalDecision,
+  closedGates,
   formatDelay,
   parseApprovalDecision,
+  quoted,
+  type ApprovalRiskSituation,
   type ApprovalSituation,
 } from './approval';
 
 const RISK = 'github.merge-protected';
+const OTHER = 'github.delete-branch';
 
-function situation(overrides: Partial<ApprovalSituation> = {}): ApprovalSituation {
+/** One-risk overrides (`gate`, `gate_open`) apply to the single risk of the request. */
+type Overrides = Partial<ApprovalSituation> & Partial<Omit<ApprovalRiskSituation, 'risk_id'>>;
+
+function situation(overrides: Overrides = {}): ApprovalSituation {
+  const { gate = 'approval', gate_open = false, ...rest } = overrides;
   return {
     mission_state: 'active',
     period_end: '2026-10-14T00:00:00.000Z',
-    risk_id: RISK,
+    risks: [{ risk_id: RISK, gate, gate_open }],
     tool: 'github__merge_pull_request',
-    gate: 'approval',
-    gate_open: false,
     approval_valid_seconds: 600,
     request_expires_at: '2026-10-14T09:00:00.000Z',
-    ...overrides,
+    ...rest,
   };
+}
+
+/** A request that covers a call touching two gated risks. */
+function twoRisks(
+  first: Partial<ApprovalRiskSituation> = {},
+  second: Partial<ApprovalRiskSituation> = {},
+): ApprovalSituation {
+  return situation({
+    risks: [
+      { risk_id: RISK, gate: 'approval', gate_open: false, ...first },
+      { risk_id: OTHER, gate: 'approval', gate_open: false, ...second },
+    ],
+  });
 }
 
 const optionOf = (s: ApprovalSituation, resolution: string) => {
@@ -161,5 +180,72 @@ describe('formatDelay', () => {
     [5400, '90 minutes'],
   ])('%i s reads "%s"', (seconds, text) => {
     expect(formatDelay(seconds)).toBe(text);
+  });
+});
+
+describe('a request that covers a call touching several gated risks', () => {
+  it('says that one approval covers them all, and names each', () => {
+    const grant = optionOf(twoRisks(), 'grant');
+    expect(grant.unavailable).toBeNull();
+    expect(grant.consequence).toContain(
+      'This one approval covers the 2 gated risks the call touches.',
+    );
+    expect(grant.consequence).toContain(`any other call on '${RISK}' and '${OTHER}' asks again`);
+    // A one-risk request reads as it always did.
+    expect(optionOf(situation(), 'grant').consequence).not.toContain('This one approval covers');
+    expect(optionOf(situation(), 'grant').consequence).toContain(
+      `any other call on '${RISK}' asks again`,
+    );
+  });
+
+  it('opening the gate opens every gate still closed, and only those', () => {
+    expect(closedGates(twoRisks())).toEqual([RISK, OTHER]);
+    expect(optionOf(twoRisks(), 'open-gate').consequence).toContain(
+      `Every call touching '${RISK}' and '${OTHER}' passes without asking you`,
+    );
+    expect(optionOf(twoRisks(), 'open-gate').consequence).toContain('The gates are approval again');
+
+    const oneLeft = twoRisks({ gate_open: true });
+    expect(closedGates(oneLeft)).toEqual([OTHER]);
+    expect(checkApprovalDecision(oneLeft, { resolution: 'open-gate' })).toBeNull();
+    expect(optionOf(oneLeft, 'open-gate').consequence).toContain(
+      `Every call touching '${OTHER}' passes`,
+    );
+    expect(optionOf(oneLeft, 'open-gate').consequence).toContain('The gate is approval again');
+  });
+
+  it('nothing to open when every gate is auto or already open; a grant stays possible', () => {
+    for (const s of [
+      twoRisks({ gate: 'auto' }, { gate_open: true }),
+      twoRisks({ gate_open: true }, { gate_open: true }),
+    ]) {
+      expect(closedGates(s)).toEqual([]);
+      expect(checkApprovalDecision(s, { resolution: 'open-gate' })).toMatchObject({
+        code: 'gate-not-closed',
+        message: expect.stringContaining(`'${RISK}' and '${OTHER}'`) as string,
+      });
+      expect(checkApprovalDecision(s, { resolution: 'grant' })).toBeNull();
+    }
+  });
+
+  it('one risk that left the policy blocks the grant of the whole call, and is named', () => {
+    const s = twoRisks({}, { gate: null });
+    expect(checkApprovalDecision(s, { resolution: 'grant' })).toEqual({
+      code: 'risk-not-in-policy',
+      message: `'${OTHER}' is no longer accepted by the mission.`,
+    });
+    expect(checkApprovalDecision(s, { resolution: 'open-gate' })?.code).toBe('risk-not-in-policy');
+    expect(checkApprovalDecision(s, { resolution: 'refuse' })).toBeNull();
+    expect(
+      checkApprovalDecision(twoRisks({ gate: null }, { gate: null }), { resolution: 'grant' })
+        ?.message,
+    ).toBe(`'${RISK}' and '${OTHER}' are no longer accepted by the mission.`);
+  });
+
+  it('quotes a list of risks the way a sentence reads', () => {
+    expect(quoted([])).toBe('');
+    expect(quoted(['a'])).toBe("'a'");
+    expect(quoted(['a', 'b'])).toBe("'a' and 'b'");
+    expect(quoted(['a', 'b', 'c'])).toBe("'a', 'b' and 'c'");
   });
 });

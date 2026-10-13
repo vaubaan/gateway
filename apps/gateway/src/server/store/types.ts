@@ -316,7 +316,14 @@ export interface RequestRecord {
   readonly sessionId: string | null;
   readonly kind: RequestKind;
   readonly state: RequestState;
+  /** The claimed risk; for an approval request, the first of `riskIds`. */
   readonly riskId: RiskId;
+  /**
+   * Every risk the request is about. A claim: the one risk. An approval request: every
+   * risk of the call that was gated `approval` when it was dropped (spec §3.5 "one
+   * request covers the call"). Never empty; `riskId` is its first element.
+   */
+  readonly riskIds: readonly RiskId[];
   readonly tool: string | null;
   readonly fingerprint: string | null;
   /** True while the encrypted arguments are still held (open approval request). */
@@ -332,7 +339,10 @@ export interface ApprovalRecord {
   readonly id: string;
   readonly missionId: string;
   readonly requestId: string;
+  /** The first of `riskIds`. */
   readonly riskId: RiskId;
+  /** Every gated risk of the call the approval covers. Never empty. */
+  readonly riskIds: readonly RiskId[];
   /** The tool of the approved call; empty only on a row older than migration 0005. */
   readonly tool: string;
   readonly fingerprint: string;

@@ -66,10 +66,14 @@ export default async function RequestsPage() {
                     </Slug>
                   </Td>
                   <Td>
-                    {request.risk_label}
-                    <div>
-                      <RiskIdLink riskId={request.risk_id} />
-                    </div>
+                    {request.risks.map((risk) => (
+                      <div key={risk.risk_id}>
+                        {risk.label}
+                        <div>
+                          <RiskIdLink riskId={risk.risk_id} />
+                        </div>
+                      </div>
+                    ))}
                   </Td>
                   <Td>
                     <LocalDate ts={request.created_at} />

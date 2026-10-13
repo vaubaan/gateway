@@ -14,7 +14,8 @@
  *   1. quota    — any risk whose consumed count reached its quota: `budget-exhausted`;
  *   2. rate     — any risk whose sliding window is full: `rate-limited`;
  *   3. gate     — any risk gated `approval` (and not opened for the period, `gates.ts`)
- *                 without a matching approval: `approval-required`.
+ *                 without a matching approval: `approval-required`, naming EVERY
+ *                 gated risk of the call, so that one request covers the call.
  *
  * Dimension-major order means a human is never asked to approve an action the budget
  * would refuse anyway. A refusal on one risk refuses the whole call (§3.5): nothing is
@@ -45,8 +46,9 @@ export interface DecideInput {
   readonly period: CurrentPeriod;
   /** Canonical fingerprint of the call's arguments (`fingerprintArguments`). */
   readonly fingerprint: string;
-  /** Approval id available for this fingerprint, per gated risk (looked up by the
-   *  caller inside the transaction; consumed only when the call is allowed). */
+  /** Approval id available for this call, per gated risk it covers (looked up by the
+   *  caller inside the transaction; consumed only when the call is allowed). One
+   *  approval may cover several risks: the same id then stands under each. */
   readonly approvals?: ReadonlyMap<RiskId, string>;
   /** Risks whose gate the creator opened for the rest of the period (spec §3.5,
    *  `gate-opened` session event): treated as `auto` until the next period. */
@@ -89,8 +91,17 @@ export type Refuse =
   | {
       readonly kind: 'refuse';
       readonly code: 'approval-required';
+      /** The first gated risk of the call no approval covers. */
       readonly risk_id: RiskId;
-      readonly details: { readonly fingerprint: string };
+      readonly details: {
+        readonly fingerprint: string;
+        /**
+         * Every risk of the call whose gate asks the creator now, in call order — the
+         * ones an approval already covers included: the request dropped for this
+         * refusal covers the call, not the missing part of it.
+         */
+        readonly gated_risks: readonly RiskId[];
+      };
     };
 
 export type BudgetOutcome = Allow | Refuse;
@@ -155,20 +166,23 @@ export function decide(input: DecideInput): BudgetOutcome {
     if (probe.count >= entry.rate_limit.max) return rateLimitedRefusal(entry, probe);
   }
 
-  const approvalsToConsume: ApprovalToConsume[] = [];
-  for (const entry of entries) {
-    if (effectiveGate(entry, openedGates) !== 'approval') continue;
-    const approvalId = approvals.get(entry.risk_id);
-    if (approvalId === undefined) {
-      return {
-        kind: 'refuse',
-        code: 'approval-required',
-        risk_id: entry.risk_id,
-        details: { fingerprint: input.fingerprint },
-      };
-    }
-    approvalsToConsume.push({ risk_id: entry.risk_id, approval_id: approvalId });
+  const gated = entries
+    .filter((entry) => effectiveGate(entry, openedGates) === 'approval')
+    .map((entry) => entry.risk_id);
+  const uncovered = gated.find((riskId) => !approvals.has(riskId));
+  if (uncovered !== undefined) {
+    return {
+      kind: 'refuse',
+      code: 'approval-required',
+      risk_id: uncovered,
+      details: { fingerprint: input.fingerprint, gated_risks: gated },
+    };
   }
+  const approvalsToConsume: ApprovalToConsume[] = gated.map((riskId) => ({
+    risk_id: riskId,
+    // `uncovered` is undefined: every gated risk has an approval.
+    approval_id: approvals.get(riskId)!,
+  }));
 
   const remaining: Record<RiskId, number> = {};
   for (const entry of entries) {

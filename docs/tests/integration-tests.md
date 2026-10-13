@@ -1422,7 +1422,7 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
 > §3.5, §6 ("encryption at rest", "authoritative, atomic counting",
 > "immutable audit"), §8, §10 (structural tests). Handbook [[store]]. ADR
 > [[embedded-store-sqlite-and-migrations]]. Every suite runs on an
-> ephemeral `:memory:` store with the real migrations (`0001`-`0012`), a
+> ephemeral `:memory:` store with the real migrations (`0001`-`0013`), a
 > `ManualClock`, a `StubEncryptor` and a five-id `SetCatalogIndex`
 > (`apps/gateway/src/server/store/testing.ts`); the two file-based cases
 > use a temp directory. Paths are relative to `apps/gateway/tests/`.
@@ -1437,7 +1437,7 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   immutability of an applied file (boot refused), full rollback of a
   failing file (nothing recorded, no table left), a database carrying a
   migration this image does not ship is refused, the eleven shipped
-  migrations `0001`-`0012` in the default directory.
+  migrations `0001`-`0013` in the default directory.
 - **`unit/server/store/db.test.ts`** (2) — `isSqliteVersionAtLeast`
   against `MIN_SQLITE_VERSION`: major, minor and patch compared in order;
   a missing or malformed component counts as zero.
@@ -2767,8 +2767,17 @@ executor is `SessionService.recordCall`, the creator is `RequestService`.
   quota the claim comes first; **one approval covers a multi-risk call**
   (both risks counted, one request); bound to the exact fingerprint, to the
   tool and to the mission; **expires after the configured delay** (boundary
-  instant), and the delay is the operator's; a second gated risk of the same
-  call asks in its turn and both approvals are consumed together.
+  instant), and the delay is the operator's. **A call touching several
+  gated risks**: ONE request listing every gated risk, one row, one inbox
+  entry, a hint that says so; a replay before the decision reuses it
+  whatever the order of the risks; **granting it approves the call** (one
+  approval, one replay, both counters, single use); the grant is audited and
+  recorded with every risk; refusing it refuses the call; `open-gate` opens
+  every listed gate, one event each; a gate already open is not listed;
+  another tool with the same arguments does not use it. **What an earlier
+  build left**: an open one-risk request is neither reused for a call that
+  needs more nor widened, granting it approves what it named and no more,
+  and approvals granted risk by risk are consumed together.
 - **Erasure** — on `grant`, `open-gate` and `refuse` **the row's `args_blob`
   and `key_version` are NULL** (read with SQL), `decision_json` names no
   argument, the view shows `arguments: null`; **on expiry the sweeper erases

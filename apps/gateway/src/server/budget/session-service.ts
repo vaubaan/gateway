@@ -15,9 +15,11 @@
  * transaction. Nothing here touches the audit: the pipeline writes the audit entry
  * from the decision this service returns.
  *
- * An approval and an approval request are bound to the call: the mission, the risk,
- * the tool and the canonical fingerprint of the arguments (`ApprovalKey`). The same
- * arguments on another tool are another call.
+ * An approval and an approval request are bound to the call: the mission, the tool and
+ * the canonical fingerprint of the arguments (`ApprovedCall`), and they list the gated
+ * risks of that call they cover. The same arguments on another tool are another call.
+ * A call that touches several gated risks drops ONE request listing them all, and the
+ * approval its grant produces lets the identical replay through (spec §3.5).
  *
  * The credit an allowed call consumes is never refunded: if the upstream call then
  * fails, the audit keeps `decision: allowed` with `upstream_error` and the counter keeps
@@ -35,7 +37,6 @@ import type {
   RequestsRepo,
   SessionsRepo,
 } from '../store/index.ts';
-import type { ApprovalKey } from '../store/repositories/approvals.ts';
 import type { PreparedArguments } from '../store/repositories/requests.ts';
 import { rateWindowKey, type SlidingWindows } from '../rate-limit/index.ts';
 import {
@@ -81,7 +82,7 @@ export interface RecordCallAllowed {
   readonly decrements: readonly RiskId[];
   /** Remaining quota per touched risk after the decrement (from the stored counters). */
   readonly remaining: Readonly<Record<RiskId, number>>;
-  /** Approvals consumed by this call, one per gated risk. */
+  /** Approvals consumed by this call: one covers every gated risk it lists. */
   readonly approval_ids: readonly string[];
 }
 
@@ -144,7 +145,12 @@ export class SessionService {
           rate_windows: this.probeWindows(mission, risks, now),
           period,
           fingerprint,
-          approvals: this.lookupApprovals(ctx, input.tool, gated, fingerprint),
+          approvals: this.lookupApprovals(
+            ctx,
+            input.tool,
+            gated.filter((riskId) => !openedGates.has(riskId)),
+            fingerprint,
+          ),
           opened_gates: openedGates,
         });
         return decision.kind === 'allow'
@@ -236,15 +242,25 @@ export class SessionService {
     return probes;
   }
 
+  /**
+   * Which usable approval of this call covers each risk that needs one. An approval
+   * that covers them all is preferred — it is the one a request "covering the call"
+   * produced —, so one grant is consumed by one replay; otherwise each risk takes the
+   * soonest-expiring approval that lists it (approvals granted risk by risk before a
+   * request covered the call).
+   */
   private lookupApprovals(
     ctx: DecideContext,
     tool: string,
-    gated: readonly RiskId[],
+    needed: readonly RiskId[],
     fingerprint: string,
   ): Map<RiskId, string> {
     const approvals = new Map<RiskId, string>();
-    for (const riskId of gated) {
-      const approval = ctx.findApproval(approvalKey(riskId, tool, fingerprint));
+    if (needed.length === 0) return approvals;
+    const usable = ctx.findApprovals({ tool, fingerprint });
+    const whole = usable.find((approval) => needed.every((r) => approval.riskIds.includes(r)));
+    for (const riskId of needed) {
+      const approval = whole ?? usable.find((candidate) => candidate.riskIds.includes(riskId));
       if (approval) approvals.set(riskId, approval.id);
     }
     return approvals;
@@ -257,16 +273,14 @@ export class SessionService {
     fingerprint: string,
     now: Date,
   ): TransactionOutcome {
-    const approvalIds = decision.approvals_to_consume.map(({ risk_id, approval_id }) => {
-      const consumed = ctx.consumeApproval(approvalKey(risk_id, input.tool, fingerprint));
-      if (!consumed || consumed.id !== approval_id) {
+    // One approval may stand under several risks: it is consumed once.
+    const approvalIds = [...new Set(decision.approvals_to_consume.map((a) => a.approval_id))];
+    for (const approvalId of approvalIds) {
+      if (!ctx.consumeApproval(approvalId)) {
         // Found a moment ago in this very transaction: anything else is a store bug.
-        throw new InvariantError(
-          `approval ${approval_id} for '${risk_id}' vanished mid-transaction`,
-        );
+        throw new InvariantError(`approval ${approvalId} vanished mid-transaction`);
       }
-      return consumed.id;
-    });
+    }
     for (const entry of input.mission.policy) {
       if (!decision.decrements.includes(entry.risk_id)) continue;
       this.deps.rateWindows.push(
@@ -328,29 +342,52 @@ export class SessionService {
     now: Date,
   ): RequestRecord | null {
     if (decision.code === 'rate-limited') return null;
-    const kind = decision.code === 'budget-exhausted' ? 'claim' : 'approval';
-    const existing = ctx.findOpenRequest({
-      kind,
-      riskId: decision.risk_id,
+    const expiresAt = addSeconds(now, this.deps.requestExpirySeconds);
+    if (decision.code === 'budget-exhausted') {
+      const open = ctx.findOpenRequest({ kind: 'claim', riskId: decision.risk_id });
+      if (open) return open;
+      const claim = ctx.createRequest({ kind: 'claim', riskId: decision.risk_id, expiresAt });
+      ctx.recordEvent({
+        kind: 'request',
+        riskId: decision.risk_id,
+        details: { request_id: claim.id, request_kind: 'claim', tool: input.tool, fingerprint },
+      } satisfies NewEvent);
+      return claim;
+    }
+
+    // One request covers the call: every gated risk it touches, not only the first.
+    const gatedRisks = decision.details.gated_risks;
+    const [firstRisk] = gatedRisks;
+    if (firstRisk === undefined) {
+      throw new InvariantError('an approval-required refusal names the gated risks of the call');
+    }
+    const open = ctx.findOpenRequest({
+      kind: 'approval',
       tool: input.tool,
       fingerprint,
+      riskIds: gatedRisks,
     });
-    if (existing) return existing;
-    if (kind === 'approval' && !prepared) {
-      throw new InvariantError('approval request without sealed arguments');
-    }
+    if (open) return open;
+    if (!prepared) throw new InvariantError('approval request without sealed arguments');
     const request = ctx.createRequest({
-      kind,
-      riskId: decision.risk_id,
-      tool: kind === 'approval' ? input.tool : null,
-      fingerprint: kind === 'approval' ? fingerprint : null,
-      prepared: kind === 'approval' ? prepared : null,
-      expiresAt: addSeconds(now, this.deps.requestExpirySeconds),
+      kind: 'approval',
+      riskId: firstRisk,
+      riskIds: gatedRisks,
+      tool: input.tool,
+      fingerprint,
+      prepared,
+      expiresAt,
     });
     ctx.recordEvent({
       kind: 'request',
-      riskId: decision.risk_id,
-      details: { request_id: request.id, request_kind: kind, tool: input.tool, fingerprint },
+      riskId: firstRisk,
+      details: {
+        request_id: request.id,
+        request_kind: 'approval',
+        tool: input.tool,
+        fingerprint,
+        risk_ids: gatedRisks,
+      },
     } satisfies NewEvent);
     return request;
   }
@@ -374,7 +411,9 @@ export class SessionService {
       case 'approval-required': {
         const approvalRequest = requireRequest(request, decision.code);
         return refuse.approvalRequired({
-          risk_id: decision.risk_id,
+          // What the request covers, which is what the creator will be asked about.
+          risk_id: approvalRequest.riskId,
+          risk_ids: approvalRequest.riskIds,
           fingerprint: decision.details.fingerprint,
           approval_url: this.deps.requestUrl(approvalRequest.id),
           expires_at: approvalRequest.expiresAt,
@@ -390,10 +429,6 @@ function gatedRisks(mission: BudgetMission, risks: readonly RiskId[]): RiskId[] 
   return mission.policy
     .filter((entry) => entry.gate === 'approval' && risks.includes(entry.risk_id))
     .map((entry) => entry.risk_id);
-}
-
-function approvalKey(riskId: RiskId, tool: string, fingerprint: string): ApprovalKey {
-  return { riskId, tool, fingerprint };
 }
 
 function requireRequest(request: RequestRecord | null, code: string): RequestRecord {

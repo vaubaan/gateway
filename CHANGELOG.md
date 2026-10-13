@@ -67,6 +67,13 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
   granted more than 90 days ago stop at the first renewal after the upgrade.** The
   page shows the date for each. Operators set another duration with
   `oauth.delegation_max_lifetime` (`VAUBAAN_OAUTH_DELEGATION_MAX_LIFETIME`).
+- **One approval request per call.** A call that touches several risks gated
+  `approval` used to ask the creator once per risk, with a refused replay in between.
+  It now drops one request that lists every gated risk; granting it approves the call,
+  and "open the gate" opens the gate of each listed risk. The `approval-required`
+  refusal carries `risk_ids` next to `risk_id`. Schema migration `0013` (forward-only).
+  Requests that are open when you upgrade keep the one risk they named: granting one
+  approves that risk, and a call that needs more gets a new request covering it.
 - **"Reset the period" on a claim resets the claimed risk only.** It used to put every
   counter of the mission back to zero, so answering a claim on one risk silently
   reopened any other exhausted risk. Each exhausted risk has its own claim. The quota

@@ -132,7 +132,7 @@ export default async function RequestPage({ params, searchParams }: Props) {
 }
 
 function ApprovalBody({ view }: { view: ApprovalView }) {
-  const { request, mission, call, gate, approval, period } = view;
+  const { request, mission, call, gates, approval, period } = view;
   return (
     <>
       <Card>
@@ -181,16 +181,25 @@ function ApprovalBody({ view }: { view: ApprovalView }) {
                 ))
               )}
             </dd>
-            <dt>Gated risk</dt>
-            <dd>
-              {request.risk_label}
-              <div>
-                <RiskIdLink riskId={request.risk_id} />
-              </div>
-            </dd>
-            <dt>Gate</dt>
-            <dd data-testid="approval-gate">
-              <GateLine gate={gate} />
+            <dt>{gates.length === 1 ? 'Gated risk' : `Gated risks (${gates.length})`}</dt>
+            <dd data-testid="approval-gated-risks">
+              {gates.length > 1 && (
+                <div className={styles.muted}>
+                  This call touches {gates.length} risks that wait for your approval. Your answer
+                  covers all of them: one decision for the call.
+                </div>
+              )}
+              {gates.map((line) => (
+                <div key={line.risk_id} data-testid="approval-gated-risk">
+                  {line.label}
+                  <div>
+                    <RiskIdLink riskId={line.risk_id} />
+                  </div>
+                  <div className={styles.muted} data-testid="approval-gate">
+                    Gate: <GateLine gate={line} />
+                  </div>
+                </div>
+              ))}
             </dd>
             <dt>Period ends</dt>
             <dd>

@@ -257,15 +257,13 @@ describe('sessions repository', () => {
     });
 
     const decide = (ctx: DecideContext) => {
-      // The same risk and arguments on another tool find nothing.
-      expect(
-        ctx.findApproval({ riskId: MERGE, tool: 'github__delete_branch', fingerprint: 'fp-1' }),
-      ).toBeNull();
-      const consumed = ctx.consumeApproval({
-        riskId: MERGE,
+      // The same arguments on another tool find nothing.
+      expect(ctx.findApprovals({ tool: 'github__delete_branch', fingerprint: 'fp-1' })).toEqual([]);
+      const [usable] = ctx.findApprovals({
         tool: 'github__merge_pull_request',
         fingerprint: 'fp-1',
       });
+      const consumed = usable ? ctx.consumeApproval(usable.id) : null;
       return { allow: consumed !== null, approvalId: consumed?.id ?? null, event: null };
     };
     const first = await store.sessions.decideAndDecrement(
