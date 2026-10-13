@@ -84,13 +84,16 @@
 
 .adminNav {
   display: flex;
-  gap: var(--space-4);
+  gap: var(--space-1) var(--space-4);
   align-items: center;
+  /* Entries never break inside a label: a bar too narrow wraps whole entries. */
+  flex-wrap: wrap;
 }
 
 .adminNav a {
   color: var(--text-muted);
   font-size: var(--text-sm);
+  white-space: nowrap;
 }
 .adminNav a:hover {
   color: var(--text-foreground);

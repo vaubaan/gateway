@@ -1,0 +1,88 @@
+/* How a risk is explained (RiskExplain.tsx): one vocabulary for mission
+   creation, the Share dialog, the mission page and the provider reference. */
+
+.explain {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-2);
+}
+.label {
+  font-weight: var(--font-weight-medium);
+}
+.name {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  cursor: pointer;
+}
+.reason {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+.note {
+  color: var(--accent-warning-fg);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+}
+.vector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+.id {
+  font-family: var(--font-geist-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+/* A link into the reference: underlined, so it reads as a link without hovering. */
+.ref {
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 3px;
+}
+.ref:hover {
+  color: var(--text-foreground);
+}
+
+.legend {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  font-size: var(--text-sm);
+}
+.legendRow {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: var(--space-3);
+}
+.legendRow dt {
+  font-weight: var(--font-weight-medium);
+}
+.legendRow dd {
+  margin: 0;
+  color: var(--text-muted);
+}
+.scale {
+  font-family: var(--font-geist-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--text-xs);
+  color: var(--text-foreground);
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .legendRow {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+  .scale {
+    white-space: normal;
+  }
+}

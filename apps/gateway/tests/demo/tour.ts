@@ -102,34 +102,39 @@ Things to try
        GitHub      opens a simulated installation page: pick an organisation.
      Any value of the right shape is accepted. Vercel has no simulation:
      connecting it fails with a message that says so, and nothing is sent.
-  3. Issue a mission on one screen: Missions -> New mission. Pick connections,
-     resources, a preset or risks one by one, a quota each, then Issue.
-  4. Open the bootstrap kit shown right after issuing: the token (shown once),
+  3. Read what a provider is: Providers -> GitHub. What the plugin connects to,
+     its data model, each risk with the reason it is a risk and its six badges,
+     each preset with everything it contains, the tools.
+  4. Issue a mission on one screen: Missions -> New mission. Include a
+     connection and pick a preset: the block says what it allows, what waits
+     for your approval and what it leaves out. Switch to Custom to accept risks
+     one by one, each with its quota, rate limit and gate; then Issue.
+  5. Open the bootstrap kit shown right after issuing: the token (shown once),
      the MCP client configuration, the instructions for the agent, a curl.
-  5. Call tools/list on /mcp with a mission token (the kit's own command; here
+  6. Call tools/list on /mcp with a mission token (the kit's own command; here
      with the seeded mission "${seeded.activeMission.name}"):
      ${toolsListCommand(origin)}
-  6. Exhaust a quota. The mission "${seeded.quotaMission.name}" allows ${SMALL_QUOTA} file reads:
+  7. Exhaust a quota. The mission "${seeded.quotaMission.name}" allows ${SMALL_QUOTA} file reads:
      ${quotaLoopCommand(origin, seeded)}
      The last answer is a refusal "budget-exhausted" carrying a claim_url. Open
      it as Alice (or Requests), grant a reset or an extension, run the loop again.
      An older claim is already waiting: ${seeded.openClaimUrl}
-  7. Approve the pending action: Requests shows a merge of pull request #128
+  8. Approve the pending action: Requests shows a merge of pull request #128
      with its arguments (${seeded.openApprovalUrl}).
      Approve it, then replay the call with exactly the same arguments:
      ${approvalReplayCommand(origin, seeded)}
-  8. Share to Bob: Connections -> "${seeded.sharedConnection.name}" -> Share. Bob already
+  9. Share to Bob: Connections -> "${seeded.sharedConnection.name}" -> Share. Bob already
      holds a share of it; sign out, sign in as Bob: Shares received, and his mission.
-  9. As Alice, revoke that share; as Bob, his mission now reads "orphaned" and
+ 10. As Alice, revoke that share; as Bob, his mission now reads "orphaned" and
      every call with its token is refused. Share again as Alice: the same
      mission comes back, same token, same counters.
- 10. Audit: every call and every administrative act, with filters (mission,
+ 11. Audit: every call and every administrative act, with filters (mission,
      agent label, decision). On a mission, "Session" shows the calls of the
      current period per agent label ("planner", "coder").
- 11. Admin, as Alice (she is the operator): Identity provider, Provider apps
+ 12. Admin, as Alice (she is the operator): Identity provider, Provider apps
      (the GitHub App), Groups ("GitHub admins", "Contractors"), Connections
      without owner, OAuth clients ("Claude Code (demo)"), Telemetry (off).
- 12. Sign in as Carol: she sees the GitHub connection owned by the group
+ 13. Sign in as Carol: she sees the GitHub connection owned by the group
      "GitHub admins", which Alice transferred to it, and her own Stripe account
      (test and live mode as two resources), whose test mode she shares to Alice.
 

@@ -14,6 +14,7 @@ import { notFound } from 'next/navigation';
 
 import { NeedsUser } from '@/components/auth/NeedsUser';
 import { RevokeConnection } from '@/components/connections/RevokeConnection';
+import { RiskIdLink } from '@/components/risk/RiskExplain';
 import { ValidationBadge } from '@/components/telemetry/ValidationBadge';
 import styles from '@/components/connections/connections.module.css';
 import {
@@ -51,6 +52,7 @@ import {
   NEW_CONNECTION_PATH,
   type ConnectionDetail,
 } from '@/server/connections';
+import { providerPath } from '@/server/providers/links';
 import { sharePath, type ShareView } from '@/server/shares';
 import type { ConnectionResourceRecord } from '@/server/store';
 
@@ -147,6 +149,13 @@ export default async function ConnectionPage({
           <dl className={styles.dl}>
             <dt>Owner</dt>
             <dd>{detail.ownerLabel}</dd>
+            <dt>Provider</dt>
+            <dd>
+              {detail.providerLabel} —{' '}
+              <Link href={providerPath(connection.provider)} className={styles.refLink}>
+                data model, risks and presets of this provider
+              </Link>
+            </dd>
             <dt>Credential</dt>
             <dd>{credentialKindLabel(detail.credentialKind)} — encrypted at rest</dd>
             <dt>Connected</dt>
@@ -313,9 +322,7 @@ function ShareRow({ view, base, editable }: { view: ShareView; base: string; edi
           </summary>
           <div className={styles.settingsBody}>
             {share.restriction.map((riskId) => (
-              <code key={riskId} className={styles.mono}>
-                {riskId}
-              </code>
+              <RiskIdLink key={riskId} riskId={riskId} />
             ))}
           </div>
         </details>

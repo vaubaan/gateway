@@ -10,6 +10,8 @@ tracks:
   - apps/gateway/src/app/api/missions/
   - apps/gateway/src/app/agent-bootstrap.md/
   - apps/gateway/src/components/shell/AppShell.tsx
+  - apps/gateway/src/components/risk/
+  - apps/gateway/src/server/providers/
   - apps/gateway/tests/integration/missions/
   - apps/gateway/tests/e2e/v5/issue-mission.spec.ts
   - apps/gateway/tests/e2e/v5/browser.ts
@@ -66,8 +68,11 @@ apps/gateway/src/app/(app)/missions/
                          operator sees `NeedsUser` from `@/components/auth/NeedsUser`)
   new/page.tsx           /missions/new — loads the issuance context (and ?from=<id>)
   new/mission-form.tsx   the one-page creation screen (client)
-  new/form-state.ts      state and transitions of the form (pure, unit-tested)
-  new/risk-detail.tsx    per-risk table of one connection (client)
+  new/form-state.ts      state and transitions of the form, Preset | Custom, explainPreset(),
+                         editorRows() / filterRows() (pure, unit-tested)
+  new/preset-panel.tsx   Preset mode of one connection: the choice, and what the chosen preset means (client)
+  new/custom-editor.tsx  Custom mode of one connection: the granular editor (client)
+  new/policy-lines.tsx   PolicyLines, FamilyList, SkippedList — the compact reading of a policy
   [id]/page.tsx          /missions/<id> — detail (links to its session page)
   [id]/session/page.tsx  /missions/<id>/session — counters, requests, timeline (handbook audit)
   [id]/mission-actions.tsx  Duplicate / Rotate / Revoke (client)
@@ -541,31 +546,94 @@ One page, one column, in the order of spec §4.2:
    proposal" (a JSON draft, or only its `connections`, sent to
    `/api/missions/preview`; what passes is loaded with `loadResolved`, the
    issues are listed, nothing is issued).
-2. **Connections, resources, preset** — one row per connection: include
+2. **Connections, resources, policy** — one block per connection: include
    checkbox, provider and name, "N of M resources" (a link that unfolds the
    resource checkboxes: all ticked by default except the hidden ones, the stale
-   ones disabled), the preset select; under it one
-   truncated line with the preset's width and description, and what the preset
-   left out. "Show experimental providers" appears only when the creator owns a
-   connection of an `experimental` plugin; those rows are hidden until ticked.
-   A creator with a single non-experimental connection finds it included.
+   ones disabled), and the mode switch **Preset | Custom** (two native radios
+   in a group named "Policy for `<provider>` `<name>`"). "Show experimental
+   providers" appears only when the creator owns a connection of an
+   `experimental` plugin; those rows are hidden until ticked. A creator with a
+   single non-experimental connection finds it included. The two modes are
+   described below.
 3. **Summary** — three lines, `summarize()`: _Can_ (per connection: accepted
    risks, resources, most severe accepted risk), _Cannot_ (withheld risks and
    the most severe one, resources left out), _Quantities_ (largest quota per
    period, fastest rate, risks under approval, reload, expiry).
-4. **Per-risk detail** — one `<details>` per included connection, **closed**.
-   Open: "Select all", "Clear", then one row per risk the creator holds that
-   the selection resolves — checkbox, label, severity, env, id; quota, rate
-   limit (`max` per `window` s), gate. Rows the selection cannot resolve or the
-   creator does not hold are listed under "N entries unavailable with this
-   selection" with the reason and cannot be ticked; an entry ticked earlier that
-   stopped resolving stays, marked "Refused", with "Remove the N refused".
-5. **Period and expiry**, and **Issue mission**, in a bar that stays at the
+4. **Period and expiry**, and **Issue mission**, in a bar that stays at the
    bottom of the viewport. Under it, what still blocks issuance, then the
    preview's `notices` (`data-testid="notices"`): one warning-coloured line
    each — a folded `<details>` whose summary names the code's meaning and the
    resources, and which unfolds to the full message. A notice never disables
    the button, and the list is absent when there is none.
+
+### Preset mode (`preset-panel.tsx`)
+
+The default. The plugin's presets are an explicit choice: one radio each (group
+"Preset for `<provider>` `<name>`"), labelled with the preset's name and its
+width on this connection (`presetChoiceLabel`: "10 risks · 2 need approval").
+For the preset picked, the block shows, without leaving the page:
+
+- its description, in full;
+- its counts in one sentence (`presetDigest`: "8 allowed without asking · 2
+  need your approval · 5 not included", plus "N entries of the preset left out
+  here" when some cannot apply), a button that spreads the lists out or hides
+  them, and a link to the preset's entry in the provider reference
+  (`/providers/<id>#preset-<preset>`, new tab);
+- spread out: **Allowed without asking** and **Needs your approval, action by
+  action** — each risk by its human label, its environment, its quota and its
+  rate limit (`formatRate`: `240/min`) —, **Not included** (a count; the names
+  unfold in place) and **In the preset, left out here** (each entry with the
+  reason: outside the authority, or the label a selected resource would need).
+
+All of it is `explainPreset(connection, state, presetId)`: the same
+`previewConnection` call as `applyPreset`, read instead of applied, so what the
+block says and what the policy holds cannot differ (a unit test compares them
+for every preset).
+
+**One reading is spread out at a time by default**: picking a preset spreads
+its own lists out and reduces the other connections to their description and
+counts; "Show what it allows, with quotas" spreads any of them out again, and
+the creator may keep several open. This is what keeps a mission on three
+connections at about two viewports (2.1 at 1280×800 in the browser test) while
+every preset still says what it is; with every list spread out the same page is
+a little over three viewports.
+
+### Custom mode (`custom-editor.tsx`)
+
+One click on **Custom** opens the granular editor in place, on the values the
+preset filled (`enterCustom`: nothing is lost, nothing counts as edited yet):
+
+- a toolbar: "Start from preset…" (`startFromPreset`), "Select all", "Clear",
+  "Remove the N refused", and "N accepted of M you can accept here";
+- when the catalog has more than `SEARCH_THRESHOLD` (8) explicit ids, a search
+  box (every word must appear in the label, the id, the reason, the
+  environment, the kind or the severity level) and a filter (all, accepted, not
+  accepted yet, unavailable to you): `filterRows`;
+- **every explicit id of the catalog** (`editorRows`), grouped by `groupByKind`:
+  Reads, Writes, Irreversible writes. An account-scoped entry is one row; an
+  env-scoped entry states its label and reason once, then one row per
+  environment. A row is the shared `RiskExplain` (label, environment, severity,
+  markers, id linked to the reference, reason, the six vector badges), a
+  checkbox (`aria-label` "Accept risk `<id>`") and, once ticked, quota, rate
+  limit (`max` per `window` s) and gate;
+- a risk the creator does not hold, or that no selected resource can resolve,
+  **stays listed**, greyed, with "Not available: `<reason>`" and a disabled
+  checkbox; an entry ticked earlier that stopped resolving stays ticked,
+  marked "Refused at issuance".
+
+Going back to **Preset**, or choosing another preset in "Start from preset…",
+after an edit (`discardsEdits`) does not act at once: an inline warning asks
+"Discard my changes" / "Keep editing". Without an edit the switch is immediate
+(`backToPreset` re-applies the preset).
+
+A policy loaded from a duplicated mission or from an agent's proposal
+(`loadResolved`) is a custom one: the connection opens in Custom mode, first as
+the compact reading of its explicit lines ("Custom policy, as loaded", allowed /
+needs approval), with "Edit risk by risk" to open the editor.
+
+The mode is a property of the screen. `draftOf` sends the same explicit
+`RiskId → (quota, rate limit, gate)` lines in both modes and never the preset
+(`preset: null`); `issue()` re-checks them server-side as before.
 
 Behaviour worth knowing (`form-state.ts`):
 
@@ -583,9 +651,34 @@ Behaviour worth knowing (`form-state.ts`):
   replaces the list of blockers with the server's.
 
 With three connections and their presets the page stays compact at 1280×800.
-The Playwright spec asserts it: no per-risk detail open, a page at most two
-viewports tall (one scroll), at most six visible checkboxes, and the Issue
-button in view.
+The Playwright spec asserts it: no editor open (no `[data-risk]` row), a page of
+at most 2.25 viewports, at most six visible checkboxes, and the Issue button in
+view. The same spec then walks the other paths: a preset shows its content,
+Custom lists the fifteen GitHub risks with their labels, the discard warning,
+the search box on Supabase, and the link from a risk id of the mission page to
+its entry in the reference.
+
+### How a risk is explained (`components/risk/RiskExplain.tsx`)
+
+One component, used by the Custom editor, the Share dialog's checklist, the
+policy table of `/missions/<id>` and the provider reference:
+
+| Export                           | Renders                                                                                                                            |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `RiskExplain({ risk })`          | label, environment, severity, markers, linked id; the reason; the six vector badges                                                |
+| `VectorBadges({ vector })`       | `Axis: value` per axis (`vectorBadges`): plain for the mildest value, highlighted further up the scale; the text carries the value |
+| `VectorLegend()`                 | each axis, the question it answers, its scale (`VECTOR_AXES`)                                                                      |
+| `RiskIdLink({ riskId })`         | the id, linked to `/providers/<provider>#risk-<base id>` (`riskReferencePath`); `newTab` on pages holding unsaved input            |
+| `RiskMarkers`, `RiskMarkerNotes` | the `fallback` and `deprecated` badges, and the sentence that explains each                                                        |
+
+`CatalogRisk` carries what they need: `vector` (resolved for the id's
+environment) and `kind` (`read` when every pattern of the entry ends in `.R`,
+`destructive` when the vector says `irreversible`, else `write`). `kind` only
+groups a list; like the severity, nothing is decided from it.
+
+On `/missions/<id>` the policy table looks each persisted id up with
+`riskExplainer(registry)` (`server/providers/reference.ts`); an id no shipped
+catalog declares any more is shown as its stored label and its bare id.
 
 After a 201 the **reveal-once dialog** shows the bootstrap kit with the secret;
 "I copied the token" goes to `/missions/<id>`, which only ever shows

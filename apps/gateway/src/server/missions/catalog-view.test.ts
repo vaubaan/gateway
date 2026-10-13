@@ -5,12 +5,19 @@ import { fullCatalogRiskIds } from '../authority';
 import {
   describePresetWidth,
   enumerateCatalog,
+  formatRate,
+  groupByKind,
+  groupVariants,
   isResolvable,
   MAX_SEVERITY,
+  patternsOf,
   presetWidth,
+  riskKindOf,
   SEVERITY_RANKS,
   severityLevel,
   severityOf,
+  VECTOR_AXES,
+  vectorBadges,
 } from './catalog-view';
 import { ACME_CATALOG } from './testing';
 
@@ -132,5 +139,103 @@ describe('presetWidth', () => {
     expect(describePresetWidth(width)).toBe(
       '3 risks · most severe: Delete things in bulk (high) · largest quota 1000 · 1 under approval',
     );
+  });
+});
+
+describe('explaining a risk', () => {
+  const rows = enumerateCatalog(ACME_CATALOG);
+  const row = (id: string) => {
+    const found = rows.find((r) => r.risk_id === id);
+    if (!found) throw new Error(`fixture row ${id} missing`);
+    return found;
+  };
+
+  it('carries the vector resolved for the environment of each id', () => {
+    expect(row('acme[staging].write').vector).toMatchObject({
+      blast: 'single',
+      visibility: 'internal',
+    });
+    expect(row('acme[prod].write').vector).toMatchObject({ blast: 'env', visibility: 'public' });
+  });
+
+  it('names the six axes in the order of the shared vocabulary, each with its question', () => {
+    expect(VECTOR_AXES.map((a) => a.axis)).toEqual(Object.keys(RISK_VECTOR_AXES));
+    expect(VECTOR_AXES.every((a) => a.label !== '' && a.question.endsWith('?'))).toBe(true);
+  });
+
+  it('turns a vector into six badges whose text carries the value and whose weight follows the scale', () => {
+    const badges = vectorBadges(row('acme.admin').vector);
+    expect(badges.map((b) => `${b.label}: ${b.value}`)).toEqual([
+      'Reversibility: costly',
+      'Blast radius: account',
+      'Data: secret',
+      'Cost: free',
+      'Visibility: team',
+      'Persistence: posture',
+    ]);
+    expect(badges.map((b) => b.weight)).toEqual([
+      'middle',
+      'middle',
+      'middle',
+      'mildest',
+      'middle',
+      'worst',
+    ]);
+    expect(badges[1]?.scale).toEqual(['single', 'env', 'account', 'bulk']);
+  });
+
+  it('tells reads from writes by the patterns, and destructive writes by the vector', () => {
+    expect(patternsOf({ matches: 'a.b.R' })).toEqual(['a.b.R']);
+    expect(patternsOf({ matches: ['a.b.R', 'a.c.W'] })).toEqual(['a.b.R', 'a.c.W']);
+    const vector = row('acme.read').vector;
+    expect(riskKindOf({ matches: ['a.b.R', 'a.c.R'] }, vector)).toBe('read');
+    // One write pattern is enough: the entry is not a read.
+    expect(riskKindOf({ matches: ['a.b.R', 'a.c.W'] }, vector)).toBe('write');
+    expect(riskKindOf({ matches: 'a.c.W' }, { ...vector, reversibility: 'irreversible' })).toBe(
+      'destructive',
+    );
+    expect(rows.map((r) => [r.risk_id, r.kind])).toEqual([
+      ['acme.read', 'read'],
+      ['acme[staging].write', 'write'],
+      ['acme[prod].write', 'write'],
+      ['acme[staging].bulk-delete', 'destructive'],
+      ['acme.admin', 'write'],
+      ['acme.legacy-export', 'read'],
+      ['acme.uncategorized-write', 'write'],
+    ]);
+  });
+
+  it('groups the rows by catalog entry: one variant per environment', () => {
+    const families = groupVariants(rows);
+    expect(families.map((f) => [f.base_id, f.variants.map((v) => v.env)])).toEqual([
+      ['acme.read', [null]],
+      ['acme.write', ['staging', 'prod']],
+      ['acme.bulk-delete', ['staging']],
+      ['acme.admin', [null]],
+      ['acme.legacy-export', [null]],
+      ['acme.uncategorized-write', [null]],
+    ]);
+    expect(families.find((f) => f.base_id === 'acme.legacy-export')?.deprecated).toBe(true);
+    expect(families.find((f) => f.base_id === 'acme.uncategorized-write')?.fallback).toBe(true);
+    expect(groupVariants([])).toEqual([]);
+  });
+
+  it('lists reads, then writes, then irreversible writes, leaving empty groups out', () => {
+    const groups = groupByKind(rows);
+    expect(groups.map((g) => [g.title, g.families.map((f) => f.base_id)])).toEqual([
+      ['Reads', ['acme.read', 'acme.legacy-export']],
+      ['Writes', ['acme.write', 'acme.admin', 'acme.uncategorized-write']],
+      ['Irreversible writes', ['acme.bulk-delete']],
+    ]);
+    // Every row is in exactly one group.
+    expect(groups.flatMap((g) => g.families.flatMap((f) => f.variants)).length).toBe(rows.length);
+    expect(groupByKind(rows.filter((r) => r.kind === 'read')).map((g) => g.kind)).toEqual(['read']);
+  });
+
+  it('writes a rate limit in a few characters', () => {
+    expect(formatRate({ max: 120, window_seconds: 60 })).toBe('120/min');
+    expect(formatRate({ max: 10, window_seconds: 3600 })).toBe('10/hour');
+    expect(formatRate({ max: 2, window_seconds: 1 })).toBe('2/s');
+    expect(formatRate({ max: 5, window_seconds: 30 })).toBe('5 per 30s');
   });
 });

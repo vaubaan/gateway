@@ -72,17 +72,24 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await ines.getByRole('link', { name: 'Share', exact: true }).click();
   await expect(ines.getByRole('heading', { name: `Share ${connectionName}` })).toBeVisible();
 
-  // The dialog is a target and one folded checklist behind a one-line summary.
+  // The dialog is a target, a one-line summary, and the checklist with each risk explained.
   const summary = ines.getByTestId('restriction-summary');
   const submit = ines.getByRole('button', { name: 'Share', exact: true });
   await expect(summary).toHaveText('No risk selected: the share would authorize nothing.');
   await expect(submit).toBeDisabled();
-  await expect(ines.locator('details[open]')).toHaveCount(0);
-  await expect(ines.getByLabel(`Share risk ${READ_CODE}`)).toBeHidden();
-  await snap(ines, 'share-dialog-folded');
+  await expect(ines.getByLabel(`Share risk ${READ_CODE}`)).toBeVisible();
+  // Label, reason, vector and a link to the entry in the provider reference.
+  const readCode = ines.locator('li', { has: ines.getByLabel(`Share risk ${READ_CODE}`) });
+  await expect(readCode).toContainText('Read code, branches, commits, files');
+  await expect(readCode).toContainText('Reads may leak secrets');
+  await expect(readCode).toContainText('Reversibility: reversible');
+  await expect(readCode.getByRole('link', { name: READ_CODE })).toHaveAttribute(
+    'href',
+    `/providers/github#risk-${READ_CODE}`,
+  );
+  await snap(ines, 'share-dialog');
 
   await ines.getByLabel('Email').fill(E2E_SHARE_TARGET.email);
-  await ines.getByText(/^Risks \(\d+\)$/).click();
   // "Select all" ticks the boxes one by one: every risk but the fallback.
   await ines.getByRole('button', { name: 'Select all' }).click();
   await expect(summary).toContainText('14 of 15 risks');
@@ -130,9 +137,15 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   // ── …and issues a mission within it ─────────────────────────────────────
   await joan.goto('/missions/new');
   await joan.getByLabel('Mission name').fill('Read ines-org');
-  await joan.getByTestId('risks-github').locator(':scope > summary').click();
-  // The detail offers what she holds; the rest of the catalog cannot be ticked.
-  await expect(joan.getByLabel('Accept risk github.merge-protected')).toHaveCount(0);
+  await joan
+    .getByRole('group', { name: /^Policy for GitHub / })
+    .getByRole('radio', { name: 'Custom' })
+    .check();
+  // The editor lists the whole catalog; what she does not hold is shown and cannot be ticked.
+  await expect(joan.getByLabel('Accept risk github.merge-protected')).toBeDisabled();
+  await expect(
+    joan.locator('[data-risk="github.merge-protected"]').getByText('outside your authority'),
+  ).toBeVisible();
   await joan.getByLabel(`Accept risk ${READ_CODE}`).check();
   await joan.getByRole('button', { name: 'Issue mission' }).click();
   const dialog = joan.getByRole('dialog');
@@ -189,7 +202,6 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   // ── The owner shares again: the mission is restored ─────────────────────
   await ines.getByRole('link', { name: 'Share', exact: true }).click();
   await ines.getByLabel('Email').fill(E2E_SHARE_TARGET.email);
-  await ines.getByText(/^Risks \(\d+\)$/).click();
   await ines.getByLabel(`Share risk ${READ_CODE}`).check();
   await ines.getByRole('button', { name: 'Share', exact: true }).click();
   await expect(ines.getByText('Shared', { exact: true })).toBeVisible();

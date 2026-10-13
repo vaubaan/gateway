@@ -11,6 +11,29 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Added
 
+- **A provider reference inside the interface.** "Providers" in the navigation lists the
+  plugins of the instance; each has a page generated from the plugin itself: what it
+  connects to in plain words, its data model as a tree, every risk a mission can accept —
+  its label, why it is a risk, its six-axis profile as readable badges with a legend,
+  whether it is accepted once or per environment, what it matches —, every preset with
+  all it contains (quota, rate limit, gate) and what it leaves out, and the tools. Every
+  risk id shown on a mission, a request, a share or a connection links to its entry.
+- **Mission creation: Preset or Custom, per connection.** A preset is now an explicit choice
+  that says what it means on the page: what it allows without asking, what waits for your
+  approval, what it leaves out, with the quota and the rate limit of each risk. **Custom**
+  opens the full editor in place: every risk you hold, grouped into reads, writes and
+  irreversible writes, each with its explanation, a checkbox, a quota, a rate limit and a
+  gate; "Start from preset…" pre-fills it, a search box filters a long catalog, and what you
+  cannot accept is listed with the reason. Switching to Custom keeps the preset's values;
+  switching back after an edit asks first. What a mission stores is unchanged: the explicit
+  list of risks with their budgets, never a preset.
+- **Plugins: `summary` and `tokenHandouts`.** A plugin may declare a short plain-words
+  paragraph (what one connection is, what one resource is, where the environment comes
+  from), shown on its reference page, and the tools whose purpose is to hand the agent a
+  short-lived provider token, with the risks that gate them: the reference marks those tools
+  and risks "hands a token to the agent" (on GitHub, the installation token for `git clone`
+  and `git push`). Both are optional and additive in the plugin contract; the ten shipped
+  plugins and the scaffold have a summary.
 - **Releases.** Pushing a tag `v2.x.y` publishes the image for `linux/amd64` and
   `linux/arm64` to `ghcr.io/sbw-vaubaan/vaubaan-gateway` (`<version>`, `<major>.<minor>`
   and `latest`; a pre-release only its own version), with an SBOM and a signed
@@ -342,6 +365,11 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Changed
 
+- **A risk reads the same on every page.** The Share dialog shows its checklist open, each
+  risk with its label, the reason it is a risk, its profile and a link to its entry in the
+  provider reference; the mission page explains each risk of the policy the same way. The
+  per-risk detail of mission creation, formerly a folded section at the bottom of the page,
+  is now the Custom mode of each connection.
 - **The documentation is in English and describes what the code does.** The risk-model
   specification, the per-environment vector note, the style guide and the Resend provider
   specification are rewritten against the implementation (the French and v4 texts are kept

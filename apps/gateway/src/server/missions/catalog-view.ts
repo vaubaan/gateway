@@ -13,7 +13,14 @@ import { parseRiskId } from '@vaubaan/shared/risk-id';
 
 // The file, not the barrel: `catalog-authority.ts` is pure and browser-safe, the barrel is not.
 import { explicitRiskIdsOf } from '../authority/catalog-authority';
-import type { CatalogRisk, IssuanceConnection, IssuanceResource, SeverityLevel } from './model';
+import {
+  RISK_KINDS,
+  type CatalogRisk,
+  type IssuanceConnection,
+  type IssuanceResource,
+  type RiskKind,
+  type SeverityLevel,
+} from './model';
 
 /**
  * Rank of each axis value, mildest first — the order of `RISK_VECTOR_AXES`
@@ -57,16 +64,35 @@ export function severityLevel(score: number): SeverityLevel {
   return 'low';
 }
 
+/** The patterns of an entry, as a list (the catalog allows one string or several). */
+export function patternsOf(entry: Pick<RiskEntry, 'matches'>): readonly string[] {
+  return typeof entry.matches === 'string' ? [entry.matches] : entry.matches;
+}
+
+/**
+ * Read, write or destructive (`RiskKind`). An entry is a read when every one
+ * of its patterns ends with the read action; a write that the vector calls
+ * irreversible is destructive. A grouping aid for long catalogs: nothing is
+ * decided from it.
+ */
+export function riskKindOf(entry: Pick<RiskEntry, 'matches'>, vector: RiskVector): RiskKind {
+  if (patternsOf(entry).every((pattern) => pattern.endsWith('.R'))) return 'read';
+  return vector.reversibility === 'irreversible' ? 'destructive' : 'write';
+}
+
 /** The display row of one explicit id of `entry` (an id `explicitRiskIdsOf(entry)` returned). */
 function riskOf(entry: RiskEntry, provider: string, riskId: RiskId): CatalogRisk {
   const env = isEnvScopedEntry(entry) ? (parseRiskId(riskId)?.env ?? null) : null;
-  const severity = severityOf(resolveVector(entry, env));
+  const vector = resolveVector(entry, env);
+  const severity = severityOf(vector);
   return {
     risk_id: riskId,
     base_id: entry.id,
     env,
     label: entry.label,
     reason: entry.reason,
+    vector,
+    kind: riskKindOf(entry, vector),
     severity,
     level: severityLevel(severity),
     fallback: isFallbackEntry(entry, provider),
@@ -148,4 +174,145 @@ export function describePresetWidth(width: PresetWidth): string {
   parts.push(`largest quota ${width.largest_quota}`);
   if (width.approvals > 0) parts.push(`${width.approvals} under approval`);
   return parts.join(' · ');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Explaining a risk: the vector as badges, the groups of a long catalog
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The six axes as the interface names them, with the question each answers
+ * (risk model §4.2). The order is the reading order of every badge row and of
+ * the legend.
+ */
+export const VECTOR_AXES: readonly {
+  readonly axis: keyof RiskVector;
+  readonly label: string;
+  readonly question: string;
+}[] = [
+  {
+    axis: 'reversibility',
+    label: 'Reversibility',
+    question: 'Can it be undone, and at what price?',
+  },
+  { axis: 'blast', label: 'Blast radius', question: 'How much does one action reach?' },
+  { axis: 'data', label: 'Data', question: 'What kind of data is exposed?' },
+  { axis: 'cost', label: 'Cost', question: 'Can it spend money?' },
+  { axis: 'visibility', label: 'Visibility', question: 'Who sees the effect?' },
+  { axis: 'persistence', label: 'Persistence', question: 'Does the effect outlive the mission?' },
+];
+
+/** Where a value sits on its axis: the mildest, the most severe, or in between. */
+export type VectorWeight = 'mildest' | 'middle' | 'worst';
+
+export interface VectorBadge {
+  readonly axis: keyof RiskVector;
+  /** The axis as the interface names it (`Blast radius`). */
+  readonly label: string;
+  /** The catalog's value on that axis (`account`). */
+  readonly value: string;
+  readonly weight: VectorWeight;
+  /** The scale of the axis, mildest first: what the badge's tooltip spells out. */
+  readonly scale: readonly string[];
+}
+
+/** One badge per axis, in the order of `VECTOR_AXES`; the text carries the information. */
+export function vectorBadges(vector: RiskVector): VectorBadge[] {
+  return VECTOR_AXES.map(({ axis, label }) => {
+    const scale: readonly string[] = SEVERITY_RANKS[axis];
+    const rank = scale.indexOf(vector[axis]);
+    const weight: VectorWeight =
+      rank <= 0 ? 'mildest' : rank === scale.length - 1 ? 'worst' : 'middle';
+    return { axis, label, value: vector[axis], weight, scale };
+  });
+}
+
+/** How each kind reads as the title of a group, and the one line under it. */
+export const RISK_KIND_GROUPS: Readonly<Record<RiskKind, { title: string; hint: string }>> = {
+  read: { title: 'Reads', hint: 'Look without changing anything at the provider.' },
+  write: { title: 'Writes', hint: 'Change something that can be undone, sometimes at a price.' },
+  destructive: {
+    title: 'Irreversible writes',
+    hint: 'Change something the catalog marks as impossible to undo.',
+  },
+};
+
+/**
+ * A catalog entry with the explicit ids it stands for: one variant for an
+ * account-scoped entry, one per environment for an env-scoped one. The label
+ * and the reason are the entry's; the vector may differ per variant.
+ */
+export interface RiskFamily {
+  readonly base_id: RiskId;
+  readonly label: string;
+  readonly reason: string;
+  readonly fallback: boolean;
+  readonly deprecated: boolean;
+  readonly variants: readonly CatalogRisk[];
+}
+
+/** The rows grouped by catalog entry, catalog order kept. */
+export function groupVariants(risks: readonly CatalogRisk[]): RiskFamily[] {
+  const families = new Map<RiskId, CatalogRisk[]>();
+  for (const risk of risks) {
+    const variants = families.get(risk.base_id);
+    if (variants) variants.push(risk);
+    else families.set(risk.base_id, [risk]);
+  }
+  return [...families.entries()].flatMap(([base_id, variants]) => {
+    const [first] = variants;
+    if (!first) return [];
+    return [
+      {
+        base_id,
+        label: first.label,
+        reason: first.reason,
+        fallback: first.fallback,
+        deprecated: first.deprecated,
+        variants,
+      },
+    ];
+  });
+}
+
+export interface RiskKindGroup {
+  readonly kind: RiskKind;
+  readonly title: string;
+  readonly hint: string;
+  readonly families: readonly RiskFamily[];
+}
+
+/**
+ * The rows as the granular editor and the provider reference list them:
+ * reads, then writes, then irreversible writes; inside a group, one family
+ * per catalog entry in catalog order. Empty groups are left out. An env-scoped
+ * entry whose vector turns irreversible in one environment only appears in
+ * two groups, each with the variants that belong there.
+ */
+export function groupByKind(risks: readonly CatalogRisk[]): RiskKindGroup[] {
+  return RISK_KINDS.map((kind) => ({
+    kind,
+    ...RISK_KIND_GROUPS[kind],
+    families: groupVariants(risks.filter((risk) => risk.kind === kind)),
+  })).filter((group) => group.families.length > 0);
+}
+
+/** What the two catalog markers mean, wherever one is shown (risk model §4.3, §4.5). */
+export const FALLBACK_NOTE =
+  'Fallback: counts only for a write no other entry of the catalog names. Accepting it accepts writes nobody reviewed; no preset includes it.';
+export const DEPRECATED_NOTE =
+  'Deprecated: kept so that existing missions and shares keep working; "select all" and presets leave it out.';
+
+const SECONDS_PER_MINUTE = 60;
+const SECONDS_PER_HOUR = 3600;
+
+/** A rate limit in a few characters: `120/min`, `10/hour`, `5 per 30s`. */
+export function formatRate(rate: {
+  readonly max: number;
+  readonly window_seconds: number;
+}): string {
+  if (rate.window_seconds === SECONDS_PER_MINUTE) return `${rate.max}/min`;
+  if (rate.window_seconds === SECONDS_PER_HOUR) return `${rate.max}/hour`;
+  if (rate.window_seconds === 1) return `${rate.max}/s`;
+  return `${rate.max} per ${rate.window_seconds}s`;
 }

@@ -42,6 +42,8 @@ export const railwayPlugin = definePlugin({
   version: '2.0.0',
   description:
     'Deploy, redeploy, read logs and manage variables of Railway projects through the official Railway MCP server and GraphQL API.',
+  summary:
+    'One connection is one Railway account reached through the Railway MCP server; one resource is one project. The connection owner labels each project with an environment (prod, staging, preview or dev); deploys and variable changes are accepted per label, and a project without a label can only be inspected.',
   docsUrl:
     'https://github.com/sbw-vaubaan/vaubaan-gateway/blob/main/docs/handbook/providers/railway.md',
   tools: railwayTools,

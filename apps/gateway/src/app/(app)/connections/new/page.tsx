@@ -21,6 +21,7 @@ import {
   type PageSearchParams,
 } from '@/lib/connections/session';
 import { CONNECTIONS_PATH, NEW_CONNECTION_PATH, PROVIDER_APPS_PAGE } from '@/server/connections';
+import { providerPath, PROVIDERS_PATH } from '@/server/providers/links';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,7 +50,12 @@ export default async function ConnectProviderPage({
         <h1>Connect a provider</h1>
         <p className={styles.muted}>
           You authenticate at the provider through the app your company registered; the credential
-          comes back to this instance, is encrypted, and stays under your name.
+          comes back to this instance, is encrypted, and stays under your name. What a mission can
+          then do with each provider — its risks, its presets — is described in the{' '}
+          <Link href={PROVIDERS_PATH} className={styles.refLink}>
+            provider reference
+          </Link>
+          .
         </p>
       </div>
 
@@ -81,6 +87,9 @@ export default async function ConnectProviderPage({
                 </span>
                 {p.description && <span className={styles.muted}>{p.description}</span>}
                 <span className={styles.muted}>{credentialKindLabel(p.kind)}</span>
+              </Link>
+              <Link href={providerPath(p.id)} className={styles.providerRef}>
+                Risks and presets of {p.displayName}
               </Link>
             </li>
           ))}

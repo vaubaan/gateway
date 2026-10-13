@@ -62,6 +62,8 @@ export const gmailPlugin: ProviderPlugin = definePlugin({
   version: '0.2.0',
   description:
     'Experimental, classifier-only : identity-zoned risks for reading, drafting and labelling in a Gmail mailbox. No tool is executable yet.',
+  summary:
+    'Experimental. One connection is one Gmail mailbox, which is also its single resource. The plugin models the risks of reading, drafting and labelling by who the sender or the recipient is, but it executes nothing yet: no tool is offered to agents.',
   docsUrl:
     'https://github.com/sbw-vaubaan/vaubaan-gateway/blob/main/docs/handbook/providers/gmail.md',
   experimental: true,

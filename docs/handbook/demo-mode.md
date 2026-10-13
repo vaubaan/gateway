@@ -109,33 +109,41 @@ Audit entries are the ones those acts and calls wrote.
    organisation). Any value of the right shape is accepted. Vercel has no
    simulation: connecting it fails with a message that says so, and nothing
    is sent.
-3. **Issue a mission on one screen**: Missions → New mission.
-4. **Open the bootstrap kit** shown right after issuing: the token (shown
+3. **Read what a provider is**: Providers → GitHub. What the plugin connects
+   to, its data model as a tree, each risk with the reason it is a risk and
+   its six badges, each preset with everything it contains, the tools.
+4. **Issue a mission on one screen**: Missions → New mission. Include a
+   connection and pick a preset: the block says what it allows, what waits
+   for your approval and what it leaves out. Switch to **Custom** to accept
+   risks one by one — every risk is listed with its quota, rate limit and
+   gate, "Start from preset…" pre-fills, and going back to Preset after an
+   edit asks first.
+5. **Open the bootstrap kit** shown right after issuing: the token (shown
    once), the MCP client configuration, the instructions for the agent, a
    `curl`.
-5. **Call `tools/list` on `/mcp`** with a mission token: the kit's own
+6. **Call `tools/list` on `/mcp`** with a mission token: the kit's own
    command, or the one the tour prints for the seeded mission
    (`$VAUBAAN_MISSION_TOKEN`).
-6. **Exhaust a quota**: the printed loop reads a file four times with
+7. **Exhaust a quota**: the printed loop reads a file four times with
    `$VAUBAAN_QUOTA_TOKEN`; the fourth answer is a refusal `budget-exhausted`
    carrying a `claim_url`. Open it as Alice (or Requests), grant a reset or an
    extension, run the loop again.
-7. **Approve the pending action**: Requests shows the merge of pull request
+8. **Approve the pending action**: Requests shows the merge of pull request
    #128 with its arguments. Approve it, then replay the call with exactly the
    same arguments (the printed `curl`, `$VAUBAAN_APPROVAL_TOKEN`): it now
    executes.
-8. **Share to Bob**: Connections → "Acme product repositories" → Share. Bob
+9. **Share to Bob**: Connections → "Acme product repositories" → Share. Bob
    already holds a share of it; sign in as Bob to see Shares received and his
    mission.
-9. **Revoke that share** as Alice: Bob's mission reads `orphaned` and every
-   call with its token is refused. **Share again**: the same mission comes
-   back, same token, same counters.
-10. **Audit**: every call and administrative act, with filters (mission, agent
+10. **Revoke that share** as Alice: Bob's mission reads `orphaned` and every
+    call with its token is refused. **Share again**: the same mission comes
+    back, same token, same counters.
+11. **Audit**: every call and administrative act, with filters (mission, agent
     label, decision). On a mission, "Session" shows the calls of the current
     period per agent label.
-11. **Admin**, as Alice: Identity provider, Provider apps, Groups, Connections
+12. **Admin**, as Alice: Identity provider, Provider apps, Groups, Connections
     without owner, OAuth clients, Telemetry.
-12. **Sign in as Carol**: the group-owned GitHub connection and her Stripe
+13. **Sign in as Carol**: the group-owned GitHub connection and her Stripe
     account.
 
 ## How it is built

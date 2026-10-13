@@ -6,14 +6,23 @@ import { ACME_HIDDEN, ACME_RESOURCES, ACME_STALE, acmeConnection } from '@/serve
 import {
   applyPreset,
   availableCount,
+  backToPreset,
   clearAll,
   defaultEntryFor,
   describeSkipped,
+  discardsEdits,
   draftOf,
   dropUnresolvable,
+  editorRows,
+  enterCustom,
   expiryOf,
+  explainPreset,
+  filterRows,
   initialFormState,
   loadResolved,
+  presetChoiceLabel,
+  presetDigest,
+  startFromPreset,
   periodChoiceOf,
   periodOf,
   presetSkipped,
@@ -61,6 +70,7 @@ describe('creation form — initial state', () => {
     const state = initialFormState(context);
     expect(connectionOf(state)).toEqual({
       included: false,
+      mode: 'preset',
       resourceIds: ['res-app-staging', 'res-app-prod', 'res-scratch'],
       presetId: '',
       entries: {},
@@ -338,5 +348,183 @@ describe('creation form — period, expiry, loading a draft', () => {
     );
     const loaded = loadResolved([experimental], initialFormState([experimental]), source.resolved);
     expect(loaded.showExperimental).toBe(true);
+  });
+});
+
+describe('creation form — a preset explains itself', () => {
+  function explained(cs: ConnectionState, presetId: string, connection = acme) {
+    const explanation = explainPreset(connection, cs, presetId);
+    if (!explanation) throw new Error(`preset ${presetId} not explained`);
+    return explanation;
+  }
+
+  it('says what passes, what waits for an approval and what is left out, with each budget', () => {
+    const developer = explained(included(), 'developer');
+    expect(
+      developer.auto.map((l) => [l.risk.label, l.risk.env, l.quota, l.rate_limit.max]),
+    ).toEqual([
+      ['Read things', null, 1000, 120],
+      ['Write a thing', 'staging', 200, 30],
+    ]);
+    expect(developer.approval.map((l) => l.risk.risk_id)).toEqual(['acme[staging].bulk-delete']);
+    expect(developer.leftOut.map((f) => [f.base_id, f.variants.map((v) => v.env)])).toEqual([
+      ['acme.write', ['prod']],
+      ['acme.admin', [null]],
+      ['acme.legacy-export', [null]],
+      ['acme.uncategorized-write', [null]],
+    ]);
+    expect(developer.skipped).toEqual([]);
+    expect(presetChoiceLabel(developer)).toBe('3 risks · 1 needs approval');
+    expect(presetDigest(developer)).toBe(
+      '2 allowed without asking · 1 needs your approval · 4 not included',
+    );
+  });
+
+  it('is the policy the preset fills: the card and the entries cannot disagree', () => {
+    for (const preset of acme.presets) {
+      const cs = included(preset.id);
+      const explanation = explained(cs, preset.id);
+      expect(
+        [...explanation.auto, ...explanation.approval].map((l) => l.risk.risk_id).sort(),
+      ).toEqual(Object.keys(cs.entries).sort());
+    }
+  });
+
+  it('names the entries a selection cannot resolve, with the label a resource would need', () => {
+    const prodOnly = setResources(acme, included(), ['res-app-prod']);
+    const developer = explained(prodOnly, 'developer');
+    expect(developer.auto.map((l) => l.risk.risk_id)).toEqual(['acme.read']);
+    expect(developer.skipped.map((f) => [f.label, f.why])).toEqual([
+      ['Write a thing', 'needs a selected resource labelled "staging"'],
+      ['Delete things in bulk', 'needs a selected resource labelled "staging"'],
+    ]);
+    // What cannot be accepted here is not offered as "not included".
+    expect(developer.leftOut.flatMap((f) => f.variants.map((v) => v.risk_id))).toEqual([
+      'acme[prod].write',
+      'acme.admin',
+      'acme.legacy-export',
+      'acme.uncategorized-write',
+    ]);
+    expect(presetDigest(developer)).toBe(
+      '1 allowed without asking · 0 need your approval · 4 not included · 2 entries of the preset left out here',
+    );
+    // A base-id entry no selected resource can resolve names every environment it could use.
+    const unlabelled = setResources(acme, included(), ['res-scratch']);
+    expect(explained(unlabelled, 'writer').skipped.map((f) => f.why)).toEqual([
+      'needs a selected resource labelled "staging" or "prod"',
+    ]);
+  });
+
+  it('names the entries outside the authority', () => {
+    const narrow = acmeConnection({ authority: ['acme.read'] });
+    const developer = explained(included(), 'developer', narrow);
+    expect(developer.skipped.map((f) => f.why)).toEqual([
+      'outside your authority',
+      'outside your authority',
+    ]);
+    expect(developer.leftOut).toEqual([]);
+    expect(presetChoiceLabel(developer)).toBe('1 risk');
+  });
+
+  it('answers null for an id that is not a preset of the plugin', () => {
+    expect(explainPreset(acme, included(), 'no-such-preset')).toBeNull();
+  });
+});
+
+describe('creation form — Preset or Custom', () => {
+  it('opens the editor on the preset values, with nothing to lose yet', () => {
+    const preset = included('developer');
+    const custom = enterCustom(preset);
+    expect(custom.mode).toBe('custom');
+    expect(custom.entries).toEqual(preset.entries);
+    expect(custom.presetId).toBe('developer');
+    expect(discardsEdits(custom)).toBe(false);
+    // Untouched, the policy still follows the resource selection.
+    expect(Object.keys(setResources(acme, custom, ['res-app-prod']).entries)).toEqual([
+      'acme.read',
+    ]);
+  });
+
+  it('warns before going back once something was edited, then restores the preset as it is', () => {
+    const edited = updateEntry(enterCustom(included('developer')), 'acme.read', { quota: '7' });
+    expect(discardsEdits(edited)).toBe(true);
+    const back = backToPreset(acme, edited);
+    expect(back).toMatchObject({ mode: 'preset', presetId: 'developer', edited: false });
+    expect(back.entries['acme.read']?.quota).toBe('1000');
+    expect(discardsEdits(back)).toBe(false);
+  });
+
+  it('never warns in Preset mode, and goes back to an empty policy when no preset was picked', () => {
+    expect(discardsEdits(included('developer'))).toBe(false);
+    const fromScratch = toggleRisk(acme, enterCustom(included()), riskOf('acme.read'));
+    expect(discardsEdits(fromScratch)).toBe(true);
+    expect(backToPreset(acme, fromScratch)).toMatchObject({ mode: 'preset', entries: {} });
+  });
+
+  it('"start from preset" pre-fills the editor and keeps it open', () => {
+    const custom = startFromPreset(acme, enterCustom(included()), 'reader');
+    expect(custom).toMatchObject({ mode: 'custom', presetId: 'reader', edited: false });
+    expect(Object.keys(custom.entries)).toEqual(['acme.read']);
+    expect(custom.entries['acme.read']?.quota).toBe('100');
+  });
+
+  it('sends the same explicit draft in both modes: the mode is not part of the mission', () => {
+    const preset = included('developer');
+    const draftIn = (cs: ConnectionState) =>
+      draftOf(context, withConnection({ ...initialFormState(context), name: 'm' }, cs), NOW);
+    expect(draftIn(enterCustom(preset))).toEqual(draftIn(preset));
+    expect(JSON.stringify(draftIn(enterCustom(preset)))).not.toMatch(/developer|custom|mode/);
+  });
+
+  it('loads a duplicated mission or a proposal as a custom policy', () => {
+    const source = previewOf(included('developer'));
+    const loaded = connectionOf(loadResolved(context, initialFormState(context), source.resolved));
+    expect(loaded).toMatchObject({ mode: 'custom', edited: true, included: true });
+  });
+});
+
+describe('creation form — the Custom editor', () => {
+  it('lists every explicit id of the catalog, and says why one cannot be ticked', () => {
+    const narrow = acmeConnection({ authority: ['acme.read', 'acme[staging].write'] });
+    const cs = setResources(narrow, enterCustom(included()), ['res-app-prod']);
+    const rows = editorRows(narrow, toggleRisk(narrow, cs, riskOf('acme.read')));
+    expect(rows.map((r) => r.risk.risk_id)).toEqual(narrow.risks.map((r) => r.risk_id));
+    const status = Object.fromEntries(rows.map((r) => [r.risk.risk_id, r.unavailable]));
+    expect(status['acme.read']).toBeNull();
+    expect(status['acme[staging].write']).toBe('no selected resource is labelled "staging"');
+    expect(status['acme.admin']).toBe('outside your authority');
+    expect(rows.filter((r) => r.accepted).map((r) => r.risk.risk_id)).toEqual(['acme.read']);
+  });
+
+  it('searches the label, the id, the reason, the environment, the kind and the level', () => {
+    const rows = editorRows(acme, enterCustom(included('developer')));
+    const ids = (query: string, filter: Parameters<typeof filterRows>[2] = 'all') =>
+      filterRows(rows, query, filter).map((r) => r.risk.risk_id);
+    expect(ids('')).toHaveLength(rows.length);
+    expect(ids('bulk')).toEqual(['acme[staging].bulk-delete']);
+    expect(ids('WRITE prod')).toEqual(['acme[prod].write']);
+    expect(ids('posture')).toEqual(['acme.admin']);
+    expect(ids('destructive')).toEqual(['acme[staging].bulk-delete']);
+    expect(ids('nothing matches this')).toEqual([]);
+  });
+
+  it('filters on what is accepted, what could be, and what is unavailable', () => {
+    const narrow = acmeConnection({
+      authority: ['acme.read', 'acme[staging].write', 'acme[prod].write'],
+    });
+    const rows = editorRows(narrow, enterCustom(applyPreset(narrow, included(), 'developer')));
+    const ids = (filter: Parameters<typeof filterRows>[2]) =>
+      filterRows(rows, '', filter).map((r) => r.risk.risk_id);
+    expect(ids('accepted')).toEqual(['acme.read', 'acme[staging].write']);
+    expect(ids('available')).toEqual(['acme[prod].write']);
+    expect(ids('unavailable')).toEqual([
+      'acme[staging].bulk-delete',
+      'acme.admin',
+      'acme.legacy-export',
+      'acme.uncategorized-write',
+    ]);
+    expect(filterRows(rows, 'write', 'accepted').map((r) => r.risk.risk_id)).toEqual([
+      'acme[staging].write',
+    ]);
   });
 });

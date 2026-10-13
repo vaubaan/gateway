@@ -73,6 +73,7 @@ describe('PluginRegistry — derivations', () => {
         displayName: 'Acme',
         version: '1.2.3',
         description: 'Fixture provider.',
+        summary: null,
         experimental: false,
       },
       {
@@ -80,9 +81,17 @@ describe('PluginRegistry — derivations', () => {
         displayName: 'BETA-CLOUD',
         version: '1.2.3',
         description: 'Fixture provider.',
+        summary: null,
         experimental: false,
       },
     ]);
+  });
+
+  test('labels carry the summary of the provider reference when the plugin has one', () => {
+    const withSummary = new PluginRegistry([
+      { ...acmePlugin, summary: 'One connection is one Acme account.' },
+    ]);
+    expect(withSummary.labels()[0]?.summary).toBe('One connection is one Acme account.');
   });
 
   test('idEnum is a non-empty tuple', () => {

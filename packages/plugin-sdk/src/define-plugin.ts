@@ -28,6 +28,9 @@ import type { ProviderPlugin } from './plugin.ts';
 /** Semver 2.0, pre-release allowed, no build metadata. */
 export const PLUGIN_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
+/** Upper bound of `ProviderPlugin.summary` : a paragraph, not a handbook. */
+export const PLUGIN_SUMMARY_MAX_LENGTH = 600;
+
 export class PluginDefinitionError extends Error {
   constructor(
     readonly pluginId: string,
@@ -47,7 +50,38 @@ export function pluginIssues(plugin: ProviderPlugin): string[] {
     ...catalogIssues(plugin),
     ...credentialSpecIssues(plugin),
     ...hookIssues(plugin),
+    ...tokenHandoutIssues(plugin),
   ];
+}
+
+/** A handout names a declared tool and risks of the plugin's own catalog. */
+function tokenHandoutIssues(plugin: ProviderPlugin): string[] {
+  const handouts: unknown = plugin.tokenHandouts;
+  if (handouts === undefined) return [];
+  if (!isList(handouts)) return ['tokenHandouts: expected a list when present'];
+  const tools = new Set(isList(plugin.tools) ? plugin.tools.map((t) => t?.name) : []);
+  const risks = new Set((plugin.catalog?.risks ?? []).map((r) => r.id));
+  const issues: string[] = [];
+  handouts.forEach((handout, i) => {
+    if (!isRecord(handout) || typeof handout.tool !== 'string' || !isList(handout.riskIds)) {
+      issues.push(`tokenHandouts[${i}]: expected { tool, riskIds }`);
+      return;
+    }
+    if (!tools.has(handout.tool)) {
+      issues.push(`tokenHandouts[${i}].tool '${handout.tool}' is not a tool of this plugin`);
+    }
+    if (handout.riskIds.length === 0) {
+      issues.push(`tokenHandouts[${i}].riskIds: expected at least one risk`);
+    }
+    for (const riskId of handout.riskIds) {
+      if (typeof riskId !== 'string' || !risks.has(riskId)) {
+        issues.push(
+          `tokenHandouts[${i}].riskIds: '${String(riskId)}' is not a risk of the catalog`,
+        );
+      }
+    }
+  });
+  return issues;
 }
 
 function identityIssues(plugin: ProviderPlugin): string[] {
@@ -60,6 +94,13 @@ function identityIssues(plugin: ProviderPlugin): string[] {
   }
   if (typeof plugin.version !== 'string' || !PLUGIN_VERSION_PATTERN.test(plugin.version)) {
     issues.push(`version: expected semver (MAJOR.MINOR.PATCH), got '${String(plugin.version)}'`);
+  }
+  if (plugin.summary !== undefined) {
+    if (typeof plugin.summary !== 'string' || plugin.summary.trim().length === 0) {
+      issues.push('summary: expected a non-empty string when present');
+    } else if (plugin.summary.length > PLUGIN_SUMMARY_MAX_LENGTH) {
+      issues.push(`summary: expected at most ${PLUGIN_SUMMARY_MAX_LENGTH} characters`);
+    }
   }
   return issues;
 }

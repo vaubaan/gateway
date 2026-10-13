@@ -31,6 +31,10 @@ export const templatePlugin = definePlugin({
   // Always equal to `version` in this plugin's package.json (a test checks it).
   version: '0.1.0',
   description: 'Scaffold plugin. Copy it to start a real one.',
+  // The paragraph of the provider reference (`/providers/<id>`), in plain words: what one
+  // connection is, what one resource is, where the environment of a call comes from.
+  summary:
+    'One connection is one API key of the template provider; one resource is one workspace. The connection owner labels each workspace with an environment (staging, prod), and writes are accepted per label.',
   // Add `docsUrl` once the provider handbook exists (docs/handbook/providers/<id>.md).
   tools: templateTools,
   dataModel: templateDataModel,

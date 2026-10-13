@@ -646,15 +646,16 @@ pages:
   member, their state per risk, their session. On a mission: its
   members and tokens (the creator adds or removes members and creates
   named tokens; a member generates, rotates or revokes their own token).
-  Creation, in this order and on one screen: name; connections and,
-  within each, the resources (all by default); one preset per connection
-  (or "duplicate mission X", or "paste an agent's proposal"); a
-  three-line summary of what the mission can do, cannot do, and in what
-  quantity; per-risk detail folded by default, unfolded on demand to
-  adjust budgets and gates within my authority; period, expiry. After
-  issuance: the **bootstrap kit** (§4.4). The screen must stay usable for
-  a mission on three connections without scrolling through a wall of
-  checkboxes.
+  Creation, in this order and on one screen: name (or "duplicate mission
+  X", or "paste an agent's proposal"); connections and, within each, the
+  resources (all by default) and the policy, **Preset or Custom per
+  connection**: a preset shows what it allows, what waits for my
+  approval and what it leaves out; Custom opens every risk I hold, each
+  with its budget and gate, within my authority; a three-line summary of
+  what the mission can do, cannot do, and in what quantity; period,
+  expiry. After issuance: the **bootstrap kit** (§4.4). The screen must
+  stay usable for a mission on three connections without scrolling
+  through a wall of checkboxes.
 - **Mission session** — event timeline, counters per risk and per
   period, gate per risk, open requests, and calls per token holder.
 - **Request inbox** — claims and approval requests awaiting me as
@@ -663,6 +664,11 @@ pages:
   they issued, and their revocation.
 - **Audit** — search by mission, user, connection, tool, decision,
   period.
+- **Providers** — the reference of each shipped plugin, for any
+  signed-in user: what it connects to, its data model, its risk catalog
+  with the reason and the vector of each risk, its presets with
+  everything they contain, its tools. Every risk shown elsewhere links
+  to its entry here.
 - **Administration** (operator) — IdP, provider apps, local groups,
   telemetry, retention, public URL.
 

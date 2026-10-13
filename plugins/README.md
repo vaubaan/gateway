@@ -95,7 +95,9 @@ in **three** places and derived everywhere else:
 
 Rename the exported symbols too (`templatePlugin` → `acmePlugin`,
 `classifyTemplate` → `classifyAcme`, `TEMPLATE_API_BASE` → `ACME_API_BASE`…)
-and set `displayName`, `description` and the API base URL. **Change nothing
+and set `displayName`, `description`, `summary` (the paragraph the web
+interface shows on the provider's reference page: what one connection is, what
+one resource is, where the environment comes from) and the API base URL. **Change nothing
 else yet**: the workspaces and widgets of the imaginary provider stay until
 you replace them file by file in steps 2 to 8. This lists what is left of
 the scaffold; it must print nothing by the end of step 9:
