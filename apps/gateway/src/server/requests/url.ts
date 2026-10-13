@@ -13,15 +13,15 @@
 /** Path prefix of the forwarded request URL. The route lives at `app/r/[id]`. */
 export const REQUEST_PATH_PREFIX = '/r';
 
-/** Path of the inbox; the creator's view of one request is `/requests/<id>`. */
-export const INBOX_PATH = '/requests';
+/** Path of the inbox ("Waiting for you"); the creator's view of one request is `/waiting/<id>`. */
+export const INBOX_PATH = '/waiting';
 
 /** `/r/<id>` — the path a refusal carries, relative to the public URL. */
 export function requestPath(requestId: string): string {
   return `${REQUEST_PATH_PREFIX}/${encodeURIComponent(requestId)}`;
 }
 
-/** `/requests/<id>` — where the creator reads and decides the request. */
+/** `/waiting/<id>` — where the creator reads and decides the request. */
 export function inboxRequestPath(requestId: string): string {
   return `${INBOX_PATH}/${encodeURIComponent(requestId)}`;
 }

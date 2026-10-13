@@ -5,6 +5,7 @@
  * shares of one connection add up: I hold the union of their restrictions.
  */
 import Link from 'next/link';
+import { PAGES, ROUTES, SECTIONS } from '@/lib/vocabulary';
 
 import { NeedsUser } from '@/components/auth/NeedsUser';
 import styles from '@/components/connections/connections.module.css';
@@ -27,7 +28,10 @@ export default async function SharesReceivedPage() {
     <Stack gap="var(--space-6)">
       <div className={styles.header}>
         <div>
-          <h1>Shares received</h1>
+          <p className={styles.muted}>
+            <Link href={ROUTES.accounts}>{PAGES.accounts.title}</Link> / {SECTIONS.sharedWithYou}
+          </p>
+          <h1>{SECTIONS.sharedWithYou}</h1>
           <p className={styles.muted}>
             Connections others shared with you. In your missions on such a connection you may accept
             the risks listed here and nothing beyond; when several shares cover one connection, you

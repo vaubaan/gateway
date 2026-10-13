@@ -1,0 +1,119 @@
+/* Request inbox and the creator's view of one request. Reading order of the
+   view: what is asked, the actions with their consequence, the risks of the
+   period, the last session events. */
+
+.pageHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+.pageHead h1 {
+  margin: 0;
+}
+.muted {
+  color: var(--ink-3);
+  font-size: var(--text-sm);
+}
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-3);
+}
+.rowLink {
+  font-weight: var(--weight-regular);
+}
+.empty {
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+  color: var(--ink-3);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  font-size: var(--text-sm);
+}
+.facts dt {
+  color: var(--ink-3);
+}
+.facts dd {
+  margin: 0;
+}
+
+/* The arguments of the call an approval request asks about, as sent. */
+.arguments {
+  margin: 0;
+  padding: var(--space-3);
+  max-height: 24rem;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--fill);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ── The actions (four for a claim, three for an approval request) ─────── */
+
+.actions {
+  display: grid;
+}
+.action {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: var(--space-2) var(--space-4);
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--line);
+}
+.action:last-child {
+  border-bottom: 0;
+}
+/* An approval's longest label ("Open the gate for the rest of the period"). */
+.actionsWide .action {
+  grid-template-columns: 320px minmax(0, 1fr);
+}
+.action form {
+  display: contents;
+}
+.action button {
+  width: 100%;
+}
+.consequence {
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+.unavailable {
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+}
+.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--ink-3);
+}
+.inline input {
+  width: auto;
+}
+@media (max-width: 640px) {
+  .action,
+  .actionsWide .action {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .action button {
+    white-space: normal;
+    height: auto;
+  }
+}

@@ -37,7 +37,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       </>
     );
   }
-  return <AdminShell principal={decision.principal}>{children}</AdminShell>;
+  return (
+    <AdminShell principal={decision.principal} instance={root.config.publicUrl.host}>
+      {children}
+    </AdminShell>
+  );
 }
 
 function describeRule(group: string | null, emailCount: number): string {

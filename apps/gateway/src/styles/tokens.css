@@ -1,105 +1,44 @@
 /**
- * Vaubaan design tokens — Geist-inspired.
+ * Vaubaan design tokens — the quiet control room.
  *
- * Spec : docs/spec/style-guide.md.
+ * Spec: docs/spec/style-guide.md. Decision: docs/decisions/
+ * interface-redesign-vocabulary-and-design-system.md.
  *
- * Two layers:
- *   1. Primitive tokens — anonymous (gray-N, blue-N, space-N…).
- *   2. Semantic tokens — prescribed usage (surface-base, text-foreground…),
- *      mapped to primitives per theme.
+ * One layer of named decisions. A component reads these and nothing else: no
+ * raw colour, no raw type size, no raw radius.
  *
- * Dark = default (data-theme="dark" or no attribute). Light via [data-theme="light"].
+ * Themes. Light is the default. Dark applies when the document (or any
+ * element: the gallery shows both side by side) carries `data-theme="dark"`,
+ * or when no theme is chosen and the system prefers dark. The two dark blocks
+ * below hold the same values; `tests/unit/app/design-tokens.test.ts` keeps
+ * them identical and checks the contrast of every documented pair.
  */
 
 :root {
-  /* ───── Primitive : gray (OKLCH, perceptually spaced) ───── */
-  --gray-0: oklch(99% 0 0);
-  --gray-20: oklch(97% 0 0);
-  --gray-50: oklch(94% 0 0);
-  --gray-100: oklch(90% 0 0);
-  --gray-200: oklch(82% 0 0);
-  --gray-300: oklch(72% 0 0);
-  --gray-400: oklch(62% 0 0);
-  --gray-500: oklch(52% 0 0);
-  --gray-600: oklch(42% 0 0);
-  --gray-700: oklch(32% 0 0);
-  --gray-800: oklch(22% 0 0);
-  --gray-900: oklch(14% 0 0);
-  --gray-980: oklch(8% 0 0);
-  --gray-1000: oklch(4% 0 0);
+  /* ───── Type: four sizes, two weights ───── */
+  --font-sans:
+    var(--font-geist-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial,
+    sans-serif;
+  --font-mono:
+    var(--font-geist-mono), ui-monospace, 'SF Mono', Menlo, 'Liberation Mono', Consolas, monospace;
 
-  /* ───── Primitive : accent palettes ───── */
-  --blue-50: oklch(96% 0.04 250);
-  --blue-200: oklch(82% 0.12 250);
-  --blue-600: oklch(58% 0.18 250);
-  --blue-900: oklch(28% 0.12 250);
+  --text-xs: 0.75rem; /* 12 px — meta, captions, chips */
+  --text-sm: 0.8125rem; /* 13 px — rows, tables, controls */
+  --text-base: 0.875rem; /* 14 px — body, section headings */
+  --text-title: 1.25rem; /* 20 px — the page title, the one statement of a request */
 
-  --green-50: oklch(96% 0.05 150);
-  --green-200: oklch(82% 0.16 150);
-  --green-600: oklch(58% 0.2 150);
-  --green-900: oklch(28% 0.12 150);
+  --weight-regular: 400;
+  --weight-strong: 600;
 
-  --amber-50: oklch(96% 0.08 80);
-  --amber-200: oklch(82% 0.16 80);
-  --amber-600: oklch(70% 0.16 60);
-  --amber-900: oklch(32% 0.12 60);
+  --leading: 1.5;
+  --leading-tight: 1.3;
+  --tracking-title: -0.01em;
 
-  --red-50: oklch(96% 0.04 25);
-  --red-200: oklch(82% 0.14 25);
-  --red-600: oklch(58% 0.2 25);
-  --red-900: oklch(28% 0.14 25);
+  /* Prose is capped so that a line stays under about 75 characters. */
+  --measure: 680px;
 
-  /* ───── Primitive : type hues (what KIND of object; never a status) ─────
-     One family per kind of object the interface names, four steps like the
-     accents. Chosen between the four status hues (red 25, amber 60-80,
-     green 150, blue 250) so that a kind is not read as a state. */
-  --violet-50: oklch(96% 0.03 305);
-  --violet-200: oklch(84% 0.1 305);
-  --violet-600: oklch(56% 0.2 305);
-  --violet-900: oklch(30% 0.14 305);
-
-  --teal-50: oklch(96% 0.035 190);
-  --teal-200: oklch(84% 0.1 190);
-  --teal-600: oklch(58% 0.11 190);
-  --teal-900: oklch(30% 0.07 190);
-
-  --pink-50: oklch(96% 0.03 350);
-  --pink-200: oklch(84% 0.1 350);
-  --pink-600: oklch(58% 0.2 350);
-  --pink-900: oklch(30% 0.13 350);
-
-  --lime-50: oklch(96% 0.06 125);
-  --lime-200: oklch(86% 0.15 125);
-  --lime-600: oklch(60% 0.16 125);
-  --lime-900: oklch(30% 0.09 125);
-
-  --cyan-50: oklch(96% 0.03 222);
-  --cyan-200: oklch(84% 0.09 222);
-  --cyan-600: oklch(58% 0.13 222);
-  --cyan-900: oklch(30% 0.08 222);
-
-  --indigo-50: oklch(96% 0.03 275);
-  --indigo-200: oklch(84% 0.09 275);
-  --indigo-600: oklch(54% 0.2 275);
-  --indigo-900: oklch(30% 0.14 275);
-
-  --orange-50: oklch(96% 0.04 45);
-  --orange-200: oklch(84% 0.12 45);
-  --orange-600: oklch(62% 0.18 45);
-  --orange-900: oklch(32% 0.1 45);
-
-  --magenta-50: oklch(96% 0.035 328);
-  --magenta-200: oklch(84% 0.11 328);
-  --magenta-600: oklch(56% 0.21 328);
-  --magenta-900: oklch(30% 0.14 328);
-
-  --gold-50: oklch(96% 0.06 98);
-  --gold-200: oklch(86% 0.13 98);
-  --gold-600: oklch(64% 0.13 98);
-  --gold-900: oklch(32% 0.07 98);
-
-  /* ───── Primitive : space (4px base) ───── */
-  --space-0: 0;
+  /* ───── Space: a 4 px base, then the rhythm of a page ───── */
+  --space-half: 2px;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -109,219 +48,205 @@
   --space-8: 32px;
   --space-10: 40px;
   --space-12: 48px;
-  --space-16: 64px;
-  --space-24: 96px;
 
-  /* ───── Primitive : radius ───── */
-  --radius-none: 0;
-  --radius-xs: 2px;
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
-  --radius-full: 999px;
+  --page-max: 1120px;
+  --page-max-narrow: 860px;
+  --page-max-wide: 1240px;
+  --page-pad-x: 44px;
+  --page-pad-top: 28px;
+  --page-pad-bottom: 72px;
+  /* Between two sections of a page: whitespace separates before any border does. */
+  --section-gap: 36px;
+  --side-width: 220px;
+  --side-width-collapsed: 56px;
 
-  /* ───── Primitive : font sizes (rem-based, 16px root) ───── */
-  --text-2xs: 0.65rem; /* 10.4px — axis abbreviations and column captions only */
-  --text-xs: 0.75rem; /* 12px */
-  --text-sm: 0.8125rem; /* 13px */
-  --text-base: 0.875rem; /* 14px */
-  --text-md: 1rem; /* 16px */
-  --text-lg: 1.125rem; /* 18px */
-  --text-xl: 1.5rem; /* 24px */
-  --text-2xl: 2rem; /* 32px */
-  --text-3xl: 2.5rem; /* 40px */
+  /* A quiet list row and a table cell. */
+  --row-y: 11px;
+  --cell-y: 9px;
+  --cell-x: 10px;
 
-  --font-weight-regular: 400;
-  --font-weight-medium: 500;
-  --font-weight-semibold: 600;
-  --font-weight-bold: 700;
+  /* The three heights of a control. */
+  --control-sm: 26px;
+  --control-md: 30px;
+  --control-lg: 36px;
 
-  /* ───── Primitive : motion ───── */
+  /* ───── Radius ───── */
+  --radius-sm: 4px; /* tags, checkboxes, inline code */
+  --radius-md: 6px; /* buttons, inputs, navigation entries */
+  --radius-lg: 10px; /* the one filled box of a page, callouts, dialogs, code blocks */
+  --radius-full: 999px; /* pills, avatars, dots */
+
+  /* ───── Motion ───── */
   --duration-fast: 100ms;
   --duration-base: 150ms;
-  --duration-slow: 250ms;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 
-  /* ───── Primitive : shadows (sparse — prefer hairlines) ───── */
-  --shadow-none: none;
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.18);
+  /* ───── Marks: the hues an avatar or a service mark takes; never a status ───── */
+  --hue-1: #5b6abf;
+  --hue-2: #3a7f60;
+  --hue-3: #a8602f;
+  --hue-4: #7a5ba8;
+  --hue-5: #a4566b;
+  --hue-0: #73767d;
+  --on-hue: #ffffff;
 }
 
-/* ───── Semantic : DARK (default) ───── */
+/* ───── Light (default) ───── */
 :root,
-:root[data-theme='dark'] {
-  /* Tell the browser to paint native controls (select option list, scrollbars,
-     date pickers) with dark system chrome. Without this, the OS-rendered
-     `<option>` list comes back light-mode by default — black-on-black against
-     our dark surfaces, white-on-white against our white text. */
-  color-scheme: dark;
-
-  --surface-base: var(--gray-1000);
-  --surface-raised: var(--gray-980);
-  --surface-overlay: var(--gray-900);
-  --surface-sunken: var(--gray-1000);
-
-  --text-foreground: var(--gray-0);
-  --text-muted: var(--gray-300);
-  --text-subtle: var(--gray-500);
-  --text-inverse: var(--gray-1000);
-
-  --border-subtle: var(--gray-800);
-  --border-strong: var(--gray-600);
-
-  --accent-info-bg: var(--blue-900);
-  --accent-info-fg: var(--blue-200);
-  --accent-success-bg: var(--green-900);
-  --accent-success-fg: var(--green-200);
-  --accent-warning-bg: var(--amber-900);
-  --accent-warning-fg: var(--amber-200);
-  --accent-danger-bg: var(--red-900);
-  --accent-danger-fg: var(--red-200);
-
-  --focus-ring: 0 0 0 2px var(--surface-base), 0 0 0 4px var(--gray-300);
-
-  --primary-bg: var(--gray-0);
-  --primary-fg: var(--gray-1000);
-  --primary-bg-hover: var(--gray-100);
-
-  /* Type colours: rail (marker), bg and fg (the tag). See components/ui/kinds.ts. */
-  --type-risk-rail: var(--violet-600);
-  --type-risk-bg: var(--violet-900);
-  --type-risk-fg: var(--violet-200);
-  --type-preset-rail: var(--teal-600);
-  --type-preset-bg: var(--teal-900);
-  --type-preset-fg: var(--teal-200);
-  --type-tool-rail: var(--pink-600);
-  --type-tool-bg: var(--pink-900);
-  --type-tool-fg: var(--pink-200);
-  --type-plane-rail: var(--lime-600);
-  --type-plane-bg: var(--lime-900);
-  --type-plane-fg: var(--lime-200);
-  --type-resource-rail: var(--cyan-600);
-  --type-resource-bg: var(--cyan-900);
-  --type-resource-fg: var(--cyan-200);
-  --type-connection-rail: var(--indigo-600);
-  --type-connection-bg: var(--indigo-900);
-  --type-connection-fg: var(--indigo-200);
-  --type-mission-rail: var(--orange-600);
-  --type-mission-bg: var(--orange-900);
-  --type-mission-fg: var(--orange-200);
-  --type-member-rail: var(--magenta-600);
-  --type-member-bg: var(--magenta-900);
-  --type-member-fg: var(--magenta-200);
-  --type-token-rail: var(--gold-600);
-  --type-token-bg: var(--gold-900);
-  --type-token-fg: var(--gold-200);
-}
-
-/* ───── Semantic : LIGHT (opt-in via data-theme="light") ───── */
-:root[data-theme='light'] {
+[data-theme='light'] {
   color-scheme: light;
 
-  --surface-base: var(--gray-0);
-  --surface-raised: var(--gray-20);
-  --surface-overlay: var(--gray-0);
-  --surface-sunken: var(--gray-50);
+  /* Paper */
+  --paper: #ffffff; /* the page */
+  --paper-side: #f6f6f4; /* the side navigation, a dialog foot, a group row */
+  --paper-raised: #ffffff; /* controls, the rail card, dialogs */
+  --fill: #f3f3f0; /* the current navigation entry, a neutral pill, inline code */
+  --hover: #fafaf8;
 
-  --text-foreground: var(--gray-1000);
-  --text-muted: var(--gray-600);
-  --text-subtle: var(--gray-400);
-  --text-inverse: var(--gray-0);
+  /* Hairlines */
+  --line: #e6e5e1;
+  --line-strong: #d2d1cc;
 
-  --border-subtle: var(--gray-100);
-  --border-strong: var(--gray-300);
+  /* Ink */
+  --ink: #1b1c1e;
+  --ink-2: #4f5156;
+  --ink-3: #6a6d74;
+  --ink-4: #a4a6ab; /* placeholders and disabled marks only: below AA on purpose */
 
-  --accent-info-bg: var(--blue-50);
-  --accent-info-fg: var(--blue-900);
-  --accent-success-bg: var(--green-50);
-  --accent-success-fg: var(--green-900);
-  --accent-warning-bg: var(--amber-50);
-  --accent-warning-fg: var(--amber-900);
-  --accent-danger-bg: var(--red-50);
-  --accent-danger-fg: var(--red-900);
+  /* The one accent: the primary action and links */
+  --accent: #2f55c7;
+  --accent-ink: #2448b0;
+  --accent-soft: #eef2fc;
+  --accent-line: #c9d5f5;
+  --on-accent: #ffffff;
 
-  --focus-ring: 0 0 0 2px var(--surface-base), 0 0 0 4px var(--gray-700);
+  /* Exceptions: a status is coloured only when it differs from normal */
+  --ok: #1c7c4a;
+  --ok-soft: #e7f4ec;
+  --ok-line: #bfe3cc;
+  --warn: #a35e00; /* needs you */
+  --warn-soft: #fbf2df;
+  --warn-line: #eed9ae;
+  --on-warn: #ffffff;
+  --bad: #b3261e; /* stopped, refused, limit reached */
+  --bad-soft: #fbebe9;
+  --bad-line: #f3c9c4;
 
-  --primary-bg: var(--gray-1000);
-  --primary-fg: var(--gray-0);
-  --primary-bg-hover: var(--gray-900);
+  /* Code blocks keep a dark surface in both themes */
+  --code-bg: #1e1f22;
+  --code-ink: #e7e7e4;
+  --code-dim: #8b8e95;
+  --code-key: #9cc4ff;
+  --code-string: #c8e6a8;
+  --code-btn: #2a2b2f;
+  --code-btn-line: #3a3b40;
 
-  /* Type colours: rail (marker), bg and fg (the tag). See components/ui/kinds.ts. */
-  --type-risk-rail: var(--violet-600);
-  --type-risk-bg: var(--violet-50);
-  --type-risk-fg: var(--violet-900);
-  --type-preset-rail: var(--teal-600);
-  --type-preset-bg: var(--teal-50);
-  --type-preset-fg: var(--teal-900);
-  --type-tool-rail: var(--pink-600);
-  --type-tool-bg: var(--pink-50);
-  --type-tool-fg: var(--pink-900);
-  --type-plane-rail: var(--lime-600);
-  --type-plane-bg: var(--lime-50);
-  --type-plane-fg: var(--lime-900);
-  --type-resource-rail: var(--cyan-600);
-  --type-resource-bg: var(--cyan-50);
-  --type-resource-fg: var(--cyan-900);
-  --type-connection-rail: var(--indigo-600);
-  --type-connection-bg: var(--indigo-50);
-  --type-connection-fg: var(--indigo-900);
-  --type-mission-rail: var(--orange-600);
-  --type-mission-bg: var(--orange-50);
-  --type-mission-fg: var(--orange-900);
-  --type-member-rail: var(--magenta-600);
-  --type-member-bg: var(--magenta-50);
-  --type-member-fg: var(--magenta-900);
-  --type-token-rail: var(--gold-600);
-  --type-token-bg: var(--gold-50);
-  --type-token-fg: var(--gold-900);
+  /* Overlays */
+  --scrim: rgba(20, 20, 22, 0.38);
+  --shadow-overlay: 0 24px 64px rgba(0, 0, 0, 0.22), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  --knob: #ffffff;
+
+  --focus-ring: 0 0 0 2px var(--paper), 0 0 0 4px var(--accent);
 }
 
-/* ───── Kind scope ─────
-   An element that IS an object of some kind, or names one, carries
-   `data-kind`; its styles then read the three `--kind-*` variables. */
-[data-kind='risk'] {
-  --kind-rail: var(--type-risk-rail);
-  --kind-bg: var(--type-risk-bg);
-  --kind-fg: var(--type-risk-fg);
+/* ───── Dark, chosen ───── */
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --paper: #0f1115;
+  --paper-side: #15181d;
+  --paper-raised: #15181d;
+  --fill: #1c2026;
+  --hover: #1a1d23;
+
+  --line: #272b32;
+  --line-strong: #363b44;
+
+  --ink: #e8e9ec;
+  --ink-2: #b9bcc4;
+  --ink-3: #8a8f99;
+  --ink-4: #5e636c;
+
+  --accent: #7fa3ff;
+  --accent-ink: #9db8ff;
+  --accent-soft: #1e2433;
+  --accent-line: #364467;
+  --on-accent: #0f1115;
+
+  --ok: #4cc38a;
+  --ok-soft: #182a25;
+  --ok-line: #244f3e;
+  --warn: #e9b04a;
+  --warn-soft: #30291d;
+  --warn-line: #66512a;
+  --on-warn: #0f1115;
+  --bad: #f0655f;
+  --bad-soft: #2f1d1f;
+  --bad-line: #693333;
+
+  --code-bg: #0b0c0f;
+  --code-ink: #e2e3e6;
+  --code-dim: #7e838c;
+  --code-key: #9cc4ff;
+  --code-string: #b8dd98;
+  --code-btn: #1c2026;
+  --code-btn-line: #363b44;
+
+  --scrim: rgba(0, 0, 0, 0.6);
+  --shadow-overlay: 0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --knob: #ffffff;
+
+  --focus-ring: 0 0 0 2px var(--paper), 0 0 0 4px var(--accent);
 }
-[data-kind='preset'] {
-  --kind-rail: var(--type-preset-rail);
-  --kind-bg: var(--type-preset-bg);
-  --kind-fg: var(--type-preset-fg);
-}
-[data-kind='tool'] {
-  --kind-rail: var(--type-tool-rail);
-  --kind-bg: var(--type-tool-bg);
-  --kind-fg: var(--type-tool-fg);
-}
-[data-kind='plane'] {
-  --kind-rail: var(--type-plane-rail);
-  --kind-bg: var(--type-plane-bg);
-  --kind-fg: var(--type-plane-fg);
-}
-[data-kind='resource'] {
-  --kind-rail: var(--type-resource-rail);
-  --kind-bg: var(--type-resource-bg);
-  --kind-fg: var(--type-resource-fg);
-}
-[data-kind='connection'] {
-  --kind-rail: var(--type-connection-rail);
-  --kind-bg: var(--type-connection-bg);
-  --kind-fg: var(--type-connection-fg);
-}
-[data-kind='mission'] {
-  --kind-rail: var(--type-mission-rail);
-  --kind-bg: var(--type-mission-bg);
-  --kind-fg: var(--type-mission-fg);
-}
-[data-kind='member'] {
-  --kind-rail: var(--type-member-rail);
-  --kind-bg: var(--type-member-bg);
-  --kind-fg: var(--type-member-fg);
-}
-[data-kind='token'] {
-  --kind-rail: var(--type-token-rail);
-  --kind-bg: var(--type-token-bg);
-  --kind-fg: var(--type-token-fg);
+
+/* ───── Dark, from the system: the same values, when no theme is chosen ───── */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+
+    --paper: #0f1115;
+    --paper-side: #15181d;
+    --paper-raised: #15181d;
+    --fill: #1c2026;
+    --hover: #1a1d23;
+
+    --line: #272b32;
+    --line-strong: #363b44;
+
+    --ink: #e8e9ec;
+    --ink-2: #b9bcc4;
+    --ink-3: #8a8f99;
+    --ink-4: #5e636c;
+
+    --accent: #7fa3ff;
+    --accent-ink: #9db8ff;
+    --accent-soft: #1e2433;
+    --accent-line: #364467;
+    --on-accent: #0f1115;
+
+    --ok: #4cc38a;
+    --ok-soft: #182a25;
+    --ok-line: #244f3e;
+    --warn: #e9b04a;
+    --warn-soft: #30291d;
+    --warn-line: #66512a;
+    --on-warn: #0f1115;
+    --bad: #f0655f;
+    --bad-soft: #2f1d1f;
+    --bad-line: #693333;
+
+    --code-bg: #0b0c0f;
+    --code-ink: #e2e3e6;
+    --code-dim: #7e838c;
+    --code-key: #9cc4ff;
+    --code-string: #b8dd98;
+    --code-btn: #1c2026;
+    --code-btn-line: #363b44;
+
+    --scrim: rgba(0, 0, 0, 0.6);
+    --shadow-overlay: 0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08);
+    --knob: #ffffff;
+
+    --focus-ring: 0 0 0 2px var(--paper), 0 0 0 4px var(--accent);
+  }
 }

@@ -1,55 +1,61 @@
 .callout {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  display: flex;
+  align-items: flex-start;
   gap: var(--space-3);
-  align-items: start;
-  max-width: 860px;
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--surface-base);
+  max-width: 100%;
+  padding: var(--space-3) 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--paper-side);
+  font-size: var(--text-sm);
 }
 .icon {
-  display: inline-grid;
-  place-items: center;
-  width: var(--space-6);
-  height: var(--space-6);
-  border-radius: var(--radius-sm);
-  background: var(--tone-bg);
-  color: var(--tone-fg);
+  display: inline-flex;
+  flex: none;
+  margin-top: var(--space-half);
+  color: var(--tone, var(--ink-3));
 }
 .body {
-  display: grid;
-  gap: 2px;
+  flex: 1;
   min-width: 0;
 }
 .title {
-  font-size: var(--text-sm);
-  font-weight: var(--font-weight-semibold);
-  color: var(--tone-fg);
+  font-weight: var(--weight-strong);
 }
 .text {
-  font-size: var(--text-sm);
-  line-height: 1.5;
-  color: var(--text-foreground);
+  color: var(--ink-2);
 }
-.tone_neutral {
-  --tone-bg: var(--surface-sunken);
-  --tone-fg: var(--text-foreground);
+.text p {
+  margin: 0;
 }
+.text p + p {
+  margin-top: var(--space-1);
+}
+.text a {
+  color: var(--accent);
+}
+.action {
+  flex: none;
+  align-self: center;
+}
+
 .tone_info {
-  --tone-bg: var(--accent-info-bg);
-  --tone-fg: var(--accent-info-fg);
+  --tone: var(--accent);
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
 }
-.tone_success {
-  --tone-bg: var(--accent-success-bg);
-  --tone-fg: var(--accent-success-fg);
+.tone_ok {
+  --tone: var(--ok);
+  border-color: var(--ok-line);
+  background: var(--ok-soft);
 }
-.tone_warning {
-  --tone-bg: var(--accent-warning-bg);
-  --tone-fg: var(--accent-warning-fg);
+.tone_warn {
+  --tone: var(--warn);
+  border-color: var(--warn-line);
+  background: var(--warn-soft);
 }
-.tone_danger {
-  --tone-bg: var(--accent-danger-bg);
-  --tone-fg: var(--accent-danger-fg);
+.tone_bad {
+  --tone: var(--bad);
+  border-color: var(--bad-line);
+  background: var(--bad-soft);
 }

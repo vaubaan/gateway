@@ -1,0 +1,154 @@
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  background: var(--hue-0);
+  color: var(--on-hue);
+  font-size: 10.5px;
+  font-weight: var(--weight-strong);
+  line-height: 1;
+  letter-spacing: 0;
+  vertical-align: middle;
+  user-select: none;
+}
+.avatar[data-hue='1'],
+.service[data-hue='1'] {
+  background: var(--hue-1);
+}
+.avatar[data-hue='2'],
+.service[data-hue='2'] {
+  background: var(--hue-2);
+}
+.avatar[data-hue='3'],
+.service[data-hue='3'] {
+  background: var(--hue-3);
+}
+.avatar[data-hue='4'],
+.service[data-hue='4'] {
+  background: var(--hue-4);
+}
+.avatar[data-hue='5'],
+.service[data-hue='5'] {
+  background: var(--hue-5);
+}
+/* A team: the round mark, squared a little. */
+.team {
+  border-radius: var(--radius-md);
+}
+/* A machine key: no person behind it. Dashed, squared, no hue. */
+.machine {
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--fill);
+  color: var(--ink-3);
+}
+.size_xs {
+  width: 18px;
+  height: 18px;
+  font-size: 9px;
+}
+.size_md {
+  width: 30px;
+  height: 30px;
+  font-size: var(--text-xs);
+}
+.size_md.machine,
+.size_md.team {
+  border-radius: 8px;
+}
+
+.stack {
+  display: inline-flex;
+  align-items: center;
+}
+.stack .avatar {
+  width: 24px;
+  height: 24px;
+  margin-left: -6px;
+  border: 2px solid var(--paper);
+}
+.stack .avatar:first-child {
+  margin-left: 0;
+}
+.stack .machine {
+  border: 2px solid var(--paper);
+  border-radius: 7px;
+}
+.more {
+  margin-left: var(--space-1);
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+}
+
+.holder {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.holderText {
+  min-width: 0;
+}
+.holderName {
+  font-weight: var(--weight-strong);
+}
+.qualifier {
+  color: var(--ink-3);
+  font-weight: var(--weight-regular);
+}
+
+.service {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  background: var(--hue-0);
+  color: var(--on-hue);
+  font-size: 9.5px;
+  font-weight: var(--weight-strong);
+  line-height: 1;
+  letter-spacing: 0;
+  vertical-align: middle;
+  user-select: none;
+}
+.serviceLg {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  font-size: var(--text-sm);
+}
+
+.key {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+.keyIcon {
+  flex: none;
+  color: var(--ink-3);
+}
+
+.agent {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+.agent::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: var(--radius-full);
+  background: var(--ink-4);
+}

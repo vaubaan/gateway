@@ -1,35 +1,41 @@
 'use client';
 
 /**
- * The account, in one compact control at the end of the application bar: a
- * button that names who is signed in — cut with an ellipsis when it is long,
- * whole in its title — and behind it the role and "Sign out". It keeps the
- * bar on one line whatever the length of the email. Closes on Escape and on a
- * click outside.
+ * The person, at the bottom of the side navigation: their mark, their name
+ * and their email — cut with an ellipsis when long, whole in the title. It is
+ * a button: behind it, what they are here (administrator, or nothing) and
+ * "Sign out". Closes on Escape and on a click outside, and gives the focus
+ * back to the button.
  */
 import { useEffect, useId, useRef, useState } from 'react';
 
-import { Glyph } from '@/components/ui';
+import { Avatar } from '@/components/ui';
 
 import styles from './shell.module.css';
 
 export function UserMenu({
   name,
+  detail,
   children,
 }: {
-  /** Who is signed in (`alice@example.com`). */
+  /** Who is signed in: a name when the identity provider gave one, else the email. */
   name: string;
-  /** The role badge and the sign-out form, rendered by the server shell. */
+  /** The line under the name: the email, or what a session without a person is. */
+  detail?: string;
+  /** The role and the sign-out form, rendered by the server shell. */
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
   const panelId = useId();
 
   useEffect(() => {
     if (!open) return;
     function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') setOpen(false);
+      if (event.key !== 'Escape') return;
+      setOpen(false);
+      button.current?.focus();
     }
     function onPointer(event: PointerEvent) {
       if (event.target instanceof Node && !root.current?.contains(event.target)) setOpen(false);
@@ -45,18 +51,21 @@ export function UserMenu({
   return (
     <div ref={root} className={styles.user}>
       <button
+        ref={button}
         type="button"
         className={styles.userButton}
         aria-expanded={open}
         aria-controls={panelId}
         aria-label={`Account: ${name}`}
-        title={name}
+        title={detail ? `${name} · ${detail}` : name}
         data-testid="user-menu"
         onClick={() => setOpen((current) => !current)}
       >
-        <Glyph name="user" />
-        <span className={styles.userName}>{name}</span>
-        <Glyph name="chevron" className={styles.userChevron} />
+        <Avatar name={name} />
+        <span className={styles.userText}>
+          <span className={styles.userName}>{name}</span>
+          {detail && <span className={styles.userDetail}>{detail}</span>}
+        </span>
       </button>
       <div id={panelId} className={styles.userPanel} hidden={!open}>
         {children}

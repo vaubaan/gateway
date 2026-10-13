@@ -55,7 +55,7 @@ import {
   type SessionTimelineFilter,
 } from '@/server/audit';
 
-import styles from '../../../audit/audit.module.css';
+import styles from '../../../activity/activity.module.css';
 import { StateBadge } from '../../state-badge';
 
 export const dynamic = 'force-dynamic';
@@ -117,7 +117,7 @@ export default async function MissionSessionPage({ params, searchParams }: Props
   const { mission, state } = view;
   const base = `/missions/${encodeURIComponent(mission.id)}`;
   const sessionPath = `${base}/session`;
-  const auditOfMission = `/audit?${AUDIT_PARAMS.mission}=${encodeURIComponent(mission.id)}`;
+  const auditOfMission = `/activity?${AUDIT_PARAMS.mission}=${encodeURIComponent(mission.id)}`;
   // The Audit page lists the entries of the missions one created: a member reads the session.
   const isCreator = view.viewer_role === 'creator';
   const filteredHolder =

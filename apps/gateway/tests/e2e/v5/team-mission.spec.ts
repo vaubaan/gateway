@@ -52,7 +52,7 @@ async function browserOf(
   opened.push(page);
   await signInAs(request, user);
   await page.goto(`/auth/login?return_to=${encodeURIComponent(landing)}`);
-  await expect(page.getByRole('banner').getByText(user.email)).toBeVisible();
+  await expect(page.getByTestId('user-menu')).toContainText(user.email);
   return page;
 }
 
@@ -275,7 +275,7 @@ test('a creator adds a member and a named token; each holder is attributed; each
     E2E_SHARE_TARGET.email,
   ]);
 
-  await ines.goto('/audit');
+  await ines.goto('/activity');
   // Her audit also holds other missions on her connections: this one only.
   await ines.locator('select[name="mission"]').selectOption({ label: MISSION });
   await ines.getByLabel('Token holder').fill(CI);

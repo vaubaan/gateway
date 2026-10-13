@@ -1,132 +1,405 @@
-/* The application shell: the bar on one line, the page, the build footer. */
+/* The application shell: a side navigation that is a fill, not a box; then the page. */
 
-.shell {
+.app {
+  display: grid;
+  grid-template-columns: var(--side-width) minmax(0, 1fr);
   min-height: 100vh;
+}
+
+/* The first stop of the keyboard: straight to the page. */
+.skip {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--space-2);
+  z-index: 300;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--ink);
+  color: var(--paper);
+  font-size: var(--text-sm);
+  transform: translateY(-200%);
+}
+.skip:focus {
+  transform: none;
+}
+
+/* ── Side navigation ─────────────────────────────────────────────────────── */
+
+.side {
+  position: sticky;
+  top: 0;
   display: flex;
   flex-direction: column;
-}
-
-.bar {
-  display: flex;
-  align-items: stretch;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding: 0 var(--space-6);
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--surface-base);
-}
-
-/* One line: the entries never wrap; a bar too narrow scrolls sideways. */
-.nav {
-  display: flex;
-  align-items: stretch;
-  gap: var(--space-1);
-  min-width: 0;
-  overflow-x: auto;
-  white-space: nowrap;
+  gap: var(--space-half);
+  height: 100vh;
+  padding: 14px 10px var(--space-3);
+  background: var(--paper-side);
 }
 
 .brand {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  margin-right: var(--space-3);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: -0.01em;
+  gap: 9px;
+  margin-bottom: var(--space-3);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-md);
 }
 .brand:hover {
   text-decoration: none;
 }
-
-.navLink {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  min-height: var(--space-12);
-  padding: 0 var(--space-2);
-  border-bottom: 2px solid transparent;
-  color: var(--text-muted);
+.brandMark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-md);
+  background: var(--ink);
+  color: var(--paper);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-strong);
+  line-height: 1;
+}
+.brandText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.2;
+}
+.brandName {
   font-size: var(--text-sm);
-  transition:
-    color var(--duration-fast) var(--ease-out),
-    border-color var(--duration-fast) var(--ease-out);
+  font-weight: var(--weight-strong);
+}
+.brandInstance {
+  overflow: hidden;
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav {
+  min-height: 0;
+  overflow-y: auto;
+}
+.navList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-half);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* Settings stands apart: a hairline above it. */
+.navRuled {
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--line);
+}
+.navLink {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: var(--control-md);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-md);
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  transition: background var(--duration-fast) var(--ease-out);
 }
 .navLink:hover {
-  color: var(--text-foreground);
+  background: var(--fill);
   text-decoration: none;
 }
-/* The current section: a heavier word and a rule under it, not a colour. */
+.navIcon {
+  flex: none;
+  color: var(--ink-3);
+}
+/* The current section: a fill and a heavier word, not a colour. */
 .navLinkOn {
-  color: var(--text-foreground);
-  font-weight: var(--font-weight-semibold);
-  border-bottom-color: var(--text-foreground);
+  background: var(--fill);
+  color: var(--ink);
+  font-weight: var(--weight-strong);
+}
+.navLinkOn .navIcon {
+  color: var(--ink);
 }
 .navLink:focus-visible,
 .brand:focus-visible {
+  border-radius: var(--radius-md);
   box-shadow: inset var(--focus-ring);
 }
-
-/* ── The account ───────────────────────────────────────────────────────── */
-
-.user {
-  position: relative;
-  display: flex;
-  align-items: center;
-  flex: none;
-}
-.userButton {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: var(--space-8);
-  max-width: 260px;
-  padding: 0 var(--space-3);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-full);
-  background: var(--surface-base);
-  color: var(--text-foreground);
-  font-size: var(--text-sm);
-  transition: border-color var(--duration-fast) var(--ease-out);
-}
-.userButton:hover,
-.userButton[aria-expanded='true'] {
-  border-color: var(--border-strong);
-}
-.userName {
+.navLabel {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.userChevron {
+/* What waits for the person: the one amber mark of the navigation. */
+.navCount {
+  display: grid;
+  place-items: center;
   flex: none;
-  color: var(--text-muted);
-  transform: rotate(90deg);
+  min-width: 18px;
+  height: 18px;
+  margin-left: auto;
+  padding: 0 5px;
+  border-radius: var(--radius-full);
+  background: var(--warn);
+  color: var(--on-warn);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-strong);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
-/* An overlay: the one place of the shell where a shadow is allowed. */
+
+/* ── The person and the theme ────────────────────────────────────────────── */
+
+.foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-top: auto;
+  padding-top: var(--space-2);
+}
+.user {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.userButton {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 6px var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--ink);
+  text-align: left;
+}
+.userButton:hover,
+.userButton[aria-expanded='true'] {
+  background: var(--fill);
+}
+.userButton:focus-visible {
+  border-radius: var(--radius-md);
+}
+.userText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+.userName,
+.userDetail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.userName {
+  font-size: var(--text-sm);
+}
+.userDetail {
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+}
+/* An overlay, opening upwards: one of the few places where a shadow is allowed. */
 .userPanel {
   position: absolute;
-  top: calc(100% - var(--space-1));
-  right: 0;
+  bottom: calc(100% + var(--space-1));
+  left: 0;
   z-index: 50;
-  display: grid;
-  gap: var(--space-3);
-  justify-items: start;
-  grid-auto-flow: column;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  padding: var(--space-3);
-  border: 1px solid var(--border-subtle);
+  gap: var(--space-2);
+  min-width: 100%;
+  padding: 10px;
   border-radius: var(--radius-lg);
-  background: var(--surface-overlay);
-  box-shadow: var(--shadow-md);
+  background: var(--paper-raised);
+  box-shadow: var(--shadow-overlay);
+  white-space: nowrap;
 }
 .userPanel[hidden] {
   display: none;
 }
+.signOut {
+  display: inline-flex;
+}
 
-/* Pushed to the bottom of the column by the shells (`margin-top: auto`). */
+.themeToggle {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--control-sm);
+  height: var(--control-sm);
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--ink-3);
+}
+.themeToggle:hover {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+.themeToggle:focus-visible {
+  border-radius: var(--radius-md);
+}
+
+/* ── The page ────────────────────────────────────────────────────────────── */
+
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 100vh;
+}
+.page {
+  width: 100%;
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: var(--page-pad-top) var(--page-pad-x) var(--page-pad-bottom);
+}
+.page:focus {
+  outline: none;
+}
+/* The measure of the column is the page's to choose (`PageHeader width`). */
+.page:has([data-page-width='narrow']) {
+  max-width: var(--page-max-narrow);
+}
+.page:has([data-page-width='wide']) {
+  max-width: var(--page-max-wide);
+}
+
+/* The build, said once, quietly, where the page ends: never in the navigation. */
 .buildFooter {
   margin-top: auto;
-  padding: var(--space-4) var(--space-6);
-  color: var(--text-muted);
+  padding: var(--space-4) var(--page-pad-x);
+  color: var(--ink-3);
   font-size: var(--text-xs);
   text-align: center;
+}
+
+/* ── Collapsed: a narrow window keeps the icons ──────────────────────────── */
+
+@media (max-width: 1023px) {
+  .app {
+    grid-template-columns: var(--side-width-collapsed) minmax(0, 1fr);
+  }
+  .side {
+    align-items: center;
+    padding: 14px var(--space-2) var(--space-3);
+  }
+  .brand {
+    padding: var(--space-1);
+  }
+  .brandText,
+  .navLabel,
+  .userText {
+    /* Still read by assistive technology; the title of each control says it on hover. */
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .navLink {
+    position: relative;
+    justify-content: center;
+    width: 40px;
+    padding: 0;
+  }
+  .navCount {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    min-width: 16px;
+    height: 16px;
+    margin: 0;
+    padding: 0 var(--space-1);
+  }
+  .foot {
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .userButton {
+    justify-content: center;
+    padding: var(--space-1);
+  }
+  .page {
+    padding: var(--space-6) var(--space-6) var(--space-12);
+  }
+  .buildFooter {
+    padding: var(--space-4) var(--space-6);
+  }
+}
+
+/* A phone: the navigation is a bar above the page. */
+@media (max-width: 640px) {
+  .app {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+  }
+  .side {
+    position: sticky;
+    z-index: 40;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-1);
+    width: 100%;
+    height: auto;
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid var(--line);
+  }
+  .brand {
+    margin: 0;
+  }
+  .nav {
+    flex: 1;
+    overflow-x: auto;
+    overflow-y: visible;
+  }
+  .navList {
+    flex-direction: row;
+    justify-content: center;
+  }
+  .navRuled {
+    margin: 0 0 0 var(--space-1);
+    padding: 0 0 0 var(--space-1);
+    border-top: 0;
+    border-left: 1px solid var(--line);
+  }
+  .navLink {
+    width: var(--control-lg);
+    height: var(--control-lg);
+  }
+  .foot {
+    flex: none;
+    flex-direction: row;
+    margin: 0;
+    padding: 0;
+  }
+  .user {
+    flex: none;
+  }
+  .userPanel {
+    top: calc(100% + var(--space-1));
+    right: 0;
+    bottom: auto;
+    left: auto;
+    min-width: 0;
+  }
+  .themeToggle {
+    display: none;
+  }
+  .main {
+    min-height: 0;
+  }
+  .page {
+    padding: var(--space-5) var(--space-4) var(--space-10);
+  }
 }

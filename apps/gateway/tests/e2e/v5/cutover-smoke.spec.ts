@@ -53,10 +53,10 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   request,
 }) => {
   // ── 1. Sign in through the identity provider ──────────────────────────────
-  await page.goto('/connections');
+  await page.goto('/accounts');
   await expect(page).toHaveURL(/\/login$/);
-  await page.goto('/auth/login?return_to=/connections');
-  await expect(page.getByRole('heading', { name: 'Connections', level: 1 })).toBeVisible();
+  await page.goto('/auth/login?return_to=/accounts');
+  await expect(page.getByRole('heading', { name: 'Accounts', level: 1 })).toBeVisible();
   await expect(page.getByText(E2E_CUTOVER_USER.email)).toBeVisible();
   await expect(page.getByText('No connection yet.')).toBeVisible();
 
@@ -69,7 +69,7 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   // To the provider's installation page (mocked), and back with the
   // installation id, the user authorization code and the single-use state.
   await page.getByRole('button', { name: 'Continue to GitHub' }).click();
-  await expect(page).toHaveURL(/\/connections\/[0-9a-f-]{36}(\?.*)?$/);
+  await expect(page).toHaveURL(/\/accounts\/[0-9a-f-]{36}(\?.*)?$/);
   await expect(page.getByRole('heading', { name: CONNECTION, level: 1 })).toBeVisible();
   await expect(page.getByText('active', { exact: true }).first()).toBeVisible();
   // The repositories of the installation were discovered as resources.
@@ -188,7 +188,7 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   // ── 6. The claim URL, opened by the creator ───────────────────────────────
   await expect(page.getByTestId('open-request-count')).toHaveCount(0);
   await page.goto(claimUrl);
-  await expect(page).toHaveURL(/\/requests\/[0-9a-f-]{36}$/);
+  await expect(page).toHaveURL(/\/waiting\/[0-9a-f-]{36}$/);
   await expect(page.getByRole('heading', { name: `Claim on ${MISSION}` })).toBeVisible();
   await expect(page.getByTestId('claim-budget')).toHaveText(
     `quota ${QUOTA} · consumed ${QUOTA} · 0 left`,
@@ -211,8 +211,8 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   });
 
   // ── 8. The calls on the Audit page ────────────────────────────────────────
-  await page.goto(`/audit?mission=${missionId}`);
-  await expect(page.getByRole('heading', { name: 'Audit', level: 1 })).toBeVisible();
+  await page.goto(`/activity?mission=${missionId}`);
+  await expect(page.getByRole('heading', { name: 'Activity', level: 1 })).toBeVisible();
   const entries = page.locator('table tbody tr');
   const calls = entries.filter({ hasText: 'github__list_branches' });
   // Three allowed, one outside the mission, two refused on the budget.

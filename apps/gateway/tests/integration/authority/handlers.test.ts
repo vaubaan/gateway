@@ -61,9 +61,9 @@ describe('share, transfer, groups and reassignment over HTTP', () => {
     return { path: url.pathname, notice: await rig.root.connections.notices.take(sessionId, id) };
   }
 
-  const sharesPath = () => `/connections/${rig.connection.id}/shares`;
+  const sharesPath = () => `/accounts/${rig.connection.id}/shares`;
 
-  describe('POST /connections/<id>/shares', () => {
+  describe('POST /accounts/<id>/shares', () => {
     it('stores what "select all" resolved to: one `risk` field per ticked risk, never "all"', async () => {
       const ada = await sessionOf(rig.ada);
       const catalog = enumerateCatalog(rig.depot.plugin.catalog);
@@ -77,7 +77,7 @@ describe('share, transfer, groups and reassignment over HTTP', () => {
         rig.connection.id,
       );
       const { path, notice } = await landing(response, ada);
-      expect(path).toBe(`/connections/${rig.connection.id}`);
+      expect(path).toBe(`/accounts/${rig.connection.id}`);
       expect(notice).toMatchObject({ tone: 'success', title: 'Shared' });
       expect(notice?.lines[0]).toContain('bob@example.com may now accept 5 risks');
 
@@ -124,7 +124,7 @@ describe('share, transfer, groups and reassignment over HTTP', () => {
         rig.connection.id,
       );
       const { path, notice } = await landing(response, ada);
-      expect(path).toBe(`/connections/${rig.connection.id}/share`);
+      expect(path).toBe(`/accounts/${rig.connection.id}/share`);
       expect(notice).toMatchObject({ tone: 'danger', title: 'Not shared' });
       expect(notice?.lines.join(' ')).toContain(sentence);
       expect(await rig.root.store.shares.listForConnection(rig.connection.id)).toEqual([]);
@@ -141,7 +141,7 @@ describe('share, transfer, groups and reassignment over HTTP', () => {
         rig.connection.id,
       );
       const { path, notice } = await landing(response, bob);
-      expect(path).toBe('/connections');
+      expect(path).toBe('/accounts');
       expect(notice?.tone).toBe('danger');
       expect(await rig.root.store.shares.listForConnection(rig.connection.id)).toEqual([]);
     });
@@ -161,19 +161,19 @@ describe('share, transfer, groups and reassignment over HTTP', () => {
       share.id,
     );
     const { path, notice } = await landing(response, ada);
-    expect(path).toBe(`/connections/${rig.connection.id}`);
+    expect(path).toBe(`/accounts/${rig.connection.id}`);
     expect(notice).toMatchObject({ tone: 'success', title: 'Share revoked' });
     expect(notice?.lines.join(' ')).toContain('1 mission that depended on it is now orphaned');
   });
 
-  it('POST /connections/<id>/transfer moves the ownership to a group of the owner, and to no other', async () => {
+  it('POST /accounts/<id>/transfer moves the ownership to a group of the owner, and to no other', async () => {
     const ada = await sessionOf(rig.ada);
     const mine = await rig.root.groups.service.create(rig.operator.id, 'mine');
     const theirs = await rig.root.groups.service.create(rig.operator.id, 'theirs');
     await rig.root.groups.service.addMember(rig.operator.id, mine.id, 'ada@example.com');
     const post = (groupId: string) =>
       rig.root.connections.handlers.transfer(
-        form(`/connections/${rig.connection.id}/transfer`, ada, [['group_id', groupId]]),
+        form(`/accounts/${rig.connection.id}/transfer`, ada, [['group_id', groupId]]),
         rig.connection.id,
       );
 

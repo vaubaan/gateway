@@ -1,29 +1,109 @@
+/* A wide table scrolls inside its own box; the page never scrolls sideways. */
+.scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
 .table {
   width: 100%;
   border-collapse: collapse;
   font-size: var(--text-sm);
 }
-.thead {
-  background: var(--surface-sunken);
-}
-.tr {
-  border-bottom: 1px solid var(--border-subtle);
-}
-.tr:last-child {
-  border-bottom: none;
-}
-.tbody .tr:hover {
-  background: var(--surface-raised);
-}
-.th {
+.table th {
+  padding: 6px var(--cell-x);
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-regular);
   text-align: left;
-  padding: 8px 12px;
-  font-weight: var(--font-weight-medium);
-  color: var(--text-muted);
-  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
 }
-.td {
-  padding: 10px 12px;
-  vertical-align: top;
-  color: var(--text-foreground);
+.table td {
+  padding: var(--cell-y) var(--cell-x);
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  vertical-align: middle;
+}
+.table tbody:last-child tr:last-child td {
+  border-bottom: 0;
+}
+.table tbody tr:hover td {
+  background: var(--hover);
+}
+.tight td {
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
+.table .right {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.nowrap {
+  white-space: nowrap;
+}
+
+/* Detail columns: on demand, through a DetailScope or the `details` prop. */
+.detail {
+  display: none;
+}
+[data-details='open'] td.detail,
+[data-details='open'] th.detail {
+  display: table-cell;
+}
+[data-details='open'] col.detail {
+  display: table-column;
+}
+
+/* The exception rows. The text of the row says what the tint says. */
+.table tbody tr.row_bad td,
+.table tbody tr.row_bad:hover td {
+  background: var(--bad-soft);
+}
+.table tbody tr.row_warn td,
+.table tbody tr.row_warn:hover td {
+  background: var(--warn-soft);
+}
+.table tbody tr.row_quiet td {
+  color: var(--ink-3);
+}
+
+.table tbody tr.rowDetail td,
+.table tbody tr.rowDetail:hover td {
+  padding: var(--space-3) var(--space-4) var(--space-4) var(--space-12);
+  background: var(--paper-side);
+}
+
+.table tbody tr.group th {
+  padding: 6px var(--cell-x);
+  border-bottom: 1px solid var(--line);
+  background: var(--paper-side);
+  color: var(--ink-2);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-strong);
+}
+.groupNote {
+  margin-left: 6px;
+  color: var(--ink-3);
+  font-weight: var(--weight-regular);
+}
+
+/* Row actions appear when the row is pointed at or holds the keyboard focus;
+   a device that cannot hover always shows them. */
+.table td.actions {
+  text-align: right;
+  white-space: nowrap;
+}
+.actions > * {
+  /* Transparent, not hidden: the keyboard still reaches them, and they show then. */
+  opacity: 0;
+}
+.table tr:hover .actions > *,
+.table tr:focus-within .actions > * {
+  opacity: 1;
+}
+@media (hover: none) {
+  .actions > * {
+    opacity: 1;
+  }
 }

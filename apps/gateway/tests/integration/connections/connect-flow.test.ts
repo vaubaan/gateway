@@ -255,7 +255,7 @@ describe('connections: provider app, connect, resources, revoke', () => {
 
     // ── User connects ───────────────────────────────────────────────────────
     const started = await handlers.connect(
-      post('/connections/connect/oauthco', alice, { name: 'Staging account' }),
+      post('/accounts/connect/oauthco', alice, { name: 'Staging account' }),
       'oauthco',
     );
     const authorize = location(started);
@@ -269,7 +269,7 @@ describe('connections: provider app, connect, resources, revoke', () => {
     const landed = await handlers.callback(get(callbackQuery, alice), 'oauthco');
     const target = location(landed);
     const connectionId = target.pathname.split('/').pop()!;
-    expect(target.pathname).toBe(`/connections/${connectionId}`);
+    expect(target.pathname).toBe(`/accounts/${connectionId}`);
     // The URL carries an opaque notice id, never a message.
     expect([...target.searchParams.keys()]).toEqual([NOTICE_PARAM]);
     expect(await noticeOf(landed, alice)).toMatchObject({ tone: 'success', title: 'Connected' });
@@ -320,7 +320,7 @@ describe('connections: provider app, connect, resources, revoke', () => {
       ['proj-b', 'Project B', null],
     ]);
     const edited = await handlers.updateResource(
-      post(`/connections/${connectionId}/resources/${discovered[0]!.id}`, alice, {
+      post(`/accounts/${connectionId}/resources/${discovered[0]!.id}`, alice, {
         display_name: 'Main project',
         env: 'prod',
         hidden_present: '1',
@@ -335,7 +335,7 @@ describe('connections: provider app, connect, resources, revoke', () => {
       { provider: 'oauthco', ref: 'proj-c', displayName: 'Project C' },
     ];
     const refreshed = await handlers.discover(
-      post(`/connections/${connectionId}/discover`, alice),
+      post(`/accounts/${connectionId}/discover`, alice),
       connectionId,
     );
     expect(await noticeOf(refreshed, alice)).toMatchObject({ title: 'Discovery refreshed' });
@@ -348,19 +348,19 @@ describe('connections: provider app, connect, resources, revoke', () => {
 
     // ── Replay, strangers, cross-origin ─────────────────────────────────────
     const replay = await handlers.callback(get(callbackQuery, alice), 'oauthco');
-    expect(location(replay).pathname).toBe('/connections');
+    expect(location(replay).pathname).toBe('/accounts');
     expect((await noticeOf(replay, alice))?.lines[0]).toContain('already used');
     expect(provider.calls).toHaveLength(1);
     expect(await root.store.connections.list()).toHaveLength(1);
 
     const bob = await signIn('bob@example.com');
     const stranger = await handlers.revoke(
-      post(`/connections/${connectionId}/revoke`, bob),
+      post(`/accounts/${connectionId}/revoke`, bob),
       connectionId,
     );
     expect((await noticeOf(stranger, bob))?.title).toBe('Not revoked');
     const crossOrigin = await handlers.revoke(
-      post(`/connections/${connectionId}/revoke`, alice, {}, 'https://evil.example.net'),
+      post(`/accounts/${connectionId}/revoke`, alice, {}, 'https://evil.example.net'),
       connectionId,
     );
     expect(crossOrigin.status).toBe(403);
@@ -368,10 +368,10 @@ describe('connections: provider app, connect, resources, revoke', () => {
 
     // ── Revoke ──────────────────────────────────────────────────────────────
     const revoked = await handlers.revoke(
-      post(`/connections/${connectionId}/revoke`, alice),
+      post(`/accounts/${connectionId}/revoke`, alice),
       connectionId,
     );
-    expect(location(revoked).pathname).toBe(`/connections/${connectionId}`);
+    expect(location(revoked).pathname).toBe(`/accounts/${connectionId}`);
     const after = root.store.db
       .prepare<
         [string],
@@ -405,7 +405,7 @@ describe('connections: provider app, connect, resources, revoke', () => {
     const handlers = root.connections.handlers;
 
     const keyRes = await handlers.connect(
-      post('/connections/connect/keyco', alice, {
+      post('/accounts/connect/keyco', alice, {
         'field.token': API_KEY,
         'field.team_id': 'team_acme',
       }),
@@ -418,7 +418,7 @@ describe('connections: provider app, connect, resources, revoke', () => {
     ]);
 
     const sshRes = await handlers.connect(
-      post('/connections/connect/sshco', alice, {
+      post('/accounts/connect/sshco', alice, {
         'field.host': 'vps-1.example.com',
         'field.user': 'deploy',
       }),
@@ -439,7 +439,7 @@ describe('connections: provider app, connect, resources, revoke', () => {
     // Editing a plugin-set label is refused; the row is unchanged.
     const live = (await root.store.connections.listResources(keyId))[0]!;
     const refused = await handlers.updateResource(
-      post(`/connections/${keyId}/resources/${live.id}`, alice, { env: 'test' }),
+      post(`/accounts/${keyId}/resources/${live.id}`, alice, { env: 'test' }),
       keyId,
       live.id,
     );
@@ -466,7 +466,7 @@ describe('connections: provider app, connect, resources, revoke', () => {
     expect(await noticeOf(saved, operator)).toMatchObject({ tone: 'success' });
 
     async function install(session: Session, query: Record<string, string>): Promise<Response> {
-      const started = await handlers.connect(post('/connections/connect/appco', session), 'appco');
+      const started = await handlers.connect(post('/accounts/connect/appco', session), 'appco');
       const state = location(started).searchParams.get('state')!;
       const search = new URLSearchParams({ ...query, state }).toString();
       return handlers.callback(get(`/connections/callback/appco?${search}`, session), 'appco');
@@ -474,7 +474,7 @@ describe('connections: provider app, connect, resources, revoke', () => {
 
     // ── An insider claims an installation their GitHub account cannot reach ──
     const stolen = await install(mallory, { code: USER_AUTH_CODE, installation_id: '9999' });
-    expect(location(stolen).pathname).toBe('/connections');
+    expect(location(stolen).pathname).toBe('/accounts');
     const stolenNotice = await noticeOf(stolen, mallory);
     expect(stolenNotice).toMatchObject({ tone: 'danger', title: 'Not connected' });
     expect(stolenNotice?.lines[0]).toContain('did not confirm that your account has access');
@@ -544,11 +544,8 @@ describe('connections: provider app, connect, resources, revoke', () => {
       app_slug: 'old-app',
     });
 
-    const refused = await handlers.connect(
-      post('/connections/connect/oldappco', alice),
-      'oldappco',
-    );
-    expect(location(refused).pathname).toBe('/connections/new/oldappco');
+    const refused = await handlers.connect(post('/accounts/connect/oldappco', alice), 'oldappco');
+    expect(location(refused).pathname).toBe('/accounts/new/oldappco');
     expect((await noticeOf(refused, alice))?.lines[0]).toContain(
       'cannot prove who performed an installation',
     );
@@ -575,10 +572,7 @@ describe('connections: provider app, connect, resources, revoke', () => {
       after: { install_verification: 'unverified-accepted' },
     });
 
-    const started = await handlers.connect(
-      post('/connections/connect/oldappco', alice),
-      'oldappco',
-    );
+    const started = await handlers.connect(post('/accounts/connect/oldappco', alice), 'oldappco');
     const state = location(started).searchParams.get('state')!;
     const landed = await handlers.callback(
       get(`/connections/callback/oldappco?installation_id=55&state=${state}`, alice),
@@ -596,15 +590,15 @@ describe('connections: provider app, connect, resources, revoke', () => {
     const bootstrap = await bootstrapSession();
     const handlers = root.connections.handlers;
 
-    expect((await handlers.connect(post('/connections/connect/keyco', null), 'keyco')).status).toBe(
+    expect((await handlers.connect(post('/accounts/connect/keyco', null), 'keyco')).status).toBe(
       401,
     );
     expect(
-      (await handlers.connect(post('/connections/connect/keyco', alice, {}, null), 'keyco')).status,
+      (await handlers.connect(post('/accounts/connect/keyco', alice, {}, null), 'keyco')).status,
     ).toBe(403);
     // The bootstrap operator configures the instance and owns nothing.
     expect(
-      (await handlers.connect(post('/connections/connect/keyco', bootstrap), 'keyco')).status,
+      (await handlers.connect(post('/accounts/connect/keyco', bootstrap), 'keyco')).status,
     ).toBe(403);
     // …but may register provider apps while the token is active.
     expect(location(await registerOAuthApp(bootstrap)).pathname).toBe('/admin/provider-apps');
@@ -618,26 +612,26 @@ describe('connections: provider app, connect, resources, revoke', () => {
     expect(location(anonymous).pathname).toBe('/login');
 
     const unconfigured = await handlers.connect(
-      post('/connections/connect/oauthco', alice),
+      post('/accounts/connect/oauthco', alice),
       'oauthco',
     );
-    expect(location(unconfigured).pathname).toBe('/connections/new/oauthco');
+    expect(location(unconfigured).pathname).toBe('/accounts/new/oauthco');
     expect((await noticeOf(unconfigured, alice))?.lines[0]).toContain('operator must register');
 
     await root.providerApps.save('oauthco', { client_id: 'cid', client_secret: CLIENT_SECRET });
     const foreign = await handlers.connect(
-      post('/connections/connect/oauthco', alice, { return_to: 'https://evil.example.net/x' }),
+      post('/accounts/connect/oauthco', alice, { return_to: 'https://evil.example.net/x' }),
       'oauthco',
     );
     expect(location(foreign).origin).toBe(PUBLIC_URL);
-    expect(location(foreign).pathname).toBe('/connections/new/oauthco');
+    expect(location(foreign).pathname).toBe('/accounts/new/oauthco');
     expect((await noticeOf(foreign, alice))?.lines[0]).toContain('outside this instance');
 
-    const unknown = await handlers.connect(post('/connections/connect/nope', alice), 'nope');
-    expect(location(unknown).pathname).toBe('/connections/new');
+    const unknown = await handlers.connect(post('/accounts/connect/nope', alice), 'nope');
+    expect(location(unknown).pathname).toBe('/accounts/new');
 
     // A notice belongs to the session it was written for.
-    const again = await handlers.connect(post('/connections/connect/nope', alice), 'nope');
+    const again = await handlers.connect(post('/accounts/connect/nope', alice), 'nope');
     const bob = await signIn('bob@example.com');
     expect(await noticeOf(again, bob)).toBeNull();
     expect(await noticeOf(again, alice)).not.toBeNull();

@@ -1,0 +1,32 @@
+.disclosure {
+  min-width: 0;
+}
+/* A link that acts: the accent, no box. */
+.toggle {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: var(--text-sm);
+  text-align: left;
+}
+.toggle:hover {
+  text-decoration: underline;
+}
+.panel {
+  margin-top: var(--space-3);
+}
+.panel[hidden] {
+  display: none;
+}
+
+.detailOnly {
+  display: none;
+}
+[data-details='open'] .detailOnly {
+  display: block;
+}
+/* A scope inside an open scope keeps its own answer. */
+[data-details='closed'] .detailOnly {
+  display: none;
+}

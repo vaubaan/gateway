@@ -302,7 +302,7 @@ export function MissionForm({
     return (
       <Banner tone="info" title="No connection yet">
         A mission is issued on connections you own. Connect a provider under{' '}
-        <a href="/connections">Connections</a>, then come back.
+        <a href="/accounts">Accounts</a>, then come back.
       </Banner>
     );
   }
