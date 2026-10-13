@@ -35,6 +35,10 @@ apps/gateway/migrations/
                                   renamed / hidden / stale flags (schema version 4, P1.4)
   0005_approval_bound_to_tool.sql approvals: the tool joins the key and the lookup index
                                   (schema version 5, P2.1)
+  0006_oauth_client_decisions.sql oauth_clients / delegations: registration, decision, revoke reason
+                                  (schema version 6, P2.3)
+  0007_orphaned_not_stored.sql    missions: stored `orphaned` rows reset to `active`, two triggers
+                                  refuse the value (schema version 7, P2.2b)
 apps/gateway/src/server/store/
   index.ts                        openStore() / openMemoryStore(), Store type, re-exports
   db.ts                           openDb() — better-sqlite3 handle, pragmas, MIN_SQLITE_VERSION,
@@ -172,16 +176,17 @@ five-id catalog).
   with no resource…), driver errors (`SqliteError` with `code`) for constraint
   violations the schema catches (`UNIQUE`, `FOREIGN KEY`, `CHECK`).
 
-## Schema (`0001_schema.sql` … `0006_oauth_client_decisions.sql`)
+## Schema (`0001_schema.sql` … `0007_orphaned_not_stored.sql`)
 
-Schema version 6. `0001` creates every table and trigger; `0002` only replaces the
+Schema version 7. `0001` creates every table and trigger; `0002` only replaces the
 `audit_risks` delete trigger (see Audit); `0003` adds `web_sessions`; `0004` adds the
 owner-curation columns of `connection_resources` (plain `ADD COLUMN`s); `0005` adds
 `approvals.tool` (`NOT NULL DEFAULT ''`: a row written before it matches no call) and
 recreates `approvals_lookup` on `(mission_id, risk_id, tool, fingerprint)`; `0006` adds to
 `oauth_clients` how the client registered, its token-endpoint authentication method and the
 operator's decision, and to `delegations` the reason it ended (`revoke_reason`), plus the
-index `delegations_client`.
+index `delegations_client`; `0007` takes `orphaned` out of what `missions.status` may
+hold (see "Missions: `orphaned` is not stored" below).
 
 | Area        | Tables                                                                                                                     | Notes                                                                                                                                                                                                                                                                                                                                                                         |
 | ----------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -191,7 +196,7 @@ index `delegations_client`.
 | Delegations | `oauth_clients`, `oauth_client_redirect_uris`, `delegations`, `oauth_codes`, `oauth_refresh_tokens`, `oauth_access_tokens` | all secrets stored as hashes by the caller; codes single-use; refresh tokens chain through `replaced_by_id`; `oauth_clients.operator_decision` (`approved`\|`disabled`, NULL while the registration policy decides), `registration` (`dynamic`\|`metadata-document`); `delegations.revoke_reason`; repository and its replay lookups in [management-door](management-door.md) |
 | Connections | `connections`, `connection_resources`                                                                                      | owner = `owner_kind` + `owner_user_id`/`owner_group_id` with a CHECK; status `active\|expired\|revoked\|unowned`; resources unique per `(connection_id, ref)` with an `env` label, its `env_source` (`owner`\|`plugin`), `metadata_json` (provider facts) and `owner_metadata_json` (owner edits), `display_name_edited`, `hidden`, `stale_since` (see Connections below)     |
 | Shares      | `shares`, `share_restrictions`                                                                                             | target principal like owner; one `risk_id` row per restriction entry                                                                                                                                                                                                                                                                                                          |
-| Missions    | `missions`, `mission_connections`, `mission_resources`, `mission_policy`, `mission_tokens`                                 | status `active\|expired\|orphaned\|revoked` (`exhausted` is per risk, computed); `period_anchor` + nullable `period_seconds`; `resource_scope all\|selected`; policy row = `(quota, rate_limit, rate_window_seconds, gate)`; partial unique index = one `active` token per mission                                                                                            |
+| Missions    | `missions`, `mission_connections`, `mission_resources`, `mission_policy`, `mission_tokens`                                 | status `active\|expired\|revoked` (`orphaned` is derived, `0007` refuses it; `exhausted` is per risk, computed); `period_anchor` + nullable `period_seconds`; `resource_scope all\|selected`; policy row = `(quota, rate_limit, rate_window_seconds, gate)`; partial unique index = one `active` token per mission                                                            |
 | Sessions    | `sessions`, `session_counters`, `events`                                                                                   | one session per mission (`mission_id` unique); counters keyed `(session_id, risk_id, period_start)`; events are free-form `kind` + JSON details                                                                                                                                                                                                                               |
 | Requests    | `requests`, `approvals`                                                                                                    | `kind claim\|approval`, `state open\|granted\|refused\|expired`; approval requests carry `tool`, `fingerprint`, encrypted `args_blob` (NULL on decision and on expiry); one approval per request, keyed `(mission, risk, tool, fingerprint)`, consumed via `consumed_at`                                                                                                      |
 | Audit       | `audit`, `audit_risks`, `audit_purge_guard`                                                                                | see below                                                                                                                                                                                                                                                                                                                                                                     |
@@ -241,7 +246,7 @@ callers (test fixtures) moved to `syncDiscoveredResources`. `setCredential` and
 `setStatus` remain, deprecated and used by fixtures only; both are exercised by
 `tests/integration/connections/repository-status.test.ts`.
 
-Ownership and the states that follow from authority (P2.2, handbook
+Ownership and the stored state that follows from authority (P2.2, handbook
 [authority](authority.md)), all additive, covered by
 `tests/integration/store/ownership-and-orphans.test.ts`:
 
@@ -251,12 +256,33 @@ Ownership and the states that follow from authority (P2.2, handbook
 | `connections.listOwnerless()`             | `unowned`, or not revoked with an empty owner group                                                  |
 | `connections.assignOwner(id, owner)`      | new owner, `unowned` → `active` in the same transaction; refuses `revoked`                           |
 | `connections.markExpired(id)`             | now from any serving status (`active` or `unowned`)                                                  |
-| `missions.markOrphaned(id)`               | `active` → `orphaned`, `closed_at` set; false when the mission was not `active`                      |
 | `shares.replaceForTarget(input)`          | revokes the active share of the same `(connection, target)` and creates the new one, one transaction |
 | `shares.listActiveForTargets(p, connId?)` | optional connection filter; the statement is compiled once per SQL shape (the door asks it per call) |
 | `groups.createLocal(name)`                | a `local` group, or `null` when any group holds the name                                             |
 
-No migration: the tables and the status values exist since `0001_schema.sql`.
+No migration for these: the tables and the status values exist since `0001_schema.sql`.
+
+### Missions: `orphaned` is not stored
+
+Spec §2.3: a mission is `orphaned` while its creator's current authority does not
+ground it, "never stored as a verdict". The store holds `active` for such a mission;
+every reader derives the state (`MissionGrounds.inspect`, handbook
+[authority](authority.md)). Three things keep the value out of the table:
+
+- `MissionsRepo.setStatus(id, status)` takes a `StoredMissionStatus`
+  (`Exclude<MissionStatus, 'orphaned'>`), and there is no `markOrphaned`;
+- a row is parsed with `STORED_MISSION_STATUSES` (`active`, `expired`, `revoked`): a
+  row that carried `orphaned` would be an `InvariantError` at the read, not a silent verdict;
+- migration `0007` resets the rows the P2.2 image wrote (`status = 'active'`,
+  `closed_at = NULL`; tokens were never retired by an orphaning) and creates
+  `missions_orphaned_not_stored_insert` / `_update`, `BEFORE` triggers that abort a
+  write of the value. The CHECK of `0001` still lists it: an applied migration is
+  immutable, and a table rebuild is not worth one constraint. The trigger bodies are the
+  SQLite-only part (a Postgres port writes the same guard as a CHECK).
+
+`MissionRecord.status` keeps the type `MissionStatus`: the same record type carries the
+derived value once it went through `inspect`. `closed_at` is set by `revoked` and
+`expired` only.
 
 ## Audit
 
@@ -394,7 +420,7 @@ capture both files atomically are also fine.
   uniqueness.
 - `tests/unit/server/store/migrate.test.ts` — file naming, ordering, duplicate
   versions, idempotent re-run, incremental apply, checksum immutability, rollback of a
-  failing file, downgrade refused (a recorded migration with no file), the four shipped
+  failing file, downgrade refused (a recorded migration with no file), the seven shipped
   files.
 - `tests/unit/server/store/db.test.ts` — `isSqliteVersionAtLeast`.
 - `tests/integration/store/schema.test.ts` — all 29 tables, every table `STRICT`,

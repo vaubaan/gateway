@@ -100,14 +100,20 @@ export function createGroupHandlers(deps: GroupHandlerDeps): GroupHandlers {
       const form = await readForm(request);
       if (!form) return notAFormResponse();
       return act(principal, 'Member not added', async (actorId) => {
-        const { group, user } = await deps.groups.addMember(actorId, groupId, field(form, 'email'));
-        return {
-          tone: 'success',
-          title: `${user.email} added to "${group.name}"`,
-          lines: [
-            'They now own the connections this group owns and receive the shares made to it.',
-          ],
-        };
+        const { group, user, restored } = await deps.groups.addMember(
+          actorId,
+          groupId,
+          field(form, 'email'),
+        );
+        const lines = [
+          'They now own the connections this group owns and receive the shares made to it.',
+        ];
+        if (restored > 0) {
+          lines.push(
+            `${restored} of their orphaned missions ${restored === 1 ? 'is' : 'are'} covered again and ${restored === 1 ? 'serves' : 'serve'} calls from now on.`,
+          );
+        }
+        return { tone: 'success', title: `${user.email} added to "${group.name}"`, lines };
       });
     },
 
@@ -119,7 +125,7 @@ export function createGroupHandlers(deps: GroupHandlerDeps): GroupHandlers {
         const lines = ['What this membership granted is withdrawn from the next check on.'];
         if (removal.orphaned > 0) {
           lines.push(
-            `${removal.orphaned} of their missions lost ${removal.orphaned === 1 ? 'its' : 'their'} authority and ${removal.orphaned === 1 ? 'is' : 'are'} now orphaned.`,
+            `${removal.orphaned} of their missions lost ${removal.orphaned === 1 ? 'its' : 'their'} authority and ${removal.orphaned === 1 ? 'is' : 'are'} now orphaned, until that authority comes back.`,
           );
         }
         if (removal.unowned > 0) {

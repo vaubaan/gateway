@@ -477,7 +477,10 @@ administrative entries whose object is one of **their** delegations.
 
 ## Pages
 
-- **`/delegations`** (`APP_NAV` "Delegations"; `DelegationService.listFor`):
+- **`/delegations`** (`APP_NAV` "Delegations"; `DelegationService.listFor`; the
+  status shown for each mission is the derived one — the composition root hands
+  the service `derivedMissionReads(store.missions, authority.grounds)`, so an
+  orphaned mission reads `orphaned` here as on its own page, [authority](authority.md)):
   one card per delegation, most recent first — the client's name (as a
   claim), its client id, where its access goes, the scope, when it was
   granted and last renewed, its state, the missions it issued (empty until

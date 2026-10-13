@@ -21,7 +21,7 @@ export interface SharesModuleDeps {
   readonly store: Store;
   readonly registry: PluginRegistry;
   readonly connections: Pick<ConnectionsModule, 'service' | 'notices'>;
-  readonly grounds: Pick<MissionGrounds, 'sweepConnection'>;
+  readonly grounds: Pick<MissionGrounds, 'watchConnection'>;
   readonly authenticator: Authenticator;
   readonly logger: Logger;
   readonly clock?: Clock;

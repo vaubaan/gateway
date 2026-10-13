@@ -18,6 +18,7 @@ import {
   type RecordCallRefused,
   type RecordCallResult,
 } from '../../../src/server/budget/index.ts';
+import { alwaysGrounded } from '../../../src/server/authority/testing.ts';
 import { createLogger } from '../../../src/server/logging/index.ts';
 import {
   RequestService,
@@ -72,6 +73,7 @@ describe('approval gate: refusal, decision, replay', () => {
       store: f.store,
       // No plugin registered: labels fall back to the risk ids.
       registry: { get: () => undefined },
+      grounds: alwaysGrounded,
       publicUrl: PUBLIC_URL,
       approvalValiditySeconds: APPROVAL_VALIDITY_SECONDS,
       clock: f.clock,
@@ -480,6 +482,7 @@ describe('approval gate: refusal, decision, replay', () => {
       const short = new RequestService({
         store: f.store,
         registry: { get: () => undefined },
+        grounds: alwaysGrounded,
         publicUrl: PUBLIC_URL,
         approvalValiditySeconds: 30,
         clock: f.clock,

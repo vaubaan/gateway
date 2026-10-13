@@ -2,7 +2,10 @@
 
 /**
  * Rotate and revoke (spec §7.8). Rotation reveals the new token once, in the
- * same dialog as issuance; revocation asks for the mission's name.
+ * same dialog as issuance; revocation asks for the mission's name. Only an
+ * active mission rotates; every mission that is not revoked yet can be
+ * revoked, an orphaned or expired one included (spec §2.3: the creator closes
+ * an orphaned mission).
  */
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -29,10 +32,14 @@ export function MissionActions({
   missionId,
   name,
   active,
+  revocable,
 }: {
   missionId: string;
   name: string;
+  /** The mission serves calls: its token can be rotated. */
   active: boolean;
+  /** The mission is not revoked yet. */
+  revocable: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -79,19 +86,19 @@ export function MissionActions({
           Duplicate
         </a>
         {active && (
-          <>
-            <Button type="button" onClick={rotate} disabled={busy}>
-              Rotate token
-            </Button>
-            <Button
-              type="button"
-              variant="danger"
-              onClick={() => setConfirming(true)}
-              disabled={busy}
-            >
-              Revoke mission
-            </Button>
-          </>
+          <Button type="button" onClick={rotate} disabled={busy}>
+            Rotate token
+          </Button>
+        )}
+        {revocable && (
+          <Button
+            type="button"
+            variant="danger"
+            onClick={() => setConfirming(true)}
+            disabled={busy}
+          >
+            Revoke mission
+          </Button>
         )}
       </div>
       {error && !confirming && <p className={styles.refused}>{error}</p>}

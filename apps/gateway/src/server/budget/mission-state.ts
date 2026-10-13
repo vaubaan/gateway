@@ -2,9 +2,11 @@
  * Mission state derivation — pure.
  *
  * Spec §2.3: `active`, `exhausted` (per risk, never a stored status), `expired`,
- * `orphaned`, `revoked`. The store persists `active | expired | orphaned | revoked`
- * (`MissionStatus`); `expired` may also follow from `expires_at` before anyone flips
- * the column; `exhausted` follows from the counters of the current period. The
+ * `orphaned`, `revoked`. The store persists `active | expired | revoked`; `orphaned`
+ * is derived from the creator's current authority before the mission gets here
+ * (`MissionGrounds.inspect`, handbook authority), so the `status` read below is the
+ * derived one; `expired` may also follow from `expires_at` before anyone flips the
+ * column; `exhausted` follows from the counters of the current period. The
  * rollover is applied here too: counters of past periods are ignored, so a mission
  * whose period ended reads as un-exhausted without any job (spec §3.3).
  */

@@ -14,9 +14,11 @@
  * callers do (`guardMutation(…, 'operator')`), and `actorId` is the audit
  * actor.
  *
- * Removing a member is an authorization change: the connections the group
- * owned become `unowned` when it empties, and the missions the membership
- * grounded become `orphaned` (`MembershipSettler`).
+ * A membership edit is an authorization change. Removing a member: the
+ * connections the group owned become `unowned` when it empties, and the
+ * missions the membership grounded read `orphaned`. Adding one: the orphaned
+ * missions of that user the membership grounds serve again. Both are watched
+ * across the edit and audited (`MembershipSettler`).
  */
 import type { AuditWriter } from '@vaubaan/gateway-core';
 
@@ -47,9 +49,16 @@ export interface MemberRemoval {
   readonly orphaned: number;
 }
 
+export interface MemberAddition {
+  readonly group: GroupRecord;
+  readonly user: UserRecord;
+  /** Orphaned missions of the new member that this membership grounds again. */
+  readonly restored: number;
+}
+
 export interface GroupServiceDeps {
   readonly store: Pick<Store, 'groups' | 'users' | 'connections'>;
-  readonly membership: Pick<MembershipSettler, 'afterRemoval'>;
+  readonly membership: Pick<MembershipSettler, 'watch'>;
   /** The IdP group of the admin rule, if any: never the name of a local group. */
   readonly adminGroup: string | null;
   readonly audit: AuditWriter;
@@ -96,25 +105,30 @@ export class GroupService {
     return group;
   }
 
-  /** Adds a known user (by email) to a local group. Idempotent. */
-  async addMember(
-    actorId: string,
-    groupId: string,
-    email: string,
-  ): Promise<{ group: GroupRecord; user: UserRecord }> {
+  /**
+   * Adds a known user (by email) to a local group. Idempotent. The orphaned
+   * missions of that user the membership grounds again are restored.
+   */
+  async addMember(actorId: string, groupId: string, email: string): Promise<MemberAddition> {
     const group = await this.requireLocal(groupId);
     const lookup = await findActiveUserByEmail(this.deps.store.users, email);
     if (!lookup.found) {
       throw new GroupError(lookup.reason === 'unknown' ? 'user-unknown' : 'user-ambiguous');
     }
     const { user } = lookup;
+    const watch = await this.deps.membership.watch(user.id);
     await this.deps.store.groups.addMember(group.id, user.id);
     await this.audit(actorId, 'group-member-added', group, null, {
       user_id: user.id,
       email: user.email,
     });
-    this.deps.logger.info('local group member added', { group_id: group.id, user_id: user.id });
-    return { group, user };
+    const settlement = await watch.settle(actorId);
+    this.deps.logger.info('local group member added', {
+      group_id: group.id,
+      user_id: user.id,
+      missions_restored: settlement.restored.length,
+    });
+    return { group, user, restored: settlement.restored.length };
   }
 
   /**
@@ -124,7 +138,9 @@ export class GroupService {
   async removeMember(actorId: string, groupId: string, userId: string): Promise<MemberRemoval> {
     const group = await this.requireLocal(groupId);
     const user = await this.deps.store.users.getById(userId);
-    if (!user || !(await this.deps.store.groups.removeMember(group.id, userId))) {
+    if (!user) throw new GroupError('not-found');
+    const watch = await this.deps.membership.watch(user.id);
+    if (!(await this.deps.store.groups.removeMember(group.id, userId))) {
       throw new GroupError('not-found');
     }
     // Audited before the settlement: the removal is done whatever happens next, and each
@@ -136,7 +152,7 @@ export class GroupService {
       { user_id: user.id, email: user.email },
       null,
     );
-    const settlement = await this.deps.membership.afterRemoval(user.id, actorId);
+    const settlement = await watch.settle(actorId);
     this.deps.logger.info('local group member removed', {
       group_id: group.id,
       user_id: user.id,

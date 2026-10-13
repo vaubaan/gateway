@@ -67,7 +67,8 @@ const PROBLEM_SENTENCES: Readonly<Record<string, string>> = {
   'invalid-amount':
     'The amount must be a whole number between 1 and what was consumed on this risk in the current period.',
   'invalid-expiry': 'The new expiry must be a date later than the current one.',
-  'mission-closed': 'The mission is revoked or orphaned: only a refusal can be recorded.',
+  'mission-closed':
+    'The mission is revoked or orphaned: only a refusal can be recorded. An orphaned mission serves again when the authority behind it is back; the request can be granted then.',
   'mission-expired': 'The mission is expired: extend its expiry first.',
   'risk-not-in-policy': 'The mission no longer accepts this risk.',
   'nothing-consumed': 'Nothing was consumed on this risk in the current period.',

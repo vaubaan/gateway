@@ -30,7 +30,13 @@ import {
   type SessionEventDetails,
 } from '@vaubaan/shared';
 
-import type { AuthorityService, AuthoritySubject } from '../authority';
+import type {
+  AuthorityService,
+  AuthoritySubject,
+  InspectedMission,
+  MissionGrounds,
+  OrphanCause,
+} from '../authority';
 import {
   budgetMissionOf,
   GATE_EVENT_KINDS,
@@ -77,6 +83,12 @@ export interface MissionServiceDeps {
   readonly store: Pick<Store, 'missions' | 'connections' | 'sessions' | 'auditWriter'>;
   readonly registry: PluginRegistry;
   readonly authority: AuthorityService;
+  /**
+   * `orphaned` is derived, never stored (spec §2.3): every mission this service
+   * loads is read through `grounds.inspect`, so the pages, the gate edit, the
+   * rotation and the session view all see the state of this instant.
+   */
+  readonly grounds: Pick<MissionGrounds, 'inspect'>;
   /** `InstanceConfig.publicUrl` — the instance URL of the bootstrap kit. */
   readonly publicUrl: URL;
   readonly clock: Clock;
@@ -167,9 +179,21 @@ export type TokenVerification =
     }
   | { readonly outcome: 'unknown' };
 
+/** Why a mission reads `orphaned` right now (handbook authority, "Orphaned missions"). */
+export interface MissionOrphanReason {
+  readonly cause: OrphanCause;
+  /** The connection the cause was met on; `null` when the creator is gone. */
+  readonly connection_id: string | null;
+  /** The accepted risks the creator no longer covers. */
+  readonly uncovered: readonly RiskId[];
+}
+
 export interface MissionOverview {
+  /** `status` is derived: `orphaned` while the creator's authority is missing. */
   readonly mission: MissionRecord;
   readonly state: MissionState;
+  /** Set while the mission is orphaned; `null` as soon as the authority is back. */
+  readonly orphan: MissionOrphanReason | null;
   /** The active token's public part; `null` once revoked. */
   readonly token: { readonly prefix: string; readonly createdAt: string } | null;
 }
@@ -494,7 +518,11 @@ export class MissionService {
     return { ok: true, mission, token, kit: await this.kitFor(mission, { secret: token.secret }) };
   }
 
-  /** The mission refuses everything from now on; its tokens are revoked. Idempotent. */
+  /**
+   * The mission refuses everything from now on; its tokens are revoked.
+   * Idempotent. An orphaned mission is revoked like any other: this is how its
+   * creator closes it for good (the stored status goes `active` → `revoked`).
+   */
   async revoke(user: AuthoritySubject, missionId: string): Promise<RevokeResult> {
     const mission = await this.ownMission(user, missionId);
     if (!mission) return { ok: false, reason: 'not-found' };
@@ -599,15 +627,18 @@ export class MissionService {
   async list(user: AuthoritySubject): Promise<MissionOverview[]> {
     const missions = await this.deps.store.missions.listForCreator(user.id);
     const overviews: MissionOverview[] = [];
-    for (const mission of missions) overviews.push(await this.overviewOf(mission));
+    for (const mission of missions) {
+      overviews.push(await this.overviewOf(await this.deps.grounds.inspect(mission)));
+    }
     // Newest first: the mission just issued is the one the creator looks for.
     return overviews.reverse();
   }
 
   async get(user: AuthoritySubject, missionId: string): Promise<MissionDetail | null> {
-    const mission = await this.ownMission(user, missionId);
-    if (!mission) return null;
-    const overview = await this.overviewOf(mission);
+    const inspected = await this.ownInspected(user, missionId);
+    if (!inspected) return null;
+    const { mission } = inspected;
+    const overview = await this.overviewOf(inspected);
     const connections = await this.detailConnections(mission);
     const remaining = overview.state.kind === 'active' ? overview.state.remaining : null;
     const rows = this.catalogRowsOf(connections);
@@ -655,11 +686,16 @@ export class MissionService {
     return open;
   }
 
-  private async overviewOf(mission: MissionRecord): Promise<MissionOverview> {
+  private async overviewOf({ mission, orphan }: InspectedMission): Promise<MissionOverview> {
     const token = await this.activeToken(mission.id);
     return {
       mission,
       state: await this.stateOf(mission),
+      orphan: orphan && {
+        cause: orphan.cause,
+        connection_id: orphan.connectionId,
+        uncovered: [...orphan.uncovered],
+      },
       token: token ? { prefix: token.prefix, createdAt: token.createdAt } : null,
     };
   }
@@ -673,14 +709,24 @@ export class MissionService {
     return tokens.find((t) => t.status === 'active') ?? null;
   }
 
-  /** One answer for "does not exist" and "not yours". */
+  /**
+   * One answer for "does not exist" and "not yours". The mission is returned as
+   * it stands now: `orphaned` when the creator's authority is missing.
+   */
   private async ownMission(
     user: AuthoritySubject,
     missionId: string,
   ): Promise<MissionRecord | null> {
+    return (await this.ownInspected(user, missionId))?.mission ?? null;
+  }
+
+  private async ownInspected(
+    user: AuthoritySubject,
+    missionId: string,
+  ): Promise<InspectedMission | null> {
     const mission = await this.deps.store.missions.getById(missionId);
     if (!mission || mission.creatorUserId !== user.id) return null;
-    return mission;
+    return this.deps.grounds.inspect(mission);
   }
 
   /**

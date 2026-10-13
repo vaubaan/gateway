@@ -254,11 +254,20 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   connection is `unowned`: it keeps serving the missions that still have grounds, nobody can
   share or reconnect it, and the operator names a new owner under Administration →
   Connections — their only act on connections.
-- **Orphaned missions.** A mission whose creator no longer covers its accepted risks — the
-  share was revoked or narrowed, the connection revoked, the creator left the group that
-  owned or received it, or was removed — becomes `orphaned` and refuses every call with
-  `mission-inactive`. The Audit shows the creator why (`mission-orphaned`: cause,
-  connection, risks no longer covered).
+- **Orphaned missions, for as long as the authority is missing.** A mission whose creator
+  does not cover its accepted risks — the share was revoked or narrowed, the connection
+  revoked, the creator left the group that owned or received it, or was removed — is
+  `orphaned` and refuses every call with `mission-inactive`. The state is computed from the
+  creator's current authority each time it is read and stored nowhere: when the authority
+  comes back (the owner shares again, the next sign-in carries the group again, the operator
+  reassigns the connection or returns a group membership) the same mission serves calls
+  again with the same token, session and counters. A group claim missing at one sign-in is
+  therefore a refusal until the next sign-in, not a mission to re-issue in every project. A
+  revoked connection never comes back: its missions stay orphaned. While orphaned, no gate
+  is edited, no token rotated and no request granted; the creator can still revoke. The
+  mission page says why the mission is orphaned and whether it can come back; the Audit
+  shows the creator the acts that orphaned and restored it (`mission-orphaned`,
+  `mission-restored`: who, cause, connection, risks not covered).
 
 ### Changed
 
@@ -268,8 +277,13 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 - **An unowned connection whose credential is rejected becomes `expired`**, like an owned
   one, instead of staying `unowned` while serving nothing.
 - **The owner of a connection reads its share entries in the Audit**; the administrative
-  acts gain `connection-reassigned`, `mission-orphaned`, `group-created`,
-  `group-member-added` and `group-member-removed`.
+  acts gain `connection-reassigned`, `mission-orphaned`, `mission-restored`,
+  `group-created`, `group-member-added` and `group-member-removed`.
+- **A mission that is not revoked can always be revoked from its page**, an orphaned or
+  expired one included; "Rotate token" stays on active missions only.
+- **Schema version 7.** Migration `0007` resets the missions an earlier v5 image had stored
+  as `orphaned` to `active` — they read orphaned again at once if their authority is still
+  missing — and makes the database refuse that value from then on.
 
 - **`/mcp` accepts mission tokens only (breaking).** A web session or a delegated token is
   refused with `wrong-credential-kind`; a token replaced by rotation is a 401 from the next
@@ -361,8 +375,9 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 - **The execution door re-checks the creator's authority on every request.** A mission used
   to keep working after the share behind it was revoked or its creator left the owner group:
   the `orphaned` status existed and nothing set it. The door now re-reads the creator's
-  status, memberships and shares for each request (about 20–45 µs), and the services orphan
-  the affected missions as soon as a share, a connection or a membership changes.
+  status, memberships and shares for each request (about 17–45 µs) and refuses the call
+  when they do not ground the mission; the pages read the same answer, and the services
+  audit which act orphaned or restored a mission.
 - **The admin rule counts IdP-claimed groups only.** A local group — which an operator can
   now create and fill in Administration — never makes its members operators, and cannot take
   the name of the admin rule's group.

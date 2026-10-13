@@ -291,7 +291,9 @@ function over the same store, not a second implementation.
 ## Mission state (`mission-state.ts`)
 
 `deriveMissionState({ status, expires_at, period, policy }, counters, now)`:
-`revoked` / `orphaned` / `expired` when the stored status says so; `expired` when
+`revoked` / `orphaned` / `expired` when the status it is given says so (`revoked` and
+`expired` are stored; `orphaned` was derived from the creator's current authority by
+`MissionGrounds.inspect` before the mission got here — [authority](authority.md)); `expired` when
 `expires_at <= now`; otherwise `{ kind: 'active', period, exhausted: RiskId[], remaining }`
 computed from the counters whose `period_start` equals the current period's `start`
 (`consumedInPeriod`), so yesterday's exhaustion is gone today without any write.

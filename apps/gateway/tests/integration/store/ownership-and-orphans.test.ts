@@ -1,12 +1,17 @@
 /**
  * The stored states of the authority chain (spec §2.3): a connection that
- * lost its owner (`unowned`) and its reassignment, a mission that lost its
- * grounds (`orphaned`), the replacement of a target's share, local groups.
- * Every transition is one conditional statement or one transaction.
+ * lost its owner (`unowned`) and its reassignment, the replacement of a
+ * target's share, local groups. Every transition is one conditional statement
+ * or one transaction. A mission that lost its grounds is *not* a stored state:
+ * `orphaned` is derived on every read, and migration 0007 keeps it out of the
+ * table.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { MEMORY_PATH, openDb } from '../../../src/server/store/db.ts';
 import { InvariantError, type Store } from '../../../src/server/store/index.ts';
+import { loadMigrations, runMigrations } from '../../../src/server/store/migrate.ts';
+import { STORED_MISSION_STATUSES } from '../../../src/server/store/repositories/enums.ts';
 import { openTestStore, type TestStore } from '../../../src/server/store/testing.ts';
 import type { ConnectionRecord, Principal } from '../../../src/server/store/types.ts';
 
@@ -113,7 +118,7 @@ describe('ownership and orphan states in the store', () => {
     });
   });
 
-  describe('missions: orphaned', () => {
+  describe('missions: `orphaned` is never stored (migration 0007)', () => {
     const mission = async () => {
       const c = await connect({ kind: 'user', id: ada });
       return store.missions.create({
@@ -132,26 +137,73 @@ describe('ownership and orphan states in the store', () => {
         ],
       });
     };
+    const REFUSED = /orphaned is derived from the creator's current authority, never stored/;
 
-    it('markOrphaned turns an active mission orphaned and stamps closed_at', async () => {
-      const m = await mission();
-      expect(await store.missions.markOrphaned(m.id)).toBe(true);
-      const after = await store.missions.getById(m.id);
-      expect(after).toMatchObject({ status: 'orphaned' });
-      expect(after?.closedAt).not.toBeNull();
-      expect(await store.missions.markOrphaned(m.id)).toBe(false);
+    it('the repository has no way to write it', () => {
+      expect(Object.keys(store.missions)).not.toContain('markOrphaned');
+      // `setStatus` takes a `StoredMissionStatus`: the cast is what a caller would need.
+      expect(STORED_MISSION_STATUSES).toEqual(['active', 'expired', 'revoked']);
     });
 
-    it('never overwrites a revoked or an expired mission, and ignores an unknown id', async () => {
-      const revoked = await mission();
-      await store.missions.setStatus(revoked.id, 'revoked');
-      const expired = await mission();
-      await store.missions.setStatus(expired.id, 'expired');
-      expect(await store.missions.markOrphaned(revoked.id)).toBe(false);
-      expect(await store.missions.markOrphaned(expired.id)).toBe(false);
-      expect(await store.missions.markOrphaned('nope')).toBe(false);
-      expect((await store.missions.getById(revoked.id))?.status).toBe('revoked');
-      expect((await store.missions.getById(expired.id))?.status).toBe('expired');
+    it('the table refuses the value on update and on insert, whoever writes it', async () => {
+      const m = await mission();
+      expect(() =>
+        store.db.prepare("UPDATE missions SET status = 'orphaned' WHERE id = ?").run(m.id),
+      ).toThrow(REFUSED);
+      await expect(store.missions.setStatus(m.id, 'orphaned' as never)).rejects.toThrow(REFUSED);
+      expect(() =>
+        store.db
+          .prepare(
+            `INSERT INTO missions (id, name, creator_user_id, status, period_anchor, created_at, updated_at)
+             VALUES ('raw', 'raw', ?, 'orphaned', '2026-10-13T00:00:00.000Z', '2026-10-13T00:00:00.000Z', '2026-10-13T00:00:00.000Z')`,
+          )
+          .run(ada),
+      ).toThrow(REFUSED);
+      expect((await store.missions.getById(m.id))?.status).toBe('active');
+      // The other statuses are written as before.
+      expect((await store.missions.setStatus(m.id, 'revoked')).status).toBe('revoked');
+    });
+
+    it('resets the verdicts an earlier image stored, and leaves the other missions alone', () => {
+      const db = openDb({ path: MEMORY_PATH });
+      try {
+        const shipped = loadMigrations();
+        runMigrations(
+          db,
+          shipped.filter((m) => m.version < 7),
+          t.clock,
+        );
+        const at = '2026-10-13T08:00:00.000Z';
+        db.prepare(
+          "INSERT INTO users (id, subject, email, status, created_at) VALUES ('u', 's', 'u@x', 'active', ?)",
+        ).run(at);
+        const insert = db.prepare(
+          `INSERT INTO missions (id, name, creator_user_id, status, period_anchor, created_at, updated_at, closed_at)
+           VALUES (?, ?, 'u', ?, ?, ?, ?, ?)`,
+        );
+        insert.run('m-orphaned', 'orphaned by P2.2', 'orphaned', at, at, at, at);
+        insert.run('m-revoked', 'revoked', 'revoked', at, at, at, at);
+        insert.run('m-expired', 'expired', 'expired', at, at, at, at);
+        insert.run('m-active', 'active', 'active', at, at, at, null);
+
+        runMigrations(db, shipped, t.clock);
+
+        const rows = db
+          .prepare<
+            [],
+            { id: string; status: string; closed_at: string | null }
+          >('SELECT id, status, closed_at FROM missions ORDER BY id')
+          .all();
+        expect(rows).toEqual([
+          { id: 'm-active', status: 'active', closed_at: null },
+          { id: 'm-expired', status: 'expired', closed_at: at },
+          // Back to `active`: every reader derives `orphaned` again if the grounds are still gone.
+          { id: 'm-orphaned', status: 'active', closed_at: null },
+          { id: 'm-revoked', status: 'revoked', closed_at: at },
+        ]);
+      } finally {
+        db.close();
+      }
     });
   });
 

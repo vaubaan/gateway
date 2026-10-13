@@ -94,6 +94,7 @@ export function createShareHandlers(deps: ShareHandlerDeps): ShareHandlers {
         ];
         if (outcome.replaced) lines.push('This replaces the restriction they held before.');
         if (outcome.orphaned > 0) lines.push(orphanedLine(outcome.orphaned));
+        if (outcome.restored > 0) lines.push(restoredLine(outcome.restored));
         return await redirectWithNotice(principal.sessionId, connectionPath(connectionId), {
           tone: 'success',
           title: outcome.replaced ? 'Share updated' : 'Shared',
@@ -139,7 +140,11 @@ export function createShareHandlers(deps: ShareHandlerDeps): ShareHandlers {
 }
 
 function orphanedLine(count: number): string {
-  return `${count} ${count === 1 ? 'mission that depended on it is' : 'missions that depended on it are'} now orphaned and ${count === 1 ? 'refuses' : 'refuse'} every call.`;
+  return `${count} ${count === 1 ? 'mission that depended on it is' : 'missions that depended on it are'} now orphaned and ${count === 1 ? 'refuses' : 'refuse'} every call, until a share covers ${count === 1 ? 'it' : 'them'} again.`;
+}
+
+function restoredLine(count: number): string {
+  return `${count} orphaned ${count === 1 ? 'mission is' : 'missions are'} covered again and ${count === 1 ? 'serves' : 'serve'} calls from now on, with ${count === 1 ? 'its' : 'their'} session and counters as they were.`;
 }
 
 function field(form: FormData, name: string): string {

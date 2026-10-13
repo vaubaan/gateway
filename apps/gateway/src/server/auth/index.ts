@@ -9,11 +9,11 @@ import type { InstanceConfig } from '../config/types';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
 import { systemClock, type Clock } from '../store/clock';
-import type { UserRecord } from '../store/types';
 import { Authenticator } from './authenticator';
 import { BootstrapService } from './bootstrap';
 import { createAuthHandlers, type AuthHandlers } from './handlers';
 import { IdpSettingsService } from './idp-settings';
+import type { LoginDeps } from './login';
 import {
   createRelyingPartyFactory,
   type CustomFetch,
@@ -35,8 +35,8 @@ export interface AuthModuleDeps {
   readonly logger: Logger;
   readonly clock?: Clock;
   readonly oidc?: OidcOptions;
-  /** Settles what a membership lost at sign-in held (`MembershipSettler`, handbook authority). */
-  readonly membershipsSynced?: (user: UserRecord) => Promise<void>;
+  /** Watches the user's memberships across a sign-in (`MembershipSettler`, handbook authority). */
+  readonly membershipsChanging?: LoginDeps['membershipsChanging'];
 }
 
 export interface AuthModule {
@@ -75,7 +75,7 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
       bootstrap,
       logger,
       clock,
-      membershipsSynced: deps.membershipsSynced,
+      membershipsChanging: deps.membershipsChanging,
     },
     audit: deps.store.auditWriter,
     logger,

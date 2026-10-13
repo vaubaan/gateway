@@ -138,6 +138,18 @@ describe('ownership: transfer, unowned, operator reassignment', () => {
     // The new owner acts again; the share and its mission never stopped.
     expect((await rig.root.shares.service.contextFor(ada, unowned.id)).shares).toHaveLength(1);
     expect((await rig.read(bobs)).result).toBeDefined();
+    // Ada owns the connection again: the mission her lost membership had orphaned is
+    // restored by the operator's act, and its token serves again.
+    expect(await rig.statusOf(adas)).toBe('active');
+    expect((await rig.read(adas)).result).toBeDefined();
+    expect(await rig.adminEntries('mission-restored')).toMatchObject([
+      {
+        user_id: rig.operator.id,
+        object: { type: 'mission', id: adas.mission.id },
+        before: { status: 'orphaned', cause: 'authority-lost' },
+        after: { status: 'active' },
+      },
+    ]);
     expect((await rig.read(await rig.issueFor(rig.ada, [READ]))).result).toBeDefined();
   });
 
@@ -256,6 +268,49 @@ describe('a sign-in that changes the IdP groups settles what the lost membership
     expect(await rig.adminEntries('mission-orphaned')).toMatchObject([
       { user_id: rig.bob.id, object: { id: mission.mission.id } },
     ]);
+  });
+
+  it('a group claim missing at one sign-in is not a permanent outage: the next sign-in that carries it restores the same mission', async () => {
+    await signIn(bobClaims(['depot-readers']));
+    const readers = (await rig.root.store.groups.getByName('depot-readers'))!;
+    await rig.root.shares.service.share(await rig.actor(rig.ada), rig.connection.id, {
+      target: { kind: 'group', groupId: readers.id },
+      riskIds: [READ],
+    });
+    const mission = await rig.issueFor(rig.bob, [READ]);
+    expect((await rig.read(mission)).result).toBeDefined();
+    const session = (await rig.root.store.sessions.getByMission(mission.mission.id))!;
+    const consumed = async () =>
+      (await rig.root.store.sessions.counters(session.id)).map((c) => [c.riskId, c.consumed]);
+    expect(await consumed()).toEqual([[READ, 1]]);
+
+    // The IdP omits the group at this sign-in (a group overage claim, a broken mapping).
+    await signIn(bobClaims([]));
+    expect(await rig.statusOf(mission)).toBe('orphaned');
+    expect(await rig.storedStatusOf(mission)).toBe('active');
+    const refused = await rig.read(mission);
+    expect(refused.error?.data).toMatchObject({ code: 'mission-inactive', status: 'orphaned' });
+    expect(await consumed()).toEqual([[READ, 1]]);
+
+    // The next sign-in carries it again: same mission, same token, same session, same counters.
+    await signIn(bobClaims(['depot-readers']));
+    expect(await rig.statusOf(mission)).toBe('active');
+    expect((await rig.read(mission)).result).toBeDefined();
+    expect((await rig.root.store.sessions.getByMission(mission.mission.id))?.id).toBe(session.id);
+    expect(await consumed()).toEqual([[READ, 2]]);
+
+    // Both sign-ins are the user's own acts.
+    const acts = [
+      ...(await rig.adminEntries('mission-orphaned')),
+      ...(await rig.adminEntries('mission-restored')),
+    ].map((e) => [e.act, e.user_id, e.object.id]);
+    expect(acts).toEqual([
+      ['mission-orphaned', rig.bob.id, mission.mission.id],
+      ['mission-restored', rig.bob.id, mission.mission.id],
+    ]);
+    // A further sign-in with the same groups writes nothing more.
+    await signIn(bobClaims(['depot-readers']));
+    expect(await rig.adminEntries('mission-restored')).toHaveLength(1);
   });
 
   it('turns a connection unowned when the sign-in removed the last member of its IdP owner group', async () => {

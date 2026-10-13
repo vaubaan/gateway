@@ -44,6 +44,7 @@ import {
   type MissionState,
   type SessionService,
 } from '../budget';
+import type { MissionGrounds } from '../authority';
 import type { Logger } from '../logging';
 import { enumerateCatalog } from '../missions/catalog-view';
 import type { Store } from '../store';
@@ -93,6 +94,8 @@ export interface RequestServiceDeps {
     Store,
     'requests' | 'missions' | 'sessions' | 'approvals' | 'audit' | 'auditWriter'
   >;
+  /** Derives `orphaned` on every mission read (handbook authority). */
+  readonly grounds: Pick<MissionGrounds, 'derive'>;
   /** `approvals.expiry` of the configuration: how long a granted approval stays usable. */
   readonly approvalValiditySeconds: number;
   /** Risk labels come from the plugins' catalogs, the single provider list. */
@@ -654,9 +657,11 @@ export class RequestService {
   private async own(user: RequestActor, requestId: string): Promise<OwnedRequest | null> {
     const request = await this.deps.store.requests.getById(requestId);
     if (!request) return null;
-    const mission = await this.deps.store.missions.getById(request.missionId);
-    if (!mission || mission.creatorUserId !== user.id) return null;
-    return { request, mission };
+    const stored = await this.deps.store.missions.getById(request.missionId);
+    if (!stored || stored.creatorUserId !== user.id) return null;
+    // `orphaned` is derived, never stored: the view and every decision read the
+    // mission as the creator's authority makes it at this instant.
+    return { request, mission: await this.deps.grounds.derive(stored) };
   }
 
   private summaryOf(

@@ -10,7 +10,11 @@
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import type { Authenticator } from '../auth';
-import { ConnectionAuthorityService, type AuthorityService } from '../authority';
+import {
+  ConnectionAuthorityService,
+  type AuthorityService,
+  type MissionGrounds,
+} from '../authority';
 import type { SessionService } from '../budget';
 import type { InstanceConfig } from '../config';
 import type { Logger } from '../logging';
@@ -34,6 +38,8 @@ export interface MissionsModuleDeps {
   readonly logger: Logger;
   /** Defaults to a `ConnectionAuthorityService` over the store; the root injects its own. */
   readonly authority?: AuthorityService;
+  /** Derives `orphaned` on every mission read (handbook authority). */
+  readonly grounds: Pick<MissionGrounds, 'inspect'>;
   readonly clock?: Clock;
   readonly mint?: TokenMinter;
   /** The budget's state read; defaults to the same read over `store.sessions`. */
@@ -54,6 +60,7 @@ export function createMissionsModule(deps: MissionsModuleDeps): MissionsModule {
     store: deps.store,
     registry: deps.registry,
     authority,
+    grounds: deps.grounds,
     publicUrl: deps.config.publicUrl,
     clock: deps.clock ?? systemClock,
     logger: deps.logger.child({ component: 'missions' }),
@@ -98,6 +105,7 @@ export {
   type MissionDetailConnection,
   type MissionDetailRisk,
   type MissionIssuedAudit,
+  type MissionOrphanReason,
   type MissionOverview,
   type MissionServiceDeps,
   type RevealedToken,
@@ -110,6 +118,7 @@ export {
 export type * from './model';
 export { PREVIEW_ISSUE_CODES, PREVIEW_NOTICE_CODES, SEVERITY_LEVELS } from './model';
 export { budgetProblem, previewConnection, previewDraft, uncoveredOf } from './preview';
+export { explainOrphan, type OrphanExplanation } from './orphan-reason';
 export { summarize } from './summary';
 export {
   maskedToken,

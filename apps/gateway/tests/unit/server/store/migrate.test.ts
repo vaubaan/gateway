@@ -106,7 +106,7 @@ describe('migration runner', () => {
     );
   });
 
-  it('ships the six migrations 0001 to 0006 in the default directory', () => {
+  it('ships the seven migrations 0001 to 0007 in the default directory', () => {
     const shipped = loadMigrations(DEFAULT_MIGRATIONS_DIR);
     expect(shipped.map((m) => [m.version, m.name])).toEqual([
       [1, 'schema'],
@@ -115,6 +115,7 @@ describe('migration runner', () => {
       [4, 'connection_resource_curation'],
       [5, 'approval_bound_to_tool'],
       [6, 'oauth_client_decisions'],
+      [7, 'orphaned_not_stored'],
     ]);
   });
 });

@@ -19,6 +19,7 @@ import {
   createBudgetStage,
   type BudgetMission,
 } from '../../../src/server/budget/index.ts';
+import { alwaysGrounded } from '../../../src/server/authority/testing.ts';
 import { createLogger } from '../../../src/server/logging/index.ts';
 import { RequestService } from '../../../src/server/requests/index.ts';
 import {
@@ -223,6 +224,7 @@ describe('budget stage in the pipeline — counters vs audit', () => {
     const requests = new RequestService({
       store: f.store,
       registry: { get: () => undefined },
+      grounds: alwaysGrounded,
       publicUrl: new URL('https://gateway.example.com'),
       approvalValiditySeconds: APPROVAL_VALIDITY_SECONDS,
       clock: f.clock,

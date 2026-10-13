@@ -342,7 +342,7 @@ describe('execution door: the call pipeline', () => {
       expect(await consumed(mission, READ)).toBe(0);
     });
 
-    it('mission-inactive: a revoked connection orphans the missions that carry it (spec §7.8)', async () => {
+    it('mission-inactive: a revoked connection orphans the missions that carry it, as a derived state (spec §7.8)', async () => {
       const mission = await instance.issue({ policy: [line(READ)] });
       // Revoked behind the services' back: the door's own re-check must see it.
       await instance.root.store.connections.revoke(instance.connection.id);
@@ -353,8 +353,9 @@ describe('execution door: the call pipeline', () => {
       expect(refusal.status).toBe('orphaned');
       expect(typeof refusal.reason).toBe('string');
       expect(refusal.hint).toContain('orphaned');
+      // Derived for this request only: the door wrote no verdict.
       expect((await instance.root.store.missions.getById(mission.mission.id))?.status).toBe(
-        'orphaned',
+        'active',
       );
       expect((await callEntries(mission))[0]?.refusal_code).toBe('mission-inactive');
       expect(instance.depot.calls).toHaveLength(0);

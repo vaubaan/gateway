@@ -35,7 +35,7 @@ export interface ExecutionModuleDeps {
   readonly missions: Pick<MissionsModule, 'service'>;
   readonly connections: Pick<ConnectionsModule, 'credentials'>;
   /** Re-checks the creator's authority on every request (handbook authority, "The door"). */
-  readonly grounds: Pick<MissionGrounds, 'settle'>;
+  readonly grounds: Pick<MissionGrounds, 'inspect'>;
   /** The budget's session service (quota, rate windows, gate) — one per process. */
   readonly budget: SessionService;
   readonly cache: CacheClient;

@@ -39,6 +39,17 @@ export const MISSION_STATUSES = membersOf<MissionStatus>({
   revoked: true,
 });
 
+/**
+ * What `missions.status` may hold. `orphaned` is derived from the creator's current
+ * authority on every read (`MissionGrounds`), never stored: a row that carried it would
+ * fail to parse, and the triggers of migration 0007 refuse the write.
+ */
+export const STORED_MISSION_STATUSES = membersOf<Exclude<MissionStatus, 'orphaned'>>({
+  active: true,
+  expired: true,
+  revoked: true,
+});
+
 export const REQUEST_KINDS = membersOf<RequestKind>({ claim: true, approval: true });
 
 export const REQUEST_STATES = membersOf<RequestState>({
@@ -68,6 +79,7 @@ export const ADMIN_ACTS = membersOf<AdminAct>({
   'mission-revoked': true,
   'mission-closed': true,
   'mission-orphaned': true,
+  'mission-restored': true,
   'budget-extended': true,
   'period-reset': true,
   'expiry-extended': true,

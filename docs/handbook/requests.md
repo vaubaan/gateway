@@ -196,6 +196,15 @@ the current period.
 | `extend-expiry` | `missions.expires_at` moved; a mission stored `expired` becomes `active` again        | `mission-closed`; no expiry (`no-expiry`); date not later than max(now, current) (`invalid-expiry`) |
 | `refuse`        | nothing; the risk stays exhausted until the next period, the other risks keep running | never                                                                                               |
 
+`orphaned` is derived, never stored ([authority](authority.md)): `own()`
+reads the mission through `grounds.derive` (`RequestServiceDeps.grounds`,
+required) on every view and every decision. A request of an orphaned mission
+therefore shows its options unavailable (`mission-closed`, with a sentence
+that says the request can be granted once the authority is back), takes a
+refusal only, and is decidable again — the same request, if it has not
+expired — as soon as the creator's authority returns. The same holds for an
+approval request.
+
 No resolution edits `mission_policy`: the next period starts from the
 mission's quota. The period is the one current **when the creator decides**
 (a claim answered after a rollover acts on the new period, where usually

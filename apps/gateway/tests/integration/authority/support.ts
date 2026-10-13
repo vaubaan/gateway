@@ -45,7 +45,13 @@ export interface AuthorityRig extends ExecutionInstance {
     name?: string,
     entryOf?: (riskId: string) => MissionPolicyEntry,
   ): Promise<IssuedMission>;
+  /**
+   * The status its creator reads on the mission page: derived, so `orphaned` while the
+   * authority is missing and `active` again as soon as it is back.
+   */
   statusOf(mission: IssuedMission): Promise<MissionStatus | undefined>;
+  /** What the `missions.status` column holds: never `orphaned`. */
+  storedStatusOf(mission: IssuedMission): Promise<MissionStatus | undefined>;
   adminEntries(act: AdminAuditEntry['act']): Promise<AdminAuditEntry[]>;
   /** `tools/call depot__read_item` on the unlabelled space: touches `depot.read`. */
   read(mission: IssuedMission): ReturnType<ExecutionInstance['call']>;
@@ -92,6 +98,13 @@ export async function authorityRig(options: ExecutionInstanceOptions = {}): Prom
       return { mission: result.mission, token: result.token.secret, prefix: result.token.prefix };
     },
     async statusOf(mission) {
+      const detail = await root.missions.service.get(
+        { id: mission.mission.creatorUserId },
+        mission.mission.id,
+      );
+      return detail?.mission.status;
+    },
+    async storedStatusOf(mission) {
       return (await root.store.missions.getById(mission.mission.id))?.status;
     },
     async adminEntries(act) {
