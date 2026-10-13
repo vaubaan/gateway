@@ -11,6 +11,14 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Added
 
+- **`npm run demo`: the whole interface in your browser, nothing to register.** One
+  command starts the real application on `http://localhost:3210` with a demo identity
+  provider (an account picker: Alice the operator, Bob, Carol — no password), simulated
+  GitHub, Stripe, Cloudflare DNS, Resend and Upstash Redis, and seeded connections,
+  shares, missions in every state, open requests and audit entries; it prints a tour with
+  ready-made `curl` commands. Development only: it refuses a production environment, is
+  not part of the image, binds the loopback interface and deletes its data on exit. See
+  `docs/handbook/demo-mode.md`.
 - **Who did what, when several agents work on one mission.** The Mission session page
   shows the calls of the current period per agent label — allowed, refused, last call,
   the unlabelled ones apart — and filters the timeline to one label; the Audit page has
@@ -415,6 +423,10 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Security
 
+- **The image no longer contains the test suite.** A computed path in the plugin SDK made
+  the build copy the whole `apps/gateway` directory into the standalone output, tests and
+  their fixtures included (an identity provider without passwords among them, inert there).
+  The output now holds what the server needs; a test fails if a test file returns.
 - **The execution door re-checks the creator's authority on every request.** A mission used
   to keep working after the share behind it was revoked or its creator left the owner group:
   the `orphaned` status existed and nothing set it. The door now re-reads the creator's

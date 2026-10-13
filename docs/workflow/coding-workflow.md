@@ -86,6 +86,7 @@ type-check` at the root fans out to all of them.
 | `npm run test` / `test:watch`      | Vitest, whole suite                                                             |
 | `npm run test:e2e` (`test:e2e:v5`) | builds `apps/gateway`, then Playwright on the ephemeral instance (CI job `e2e`) |
 | `npm run dev`                      | `next dev` of `apps/gateway`                                                    |
+| `npm run demo`                     | builds, then the demo instance on `http://localhost:3210` (handbook demo-mode)  |
 | `npm run gen-master-key`           | prints a fresh 32-byte base64 master key                                        |
 | `npm run docker:build`             | builds `deploy/docker/Dockerfile` as `vaubaan-gateway:local`                    |
 | `npm run docker:smoke`             | runs `deploy/docker/smoke.sh` against that image                                |

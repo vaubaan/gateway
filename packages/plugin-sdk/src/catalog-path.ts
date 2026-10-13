@@ -16,6 +16,12 @@
  * and the path is a real filesystem path in vitest, `next dev`, `next build`
  * and the standalone server (where `apps/gateway/next.config.ts` traces every
  * `plugins/*\/src/**\/*.yaml` into the output).
+ *
+ * The `join` below is marked `turbopackIgnore` : left alone, Turbopack treats
+ * the computed path as "dynamic filesystem access" and traces the whole
+ * application directory — tests and their fixtures included — into the
+ * standalone output (ADR local-demo-mode D7). The catalogs do not depend on
+ * that : they are traced by name.
  */
 
 import { dirname, join } from 'node:path';
@@ -41,7 +47,7 @@ export function catalogPathNextTo(
         'a bundler rewrote the module URL; load the catalog from a plain filesystem path',
     );
   }
-  return join(dirname(fileURLToPath(url)), fileName);
+  return join(/* turbopackIgnore: true */ dirname(fileURLToPath(url)), fileName);
 }
 
 function parseModuleUrl(raw: string): URL {

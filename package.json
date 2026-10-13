@@ -26,6 +26,7 @@
     "test:e2e": "npm run test:e2e:v5",
     "test:e2e:v5": "npm run build --workspace @vaubaan/gateway-app && playwright test -c apps/gateway/tests/e2e/v5/playwright.config.ts",
     "dev": "npm run --workspace @vaubaan/gateway-app dev",
+    "demo": "tsx apps/gateway/tests/demo/main.ts",
     "prepare": "husky || true",
     "gen-master-key": "node scripts/gen-master-key.mjs",
     "docker:build": "docker build -f deploy/docker/Dockerfile -t vaubaan-gateway:local .",

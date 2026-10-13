@@ -244,7 +244,13 @@ when the loader reads it. The helper builds the path with `node:path` from
 `import.meta.url` becomes a runtime `file:` URL of the source path relative
 to the output root, so the same path works in vitest, `next dev`,
 `next build` and the standalone server. A non-`file:` URL (a rewrite) throws
-a named error instead of an `ENOENT`. `apps/gateway/next.config.ts` traces
+a named error instead of an `ENOENT`. The `join` call carries
+`/* turbopackIgnore: true */`: without it Turbopack reports the computed path
+as "dynamic filesystem access" and traces the whole `apps/gateway` directory
+— `tests/` included — into `.next/standalone`
+(`apps/gateway/tests/integration/demo/demo-safety.test.ts` fails if a test
+file gets there; ADR [local-demo-mode](../decisions/local-demo-mode.md) D7).
+`apps/gateway/next.config.ts` traces
 `plugins/*/src/**/*.yaml` into `.next/standalone` so the Docker image ships
 every catalog; `apps/gateway/tests/integration/standalone-plugin-catalogs.test.ts`
 checks it after a build. ADR

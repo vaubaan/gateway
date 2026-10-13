@@ -160,6 +160,8 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/compose/boot.test.ts`                     |        4 |
 | `apps/gateway/tests/integration/connections/connect-flow.test.ts`         |        6 |
 | `apps/gateway/tests/integration/connections/repository-status.test.ts`    |        9 |
+| `apps/gateway/tests/integration/demo/demo-safety.test.ts`                 |       13 |
+| `apps/gateway/tests/integration/demo/demo-smoke.test.ts`                  |       15 |
 | `apps/gateway/tests/integration/execution/agent-label.test.ts`            |        6 |
 | `apps/gateway/tests/integration/execution/approval-door.test.ts`          |        7 |
 | `apps/gateway/tests/integration/execution/counters-vs-audit.test.ts`      |        4 |
@@ -299,11 +301,11 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/vercel/tests/unit/plugin.test.ts`                                |       33 |
 | `plugins/vercel/tests/unit/risk-catalog.test.ts`                          |       55 |
 | `plugins/vercel/tests/unit/team-pin.test.ts`                              |       99 |
-| **TOTAL** (`npm run test`, 2026-10-13, after a build; 216 files)          | **5353** |
+| **TOTAL** (`npm run test`, 2026-10-13, after a build; 218 files)          | **5381** |
 
 After a build one test is skipped: the latency measurement of the authority
 re-check (`door-latency.bench.test.ts`, run with `VAUBAAN_BENCH=1`). Without `.next/standalone` the five
-standalone tests (`standalone-native-addons` 3, `standalone-plugin-catalogs` 2) skip; `npm run ci` builds first, so they run there. Each plugin has one
+standalone tests (`standalone-native-addons` 3, `standalone-plugin-catalogs` 2), the demo smoke test (`demo-smoke`, 15) and the four build checks of `demo-safety` skip; `npm run ci` builds first, so they run there. Each plugin has one
 classifier suite, `classify.test.ts`, on its v5 entry point
 `classify(tool, args, resources)`, and its adapter scenarios in
 `execute.test.ts` / `plugin.test.ts` on `plugin.execute` with `mockFetch`.
@@ -2558,6 +2560,41 @@ mutations, each of which must leave its entry in the user's name **with**
 (the token rotated last inside the window, its bounds, older generations, a
 second reuse, another client, a window of 0, two simultaneous renewals over
 HTTP).
+
+## Scenarios — Demo mode
+
+> Covers: handbook [[demo-mode]] ("Safety", "Run it"); ADR [[local-demo-mode]]
+> D6, D7. Spec [`vaubaan-gateway.md`](../spec/vaubaan-gateway.md) §10 ("no
+> integration test against a real provider, ever": every provider request of
+> the demo is answered from memory). `apps/gateway/tests/integration/demo/`.
+
+- **`demo-smoke.test.ts`** (15; needs a build) — **the command, as a human
+  runs it**: spawns `tests/demo/main.ts` on a port the system picks
+  (`DEMO_PORT=0`, `DEMO_SKIP_BUILD=1`) and waits for the printed tour; the
+  tour carries the banner, the three accounts, the `ssh -L` line and the list
+  of things to try; the demo identity provider answers discovery and JWKS
+  over HTTP under `/__demo/idp` with a prefixed issuer; an anonymous visitor
+  is sent to `/login`; **Alice signs in through the account picker**, the
+  redirects of `/auth/login` followed by hand with a cookie jar (authorize →
+  picker → `account=alice` → `/auth/callback` → `/missions`, session cookie
+  set); `/missions`, `/connections`, `/requests`, `/audit`, `/shares`,
+  `/delegations`, `/admin/provider-apps` and `/admin/groups` answer 200 with
+  one seeded item each; `tools/list` on `/mcp` with the mission token the
+  tour prints lists GitHub and Redis tools; `/mcp` without a token is 401;
+  `SIGTERM` ends the process with code 0, deletes the data directory and
+  closes the listener.
+- **`demo-safety.test.ts`** (13) — **the guards**: `assertDemoAllowed` passes
+  in a development or test shell and refuses `NODE_ENV=production`,
+  `VAUBAAN_CONFIG_FILE` and `VAUBAAN_PUBLIC_URL`; `DEMO_PORT` (default, a
+  port, `0`, garbage). **One prefix**: the identity provider and the
+  installation page are under `/__demo`. **No seam in the application**: no
+  route file under `src/app` serves the prefix; nothing under `src/` names
+  `__demo` or `tests/demo`; a normally composed root holds the GitHub
+  plugin's own credential spec (its `installUrl` answers github.com), an
+  https public URL and no identity provider. **The build** (needs one): the
+  standalone output holds `server.js`, **no file from a `tests/` or `demo/`
+  folder** and no file naming `/__demo`; the route manifest has `/missions`
+  and no route under the prefix.
 
 ## Out of scope for these tests
 
