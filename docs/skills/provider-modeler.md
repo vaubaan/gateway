@@ -7,10 +7,13 @@ tracks:
   - plugins/README.md
   - plugins/_template/src/
   - plugins/_template/tests/unit/
+  - plugins/_template/README.md
   - packages/plugin-sdk/src/index.ts
   - packages/plugin-sdk/src/plugin.ts
   - packages/plugin-sdk/src/define-plugin.ts
   - packages/plugin-sdk/src/catalog-loader.ts
+  - packages/plugin-sdk/src/credential.ts
+  - packages/plugin-sdk/src/testing/assertions.ts
   - apps/gateway/src/server/compose/shipped-plugins.ts
 ---
 
@@ -24,9 +27,13 @@ You model a new provider for Vaubaan Gateway as a plugin on the v5 SDK
 (`@vaubaan/plugin-sdk`). A plugin is complete or it does not load:
 `definePlugin` rejects a definition without a data model, a catalog, a
 `CredentialSpec`, `classify`, `execute` and `discoverResources`, and the
-catalog loader rejects a catalog without a preset. The mechanics (file by file, YAML shape, SDK calls) are in
-[`plugins/README.md`](../../plugins/README.md), "Writing a plugin"; this file
-is the method around it.
+catalog loader rejects a catalog without a preset.
+
+**The procedure is [`plugins/README.md`](../../plugins/README.md)**, the
+plugin kit: steps 0 to 11, each with the file to write, the rules and the
+command that checks it. This file does not repeat it. It says what an agent
+adds around it: what to ask, where to stop for a human, and what to hand
+back. Where the two disagree, the kit wins; report the disagreement.
 
 ## Inputs — ask before starting
 
@@ -35,10 +42,12 @@ is the method around it.
 2. The API surface: the upstream documentation, the list of tools wanted, or
    an existing MCP server to rewrap.
 3. The why: the operational use case, which bounds the risks worth modelling.
+4. How the provider authenticates, if the human already knows: a pasted key,
+   OAuth consent, an installed app, an SSH key.
 
 ## Read first
 
-- [`plugins/README.md`](../../plugins/README.md) and the scaffold
+- [`plugins/README.md`](../../plugins/README.md), whole, and the scaffold
   [`plugins/_template`](../../plugins/_template/README.md).
 - [`docs/handbook/plugin-sdk.md`](../handbook/plugin-sdk.md): the contract,
   the catalog loader, environment resolution, the test kit.
@@ -46,90 +55,105 @@ is the method around it.
   model), §3 (slice DSL), §4 (risk catalog), §7 (plugin). Where the spec and
   the SDK disagree, the loader and the test kit are the rules that run.
 - One existing plugin and its handbook under
-  [`docs/handbook/providers/`](../handbook/providers/README.md): `vercel` (one
-  plane, environment in the call), `supabase` (several planes), `github`
-  (app installation, per-call token), `ssh` (shell commands on a host),
-  `railway` (rewrapped remote MCP server, OAuth with refresh).
+  [`docs/handbook/providers/`](../handbook/providers/README.md), chosen for
+  its resemblance: `cloudflare-dns` (`api-key`, one resource per zone,
+  layered write risks), `vercel` (environment in the call), `supabase`
+  (several planes, `oauth2`), `github` (`app-install` with
+  `userVerification`, per-call token), `ssh` (`ssh-key`, shell commands
+  classified from their text), `railway` (rewrapped remote MCP server,
+  `oauth2` with refresh).
 
 Provider documentation comes from Context7
 (`mcp__context7__resolve-library-id`, then `mcp__context7__query-docs`), not
-from memory and not from ad-hoc web fetches.
+from memory and not from ad-hoc web fetches. Record which pages the
+classifier was written from: the pull request states them.
 
 ## Phases
 
-1. **Research — validated by a human before any code.** Draft the handbook
-   `docs/handbook/providers/<vendor>.md` with the six sections listed in
-   [`providers/README.md`](../handbook/providers/README.md) (data model,
-   tool → slice mapping, catalog and presets, coverage, edge cases,
-   credential / discovery / execution / tests) and the open questions. Stop
-   and submit it.
-2. **Scaffold.** Copy `plugins/_template` to `plugins/<vendor>` and rename
-   `template` everywhere (folder, `package.json` name, plugin `id`, catalog
-   `provider:`, tool prefix, data-model provider).
-3. **Data model** — `src/data-model.ts`, exported as `<vendor>DataModel`
-   (`vercelDataModel`, `gmailDataModel`): planes, entities with `parent` and
-   `cardinalities`, and the `envScopable` entity. `definePlugin` runs
-   `validateDataModel` on it.
-4. **Risk catalog** — `src/risk-catalog.yaml`, the only catalog artefact:
-   - Every risk has an explicit id `<vendor>.<name>`, never renamed and never
-     deleted (`deprecated: true` with `replaced_by` instead).
-   - Exactly one `<vendor>.uncategorized-write` entry flagged
-     `fallback: true`. It is touched only when no dedicated entry matches a
-     write, so every tool must be covered by a dedicated risk.
-   - A risk that depends on the environment is one entry with
-     `acceptable_in_envs` (and `vector_overrides.<env>` when the vector
-     changes), never two ids with the environment in the name. The runtime
-     qualifies it as `<vendor>[<env>].<name>` from the owner's label on the
-     resource, or from the plugin's `envOf` when the environment lives in
-     the call.
-   - `presets:` is mandatory, at least one. Each entry names an explicit
-     risk id of this catalog (env-qualified where the risk is env-scoped)
-     with a numeric `quota`, a `rate_limit` and a `gate` (`auto` or
-     `approval`). Never a wildcard or a sentinel, never the fallback, never
-     a deprecated id: an "allow all" preset is the explicit enumeration.
-5. **Classifier** — `src/classify.ts`:
-   `classify<Vendor>(tool, args, resources): ClassifyOutcome`. Pure. It fails
-   closed: an unknown tool, a resource that is ambiguous or outside the
-   mission, or a missing or malformed identifier is `{ denied }`, never a
-   broader slice. A call touching several entities returns several slices; a
-   credential minted by a call is a write.
-6. **Execute** — `src/execute.ts`: `ctx.fetch` only, the secret narrowed with
-   `expectCredentialKind`, `UpstreamAuthError` on 401 / 403, an
-   `McpToolResult` back.
-7. **Credential** — the `CredentialSpec` in `definePlugin`: `api-key`,
-   `oauth2`, `app-install` or `ssh-key`. The host runs the flow and the
-   standard `refresh_token` grant; declare `refresh()` only for a
-   non-standard one.
-8. **Discovery** — `discoverResources(ctx)`: the `Resource` refs
-   (`provider`, `ref`, `displayName`, optional `metadata`) the owner will
-   label and a mission will select. The classifier sees the same refs.
-9. **Tests** — keep `tests/unit/plugin.test.ts` from the template: the kit of
+The numbers on the right are the steps of the kit.
+
+1. **Research — validated by a human before any code** (step 0). Draft the
+   handbook `docs/handbook/providers/<vendor>.md` with its six sections
+   (data model; tool → slice mapping; catalog and presets; coverage; edge
+   cases; credential, discovery, execution, tests) and a list of open
+   questions. It must already answer:
+   - what a **resource** is, and where the environment comes from (the
+     owner's label, a mode of the provider, a segment of the call);
+   - the **risks**, each with its six-axis vector and the reason it deserves
+     its own decision, and which are env-scoped;
+   - the **presets**: at least a read-only one and one for daily work, each
+     entry with a quota, a rate limit and a gate, and which risks are
+     deliberately in no preset;
+   - the **credential kind**, the narrowest key or scopes that work, and for
+     an installed app how the installation is bound to the user who made it.
+
+   **Stop and submit it.** Do not scaffold before the human has answered.
+
+2. **Scaffold** (step 1). Copy `plugins/_template`, set the identity in its
+   three places, rename the exported symbols, run `npm install`, and check
+   that the copied tests pass under the new id.
+3. **Data model** (step 2).
+4. **Risk catalog and presets** (step 3). The rules that are refused when
+   broken, in one place:
+   - explicit ids `<vendor>.<name>`, never renamed, never deleted
+     (`deprecated: true` with `replaced_by`);
+   - exactly one `<vendor>.uncategorized-write` entry matching
+     `<vendor>.**.W` and flagged `fallback: true`; reads need their own
+     entries;
+   - a destructive operation gets its own risk through a verb leaf of the
+     data model (`…record[<id>].delete.W`); a slice matching several risks
+     touches all of them, the mission needs each one, and one gated
+     `approval` gates the call;
+   - an environment-dependent risk is one entry with `acceptable_in_envs`,
+     never two ids;
+   - `presets:` is mandatory. Every entry is an explicit risk id of this
+     catalog (env-qualified where the risk is env-scoped) with a numeric
+     `quota`, a `rate_limit` and a `gate`. **Never a wildcard or a sentinel,
+     never the fallback, never a deprecated id**: a preset that allows
+     everything enumerates everything.
+5. **Tools and classifier** (step 4). Pure and fail closed: an unknown tool,
+   a resource that is ambiguous or outside the mission, a missing or
+   malformed identifier is `{ denied }`, never a broader slice. An identifier
+   that reaches a URL path is one path segment (`pathIdent`). A call touching
+   several entities returns several slices; a call that hands out a
+   credential is a write.
+6. **Credential** (step 5). One `CredentialSpec`: `api-key`, `oauth2`,
+   `app-install` or `ssh-key`. The host runs the flow and the standard
+   `refresh_token` grant; declare `refresh()` only for a non-standard one.
+   For `app-install`, declare `userVerification` whenever the provider can
+   list the installations a user reaches, with `CLIENT_ID_FIELD` and a secret
+   `CLIENT_SECRET_FIELD` in `appConfigFields`; without it the host refuses
+   the connection unless the operator accepts unverified installations. The
+   plugin never sees a client secret and never reads the environment.
+7. **Resources** (step 6). `discoverResources(ctx)` returns the refs the
+   owner will label and a mission will select; the classifier compares with
+   the same refs. The provider's answer goes through a type guard.
+8. **Execution** (step 7). `ctx.fetch` only; the secret narrowed with
+   `expectCredentialKind`; the target resolved with the classifier's
+   functions. A provider failure is thrown (`UpstreamAuthError` on 401 / 403,
+   `UpstreamHttpError` otherwise); `isError: true` is returned only for what
+   the executor declines itself. `ctx.emitPart` with `streamToolResult` only
+   for a provider that answers progressively.
+9. **Wire and test** (step 8). The default export; the kit of
    `@vaubaan/plugin-sdk/testing` (`assertPluginWellFormed`,
    `assertPresetsValid`, `assertNoWildcard`, `assertCatalogCoverage` with at
-   least one sample per tool), asserting that the coverage report has no
-   `fallbackHits` and an explained `risksUntouched`. Add one classifier case
-   per branch, `denied` paths included, and run `execute` and
-   `discoverResources` against `mockFetch`. No test calls a real provider.
-10. **Handbook** — align `docs/handbook/providers/<vendor>.md` with the code,
-    with this frontmatter, and add the row to the index table of
-    `docs/handbook/providers/README.md`:
-
-    ```yaml
-    ---
-    title: <Vendor> provider plugin
-    status: current
-    date: <YYYY-MM-DD>
-    last_synced: <YYYY-MM-DD>
-    tracks:
-      - plugins/<vendor>/src/
-      - plugins/<vendor>/tests/unit/
-    ---
-    ```
-
-11. **Registration** — one import and one array entry in
-    `apps/gateway/src/server/compose/shipped-plugins.ts`, plus the
-    `@vaubaan/plugin-<vendor>` dependency in `apps/gateway/package.json`. That
-    registry is the single provider list; add the provider to no other list.
+   least one sample per tool), asserting no `fallbackHits` and an explained
+   `risksUntouched`; one classifier case per branch, refusals included;
+   `execute` and `discoverResources` against `mockFetch`. No test calls a
+   real provider.
+10. **README and handbook** (step 9). The plugin's `README.md` in the
+    template's sections; the handbook of phase 1 aligned with the code as
+    written, with its `tracks:` frontmatter, and its row in the index of
+    `docs/handbook/providers/README.md`.
+11. **Registration** (step 10). The dependency in
+    `apps/gateway/package.json`, then one import and one array entry in
+    `apps/gateway/src/server/compose/shipped-plugins.ts`. That registry is
+    the single provider list; add the provider to no other list. For an
+    `oauth2` or `app-install` plugin, its app settings in the two examples
+    under `deploy/config/`.
+12. **Version and changelog** (step 11). A new plugin starts at `0.1.0`, the
+    same in `src/index.ts` and `package.json`; `catalog_version: 1`; one
+    entry in the root `CHANGELOG.md` under `[Unreleased]`.
 
 ## Commands
 
@@ -143,6 +167,9 @@ from memory and not from ad-hoc web fetches.
 - The specs are read-only from here; report a gap instead of working around
   it.
 - No new slice notation: names, identifiers, `*`, `**` and lists only.
+- Never a hard-coded instance URL or secret; the provider's public API base
+  is a constant of the plugin.
 - English only, in code, YAML labels and the handbook.
-- Add a `CHANGELOG.md` entry under `[Unreleased]`; hand back the file list,
-  the test run and the open questions.
+- Do not open the pull request and do not commit unless asked. Hand back the
+  file list, the output of the test run, the provider documentation used,
+  what you decided alone, and the open questions.

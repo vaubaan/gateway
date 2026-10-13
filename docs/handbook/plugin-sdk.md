@@ -526,20 +526,32 @@ any more.
 
 ## The template (`plugins/_template`)
 
-`@vaubaan/plugin-template`, provider id `template`, imports the SDK only.
-Seven source files (`identity.ts`, `risk-catalog.yaml` with its
-`fallback: true` entry, `data-model.ts`, `tools.ts`, `classify.ts`,
-`execute.ts`, `index.ts` loading the catalog with `catalogPathNextTo`) and
-one test file running the kit, `mockFetch`, and the on-disk check of the
-catalog path.
+`@vaubaan/plugin-template`, provider id `template`, imports the SDK only. It
+is a complete plugin kept at the level of the shipped ones, and it is never
+registered. The guide that tells a contributor what to change in a copy is
+[`plugins/README.md`](../../plugins/README.md); the template's own README has
+the sections every plugin README has.
+
+Seven source files (`identity.ts`, `risk-catalog.yaml` with three named
+risks, its `fallback: true` entry and two presets, `data-model.ts`,
+`tools.ts` (four tools), `classify.ts`, `execute.ts`, `index.ts` loading the
+catalog with `catalogPathNextTo`) and one test file. The sources import the
+SDK only; `@vaubaan/policy-engine` is a `devDependency`, for the test that
+asserts which risks a slice touches (`risksTouchedBy`).
 
 `identity.ts` is the one place the ids are written: `PROVIDER_ID`, the tool
 names derived from it with `toolPrefixFor` (`TOOL.listWidgets`…) and
 `API_KEY_FIELD`, the name of the credential's secret field. The plugin id,
 the data-model provider, the tool declarations, both dispatch `switch`es,
 the discovered resources and the bearer all read it; a copy changes
-`PROVIDER_ID` and the YAML (`provider:` and the ids), nothing else. The
-test derives its expectations the same way.
+`PROVIDER_ID`, the YAML (`provider:` and the ids) and the `package.json`
+name, nothing else. The test derives its expectations the same way,
+including the catalog path, which it computes from its own location.
+
+`index.ts` exports the plugin as a named export and as the **default
+export** (what `shipped-plugins.ts` imports), and declares an `api-key`
+credential with `createUrl`, `required`, `placeholder`, `pattern` and
+`help`.
 
 The classifier shows the conventions every plugin follows:
 
@@ -551,19 +563,40 @@ The classifier shows the conventions every plugin follows:
   the mission's single resource, and none or several is `denied`. The
   classifier is the check: the gateway's resource stage works from the
   slices and only recognises refs the connection has discovered;
-- identifiers are validated against a safe character class before being
-  embedded in a slice;
+- every identifier goes through `pathIdent` (`PATH_IDENT`,
+  `^[A-Za-z0-9_-]{1,64}$`) before it is embedded in a slice: both
+  identifiers of the template also reach the request path, and a wider
+  class lets `..` through, which `encodeURIComponent` leaves alone and the
+  URL parser then removes — the request would hit the workspace while the
+  slice named a widget (the finding `plugins/cloudflare-dns` fixed first);
 - a call that cannot be placed on the data model is `denied`, never mapped
-  to a broad slice.
+  to a broad slice;
+- a destructive operation has its own risk through a **verb leaf**:
+  `delete_widget` emits `…widget[<id>].delete.W`, the data model declares
+  `delete` under `widget`, and the catalog matches it with `widget-delete`.
+  The pattern of `widget-write` (`widget[**].W`) covers it too, so a deletion
+  touches both risks and a mission needs both — the layering
+  `plugins/cloudflare-dns` uses for record deletions.
 
-`execute.ts` resolves the workspace with the same `resolveWorkspace` (a
-refusal is an `isError` result, returned before any request), so the call
-runs on the workspace the slice named. It shows the injected `fetch`, the
-bearer read from the `api-key` secret by `API_KEY_FIELD` (a credential
-without it is refused, never sent as `Bearer undefined`), the two thrown
-provider failures (`UpstreamAuthError` on 401/403, `UpstreamHttpError` on
-another failed status), and `discoverResources` checking the provider's
-answer with a type guard (`isWorkspaceDtoList`) instead of a cast.
+`execute.ts` resolves the workspace with the same `resolveWorkspace` and the
+widget id with the same `pathIdent` (a refusal is an `isError` result,
+returned before any request), so the call runs on what the slice named. It
+shows the injected `fetch`, the bearer read from the `api-key` secret by
+`API_KEY_FIELD` (a credential without it is refused, never sent as
+`Bearer undefined`), the two thrown provider failures (`UpstreamAuthError`
+on 401/403, `UpstreamHttpError` on another failed status), and
+`discoverResources` checking the provider's answer with a type guard
+(`isWorkspaceDtoList`) instead of a cast and refusing a workspace id that is
+not a path-safe identifier. A `204` (the answer to the `DELETE`) is not
+parsed as JSON; the tool returns its own confirmation.
+
+The test file runs the kit (`assertPluginWellFormed`, `assertPresetsValid`,
+`assertNoWildcard`, `assertCatalogCoverage`), then checks that the default
+export is the plugin and that its `version` equals the one in
+`package.json`, that no preset entry is a wildcard or the fallback, every
+branch of the classifier (hostile identifiers included), the two risks a
+deletion touches, and `execute` and
+`discoverResources` against `mockFetch`.
 
 ## How to debug
 
@@ -639,6 +672,6 @@ fallback: true on it`** — add the flag to the catch-all entry; the kit's
   [`providers/README.md`](./providers/README.md) (index of the
   per-provider handbooks).
 - Guide: [`plugins/README.md`](../../plugins/README.md).
-- Tests: `npx vitest run packages/plugin-sdk plugins/_template` — 113 tests;
+- Tests: `npx vitest run packages/plugin-sdk plugins/_template` — 120 tests;
   `apps/gateway/tests/integration/standalone-plugin-catalogs.test.ts` after
   a `next build`.

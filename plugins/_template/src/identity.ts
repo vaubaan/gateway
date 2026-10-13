@@ -1,9 +1,10 @@
 /**
  * Identity of the `template` provider — the one place its ids are written.
  *
- * A copy of this template changes `PROVIDER_ID` here and `provider:` in
- * `risk-catalog.yaml` (the loader refuses a catalog of another provider, and
- * `definePlugin` a catalog whose provider differs from the plugin id).
+ * A copy of this template changes `PROVIDER_ID` here, `provider:` and the ids
+ * in `risk-catalog.yaml` (the loader refuses a catalog of another provider,
+ * and `definePlugin` a catalog whose provider differs from the plugin id),
+ * and the package name in `package.json`.
  * Everything else — the plugin id, the data-model provider, the tool names,
  * the resources `discoverResources` returns, the credential field — is
  * derived from this module, so a classifier can never emit slices under one
@@ -25,4 +26,5 @@ export const TOOL = {
   listWidgets: `${prefix}list_widgets`,
   getWidget: `${prefix}get_widget`,
   updateWidget: `${prefix}update_widget`,
+  deleteWidget: `${prefix}delete_widget`,
 } as const;

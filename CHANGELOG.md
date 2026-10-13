@@ -19,6 +19,15 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   page, next to the commit, as on `/healthz`. What a version number promises —
   configuration keys, refusal codes, the plugin contract, catalog ids — is written down in
   `docs/workflow/coding-workflow.md`; pulling and verifying an image in `deploy/README.md`.
+- **Contributing, and a kit to write a provider plugin.** `CONTRIBUTING.md` takes an
+  outside contributor from a fresh clone to a pull request (setup, the demo, the tests, the
+  documentation-first rule, the checklist); `plugins/README.md` is a step-by-step guide to
+  write, test and submit a plugin, checked by writing a plugin from it; `SECURITY.md` says
+  how to report a vulnerability privately, what is in scope and the trust model. New issue
+  form "Catalog correction" for a wrong or missing risk. The plugin scaffold
+  (`plugins/_template`) is brought to the level of the shipped plugins: identifiers that
+  reach a request path are limited to one path segment, in the classifier and the executor
+  alike.
 - **`npm run demo`: the whole interface in your browser, nothing to register.** One
   command starts the real application on `http://localhost:3210` with a demo identity
   provider (an account picker: Alice the operator, Bob, Carol — no password), simulated

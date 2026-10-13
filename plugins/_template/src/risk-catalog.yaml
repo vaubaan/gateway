@@ -52,6 +52,29 @@ risks:
         reversibility: costly
         visibility: public
 
+  # A destructive operation gets its own entry through a verb leaf of the
+  # data model (`delete`). The pattern of `widget-write` above, `widget[**].W`,
+  # also matches a deletion : a slice may touch several risks, and the mission
+  # must then have accepted every one of them. A deletion therefore needs
+  # `widget-write` and `widget-delete`.
+  - id: template.widget-delete
+    label: 'Delete a widget'
+    reason: >-
+      A deleted widget cannot be restored. Kept apart from other writes so a
+      mission can modify widgets without being able to remove them.
+    matches: 'template.workspace[**].widget[**].delete.W'
+    acceptable_in_envs: [staging, prod]
+    vector:
+      reversibility: irreversible
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+      persistence: session
+    vector_overrides:
+      prod:
+        visibility: public
+
   # Fallback — must exist, exactly once. It is touched only by writes no
   # other entry covers, so a preset should not include it. Seen in
   # production, it means a tool classifies to a slice no fine-grained entry
@@ -83,7 +106,7 @@ presets:
 
   - id: developer
     label: Developer
-    description: Read everywhere, write on staging freely, write on prod with approval.
+    description: Read everywhere ; write and delete on staging freely, on prod with approval.
     entries:
       - risk_id: template.read-widgets
         quota: 5000
@@ -96,4 +119,14 @@ presets:
       - risk_id: template[prod].widget-write
         quota: 20
         rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+      # Deleting on staging : both risks are `auto`. Deleting on prod : one
+      # gated risk is enough for the whole call to wait for an approval.
+      - risk_id: template[staging].widget-delete
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: template[prod].widget-delete
+        quota: 5
+        rate_limit: { max: 2, window_seconds: 60 }
         gate: approval

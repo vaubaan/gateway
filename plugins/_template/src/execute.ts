@@ -18,8 +18,10 @@
  *     failed at the provider.
  *   - the provider's public API base is a constant of the plugin : it is a
  *     fact about the provider, not configuration of the instance.
- *   - the workspace is resolved by the classifier's own `resolveWorkspace` :
- *     the call runs on the workspace the slice named, or not at all.
+ *   - the workspace is resolved by the classifier's own `resolveWorkspace`
+ *     and every identifier that reaches the request path goes through the
+ *     classifier's own `pathIdent` : the call runs on the workspace and the
+ *     widget the slice named, or not at all.
  *   - what the provider answers is untrusted : checked by a type guard
  *     before it becomes a `Resource`.
  */
@@ -34,7 +36,7 @@ import {
   type Resource,
 } from '@vaubaan/plugin-sdk';
 
-import { resolveWorkspace } from './classify.ts';
+import { MALFORMED_WIDGET_ID, pathIdent, resolveWorkspace } from './classify.ts';
 import { API_KEY_FIELD, PROVIDER_ID, TOOL } from './identity.ts';
 
 /** Public API of the provider. Replace with the real base URL in a copy of this template. */
@@ -53,29 +55,31 @@ export async function executeTemplate(
   const resolved = resolveWorkspace(args, ctx.resources);
   // Declined here, before any request : a result the agent reads, not an upstream failure.
   if ('denied' in resolved) return refused(resolved.denied);
-  const workspace = encodeURIComponent(resolved.ref);
+  // `resolved.ref` and the widget id went through `pathIdent` : one path
+  // segment each, so they are interpolated as they are.
+  const widgets = `/workspaces/${resolved.ref}/widgets`;
   switch (tool) {
     case TOOL.listWidgets:
-      return text(await request(ctx, 'GET', `/workspaces/${workspace}/widgets`));
-    case TOOL.getWidget:
-      return text(
-        await request(
-          ctx,
-          'GET',
-          `/workspaces/${workspace}/widgets/${encodeURIComponent(String(args.widget_id))}`,
-        ),
-      );
-    case TOOL.updateWidget:
-      return text(
-        await request(
-          ctx,
-          'PATCH',
-          `/workspaces/${workspace}/widgets/${encodeURIComponent(String(args.widget_id))}`,
-          {
-            name: args.name,
-          },
-        ),
-      );
+      return text(await request(ctx, 'GET', widgets));
+    case TOOL.getWidget: {
+      const id = pathIdent(args.widget_id);
+      if (!id) return refused(MALFORMED_WIDGET_ID);
+      return text(await request(ctx, 'GET', `${widgets}/${id}`));
+    }
+    case TOOL.updateWidget: {
+      const id = pathIdent(args.widget_id);
+      if (!id) return refused(MALFORMED_WIDGET_ID);
+      if (typeof args.name !== 'string' || args.name.length === 0) {
+        return refused('name: expected a non-empty string');
+      }
+      return text(await request(ctx, 'PATCH', `${widgets}/${id}`, { name: args.name }));
+    }
+    case TOOL.deleteWidget: {
+      const id = pathIdent(args.widget_id);
+      if (!id) return refused(MALFORMED_WIDGET_ID);
+      await request(ctx, 'DELETE', `${widgets}/${id}`);
+      return text({ deleted: id });
+    }
     default:
       return refused(`unknown tool '${tool}'`);
   }
@@ -88,6 +92,12 @@ export async function discoverTemplateResources(
   const workspaces = await request(ctx, 'GET', '/workspaces');
   if (!isWorkspaceDtoList(workspaces)) {
     throw new Error(`${PROVIDER_ID}: unexpected workspace list (expected [{ id, name }])`);
+  }
+  // A ref the classifier would refuse is of no use to a mission : say so at
+  // connection time instead of listing a resource no call can name.
+  const unusable = workspaces.find((w) => pathIdent(w.id) === null);
+  if (unusable) {
+    throw new Error(`${PROVIDER_ID}: workspace id '${unusable.id}' is not a path-safe identifier`);
   }
   return workspaces.map((w) => ({ provider: PROVIDER_ID, ref: w.id, displayName: w.name }));
 }
@@ -132,6 +142,8 @@ async function request(
       res.status,
     );
   }
+  // A success without content (the answer to a DELETE) is not JSON.
+  if (res.status === 204) return null;
   return await res.json();
 }
 

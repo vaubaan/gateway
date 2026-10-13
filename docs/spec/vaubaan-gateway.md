@@ -692,7 +692,8 @@ command.
   credential. They also declare how to obtain and refresh a credential
   from the app registered by the company, how to discover resources, and
   ship at least one **preset** in their catalog. Contribution process:
-  [integrations-submission-kit](../handbook/legacy/integrations-submission-kit.md).
+  [CONTRIBUTING](../../CONTRIBUTING.md) and the plugin kit,
+  [plugins/README](../../plugins/README.md).
 - **The company's IdP** — authenticates humans, provides subject, email
   and groups. The instance trusts it for identity, never for
   authorization: shares and missions are local.
