@@ -268,8 +268,16 @@ The admin rule counts **IdP-claimed** groups only (`currentAuthority` in
   died is `expired`, and still ownerless). `reassign` refuses a connection
   that has an owner (`not-ownerless`), an unknown user (`owner-unknown`) and a
   group without member (`owner-group-empty`); `ConnectionsRepo.assignOwnerlessTo`
-  sets the owner and turns `unowned` back to `active` (an `expired` one stays
-  `expired` for its new owner to reconnect); entry `connection-reassigned`.
+  checks both conditions again inside its write transaction, sets the owner
+  and turns `unowned` back to `active` (an `expired` one stays `expired` for
+  its new owner to reconnect); entry `connection-reassigned`.
+  `ConnectionService.reassignTargets()` lists the groups `reassign` accepts —
+  the ones that have a member — for the form of Administration → Connections.
+- `ownerActRefusal(connection)` (`connections/service.ts`) is the one
+  statement of "a revoked or unowned connection takes no owner act":
+  `connection-revoked`, `connection-unowned` or `null`. The connection
+  service's own refusals, `ShareService.share` and the pages
+  (`transferTargets`, `ShareContext.unshareable`) all read it.
   The missions the emptied group had left orphaned serve again when their
   creator is the new owner or a member of the new owner group
   (`mission-restored`, actor: the operator).

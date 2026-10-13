@@ -397,30 +397,31 @@ per sliding window on the root's `RateLimiter`, under the key shown.
 Authorization server of the management door (`oauth.*` has six keys;
 everything else is fixed):
 
-| What                                                               | Value            | Constant                                                          | Module                                 |
-| ------------------------------------------------------------------ | ---------------- | ----------------------------------------------------------------- | -------------------------------------- |
-| Longest `oauth.access_token_ttl`                                   | 3600 s (1 h)     | `maxSeconds` of the key in `KEYS`                                 | `config/sources.ts`                    |
-| Longest `oauth.refresh_reuse_window_seconds`                       | 60 s             | `max` of the key in `KEYS`                                        | `config/sources.ts`                    |
-| Lifetime of an authorization code                                  | 60 s             | `AUTHORIZATION_CODE_TTL_MS`                                       | `oauth-as/authorization.ts`            |
-| Time to answer the consent screen                                  | 10 min           | `CONSENT_TTL_MS`                                                  | `oauth-as/authorization.ts`            |
-| Longest `state` of an authorization request                        | 1024 characters  | `MAX_STATE_LENGTH`                                                | `oauth-as/authorization.ts`            |
-| Token and revocation requests per client address                   | 60 per minute    | `TOKEN_REQUESTS_PER_WINDOW`, `TOKEN_WINDOW_MS`                    | `oauth-as/handlers.ts`                 |
-| Token requests per authenticated client                            | 120 per minute   | `TOKEN_REQUESTS_PER_CLIENT`, `TOKEN_WINDOW_MS`                    | `oauth-as/handlers.ts`                 |
-| Client registrations per client address                            | 20 per 10 min    | `REGISTRATIONS_PER_WINDOW`, `REGISTRATION_WINDOW_MS`              | `oauth-as/handlers.ts`                 |
-| Client registrations, whole instance                               | 300 per hour     | `REGISTRATIONS_PER_INSTANCE`, `REGISTRATION_INSTANCE_WINDOW_MS`   | `oauth-as/handlers.ts`                 |
-| Largest token, revocation or registration body                     | 16 384 bytes     | `MAX_REQUEST_BYTES`                                               | `oauth-as/handlers.ts`                 |
-| Redirect URIs per registered client                                | 10               | `MAX_REDIRECT_URIS`                                               | `oauth-as/clients.ts`                  |
-| Longest redirect URI                                               | 1024 characters  | `MAX_REDIRECT_URI_LENGTH`                                         | `oauth-as/redirect-uri.ts`             |
-| An undecided client nobody consented to is forgotten after         | 30 days          | `UNUSED_CLIENT_RETENTION_MS`                                      | `oauth-as/clients.ts`                  |
-| Metadata-document fetches per requesting user                      | 10 per minute    | `DOCUMENT_FETCHES_PER_WINDOW`, `DOCUMENT_FETCH_WINDOW_MS`         | `oauth-as/clients.ts`                  |
-| Metadata document: longest client-id URL                           | 512 characters   | `MAX_CLIENT_ID_URL_LENGTH`                                        | `oauth-as/client-metadata-document.ts` |
-| Metadata document: largest body                                    | 16 384 bytes     | `MAX_DOCUMENT_BYTES`                                              | `oauth-as/client-metadata-document.ts` |
-| Metadata document: fetch timeout                                   | 5 s              | `DOCUMENT_FETCH_TIMEOUT_MS`                                       | `oauth-as/client-metadata-document.ts` |
-| Metadata document: redirect URIs                                   | 10               | `MAX_DOCUMENT_REDIRECT_URIS`                                      | `oauth-as/client-metadata-document.ts` |
-| Metadata document: longest client name                             | 80 characters    | `MAX_CLIENT_NAME_LENGTH`                                          | `oauth-as/client-metadata-document.ts` |
-| Metadata document: reuse of a fetched document (min, default, max) | 5 min, 1 h, 24 h | `MIN_CACHE_SECONDS`, `DEFAULT_CACHE_SECONDS`, `MAX_CACHE_SECONDS` | `oauth-as/client-metadata-document.ts` |
-| Sweep of expired codes and tokens: at most every                   | 1 h              | `PURGE_INTERVAL_MS`                                               | `oauth-as/token-service.ts`            |
-| An expired code or token is kept (a replay is still recognised)    | 24 h             | `PURGE_GRACE_MS`                                                  | `oauth-as/token-service.ts`            |
+| What                                                                                          | Value            | Constant                                                          | Module                                 |
+| --------------------------------------------------------------------------------------------- | ---------------- | ----------------------------------------------------------------- | -------------------------------------- |
+| Longest `oauth.access_token_ttl`                                                              | 3600 s (1 h)     | `maxSeconds` of the key in `KEYS`                                 | `config/sources.ts`                    |
+| Longest `oauth.refresh_reuse_window_seconds`                                                  | 60 s             | `max` of the key in `KEYS`                                        | `config/sources.ts`                    |
+| Lifetime of an authorization code                                                             | 60 s             | `AUTHORIZATION_CODE_TTL_MS`                                       | `oauth-as/authorization.ts`            |
+| Time to answer the consent screen                                                             | 10 min           | `CONSENT_TTL_MS`                                                  | `oauth-as/authorization.ts`            |
+| Longest `state` of an authorization request                                                   | 1024 characters  | `MAX_STATE_LENGTH`                                                | `oauth-as/authorization.ts`            |
+| Token and revocation requests per client address                                              | 60 per minute    | `TOKEN_REQUESTS_PER_WINDOW`, `TOKEN_WINDOW_MS`                    | `oauth-as/handlers.ts`                 |
+| Token requests per confidential client, once its secret matched (`oauth:token:client:<id>`)   | 120 per minute   | `TOKEN_REQUESTS_PER_CLIENT`, `TOKEN_WINDOW_MS`                    | `oauth-as/handlers.ts`                 |
+| Renewals per delegation, once the refresh token is recognised (`oauth:token:delegation:<id>`) | 120 per minute   | `RENEWALS_PER_DELEGATION`, `RENEWAL_WINDOW_MS`                    | `oauth-as/token-service.ts`            |
+| Client registrations per client address                                                       | 20 per 10 min    | `REGISTRATIONS_PER_WINDOW`, `REGISTRATION_WINDOW_MS`              | `oauth-as/handlers.ts`                 |
+| Client registrations, whole instance                                                          | 300 per hour     | `REGISTRATIONS_PER_INSTANCE`, `REGISTRATION_INSTANCE_WINDOW_MS`   | `oauth-as/handlers.ts`                 |
+| Largest token, revocation or registration body                                                | 16 384 bytes     | `MAX_REQUEST_BYTES`                                               | `oauth-as/handlers.ts`                 |
+| Redirect URIs per registered client                                                           | 10               | `MAX_REDIRECT_URIS`                                               | `oauth-as/clients.ts`                  |
+| Longest redirect URI                                                                          | 1024 characters  | `MAX_REDIRECT_URI_LENGTH`                                         | `oauth-as/redirect-uri.ts`             |
+| An undecided client nobody consented to is forgotten after                                    | 30 days          | `UNUSED_CLIENT_RETENTION_MS`                                      | `oauth-as/clients.ts`                  |
+| Metadata-document fetches per requesting user                                                 | 10 per minute    | `DOCUMENT_FETCHES_PER_WINDOW`, `DOCUMENT_FETCH_WINDOW_MS`         | `oauth-as/clients.ts`                  |
+| Metadata document: longest client-id URL                                                      | 512 characters   | `MAX_CLIENT_ID_URL_LENGTH`                                        | `oauth-as/client-metadata-document.ts` |
+| Metadata document: largest body                                                               | 16 384 bytes     | `MAX_DOCUMENT_BYTES`                                              | `oauth-as/client-metadata-document.ts` |
+| Metadata document: fetch timeout                                                              | 5 s              | `DOCUMENT_FETCH_TIMEOUT_MS`                                       | `oauth-as/client-metadata-document.ts` |
+| Metadata document: redirect URIs                                                              | 10               | `MAX_DOCUMENT_REDIRECT_URIS`                                      | `oauth-as/client-metadata-document.ts` |
+| Metadata document: longest client name                                                        | 80 characters    | `MAX_CLIENT_NAME_LENGTH`                                          | `oauth-as/client-metadata-document.ts` |
+| Metadata document: reuse of a fetched document (min, default, max)                            | 5 min, 1 h, 24 h | `MIN_CACHE_SECONDS`, `DEFAULT_CACHE_SECONDS`, `MAX_CACHE_SECONDS` | `oauth-as/client-metadata-document.ts` |
+| Sweep of expired codes and tokens: at most every                                              | 1 h              | `PURGE_INTERVAL_MS`                                               | `oauth-as/token-service.ts`            |
+| An expired code or token is kept (a replay is still recognised)                               | 24 h             | `PURGE_GRACE_MS`                                                  | `oauth-as/token-service.ts`            |
 
 The refresh reuse window itself is a key (`oauth.refresh_reuse_window_seconds`,
 30 s by default); only its 60 s ceiling is fixed.
@@ -472,27 +473,26 @@ for tests; the composition root passes neither.
 
 Sign-in, connections, missions, audit, store and caches:
 
-| What                                                       | Value                    | Constant                                                 | Module                                            |
-| ---------------------------------------------------------- | ------------------------ | -------------------------------------------------------- | ------------------------------------------------- |
-| Web session, absolute lifetime                             | 8 h                      | `SESSION_TTL_MS`                                         | `auth/session-service.ts`                         |
-| Time to come back from the IdP                             | 10 min                   | `LOGIN_TTL_MS`                                           | `auth/session-service.ts`                         |
-| Clock skew tolerated on an ID token                        | 60 s                     | `DEFAULT_CLOCK_TOLERANCE_SECONDS`                        | `auth/relying-party.ts`                           |
-| Connect attempts per user (`connect:<user>`)               | 10 per minute            | `CONNECT_RATE_LIMIT`, `CONNECT_RATE_WINDOW_MS`           | `connections/service.ts`                          |
-| Resource discovery timeout                                 | 30 s                     | `DISCOVERY_TIMEOUT_MS`                                   | `connections/service.ts`                          |
-| Provider token endpoint timeout                            | 15 s                     | `TOKEN_REQUEST_TIMEOUT_MS`                               | `connections/oauth2.ts`                           |
-| An access token expiring within this delay is refreshed    | 60 s                     | `REFRESH_SKEW_MS`                                        | `connections/credentials.ts`                      |
-| Pending connect flow, and its notice                       | 10 min, 5 min            | `CONNECT_TTL_MS`, `NOTICE_TTL_MS`                        | `connections/pending.ts`                          |
-| Installation pages read before a connection is refused     | 20                       | `MAX_INSTALLATION_PAGES`                                 | `connections/install-verification.ts`             |
-| Longest connection name                                    | 80 characters            | `MAX_NAME_CHARS`                                         | `connections/input.ts`                            |
-| Longest mission name                                       | 120 characters           | `MISSION_NAME_MAX_LENGTH`                                | `missions/preview.ts`                             |
-| Shortest and longest recurring period of a mission         | 60 s, 366 days           | `MIN_PERIOD_SECONDS`, `MAX_PERIOD_SECONDS`               | `missions/preview.ts`                             |
-| Longest local group name                                   | 80 characters            | `GROUP_NAME_MAX_LENGTH`                                  | `groups/service.ts`                               |
-| Retention sweep of the audit (after the one at boot)       | every hour               | `RETENTION_SWEEP_INTERVAL_MS`                            | `audit/retention.ts`                              |
-| Audit page size; session timeline page size                | 50; 100                  | `AUDIT_PAGE_SIZE`, `SESSION_EVENTS_PAGE_SIZE`            | `audit/query-service.ts`, `audit/session-view.ts` |
-| Events a filtered session timeline looks through, per page | 2000, read 200 at a time | `SESSION_FILTER_SCAN_LIMIT`, `SESSION_FILTER_SCAN_BATCH` | `audit/session-view.ts`                           |
-| SQLite busy timeout                                        | 5 s                      | `DEFAULT_BUSY_TIMEOUT_MS`                                | `store/db.ts`                                     |
-| Entries of the in-memory cache                             | 10 000                   | `DEFAULT_MAX_ENTRIES`                                    | `packages/gateway-core/src/cache.ts`              |
-| Keys after which the sliding-window limiter prunes         | 10 000                   | `DEFAULT_PRUNE_THRESHOLD`                                | `rate-limit/sliding-window.ts`                    |
+| What                                                    | Value          | Constant                                       | Module                                            |
+| ------------------------------------------------------- | -------------- | ---------------------------------------------- | ------------------------------------------------- |
+| Web session, absolute lifetime                          | 8 h            | `SESSION_TTL_MS`                               | `auth/session-service.ts`                         |
+| Time to come back from the IdP                          | 10 min         | `LOGIN_TTL_MS`                                 | `auth/session-service.ts`                         |
+| Clock skew tolerated on an ID token                     | 60 s           | `DEFAULT_CLOCK_TOLERANCE_SECONDS`              | `auth/relying-party.ts`                           |
+| Connect attempts per user (`connect:<user>`)            | 10 per minute  | `CONNECT_RATE_LIMIT`, `CONNECT_RATE_WINDOW_MS` | `connections/service.ts`                          |
+| Resource discovery timeout                              | 30 s           | `DISCOVERY_TIMEOUT_MS`                         | `connections/service.ts`                          |
+| Provider token endpoint timeout                         | 15 s           | `TOKEN_REQUEST_TIMEOUT_MS`                     | `connections/oauth2.ts`                           |
+| An access token expiring within this delay is refreshed | 60 s           | `REFRESH_SKEW_MS`                              | `connections/credentials.ts`                      |
+| Pending connect flow, and its notice                    | 10 min, 5 min  | `CONNECT_TTL_MS`, `NOTICE_TTL_MS`              | `connections/pending.ts`                          |
+| Installation pages read before a connection is refused  | 20             | `MAX_INSTALLATION_PAGES`                       | `connections/install-verification.ts`             |
+| Longest connection name                                 | 80 characters  | `MAX_NAME_CHARS`                               | `connections/input.ts`                            |
+| Longest mission name                                    | 120 characters | `MISSION_NAME_MAX_LENGTH`                      | `missions/preview.ts`                             |
+| Shortest and longest recurring period of a mission      | 60 s, 366 days | `MIN_PERIOD_SECONDS`, `MAX_PERIOD_SECONDS`     | `missions/preview.ts`                             |
+| Longest local group name                                | 80 characters  | `GROUP_NAME_MAX_LENGTH`                        | `groups/errors.ts`                                |
+| Retention sweep of the audit (after the one at boot)    | every hour     | `RETENTION_SWEEP_INTERVAL_MS`                  | `audit/retention.ts`                              |
+| Audit page size; session timeline page size             | 50; 100        | `AUDIT_PAGE_SIZE`, `SESSION_EVENTS_PAGE_SIZE`  | `audit/query-service.ts`, `audit/session-view.ts` |
+| SQLite busy timeout                                     | 5 s            | `DEFAULT_BUSY_TIMEOUT_MS`                      | `store/db.ts`                                     |
+| Entries of the in-memory cache                          | 10 000         | `DEFAULT_MAX_ENTRIES`                          | `packages/gateway-core/src/cache.ts`              |
+| Keys after which the sliding-window limiter prunes      | 10 000         | `DEFAULT_PRUNE_THRESHOLD`                      | `rate-limit/sliding-window.ts`                    |
 
 Limits that belong to one plugin are in that plugin's page under
 [providers](providers/README.md) (the GitHub installation-token cache in

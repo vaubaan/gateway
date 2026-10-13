@@ -387,6 +387,14 @@ gives it an owner again — all three, with shares, are in
 [authority](authority.md). The same `owns` check serves a user owner and a
 group owner.
 
+`ownerActRefusal(connection)` (`service.ts`) states once why a connection
+takes no owner act — share, transfer, reconnect: `connection-revoked`,
+`connection-unowned`, or `null` when it does. The service's refusals, the
+shares service and the pages (through `transferTargets` and
+`ShareContext.unshareable`) read it there. `reassignTargets()` is the
+matching reading for the operator's form: the groups `reassign` would accept
+as the new owner, the ones that have a member.
+
 `reassign` holds its rule at the write. The operator only reassigns a
 connection that has no owner left (spec §2.3), and that is decided by
 `ConnectionsRepo.assignOwnerlessTo(id, owner)` inside one

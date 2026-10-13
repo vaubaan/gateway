@@ -36,8 +36,9 @@ mission state) and [authentication](authentication.md) (session, origin check).
 
 ```
 apps/gateway/src/server/authority/
-  catalog-authority.ts   explicitRiskIdsOf(), fullCatalogRiskIds()  — a catalog as explicit ids   (pure)
-  authority-service.ts   AuthorityService, ConnectionAuthorityService, uncoveredRisks()
+  catalog-authority.ts   explicitRiskIdsOf(), fullCatalogRiskIds()  — a catalog as explicit ids;
+                         uncoveredRisks() — the one "asked minus held"                              (pure)
+  authority-service.ts   AuthorityService, ConnectionAuthorityService
                          (the rest of the module — grounds, shares — is in handbook authority)
 apps/gateway/src/server/missions/
   model.ts               MissionDraft, IssuanceConnection, MissionPreview, PreviewIssue, PreviewNotice… (types)
@@ -490,7 +491,11 @@ and reloads the page's data.
 - **Creator only**, like every act on a mission: anyone else gets `not-found`. A revoked
   or orphaned mission answers `inactive`: every call is refused whatever its gates.
   `orphaned` is derived at the instant of the edit, so the gate is editable again as soon
-  as the creator's authority is back.
+  as the creator's authority is back. The rule is stated once, in
+  `gateEditBlockedBy(mission)` (`mission-service.ts`: `revoked`, `orphaned` or `null`):
+  `setGate` refuses on it and the mission page reads it as `MissionDetail.gates_editable`,
+  so the page shows the gate buttons exactly when the edit would be taken
+  (`tests/integration/authority/rules-read-by-pages.test.ts`).
 - **It applies to the next call.** The execution door loads the policy for each call;
   nothing is cached, nothing is re-issued, the token does not change. Open approval
   requests are left where they are (the creator answers them, or they expire).

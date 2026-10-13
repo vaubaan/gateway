@@ -494,9 +494,9 @@ transaction takes the delegation from the code or from the rotated token.
 ## Repository methods at a glance
 
 Every method of the twelve repository interfaces, as declared in `repositories/*.ts`.
-Some P0.3 primitives are called by the store suites and the fixtures only (requests,
-shares and approvals are created inside a decision transaction in production); they are
-listed all the same: the list is the interface.
+Some P0.3 primitives are called by the store suites and the fixtures only (in production a
+request or an approval is born inside a decision transaction and a share through
+`replaceForTarget`); they are listed all the same: the list is the interface.
 
 | Repository                        | Methods                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

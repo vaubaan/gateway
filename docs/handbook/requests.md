@@ -216,7 +216,9 @@ request.
 #### A request on an orphaned mission still expires
 
 The sweeper expires the open requests of an orphaned mission on the normal
-`requests.expiry` delay, like any other. This is a decision, not an oversight:
+`requests.expiry` delay, like any other. This is a decision, not an oversight
+(ADR
+[request-expiry-on-orphaned-missions](../decisions/request-expiry-on-orphaned-missions.md)):
 
 - **The sealed arguments live as long as the request and no longer** (spec
   §3.5). Pausing the request's clock while the mission is orphaned would hold

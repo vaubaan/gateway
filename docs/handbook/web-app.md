@@ -273,24 +273,26 @@ addons, the migrations, the plugin catalogs) and removes what must never ship
 (`outputFileTracingExcludes`, the list `NEVER_SHIPPED`: `tests/**`, every `*.test.ts(x)`
 under `src/`, `tsconfig.tsbuildinfo`).
 
-The second list exists because of one line of the plugin SDK: `catalogPathNextTo`
-(`packages/plugin-sdk/src/catalog-path.ts`) joins a path computed at run time, and
-Turbopack answers a computed filesystem path by tracing the whole application directory
-into every entry that reaches it (the build prints "Dynamic filesystem access causes
-tracing of the whole project"). Every route reaches the plugins through the composition
-root, so every route trace named the tests.
+Two guards keep the tests out of the output, because of one line of the plugin SDK:
+`catalogPathNextTo` (`packages/plugin-sdk/src/catalog-path.ts`) joins a path computed at
+run time, and Turbopack answers a computed filesystem path by tracing the whole
+application directory into every entry that reaches it ("Dynamic filesystem access causes
+tracing of the whole project"). Every route, and the boot hook, reach the plugins through
+the composition root.
 
-**Known limit.** Turbopack applies `outputFileTracingExcludes` to route traces only. The
-trace of the boot hook (`src/instrumentation.ts` →
-`.next/server/instrumentation.js.nft.json`) is not a route's: no key of the option reaches
-it, and it still carries the whole application directory, tests included, into the
-standalone tree. The exclusion list therefore cleans the route traces but not the image.
-The remedy is at the source — a `/* turbopackIgnore: true */` comment on that `join` (the
-catalogs are already listed in `outputFileTracingIncludes`), after which the build prints
-no warning and the standalone application directory holds `server.js`, `package.json`,
-`migrations/` and the one traced content file. `tests/integration/standalone-plugin-catalogs.test.ts`
-asserts that no route trace names a test file and that a test file in the standalone tree
-got there through the boot hook's trace only.
+- **At the source.** The `join` of `catalogPathNextTo` carries a
+  `/* turbopackIgnore: true */` hint: the tracer leaves the computed path alone, and the
+  catalogs themselves are listed in `outputFileTracingIncludes`. This is the guard that
+  covers the trace of the boot hook (`src/instrumentation.ts` →
+  `.next/server/instrumentation.js.nft.json`), which no key of
+  `outputFileTracingExcludes` reaches: Turbopack applies that option to route traces only.
+- **In the configuration.** `outputFileTracingExcludes` with `NEVER_SHIPPED` is the second
+  guard, for the route traces.
+
+`tests/integration/standalone-plugin-catalogs.test.ts` (3, skipped without a build) holds
+the result: every plugin catalog is in the standalone tree next to its module, no trace
+under `.next/server` — a route's or the boot hook's — names a test file, the standalone
+tree holds none, and `apps/gateway/server.js` is there.
 
 Nothing at run time needs those files: the browser suite starts the standalone server
 from the repository's sources and copies `public/` and `.next/static` beside it itself,

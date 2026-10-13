@@ -128,7 +128,11 @@ to the request's own id.
   (`root.oauth.verifier`, handbook [management-door](management-door.md));
   `RootDeps.delegatedTokens` replaces it in tests of the door alone. Only a
   live delegated access token is recognised: a revoked or expired one, or a
-  refresh token, is an unknown bearer (401). The
+  refresh token, is an unknown bearer (401). So is the token of a client that
+  is no longer approved — disabled by an operator, or left pending by a
+  registration policy tightened since — because the verifier evaluates the
+  client's status at every call and answers `null` for it: such a token is
+  answered 401 here, not `wrong-credential-kind`. The
   hint of the refusal names where the presented kind is accepted
   (`ACCEPTED_AT` in gateway-core's `errors.ts`).
 
@@ -424,7 +428,10 @@ runs it with the GitHub plugin's `developer` preset as shipped.
 A label is what a caller says about itself, so that the session and the audit
 tell who did what when several agents work on one mission (spec §0, §7.9). It
 is attribution only: **nothing decides on it**, it reserves no share of the
-budget, and it is never an identity — nothing proves it.
+budget, and it is never an identity — nothing proves it. Decision: ADR
+[atomic-budget-accounting](../decisions/atomic-budget-accounting.md), "The
+agent label never reaches the decision" and its amendment of 2026-10-13
+[the agent label is checked, not repaired](../decisions/atomic-budget-accounting.md#amendment-2026-10-13--the-agent-label-is-checked-not-repaired-p27).
 
 **Transport.** Two carriers, read by `readAgentLabel(headers, params._meta)`:
 
@@ -504,12 +511,19 @@ undefined, enableJsonResponse: true })`: stateless, one JSON body per POST.
   way (`ExecuteContext.emitPart`).
 - `GET /.well-known/oauth-protected-resource` answers `{ resource:
 <public_url>/mcp, authorization_servers: [], bearer_methods_supported:
-['header'] }` so clients that probe it use the static bearer.
+['header'] }` so clients that probe it use the static bearer. The route file
+  is an adapter over `root.oauth.discovery.executionResource(request)`: the
+  document and its answer (`GET`, `HEAD`, `OPTIONS` as a CORS preflight) are
+  built by the authorization server module, like the two other discovery
+  documents ([management-door](management-door.md)).
 
 ## Streaming
 
 Spec §4.1: "the gateway forwards streamed responses unmodified; the decision
-is made before the stream starts".
+is made before the stream starts". Decision: ADR
+[plugin-contract-and-credential-spec](../decisions/plugin-contract-and-credential-spec.md),
+amendment of 2026-10-13
+[streamed results](../decisions/plugin-contract-and-credential-spec.md#amendment-2026-10-13--streamed-results-p27).
 
 ### What MCP allows
 
@@ -1027,7 +1041,9 @@ textParts(response.body))`, or call `ctx.emitPart` yourself and await it.
   [api-key-format-vbn-live-argon2id](../decisions/api-key-format-vbn-live-argon2id.md),
   [scope-caps-not-enforced-in-v5-0](../decisions/scope-caps-not-enforced-in-v5-0.md),
   [plugin-contract-and-credential-spec](../decisions/plugin-contract-and-credential-spec.md)
-  (amendment "Streamed results").
+  (amendment "Streamed results"); the agent label is in
+  [atomic-budget-accounting](../decisions/atomic-budget-accounting.md)
+  (amendment "The agent label is checked, not repaired").
 - Neighbours: [gateway-core](gateway-core.md),
   [budget-and-sessions](budget-and-sessions.md), [connections](connections.md),
   [missions](missions.md), [configuration](configuration.md),
