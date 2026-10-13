@@ -16,6 +16,13 @@ extends:
 > quantity, gate or resource in a share): nothing here deviates from them.
 > These are the points the spec leaves open or states in two ways. Handbook:
 > [authority](../handbook/authority.md).
+>
+> **Amended on 2026-10-13 by P2.2b** — Decision 1 is reversed: `orphaned` is
+> derived from the creator's current authority on every read, never stored,
+> and ends when the authority comes back. See "Amendment 2026-10-13 —
+> `orphaned` is derived and reversible" below (D1′, D2′, D7′). The title, the
+> first decision, the third consequence and the first rejected alternative
+> are kept as written, for the record of what was decided first.
 
 ## Context
 
@@ -53,7 +60,8 @@ restriction)` with states `active → revoked`, and says nothing of changing
    right after each act that can remove an authority (`sweepConnection`,
    `sweepCreator`). An ungrounded `active` mission is updated to `orphaned`
    by a conditional write. It never returns to `active`: when the authority
-   comes back, the creator issues a new mission.
+   comes back, the creator issues a new mission. **Reversed by the amendment
+   of 2026-10-13 below (D1′).**
 2. **A revoked connection orphans the missions that carry it**, the owner's
    own included, and every connection of a multi-connection mission with it.
    `connection-unavailable` remains the refusal of an `expired` connection.
@@ -91,6 +99,7 @@ restriction)` with states `active → revoked`, and says nothing of changing
   an IdP that omits a group at one sign-in orphans that user's missions on the
   connections that group owned or received. The user signs in again with the
   right claims and issues new missions; the orphaned ones stay closed.
+  **Closed by the amendment of 2026-10-13 below.**
 - `connection-unavailable` with `status: 'revoked'` is now only reachable in
   the instant between a revocation and the sweep; an agent reads
   `mission-inactive` (orphaned) instead, and the reason is generic. The
@@ -115,7 +124,8 @@ restriction)` with states `active → revoked`, and says nothing of changing
   column, the request service (`mission-closed`) and the listings would then
   each need the derivation, and a share revoked on purpose would be undone by
   any later share to the same person. A new mission is one click and is
-  checked against the authority of that day.
+  checked against the authority of that day. **Adopted by the amendment of
+  2026-10-13 below, which answers both objections.**
 - **Sweeps only, no check at the door.** Cheaper per call, but any path that
   changes a membership or a share without calling the sweep (a future import,
   a repair in the database, a bug) would leave missions running on an
@@ -138,3 +148,156 @@ restriction)` with states `active → revoked`, and says nothing of changing
 - **Let a local group satisfy the admin rule.** It would let any operator
   create operators outside the IdP, and make the rule depend on a table
   edited in the interface it protects.
+
+## Amendment 2026-10-13 — `orphaned` is derived and reversible, never stored (P2.2b)
+
+Reverses Decision 1 ("a stored, final status") and the rejected alternative
+"`orphaned` purely derived, never written". Decisions 2 to 6 stand; Decision 7
+is extended to the way back. The spec says it since (§2.3, Mission): "The
+state is derived from the creator's current authority, never stored as a
+verdict: if the authority comes back, the mission serves calls again, with its
+session and counters intact. A revoked connection never comes back, so its
+missions stay orphaned."
+
+### Why
+
+A final verdict turns a transient loss of authority into a permanent outage.
+The third consequence above was written as a cost; it is a defect:
+
+- an IdP that omits one group at one sign-in closes, for good, every mission
+  of that user on the connections the group owned or received. This is not
+  rare: Entra ID stops listing groups in the token above 200 memberships and
+  emits an overage claim instead; a claim mapping is edited and breaks for an
+  afternoon; a user is removed from a group and put back;
+- "a new mission is one click" was wrong about the cost. The click is the
+  creator's; the token is in the environment of each code project that uses
+  the mission, and every one of them needs the new one. The session and its
+  counters start again from zero, so the period's budget is granted twice;
+- the argument "a share revoked on purpose would be undone by any later
+  share" confuses the mission with the share. The owner who shares again
+  grants that authority again, on purpose, to the same person; a mission that
+  fits inside it is exactly what the share allows. An owner who wants a
+  mission closed has two terminal acts for it, both stored: revoking the
+  connection, and (the creator's) revoking the mission.
+
+### D1′ — `orphaned` is computed on every read and stored nowhere
+
+`MissionGrounds.check(mission)` is unchanged. What changes is what is done
+with its verdict:
+
+- `MissionGrounds.inspect(mission)` returns the mission as a reader must see
+  it — `status: 'orphaned'` in place of `active` when the verdict is
+  ungrounded — with the reason (`cause`, `connectionId`, `uncovered`).
+  Nothing is written. A mission the store holds as `revoked` or `expired`
+  is returned as it is, without a read: those are stored facts no authority
+  changes;
+- every reader goes through it: the execution door on every request, the
+  mission service on every load (list, detail, session page, gate edit,
+  rotation, revocation), the request service on every load (view, claim and
+  approval decisions), and the Delegations listing through reads the
+  composition root wraps (`derivedMissionReads`). A structural test lists
+  the files that load a mission record and fails on a new one until it is
+  classified;
+- the column keeps `active`. `MissionsRepo.markOrphaned` is removed,
+  `setStatus` takes a `StoredMissionStatus` (every status but `orphaned`),
+  and migration 0007 resets the rows P2.2 had written and adds two triggers
+  that refuse the value on insert and on update. The CHECK of migration 0001
+  still lists it: applied migrations are immutable and the table is not
+  rebuilt for it.
+
+While orphaned nothing else changes: every call is refused
+`mission-inactive` (`status: orphaned`), no gate is edited, no token rotated,
+no claim or approval granted (`mission-closed`; a refusal can still be
+recorded), and the creator can still revoke — which is stored and terminal.
+When the authority is back, all of it is back: same token, same session,
+same counters, same open requests.
+
+### D2′ — A revoked connection still orphans, and that never ends
+
+Decision 2 stands, and it is where the spec's last sentence comes from:
+revocation erases the credential and is terminal, `check` answers
+`connection-revoked` before it asks about any share, so no later act
+restores the mission. The mission page says so, and tells the creator to
+revoke the mission and issue a new one.
+
+### D7′ — Human acts are audited in both directions; the door in neither
+
+With nothing stored, "this act orphaned that mission" is no longer a write
+to observe: it is a difference between two verdicts. The services therefore
+take the verdicts **before** the act and compare **after** it:
+
+```
+const watch = await grounds.watchConnection(connectionId);   // or watchCreator(userId)
+…the act…
+const { orphaned, restored } = await watch.settle(actorId);
+```
+
+One `mission-orphaned` entry per mission that was grounded and is not any
+more (as before: `before: { status: 'active' }`, `after` with the cause);
+one `mission-restored` entry per mission that was orphaned and is grounded
+again (`before` with the cause it was orphaned for, `after: { status:
+'active' }`). Both name the human behind the act:
+
+| Act                                                      | May orphan | May restore | Actor                  |
+| -------------------------------------------------------- | ---------- | ----------- | ---------------------- |
+| `ShareService.share` (new share, or a replacement)       | yes        | yes         | the owner              |
+| `ShareService.revoke`                                    | yes        | no          | the owner              |
+| `ConnectionService.revoke`                               | yes        | no          | the owner              |
+| `ConnectionService.transfer`                             | yes        | yes         | the owner              |
+| `ConnectionService.reassign`                             | yes        | yes         | the operator           |
+| `GroupService.addMember` / `removeMember`                | yes        | yes         | the operator           |
+| a sign-in (`completeLogin`, around `syncIdpMemberships`) | yes        | yes         | the user who signed in |
+
+The door writes no administrative entry in either direction: no human is
+behind a read. It logs the refusal with its cause, and the pipeline audits
+the refused call. A change made by a path that no service watched is
+therefore seen at once by every reader, and has no administrative entry;
+the two entries of one mission need not come in pairs.
+
+The watch holds verdicts for the length of one act and for the audit only:
+no reader ever sees them, so it is not the snapshot spec §10 forbids.
+
+### Consequences
+
+- A transient loss of authority is a transient refusal. The agent is told
+  `mission-inactive` (orphaned) with a hint that says the same token works
+  again when the authority is back.
+- The door's cost is unchanged (one to three indexed reads; measured again
+  with the same bench: 17–19 µs owner in their own name, 19–21 µs owner
+  through a group, 43–45 µs share to a group, against 19 / 21 / 44 µs before).
+  The orphan path is now cheaper by one write. The mission and request pages
+  pay the same reads once per mission shown.
+- A page shows the state of the instant it was rendered: a mission listed
+  `active` may refuse the next call, and the reverse. The door decides.
+- The creator reads the reason on the mission page itself (`MissionOverview.orphan`),
+  not only in the Audit, and whether it can come back.
+- A sign-in settles in two steps (watch, replace the memberships, settle).
+  They are not one transaction: two concurrent acts on the same mission can
+  each record the same change, or one can record a change the other caused.
+  The state itself cannot be wrong, only the attribution of an audit entry.
+- An orphaned mission that nobody restores or revokes stays listed as
+  orphaned for ever. Its token still authenticates (and is refused): closing
+  it is the creator's revocation.
+- A share made again restores the missions that fit inside it, including
+  ones the owner had forgotten. The share notice counts them ("1 orphaned
+  mission is covered again").
+- New administrative act: `mission-restored`.
+
+### Rejected alternatives
+
+- **Keep the status stored, and flip it back when a sweep finds the grounds
+  again.** Two writers of one column (the door and the sweeps), in two
+  directions, with a path that changes authority without a sweep leaving the
+  column wrong either way. The derivation needs no reconciliation.
+- **Store a "last seen verdict" beside the status, to write the audit
+  entries from the door.** It is the stored verdict again under another
+  name, and it would make the door attribute an administrative entry to
+  nobody.
+- **A grace period before a lost authority refuses calls.** It would let a
+  mission run on an authority its owner has just withdrawn; the spec asks
+  for the refusal at once.
+- **Derive inside the repository** (`MissionsRepo.getById` returning
+  `orphaned`). It hides a domain rule in the store and makes the hot path of
+  the door pay it on every record load, the budget stage's included.
+- **Rebuild the `missions` table to drop the value from its CHECK.** A
+  table rebuild under foreign keys for a constraint two triggers give.

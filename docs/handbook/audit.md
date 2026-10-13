@@ -72,8 +72,21 @@ the keyset position, so a filter can only narrow what the scope allows:
 
 So the owner of a connection reads its `share-created` / `share-revoked` /
 `connection-transferred` / `connection-reassigned` entries, and the creator of a mission
-reads its `mission-orphaned` entry (cause, connection, uncovered risks —
-[authority](authority.md)).
+reads its `mission-orphaned` and `mission-restored` entries (cause, connection, uncovered
+risks — [authority](authority.md)).
+
+Those two entries record **human acts**, not the state. `orphaned` is derived from the
+creator's current authority on every read and never stored (spec §2.3): the services take
+the verdict of each mission before an act that can change an authority and again after it
+(`MissionGrounds.watchConnection` / `watchCreator`), and write `mission-orphaned` when
+the act removed it, `mission-restored` when the act returned it, naming the human behind
+the act (the owner who revoked or shared again, the operator who edited a group or
+reassigned a connection, the user whose sign-in changed their groups). `before` and
+`after` carry `status` (`active` / `orphaned`) and, on the orphaned side, `cause`,
+`connection_id` and `uncovered`. The execution door detects the same change on its own
+and writes no administrative entry, in either direction: a change no service watched is
+visible as refused, then allowed, call entries only. The two acts of one mission
+therefore need not come in pairs.
 
 An operator therefore sees every administrative act but not the calls of other people's
 missions. The statement is plain `IN` subqueries over `missions`, `connections` and
@@ -228,7 +241,10 @@ an exemption with its reason. Adding a public method to one of those services fa
 test until the method is classified. Exempt today: web-session and per-session transient
 state (`SessionService`, `Authenticator`, `PendingConnectStore`, `NoticeStore`),
 `CredentialBroker.refresh` and `RequestService.sweep` (performed by the gateway with no
-human actor; an administrative entry always names a user).
+human actor; an administrative entry always names a user). `MissionGrounds.inspect` and
+`derive` are classified as reads — they write nothing — and `watchConnection`,
+`watchCreator` and `MembershipSettler.watch` as mutations, driven around an act that
+removes an authority (`mission-orphaned`) or returns one (`mission-restored`).
 
 ## How to use it
 

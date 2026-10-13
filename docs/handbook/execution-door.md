@@ -80,8 +80,9 @@ POST /mcp
                     missing / malformed / unknown / rotated             → 401  AuthError (-32001), WWW-Authenticate: Bearer
                     web session (cookie or bearer), delegated token     → 403  wrong-credential-kind
                     too many hash verifications, prefix + client address → 429
-  grounds         MissionGrounds.settle(mission): the creator's authority, re-read from the store;
-                    an active mission it no longer grounds becomes `orphaned` (handbook authority)
+  grounds         MissionGrounds.inspect(mission): the creator's authority, re-read from the store;
+                    an active mission it does not ground is `orphaned` for this request, nothing
+                    is stored (handbook authority)
   mission context loadMissionContext (store reads, no cache)
   surface rate    rateLimiter.take('mcp:mission:<id>', mcp.rate_limit_per_minute, 60 s) → 429 (-32002), Retry-After
   protocol        isLegacyRequest(request) ? stateless JSON transport : createMcpHandler(...).fetch
@@ -162,19 +163,30 @@ the door resolves it once per request, before authenticating, and builds the
 ### Grounds (`door.ts` → `authority/mission-grounds.ts`)
 
 Between the token verification and the mission context,
-`credentialResolver` calls `deps.grounds.settle(verified.mission)`: for an
-`active` mission it re-reads the creator's status, memberships and shares, and
-turns the mission `orphaned` when they no longer cover its accepted risks or
-when one of its connections is revoked. The context is then built from the
-mission as settled, so `checkMissionActive` refuses `mission-inactive` with
-`status: 'orphaned'` on `tools/list`, `tools/call` and the catalog alike.
+`credentialResolver` calls `deps.grounds.inspect(verified.mission)`: for a
+mission the store holds as `active` it re-reads the creator's status,
+memberships and shares, and returns the mission with `status: 'orphaned'`
+when they do not cover its accepted risks or when one of its connections is
+revoked. The context is built from that mission, so `checkMissionActive`
+refuses `mission-inactive` with `status: 'orphaned'` on `tools/list`,
+`tools/call` and the catalog alike.
+
+Nothing is written: `orphaned` is derived for this request and stored nowhere
+(spec §2.3). The next request asks again, so the day the authority is back the
+**same token** is served, on the same session and counters — a refused call
+consumed nothing. The door writes no administrative entry in either direction
+(no human is behind a read): it logs `mission orphaned at the execution door`
+(info, with `cause`, `connection_id`, `uncovered`) and the pipeline audits the
+refused call. A `revoked` or `expired` mission is not re-checked.
+
 `grounds` is a required dependency. Rule, causes and measured cost (about
-20–45 µs per request): [authority](authority.md), "Orphaned missions" and
+17–45 µs per request): [authority](authority.md), "Orphaned missions" and
 "The door".
 
 A consequence: a mission that carries a **revoked** connection is refused
 `mission-inactive` (orphaned), not `connection-unavailable`; the latter is the
-refusal of an `expired` connection.
+refusal of an `expired` connection. A revoked connection never comes back, so
+that mission stays orphaned.
 
 ### Mission context (`mission-context.ts`)
 

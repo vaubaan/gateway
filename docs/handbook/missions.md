@@ -107,9 +107,32 @@ basis, riskIds }`, implemented by `ConnectionAuthorityService`
 and connections shared with the user, every status. The root injects
 `root.authority.service` through `MissionsModuleDeps.authority`; issuance and
 preview are the same for an owner and a beneficiary, the `authority` list of
-each `IssuanceConnection` is what differs. A mission whose creator later loses
-that authority becomes `orphaned` ([authority](authority.md), "Orphaned
-missions"); `MissionService.revoke` closes it like any other.
+each `IssuanceConnection` is what differs.
+
+A mission whose creator later loses that authority is `orphaned` for as long
+as it is missing, and serves again when it is back — same token, same session,
+same counters ([authority](authority.md), "Orphaned missions"). The state is
+**derived, never stored**: the service takes `grounds: Pick<MissionGrounds,
+'inspect'>` and reads every mission it loads through it (`ownInspected` for
+one mission, `list` for all), so each of its answers is about this instant:
+
+| Method                    | On an orphaned mission                                                             |
+| ------------------------- | ---------------------------------------------------------------------------------- |
+| `list`, `get`             | `mission.status: 'orphaned'`, `state.kind: 'orphaned'`, `orphan: { cause, … }`     |
+| `setGate`                 | `{ ok: false, reason: 'inactive', state: 'orphaned' }`                             |
+| `rotate`                  | `{ ok: false, reason: 'inactive', state: 'orphaned' }`                             |
+| `revoke`                  | revokes: the stored status goes `active` → `revoked`, terminal                     |
+| `draftFrom` / `duplicate` | unaffected: a copy is a new issuance, checked against what the creator holds now   |
+| `verifyToken`             | returns the stored record; the door derives the state right after (execution-door) |
+
+`MissionOverview.orphan` (`MissionOrphanReason`: `cause`, `connection_id`,
+`uncovered`) is `null` unless the mission is orphaned. `/missions/<id>` renders
+it with `explainOrphan(orphan, connections)` (`orphan-reason.ts`, pure): a
+banner that names the connection and the uncovered risks, says whether the
+authority can come back (`reversible` is false for a revoked or missing
+connection) and that the token, session and counters are kept. The page shows
+"Revoke mission" on every mission that is not revoked yet, an orphaned or
+expired one included; "Rotate token" only on an active one.
 
 ## The draft
 
@@ -453,6 +476,8 @@ and reloads the page's data.
   which risks the mission accepts.
 - **Creator only**, like every act on a mission: anyone else gets `not-found`. A revoked
   or orphaned mission answers `inactive`: every call is refused whatever its gates.
+  `orphaned` is derived at the instant of the edit, so the gate is editable again as soon
+  as the creator's authority is back.
 - **It applies to the next call.** The execution door loads the policy for each call;
   nothing is cached, nothing is re-issued, the token does not change. Open approval
   requests are left where they are (the creator answers them, or they expire).
@@ -556,9 +581,11 @@ cached five minutes) serves `content.md`, the generic companion of the kit
 
 ## Wiring
 
-`createMissionsModule({ config, store, registry, authenticator, logger,
+`createMissionsModule({ config, store, registry, authenticator, logger, grounds,
 authority?, clock?, mint?, budget? })` → `root.missions = { authority, service,
-handlers }` (composition root, after `root.auth`). `budget` is a
+handlers }` (composition root, after `root.auth`). `grounds` is required: the
+root passes `root.authority.grounds`, and a test that builds a `MissionService`
+by hand passes it too. `budget` is a
 `Pick<SessionService, 'stateOf'>`; the root builds the missions module before
 the `SessionService`, so it is left out and defaults to
 `missionUsageReader(store.sessions)` — the same function over the same store.
@@ -613,6 +640,10 @@ for the ephemeral instance.
   policy must say `provider[env].name`.
 - **Issue stays disabled** — the list under the bottom bar names every blocker;
   an empty quota field is `missing-budget`.
+- **A mission shows `orphaned`** — the banner on its page gives the cause; it is
+  computed on that page load, so reload after the owner shared again or after a new
+  sign-in. Nothing in the `missions` table says `orphaned`: the row is `active`.
+  [authority](authority.md), "How to debug".
 - **A token is refused** — `verifyToken` → `retired/rotated`: an older token of
   the mission; `retired/revoked`: the mission was revoked; `unknown`: wrong
   instance, truncated secret, or not a `vbn_live_` key.

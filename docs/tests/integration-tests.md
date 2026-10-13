@@ -98,7 +98,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/auth/origin.test.ts`                             |        5 |
 | `apps/gateway/src/server/auth/session-service.test.ts`                    |        7 |
 | `apps/gateway/src/server/authority/authority-service.test.ts`             |       20 |
-| `apps/gateway/src/server/authority/mission-grounds.test.ts`               |       16 |
+| `apps/gateway/src/server/authority/mission-grounds.test.ts`               |       22 |
 | `apps/gateway/src/server/compose/compose.test.ts`                         |       16 |
 | `apps/gateway/src/server/config/duration.test.ts`                         |        2 |
 | `apps/gateway/src/server/config/load.test.ts`                             |       44 |
@@ -120,6 +120,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/missions/bootstrap-kit.test.ts`                  |        9 |
 | `apps/gateway/src/server/missions/catalog-view.test.ts`                   |       11 |
 | `apps/gateway/src/server/missions/preview.test.ts`                        |       44 |
+| `apps/gateway/src/server/missions/orphan-reason.test.ts`                  |        4 |
 | `apps/gateway/src/server/missions/summary.test.ts`                        |        8 |
 | `apps/gateway/src/server/missions/token.test.ts`                          |        8 |
 | `apps/gateway/src/server/oauth-as/authorization.test.ts`                  |       40 |
@@ -152,8 +153,8 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/auth/oidc-login.test.ts`                  |       16 |
 | `apps/gateway/tests/integration/authority/door-latency.bench.test.ts`     |        1 |
 | `apps/gateway/tests/integration/authority/handlers.test.ts`               |       11 |
-| `apps/gateway/tests/integration/authority/ownership.test.ts`              |        8 |
-| `apps/gateway/tests/integration/authority/share-and-orphan.test.ts`       |       11 |
+| `apps/gateway/tests/integration/authority/ownership.test.ts`              |        9 |
+| `apps/gateway/tests/integration/authority/share-and-orphan.test.ts`       |       17 |
 | `apps/gateway/tests/integration/budget/pipeline-consistency.test.ts`      |        6 |
 | `apps/gateway/tests/integration/budget/session-service.test.ts`           |       20 |
 | `apps/gateway/tests/integration/compose/boot.test.ts`                     |        4 |
@@ -185,7 +186,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/store/identities.test.ts`                 |       10 |
 | `apps/gateway/tests/integration/store/missions.test.ts`                   |        8 |
 | `apps/gateway/tests/integration/store/oauth-clients.test.ts`              |       16 |
-| `apps/gateway/tests/integration/store/ownership-and-orphans.test.ts`      |       12 |
+| `apps/gateway/tests/integration/store/ownership-and-orphans.test.ts`      |       13 |
 | `apps/gateway/tests/integration/store/requests-approvals.test.ts`         |       10 |
 | `apps/gateway/tests/integration/store/schema.test.ts`                     |        6 |
 | `apps/gateway/tests/integration/store/sessions.test.ts`                   |       11 |
@@ -204,7 +205,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/server/store/db.test.ts`                         |        2 |
 | `apps/gateway/tests/unit/server/store/ids.test.ts`                        |        6 |
 | `apps/gateway/tests/unit/server/store/migrate.test.ts`                    |        9 |
-| `apps/gateway/tests/unit/structural/authority-not-snapshotted.test.ts`    |       17 |
+| `apps/gateway/tests/unit/structural/authority-not-snapshotted.test.ts`    |       27 |
 | `apps/gateway/tests/unit/structural/catalog-caps-enforced.test.ts`        |       12 |
 | `apps/gateway/tests/unit/structural/example-config-providers.test.ts`     |       10 |
 | `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`          |      279 |
@@ -295,7 +296,7 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/vercel/tests/unit/plugin.test.ts`                                |       33 |
 | `plugins/vercel/tests/unit/risk-catalog.test.ts`                          |       55 |
 | `plugins/vercel/tests/unit/team-pin.test.ts`                              |       99 |
-| **TOTAL** (`npm run test`, 2026-10-13, after a build; 208 files)          | **5192** |
+| **TOTAL** (`npm run test`, 2026-10-13, after a build; 209 files)          | **5222** |
 
 After a build one test is skipped: the latency measurement of the authority
 re-check (`door-latency.bench.test.ts`, run with `VAUBAAN_BENCH=1`). Without `.next/standalone` the five
@@ -1646,21 +1647,33 @@ Unit, beside the code (79):
   once for several group-owned connections; the uncovered ids per connection
   with the basis left (`share` or `none`); nothing asked where nothing was
   accepted; a removed user; a membership change seen on the next check.
-- **`src/server/authority/mission-grounds.test.ts`** (16) — **the `orphaned`
+- **`src/server/authority/mission-grounds.test.ts`** (22) — **the `orphaned`
   derivation**: grounded for the owner and for a covered beneficiary;
   `authority-lost` naming the connection and the uncovered risks (share
   narrowed; creator dropped from the owner group); `connection-revoked` even
   for the owner; **an expired or unowned connection does not orphan**;
   `creator-removed`; each connection checked against its own partition
   (`partitionOf`), a share of one connection never covering another.
-  `settle`: grounded untouched; ungrounded → `orphaned` with `closed_at` and
-  **no admin entry**; a non-active mission never touched; a mission revoked
-  between read and write stays `revoked`. Sweeps: `sweepConnection` orphans
-  only the ungrounded missions of that connection and writes
-  `mission-orphaned` naming the actor, cause, connection and uncovered ids;
-  `sweepCreator` only that user's, once. `MembershipSettler.afterRemoval`:
-  the emptied owner group's connection `unowned`, the member's mission
-  orphaned; nothing while the group keeps another member.
+  `inspect` / `derive` (P2.2b): grounded untouched with no reason;
+  ungrounded → the mission **read** `orphaned` with the reason, **the stored
+  row unchanged and no admin entry**; **reversible** — the same mission reads
+  `active` once the share is back; a revoked connection stays orphaned
+  whatever is shared afterwards; a `revoked` or `expired` mission is never
+  checked. `derivedMissionReads`: a creator's listing carries the status of
+  the instant. Watches: `watchConnection` … `settle(actor)` writes
+  `mission-orphaned` for the missions the act left ungrounded (actor, cause,
+  connection, uncovered ids) and **`mission-restored`** for the ones it
+  grounded again (`before` carries the cause they were orphaned for);
+  nothing when no verdict changed or changed back; a mission revoked during
+  the act, or not active before it, is left out; `watchCreator` follows one
+  user's missions in both directions. `MembershipSettler.watch`: the emptied
+  owner group's connection `unowned`, the member's mission orphaned; a
+  regained membership restores; nothing while the group keeps another member.
+- **`src/server/missions/orphan-reason.test.ts`** (4) — what the mission page
+  says for each cause: a lost authority names the connection and the risks,
+  says it can come back and that session and counters are kept; a revoked
+  connection "never comes back"; a long list of risks is cut; an unknown
+  connection does not break the sentence.
 - **`src/server/shares/restriction.test.ts`** (8) — groups by severity, most
   severe first, every row in one group; **"select all" is an enumerated
   list** (explicit ids, no wildcard, no fallback, no deprecated entry); the
@@ -1692,43 +1705,62 @@ Unit, beside the code (79):
   `findActiveUserByEmail` (equality only, case, ambiguous, removed twin).
 
 Integration, real composition root on `:memory:`
-(`apps/gateway/tests/integration/authority/`, 30 + 1 skipped; rig in
+(`apps/gateway/tests/integration/authority/`, 37 + 1 skipped; rig in
 `support.ts`: the execution instance and its Depot plugin, a second user, an
 operator):
 
-- **`share-and-orphan.test.ts`** (11) — **the chain**: before any share the
+- **`share-and-orphan.test.ts`** (17) — **the chain**: before any share the
   beneficiary's issuance context is empty → the owner shares R1 → "Shares
   received" shows it with the exact restriction → the beneficiary's context
   carries R1 → a mission within R1 is issued and a call passes → **a draft
   beyond R1 is refused with the uncovered list** (`exceeds-authority`,
   `risk_ids`) → the owner revokes the share → the mission is `orphaned` at
-  once, one `mission-orphaned` entry (actor: the owner; cause, connection,
+  once (**derived: the stored row stays `active`**), one `mission-orphaned` entry (actor: the owner; cause, connection,
   uncovered) → **`tools/call`, `tools/list` and the catalog answer
   `mission-inactive` / `orphaned`**, the provider is not called → the
   beneficiary holds nothing, the owner's own mission still runs. Narrowing a
   share orphans only the missions that exceed it. Union of a direct and a
   group share, and the operator removing the member orphans what the group
-  half grounded. **Seen by the door when nobody swept** (membership removed
-  straight in the store): refused, stored `orphaned`, no admin entry, the
-  call audited. Orphaned stays orphaned when the authority returns; a new
-  mission works. **An orphaned mission takes no gate edit** (`inactive`),
-  and its creator revokes it. A removed creator. A revoked connection orphans every
+  half grounded. **Seen by the door when nobody watched** (membership removed
+  straight in the store): refused, the creator's page reads `orphaned`, the
+  row still `active`, no admin entry, the call audited. **Derived and
+  reversible (P2.2b)**: **lose → refused → regain — the same token serves the
+  next call on the same session, counters 2 → 2 → 3, the token still `active`,
+  `mission-orphaned` then `mission-restored` under the owner's name, call
+  entries allowed, allowed, refused, refused, allowed**; restored only when
+  the new share covers every accepted risk (the detail's `orphan.uncovered`
+  says what is missing); **the door detects both directions with no admin
+  entry**; a membership the operator returns restores (`restored: 1`, actor:
+  the operator); **a revoked connection never comes back** — the service
+  refuses to share it and a share written behind its back grounds nothing;
+  **a revoked and an expired mission are unaffected** by the authority going
+  and coming, and no entry names them; **while orphaned no gate edit, no
+  rotation, no decision on a claim** (`mission-closed`), and the same claim
+  is granted once the authority is back. **An orphaned mission takes no gate
+  edit** (`inactive`), its creator revokes it, and a share made again does
+  not bring a revoked mission back. A removed creator. A revoked connection orphans every
   mission that carries it, the owner's included. Audit visibility: the owner
   reads the share acts, the creator the orphaning, an operator all. **No
   transitive sharing**: a beneficiary who shares, lists or revokes reads "not
   found"; every member of an owner group shares.
-- **`ownership.test.ts`** (8) — transfer to a group of the owner (entry;
+- **`ownership.test.ts`** (9) — transfer to a group of the owner (entry;
   later members are full owners and issue on the full catalog); transfer to a
   group one is not in, or by a non-owner, refused; **unowned**: the last
   member leaves → `unowned`, the share's mission keeps running, the mission
   grounded on the vanished ownership is orphaned, nobody shares or reads the
   connection, the operator lists it and reassigns (entry with before/after),
-  the new owner acts and the share never stopped; reassign refused for an
+  the new owner acts and the share never stopped, **and the mission her lost
+  membership had orphaned is restored by the reassignment** (`mission-restored`,
+  actor: the operator; its token serves again); reassign refused for an
   owned connection, an unknown one, an unknown user, an empty group; a
   member coming back does not restore it; **an unowned connection whose
   credential dies is `expired`, still listed, and stays `expired` after
   reassignment**. Sign-in through the simulated IdP: a dropped IdP group
-  orphans the missions it grounded (actor: the user), a sign-in that removed
+  orphans the missions it grounded (actor: the user); **a group claim missing
+  at one sign-in is not a permanent outage — the next sign-in that carries it
+  restores the same mission: same token, same session, counter 1 → 1 → 2,
+  `mission-orphaned` then `mission-restored` under the user's own name, and a
+  further identical sign-in writes nothing**; a sign-in that removed
   the last member of an IdP owner group turns the connection `unowned`,
   **IdP and local groups merge** and a sign-in never touches a local
   membership.
@@ -1746,22 +1778,40 @@ operator):
   prints the mean cost of the door's re-check for the three groundings next
   to a whole in-process call.
 
-Store (`tests/integration/store/ownership-and-orphans.test.ts`, 12):
+Store (`tests/integration/store/ownership-and-orphans.test.ts`, 13):
 `markOwnerlessUnowned` (exactly the active connections whose owner group is
 empty; idempotent), `listOwnerless`, `assignOwner` (unowned → active with its
 credential; expired stays; revoked refused), `markExpired` from `unowned`;
-`markOrphaned` (conditional, `closed_at`, never over `revoked` / `expired`);
+**`orphaned` is never stored (migration `0007`)** — the repository has no
+`markOrphaned` and `STORED_MISSION_STATUSES` is `active`, `expired`, `revoked`;
+the table refuses the value on update and on insert, whoever writes it, and
+still takes the others; a database at version 6 holding an `orphaned` row is
+migrated to `active` with `closed_at` cleared, the `revoked` and `expired`
+rows untouched;
 `replaceForTarget` (atomic, other targets and connections untouched, nothing
 written when a risk is unknown), `listActiveForTargets` with a connection;
 `createLocal`; the IdP / local merge of `groupsOf`.
 
-Structural (`tests/unit/structural/authority-not-snapshotted.test.ts`, 17) —
+Structural (`tests/unit/structural/authority-not-snapshotted.test.ts`, 27) —
 **spec §10 "never from a snapshot"**: every class of `server/authority`
 holds its `deps` and no other field; no file of the module imports a cache,
 a session or the auth module, nor keeps a module-level map; then one
 long-lived instance follows membership changes made in the store at
 issuance, in the web session (whose `login.groups` still lists the group),
 in the owner check of the Share dialog, and at the execution door.
+**Extended by P2.2b to the `orphaned` state itself (spec §2.3 "never stored
+as a verdict")**: three rounds of leave / join at the door and on the
+creator's page with the `missions` row (`status`, `updated_at`, `closed_at`)
+byte-identical throughout and the refused calls consuming nothing; no
+production source writes the status (`markOrphaned`, `SET status =
+'orphaned'`, `setStatus(…, 'orphaned')`); the stored-status set excludes it
+and the two triggers exist and abort a raw write; the last migration that
+mentions the value is the one that removes it; **every production file that
+loads a mission record is classified** (`MISSION_READERS`: derives through
+`grounds.inspect` / `derive`, or does not read the status), the ones said to
+derive are checked to call it, the composition root is checked to wrap the
+Delegations listing, and the two that do not derive are checked not to read
+`.status` on a record.
 
 Changed elsewhere: `admin-mutations.test.ts` scans `authority`, `shares` and
 `groups` too; `mutation-guard.test.ts` and the two page-guard suites
@@ -1770,6 +1820,15 @@ cover the new handlers, routes and pages; `pipeline.test.ts` now expects
 `mission-inactive` (orphaned) for a revoked one;
 `connections/credentials.test.ts` expects an unowned connection whose refresh
 is rejected to become `expired`.
+
+Changed by P2.2b: `admin-mutations.test.ts` classifies `MissionGrounds.inspect`
+and `derive` as reads and drives `watchConnection` (a revoked connection →
+`mission-orphaned`, the owner), `watchCreator` (a member removed →
+`mission-orphaned`, the operator) and `MembershipSettler.watch` (a member
+returned → **`mission-restored`**, the operator); `pipeline.test.ts` expects
+the row of a mission refused as orphaned to stay `active`; the request and
+budget suites build `RequestService` with `alwaysGrounded`; `boot`, `schema`,
+`compose` and `migrate` expect schema version 7.
 
 ## Scenarios — Requests
 
