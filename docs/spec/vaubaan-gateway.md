@@ -79,7 +79,7 @@ Twenty-seven terms, distinct and not interchangeable.
   arguments and what the gateway checks. Environment-qualified `RiskId`s
   (`supabase[prod].bulk-row-write`) resolve against the environment label
   of the resource a call touches; for providers where the environment
-  lives in the arguments (the branch, for GitHub), the plugin derives it. A call
+  lives in the arguments (the target environment of a deployment), the plugin derives it. A call
   that touches an environment-scoped risk on a resource carrying no
   label, or a label outside the environments the risk accepts, is
   refused: an unlabelled resource is never treated as a safe default.
@@ -330,7 +330,14 @@ the company:
 - The gateway mints or decrypts in memory an ephemeral upstream
   credential, uses it for the call, releases it.
 - The executor receives the provider's response, never a credential
-  usable outside the gateway.
+  usable outside the gateway. **One deliberate exception:** a tool whose
+  very purpose is to hand the agent a short-lived, narrowly scoped
+  provider token, because the work cannot go through the gateway (a
+  repository-scoped installation token for `git clone` and `git push`).
+  Such a tool is a risk of its own in the catalog, never accepted by
+  default, gated by approval in the presets that carry it, counted
+  against the budget and audited like any call; the long-lived
+  credential still never leaves the instance.
 - An exfiltrated mission token grants the mission's rights, within its
   budget, until revocation. Nothing more.
 - An exfiltrated delegated token allows issuing missions within the
@@ -511,10 +518,12 @@ mission by its creator.
 The executor has one door: the instance's execution MCP endpoint, in
 JSON-RPC, authenticated by `Authorization: Bearer <mission token>`.
 
-- **Discovery** (`tools/list`): only the tools that at least one accepted
-  risk of the mission makes potentially callable. A listed tool never
-  produces a risk-not-accepted refusal on a static mismatch; it may still
-  be refused at call time on its arguments.
+- **Discovery** (`tools/list`): the tools of the providers the mission
+  carries. In v5.0 the list is filtered **per provider, not per tool**: a
+  listed tool may still be refused `risk-not-accepted` at call time. The
+  catalog endpoint below is the precise source of what a mission can
+  call. Filtering per tool needs plugins to declare the risks each tool
+  can touch; it is an open question (§11.2).
 - **Call** (`tools/call`): classification by the plugin, intersection
   with the catalog, check `risks_touched ⊆ accepted_risks`, budget check,
   upstream credential mint, forward, audit.
@@ -836,7 +845,7 @@ For a call: timestamp, mission, connection used and resource ref, tool,
 argument hash, slices executed, risks touched, snapshot of accepted
 risks, decision and refusal reason, approval consumed if any, remaining
 budget per risk after the call, agent label, upstream latency, client
-origin. The detailed shape of the risk- and cap-related fields is that
+origin. The detailed shape of the risk-related fields is that
 of [gateway-risk-model](./gateway-risk-model.md) §12.
 
 For an administrative act: timestamp, user, act (connection, share,
@@ -1004,6 +1013,9 @@ automated suite. Trust comes from usage.
 - **Authorization server.** The instance issues delegated tokens itself,
   relying on the IdP for identity. The alternative, accepting IdP tokens
   directly, is a technical decision for an ADR at implementation.
+- **Per-tool discovery.** `tools/list` filters per provider (§4.1).
+  Should plugins declare, per tool, the risks it can touch, so that a
+  mission lists only what it can call?
 - **Audit export.** Format and scope of an export for companies subject
   to retention requirements beyond local retention.
 
