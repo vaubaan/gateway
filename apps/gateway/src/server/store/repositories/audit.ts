@@ -13,7 +13,7 @@ import type {
   AuditEntry,
   CallAuditEntry,
 } from '@vaubaan/gateway-core';
-import { isRefusalCode, type Slice } from '@vaubaan/shared';
+import { isRefusalCode, type RefusalCode, type Slice } from '@vaubaan/shared';
 import { withImmediateTransaction } from '../db.ts';
 import { InvariantError } from '../errors.ts';
 import type { Iso, Principal, RiskId } from '../types.ts';
@@ -78,6 +78,17 @@ export interface AuditCursor {
   readonly id: string;
 }
 
+export type AuditCallRecord = Extract<AuditRecord, { readonly kind: 'call' }>;
+
+export interface CallLookup {
+  readonly missionId: string;
+  readonly tool: string;
+  /** `arguments_hash`: the canonical fingerprint of the call's arguments. */
+  readonly argumentsHash: string;
+  /** Only entries refused with this code. */
+  readonly refusalCode?: RefusalCode;
+}
+
 export interface AuditSearch {
   readonly scope: AuditScope;
   /** Calls of the mission, administrative acts on it and on its requests. */
@@ -117,6 +128,12 @@ export interface AuditRepo {
    * by keyset. Returns at most `limit` records.
    */
   search(query: AuditSearch): Promise<AuditRecord[]>;
+  /**
+   * The most recent call entry of a mission for one tool and one argument fingerprint —
+   * what the creator's view of an approval request reads the slices and the touched
+   * risks from (spec §3.5: "only their fingerprint remains in the audit").
+   */
+  latestCall(query: CallLookup): Promise<AuditCallRecord | null>;
   /** Distinct agent labels of a mission's call entries, most recently seen first. */
   agentLabels(missionId: string): Promise<AgentLabelSeen[]>;
   /**
@@ -403,6 +420,17 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
      GROUP BY agent_label ORDER BY last_seen DESC, agent_label`,
   );
 
+  const latestCallOf = db.prepare<[string, string, string], AuditRow>(
+    `SELECT ${COLUMNS} FROM audit
+     WHERE kind = 'call' AND mission_id = ? AND tool = ? AND arguments_hash = ?
+     ORDER BY ts DESC, id DESC LIMIT 1`,
+  );
+  const latestRefusedCallOf = db.prepare<[string, string, string, string], AuditRow>(
+    `SELECT ${COLUMNS} FROM audit
+     WHERE kind = 'call' AND mission_id = ? AND tool = ? AND arguments_hash = ? AND refusal_code = ?
+     ORDER BY ts DESC, id DESC LIMIT 1`,
+  );
+
   function toRecord(row: AuditRow): AuditRecord {
     const kind = parseEnum(AUDIT_KINDS, row.kind, 'audit.kind');
     return kind === 'admin' ? toAdminRecord(row) : toCallRecord(row);
@@ -431,7 +459,7 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
     };
   }
 
-  function toCallRecord(row: AuditRow): AuditRecord {
+  function toCallRecord(row: AuditRow): AuditCallRecord {
     // perf: one query per call entry; a Postgres port reads a page's risks in one statement.
     const risks = risksOf.all(row.id).map(riskToRecord);
     const remaining = risks.filter((r) => r.remaining !== null);
@@ -537,6 +565,17 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
         .prepare<(string | number)[], AuditRow>(sql)
         .all(...params)
         .map(toRecord);
+    },
+    async latestCall(query) {
+      const row = query.refusalCode
+        ? latestRefusedCallOf.get(
+            query.missionId,
+            query.tool,
+            query.argumentsHash,
+            query.refusalCode,
+          )
+        : latestCallOf.get(query.missionId, query.tool, query.argumentsHash);
+      return row ? toCallRecord(row) : null;
     },
     async agentLabels(missionId) {
       return labelsOf

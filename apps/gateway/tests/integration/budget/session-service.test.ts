@@ -16,6 +16,7 @@ import {
 } from '../../../src/server/budget/index.ts';
 import {
   ANCHOR,
+  APPROVAL_VALIDITY_SECONDS,
   at,
   DAY_SECONDS,
   MERGE,
@@ -228,6 +229,7 @@ describe('SessionService.recordCall', () => {
         missionId: f.mission.id,
         requestId,
         riskId: MERGE,
+        tool,
         fingerprint,
         expiresAt,
       });
@@ -240,6 +242,7 @@ describe('SessionService.recordCall', () => {
         risk_id: MERGE,
         fingerprint: fingerprintArguments(args),
         approval_url: f.requestUrl(result.request_id as string),
+        approval_valid_seconds: APPROVAL_VALIDITY_SECONDS,
       });
       const request = await f.store.requests.getById(result.request_id as string);
       expect(request).toMatchObject({
@@ -385,6 +388,7 @@ describe('SessionService.stateOf', () => {
       rateWindows: f.rateWindows,
       requestUrl: f.requestUrl,
       requestExpirySeconds: REQUEST_EXPIRY_SECONDS,
+      approvalValiditySeconds: APPROVAL_VALIDITY_SECONDS,
     });
     const later = at('2026-10-15T10:00:00.000Z');
     const usage = await service.usageOf(f.mission, later);

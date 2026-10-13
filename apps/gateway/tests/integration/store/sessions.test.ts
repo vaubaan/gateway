@@ -229,12 +229,21 @@ describe('sessions repository', () => {
       missionId,
       requestId: request.id,
       riskId: MERGE,
+      tool: 'github__merge_pull_request',
       fingerprint: 'fp-1',
       expiresAt: '2026-10-13T09:30:00.000Z',
     });
 
     const decide = (ctx: DecideContext) => {
-      const consumed = ctx.consumeApproval(MERGE, 'fp-1');
+      // The same risk and arguments on another tool find nothing.
+      expect(
+        ctx.findApproval({ riskId: MERGE, tool: 'github__delete_branch', fingerprint: 'fp-1' }),
+      ).toBeNull();
+      const consumed = ctx.consumeApproval({
+        riskId: MERGE,
+        tool: 'github__merge_pull_request',
+        fingerprint: 'fp-1',
+      });
       return { allow: consumed !== null, approvalId: consumed?.id ?? null, event: null };
     };
     const first = await store.sessions.decideAndDecrement(

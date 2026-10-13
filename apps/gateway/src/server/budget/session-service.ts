@@ -8,11 +8,16 @@
  *
  * `recordCall` runs, inside one `BEGIN IMMEDIATE` transaction of the store
  * (`SessionsRepo.decideAndDecrement`): session get-or-create, counter read for the
- * current period, approval lookup for gated risks, the pure `decide()`, then — on
- * allow — approval consumption, the rate-window push and the counter increments; on
- * refusal, the request drop (or the reuse of the one already open). The event of the
- * call is written in the same transaction. Nothing here touches the audit: the pipeline
- * writes the audit entry from the decision this service returns.
+ * current period, the gates the creator opened for the period, approval lookup for
+ * the risks still gated, the pure `decide()`, then — on allow — approval consumption,
+ * the rate-window push and the counter increments; on refusal, the request drop (or
+ * the reuse of the one already open). The event of the call is written in the same
+ * transaction. Nothing here touches the audit: the pipeline writes the audit entry
+ * from the decision this service returns.
+ *
+ * An approval and an approval request are bound to the call: the mission, the risk,
+ * the tool and the canonical fingerprint of the arguments (`ApprovalKey`). The same
+ * arguments on another tool are another call.
  *
  * The credit an allowed call consumes is never refunded: if the upstream call then
  * fails, the audit keeps `decision: allowed` with `upstream_error` and the counter keeps
@@ -30,6 +35,7 @@ import type {
   RequestsRepo,
   SessionsRepo,
 } from '../store/index.ts';
+import type { ApprovalKey } from '../store/repositories/approvals.ts';
 import type { PreparedArguments } from '../store/repositories/requests.ts';
 import { rateWindowKey, type SlidingWindows } from '../rate-limit/index.ts';
 import {
@@ -41,6 +47,7 @@ import {
   type Refuse,
 } from './decide.ts';
 import { fingerprintArguments } from './fingerprint.ts';
+import { GATE_EVENT_KINDS, openedGatesOf } from './gates.ts';
 import type { BudgetMission } from './mapping.ts';
 import type { MissionState } from './mission-state.ts';
 import { readMissionUsage, type MissionUsage } from './mission-usage.ts';
@@ -92,6 +99,12 @@ export interface SessionServiceDeps {
   readonly requestUrl: (requestId: string) => string;
   /** Lifetime of a claim or approval request (`requests.expiry` in the configuration). */
   readonly requestExpirySeconds: number;
+  /**
+   * How long a granted approval stays usable (`approvals.expiry` in the configuration).
+   * Only told to the executor here, in the `approval-required` refusal; the request
+   * service applies it when the creator grants.
+   */
+  readonly approvalValiditySeconds: number;
 }
 
 /** What the transaction callback hands back, beyond the store's `allow` / `event`. */
@@ -116,6 +129,8 @@ export class SessionService {
     const result = await this.deps.sessions.decideAndDecrement(
       { missionId: mission.id, riskIds: risks, periodStart: period.start },
       (ctx): TransactionOutcome => {
+        const gated = gatedRisks(mission, risks);
+        const openedGates = this.openedGates(ctx, gated, period);
         const decision = decide({
           policy: mission.policy,
           risks_touched: risks,
@@ -123,7 +138,8 @@ export class SessionService {
           rate_windows: this.probeWindows(mission, risks, now),
           period,
           fingerprint,
-          approvals: this.lookupApprovals(ctx, mission, risks, fingerprint),
+          approvals: this.lookupApprovals(ctx, input.tool, gated, fingerprint),
+          opened_gates: openedGates,
         });
         return decision.kind === 'allow'
           ? this.applyAllow(ctx, input, decision, fingerprint, now)
@@ -178,10 +194,19 @@ export class SessionService {
     input: RecordCallInput,
     risks: readonly RiskId[],
   ): Promise<PreparedArguments | null> {
-    const gated = input.mission.policy.some(
-      (entry) => entry.gate === 'approval' && risks.includes(entry.risk_id),
-    );
+    const gated = gatedRisks(input.mission, risks).length > 0;
     return gated ? this.deps.requests.prepareArguments(input.args ?? {}) : null;
+  }
+
+  /** The gates the creator opened for this period, among the gated risks of the call. */
+  private openedGates(
+    ctx: DecideContext,
+    gated: readonly RiskId[],
+    period: CurrentPeriod,
+  ): Set<RiskId> {
+    if (gated.length === 0) return new Set();
+    const events = ctx.riskEvents({ kinds: GATE_EVENT_KINDS, riskIds: gated, since: period.start });
+    return openedGatesOf(events, period);
   }
 
   private probeWindows(
@@ -207,15 +232,14 @@ export class SessionService {
 
   private lookupApprovals(
     ctx: DecideContext,
-    mission: BudgetMission,
-    risks: readonly RiskId[],
+    tool: string,
+    gated: readonly RiskId[],
     fingerprint: string,
   ): Map<RiskId, string> {
     const approvals = new Map<RiskId, string>();
-    for (const entry of mission.policy) {
-      if (entry.gate !== 'approval' || !risks.includes(entry.risk_id)) continue;
-      const approval = ctx.findApproval(entry.risk_id, fingerprint);
-      if (approval) approvals.set(entry.risk_id, approval.id);
+    for (const riskId of gated) {
+      const approval = ctx.findApproval(approvalKey(riskId, tool, fingerprint));
+      if (approval) approvals.set(riskId, approval.id);
     }
     return approvals;
   }
@@ -228,7 +252,7 @@ export class SessionService {
     now: Date,
   ): TransactionOutcome {
     const approvalIds = decision.approvals_to_consume.map(({ risk_id, approval_id }) => {
-      const consumed = ctx.consumeApproval(risk_id, fingerprint);
+      const consumed = ctx.consumeApproval(approvalKey(risk_id, input.tool, fingerprint));
       if (!consumed || consumed.id !== approval_id) {
         // Found a moment ago in this very transaction: anything else is a store bug.
         throw new InvariantError(
@@ -299,7 +323,12 @@ export class SessionService {
   ): RequestRecord | null {
     if (decision.code === 'rate-limited') return null;
     const kind = decision.code === 'budget-exhausted' ? 'claim' : 'approval';
-    const existing = ctx.findOpenRequest({ kind, riskId: decision.risk_id, fingerprint });
+    const existing = ctx.findOpenRequest({
+      kind,
+      riskId: decision.risk_id,
+      tool: input.tool,
+      fingerprint,
+    });
     if (existing) return existing;
     if (kind === 'approval' && !prepared) {
       throw new InvariantError('approval request without sealed arguments');
@@ -343,10 +372,22 @@ export class SessionService {
           fingerprint: decision.details.fingerprint,
           approval_url: this.deps.requestUrl(approvalRequest.id),
           expires_at: approvalRequest.expiresAt,
+          approval_valid_seconds: this.deps.approvalValiditySeconds,
         });
       }
     }
   }
+}
+
+/** The touched risks the mission gates `approval`, in policy order. */
+function gatedRisks(mission: BudgetMission, risks: readonly RiskId[]): RiskId[] {
+  return mission.policy
+    .filter((entry) => entry.gate === 'approval' && risks.includes(entry.risk_id))
+    .map((entry) => entry.risk_id);
+}
+
+function approvalKey(riskId: RiskId, tool: string, fingerprint: string): ApprovalKey {
+  return { riskId, tool, fingerprint };
 }
 
 function requireRequest(request: RequestRecord | null, code: string): RequestRecord {

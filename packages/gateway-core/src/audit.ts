@@ -99,7 +99,10 @@ export type AdminAct =
   | 'budget-extended'
   | 'period-reset'
   | 'expiry-extended'
+  /** The creator opened a risk's gate for the rest of the period, on a request. */
   | 'gate-opened'
+  /** The creator edited a risk's gate on the mission itself (`auto` ⇄ `approval`). */
+  | 'gate-changed'
   | 'approval-granted'
   | 'request-refused'
   | 'delegation-granted'

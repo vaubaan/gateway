@@ -65,8 +65,11 @@ export interface ApprovalRequiredRefusal extends RefusalBase<'approval-required'
   readonly fingerprint: string;
   /** Where the mission creator grants or refuses this precise action. */
   readonly approval_url: string;
-  /** ISO expiry of the approval request. */
+  /** ISO expiry of the approval request: unanswered by then, it is closed. */
   readonly expires_at: string;
+  /** How long a granted approval stays usable: the identical replay must come
+   *  within this delay after the grant (operator-configured). */
+  readonly approval_valid_seconds: number;
 }
 
 export interface ResourceNotInMissionRefusal extends RefusalBase<'resource-not-in-mission'> {
@@ -212,6 +215,7 @@ export const refuse = {
     fingerprint: string;
     approval_url: string;
     expires_at: string;
+    approval_valid_seconds: number;
   }): ApprovalRequiredRefusal {
     return {
       code: 'approval-required',
@@ -219,7 +223,8 @@ export const refuse = {
       fingerprint: input.fingerprint,
       approval_url: input.approval_url,
       expires_at: input.expires_at,
-      hint: `'${input.risk_id}' requires the mission creator's approval for each action. Nothing was executed. An approval request is open at ${input.approval_url} until ${input.expires_at}. Once granted, replay this call with exactly the same arguments; any change asks again. ${HAND_TO_HUMAN}`,
+      approval_valid_seconds: input.approval_valid_seconds,
+      hint: `'${input.risk_id}' requires the mission creator's approval for each action. Nothing was executed and nothing is held. An approval request is open at ${input.approval_url} until ${input.expires_at}. Once granted, replay this call with the same tool and exactly the same arguments within ${input.approval_valid_seconds}s of the grant: the approval is used once, and any change of the arguments asks again. ${HAND_TO_HUMAN}`,
     };
   },
 

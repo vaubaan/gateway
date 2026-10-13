@@ -9,11 +9,16 @@
  * readers get it back from `parseEventDetails`, the only place that reads
  * stored details.
  *
- * `approval` and `gate-opened` are kinds of `SessionEventKind` that nothing
- * writes yet: they have no details shape and `parseEventDetails` answers
- * `null` for them, as for any kind it does not know.
+ * Every kind of `SessionEventKind` has a details shape here; `parseEventDetails`
+ * answers `null` for a kind it does not know (a later version's).
  */
-import type { Iso8601, RequestKind, SessionEventKind } from './domain.ts';
+import {
+  isGate,
+  type Gate,
+  type Iso8601,
+  type RequestKind,
+  type SessionEventKind,
+} from './domain.ts';
 import { isRefusalCode, type RefusalCode } from './refusal.ts';
 import type { RiskId } from './risk.ts';
 
@@ -91,6 +96,42 @@ export interface ExpiryExtensionEventDetails {
 
 export type ExtensionEventDetails = QuotaExtensionEventDetails | ExpiryExtensionEventDetails;
 
+/**
+ * A granted approval request (spec §3.5): one approval, bound to the call the
+ * creator read. The arguments are never here, only their fingerprint.
+ */
+export interface ApprovalEventDetails {
+  readonly request_id: string;
+  readonly approval_id: string;
+  readonly tool: string;
+  readonly fingerprint: string;
+  /** The first identical replay consumes the approval before this instant. */
+  readonly expires_at: Iso8601;
+}
+
+/**
+ * The creator opened the gate of one risk "for the rest of the period" (spec
+ * §3.5): the risk reads `auto` for calls of the period starting at
+ * `period_start`, and `approval` again from `period_end`. The risk is the
+ * event's own `risk_id` column.
+ */
+export interface GateOpenedEventDetails {
+  readonly request_id: string;
+  readonly period_start: Iso8601;
+  /** Always an instant: a mission with a single, endless period has no "rest of the period". */
+  readonly period_end: Iso8601;
+}
+
+/**
+ * The creator edited the gate of one risk on the mission itself. Recorded on
+ * the session because it ends an opening granted earlier in the period: the
+ * latest of the two events decides.
+ */
+export interface GateChangedEventDetails {
+  readonly gate: Gate;
+  readonly gate_before: Gate;
+}
+
 export interface RotationEventDetails {
   readonly token_prefix: string;
 }
@@ -106,6 +147,9 @@ export interface SessionEventDetailsByKind {
   readonly request: RequestEventDetails;
   readonly extension: ExtensionEventDetails;
   readonly reset: ResetEventDetails;
+  readonly approval: ApprovalEventDetails;
+  readonly 'gate-opened': GateOpenedEventDetails;
+  readonly 'gate-changed': GateChangedEventDetails;
   readonly rotation: RotationEventDetails;
   readonly revocation: RevocationEventDetails;
 }
@@ -200,6 +244,24 @@ function isExtension(d: Fields): d is Fields & ExtensionEventDetails {
   return false;
 }
 
+function isApproval(d: Fields): d is Fields & ApprovalEventDetails {
+  return (
+    isText(d.request_id) &&
+    isText(d.approval_id) &&
+    isText(d.tool) &&
+    isText(d.fingerprint) &&
+    isText(d.expires_at)
+  );
+}
+
+function isGateOpened(d: Fields): d is Fields & GateOpenedEventDetails {
+  return isText(d.request_id) && isText(d.period_start) && isText(d.period_end);
+}
+
+function isGateChanged(d: Fields): d is Fields & GateChangedEventDetails {
+  return isText(d.gate) && isGate(d.gate) && isText(d.gate_before) && isGate(d.gate_before);
+}
+
 function isRotation(d: Fields): d is Fields & RotationEventDetails {
   return isText(d.token_prefix);
 }
@@ -227,6 +289,12 @@ export function parseEventDetails(kind: string, details: unknown): SessionEventD
       return isExtension(details) ? { kind, details } : null;
     case 'reset':
       return isReset(details) ? { kind, details } : null;
+    case 'approval':
+      return isApproval(details) ? { kind, details } : null;
+    case 'gate-opened':
+      return isGateOpened(details) ? { kind, details } : null;
+    case 'gate-changed':
+      return isGateChanged(details) ? { kind, details } : null;
     case 'rotation':
       return isRotation(details) ? { kind, details } : null;
     case 'revocation':

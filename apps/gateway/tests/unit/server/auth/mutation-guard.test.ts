@@ -97,6 +97,15 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       rig.mission.id,
     ),
   ),
+  'missions.handlers.setGate': json('user', 200, (rig, headers) =>
+    rig.root.missions.handlers.setGate(
+      post(`/api/missions/${rig.mission.id}/gate`, headers, {
+        risk_id: rig.mission.policy[0]?.riskId,
+        gate: 'approval',
+      }),
+      rig.mission.id,
+    ),
+  ),
   'requests.handlers.decide': json('user', 200, (rig, headers) =>
     rig.root.requests.handlers.decide(
       post(`/api/requests/${rig.claimId}/decide`, headers, { resolution: 'reset-period' }),

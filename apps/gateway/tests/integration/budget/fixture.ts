@@ -21,6 +21,8 @@ export const MERGE = 'github.merge-protected';
 export const ANCHOR = '2026-10-13T00:00:00.000Z';
 export const DAY_SECONDS = 86_400;
 export const REQUEST_EXPIRY_SECONDS = 24 * 3600;
+/** The default of `approvals.expiry`: a granted approval is usable for ten minutes. */
+export const APPROVAL_VALIDITY_SECONDS = 600;
 
 export const DEFAULT_POLICY: readonly MissionPolicyEntryRecord[] = [
   { riskId: READ, quota: 10, rateLimit: 5, rateWindowSeconds: 60, gate: 'auto' },
@@ -66,6 +68,7 @@ export async function openBudgetFixture(
     rateWindows,
     requestUrl,
     requestExpirySeconds: REQUEST_EXPIRY_SECONDS,
+    approvalValiditySeconds: APPROVAL_VALIDITY_SECONDS,
   });
 
   async function createMission(input: {

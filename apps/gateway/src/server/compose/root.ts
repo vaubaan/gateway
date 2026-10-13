@@ -273,6 +273,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     // The single builder of `<public_url>/r/<id>` (requests module).
     requestUrl: requests.requestUrl,
     requestExpirySeconds: config.requests.expirySeconds,
+    approvalValiditySeconds: config.approvals.expirySeconds,
   });
   // Off unless the operator turned it on and a real collector is configured.
   const telemetry = await createTelemetryModule({

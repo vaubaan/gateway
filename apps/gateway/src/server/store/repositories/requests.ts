@@ -2,6 +2,7 @@ import { withImmediateTransaction } from '../db.ts';
 import { openSealedColumn, sealText, type Encryptor } from '../encryptor.ts';
 import { InvariantError, NotFoundError } from '../errors.ts';
 import type {
+  ApprovalRecord,
   EventRecord,
   Iso,
   NewEvent,
@@ -10,6 +11,7 @@ import type {
   RiskId,
   SessionRecord,
 } from '../types.ts';
+import { insertApprovalSync } from './approvals.ts';
 import {
   nowIso,
   parseEnum,
@@ -19,7 +21,7 @@ import {
   type RepoContext,
 } from './context.ts';
 import { REQUEST_KINDS, REQUEST_STATES } from './enums.ts';
-import { createSessionPrimitives } from './sessions.ts';
+import { createSessionPrimitives, type RiskEventQuery } from './sessions.ts';
 
 /**
  * Approval-request arguments sealed ahead of a transaction. The request id is fixed
@@ -76,16 +78,42 @@ export interface ClaimDecisionContext {
   recordEvent(event: NewEvent): EventRecord | null;
 }
 
-export interface ClaimDecisionOutcome {
+export interface RequestDecisionOutcome {
   readonly state: 'granted' | 'refused';
-  /** Persisted in `requests.decision_json` (resolution, amounts, dates). */
+  /** Persisted in `requests.decision_json` (resolution, amounts, dates). Never arguments. */
   readonly decision: Record<string, unknown>;
 }
 
-export type ClaimDecisionResult<R extends ClaimDecisionOutcome> =
+export type RequestDecisionResult<R extends RequestDecisionOutcome> =
   | { readonly status: 'decided'; readonly request: RequestRecord; readonly outcome: R }
   /** Already granted, refused or expired (an overdue open request is expired here). */
   | { readonly status: 'not-open'; readonly request: RequestRecord };
+
+export type ClaimDecisionOutcome = RequestDecisionOutcome;
+export type ClaimDecisionResult<R extends ClaimDecisionOutcome> = RequestDecisionResult<R>;
+
+/**
+ * What the `apply` callback of `decideApproval` sees and may do, all inside the open
+ * transaction (spec §3.5). The rules (grant, refuse, open the gate) belong to the
+ * `RequestService`; this context makes their effects atomic with the decision and with
+ * the erasure of the sealed arguments.
+ */
+export interface ApprovalDecisionContext {
+  /** The approval request, still `open` and unexpired at `now`. */
+  readonly request: RequestRecord;
+  /** The mission's session; null only when the session row was deleted since. */
+  readonly session: SessionRecord | null;
+  readonly now: Iso;
+  /**
+   * The approval a grant produces: bound to the request's mission, risk, tool and
+   * fingerprint, single-use, valid until `expiresAt`.
+   */
+  createApproval(expiresAt: Iso): ApprovalRecord;
+  /** Events of the mission's session about some risks (empty when there is no session). */
+  riskEvents(query: RiskEventQuery): EventRecord[];
+  /** Records an event on the mission's session; null when there is no session. */
+  recordEvent(event: NewEvent): EventRecord | null;
+}
 
 export interface RequestsRepo {
   create(input: CreateRequestInput): Promise<RequestRecord>;
@@ -95,7 +123,11 @@ export interface RequestsRepo {
   /** Open requests addressed to the creator of their mission (the inbox). */
   listOpenForCreator(userId: string): Promise<RequestRecord[]>;
   listForMission(missionId: string): Promise<RequestRecord[]>;
-  /** Decrypts the held arguments for the creator's page; null once erased. */
+  /**
+   * Decrypts the held arguments for the creator's page. Null once erased, and null for
+   * a request that is no longer open — decided, or past its expiry even when the
+   * sweeper has not erased the blob yet.
+   */
   getArguments(id: string): Promise<unknown>;
   /** Grants or refuses an open request and erases the argument blob. */
   decide(
@@ -115,6 +147,18 @@ export interface RequestsRepo {
     decidedByUserId: string,
     apply: (ctx: ClaimDecisionContext) => R,
   ): Promise<ClaimDecisionResult<R>>;
+  /**
+   * Decides an open approval request in one `BEGIN IMMEDIATE` transaction: the state
+   * change, the erasure of the sealed arguments, the approval or the gate opening done
+   * through the context, and the events. `apply` must be synchronous; if it throws,
+   * nothing is written and the arguments stay sealed. A request that is not an approval
+   * request is an `InvariantError`.
+   */
+  decideApproval<R extends RequestDecisionOutcome>(
+    id: string,
+    decidedByUserId: string,
+    apply: (ctx: ApprovalDecisionContext) => R,
+  ): Promise<RequestDecisionResult<R>>;
   /** Sweeper: flips open requests past their expiry to `expired` and erases blobs. */
   expireOpen(): Promise<number>;
   /**
@@ -190,7 +234,11 @@ function getRequestRecord(ctx: RepoContext, id: string): RequestRecord | null {
 export interface OpenRequestLookup {
   readonly kind: RequestKind;
   readonly riskId: RiskId;
-  /** Approval requests are keyed by fingerprint too; claims ignore it. */
+  /**
+   * Approval requests are keyed by the call too — its tool and the fingerprint of its
+   * arguments, both mandatory for them; claims ignore both.
+   */
+  readonly tool?: string | null;
   readonly fingerprint?: string | null;
 }
 
@@ -199,8 +247,8 @@ export interface OpenRequestLookup {
 const OPEN_OF_RISK = `r.mission_id = ? AND r.kind = ? AND r.risk_id = ? AND r.state = 'open' AND r.expires_at > ?`;
 const SELECT_OPEN = `SELECT ${COLUMNS} FROM requests r
   WHERE ${OPEN_OF_RISK} ORDER BY r.created_at LIMIT 1`;
-const SELECT_OPEN_BY_FINGERPRINT = `SELECT ${COLUMNS} FROM requests r
-  WHERE ${OPEN_OF_RISK} AND r.fingerprint = ? ORDER BY r.created_at LIMIT 1`;
+const SELECT_OPEN_BY_CALL = `SELECT ${COLUMNS} FROM requests r
+  WHERE ${OPEN_OF_RISK} AND r.tool = ? AND r.fingerprint = ? ORDER BY r.created_at LIMIT 1`;
 
 /**
  * Synchronous lookup of a still-open request, meant to run inside an already-open
@@ -213,15 +261,18 @@ export function findOpenRequestSync(
   lookup: OpenRequestLookup,
   now: Iso,
 ): RequestRecord | null {
-  const fingerprint = lookup.kind === 'approval' ? (lookup.fingerprint ?? null) : null;
-  const row =
-    fingerprint === null
-      ? ctx.db
-          .prepare<[string, string, string, string], RequestRow>(SELECT_OPEN)
-          .get(missionId, lookup.kind, lookup.riskId, now)
-      : ctx.db
-          .prepare<[string, string, string, string, string], RequestRow>(SELECT_OPEN_BY_FINGERPRINT)
-          .get(missionId, lookup.kind, lookup.riskId, now, fingerprint);
+  if (lookup.kind !== 'approval') {
+    const row = ctx.db
+      .prepare<[string, string, string, string], RequestRow>(SELECT_OPEN)
+      .get(missionId, lookup.kind, lookup.riskId, now);
+    return row ? toRecord(row) : null;
+  }
+  if (!lookup.tool || !lookup.fingerprint) {
+    throw new InvariantError('an approval request is looked up by its tool and fingerprint');
+  }
+  const row = ctx.db
+    .prepare<[string, string, string, string, string, string], RequestRow>(SELECT_OPEN_BY_CALL)
+    .get(missionId, lookup.kind, lookup.riskId, now, lookup.tool, lookup.fingerprint);
   return row ? toRecord(row) : null;
 }
 
@@ -276,9 +327,10 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
   const forMission = db.prepare<[string], RequestRow>(
     `SELECT ${COLUMNS} FROM requests r WHERE r.mission_id = ? ORDER BY r.created_at`,
   );
-  const blobOf = db.prepare<[string], { args_blob: Buffer | null; key_version: number | null }>(
-    'SELECT args_blob, key_version FROM requests WHERE id = ?',
-  );
+  const blobOf = db.prepare<
+    [string],
+    { args_blob: Buffer | null; key_version: number | null; state: string; expires_at: string }
+  >('SELECT args_blob, key_version, state, expires_at FROM requests WHERE id = ?');
   const decideOpen = db.prepare<[string, string, string, string | null, string]>(
     `UPDATE requests SET state = ?, decided_at = ?, decided_by_user_id = ?, decision_json = ?,
        args_blob = NULL, key_version = NULL
@@ -358,6 +410,70 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
     };
   }
 
+  function approvalContext(
+    request: RequestRecord,
+    session: SessionRecord | null,
+    now: Iso,
+  ): ApprovalDecisionContext {
+    const { tool, fingerprint } = request;
+    if (!tool || !fingerprint) {
+      throw new InvariantError(`approval request ${request.id} has no tool or fingerprint`);
+    }
+    return {
+      request,
+      session,
+      now,
+      createApproval(expiresAt) {
+        return insertApprovalSync(
+          ctx,
+          {
+            missionId: request.missionId,
+            requestId: request.id,
+            riskId: request.riskId,
+            tool,
+            fingerprint,
+            expiresAt,
+          },
+          now,
+        );
+      },
+      riskEvents(query) {
+        return session ? sessions.riskEvents(session.id, query) : [];
+      },
+      recordEvent(event) {
+        return session ? sessions.recordEvent(session.id, event, now) : null;
+      },
+    };
+  }
+
+  /**
+   * The shared frame of a creator's decision: the request must be of `kind`, still open
+   * and unexpired (an overdue one is expired here); `apply` runs, then the conditional
+   * update stores the decision and erases the sealed arguments. One transaction.
+   */
+  function decideOpenSync<R extends RequestDecisionOutcome>(
+    id: string,
+    kind: RequestKind,
+    decidedByUserId: string,
+    now: Iso,
+    apply: (request: RequestRecord, session: SessionRecord | null) => R,
+  ): RequestDecisionResult<R> {
+    const request = getRequestRecord(ctx, id);
+    if (!request) throw new NotFoundError('request', id);
+    if (request.kind !== kind) {
+      throw new InvariantError(`request ${id} is not of kind '${kind}' (kind '${request.kind}')`);
+    }
+    if (request.state !== 'open') return { status: 'not-open', request };
+    if (request.expiresAt <= now) return { status: 'not-open', request: expireSync(request, now) };
+    const outcome = apply(request, sessions.sessionOfMission(request.missionId));
+    decideOpen.run(outcome.state, now, decidedByUserId, toJson(outcome.decision), id);
+    return {
+      status: 'decided',
+      request: requireRow(getRequestRecord(ctx, id) ?? undefined, 'request', id),
+      outcome,
+    };
+  }
+
   async function prepareArguments(args: unknown): Promise<PreparedArguments> {
     return prepareRequestArguments(ctx.encryptor, ctx.newId(), args);
   }
@@ -381,6 +497,9 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
     },
     async getArguments(id) {
       const row = requireRow(blobOf.get(id), 'request', id);
+      // Held for the lifetime of the request (spec §3.5): an overdue request the
+      // sweeper has not reached yet is not opened either.
+      if (row.state !== 'open' || row.expires_at <= nowIso(ctx)) return null;
       const text = await openSealedColumn(
         ctx.encryptor,
         requestAd(id),
@@ -402,26 +521,19 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
     },
     async decideClaim(id, decidedByUserId, apply) {
       const now = nowIso(ctx);
-      return withImmediateTransaction(db, () => {
-        const request = getRequestRecord(ctx, id);
-        if (!request) throw new NotFoundError('request', id);
-        if (request.kind !== 'claim') {
-          throw new InvariantError(`request ${id} is not a claim (kind '${request.kind}')`);
-        }
-        if (request.state !== 'open') return { status: 'not-open' as const, request };
-        if (request.expiresAt <= now) {
-          return { status: 'not-open' as const, request: expireSync(request, now) };
-        }
-        const outcome = apply(
-          claimContext(request, sessions.sessionOfMission(request.missionId), now),
-        );
-        decideOpen.run(outcome.state, now, decidedByUserId, toJson(outcome.decision), id);
-        return {
-          status: 'decided' as const,
-          request: requireRow(getRequestRecord(ctx, id) ?? undefined, 'request', id),
-          outcome,
-        };
-      });
+      return withImmediateTransaction(db, () =>
+        decideOpenSync(id, 'claim', decidedByUserId, now, (request, session) =>
+          apply(claimContext(request, session, now)),
+        ),
+      );
+    },
+    async decideApproval(id, decidedByUserId, apply) {
+      const now = nowIso(ctx);
+      return withImmediateTransaction(db, () =>
+        decideOpenSync(id, 'approval', decidedByUserId, now, (request, session) =>
+          apply(approvalContext(request, session, now)),
+        ),
+      );
     },
     async expireOpen() {
       return expire.run(nowIso(ctx)).changes;

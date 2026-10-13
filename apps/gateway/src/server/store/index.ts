@@ -177,13 +177,17 @@ export type {
   DecideResult,
   DecisionOutcome,
   ListEventsOptions,
+  RiskEventQuery,
   SessionsRepo,
 } from './repositories/sessions.ts';
 export { prepareRequestArguments } from './repositories/requests.ts';
 export type {
+  ApprovalDecisionContext,
   ClaimDecisionContext,
   ClaimDecisionOutcome,
   ClaimDecisionResult,
+  RequestDecisionOutcome,
+  RequestDecisionResult,
   CreateRequestInput,
   InsertRequestInput,
   OpenRequestLookup,
@@ -191,7 +195,7 @@ export type {
   RequestInput,
   RequestsRepo,
 } from './repositories/requests.ts';
-export type { ApprovalsRepo, CreateApprovalInput } from './repositories/approvals.ts';
+export type { ApprovalKey, ApprovalsRepo, CreateApprovalInput } from './repositories/approvals.ts';
 export type {
   CreateCodeInput,
   CreateDelegationInput,
@@ -202,6 +206,7 @@ export type {
 export { DEFAULT_AUDIT_RETENTION_DAYS } from './repositories/audit.ts';
 export type {
   AgentLabelSeen,
+  AuditCallRecord,
   AuditCursor,
   AuditFilter,
   AuditRecord,
@@ -209,6 +214,7 @@ export type {
   AuditRiskRow,
   AuditScope,
   AuditSearch,
+  CallLookup,
 } from './repositories/audit.ts';
 export type { ConfigRepo, ConfigWrite } from './repositories/config.ts';
 export type { WebSessionsRepo } from './repositories/web-sessions.ts';

@@ -4,15 +4,19 @@ import { InvariantError, NotFoundError } from '../errors.ts';
 import {
   MISSION_TOKEN_STATUSES,
   RESOURCE_SCOPES,
+  type Gate,
   type Iso,
   type MissionConnection,
   type MissionPolicyEntry,
   type MissionRecord,
   type MissionStatus,
   type MissionTokenRecord,
+  type NewEvent,
+  type RiskId,
 } from '../types.ts';
 import { nowIso, parseEnum, requireRow, type RepoContext } from './context.ts';
 import { GATES, MISSION_STATUSES } from './enums.ts';
+import { createSessionPrimitives } from './sessions.ts';
 
 export interface CreateMissionInput {
   readonly name: string;
@@ -44,6 +48,19 @@ export interface MissionsRepo {
   setExpiresAt(id: string, expiresAt: Iso | null): Promise<MissionRecord>;
   /** The creator enlarges or shrinks the mission; the whole policy is replaced atomically. */
   replacePolicy(id: string, policy: readonly MissionPolicyEntry[]): Promise<MissionRecord>;
+  /**
+   * Sets the gate of one accepted risk (spec §3.5 "at issuance, or later") and, when the
+   * mission has a session, records the `gate-changed` event in the same transaction: the
+   * event is what ends a gate opening granted earlier in the period, so the two must not
+   * come apart. Returns the gate the risk had; `null` (nothing written) when the risk is
+   * not in the mission's policy. Setting the gate it already has writes nothing.
+   */
+  setGate(
+    id: string,
+    riskId: RiskId,
+    gate: Gate,
+    actorUserId: string,
+  ): Promise<{ readonly mission: MissionRecord; readonly previous: Gate } | null>;
   /** Issues a new token; the previously active one, if any, becomes `rotated`. */
   issueToken(input: IssueTokenInput): Promise<MissionTokenRecord>;
   findTokenByPrefix(
@@ -225,6 +242,15 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
     'UPDATE missions SET expires_at = ?, updated_at = ? WHERE id = ?',
   );
   const touch = db.prepare<[string, string]>('UPDATE missions SET updated_at = ? WHERE id = ?');
+  const gateOf = db.prepare<[string, string], { gate: string }>(
+    'SELECT gate FROM mission_policy WHERE mission_id = ? AND risk_id = ?',
+  );
+  const setGateStmt = db.prepare<[string, string, string]>(
+    'UPDATE mission_policy SET gate = ? WHERE mission_id = ? AND risk_id = ?',
+  );
+  // The session's events belong to the sessions repository: its primitives run here,
+  // inside this repository's transaction.
+  const sessions = createSessionPrimitives(ctx);
   const retireActive = db.prepare<[string, string]>(
     `UPDATE mission_tokens SET status = 'rotated', retired_at = ? WHERE mission_id = ? AND status = 'active'`,
   );
@@ -339,6 +365,32 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
         writePolicy(id, policy);
         touch.run(now, id);
         return requireMission(id);
+      });
+    },
+    async setGate(id, riskId, gate, actorUserId) {
+      const now = nowIso(ctx);
+      return withImmediateTransaction(db, () => {
+        const mission = requireMission(id);
+        const row = gateOf.get(id, riskId);
+        if (!row) return null;
+        const previous = parseEnum(GATES, row.gate, 'mission_policy.gate');
+        if (previous === gate) return { mission, previous };
+        setGateStmt.run(gate, id, riskId);
+        touch.run(now, id);
+        const session = sessions.sessionOfMission(id);
+        if (session) {
+          sessions.recordEvent(
+            session.id,
+            {
+              kind: 'gate-changed',
+              riskId,
+              actorUserId,
+              details: { gate, gate_before: previous },
+            } satisfies NewEvent,
+            now,
+          );
+        }
+        return { mission: requireMission(id), previous };
       });
     },
     async issueToken(input) {

@@ -49,6 +49,7 @@ describe('requests: exhaust and claim over HTTP', () => {
       rateWindows: new SlidingWindowRateLimiter(),
       requestUrl: root.requests.requestUrl,
       requestExpirySeconds: root.config.requests.expirySeconds,
+      approvalValiditySeconds: root.config.approvals.expirySeconds,
     });
     const issued = await root.missions.service.issue(seeded.ada, {
       name: 'Read the billing code',
