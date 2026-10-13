@@ -152,7 +152,7 @@ Twenty-seven terms, distinct and not interchangeable.
   - **Approval request** — when the action touches a risk whose gate is
     `approval`: grant or refusal for that precise action.
 - **Approval** — the positive answer to an approval request. Bound to
-  the mission, the risk, and the exact fingerprint of the call's
+  the mission, the risk, the tool, and the exact fingerprint of the call's
   arguments. Single-use, valid for a short time. The identical replayed
   call passes; any other call asks again.
 
@@ -273,7 +273,7 @@ Instance                          (one company, one trust domain)
 | **Session**       | History of the mission. Counters per `RiskId` and per period. Created on the first call, never recreated.                                                                                          |
 | **Event**         | Session entry: allowed call, refused call, request, extension, reset, approval, rotation, revocation.                                                                                              |
 | **Request**       | Claim (reset or extension) or approval request (one precise action), addressed to the creator. States: open, granted, refused, expired.                                                            |
-| **Approval**      | Creator's grant for one action: `(mission, RiskId, argument fingerprint)`. Single-use, short-lived.                                                                                               |
+| **Approval**      | Creator's grant for one action: `(mission, RiskId, tool, argument fingerprint)`. Single-use, short-lived.                                                                                               |
 | **Audit**         | One entry per call and per administrative act. Append-only.                                                                                                                                       |
 
 ### 2.3 States
@@ -465,7 +465,7 @@ the risk's gate to `approval` at issuance, or later.
   for the lifetime of the request, then erased; only their fingerprint
   remains in the audit.
 - The creator grants or refuses. A grant produces an **approval** bound
-  to `(mission, RiskId, argument fingerprint)`, single-use, valid for a
+  to `(mission, RiskId, tool, argument fingerprint)`, single-use, valid for a
   short time configured by the operator.
 - The executor replays the call **identically**. The gateway finds the
   approval, consumes it, decrements the budget, executes. A call with
