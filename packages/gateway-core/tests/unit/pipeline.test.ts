@@ -330,10 +330,15 @@ describe('CallPipeline', () => {
     expect(audit.calls[0]).toMatchObject({
       decision: 'refused',
       refusal_code: null,
-      refusal_reason: out.reason,
       connection_id: null,
       remaining_budget: null,
     });
+    // The caller reads which argument; the audit, which keeps no trace of the arguments
+    // but their hash, keeps what was wrong and not the name the caller chose.
+    const stored = audit.calls[0]!.refusal_reason ?? '';
+    expect(stored).toContain('Infinity');
+    expect(stored).toContain('arguments must be JSON values');
+    expect(stored).not.toContain('limit');
   });
 
   test('a classifier denial that quotes an argument: the agent reads it whole, the audit entry holds no argument value', async () => {
@@ -356,6 +361,28 @@ describe('CallPipeline', () => {
     expect(stored).not.toContain('ops@acme.example');
     expect(stored).toBe("path: '[argument]' is not a file of this mission (asked by [argument])");
     expect(out.audit.refusal_reason).toBe(stored);
+  });
+
+  test('the audit copy is redacted in one pass: a short value is not found inside a placeholder already written', async () => {
+    // `argument` and `ment` are values too: replaced one after the other, the second
+    // would be matched inside the `[argument]` the first one left.
+    const reason = "argument 'ment' of statement 'argument-list' is refused";
+    const { p, audit } = pipeline({
+      risks: { evaluate: async () => ({ kind: 'classify-denied', reason }) },
+    });
+    await p.execute(ctx, { ...call, args: { a: 'argument', b: 'ment', c: 'argument-list' } });
+    expect(audit.calls[0]!.refusal_reason).toBe(
+      "[argument] '[argument]' of state[argument] '[argument]' is refused",
+    );
+  });
+
+  test('a value with characters a pattern would read is replaced as text', async () => {
+    const value = 'a.*(b)|[c]$^+?{1}\\';
+    const { p, audit } = pipeline({
+      risks: { evaluate: async () => ({ kind: 'classify-denied', reason: `bad: ${value}!` }) },
+    });
+    await p.execute(ctx, { ...call, args: { q: value } });
+    expect(audit.calls[0]!.refusal_reason).toBe('bad: [argument]!');
   });
 
   test('the audit copy of a structural reason is bounded', async () => {

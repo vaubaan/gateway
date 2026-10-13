@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1.7
 # Vaubaan Gateway — one image, one Node process (Next.js standalone server).
 # Build from the repository root:
 #   docker build -f deploy/docker/Dockerfile -t vaubaan-gateway:local .

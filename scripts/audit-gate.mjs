@@ -30,8 +30,13 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const DEFAULT_ALLOWLIST = '.github/audit-allowlist.json';
-/** Severities that fail the gate when not allowlisted. `low` and `info` are listed, not gated. */
+/** Severities that fail the gate when not allowlisted (the documented ones). */
 export const GATED_SEVERITIES = ['moderate', 'high', 'critical'];
+/**
+ * Severities that are listed, not gated. Everything else is gated: a severity this
+ * script does not know (`unknown`, a level npm adds one day) is not read as harmless.
+ */
+export const UNGATED_SEVERITIES = ['info', 'low'];
 export const ATTEMPTS = 4;
 export const RETRY_DELAYS_MS = [2_000, 8_000, 20_000];
 
@@ -88,8 +93,11 @@ export function parseAuditOutput(stdout) {
     parsed = JSON.parse(stdout);
   } catch {
     const text = String(stdout).trim();
-    if (text === '' || REGISTRY_ERROR_TEXT.test(text)) {
-      return { kind: 'registry-error', detail: text.slice(0, 300) || 'no output' };
+    // A registry outage is recognised on what was written, never on silence: no output
+    // at all is `npm` missing, killed or crashed, and that is a broken gate (exit 2).
+    if (text === '') return { kind: 'unreadable', detail: 'npm audit produced no output' };
+    if (REGISTRY_ERROR_TEXT.test(text)) {
+      return { kind: 'registry-error', detail: text.slice(0, 300) };
     }
     return { kind: 'unreadable', detail: text.slice(0, 300) };
   }
@@ -114,10 +122,13 @@ export function parseAuditOutput(stdout) {
       if (!via || typeof via !== 'object') continue;
       const url = String(via.url ?? '');
       const id = GHSA.exec(url)?.[0] ?? `npm:${String(via.source ?? url)}`;
-      if (byId.has(id)) continue;
-      byId.set(id, {
+      const pkg = String(via.name ?? name);
+      // One advisory can name several packages: each pair is compared with the allowlist.
+      const key = `${id}|${pkg}`;
+      if (byId.has(key)) continue;
+      byId.set(key, {
         id,
-        package: String(via.name ?? name),
+        package: pkg,
         severity: String(via.severity ?? entry.severity ?? 'unknown'),
         title: String(via.title ?? ''),
         url,
@@ -127,7 +138,9 @@ export function parseAuditOutput(stdout) {
   }
   return {
     kind: 'report',
-    advisories: [...byId.values()].sort((a, b) => a.id.localeCompare(b.id)),
+    advisories: [...byId.values()].sort(
+      (a, b) => a.id.localeCompare(b.id) || a.package.localeCompare(b.package),
+    ),
   };
 }
 
@@ -222,7 +235,7 @@ export function decide(advisories, entries, today) {
   for (const advisory of advisories) {
     const entry = byId.get(advisory.id);
     if (entry) matched.add(entry.id);
-    if (!GATED_SEVERITIES.includes(advisory.severity)) {
+    if (UNGATED_SEVERITIES.includes(advisory.severity)) {
       notices.push(advisory);
       continue;
     }
@@ -256,8 +269,18 @@ function runAudit() {
       'npm',
       ['audit', '--omit=dev', '--json'],
       { maxBuffer: 64 * 1024 * 1024, env: { ...process.env, NPM_CONFIG_UPDATE_NOTIFIER: 'false' } },
-      // `npm audit` exits 1 when it found something: the report on stdout decides, not the code.
-      (_error, stdout, stderr) => resolveRun({ stdout: String(stdout), stderr: String(stderr) }),
+      // `npm audit` exits 1 when it found something: the report on stdout decides, not the
+      // code. A process that could not be started or was killed wrote nothing to decide
+      // on: its error is kept, so the gate says why it is broken.
+      (error, stdout, stderr) =>
+        resolveRun({
+          stdout: String(stdout),
+          stderr: String(stderr),
+          spawnError:
+            error && (typeof error.code === 'string' || error.signal)
+              ? `npm could not run (${error.code ?? error.signal})`
+              : null,
+        }),
     );
   });
 }
@@ -288,8 +311,10 @@ async function main(argv) {
 
   let outcome = { kind: 'registry-error', detail: 'not run' };
   for (let attempt = 1; attempt <= ATTEMPTS; attempt += 1) {
-    const { stdout, stderr } = await runAudit();
-    outcome = parseAuditOutput(stdout.trim() === '' ? stderr : stdout);
+    const { stdout, stderr, spawnError } = await runAudit();
+    outcome = spawnError
+      ? { kind: 'unreadable', detail: spawnError }
+      : parseAuditOutput(stdout.trim() === '' ? stderr : stdout);
     if (outcome.kind !== 'registry-error') break;
     if (attempt < ATTEMPTS) {
       const wait = RETRY_DELAYS_MS[attempt - 1] ?? RETRY_DELAYS_MS.at(-1);

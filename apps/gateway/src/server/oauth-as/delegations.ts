@@ -299,11 +299,20 @@ export class DelegationService {
    */
   async revokeAllOf(userId: string, by: DelegationEnding): Promise<DelegationRecord[]> {
     const ended: DelegationRecord[] = [];
+    const failures: unknown[] = [];
     for (const delegation of await this.deps.repo.listForUser(userId)) {
       if (delegation.status !== 'active') continue;
-      const revoked = await endDelegation(this.deps, delegation.id, by);
-      if (revoked) ended.push(revoked);
+      // Each one is attempted whatever happened to the one before: a delegation that
+      // cannot be ended must not leave the next ones active. The first failure
+      // reaches the caller once all were tried.
+      try {
+        const revoked = await endDelegation(this.deps, delegation.id, by);
+        if (revoked) ended.push(revoked);
+      } catch (err) {
+        failures.push(err);
+      }
     }
+    if (failures.length > 0) throw failures[0];
     return ended;
   }
 }

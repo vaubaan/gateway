@@ -30,7 +30,9 @@
  *                 read `orphaned` (`creator-removed`), each with its
  *                 `mission-orphaned` entry in the operator's name
  *
- * Reactivation restores the status and nothing else that was removed: the
+ * Reactivation first closes again whatever a half-failed deactivation left open
+ * (`closeHeldBy`: nothing to do when the deactivation completed, and a failure
+ * there stops the reactivation), then restores the status and nothing else: the
  * missions whose authority still stands (a share made to the user, a
  * connection they still own) serve again by the same derived rule, with their
  * `mission-restored` entry; IdP groups return at the next sign-in; local
@@ -194,12 +196,34 @@ export class UserAdminService {
     };
   }
 
+  /**
+   * Closes what a user holds that outlives their status: their delegations (with
+   * their tokens), the member tokens they hold on other people's missions, their
+   * group memberships. Idempotent; throws on the first step that fails.
+   */
+  private async closeHeldBy(actor: UserAdminActor, userId: string): Promise<void> {
+    const { store, delegations, memberTokens } = this.deps;
+    await delegations.revokeAllOf(userId, {
+      reason: 'user-deactivated',
+      actorId: actor.actorId,
+      viaClient: false,
+    });
+    await memberTokens.revokeTokensOfDeactivated(actor.actorId, userId);
+    await store.groups.removeAllMemberships(userId);
+  }
+
   async reactivate(actor: UserAdminActor, userId: string): Promise<Reactivation> {
     const { store, membership } = this.deps;
     const user = await store.users.getById(userId);
     if (!user) throw new UserAdminError('not-found');
     if (user.status === 'active') throw new UserAdminError('not-deactivated');
 
+    // A deactivation whose closing steps half-failed left things open that only the
+    // user's status keeps dead (a delegation not revoked, a member token, a membership).
+    // They are closed again here, BEFORE the status returns: each step is a no-op when
+    // the deactivation completed, and a step that fails stops the reactivation — the
+    // user stays deactivated and the operator tries again.
+    await this.closeHeldBy(actor, user.id);
     const watch = await membership.watch(user.id);
     const restoredUser = await store.users.reactivate(user.id);
     // Another operator reactivated them between the read and the write: their entry stands.

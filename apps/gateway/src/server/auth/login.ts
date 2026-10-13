@@ -115,6 +115,14 @@ export async function completeLogin(
     email: claims.email,
     displayName: claims.displayName,
   });
+  // Deactivated between the read above and the upsert: the row says so, and nothing
+  // of this sign-in is applied to it (the upsert never changes a status).
+  if (user.status !== 'active') {
+    throw new LoginError(
+      'account-deactivated',
+      `user ${user.id} was deactivated on this instance while signing in`,
+    );
+  }
   const settleFailed = (err: unknown): void => {
     deps.logger.error('could not settle the memberships changed by a sign-in', {
       user_id: user.id,

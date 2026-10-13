@@ -49,6 +49,22 @@ describe('base images are pinned by version and digest', () => {
     }
   });
 
+  it('nothing else runs in the build: no unpinned frontend, no image copied from', () => {
+    const dockerfile = read('deploy/docker/Dockerfile');
+    // `# syntax=<image>` makes BuildKit pull that image and run it as the frontend of the
+    // build: it has more power over the result than the base image. None is needed (the
+    // file uses no heredoc, no `--mount`, no `--link`); one that appears is pinned.
+    const frontend = /^#\s*syntax\s*=\s*(\S+)/m.exec(dockerfile)?.[1];
+    if (frontend !== undefined) expect(frontend).toMatch(PINNED);
+    // `COPY --from=` and `RUN --mount=…from=` name a stage of this file, never an image.
+    const stages = new Set(
+      [...dockerfile.matchAll(/^FROM\s+\S+\s+AS\s+(\S+)/gm)].map((match) => match[1]),
+    );
+    const sources = [...dockerfile.matchAll(/\bfrom=([^\s,]+)/g)].map((match) => match[1] ?? '');
+    expect(sources.length).toBeGreaterThan(0);
+    for (const source of sources) expect(stages.has(source), source).toBe(true);
+  });
+
   it('the Compose file pins every image it pulls', () => {
     const images = composeImages();
     expect(images.length).toBeGreaterThan(0);

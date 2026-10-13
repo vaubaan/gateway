@@ -25,7 +25,7 @@ export const supabaseCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url
 export const supabasePlugin = definePlugin({
   id: 'supabase',
   displayName: 'Supabase',
-  version: '2.0.0',
+  version: '3.0.0',
   description:
     'Postgres, storage, auth and edge functions of Supabase projects, through the Management API.',
   summary:

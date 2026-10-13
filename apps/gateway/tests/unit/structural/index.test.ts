@@ -2,11 +2,17 @@
  * The index of the structural suite (see `manifest.ts`): every invariant has
  * a proof that still exists, every structural test is reachable from the
  * index, and every bullet of the spec's "Structural" list is held here.
+ *
+ * "Still exists" is read with the TypeScript parser, not by searching the text:
+ * a proof is a test the runner will run. A title that survives only in a comment,
+ * on an `it.skip` / `it.todo`, or under a `describe.skipIf` the index does not
+ * mention, fails here.
  */
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 import { INVARIANTS } from './manifest';
@@ -18,6 +24,79 @@ const SPEC = 'docs/spec/vaubaan-gateway.md';
 
 /** One line: bullets of the spec wrap, titles in a test file do not. */
 const flat = (text: string): string => text.replace(/\s+/g, ' ');
+
+/** A test or a suite a proof file declares, as the runner will treat it. */
+interface DeclaredTest {
+  /** The title, flattened to one line (a template title keeps its text parts). */
+  readonly title: string;
+  /** `.skip`, `.todo` on it or on a suite around it: it never runs. */
+  readonly skipped: boolean;
+  /** `.skipIf(…)` / `.runIf(…)` on it or on a suite around it: it runs on a condition. */
+  readonly conditional: boolean;
+}
+
+const RUNNER_ROOTS = new Set(['it', 'test', 'describe', 'suite']);
+const NEVER_RUNS = new Set(['skip', 'todo']);
+const RUNS_ON_CONDITION = new Set(['skipIf', 'runIf']);
+
+/** `it` / `it.each(table)` / `describe.skipIf(cond)` → the root name and the modifiers. */
+function runnerCallee(node: ts.Expression): { root: string; modifiers: string[] } | null {
+  const modifiers: string[] = [];
+  let current: ts.Expression = node;
+  for (;;) {
+    if (ts.isCallExpression(current)) current = current.expression;
+    else if (ts.isPropertyAccessExpression(current)) {
+      modifiers.push(current.name.text);
+      current = current.expression;
+    } else break;
+  }
+  return ts.isIdentifier(current) && RUNNER_ROOTS.has(current.text)
+    ? { root: current.text, modifiers }
+    : null;
+}
+
+function titleOf(argument: ts.Expression | undefined): string | null {
+  if (!argument) return null;
+  if (ts.isStringLiteralLike(argument)) return flat(argument.text);
+  if (ts.isTemplateExpression(argument)) {
+    return flat(
+      argument.head.text + argument.templateSpans.map((span) => `…${span.literal.text}`).join(''),
+    );
+  }
+  return null;
+}
+
+/**
+ * Every test and suite of a TypeScript or JavaScript test file, read with the
+ * compiler's parser: a title in a comment, in a string that is not a title, or on
+ * a skipped test is not a declared test.
+ */
+function declaredTests(path: string): DeclaredTest[] {
+  const source = ts.createSourceFile(
+    path,
+    readFileSync(path, 'utf8'),
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const found: DeclaredTest[] = [];
+  const visit = (node: ts.Node, skipped: boolean, conditional: boolean): void => {
+    let inner = { skipped, conditional };
+    if (ts.isCallExpression(node)) {
+      const callee = runnerCallee(node.expression);
+      const title = callee ? titleOf(node.arguments[0]) : null;
+      if (callee && title !== null) {
+        inner = {
+          skipped: skipped || callee.modifiers.some((m) => NEVER_RUNS.has(m)),
+          conditional: conditional || callee.modifiers.some((m) => RUNS_ON_CONDITION.has(m)),
+        };
+        found.push({ title, ...inner });
+      }
+    }
+    ts.forEachChild(node, (child) => visit(child, inner.skipped, inner.conditional));
+  };
+  visit(source, false, false);
+  return found;
+}
 
 /** The bullets under "- **Structural**:" of spec §10, each flattened to one line. */
 function specStructuralBullets(): string[] {
@@ -60,9 +139,37 @@ describe('the structural suite is indexed', () => {
         (file, proof) => {
           const path = resolve(REPO, file);
           expect(existsSync(path), `${file} is missing`).toBe(true);
-          const source = flat(readFileSync(path, 'utf8'));
-          const gone = proof.tests.filter((title) => !source.includes(flat(title)));
-          expect(gone, `${file} no longer holds these tests`).toEqual([]);
+          if (!/\.test\.(?:ts|tsx|mjs)$/.test(file)) {
+            // A shell proof (the image smoke test): the step is named by its message.
+            const source = flat(readFileSync(path, 'utf8'));
+            const gone = proof.tests.filter((title) => !source.includes(flat(title)));
+            expect(gone, `${file} no longer holds these steps`).toEqual([]);
+            return;
+          }
+          const declared = declaredTests(path);
+          const holding = (title: string): DeclaredTest[] =>
+            declared.filter((test) => test.title.includes(flat(title)));
+          const gone = proof.tests.filter((title) => holding(title).length === 0);
+          expect(gone, `${file} declares no test with these titles`).toEqual([]);
+          // A title that only skipped or to-do tests carry proves nothing.
+          const dead = proof.tests.filter((title) => holding(title).every((test) => test.skipped));
+          expect(dead, `${file} only skips these tests`).toEqual([]);
+          // A proof that runs on a condition says which, and one that says so is one.
+          const conditional = proof.tests.filter((title) =>
+            holding(title).every((test) => test.skipped || test.conditional),
+          );
+          if (proof.conditional === undefined) {
+            expect(
+              conditional,
+              `${file}: these tests run on a condition the index does not state`,
+            ).toEqual([]);
+          } else {
+            expect(proof.conditional.length).toBeGreaterThan(20);
+            expect(
+              conditional.length,
+              `${file}: stated conditional, but no named test is`,
+            ).toBeGreaterThan(0);
+          }
         },
       );
     },

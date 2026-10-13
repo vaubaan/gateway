@@ -29,7 +29,7 @@ export const cloudflareDnsCatalog = loadCatalogFile(catalogPathNextTo(import.met
 export const cloudflareDnsPlugin = definePlugin({
   id: 'cloudflare-dns',
   displayName: 'Cloudflare DNS',
-  version: '2.0.0',
+  version: '3.0.0',
   description:
     'DNS zones and records on Cloudflare : records, BIND import / export, zone settings, ' +
     'DNSSEC and cache purge — one resource per zone.',

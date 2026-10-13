@@ -82,7 +82,6 @@ describe('parseAuditOutput', () => {
       'the audit endpoint erroring',
       '{"error":{"code":"ENOAUDIT","summary":"audit endpoint returned an error"}}',
     ],
-    ['no output at all', ''],
     ['an HTML error page of a proxy', '<html><body>502 Bad Gateway</body></html>'],
   ])('tells %s from an advisory: registry-error, to retry', (_name, stdout) => {
     expect(parseAuditOutput(stdout).kind).toBe('registry-error');
@@ -95,6 +94,13 @@ describe('parseAuditOutput', () => {
       ).kind,
     ).toBe('unreadable');
     expect(parseAuditOutput('{"something":"else"}').kind).toBe('unreadable');
+    // No output at all is `npm` missing, killed or crashed before it wrote anything: the
+    // gate is broken, which is not "the registry did not answer".
+    expect(parseAuditOutput('')).toEqual({
+      kind: 'unreadable',
+      detail: 'npm audit produced no output',
+    });
+    expect(parseAuditOutput('  \n').kind).toBe('unreadable');
     expect(parseAuditOutput('npm ERR! something unexpected').kind).toBe('unreadable');
   });
 });
@@ -109,6 +115,58 @@ describe('decide', () => {
     ]);
     expect(verdict.notices.map((a) => a.id)).toEqual(['GHSA-2222-3333-4444']);
     expect(GATED_SEVERITIES).toEqual(['moderate', 'high', 'critical']);
+  });
+
+  it('gates a severity it does not know: only `info` and `low` are notices', () => {
+    const advisory = (severity) => ({
+      id: 'GHSA-aaaa-bbbb-cccc',
+      package: 'left-pad',
+      severity,
+      title: '',
+      url: '',
+      range: '',
+    });
+    for (const severity of ['unknown', '', 'severe', 'CRITICAL']) {
+      expect(decide([advisory(severity)], [], '2026-10-13').failures, severity).toHaveLength(1);
+    }
+    for (const severity of ['info', 'low']) {
+      const verdict = decide([advisory(severity)], [], '2026-10-13');
+      expect(verdict.failures, severity).toEqual([]);
+      expect(verdict.notices, severity).toHaveLength(1);
+    }
+  });
+
+  it('keeps one advisory per package: the same id on a second package is not dropped', () => {
+    const report = JSON.stringify({
+      vulnerabilities: {
+        a: {
+          severity: 'high',
+          via: [
+            {
+              name: 'a',
+              severity: 'high',
+              url: 'https://advisories.example.org/GHSA-vfj7-8cjw-p6xm',
+            },
+          ],
+        },
+        b: {
+          severity: 'high',
+          via: [
+            {
+              name: 'b',
+              severity: 'high',
+              url: 'https://advisories.example.org/GHSA-vfj7-8cjw-p6xm',
+            },
+          ],
+        },
+      },
+    });
+    const outcome = parseAuditOutput(report);
+    expect(outcome.kind).toBe('report');
+    expect(outcome.advisories.map(({ package: name }) => String(name))).toEqual(['a', 'b']);
+    // Allowlisted for `a` only: `b` fails.
+    const verdict = decide(outcome.advisories, [entry('GHSA-vfj7-8cjw-p6xm', 'a')], '2026-10-13');
+    expect(verdict.failures.map((f) => f.advisory.package)).toEqual(['b']);
   });
 
   it('passes an allowlisted advisory until its review date, that day included', () => {

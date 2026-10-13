@@ -223,6 +223,7 @@ function warnWithoutTrustedProxies(logger: Logger, config: InstanceConfig): void
     affected: [
       'request page: one per-IP window for everybody',
       'execution door: one token-verification window per token prefix (a flood of wrong secrets on a known prefix holds a not-yet-verified agent at 429)',
+      'authorization server: one registration window and one token window for everybody (one caller can hold every delegated client at 429 when it renews its token)',
       'audit: client_ip is not recorded',
     ],
     remedy:

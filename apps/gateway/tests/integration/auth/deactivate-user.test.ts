@@ -306,6 +306,59 @@ describe('deactivating a user: sessions end, delegations are revoked, missions f
     );
   });
 
+  it('what a half-failed deactivation left open is closed before the user is active again', async () => {
+    const delegations = rig.root.oauth.delegations;
+    const original = delegations.revokeAllOf.bind(delegations);
+    delegations.revokeAllOf = async () => {
+      throw new Error('delegations unavailable');
+    };
+    try {
+      await expect(rig.root.users.service.deactivate(operator(), bob.id)).rejects.toThrow(
+        'delegations unavailable',
+      );
+    } finally {
+      delegations.revokeAllOf = original;
+    }
+    // The delegation is still `active` in the store: dead only because Bob is not.
+    const stored = async () =>
+      (await rig.root.store.delegations.listForUser(bob.id)).map((d) => d.status);
+    expect(await stored()).toContain('active');
+
+    const back = await rig.root.users.service.reactivate(operator(), bob.id);
+
+    expect(back.user.status).toBe('active');
+    // Bob is active again and the delegation did not come back with him: he consents again.
+    expect(await stored()).not.toContain('active');
+    expect((await refresh()).status).toBe(400);
+    const door = await toolsList(rig, MANAGEMENT_URL, bearer(agent.delegated.tokens.access_token));
+    expect(door.status).toBe(401);
+    expect(await rig.adminEntries('delegation-revoked')).toMatchObject([
+      { after: { reason: 'user-deactivated' } },
+    ]);
+  });
+
+  it('a reactivation that cannot close what was left open does not happen', async () => {
+    await rig.root.users.service.deactivate(operator(), bob.id);
+    const delegations = rig.root.oauth.delegations;
+    const original = delegations.revokeAllOf.bind(delegations);
+    delegations.revokeAllOf = async () => {
+      throw new Error('delegations unavailable');
+    };
+    try {
+      await expect(rig.root.users.service.reactivate(operator(), bob.id)).rejects.toThrow(
+        'delegations unavailable',
+      );
+    } finally {
+      delegations.revokeAllOf = original;
+    }
+    expect((await rig.root.store.users.getById(bob.id))?.status).toBe('removed');
+    expect(await rig.adminEntries('user-reactivated')).toEqual([]);
+    // Once the store answers again, the operator's second attempt goes through.
+    expect((await rig.root.users.service.reactivate(operator(), bob.id)).user.status).toBe(
+      'active',
+    );
+  });
+
   it('the bootstrap operator may deactivate anyone, an operator included', async () => {
     const done = await rig.root.users.service.deactivate(
       { actorId: 'bootstrap', userId: null },
