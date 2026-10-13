@@ -327,6 +327,7 @@ export async function executionInstance(
     ...options.deps,
   });
   const ada = await root.store.users.upsertFromIdp({
+    issuer: 'http://idp.test',
     subject: 'idp|ada',
     email: 'ada@example.com',
     displayName: 'Ada',

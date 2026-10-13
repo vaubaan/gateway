@@ -144,7 +144,13 @@ describe('token holders (migration 0010)', () => {
   });
 
   async function openMission(): Promise<{ missionId: string; sessionId: string; ada: string }> {
-    const ada = (await t.store.users.upsertFromIdp({ subject: 'a', email: 'ada@example.com' })).id;
+    const ada = (
+      await t.store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: 'a',
+        email: 'ada@example.com',
+      })
+    ).id;
     const connection = await t.store.connections.create({
       provider: 'github',
       owner: { kind: 'user', id: ada },

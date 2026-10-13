@@ -52,8 +52,15 @@ export interface LoginChecks {
 }
 
 export interface FinishedLogin {
+  /** The ID token's claims over the userinfo answer: `iss`, `sub` and every signed claim win. */
   readonly claims: RawClaims;
-  /** Non-fatal problems (userinfo unreachable…) for the server log. */
+  /**
+   * The IdP advertises a userinfo endpoint and the request to it failed: `claims`
+   * is the ID token alone. Not fatal by itself — the claim mapping decides whether
+   * what is missing was needed (`mapClaims`: groups that are in neither).
+   */
+  readonly userinfoFailed: boolean;
+  /** Problems for the server log (the userinfo failure and its cause). */
   readonly warnings: readonly string[];
 }
 
@@ -144,15 +151,17 @@ export function createRelyingPartyFactory(options: RelyingPartyOptions): Relying
           if (!idToken) throw new LoginError('idp-error', 'no ID token in the token response');
           const warnings: string[] = [];
           let userinfo: RawClaims = {};
+          let userinfoFailed = false;
           if (config.serverMetadata().userinfo_endpoint && tokens.access_token) {
             try {
               userinfo = await oidc.fetchUserInfo(config, tokens.access_token, idToken.sub);
             } catch (err) {
+              userinfoFailed = true;
               warnings.push(`userinfo request failed: ${errorMessage(err)}`);
             }
           }
           // ID token claims win: they are signed by the issuer and bound to the nonce.
-          return { claims: { ...userinfo, ...idToken }, warnings };
+          return { claims: { ...userinfo, ...idToken }, userinfoFailed, warnings };
         },
       };
     },

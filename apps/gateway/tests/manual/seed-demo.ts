@@ -26,6 +26,7 @@ async function main(): Promise<void> {
   try {
     const { store } = root;
     const user = await store.users.upsertFromIdp({
+      issuer: 'http://idp.test',
       subject: 'idp|demo',
       email: 'demo@example.com',
       displayName: 'Demo user',

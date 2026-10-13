@@ -130,7 +130,11 @@ describe('ShareService', () => {
     });
 
     it('refuses a user the IdP removed and an email two users carry', async () => {
-      await rig.root.store.users.upsertFromIdp({ subject: 'idp|bob-2', email: 'bob@example.com' });
+      await rig.root.store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: 'idp|bob-2',
+        email: 'bob@example.com',
+      });
       await expect(share(toBob([READ]))).rejects.toMatchObject({ code: 'target-ambiguous' });
       await rig.root.store.users.markRemoved(rig.operator.id);
       await expect(

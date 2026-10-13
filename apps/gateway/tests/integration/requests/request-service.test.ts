@@ -105,7 +105,11 @@ describe('RequestService', () => {
   };
 
   async function otherUser(email: string): Promise<{ id: string }> {
-    return f.store.users.upsertFromIdp({ subject: email, email });
+    return f.store.users.upsertFromIdp({
+      issuer: 'http://idp.test',
+      subject: email,
+      email,
+    });
   }
 
   // ───────────────────────────────────────────────────────────────────────────

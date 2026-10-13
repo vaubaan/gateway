@@ -29,6 +29,11 @@ import { LoginError } from './errors';
 export type RawClaims = Readonly<Record<string, unknown>>;
 
 export interface IdentityClaims {
+  /**
+   * The `iss` of the validated ID token, as issued. With `subject` it IS the
+   * user: a subject is unique within its issuer only (OpenID Connect Core §2).
+   */
+  readonly issuer: string;
   /** Stable subject, as the IdP issued it. */
   readonly subject: string;
   /** Lower-cased. */
@@ -39,6 +44,8 @@ export interface IdentityClaims {
 }
 
 const GROUP_DELIMITERS = /[\s,;]+/;
+/** The issuer claim of an ID token (OpenID Connect Core §2). */
+const ISSUER_CLAIM = 'iss';
 /** The standard OIDC claim about the `email` claim (OpenID Connect Core §5.1). */
 const EMAIL_VERIFIED_CLAIM = 'email_verified';
 
@@ -91,16 +98,47 @@ function nonEmptyString(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
 }
 
-export function mapClaims(raw: RawClaims, mapping: IdpClaimMapping): IdentityClaims {
+/** Where the claims came from, when it changes what their absence means. */
+export interface ClaimsProvenance {
+  /**
+   * The IdP has a userinfo endpoint and the request to it failed: `raw` is the
+   * ID token alone. A claim absent from it may have been in the answer that
+   * never came.
+   */
+  readonly userinfoFailed: boolean;
+}
+
+export function mapClaims(
+  raw: RawClaims,
+  mapping: IdpClaimMapping,
+  provenance: ClaimsProvenance = { userinfoFailed: false },
+): IdentityClaims {
+  // `iss` is not configurable: it is the claim the ID token was validated on.
+  const issuer = nonEmptyString(raw[ISSUER_CLAIM]);
   const subject = nonEmptyString(raw[mapping.sub]);
   const email = nonEmptyString(raw[mapping.email]);
-  const missing = [subject === null ? mapping.sub : null, email === null ? mapping.email : null]
+  const missing = [
+    issuer === null ? ISSUER_CLAIM : null,
+    subject === null ? mapping.sub : null,
+    email === null ? mapping.email : null,
+  ]
     .filter((c): c is string => c !== null)
     .map((c) => `'${c}'`);
-  if (subject === null || email === null) {
+  if (issuer === null || subject === null || email === null) {
     throw new LoginError(
       'claims-missing',
       `claim(s) ${missing.join(', ')} missing or empty; check idp.claims in the instance configuration`,
+    );
+  }
+  // The groups are not in the ID token, and the userinfo answer that may have carried
+  // them never came: they are unknown, not empty. Syncing "no groups" would take the
+  // user out of every IdP group for the length of the session — ownership of the
+  // connections those groups own, the shares made to them, the admin rule.
+  if (provenance.userinfoFailed && raw[mapping.groups] === undefined) {
+    throw new LoginError(
+      'groups-unavailable',
+      `the ID token of subject '${subject}' carries no '${mapping.groups}' claim and the userinfo request failed, ` +
+        'so the groups of this user are unknown; the sign-in is refused rather than read as "no groups"',
     );
   }
   if (saysUnverified(raw[EMAIL_VERIFIED_CLAIM])) {
@@ -120,6 +158,7 @@ export function mapClaims(raw: RawClaims, mapping: IdpClaimMapping): IdentityCla
     );
   }
   return {
+    issuer,
     subject,
     email: email.toLowerCase(),
     displayName: nonEmptyString(raw.name),

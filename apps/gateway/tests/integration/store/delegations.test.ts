@@ -20,7 +20,13 @@ describe('delegations repository', () => {
   beforeEach(async () => {
     t = openTestStore();
     store = t.store;
-    user = (await store.users.upsertFromIdp({ subject: 'u', email: 'u@x' })).id;
+    user = (
+      await store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: 'u',
+        email: 'u@x',
+      })
+    ).id;
     clientId = (
       await store.delegations.registerClient({
         clientId: 'claude-code',

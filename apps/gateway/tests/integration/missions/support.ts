@@ -47,8 +47,18 @@ export interface SeededInstance {
   readonly gmail: SeededConnection;
 }
 
-export const ADA = { subject: 'idp|ada', email: 'ada@example.com', displayName: 'Ada' } as const;
-export const BOB = { subject: 'idp|bob', email: 'bob@example.com', displayName: 'Bob' } as const;
+export const ADA = {
+  issuer: 'http://idp.test',
+  subject: 'idp|ada',
+  email: 'ada@example.com',
+  displayName: 'Ada',
+} as const;
+export const BOB = {
+  issuer: 'http://idp.test',
+  subject: 'idp|bob',
+  email: 'bob@example.com',
+  displayName: 'Bob',
+} as const;
 
 /**
  * Ada owns four connections: GitHub (three repositories), Supabase (a

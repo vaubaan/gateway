@@ -38,7 +38,13 @@ describe('sessions repository', () => {
   beforeEach(async () => {
     t = openTestStore();
     store = t.store;
-    creator = (await store.users.upsertFromIdp({ subject: 'c', email: 'c@x' })).id;
+    creator = (
+      await store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: 'c',
+        email: 'c@x',
+      })
+    ).id;
     const connection = await store.connections.create({
       provider: 'github',
       owner: { kind: 'user', id: creator },
@@ -127,7 +133,13 @@ describe('sessions repository', () => {
     const a = open(50);
     const b = open(50);
     try {
-      const user = (await a.users.upsertFromIdp({ subject: 'c', email: 'c@x' })).id;
+      const user = (
+        await a.users.upsertFromIdp({
+          issuer: 'http://idp.test',
+          subject: 'c',
+          email: 'c@x',
+        })
+      ).id;
       const connection = await a.connections.create({
         provider: 'github',
         owner: { kind: 'user', id: user },

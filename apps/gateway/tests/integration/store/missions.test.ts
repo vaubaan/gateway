@@ -36,7 +36,13 @@ describe('missions repository', () => {
   beforeEach(async () => {
     t = openTestStore();
     store = t.store;
-    creator = (await store.users.upsertFromIdp({ subject: 'c', email: 'c@x' })).id;
+    creator = (
+      await store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: 'c',
+        email: 'c@x',
+      })
+    ).id;
     connection = (
       await store.connections.create({
         provider: 'github',
@@ -193,7 +199,13 @@ describe('missions repository', () => {
 
   it('issues one active token per member; a member rotating retires their own token only', async () => {
     const m = await create();
-    const bob = (await store.users.upsertFromIdp({ subject: 'b', email: 'b@x' })).id;
+    const bob = (
+      await store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: 'b',
+        email: 'b@x',
+      })
+    ).id;
     await store.missions.addMember({ missionId: m.id, userId: bob, addedBy: creator });
 
     const first = await issue(m.id, 'vbn_live_aaaa', member(creator));
@@ -338,8 +350,20 @@ describe('missions repository', () => {
 
   it('adds, lists and removes members; the creator is never a row', async () => {
     const m = await create();
-    const bob = (await store.users.upsertFromIdp({ subject: 'b', email: 'b@x' })).id;
-    const carol = (await store.users.upsertFromIdp({ subject: 'k', email: 'k@x' })).id;
+    const bob = (
+      await store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: 'b',
+        email: 'b@x',
+      })
+    ).id;
+    const carol = (
+      await store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: 'k',
+        email: 'k@x',
+      })
+    ).id;
     expect(await store.missions.listMembers(m.id)).toEqual([]);
     await expect(
       store.missions.addMember({ missionId: m.id, userId: creator, addedBy: creator }),
@@ -368,7 +392,13 @@ describe('missions repository', () => {
 
   it('removing a member revokes their token in the same step, and only theirs', async () => {
     const m = await create();
-    const bob = (await store.users.upsertFromIdp({ subject: 'b', email: 'b@x' })).id;
+    const bob = (
+      await store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: 'b',
+        email: 'b@x',
+      })
+    ).id;
     await store.missions.addMember({ missionId: m.id, userId: bob, addedBy: creator });
     const mine = await issue(m.id, 'p-mine', member(creator));
     const bobs = await issue(m.id, 'p-bob', member(bob));
@@ -400,7 +430,13 @@ describe('missions repository', () => {
   });
 
   it('revokes the member tokens of a user on the missions they did not create, and leaves their own missions alone', async () => {
-    const bob = (await store.users.upsertFromIdp({ subject: 'b', email: 'b@x' })).id;
+    const bob = (
+      await store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: 'b',
+        email: 'b@x',
+      })
+    ).id;
     const shared = await create({ name: 'Shared with Bob' });
     const other = await create({ name: 'Also shared' });
     const bobsOwn = await create({ name: 'Bob created this', creatorUserId: bob });

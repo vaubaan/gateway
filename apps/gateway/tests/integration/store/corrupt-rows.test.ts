@@ -35,7 +35,13 @@ describe('store rows with a value outside a closed set', () => {
   beforeEach(async () => {
     t = openTestStore();
     store = t.store;
-    userId = (await store.users.upsertFromIdp({ subject: 'u', email: 'u@x' })).id;
+    userId = (
+      await store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: 'u',
+        email: 'u@x',
+      })
+    ).id;
     connectionId = (
       await store.connections.create({
         provider: 'github',

@@ -98,7 +98,11 @@ describe('the human surface authenticates in every page and route', () => {
 
   async function signInUser(subject: string): Promise<void> {
     const email = `${subject}@example.com`;
-    const user = await root.store.users.upsertFromIdp({ subject, email });
+    const user = await root.store.users.upsertFromIdp({
+      issuer: 'http://idp.test',
+      subject,
+      email,
+    });
     const session = await root.auth.sessions.create({
       kind: 'user',
       userId: user.id,

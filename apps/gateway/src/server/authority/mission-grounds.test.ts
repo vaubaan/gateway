@@ -41,8 +41,16 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
     });
     clock = new ManualClock();
     authority = createAuthorityModule({ store, registry, logger: silentLogger, clock });
-    ada = await store.users.upsertFromIdp({ subject: 'idp|ada', email: 'ada@example.com' });
-    bob = await store.users.upsertFromIdp({ subject: 'idp|bob', email: 'bob@example.com' });
+    ada = await store.users.upsertFromIdp({
+      issuer: 'http://idp.test',
+      subject: 'idp|ada',
+      email: 'ada@example.com',
+    });
+    bob = await store.users.upsertFromIdp({
+      issuer: 'http://idp.test',
+      subject: 'idp|bob',
+      email: 'bob@example.com',
+    });
   });
   afterEach(async () => {
     await store.close();

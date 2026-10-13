@@ -153,8 +153,16 @@ export async function openOAuthRig(options: OAuthRigOptions = {}): Promise<OAuth
     users: store.users,
     clients,
   });
-  const ada = await store.users.upsertFromIdp({ subject: 'idp|ada', email: 'ada@example.com' });
-  const bob = await store.users.upsertFromIdp({ subject: 'idp|bob', email: 'bob@example.com' });
+  const ada = await store.users.upsertFromIdp({
+    issuer: 'http://idp.test',
+    subject: 'idp|ada',
+    email: 'ada@example.com',
+  });
+  const bob = await store.users.upsertFromIdp({
+    issuer: 'http://idp.test',
+    subject: 'idp|bob',
+    email: 'bob@example.com',
+  });
 
   const rig: OAuthRig = {
     store,

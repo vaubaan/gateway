@@ -287,6 +287,7 @@ async function issueDeveloperMission(
   name: string,
 ): Promise<{ mission_id: string; token: string }> {
   const user = await root.store.users.upsertFromIdp({
+    issuer: IDP_ISSUER,
     subject: E2E_APPROVER_USER.sub,
     email: E2E_APPROVER_USER.email,
     displayName: E2E_APPROVER_USER.name,
@@ -429,6 +430,7 @@ async function main(): Promise<void> {
         const [owner] = await Promise.all(
           [E2E_SHARE_OWNER, E2E_SHARE_TARGET, E2E_OPERATOR].map((user) =>
             root.store.users.upsertFromIdp({
+              issuer: IDP_ISSUER,
               subject: user.sub,
               email: user.email,
               displayName: user.name,
@@ -467,6 +469,7 @@ async function main(): Promise<void> {
         // A user of their own, with their own GitHub connection: the open
         // requests this leaves behind are in nobody else's inbox.
         const user = await root.store.users.upsertFromIdp({
+          issuer: IDP_ISSUER,
           subject: E2E_AUDIT_USER.sub,
           email: E2E_AUDIT_USER.email,
           displayName: E2E_AUDIT_USER.name,

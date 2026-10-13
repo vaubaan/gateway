@@ -414,6 +414,7 @@ describe('the mutation guard covers every mutating handler', () => {
     });
     const seeded = await seedInstance(root);
     const operator = await root.store.users.upsertFromIdp({
+      issuer: 'http://idp.test',
       subject: 'idp|ops',
       email: OPERATOR_EMAIL,
       displayName: 'Ops',

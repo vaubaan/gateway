@@ -52,6 +52,7 @@ describe('missions: members and per-holder tokens', () => {
     seeded = await seedInstance(root);
     ({ ada, bob } = seeded);
     carol = await root.store.users.upsertFromIdp({
+      issuer: 'http://idp.test',
       subject: 'idp|carol',
       email: 'carol@example.com',
     });

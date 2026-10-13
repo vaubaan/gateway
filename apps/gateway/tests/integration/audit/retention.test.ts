@@ -89,7 +89,13 @@ describe('audit retention sweeper', () => {
   beforeEach(async () => {
     t = openTestStore();
     t.clock.set(NOW);
-    userId = (await t.store.users.upsertFromIdp({ subject: 'u', email: 'u@example.com' })).id;
+    userId = (
+      await t.store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: 'u',
+        email: 'u@example.com',
+      })
+    ).id;
     const connection = await t.store.connections.create({
       provider: 'github',
       owner: { kind: 'user', id: userId },
@@ -306,7 +312,11 @@ describe('audit retention sweeper — composition root', () => {
     try {
       expect(root.config.retentionDays).toBe(7);
       expect(root.audit.retention.started).toBe(true);
-      const user = await root.store.users.upsertFromIdp({ subject: 'u', email: 'u@example.com' });
+      const user = await root.store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: 'u',
+        email: 'u@example.com',
+      });
       const old = await root.store.audit.append(
         act(new Date(Date.now() - 8 * DAY_MS).toISOString(), user.id),
       );
@@ -325,7 +335,11 @@ describe('audit retention sweeper — composition root', () => {
   it('defaults to 90 days', async () => {
     const root = await buildTestRoot();
     try {
-      const user = await root.store.users.upsertFromIdp({ subject: 'u', email: 'u@example.com' });
+      const user = await root.store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: 'u',
+        email: 'u@example.com',
+      });
       await root.store.audit.append(act(new Date(Date.now() - 89 * DAY_MS).toISOString(), user.id));
       await root.store.audit.append(act(new Date(Date.now() - 91 * DAY_MS).toISOString(), user.id));
       expect(await root.audit.retention.sweep()).toBe(1);

@@ -93,7 +93,11 @@ describe('community telemetry', () => {
         if (as !== 'nobody') {
           const user =
             as === 'operator'
-              ? await root.store.users.upsertFromIdp({ subject: 'idp|ops', email: OPERATOR_EMAIL })
+              ? await root.store.users.upsertFromIdp({
+                  issuer: 'http://idp.test',
+                  subject: 'idp|ops',
+                  email: OPERATOR_EMAIL,
+                })
               : instance.ada;
           const session = await root.auth.sessions.create({
             kind: 'user',
@@ -268,6 +272,7 @@ describe('community telemetry', () => {
       // Same value again: nothing changes, nothing is audited twice.
       await r.toggle('true');
       const operator = await instance.root.store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
         subject: 'idp|ops',
         email: OPERATOR_EMAIL,
       });

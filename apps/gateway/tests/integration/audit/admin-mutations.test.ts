@@ -173,10 +173,12 @@ async function openRig(): Promise<Rig> {
     ...memoryStoreDeps,
   });
   const operator = await root.store.users.upsertFromIdp({
+    issuer: 'http://idp.test',
     subject: 'idp|ops',
     email: OPERATOR_EMAIL,
   });
   const aliceUser = await root.store.users.upsertFromIdp({
+    issuer: 'http://idp.test',
     subject: 'idp|alice',
     email: 'alice@example.com',
   });
@@ -262,7 +264,11 @@ async function openRig(): Promise<Rig> {
       return refused.request_id;
     },
     bob() {
-      return root.store.users.upsertFromIdp({ subject: 'idp|bob', email: 'bob@example.com' });
+      return root.store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: 'idp|bob',
+        email: 'bob@example.com',
+      });
     },
     async groupGrounded() {
       const mission = await rig.issue();
@@ -871,7 +877,13 @@ const RULES: Readonly<Record<string, Rule>> = {
           bootstrap: rig.root.auth.bootstrap,
           logger: silentLogger,
         },
-        { subject: 'idp|ops', email: OPERATOR_EMAIL, displayName: 'Ops', groups: [] },
+        {
+          issuer: 'http://idp.test',
+          subject: 'idp|ops',
+          email: OPERATOR_EMAIL,
+          displayName: 'Ops',
+          groups: [],
+        },
       ),
     writes: {
       act: 'config-changed',

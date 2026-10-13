@@ -24,7 +24,13 @@ describe('delegations repository — clients, reasons, replay lookups, sweep', (
   beforeEach(async () => {
     t = openTestStore();
     store = t.store;
-    user = (await store.users.upsertFromIdp({ subject: 'u', email: 'u@example.com' })).id;
+    user = (
+      await store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: 'u',
+        email: 'u@example.com',
+      })
+    ).id;
   });
   afterEach(() => store.close());
 
@@ -340,7 +346,13 @@ describe('delegations repository — clients, reasons, replay lookups, sweep', (
 
   describe('audit scope', () => {
     it('shows a user the administrative entries of their own delegations only', async () => {
-      const other = (await store.users.upsertFromIdp({ subject: 'o', email: 'o@example.com' })).id;
+      const other = (
+        await store.users.upsertFromIdp({
+          issuer: 'http://idp.test',
+          subject: 'o',
+          email: 'o@example.com',
+        })
+      ).id;
       const c = await client('c');
       const mine = await store.delegations.create({ userId: user, clientId: c.id, scope: 'mgmt' });
       const theirs = await store.delegations.create({

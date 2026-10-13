@@ -321,7 +321,11 @@ describe('approval gate: refusal, decision, replay', () => {
 
     it('is refused to anyone but the creator, with nothing about the request', async () => {
       const result = refused(await call());
-      const other = await f.store.users.upsertFromIdp({ subject: 'o', email: 'o@x' });
+      const other = await f.store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: 'o',
+        email: 'o@x',
+      });
       expect(await requests.view({ id: other.id }, result.request_id)).toEqual({
         outcome: 'forbidden',
       });

@@ -90,7 +90,18 @@ export async function completeLogin(
   deps: LoginDeps,
   claims: IdentityClaims,
 ): Promise<LoginOutcome> {
-  const known = await deps.store.users.getBySubject(claims.subject);
+  // Accounts from before the store recorded an issuer belong to the identity provider
+  // the instance was using: the first validated sign-in after the upgrade names it,
+  // for all of them, before any is looked up (migration 0011).
+  const bound = await deps.store.users.bindUnboundTo(claims.issuer);
+  if (bound > 0) {
+    deps.logger.warn('existing accounts bound to the identity provider of this sign-in', {
+      issuer: claims.issuer,
+      accounts: bound,
+    });
+  }
+  // A user is (issuer, subject): the same subject from another issuer is somebody else.
+  const known = await deps.store.users.getByIdentity(claims.issuer, claims.subject);
   if (known && known.status !== 'active') {
     throw new LoginError(
       'account-deactivated',
@@ -99,6 +110,7 @@ export async function completeLogin(
     );
   }
   const user = await deps.store.users.upsertFromIdp({
+    issuer: claims.issuer,
     subject: claims.subject,
     email: claims.email,
     displayName: claims.displayName,

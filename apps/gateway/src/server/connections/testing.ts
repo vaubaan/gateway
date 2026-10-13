@@ -286,7 +286,11 @@ export function connectionsHarness(options: HarnessOptions): ConnectionsHarness 
     sessions,
     audit,
     async actor(email, groupNames = []) {
-      const user: UserRecord = await test.store.users.upsertFromIdp({ subject: email, email });
+      const user: UserRecord = await test.store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: email,
+        email,
+      });
       const groups: GroupRecord[] = [];
       for (const name of groupNames) {
         const group = await test.store.groups.getOrCreate(name, 'idp');

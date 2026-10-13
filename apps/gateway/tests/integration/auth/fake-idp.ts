@@ -37,6 +37,8 @@ export class FakeIdp {
   nextClaims: Record<string, unknown> = {};
   /** Set to make the next authorization fail at the IdP (`error=` on the callback). */
   nextError: string | null = null;
+  /** While true, the userinfo endpoint answers 503: tokens are issued, userinfo is down. */
+  userinfoDown = false;
   readonly requests: string[] = [];
 
   private readonly privateKey: KeyObject;
@@ -65,9 +67,17 @@ export class FakeIdp {
     return new URL(path, this.issuer).href;
   }
 
+  /**
+   * The issuer identifier as the ID tokens carry it (`iss`): no trailing slash,
+   * unlike `issuer.href`. A user of the instance is `(iss, sub)`.
+   */
+  get iss(): string {
+    return this.issuer.href.replace(/\/$/, '');
+  }
+
   metadata(): Record<string, unknown> {
     return {
-      issuer: this.issuer.href.replace(/\/$/, ''),
+      issuer: this.iss,
       authorization_endpoint: this.url('/authorize'),
       token_endpoint: this.url('/token'),
       jwks_uri: this.url('/jwks'),
@@ -136,6 +146,7 @@ export class FakeIdp {
       case 'POST /token':
         return this.token(new URLSearchParams(await request.text()));
       case 'GET /userinfo':
+        if (this.userinfoDown) return json({ error: 'temporarily_unavailable' }, 503);
         return this.userinfo(request.headers.get('authorization'));
       default:
         return json({ error: 'not_found' }, 404);

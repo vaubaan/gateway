@@ -264,6 +264,7 @@ describe('structural: a telemetry report contains none of the forbidden fields (
     // hand it to telemetry.
     const memberEmail = `${rng.poison('member')}@holder.example`;
     const member = await root.store.users.upsertFromIdp({
+      issuer: 'http://idp.test',
       subject: rng.poison('subject'),
       email: memberEmail,
     });
