@@ -26,6 +26,7 @@ requests, approvals), §6 (encryption at rest, immutable audit), §8 (audit). De
 apps/gateway/migrations/
   0001_schema.sql                 schema v1 (27 tables + schema_migrations from the runner, 4 triggers)
   0002_audit_risks_purge_guard.sql audit_risks delete guard compares with the purge cutoff (schema version 2)
+  0003_web_sessions.sql           web_sessions: the human web-session rows (schema version 3, P1.1)
 apps/gateway/src/server/store/
   index.ts                        openStore() / openMemoryStore(), Store type, re-exports
   db.ts                           better-sqlite3 handle, pragmas, withImmediateTransaction, backupTo
@@ -66,7 +67,8 @@ const store = openStore({
 // store.sessions, store.requests, store.approvals, store.delegations, store.audit,
 // store.config, store.auditWriter, store.schemaVersion, store.backupTo(),
 // store.kind ('sqlite' | 'memory'), store.ping(), store.close()  <- compose/ports.ts Store port
-// store.db: raw handle, for structural tests and diagnostics only
+// store.db: raw handle — structural tests, diagnostics, and the SQLite-backed
+//           ports the root builds over the same connection (SqliteSessionStore)
 ```
 
 `RegistryCatalogIndex` (`compose/registry.ts`) answers `has(riskId)` from
@@ -140,14 +142,15 @@ five-id catalog).
   with no resource…), driver errors (`SqliteError` with `code`) for constraint
   violations the schema catches (`UNIQUE`, `FOREIGN KEY`, `CHECK`).
 
-## Schema (`0001_schema.sql`, `0002_audit_risks_purge_guard.sql`)
+## Schema (`0001_schema.sql`, `0002_audit_risks_purge_guard.sql`, `0003_web_sessions.sql`)
 
-Schema version 2. `0001` creates every table and trigger; `0002` only replaces the
-`audit_risks` delete trigger (see Audit).
+Schema version 3. `0001` creates every table and trigger; `0002` only replaces the
+`audit_risks` delete trigger (see Audit); `0003` adds `web_sessions`.
 
 | Area        | Tables                                                                                                                     | Notes                                                                                                                                                                                                                                                                              |
 | ----------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Instance    | `instance_config`, `schema_migrations`                                                                                     | key → clear `value` **or** `secret_blob`+`key_version`, never both                                                                                                                                                                                                                 |
+| Web session | `web_sessions`                                                                                                             | `id` = cookie value, `value_json`, `expires_at`; owned by `server/session/SqliteSessionStore` (handbook [authentication](authentication.md)), not by a repository                                                                                                                  |
 | Identities  | `users`, `groups`, `group_members`                                                                                         | `users.subject` unique (IdP), `status active\|removed`; `groups.source idp\|local`                                                                                                                                                                                                 |
 | Delegations | `oauth_clients`, `oauth_client_redirect_uris`, `delegations`, `oauth_codes`, `oauth_refresh_tokens`, `oauth_access_tokens` | all secrets stored as hashes by the caller; codes single-use; refresh tokens chain through `replaced_by_id`                                                                                                                                                                        |
 | Connections | `connections`, `connection_resources`                                                                                      | owner = `owner_kind` + `owner_user_id`/`owner_group_id` with a CHECK; status `active\|expired\|revoked\|unowned`; resources unique per `(connection_id, ref)` with an `env` label                                                                                                  |
@@ -237,10 +240,10 @@ capture both files atomically are also fine.
   uniqueness.
 - `tests/unit/server/store/migrate.test.ts` — file naming, ordering, duplicate
   versions, idempotent re-run, incremental apply, checksum immutability, rollback of a
-  failing file, downgrade refused (a recorded migration with no file), the two shipped
+  failing file, downgrade refused (a recorded migration with no file), the three shipped
   files.
 - `tests/unit/server/store/db.test.ts` — `isSqliteVersionAtLeast`.
-- `tests/integration/store/schema.test.ts` — all 28 tables, every table `STRICT`,
+- `tests/integration/store/schema.test.ts` — all 29 tables, every table `STRICT`,
   the composition `StoreLiveness` port (`kind`, `ping`, `close`), boot against an empty file
   (WAL, foreign keys, `NORMAL`), reopen without re-migrating, two writers on one file
   serialize (`SQLITE_BUSY` then success), `VACUUM INTO` backup.

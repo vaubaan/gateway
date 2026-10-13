@@ -88,7 +88,9 @@ admin:
 #     client_secret: ${VERCEL_CLIENT_SECRET}
 
 # REQUIRED while idp is not configured. At least 32 characters; lets the
-# operator sign in and configure the instance. Revoke it once the IdP works.
+# operator sign in at /admin/bootstrap and configure the IdP from the Admin
+# page. Revoked automatically (flag in the database) after the first operator
+# signs in through the IdP; harmless to leave set afterwards.
 # env: VAUBAAN_BOOTSTRAP_TOKEN or VAUBAAN_BOOTSTRAP_TOKEN_FILE
 # (or `${file:/run/secrets/vaubaan_bootstrap_token}` with a secrets mount)
 bootstrap_token: ${VAUBAAN_BOOTSTRAP_TOKEN}

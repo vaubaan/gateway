@@ -55,11 +55,13 @@ apps/gateway/src/
       memory.ts                 MemoryRateLimiter, MemorySessionStore  // single-process only
       registry.ts               buildEmptyRegistry(), RegistryCatalogIndex, checkProviderApps()
       store.ts                  openEmbeddedStore(): the SQLite store from store.path
-      root.ts                   buildRoot(), getRoot() (globalThis), resetRoot()
+      root.ts                   buildRoot(), getRoot() (globalThis), resetRoot(); wires session/ and auth/
       boot.ts                   bootOrExit(): exit 78 on ConfigError, 1 otherwise
       testing.ts                memoryStoreDeps, fakePlugin() — tests only
     http/
       healthz.ts                healthResponse(root), healthHandler(getRoot)
+    session/                    SqliteSessionStore — the SessionStore port over web_sessions (handbook authentication)
+    auth/                       OIDC relying party, web session, bootstrap, admin rule (handbook authentication)
   lib/crypto/index.ts           LEGACY v4 shim over the new encryptor (deleted in Phase 1)
 scripts/gen-master-key.mjs      prints 32 random bytes, base64
 deploy/config/                  gateway.example.yaml, .env.example (every key documented)
@@ -98,9 +100,15 @@ deploy/config/                  gateway.example.yaml, .env.example (every key do
      `store opened` carries `kind`, `path` and `schema_version`. A store
      that cannot open fails the boot with a message naming `store.path` and
      `VAUBAAN_STORE_PATH` (exit 1);
+   - the web `SessionStore`: `SqliteSessionStore` over the store's connection
+     (table `web_sessions`) unless `RootDeps.sessions` injects another one,
+     then `createAuthModule()` → `root.auth` (relying party, sessions,
+     bootstrap, authenticator, handlers; handbook
+     [authentication](authentication.md)), with `RootDeps.oidc` for the
+     relying party's outbound `fetch` and the test-only insecure issuer;
    - the boot line `composition root ready` (`store`, `schema_version`,
      `plugins`, `build`) closes the sequence;
-   - in-memory rate limiter, cache and session store unless injected.
+   - in-memory rate limiter and cache unless injected.
 5. On `ConfigError`, `bootOrExit()` prints the error to stderr with a
    pointer to `deploy/config/` and exits with code **78** (`EX_CONFIG`);
    any other failure exits with 1. Next waits for `register()` before
@@ -176,7 +184,7 @@ accept `<VAR>_FILE`.
 | `admin.group`                   | `VAUBAAN_ADMIN_GROUP`                  | **admin rule**: group and/or emails required                                                                   |
 | `admin.emails`                  | `VAUBAAN_ADMIN_EMAILS`                 | list, lower-cased, must contain `@`                                                                            |
 | `providers.<id>.<field>`        | `VAUBAAN_PROVIDER_<ID>_<FIELD>`        | fields `client_id`, `client_secret`_, `app_id`, `app_slug`, `private_key`_ (\* secret); `-` in id ↔ `_` in env |
-| `bootstrap_token`               | `VAUBAAN_BOOTSTRAP_TOKEN` (secret)     | **required while `idp` is absent**, >= 32 chars                                                                |
+| `bootstrap_token`               | `VAUBAAN_BOOTSTRAP_TOKEN` (secret)     | **required while `idp` is absent**, >= 32 chars; refused once `bootstrap.revoked_at` is set in the store       |
 | `telemetry.enabled`             | `VAUBAAN_TELEMETRY_ENABLED`            | default false                                                                                                  |
 | `telemetry.collector_url`       | `VAUBAAN_TELEMETRY_COLLECTOR_URL`      | https; default `DEFAULT_TELEMETRY_COLLECTOR_URL`                                                               |
 | `retention_days`                | `VAUBAAN_RETENTION_DAYS`               | integer >= 1, default 90                                                                                       |
@@ -261,15 +269,24 @@ bindings. `silentLogger` is for tests.
 | `RateLimiter`    | `MemoryRateLimiter` fixed window per key (`compose/memory.ts`); `SlidingWindowRateLimiter` (`server/rate-limit/`, handbook [budget-and-sessions](budget-and-sessions.md)) also satisfies it | Redis `INCR` + `PEXPIRE`, or a sorted set for the sliding window |
 | `CacheClient`    | `@vaubaan/gateway-core`'s `MemoryCacheClient` (TTL in seconds, bounded); one definition                                                                                                     | Redis                                                            |
 | `SessionStore`   | `MemorySessionStore`, built on `MemoryCacheClient` (TTL in ms at the port)                                                                                                                  | store-backed rows or Redis                                       |
+| Port             | Today                                                                                                                                                                                       | Hosted replacement                                               |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------                                                                 | --------------------------------------------                     |
+| `StoreLiveness`  | the embedded SQLite store of [store](store.md) (`openEmbeddedStore`)                                                                                                                        | Postgres behind the same repositories                            |
+| `PluginRegistry` | `@vaubaan/plugin-sdk`'s registry, empty until P1.2                                                                                                                                          | same (static)                                                    |
+| `RateLimiter`    | `MemoryRateLimiter` fixed window per key (`compose/memory.ts`)                                                                                                                              | Redis `INCR` + `PEXPIRE`                                         |
+| `CacheClient`    | `@vaubaan/gateway-core`'s `MemoryCacheClient` (TTL in seconds, bounded); one definition                                                                                                     | Redis                                                            |
+| `SessionStore`   | `SqliteSessionStore` (`server/session/`, table `web_sessions`, migration 0003); `MemorySessionStore` remains for unit tests                                                                 | Redis, or Postgres rows behind the same port                     |
 
 `GatewayRoot.store` is the full store with its repositories
 (`StoreLiveness` of `ports.ts` is only the slice `/healthz` and `close()`
 need); the `globalThis` handle of `getRoot()` is per process by design
 (`// single-process only`: every replica builds its own root);
 `GatewayRoot.registry` is the SDK registry itself, so every provider list
-derives from one object. Features plug their factories through `RootDeps`
+derives from one object; `GatewayRoot.auth` is the authentication module
+(P1.1). Features plug their factories through `RootDeps`
 (`openStore(ctx: { config, logger, encryptor, catalog })`,
-`buildRegistry(config, logger)`, `rateLimiter`, `cache`, `sessions`, plus
+`buildRegistry(config, logger)`, `rateLimiter`, `cache`, `sessions`, `oidc`
+(`fetch`, `allowInsecureIssuer`), plus
 `loadConfig`, `logWrite` and `build` that tests override);
 tests use `memoryStoreDeps` (the `:memory:` store) and `fakePlugin()` from
 `compose/testing.ts`, and call `resetRoot()` between cases.

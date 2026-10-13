@@ -51,6 +51,15 @@ the `*.example*` files are tracked). The YAML wins over the environment key by k
 you may use either alone. Secrets go in through `${NAME}` /
 `${file:/path}` references in the YAML or `*_FILE` variables.
 
+First sign-in: open `https://<your domain>/login`, follow the bootstrap link
+and paste the bootstrap token; on **Administration → Identity provider**
+enter your OpenID Connect issuer, client id and secret (redirect URI
+`https://<your domain>/auth/callback`), then "Test login". The first
+sign-in of a user matching the admin rule revokes the bootstrap token. You
+may instead put the IdP in the configuration (`idp.*`); the Admin page is
+then read-only and no bootstrap token is needed
+(handbook [authentication](../docs/handbook/authentication.md)).
+
 Minimum to start: `public_url` (https), `store.path`,
 `encryption.master_key`, the admin rule (`admin.group` or `admin.emails`)
 and `bootstrap_token` (until an IdP is configured). Anything missing stops

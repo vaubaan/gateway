@@ -28,7 +28,7 @@ describe('buildRoot', () => {
     expect(root.configFile).toBeNull();
     expect(root.encryptor.currentKeyVersion).toBe(1);
     expect(root.store.kind).toBe('memory');
-    expect(root.store.schemaVersion).toBe(2);
+    expect(root.store.schemaVersion).toBe(3);
     expect(root.registry.size).toBe(0);
     expect(root.registry.labels()).toEqual([]);
     expect(root.build).toEqual({ version: 'dev', commit: 'dev' });

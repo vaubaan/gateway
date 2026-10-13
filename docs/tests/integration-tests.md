@@ -135,8 +135,89 @@ are absent.
 | `apps/gateway/tests/integration/budget/session-service.test.ts`      |                    19 |
 | `apps/gateway/tests/integration/budget/pipeline-consistency.test.ts` |                     4 |
 | **TOTAL** (`npm run test`, 2026-10-13, incl. suites not listed)      |  **1798 (3 skipped)** |
+| Suite                                                                |                 Tests |
+| -----------------------------------------------------------------    | --------------------: |
+| `packages/policy-engine/tests/unit/slice-dsl.test.ts`                |                    23 |
+| `packages/policy-engine/tests/unit/slice-matcher.test.ts`            |                    26 |
+| `packages/policy-engine/tests/unit/risk-evaluator.test.ts`           |                    11 |
+| `packages/policy-engine/tests/unit/risk-policy.test.ts`              |                     8 |
+| `packages/policy-engine/tests/unit/risk-runtime.test.ts`             |                    17 |
+| `packages/policy-engine/tests/unit/scope-injection.test.ts`          |                    13 |
+| `packages/policy-engine/tests/unit/qualify.test.ts`                  |                    21 |
+| `packages/plugin-sdk/tests/unit/catalog-loader.test.ts`              |                    19 |
+| `packages/plugin-sdk/tests/unit/registry.test.ts`                    |                    10 |
+| `packages/plugin-sdk/tests/unit/define-plugin.test.ts`               |                    11 |
+| `packages/plugin-sdk/tests/unit/testing-kit.test.ts`                 |                    13 |
+| `plugins/_template/tests/unit/plugin.test.ts`                        |                    11 |
+| `plugins/github/tests/unit/adapter.test.ts`                          |                    18 |
+| `plugins/github/tests/unit/data-model.test.ts`                       |                     1 |
+| `plugins/github/tests/unit/risk-catalog.test.ts`                     |                    35 |
+| `plugins/github/tests/unit/risk-classifier.test.ts`                  |                    31 |
+| `plugins/github/tests/unit/risk-catalog-sync.test.ts`                |                    18 |
+| `plugins/vercel/tests/unit/adapter.test.ts`                          |                    23 |
+| `plugins/vercel/tests/unit/data-model.test.ts`                       |                     1 |
+| `plugins/vercel/tests/unit/risk-catalog.test.ts`                     |                    57 |
+| `plugins/vercel/tests/unit/risk-classifier.test.ts`                  |                    32 |
+| `plugins/vercel/tests/unit/risk-catalog-sync.test.ts`                |                    19 |
+| `plugins/supabase/tests/unit/adapter.test.ts`                        |                    30 |
+| `plugins/supabase/tests/unit/data-model.test.ts`                     |                     1 |
+| `plugins/supabase/tests/unit/risk-catalog.test.ts`                   |                    32 |
+| `plugins/supabase/tests/unit/risk-classifier.test.ts`                |                    30 |
+| `plugins/supabase/tests/unit/risk-catalog-sync.test.ts`              |                    28 |
+| `plugins/railway/tests/unit/adapter.test.ts`                         |                    15 |
+| `plugins/railway/tests/unit/data-model.test.ts`                      |                     1 |
+| `plugins/railway/tests/unit/risk-catalog.test.ts`                    |                    15 |
+| `plugins/railway/tests/unit/risk-classifier.test.ts`                 |                    20 |
+| `plugins/ssh/tests/unit/data-model.test.ts`                          |                     1 |
+| `plugins/ssh/tests/unit/risk-catalog.test.ts`                        |                    10 |
+| `plugins/ssh/tests/unit/risk-classifier.test.ts`                     |                    39 |
+| `plugins/upstash-redis/tests/unit/plugin.test.ts` (v5, P1.2h)        |                    24 |
+| `plugins/upstash-redis/tests/unit/risk-classifier.test.ts`           |                    30 |
+| `plugins/upstash-redis/tests/unit/risk-catalog.test.ts`              |                    49 |
+| `plugins/upstash-redis/tests/unit/adapter.test.ts`                   |                    16 |
+| `plugins/upstash-redis/tests/unit/data-model.test.ts`                |                     1 |
+| `packages/gateway-core/tests/unit/errors.test.ts`                    |                    24 |
+| `packages/gateway-core/tests/unit/audit.test.ts`                     |                     6 |
+| `packages/gateway-core/tests/unit/cache.test.ts`                     |                     6 |
+| `packages/gateway-core/tests/unit/authenticate.test.ts`              |                    11 |
+| `packages/gateway-core/tests/unit/pipeline.test.ts`                  |                    15 |
+| `apps/gateway/tests/unit/lib/gateway/legacy-v4-gateway.test.ts`      |                     4 |
+| `packages/gateway-core/tests/unit/risk-gateway.test.ts`              |                     8 |
+| `apps/gateway/tests/unit/api/members-post.test.ts`                   |         5 (1 skipped) |
+| `apps/gateway/tests/unit/api/tokens-preview.test.ts`                 |                    12 |
+| `apps/gateway/tests/unit/api/tokens-rotate.test.ts`                  |           2 (skipped) |
+| `apps/gateway/tests/unit/lib/mint/preview.test.ts`                   |                     4 |
+| `apps/gateway/tests/unit/lib/risk-catalog/loader.test.ts`            |                    12 |
+| `apps/gateway/tests/unit/providers/data-model-to-mermaid.test.ts`    |                     8 |
+| `apps/gateway/tests/unit/providers/plane-filters.test.ts`            |                     5 |
+| `apps/gateway/src/lib/bash/parse.test.ts`                            |                    11 |
+| `apps/gateway/src/lib/bash/exec.test.ts`                             |                     4 |
+| `apps/gateway/src/lib/bash/args.test.ts`                             |                     9 |
+| `apps/gateway/src/lib/bash/exec-host.test.ts`                        |                     7 |
+| `apps/gateway/src/server/**/*.test.ts` (v5, P0.4 + P0.R)             |                    64 |
+| `apps/gateway/src/server/auth/*.test.ts` (v5, P1.1)                  |                    34 |
+| `apps/gateway/src/server/session/*.test.ts` (v5, P1.1)               |                     6 |
+| `apps/gateway/tests/integration/auth/oidc-login.test.ts` (P1.1)      |                    12 |
+| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`     |     56 (one per file) |
+| `apps/gateway/tests/integration/standalone-native-addons.test.ts`    | 3 (skipped w/o build) |
+| `packages/shared/src/api-key.test.ts`                                |                     6 |
+| `packages/shared/src/risk-id.test.ts`                                |                    20 |
+| `packages/shared/src/mcp.test.ts`                                    |                    10 |
+| `apps/gateway/tests/unit/server/store/ids.test.ts`                   |                     6 |
+| `apps/gateway/tests/unit/server/store/migrate.test.ts`               |                     9 |
+| `apps/gateway/tests/integration/store/schema.test.ts`                |                     6 |
+| `apps/gateway/tests/integration/store/audit.test.ts`                 |                    12 |
+| `apps/gateway/tests/integration/store/identities.test.ts`            |                     7 |
+| `apps/gateway/tests/integration/store/connections-shares.test.ts`    |                    11 |
+| `apps/gateway/tests/integration/store/missions.test.ts`              |                     8 |
+| `apps/gateway/tests/integration/store/sessions.test.ts`              |                     9 |
+| `apps/gateway/tests/integration/store/requests-approvals.test.ts`    |                     8 |
+| `apps/gateway/tests/integration/store/delegations.test.ts`           |                     7 |
+| `apps/gateway/tests/integration/store/config.test.ts`                |                     4 |
+| `apps/gateway/tests/integration/compose/boot.test.ts`                |                     4 |
+| **TOTAL** (`npm run test`, 2026-10-13, incl. suites not listed)      |  **1784 (3 skipped)** |
 
-Skipped: `members-post` (1), `tokens-rotate` (2), both legacy v4, and the
+Skipped: `members-post` (1), `tokens-rotate` (2), both legacy v4, plus the
 three standalone-addon tests when `.next/standalone` is absent. The plugin
 rows are the P0 snapshot; the plugin migrations (P1.2) rewrite them.
 
@@ -540,6 +621,87 @@ build` integration.
 Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
 [`e2e-tests.md`](./e2e-tests.md).
 
+## v5 — Human authentication: OIDC, web session, bootstrap, admin rule (P1.1)
+
+> Covers: spec §0 (Operator, User, Group, IdP), §4.2 Administration, §4.3
+> (IdP block, bootstrap token, admin rule), §6 "human authentication"
+> (short sessions bound to the origin, origin check on every mutation), §7.1,
+> §10 integration "simulated IdP" and structural "authority recomputed from
+> current membership". Handbook [[authentication]], ADR
+> [[oidc-relying-party-and-web-session]].
+
+- **`server/auth/claims.test.ts`** (8) — groups claim as array (trimmed,
+  de-duplicated, non-strings dropped), as space/comma/semicolon delimited
+  string, absent or of another type; default and custom (Entra-style)
+  mapping; email lower-cased, `name` → display name; missing `sub` /
+  `email` fail closed naming the claim(s) (`LoginError` `claims-missing`);
+  allowed email domains (empty list = any, case-insensitive, no `@`).
+- **`server/auth/admin-rule.test.ts`** (5) — group match, email match
+  (case-insensitive), neither, either half of a combined rule,
+  `describeAdminRule` without secrets.
+- **`server/auth/origin.test.ts`** (5) — matching `Origin`; another origin,
+  scheme or the internal host refused; `Referer` fallback; neither header
+  or `Origin: null` refused; 403 body `origin-mismatch`.
+- **`server/auth/session-service.test.ts`** (5) — cookie attributes
+  (`HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age`), malformed values
+  ignored; user session created / read / destroyed; **absolute expiry** at
+  `SESSION_TTL_MS` (8 h); pending logins apart from sessions, single use,
+  10-minute TTL.
+- **`server/auth/bootstrap.test.ts`** (3) — exact token accepted while
+  active, variants refused; `unavailable` without a configured token;
+  revocation persisted in `instance_config`, durable across services,
+  idempotent (first timestamp kept), token refused afterwards.
+- **`server/auth/idp-settings.test.ts`** (6) — none until saved, then read
+  back from the store (`source: store`); client secret **sealed**
+  (`secret_blob`, associated data `instance_config:idp.client_secret`);
+  blank secret keeps the stored one; every problem reported at once, http
+  issuer only with `allowInsecureIssuer`; file configuration wins and makes
+  the service read-only; `splitList`.
+- **`server/auth/handlers.test.ts`** (2) — `safeReturnTo`: same-origin
+  paths kept; URLs, `//host`, `/\host` and relative junk fall back.
+- **`server/session/sqlite-session-store.test.ts`** (6) — round trip,
+  unknown id, TTL expiry and sweep on write, overwrite of value and
+  expiry, non-positive TTL refused, durability across handles on the same
+  database.
+- **`tests/integration/auth/oidc-login.test.ts`** (12) — the composition
+  root over the `:memory:` store with the real `openid-client` relying
+  party and the in-process **`FakeIdp`** (`fake-idp.ts`: discovery, JWKS,
+  token, userinfo through `customFetch`; ES256 ID tokens; PKCE S256
+  verified; `authorize()` plays the consenting browser), handlers driven
+  with web-standard `Request`s:
+  1. first sign-in creates the user (email lower-cased, display name) and
+     its `idp` groups; the principal is `isOperator` through the admin
+     group; `groups` scope requested because the IdP advertises it; the
+     client secret never reaches the log;
+  2. re-login with changed groups rewrites IdP memberships, leaves a local
+     group alone, keeps the emptied IdP group's row;
+  3. a claim colliding with a local group is ignored with a warning;
+  4. **structural** — removed from the admin group, the next
+     `authenticate()` reports `isOperator: false` and `authorizeAdmin` 403;
+  5. non-admin user: 403 on `authorizeAdmin` and on the settings handler;
+     no session → 401;
+  6. bootstrap: `/auth/login` without IdP → `idp-not-configured`; the token
+     form refused without `Origin` (403) and with a wrong token
+     (`bootstrap-refused`); accepted → bootstrap session authorised on
+     `/admin`; the IdP saved through the form (secret sealed, one
+     `config-changed` audit entry by `bootstrap` without the secret); a
+     non-operator IdP sign-in leaves the token active; the first operator
+     sign-in revokes it (`bootstrap.revoked_at`, log line); then the form
+     answers `bootstrap-unavailable`, `verify()` is false and the stale
+     bootstrap session is 401 and deleted;
+  7. the callback URL is built from `public_url` even when the request
+     arrives on `http://127.0.0.1:3000`;
+  8. tampered `state` → `state-mismatch` (no session, login cookie
+     cleared); callback without pending login → `login-expired`; IdP
+     `access_denied` → `idp-error` with the detail logged;
+  9. email outside `allowed_email_domains` refused (no user created);
+     missing claims → `claims-missing`;
+  10. userinfo claims merged under the ID token claims (userinfo-only
+      email and groups);
+  11. logout: cross-origin POST → 403 and the session survives; same-origin
+      → 303 `/login`, row deleted, cookie cleared;
+  12. sessions are rows of `web_sessions`.
+
 ## Scenarios — Crypto (app-level encryption) — legacy v4
 
 > The v4 `provider-secrets.test.ts` moved to
@@ -737,6 +899,10 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
 - **Gate opened for the period** (spec §3.5 `gate-opened` event): the pure
   `decide()` accepts `opened_gates`, but no code records or reads the event
   yet (P2.1), so only the unit test exercises it.
+- **Accounting rules** (period arithmetic, quota/rate comparison, gates) —
+  feature P1.3 tests them against the store's `decideAndDecrement`.
+- **A real identity provider** (Google, Entra ID, Keycloak) — never in the
+  automated suite; the manual check is in [`e2e-tests.md`](./e2e-tests.md).
 
 ## Known gaps
 
@@ -746,6 +912,13 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   re-tested beyond `legacy-v4-gateway.test.ts` (4) and is deleted at P1.6.
   Its v5 counterpart is `authenticate.test.ts`.
 - **`tokens-rotate`** is skipped (legacy v4, see above).
+- **Four plugin suites fail on `v5` at the P1.1 rebase (2026-10-13):**
+  `plugins/cloudflare-dns/tests/unit/plugin.test.ts` (1),
+  `plugins/cloudflare-dns/tests/unit/risk-catalog.test.ts` (2) and
+  `plugins/gmail/tests/unit/plugin.test.ts` (1) — the fallback risk is still
+  reported next to the categorised one, i.e. these plugins predate the
+  P1.2-SDK "fallback only when uncategorized" rule. Owned by the plugin
+  migrations, not by the authentication feature.
 - **`bash__*` end to end** — the v4 bash adapter is only reached through
   the REST shortcut; the SSH plugin migration (P1.2) owns the v5 test.
 
@@ -756,6 +929,7 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   model).
 - Handbooks: [[policy-engine]], [[plugin-sdk]], [[gateway-core]], [[store]],
   [[budget-and-sessions]], [[configuration]]; legacy [[mcp-gateway]], [[github-provider]],
+  [[configuration]], [[authentication]]; legacy [[mcp-gateway]], [[github-provider]],
   [[vercel-provider]], [[railway-provider]], [[bash-provider]],
   [[escalation]], [[web-app]].
 - CI workflow: [`../workflow/coding-workflow.md`](../workflow/coding-workflow.md)
