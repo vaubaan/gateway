@@ -91,6 +91,7 @@ import {
   prefixOfBearer,
   type TokenMinter,
 } from './token';
+import { reissueMemberToken } from './member-token';
 import { issueTokenTo, type IssuedSecret } from './token-issuer';
 
 const COPY_SUFFIX = ' (copy)';
@@ -624,34 +625,21 @@ export class MissionService {
 
     let token: IssuedSecret;
     try {
-      token = await this.issueCreatorToken(mission);
+      // The one implementation of "a member's own token, issued or replaced"
+      // (`member-token.ts`), shared with `MissionTeamService.generateToken`.
+      token = await reissueMemberToken(
+        { store: this.deps.store, mint: this.mint, clock: this.deps.clock },
+        {
+          missionId: mission.id,
+          userId: user.id,
+          delegatedClientId: options.delegation?.clientId ?? null,
+        },
+      );
     } catch (err) {
       // Revoked while the hash was computed: the store refused the insert.
       if (!(err instanceof TokenNotIssuableError)) throw err;
       return { ok: false, reason: 'inactive', state: await this.stateAfterRefusal(mission.id) };
     }
-    const previous = token.replaced;
-    await this.deps.store.auditWriter.write({
-      kind: 'admin',
-      ts: toIso(this.deps.clock.now()),
-      user_id: user.id,
-      // The same rule as `MissionTeamService.generateToken`, the other way a creator gets
-      // a token of their own: a first token is issued, a replacement is a rotation.
-      act: previous ? 'mission-rotated' : 'mission-token-issued',
-      object: { type: 'mission', id: mission.id },
-      before: previous ? { token_prefix: previous.prefix } : null,
-      after: { token_prefix: token.prefix, token_kind: 'member', holder: user.id },
-      delegated_client_id: options.delegation?.clientId ?? null,
-    });
-    await this.recordEvent(mission.id, user.id, {
-      kind: 'rotation',
-      details: {
-        token_prefix: token.prefix,
-        token_kind: 'member',
-        holder: user.id,
-        replaced_prefix: previous?.prefix ?? null,
-      },
-    });
     this.deps.logger.info('mission token rotated', {
       mission_id: mission.id,
       token_prefix: token.prefix,

@@ -71,6 +71,8 @@ apps/gateway/src/server/missions/
                          also the input of the management door's `preview_policy` and `issue_mission`
   token.ts               mintMissionToken(), prefixOfBearer(), bearerMatches(), maskedToken()
   token-issuer.ts        issueTokenTo() — mints one token for one holder; the secret is in its return value only
+  member-token.ts        reissueMemberToken() — a member's own token, issued or replaced: the one implementation
+                         behind MissionService.rotate and MissionTeamService.generateToken (store, entry, event)
   token-name.ts          parseTokenName(), TOKEN_NAME_RULE — the name of a named token             (pure)
   team-service.ts        MissionTeamService: team / addMember / removeMember / generateToken /
                          createNamedToken / revokeToken / revokeTokensOfDeactivated
@@ -610,6 +612,17 @@ compares the store before and after). `MissionDetail.gates_editable` is
 of the mission's connections (spec §11.2). `orphaned` is still derived from
 the **creator** alone: it holds for every holder at once, and comes back for
 every holder at once, same tokens.
+
+**One implementation for a member's own token.** The creator's "Rotate token"
+(`MissionService.rotate`) and "Generate / Rotate my token"
+(`MissionTeamService.generateToken`, which the creator may use too) are the
+same act on the same row. Both call `reissueMemberToken` (`member-token.ts`):
+it mints and stores the token (the holder's previous active one becomes
+`rotated`), writes `mission-token-issued` for a first token or
+`mission-rotated` for a replacement — with the delegated client when the act
+came through the management door — and records the `rotation` event. The
+callers keep what differs: who may ask (the creator, within what a delegation
+issued; any member), and what is handed back.
 
 **The creator never sees a member's secret.** `generateToken` returns it to
 the member who called, and `issueTokenTo` (`token-issuer.ts`) hands the store

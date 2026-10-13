@@ -49,6 +49,7 @@ import type { MissionRecord, MissionTokenRecord, UserRecord } from '../store/typ
 import type { BootstrapKit } from './bootstrap-kit';
 import type { MissionAccess, MissionRole, MissionService, RevealedToken } from './mission-service';
 import { mintMissionToken, type TokenMinter } from './token';
+import { reissueMemberToken } from './member-token';
 import { issueTokenTo, type IssuedSecret } from './token-issuer';
 import { parseTokenName } from './token-name';
 
@@ -350,9 +351,11 @@ export class MissionTeamService {
 
     let issued: IssuedSecret;
     try {
-      issued = await issueTokenTo(
-        { missions: this.deps.store.missions, mint: this.mint },
-        { missionId: mission.id, holder: { kind: 'member', userId: user.id }, createdBy: user.id },
+      // The one implementation of "a member's own token, issued or replaced"
+      // (`member-token.ts`), shared with the creator's `MissionService.rotate`.
+      issued = await reissueMemberToken(
+        { store: this.deps.store, mint: this.mint, clock: this.deps.clock },
+        { missionId: mission.id, userId: user.id, delegatedClientId: null },
       );
     } catch (err) {
       // Removed, deactivated, or the mission revoked, while the hash was computed: the
@@ -361,22 +364,6 @@ export class MissionTeamService {
       return this.notIssued(mission.id, err);
     }
     const previous = issued.replaced;
-    await this.audit(
-      user.id,
-      previous ? 'mission-rotated' : 'mission-token-issued',
-      mission.id,
-      previous ? { token_prefix: previous.prefix } : null,
-      { token_prefix: issued.prefix, token_kind: 'member', holder: user.id },
-    );
-    await this.recordEvent(mission.id, user.id, {
-      kind: 'rotation',
-      details: {
-        token_prefix: issued.prefix,
-        token_kind: 'member',
-        holder: user.id,
-        replaced_prefix: previous?.prefix ?? null,
-      },
-    });
     this.deps.logger.info('mission member token generated', {
       mission_id: mission.id,
       holder_user_id: user.id,
