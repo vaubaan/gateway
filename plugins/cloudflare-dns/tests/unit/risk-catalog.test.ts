@@ -304,9 +304,15 @@ describe('cloudflare-dns risk-catalog — risksTouchedBy sanity checks', () => {
     expect(risksTouchedBy(sl, idx)).toContain('cloudflare-dns.zone-delete');
   });
 
-  test('the fallback catches a wholly novel write slice', () => {
-    const sl = parseSlice('cloudflare-dns.account[acct_x].zone[zone_x].page-rule[**].W');
-    expect(risksTouchedBy(sl, idx)).toContain('cloudflare-dns.uncategorized-write');
+  test('the fallback catches a wholly novel write slice, and only then', () => {
+    // A write under a zone is already covered by `zone[**].W` (zone-delete),
+    // so the fallback no longer co-fires there (ADR
+    // fallback-risk-only-when-uncategorized) ; an account-level write that no
+    // entry names is the fallback's case.
+    const sl = parseSlice('cloudflare-dns.account[acct_x].member[user_x].W');
+    expect(risksTouchedBy(sl, idx)).toEqual(['cloudflare-dns.uncategorized-write']);
+    const underZone = parseSlice('cloudflare-dns.account[acct_x].zone[zone_x].page-rule[pr_1].W');
+    expect(risksTouchedBy(underZone, idx)).not.toContain('cloudflare-dns.uncategorized-write');
   });
 
   test('zone-settings.R touches read-zone-metadata but not read-records', () => {

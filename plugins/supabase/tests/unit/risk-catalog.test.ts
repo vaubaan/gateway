@@ -225,6 +225,8 @@ describe('risk-catalog.yaml — cardinality mutual exclusion', () => {
     const touched = risksTouchedByAll([rowSlice('one')], INDEXED);
     expect(touched).toContain('supabase.row-write-one');
     expect(touched).not.toContain('supabase.bulk-row-write');
+    // The fallback is not co-touched by a categorized write (ADR fallback-risk-only-when-uncategorized).
+    expect(touched).not.toContain('supabase.uncategorized-write');
   });
 
   test('row[bulk].W fires bulk-row-write but NOT row-write-one', () => {

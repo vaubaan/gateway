@@ -90,8 +90,15 @@ export interface CoverageReport {
   readonly samplesChecked: number;
   /** Distinct catalog risks touched across all samples, in catalog order. */
   readonly risksTouched: readonly RiskId[];
-  /** Catalog risks no sample touched — informational, not a failure (the fallback often stays untouched). */
+  /** Catalog risks no sample touched — informational, not a failure (the fallback stays untouched in a complete catalog). */
   readonly risksUntouched: readonly RiskId[];
+  /**
+   * Samples whose slice touched the fallback — that is, a write no
+   * dedicated entry covers (ADR fallback-risk-only-when-uncategorized).
+   * Informational : a realistic sample landing here usually means the
+   * catalog misses an entry.
+   */
+  readonly fallbackHits: readonly string[];
 }
 
 /**
@@ -122,6 +129,8 @@ export function assertCatalogCoverage(
   }
 
   const touched = new Set<RiskId>();
+  const fallbackIds = new Set(indexed.entries.filter((e) => e.fallback).map((e) => e.entry.id));
+  const fallbackHits: string[] = [];
   let samplesChecked = 0;
   for (const [tool, calls] of Object.entries(samples)) {
     if (!declared.has(tool)) continue;
@@ -157,6 +166,7 @@ export function assertCatalogCoverage(
         const risks = risksTouchedBy(slice, indexed);
         if (risks.length === 0)
           findings.push(`${where} slice #${s + 1}: no catalog risk matches it`);
+        if (risks.some((r) => fallbackIds.has(r))) fallbackHits.push(`${where} slice #${s + 1}`);
         for (const r of risks) touched.add(r);
       });
     });
@@ -169,5 +179,6 @@ export function assertCatalogCoverage(
     samplesChecked,
     risksTouched: all.filter((id) => touched.has(id)),
     risksUntouched: all.filter((id) => !touched.has(id)),
+    fallbackHits,
   };
 }

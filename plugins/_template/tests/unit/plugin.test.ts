@@ -2,9 +2,12 @@
  * Mandatory test suite of a plugin : the SDK kit plus classifier cases.
  * No network : `execute` runs against `mockFetch`.
  */
+import { existsSync } from 'node:fs';
+
 import { describe, expect, test } from 'vitest';
 
 import {
+  catalogPathNextTo,
   parseSlice,
   serializeSlice,
   type ExecuteContext,
@@ -19,7 +22,7 @@ import {
 } from '@vaubaan/plugin-sdk/testing';
 
 import { TEMPLATE_API_BASE } from '../../src/execute.ts';
-import { classifyTemplate, templatePlugin } from '../../src/index.ts';
+import { classifyTemplate, templateCatalog, templatePlugin } from '../../src/index.ts';
 
 const staging: Resource = {
   provider: 'template',
@@ -49,11 +52,24 @@ describe('template plugin — structural kit', () => {
       },
       { resources: [staging] },
     );
-    expect(report.risksTouched).toEqual([
-      'template.read-widgets',
-      'template.widget-write',
+    // A categorized write touches its entry alone ; the fallback stays
+    // untouched in a complete catalog (ADR fallback-risk-only-when-uncategorized).
+    expect(report.risksTouched).toEqual(['template.read-widgets', 'template.widget-write']);
+    expect(report.risksUntouched).toEqual(['template.uncategorized-write']);
+    expect(report.fallbackHits).toEqual([]);
+  });
+
+  test('the catalog is read from a filesystem path next to the plugin module', () => {
+    // Same computation as src/index.ts, from the test's own location : the
+    // path must exist on disk (vitest here ; `next build` and the standalone
+    // server are covered by apps/gateway/tests/integration/standalone-plugin-catalogs.test.ts).
+    const path = catalogPathNextTo(new URL('../../src/index.ts', import.meta.url));
+    expect(path.endsWith('/plugins/_template/src/risk-catalog.yaml')).toBe(true);
+    expect(existsSync(path)).toBe(true);
+    expect(templateCatalog.catalog.provider).toBe('template');
+    expect(templateCatalog.catalog.risks.find((r) => r.fallback)?.id).toBe(
       'template.uncategorized-write',
-    ]);
+    );
   });
 });
 

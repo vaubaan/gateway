@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import type { RiskCatalog } from '@vaubaan/shared';
 
-import { checkAcceptableInEnv, hasFallbackRisk, prepareCatalog } from '../../src/risk-policy.ts';
+import { checkAcceptableInEnv, prepareCatalog } from '../../src/risk-policy.ts';
+import { hasFallbackRisk } from '../../src/risk-evaluator.ts';
 
 const catalog: RiskCatalog = {
   provider: 'supabase',

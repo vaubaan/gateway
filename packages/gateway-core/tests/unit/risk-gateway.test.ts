@@ -134,8 +134,8 @@ describe('evaluateCallForToken', () => {
 
   test('deny when classified slice touches a non-accepted risk', () => {
     // bulk-row-write is in the catalog but not in token.accepted_risks
-    // (which has read + row-write-one). The fallback uncategorized-write
-    // also catches `.W`, also not accepted → deny with both missing.
+    // (which has read + row-write-one) → deny with it missing. The fallback
+    // is not co-touched by a categorized write (ADR fallback-risk-only-when-uncategorized).
     const verdict = evaluateCallForToken({
       tool: 'supabase__bulk_update',
       args: {},
@@ -148,7 +148,7 @@ describe('evaluateCallForToken', () => {
     if (verdict.kind === 'deny') {
       expect(verdict.code).toBe('risk-not-accepted');
       expect(verdict.missing_risks).toContain('supabase.bulk-row-write');
-      expect(verdict.missing_risks).toContain('supabase.uncategorized-write');
+      expect(verdict.missing_risks).not.toContain('supabase.uncategorized-write');
       expect(verdict.hint).toBeTruthy();
     }
   });

@@ -19,8 +19,10 @@ tracks:
 # Plugin SDK — `@vaubaan/plugin-sdk`
 
 The package a provider plugin is written against, and the single place the
-gateway learns which providers exist. ADR :
-[[plugin-contract-and-credential-spec]]. Spec :
+gateway learns which providers exist. ADRs :
+[[plugin-contract-and-credential-spec]],
+[[plugin-catalog-path-and-standalone-tracing]],
+[[fallback-risk-only-when-uncategorized]]. Spec :
 [`vaubaan-gateway.md`](../spec/vaubaan-gateway.md) §5 (plugins), §3.2
 (presets), §10 (structural tests) ;
 [`gateway-risk-model.md`](../spec/gateway-risk-model.md) §7.
@@ -36,7 +38,10 @@ packages/plugin-sdk/
                         expectCredentialKind, CredentialKindMismatch
     catalog-loader.ts   loadCatalogFile / parseCatalogYaml / validateCatalog, CatalogError,
                         PluginCatalog / LoadedCatalog / LoadCatalogOptions,
-                        semanticIssues / presetIssues / wildcardIssues / structuralIssues
+                        semanticIssues / fallbackIssues / presetIssues / wildcardIssues / structuralIssues,
+                        catalogWarnings
+    catalog-path.ts     catalogPathNextTo, CATALOG_FILE_NAME — the filesystem path of the YAML
+    env-of.ts           envFromSliceSegment, EnvOf — helpers for `ProviderPlugin.envOf`
     define-plugin.ts    definePlugin, pluginIssues, PluginDefinitionError, PLUGIN_VERSION_PATTERN
     registry.ts         PluginRegistry, createRegistry, RegisteredPlugin, ProviderLabel
     flags.ts            PluginHostFlags, DEFAULT_HOST_FLAGS, normalizeArgsIfEnabled
@@ -48,7 +53,8 @@ packages/plugin-sdk/
                         assertPresetsValid, PluginAssertionError
   tests/
     fixtures/acme/      a tiny valid plugin (risk-catalog.yaml + acme-plugin.ts) used by the tests
-    unit/               catalog-loader (19), registry (10), define-plugin (11), testing-kit (13)
+    unit/               catalog-loader (21), catalog-path (4), env-of (3), registry (10),
+                        define-plugin (12), testing-kit (14)
 ```
 
 Dependencies : `@vaubaan/shared`, `@vaubaan/policy-engine`, `js-yaml`.
@@ -60,7 +66,7 @@ Nothing from `gateway-core` or `apps/`. Two entry points : `.` and
 ```mermaid
 flowchart LR
   subgraph plugin["plugins/<id> (imports @vaubaan/plugin-sdk only)"]
-    yaml["risk-catalog.yaml<br/>risks + presets"] --> load["loadCatalogFile()"]
+    yaml["risk-catalog.yaml<br/>risks + presets"] --> load["loadCatalogFile(catalogPathNextTo(import.meta.url))"]
     load --> def["definePlugin({ id, tools, dataModel, catalog,<br/>credential, classify, execute, discoverResources })"]
   end
   def --> reg["PluginRegistry (host, once at boot)"]
@@ -84,6 +90,7 @@ flowchart LR
 | `classify(tool, args, resources)`                    | yes    | `{ slices: Slice[] } \| { denied: string }`. `resources` = the mission's resources on this connection ; used to derive the env and default refs. The gateway core's `Classifier` is exactly this member (`Pick<ProviderPlugin, 'classify'>`). |
 | `execute(ctx, tool, args)`                           | no     | `ctx: ExecuteContext` = credential (decrypted), appConfig, fetch, signal?, logger?, resources, agentLabel?. Throws `UpstreamAuthError` on 401/403.                                                                                            |
 | `discoverResources(ctx)`                             | no     | `ctx: ConnectionContext` (same minus resources/agentLabel). Returns `Resource[]`.                                                                                                                                                             |
+| `envOf?(slice, resources)`                           | yes    | The environment a slice carries in itself (Vercel's `env[prod]` segment, GitHub's branch) ; `undefined` defers to the resource label. See "Environment resolution".                                                                           |
 | `refresh?(ctx)`                                      | no     | Returns a new `CredentialSecret` ; must not mutate the input. Required when `credential.refreshable` is true.                                                                                                                                 |
 | `normalizeForCaps?(args, caps)`                      | yes    | Scope caps (ADR scope-caps).                                                                                                                                                                                                                  |
 | `normalizeArgs?(args, resources)`                    | yes    | Only called when `PluginHostFlags.argNormalization` is on. **Default off** (plan §8-Q4).                                                                                                                                                      |
@@ -107,10 +114,30 @@ secret, kind)` narrows the secret or throws `CredentialKindMismatch`. The
 encrypted envelope (`Credential` in `@vaubaan/shared`) never reaches a
 plugin.
 
+### Catalog path (`catalog-path.ts`)
+
+```ts
+export const myCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
+// catalogPathNextTo(moduleUrl, fileName = 'risk-catalog.yaml') → '/…/plugins/<id>/src/risk-catalog.yaml'
+```
+
+Never write `new URL('./risk-catalog.yaml', import.meta.url)` in a plugin :
+Turbopack (Next.js 16, `apps/gateway`) recognises that literal and rewrites
+it into a `/_next/static/media/*.yaml` asset URL, and `next build` fails
+when the loader reads it. The helper builds the path with `node:path` from
+`import.meta.url`, which the bundler leaves alone — in the server bundle
+`import.meta.url` becomes a runtime `file:` URL of the source path relative
+to the output root, so the same path works in vitest, `next dev`,
+`next build` and the standalone server. A non-`file:` URL (a rewrite) throws
+a named error instead of an `ENOENT`. `apps/gateway/next.config.ts` traces
+`plugins/*/src/**/*.yaml` into `.next/standalone` so the Docker image ships
+every catalog ; `apps/gateway/tests/integration/standalone-plugin-catalogs.test.ts`
+checks it after a build. ADR [[plugin-catalog-path-and-standalone-tracing]].
+
 ### Catalog loader (`catalog-loader.ts`)
 
 ```ts
-export const myCatalog = loadCatalogFile(new URL('./risk-catalog.yaml', import.meta.url));
+export const myCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 // → { catalog: PluginCatalog, indexed: IndexedRiskCatalog }
 ```
 
@@ -126,18 +153,26 @@ env-qualified preset entries. Pipeline :
    : id grammar and provider, `label`, `reason`, `matches` (string or
    list), `vector` with the six axes from `RISK_VECTOR_AXES`,
    `vector_overrides`, `acceptable_in_envs` (env labels), `caps`,
-   `infra_limits`, `deprecated`, `replaced_by` ; each preset : slug id,
+   `infra_limits`, `fallback` (boolean), `deprecated`, `replaced_by` ; each preset : slug id,
    `label`, `description`, non-empty `entries` with `risk_id`, positive
    integer `quota`, `rate_limit { max, window_seconds }`, `gate` (default
    `auto`).
 3. `prepareCatalog` from `policy-engine` — duplicate ids, id regex, every
    pattern parses and belongs to the provider.
-4. `semanticIssues` — fallback `<provider>.uncategorized-*` present
-   (`requireFallback`, default true) ; `wildcardIssues` ; `presetIssues`
-   (`requirePresets`, default true) : at least one preset, ids unique,
-   every `risk_id` an explicit id of this provider present in the catalog,
-   env-qualified entries only on env-scoped risks and inside
-   `acceptable_in_envs`, no deprecated risk, no repeated risk in a preset.
+4. `semanticIssues` — `fallbackIssues` : exactly one fallback entry
+   (`fallback: true`, or detected by the catch-all pattern
+   `<provider>.**.W` or the `<provider>.uncategorized-` id — see
+   `isFallbackEntry` in the policy engine), named
+   `<provider>.uncategorized-*` ; zero (`requireFallback`, default true) or
+   two is an error. `wildcardIssues` ; `presetIssues` (`requirePresets`,
+   default true) : at least one preset, ids unique, every `risk_id` an
+   explicit id of this provider present in the catalog, env-qualified
+   entries only on env-scoped risks and inside `acceptable_in_envs`, no
+   deprecated risk, no repeated risk in a preset.
+5. `catalogWarnings` → `options.warn` (default `console.warn`) : a preset
+   entry on the fallback. Since the fallback fires only on writes no other
+   entry covers (ADR [[fallback-risk-only-when-uncategorized]]), a preset
+   including it pre-accepts unreviewed writes ; warned, not refused.
 
 All issues are collected and thrown together, path-qualified :
 
@@ -148,8 +183,41 @@ Invalid risk catalog '/…/plugins/github/src/risk-catalog.yaml':
 ```
 
 `validateCatalog(doc)` accepts an already-parsed object (tests, JSON).
-`semanticIssues`, `presetIssues` and `wildcardIssues` are exported for the
-test kit and `definePlugin`.
+`semanticIssues`, `fallbackIssues`, `presetIssues`, `wildcardIssues` and
+`catalogWarnings` are exported for the test kit and `definePlugin`.
+
+### The fallback at runtime
+
+`risksTouchedBy` (policy engine) includes the fallback **only when no other
+entry of the catalog matched the slice**. A write covered by a dedicated
+entry touches that entry alone ; a write covered by none touches the
+fallback ; a slice covered by nothing — reads are not caught by
+`<provider>.**.W` — yields an empty set, which the runtime refuses. So a
+preset need not (and should not) include the fallback, and its appearance
+in an audit log means "a catalog entry is missing". Mark it `fallback: true`
+in the YAML ; the detection by pattern or id is the compatibility path for
+catalogs written before the flag.
+
+### Environment resolution (`env-of.ts`)
+
+Env-scoped risks (`vercel[prod].env-var-write`) need the environment of the
+executed slice. The policy engine's default resolver, `envResolverFor(
+resources, plugin.envOf)`, asks the plugin first, then the owner's label on
+the matching resource, then gives up (unqualified) :
+
+| Provider shape                                                            | Declare                                 |
+| ------------------------------------------------------------------------- | --------------------------------------- |
+| The environment is a slice segment (`vercel.project[p].env[prod].…`)      | `envOf: envFromSliceSegment('env')`     |
+| The environment is a function of the arguments (GitHub : the branch)      | a custom pure `envOf(slice, resources)` |
+| The environment is the owner's label on the resource (Supabase, Railway)  | nothing                                 |
+| The plugin labels one resource per mode at discovery (Stripe test / live) | nothing                                 |
+
+`envFromSliceSegment(entity)` returns the identifier following the named
+entity, `undefined` for wildcards, lists or an absent segment. The hook is
+pure and validated by `definePlugin` (a function when present). Wiring
+`envResolverFor` into `gateway-core`'s `evaluateCallForToken` is the
+follow-up P1.2-align ; until then `envResolverFor(resources)` without a
+hook is exactly `resourceEnvResolver(resources)`.
 
 ### Registry (`registry.ts`)
 
@@ -191,14 +259,16 @@ const report = assertCatalogCoverage(plugin, {
   github__list_branches: [{ args: { owner: 'acme', repo: 'app' } }],
   …one entry per declared tool…
 }, { resources: [stagingRepo] });
-// report.risksTouched / report.risksUntouched / report.toolsChecked / report.samplesChecked
+// report.risksTouched / report.risksUntouched / report.fallbackHits / report.toolsChecked / report.samplesChecked
 ```
 
 `assertCatalogCoverage` fails when a declared tool has no sample, a sample
 names an undeclared tool, a non-`expectDenied` sample is denied (or an
 `expectDenied` one is not), a sample yields no slice, a slice carries
-another provider, or a slice matches no catalog risk. Every assertion
-throws `PluginAssertionError { subject, findings }`.
+another provider, or a slice matches no catalog risk. `fallbackHits` lists
+the samples only the fallback covered — informational, but a realistic
+sample there means the catalog misses an entry. Every assertion throws
+`PluginAssertionError { subject, findings }`.
 
 `mockFetch(routes)` returns a `fetch` with `.calls` (method, url,
 lower-cased headers, body text, parsed JSON) and `.pending()` (routes whose
@@ -251,9 +321,10 @@ metadata? }`, `ConnectionResource`, `Credential` (encrypted envelope),
 ## The template (`plugins/_template`)
 
 `@vaubaan/plugin-template`, provider id `template`, imports the SDK only.
-Six source files (`risk-catalog.yaml`, `data-model.ts`, `tools.ts`,
-`classify.ts`, `execute.ts`, `index.ts`) and one test file running the kit
-and `mockFetch`. The classifier shows the two conventions every plugin
+Six source files (`risk-catalog.yaml` with its `fallback: true` entry,
+`data-model.ts`, `tools.ts`, `classify.ts`, `execute.ts`, `index.ts` loading
+the catalog with `catalogPathNextTo`) and one test file running the kit,
+`mockFetch`, and the on-disk check of the catalog path. The classifier shows the two conventions every plugin
 follows : the resource ref is taken from the arguments, falls back to the
 mission's single resource of the provider, and anything else is `denied`
 (never mapped to a broad slice) ; identifiers are validated against a safe
@@ -267,7 +338,21 @@ injected `fetch`, the bearer from the `api-key` secret and the
   are exact (`presets[1].entries[2].risk_id`). A legacy YAML with a
   top-level `railway:` key fails with `provider: expected a lowercase
 slug` + `risks: expected a non-empty list` + `railway: unknown key` :
-  convert it to `provider:` / `risks:` (P1.2).
+  convert it to `provider:` / `risks:` (P1.2). `exactly one fallback entry
+  per catalog, found 2` : a second entry matches `<provider>.**.W` or is
+  flagged — give it a narrower pattern or `fallback: false`.
+- **`next build` fails reading `risk-catalog.yaml`, or `catalogPathNextTo:
+expected a file: URL`** — the plugin uses `new URL('./risk-catalog.yaml',
+import.meta.url)` ; switch to `catalogPathNextTo(import.meta.url)`.
+- **The container boots with `ENOENT … risk-catalog.yaml`** — the YAML was
+  not traced into `.next/standalone` ; it must live under
+  `plugins/<id>/src/` (the glob in `next.config.ts`). Run the standalone
+  integration test after `next build`.
+- **`[plugin-sdk] catalog … is the fallback — presets should not
+pre-accept uncategorized writes`** — drop the fallback from the preset ;
+  the writes it names are already covered by their dedicated entries.
+- **`report.fallbackHits` is not empty** — a realistic sample classifies
+  to a slice only the catch-all covers : add the catalog entry.
 - **`PluginDefinitionError … must start with '<prefix>'`** — the tool name
   uses `-` or a different id ; the prefix maps `-` → `_` and ends with `__`.
 - **`assertCatalogCoverage` says `no catalog risk matches it`** — the
@@ -290,15 +375,19 @@ slug` + `risks: expected a non-empty list` + `railway: unknown key` :
   the host. That is an ADR (it changes the public contract).
 - **A new catalog field** — add it to `RiskEntry` (shared), to the
   `RISK_KEYS` set and `riskFrom` in `catalog-loader.ts`, and to the loader
-  tests. Unknown keys are rejected on purpose, so a typo in a YAML never
-  silently disables a guard.
+  tests (`fallback` is the worked example). Unknown keys are rejected on
+  purpose, so a typo in a YAML never silently disables a guard.
 - **A new derivation from the registry** — add a method on
   `PluginRegistry` ; never a second list.
 
 ## References
 
-- ADR [[plugin-contract-and-credential-spec]] ; neighbours
+- ADRs [[plugin-contract-and-credential-spec]],
+  [[plugin-catalog-path-and-standalone-tracing]],
+  [[fallback-risk-only-when-uncategorized]] ; neighbours
   [[policy-engine]], [`providers/README.md`](./providers/README.md) (per
   provider modelling, v4).
 - Guide : [`plugins/README.md`](../../plugins/README.md).
-- Tests : `npx vitest run packages/plugin-sdk plugins/_template` — 64 tests.
+- Tests : `npx vitest run packages/plugin-sdk plugins/_template` — 76 tests ;
+  `apps/gateway/tests/integration/standalone-plugin-catalogs.test.ts` after
+  a `next build`.

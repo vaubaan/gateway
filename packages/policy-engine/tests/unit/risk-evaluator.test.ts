@@ -2,8 +2,11 @@ import { describe, expect, test } from 'vitest';
 import type { RiskCatalog, Slice } from '@vaubaan/shared';
 
 import {
+  fallbackEntriesOf,
   findRiskEntry,
+  hasFallbackRisk,
   indexCatalog,
+  isFallbackEntry,
   risksTouchedBy,
   risksTouchedByAll,
 } from '../../src/risk-evaluator.ts';
@@ -94,22 +97,72 @@ describe('risksTouchedBy', () => {
     expect(touched).toEqual(['github.read-code']);
   });
 
-  test('a feature branch write touches feature + fallback', () => {
+  // The next three cases used to assert that the fallback co-fires with the
+  // dedicated entry. Inverted on purpose : ADR
+  // fallback-risk-only-when-uncategorized — the fallback counts only when
+  // no other entry matched the slice.
+  test('a feature branch write touches feature only (no fallback co-fire)', () => {
     const touched = risksTouchedBy(
       s('github.repo[foo/bar].branch[feature/auth].file[src/x.ts].W'),
       indexed,
     );
-    expect(touched).toEqual(['github.feature-branch-write', 'github.uncategorized-write']);
+    expect(touched).toEqual(['github.feature-branch-write']);
   });
 
-  test('a merge-to-main touches merge-protected + fallback', () => {
+  test('a merge-to-main touches merge-protected only', () => {
     const touched = risksTouchedBy(s('github.repo[foo/bar].branch[main].W'), indexed);
-    expect(touched).toEqual(['github.merge-protected', 'github.uncategorized-write']);
+    expect(touched).toEqual(['github.merge-protected']);
   });
 
-  test('branch protection write touches protection + fallback', () => {
+  test('branch protection write touches protection only', () => {
     const touched = risksTouchedBy(s('github.repo[foo/bar].branch-protection[main].W'), indexed);
-    expect(touched).toEqual(['github.branch-protection-write', 'github.uncategorized-write']);
+    expect(touched).toEqual(['github.branch-protection-write']);
+  });
+
+  test('a write no dedicated entry covers touches the fallback alone', () => {
+    const touched = risksTouchedBy(s('github.repo[foo/bar].webhook[hook-1].W'), indexed);
+    expect(touched).toEqual(['github.uncategorized-write']);
+  });
+
+  test('a slice nothing covers — not even the fallback — yields an empty result', () => {
+    // Reads are not caught by `github.**.W` ; the runtime refuses an empty set.
+    const touched = risksTouchedBy(s('github.repo[foo/bar].webhook[hook-1].R'), indexed);
+    expect(touched).toEqual([]);
+  });
+
+  test('overlapping dedicated entries still co-fire with each other', () => {
+    // Two non-fallback entries matching the same slice both count : only the
+    // fallback is subject to the "nothing else matched" rule.
+    const overlapping = indexCatalog({
+      provider: 'ssh',
+      risks: [
+        entry('ssh.exec-read', 'ssh.host[**].command.R'),
+        entry('ssh.exec-read-secret-files', 'ssh.host[**].command.R'),
+        entry('ssh.exec-write', 'ssh.host[**].command.W'),
+        { ...entry('ssh.uncategorized-write', 'ssh.**.W'), fallback: true },
+      ],
+    });
+    expect(risksTouchedBy(s('ssh.host[vps].command.R'), overlapping)).toEqual([
+      'ssh.exec-read',
+      'ssh.exec-read-secret-files',
+    ]);
+    expect(risksTouchedBy(s('ssh.host[vps].command.W'), overlapping)).toEqual(['ssh.exec-write']);
+  });
+
+  test('a flagged fallback whose pattern is not a bare catch-all follows the same rule', () => {
+    // GitHub's fallback is `github.repo[**].W`, not `github.**.W` : the
+    // explicit flag — or the `uncategorized-` id — identifies it.
+    const flagged = indexCatalog({
+      provider: 'github',
+      risks: [
+        entry('github.create-pr', 'github.repo[**].pr[**].W'),
+        { ...entry('github.catch-all', 'github.repo[**].W'), fallback: true },
+      ],
+    });
+    expect(risksTouchedBy(s('github.repo[foo].pr[12].W'), flagged)).toEqual(['github.create-pr']);
+    expect(risksTouchedBy(s('github.repo[foo].release[v1].W'), flagged)).toEqual([
+      'github.catch-all',
+    ]);
   });
 
   test('different provider returns empty', () => {
@@ -119,11 +172,12 @@ describe('risksTouchedBy', () => {
 });
 
 describe('risksTouchedByAll', () => {
-  test('union deduplicated, stable order', () => {
+  test('union deduplicated, stable order, fallback rule applied per slice', () => {
     const slices = [
       s('github.repo[foo].file[a].R'),
       s('github.repo[foo].file[b].R'),
       s('github.repo[foo].branch[main].W'),
+      s('github.repo[foo].webhook[h].W'),
     ];
     const touched = risksTouchedByAll(slices, indexed);
     expect(touched).toEqual([
@@ -133,6 +187,54 @@ describe('risksTouchedByAll', () => {
     ]);
   });
 });
+
+describe('fallback detection', () => {
+  test('explicit flag wins over the pattern and the id', () => {
+    expect(isFallbackEntry({ ...entry('x.anything', 'x.a[**].W'), fallback: true }, 'x')).toBe(
+      true,
+    );
+    expect(
+      isFallbackEntry({ ...entry('x.uncategorized-write', 'x.**.W'), fallback: false }, 'x'),
+    ).toBe(false);
+  });
+
+  test('without the flag : catch-all write pattern (bare or bracketed) or uncategorized- id', () => {
+    expect(isFallbackEntry(entry('x.catch', 'x.**.W'), 'x')).toBe(true);
+    expect(isFallbackEntry(entry('x.catch', 'x.[**].W'), 'x')).toBe(true);
+    expect(isFallbackEntry(entry('x.uncategorized-write', 'x.repo[**].W'), 'x')).toBe(true);
+    expect(isFallbackEntry(entry('x.read-all', 'x.**.R'), 'x')).toBe(false);
+    expect(isFallbackEntry(entry('x.repo-write', 'x.repo[**].W'), 'x')).toBe(false);
+    expect(isFallbackEntry(entry('x.broken', 'not a slice'), 'x')).toBe(false);
+  });
+
+  test('fallbackEntriesOf / hasFallbackRisk / indexCatalog agree', () => {
+    expect(fallbackEntriesOf(githubCatalog).map((r) => r.id)).toEqual([
+      'github.uncategorized-write',
+    ]);
+    expect(hasFallbackRisk(githubCatalog)).toBe(true);
+    expect(indexed.entries.map((e) => e.fallback)).toEqual([false, false, false, false, true]);
+    expect(hasFallbackRisk({ provider: 'github', risks: githubCatalog.risks.slice(0, 2) })).toBe(
+      false,
+    );
+  });
+});
+
+function entry(id: string, matches: string): RiskCatalog['risks'][number] {
+  return {
+    id,
+    label: id,
+    reason: 'r',
+    matches,
+    vector: {
+      reversibility: 'reversible',
+      blast: 'single',
+      data: 'data',
+      cost: 'free',
+      visibility: 'internal',
+      persistence: 'stateless',
+    },
+  };
+}
 
 describe('indexCatalog', () => {
   test('rejects pattern for wrong provider', () => {

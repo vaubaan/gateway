@@ -54,6 +54,13 @@ describe('definePlugin', () => {
     ]);
   });
 
+  test('optional hooks must be functions when present', () => {
+    const bad = { ...acmePlugin, envOf: 'prod' } as unknown as ProviderPlugin;
+    expect(pluginIssues(bad)).toEqual(['envOf: expected a function when present']);
+    const good: ProviderPlugin = { ...acmePlugin, envOf: () => undefined };
+    expect(pluginIssues(good)).toEqual([]);
+  });
+
   test('data-model integrity is checked', () => {
     const orphan: ProviderPlugin = {
       ...acmePlugin,

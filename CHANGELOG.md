@@ -11,6 +11,24 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Added
 
+- **Plugin SDK fixes from the first migrations (P1.2-SDK).**
+  `catalogPathNextTo(import.meta.url)` locates a plugin's `risk-catalog.yaml`
+  as a filesystem path that works in vitest, `next dev`, `next build`
+  (Turbopack rewrites `new URL(…, import.meta.url)` into a static asset) and
+  the standalone server; `apps/gateway/next.config.ts` traces
+  `plugins/*/src/**/*.yaml` into `.next/standalone` and derives
+  `transpilePackages` from the plugins folder; an integration test checks the
+  catalogs are present after a build. `ProviderPlugin.envOf?(slice,
+resources)` lets a plugin derive the environment carried by the call
+  (Vercel's `env[prod]` segment, GitHub's branch), with
+  `envFromSliceSegment()` for the segment case and the policy engine's
+  composed `envResolverFor(resources, envOf)` (plugin first, resource label
+  next, unqualified last). `RiskEntry.fallback: true` marks the catalog's
+  catch-all; the loader requires exactly one fallback per catalog and warns
+  when a preset includes it; `assertCatalogCoverage` reports `fallbackHits`.
+  ADRs `plugin-catalog-path-and-standalone-tracing`,
+  `fallback-risk-only-when-uncategorized`.
+
 - **Stripe plugin on the v5 SDK (P1.2e).** `@vaubaan/plugin-stripe` implements
   `definePlugin()`: one `api-key` credential with optional test and live keys,
   one resource per mode (`acct_…/test`, `acct_…/live`) so `stripe[live].*`
@@ -78,6 +96,17 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   `embedded-store-sqlite-and-migrations`, handbook `store`.
 
 ### Changed
+
+- **The fallback risk no longer co-fires with a categorized write.**
+  `risksTouchedBy` includes `<provider>.uncategorized-write` only when no
+  other catalog entry matches the slice; a write covered by a dedicated
+  entry touches that entry alone, a write covered by none still touches the
+  fallback, and a slice covered by nothing is still refused. Missions built
+  from presets without the fallback can now perform the writes the preset
+  names; the fallback's appearance in an audit log again means a catalog
+  entry is missing. Tests asserting the co-fire were inverted (policy engine,
+  gateway-core, template, ssh, railway, supabase, cloudflare-dns catalog
+  tests). ADR `fallback-risk-only-when-uncategorized`.
 
 - **Next.js 16 (P0.6).** `apps/gateway` runs on Next.js 16.4.0 with React
   19.3.0 (from 15.5.18 / 19.1.1); `next build` and `next dev` use Turbopack.

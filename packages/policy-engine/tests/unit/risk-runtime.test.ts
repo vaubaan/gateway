@@ -71,17 +71,36 @@ const catalog: RiskCatalog = {
 const idx = indexCatalog(catalog);
 
 describe('evaluateCall — allow path', () => {
-  test('feature branch write with feature-branch-write + fallback accepted', () => {
+  test('feature branch write allowed with feature-branch-write alone (fallback not co-touched)', () => {
+    // Inverted on purpose (ADR fallback-risk-only-when-uncategorized) : a mission built from a
+    // preset without the fallback can still write on feature branches.
     const d = evaluateCall({
       executed_slices: [parseSlice('github.repo[foo].branch[feature/x].file[a.ts].W')],
-      token_accepted_risks: new Set(['github.feature-branch-write', 'github.uncategorized-write']),
+      token_accepted_risks: new Set(['github.feature-branch-write']),
       catalog: idx,
     });
     expect(d.outcome).toBe('allowed');
     if (d.outcome === 'allowed') {
-      expect(d.risks_touched).toContain('github.feature-branch-write');
-      expect(d.risks_touched).toContain('github.uncategorized-write');
+      expect(d.risks_touched).toEqual(['github.feature-branch-write']);
     }
+  });
+
+  test('an uncategorized write needs the fallback, and only the fallback', () => {
+    const slice = parseSlice('github.repo[foo].webhook[h1].W');
+    const refused = evaluateCall({
+      executed_slices: [slice],
+      token_accepted_risks: new Set(['github.feature-branch-write', 'github.merge-protected']),
+      catalog: idx,
+    });
+    expect(refused.outcome).toBe('denied');
+    if (refused.outcome === 'denied')
+      expect(refused.missing_risks).toEqual(['github.uncategorized-write']);
+    const allowed = evaluateCall({
+      executed_slices: [slice],
+      token_accepted_risks: new Set(['github.uncategorized-write']),
+      catalog: idx,
+    });
+    expect(allowed.outcome).toBe('allowed');
   });
 
   test('read code accepted', () => {
@@ -104,8 +123,9 @@ describe('evaluateCall — denied paths', () => {
     expect(d.outcome).toBe('denied');
     if (d.outcome === 'denied') {
       expect(d.code).toBe('risk-not-accepted');
-      expect(d.missing_risks).toContain('github.merge-protected');
-      expect(d.missing_risks).toContain('github.uncategorized-write');
+      expect(d.missing_risks).toEqual(['github.merge-protected']);
+      // The fallback is not co-touched by a categorized write (ADR fallback-risk-only-when-uncategorized).
+      expect(d.missing_risks).not.toContain('github.uncategorized-write');
       expect(d.hint).toContain('does not accept');
     }
   });
@@ -184,11 +204,7 @@ describe('evaluateCall — multi-slice scenarios', () => {
         parseSlice('github.repo[foo].file[a.ts].R'),
         parseSlice('github.repo[foo].branch[main].W'),
       ],
-      token_accepted_risks: new Set([
-        'github.read-code',
-        'github.merge-protected',
-        'github.uncategorized-write',
-      ]),
+      token_accepted_risks: new Set(['github.read-code', 'github.merge-protected']),
       catalog: idx,
     });
     expect(d.outcome).toBe('allowed');
@@ -200,7 +216,7 @@ describe('evaluateCall — multi-slice scenarios', () => {
         parseSlice('github.repo[foo].file[a.ts].R'),
         parseSlice('github.repo[foo].branch[main].W'),
       ],
-      token_accepted_risks: new Set(['github.read-code']), // missing merge-protected + fallback
+      token_accepted_risks: new Set(['github.read-code']), // missing merge-protected
       catalog: idx,
     });
     expect(d.outcome).toBe('denied');
@@ -381,37 +397,31 @@ describe('evaluateCall — acceptable_in_envs runtime filter', () => {
     'railway.project[pid-456].environment[staging].service-var[MY_VAR].W',
   );
 
+  // The fallback no longer co-fires with `upsert-variable` (ADR fallback-risk-only-when-uncategorized) :
+  // the env-qualified entry alone is touched and accepted.
   test('prod resource: upsert-variable fires with env-qualified id', () => {
     const d = evaluateCall({
       executed_slices: [prodSlice],
-      token_accepted_risks: new Set([
-        'railway[prod].upsert-variable',
-        'railway.uncategorized-write',
-      ]),
+      token_accepted_risks: new Set(['railway[prod].upsert-variable']),
       catalog: railwayIdx,
       envResolver: resourceEnvResolver([prodResource]),
     });
     expect(d.outcome).toBe('allowed');
     if (d.outcome === 'allowed') {
-      expect(d.risks_touched).toContain('railway[prod].upsert-variable');
-      expect(d.risks_touched).toContain('railway.uncategorized-write');
+      expect(d.risks_touched).toEqual(['railway[prod].upsert-variable']);
     }
   });
 
   test('staging resource: upsert-variable fires with staging-qualified id', () => {
     const d = evaluateCall({
       executed_slices: [stagingSlice],
-      token_accepted_risks: new Set([
-        'railway[staging].upsert-variable',
-        'railway.uncategorized-write',
-      ]),
+      token_accepted_risks: new Set(['railway[staging].upsert-variable']),
       catalog: railwayIdx,
       envResolver: resourceEnvResolver([stagingResource]),
     });
     expect(d.outcome).toBe('allowed');
     if (d.outcome === 'allowed') {
-      expect(d.risks_touched).toContain('railway[staging].upsert-variable');
-      expect(d.risks_touched).toContain('railway.uncategorized-write');
+      expect(d.risks_touched).toEqual(['railway[staging].upsert-variable']);
     }
   });
 

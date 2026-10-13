@@ -58,9 +58,10 @@ packages/policy-engine/
     slice-dsl.ts          parseSlice / serializeSlice / SliceParseError
     slice-matcher.ts      matches / covers / intersects
     risk-evaluator.ts     indexCatalog / risksTouchedBy / risksTouchedByAll / findRiskEntry
-    risk-policy.ts        checkAcceptableInEnv / prepareCatalog / hasFallbackRisk / fallbackRiskPrefix
+    risk-policy.ts        checkAcceptableInEnv / prepareCatalog
     qualify.ts            isEnvScopedEntry / isAcceptableInEnv / qualifyRiskId / unqualifyRiskId /
-                          EnvResolver / noEnvResolver / resourceEnvResolver / resolveVector
+                          EnvResolver / noEnvResolver / resourceEnvResolver / envResolverFor /
+                          EnvDeriver / resolveVector
     risk-runtime.ts       evaluateCall / evaluateCallSimple
     legacy-bindings.ts    resourceFromBinding / bindingsEnvResolver            (quarantine)
     scope-injection.ts    injectionPlanFor / stripInjectedArgs / mergeInjectedArgs (quarantine, flag)
@@ -129,12 +130,23 @@ covers itself and any glob whose literals extend its own).
 ### `risk-evaluator.ts`
 
 `indexCatalog(catalog) → IndexedRiskCatalog` parses every `matches` once
-(string or list, OR semantics) and enforces id uniqueness and provider
-consistency of patterns. `risksTouchedBy(slice, indexed) → RiskId[]`
-returns, in catalog order, every entry one of whose patterns intersects the
-slice ; empty means the catalog has no fallback for that slice.
-`risksTouchedByAll(slices, indexed)` unions and deduplicates.
-`findRiskEntry(indexed, id)` is an O(N) lookup, N small.
+(string or list, OR semantics), enforces id uniqueness and provider
+consistency of patterns, and marks the catalog's fallback entry
+(`fallback: boolean` per indexed entry). `risksTouchedBy(slice, indexed) →
+RiskId[]` returns, in catalog order, every non-fallback entry one of whose
+patterns intersects the slice ; **the fallback is included only when no
+other entry matched** (ADR [[fallback-risk-only-when-uncategorized]]) ;
+empty means nothing covers the slice, not even the fallback.
+`risksTouchedByAll(slices, indexed)` unions and deduplicates, applying the
+fallback rule per slice. `findRiskEntry(indexed, id)` is an O(N) lookup,
+N small.
+
+Fallback detection : `isFallbackEntry(entry, provider, patterns?)` — the
+explicit `fallback` flag when present ; otherwise a catch-all write pattern
+(`<provider>.**.W`, `isCatchAllWritePattern`) or the id prefix
+`fallbackRiskPrefix(provider)` = `<provider>.uncategorized`.
+`fallbackEntriesOf(catalog)` and `hasFallbackRisk(catalog)` derive from it
+(moved here from `risk-policy.ts`, same barrel exports).
 
 ### `risk-policy.ts`
 
@@ -142,13 +154,12 @@ slice ; empty means the catalog has no fallback for that slice.
   is env-scoped and the resource's environment label is absent or not in
   the list. Returns a message or `null`. Built on `isAcceptableInEnv`.
 - `prepareCatalog(catalog, { warn? })` — `indexCatalog` (patterns parsed,
-  ids unique) + RiskId grammar (`isRiskId` from `@vaubaan/shared`) ; a missing
-  `<provider>.uncategorized-*` fallback calls `warn` (default
+  ids unique) + RiskId grammar (`isRiskId` from `@vaubaan/shared`) ; a
+  missing fallback (`hasFallbackRisk`) calls `warn` (default
   `console.warn`). The SDK loader silences `warn` and re-checks the fallback
-  itself (`semanticIssues`, a hard error) ; the SDK registry silences it
-  too ; here it stays a warning so partial catalogs can be indexed in tests
-  and tooling.
-- `hasFallbackRisk(catalog)`, `fallbackRiskPrefix(provider)`.
+  itself (`fallbackIssues`, a hard error requiring exactly one) ; the SDK
+  registry silences it too ; here it stays a warning so partial catalogs
+  can be indexed in tests and tooling.
 
 ### `qualify.ts`
 
@@ -174,8 +185,15 @@ them).
   applies the v4 rule to v5 `Resource`s : same provider, first `ident`
   segment equal to a `ref` wins ; no ref in the path and exactly one
   resource of the provider → that resource's env ; several resources and no
-  ref → `null` (ambiguous). A host may implement another resolver (a plugin
-  hook deriving the env from the branch, for GitHub).
+  ref → `null` (ambiguous).
+- `EnvDeriver` = `(slice, resources) → env | null | undefined` — the shape
+  of the SDK's `ProviderPlugin.envOf`, declared here so this package does
+  not import the SDK. `envResolverFor(resources, derive?)` is the composed
+  default resolver (ADR [[fallback-risk-only-when-uncategorized]] D4 ;
+  spec vaubaan-gateway §0 "Resource") : the plugin's derivation when it
+  returns a non-empty string (Vercel's `env[prod]` segment, GitHub's
+  branch), else the resource label (`resourceEnvResolver`), else `null`.
+  Without a deriver it is exactly `resourceEnvResolver(resources)`.
 - `resolveVector(entry, env)` — base vector with `vector_overrides[env]`
   applied.
 
@@ -263,6 +281,10 @@ P1.6 deletes the v4 app that still holds bindings.
   intersects it, not even the fallback. Check the slice against the
   plugin's `dataModel` ; the fallback `<provider>.**.W` catches writes only,
   reads need their own entry.
+- **The fallback is accepted but the call is denied** — the fallback no
+  longer co-fires with a dedicated entry ; `missing_risks` names the entry
+  to accept. Conversely, the fallback appearing in `risks_touched` means no
+  dedicated entry covers that write : add one to the catalog.
 - **Denied although the risk is accepted** — qualification mismatch. The
   mission stores `supabase[staging].bulk-row-write` ; the runtime qualifies
   with the env the resolver returns. Is the resource labelled ? Does the

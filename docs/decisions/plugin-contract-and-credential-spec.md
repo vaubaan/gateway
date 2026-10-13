@@ -10,6 +10,9 @@ extends:
 partially-supersedes:
   - oauth-app-install-per-provider
   - mint-install-token-credential
+amended-by:
+  - plugin-catalog-path-and-standalone-tracing
+  - fallback-risk-only-when-uncategorized
 ---
 
 # Plugin contract, credential spec, presets and the single registry
@@ -21,6 +24,12 @@ partially-supersedes:
 > registry every provider list derives from, the mandatory test kit and the
 > plugin versioning rule. Implemented by feature P0.2. Plugins migrate to
 > the contract in P1.2 ; nothing in `plugins/<provider>` changes here.
+>
+> **Amended on 2026-10-13** by [[plugin-catalog-path-and-standalone-tracing]]
+> (D4 : the catalog is located with `catalogPathNextTo(import.meta.url)`, not
+> `new URL(…, import.meta.url)`) and [[fallback-risk-only-when-uncategorized]]
+> (D1 : optional `envOf` hook ; D4 : one flagged fallback per catalog, touched
+> only when no other entry matches).
 
 ## Context
 
