@@ -121,6 +121,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/missions/summary.test.ts`                        |        8 |
 | `apps/gateway/src/server/missions/token.test.ts`                          |        8 |
 | `apps/gateway/src/server/provider-apps/service.test.ts`                   |       15 |
+| `apps/gateway/src/server/requests/approval.test.ts`                       |       27 |
 | `apps/gateway/src/server/requests/claim.test.ts`                          |       37 |
 | `apps/gateway/src/server/requests/client-ip.test.ts`                      |        2 |
 | `apps/gateway/src/server/requests/events.test.ts`                         |        6 |
@@ -129,7 +130,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/telemetry/outcome.test.ts`                       |       28 |
 | `apps/gateway/src/server/telemetry/settings.test.ts`                      |        7 |
 | `apps/gateway/src/server/telemetry/stats.test.ts`                         |       11 |
-| `apps/gateway/tests/integration/audit/admin-mutations.test.ts`            |       21 |
+| `apps/gateway/tests/integration/audit/admin-mutations.test.ts`            |       26 |
 | `apps/gateway/tests/integration/audit/audit-query.test.ts`                |       22 |
 | `apps/gateway/tests/integration/audit/mission-session.test.ts`            |       15 |
 | `apps/gateway/tests/integration/audit/retention.test.ts`                  |       10 |
@@ -139,15 +140,20 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/compose/boot.test.ts`                     |        4 |
 | `apps/gateway/tests/integration/connections/connect-flow.test.ts`         |        6 |
 | `apps/gateway/tests/integration/connections/repository-status.test.ts`    |        9 |
+| `apps/gateway/tests/integration/execution/approval-door.test.ts`          |        7 |
 | `apps/gateway/tests/integration/execution/counters-vs-audit.test.ts`      |        4 |
 | `apps/gateway/tests/integration/execution/door-http.test.ts`              |       19 |
 | `apps/gateway/tests/integration/execution/pipeline.test.ts`               |       22 |
+| `apps/gateway/tests/integration/missions/gate.test.ts`                    |       17 |
 | `apps/gateway/tests/integration/missions/mission-handlers.test.ts`        |        8 |
 | `apps/gateway/tests/integration/missions/mission-lifecycle.test.ts`       |       28 |
+| `apps/gateway/tests/integration/requests/approval-access.test.ts`         |       29 |
+| `apps/gateway/tests/integration/requests/approval.test.ts`                |       42 |
 | `apps/gateway/tests/integration/requests/request-handlers.test.ts`        |       13 |
 | `apps/gateway/tests/integration/requests/request-service.test.ts`         |       30 |
 | `apps/gateway/tests/integration/standalone-native-addons.test.ts`         |        3 |
 | `apps/gateway/tests/integration/standalone-plugin-catalogs.test.ts`       |        2 |
+| `apps/gateway/tests/integration/store/approval-decisions.test.ts`         |       16 |
 | `apps/gateway/tests/integration/store/audit.test.ts`                      |       13 |
 | `apps/gateway/tests/integration/store/config.test.ts`                     |        7 |
 | `apps/gateway/tests/integration/store/connections-shares.test.ts`         |       13 |
@@ -155,7 +161,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/store/delegations.test.ts`                |        7 |
 | `apps/gateway/tests/integration/store/identities.test.ts`                 |       10 |
 | `apps/gateway/tests/integration/store/missions.test.ts`                   |        8 |
-| `apps/gateway/tests/integration/store/requests-approvals.test.ts`         |        8 |
+| `apps/gateway/tests/integration/store/requests-approvals.test.ts`         |       10 |
 | `apps/gateway/tests/integration/store/schema.test.ts`                     |        6 |
 | `apps/gateway/tests/integration/store/sessions.test.ts`                   |       11 |
 | `apps/gateway/tests/integration/store/web-sessions.test.ts`               |        8 |
@@ -163,8 +169,9 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/app/admin-guard.test.ts`                         |       29 |
 | `apps/gateway/tests/unit/app/app-guard.test.ts`                           |       80 |
 | `apps/gateway/tests/unit/app/field.test.tsx`                              |        6 |
-| `apps/gateway/tests/unit/server/auth/mutation-guard.test.ts`              |      122 |
+| `apps/gateway/tests/unit/server/auth/mutation-guard.test.ts`              |      131 |
 | `apps/gateway/tests/unit/server/budget/decide.test.ts`                    |       15 |
+| `apps/gateway/tests/unit/server/budget/gates.test.ts`                     |        9 |
 | `apps/gateway/tests/unit/server/budget/mission-state.test.ts`             |        7 |
 | `apps/gateway/tests/unit/server/budget/period.test.ts`                    |        8 |
 | `apps/gateway/tests/unit/server/connections/provider-app-handler.test.ts` |        4 |
@@ -174,7 +181,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/server/store/migrate.test.ts`                    |        9 |
 | `apps/gateway/tests/unit/structural/catalog-caps-enforced.test.ts`        |       12 |
 | `apps/gateway/tests/unit/structural/example-config-providers.test.ts`     |       10 |
-| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`          |      222 |
+| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`          |      226 |
 | `apps/gateway/tests/unit/structural/telemetry-collector-schema.test.ts`   |        7 |
 | `apps/gateway/tests/unit/structural/telemetry-report-shape.test.ts`       |        3 |
 | `packages/gateway-core/tests/unit/audit.test.ts`                          |        2 |
@@ -201,7 +208,7 @@ this table says where each requirement lives, and what is not written yet.
 | `packages/shared/src/data-model.test.ts`                                  |        4 |
 | `packages/shared/src/mcp.test.ts`                                         |       10 |
 | `packages/shared/src/risk-id.test.ts`                                     |       20 |
-| `packages/shared/src/session-events.test.ts`                              |       22 |
+| `packages/shared/src/session-events.test.ts`                              |       28 |
 | `packages/telemetry/src/client.test.ts`                                   |       17 |
 | `packages/telemetry/src/queue.test.ts`                                    |       12 |
 | `packages/telemetry/src/report.test.ts`                                   |       24 |
@@ -262,7 +269,7 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/vercel/tests/unit/plugin.test.ts`                                |       33 |
 | `plugins/vercel/tests/unit/risk-catalog.test.ts`                          |       55 |
 | `plugins/vercel/tests/unit/team-pin.test.ts`                              |       99 |
-| **TOTAL** (`npm run test`, 2026-10-13, after a build; 175 files)          | **4242** |
+| **TOTAL** (`npm run test`, 2026-10-13, after a build; 182 files)          | **4415** |
 
 Nothing is skipped after a build. Without `.next/standalone` the five
 standalone tests (`standalone-native-addons` 3, `standalone-plugin-catalogs` 2) skip; `npm run ci` builds first, so they run there. Each plugin has one
@@ -1056,13 +1063,16 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   extra events from inside the refusal transaction; `resetCounters` and
   `listEvents` since/limit; **structural check**: `session_counters`
   consumed == allowed audit touches after a mixed run.
-- **`integration/store/requests-approvals.test.ts`** (8) — approval
+- **`integration/store/requests-approvals.test.ts`** (10) — approval
   request arguments sealed with `request:<id>` as associated data and
   readable only through `getArguments`; approval requires tool and
   fingerprint; decision erases the blob and a second decision is refused;
   sweeper expires open requests and erases blobs; inbox lists only the
   creator's open requests. Approvals: single-use and bound to the exact
-  fingerprint and risk, expiry, one approval per request.
+  risk, tool and fingerprint; **the same arguments on another tool touching
+  the same risk do not consume it**; an approval without a tool is never
+  written and a row older than migration 0005 is never matched; expiry; one
+  approval per request.
 - **`integration/store/delegations.test.ts`** (7) — public client with
   de-duplicated redirect URIs, consent listing, single-use and expiring
   codes, refresh-token rotation chain (`revoked_at`, `replaced_by_id`),
@@ -1596,7 +1606,8 @@ calls sent as JSON-RPC to `root.execution.handlers.mcp`.
 > `SessionService.recordCall` (budget scenarios above); these start from its
 > refusal.
 
-Unit, beside the code (`apps/gateway/src/server/requests/`, 58):
+Unit, beside the code (`apps/gateway/src/server/requests/`, 85 with
+`approval.test.ts`, listed under "Scenarios — Approval gate"):
 
 - **`state.test.ts`** (9) — **state machine**: `open → granted | refused |
 expired`, the three terminal for every transition; an open request past
