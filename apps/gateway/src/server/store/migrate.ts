@@ -11,7 +11,7 @@
 
 import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Clock } from './clock.ts';
 import { toIso } from './clock.ts';
@@ -41,9 +41,16 @@ export interface MigrationResult {
 
 const FILE_RE = /^(\d{4})_([a-z0-9][a-z0-9_-]*)\.sql$/;
 
-/** `apps/gateway/migrations`, resolved relative to this module. */
-export const DEFAULT_MIGRATIONS_DIR = fileURLToPath(
-  new URL('../../../migrations/', import.meta.url),
+/**
+ * `apps/gateway/migrations`, resolved relative to this module. Written with
+ * `path.resolve` rather than `new URL('../…/', import.meta.url)` on purpose:
+ * webpack treats the latter as an asset import and refuses to build the
+ * Next server bundle (the files are traced into the standalone output by
+ * `outputFileTracingIncludes` in `next.config.ts`).
+ */
+export const DEFAULT_MIGRATIONS_DIR = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../../migrations/',
 );
 
 export function loadMigrations(dir: string = DEFAULT_MIGRATIONS_DIR): Migration[] {

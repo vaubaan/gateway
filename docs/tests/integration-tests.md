@@ -46,7 +46,7 @@ en absence des creds env vars.
 | `packages/policy-engine/tests/unit/slice-matcher.test.ts`         |                   26 |
 | `packages/policy-engine/tests/unit/risk-evaluator.test.ts`        |                   11 |
 | `packages/policy-engine/tests/unit/risk-policy.test.ts`           |                    8 |
-| `packages/policy-engine/tests/unit/risk-runtime.test.ts`          |                   16 |
+| `packages/policy-engine/tests/unit/risk-runtime.test.ts`          |                   17 |
 | `packages/policy-engine/tests/unit/scope-injection.test.ts`       |                   13 |
 | `packages/policy-engine/tests/unit/qualify.test.ts`               |                   21 |
 | `packages/plugin-sdk/tests/unit/catalog-loader.test.ts`           |                   19 |
@@ -82,7 +82,7 @@ en absence des creds env vars.
 | `packages/gateway-core/tests/unit/authenticate.test.ts`           |                   11 |
 | `packages/gateway-core/tests/unit/pipeline.test.ts`               |                   15 |
 | `apps/gateway/tests/unit/lib/gateway/legacy-v4-gateway.test.ts`   |                    4 |
-| `packages/gateway-core/tests/unit/risk-gateway.test.ts`           |                    6 |
+| `packages/gateway-core/tests/unit/risk-gateway.test.ts`           |                    8 |
 | `apps/gateway/tests/unit/api/members-post.test.ts`                |        5 (1 skipped) |
 | `apps/gateway/tests/unit/api/tokens-preview.test.ts`              |                   12 |
 | `apps/gateway/tests/unit/api/tokens-rotate.test.ts`               |          2 (skipped) |
@@ -110,6 +110,7 @@ en absence des creds env vars.
 | `apps/gateway/tests/integration/store/requests-approvals.test.ts` |                    8 |
 | `apps/gateway/tests/integration/store/delegations.test.ts`        |                    7 |
 | `apps/gateway/tests/integration/store/config.test.ts`             |                    4 |
+| `apps/gateway/tests/integration/compose/boot.test.ts`             |                    4 |
 | **TOTAL** (`npm run test`, 2026-10-13, incl. suites not listed)   | **1658 (3 skipped)** |
 
 ## Run
@@ -145,8 +146,8 @@ npx vitest run packages/policy-engine     # one package
   no catalog match), multi-slice (all risks covered, missing one fails),
   env qualification through `resourceEnvResolver` (staging vs prod
   resource, `acceptable_in_envs` runtime filter), no resolver → unqualified,
-  deprecated `bindings` input through the legacy bridge,
-  `evaluateCallSimple` happy.
+  deprecated `bindings` input through the legacy bridge, every denial
+  carries `code: 'risk-not-accepted'`, `evaluateCallSimple` happy.
 - **`scope-injection.test.ts`** — `injectionPlanFor` (github owner/repo,
   vercel projectId+teamId, supabase project_ref ; null si 0/2+ bindings,
   null si resource_ref malformé), `stripInjectedArgs` (retire properties
@@ -299,10 +300,14 @@ examples.
 
 `packages/gateway-core/tests/unit/`, vitest, no network, no store.
 
-- **`risk-gateway.test.ts`** (6) — the pure decision core
-  `evaluateCallForToken`: allow, deny with missing risks, classify-denied,
-  no-catalog (fail closed), multi-slice union, denied_risks shadow.
-  Unchanged since v4.
+- **`risk-gateway.test.ts`** (8) — the pure decision core
+  `evaluateCallForToken`: allow, deny with missing risks and
+  `code: 'risk-not-accepted'`, classify-denied, no-catalog (fail closed),
+  denied_risks shadow, the classifier receives `(tool, args, resources)`,
+  environment qualification from the mission's resources by default and an
+  explicit `envResolver` overriding it, `denyResponseBody`. The decision is
+  unchanged since v4; its inputs are the v5 `Resource[]` and the plugin's
+  `classify` (P0.R).
 - **`errors.test.ts`** (24) — the eight refusal codes: exactly eight in
   `REFUSAL_CODES`, one builder sample per code, every field of every code,
   `hint` non-empty and serializable, `isRefusal` guard, JSON-RPC mapping
@@ -320,12 +325,14 @@ examples.
   door/presented/expected; `parseBearer`; `DoorAuthenticator` end to end;
   unknown bearer → `AuthError`, not a refusal.
 - **`pipeline.test.ts`** (15) — `checkMissionActive` (status, passed and
-  future `expires_at`), `checkConnectionAvailable`; `CallPipeline`: happy
-  path with the full audit entry, inactive mission refused before anything
-  else, `resource-not-in-mission` before any risk evaluation, expired
-  connection, `risk-not-accepted` through the real decision core with the
-  budget untouched, structural rejections without a code, budget refusal
-  with no upstream call, approval id carried to the audit, upstream
+  future `expires_at`), `checkConnectionAvailable`; `CallPipeline` over a
+  context built from the shared types (`ConnectionResource`, policy entry
+  list, one-off period): happy path with the full audit entry, inactive
+  mission refused before anything else, `resource-not-in-mission` before
+  any risk evaluation, expired connection, `risk-not-accepted` through the
+  real decision core fed with the resources of the target connection and
+  the budget untouched, structural rejections without a code, budget
+  refusal with no upstream call, approval id carried to the audit, upstream
   failure after allow (`decision: allowed`, `upstream_error`), audit write
   failure propagates.
 
@@ -442,15 +449,31 @@ code) :
 - **`logging/logging.test.ts`** (5) — mission token prefix kept, secret
   dropped; configured secrets replaced longest-first and JSON-escaped;
   JSON line shape with bindings; level threshold and stderr routing.
-- **`compose/compose.test.ts`** (12) — `buildRoot` from configuration
-  alone; injected store/registry and warning for an unknown provider id;
-  no secret in the boot log; `getRoot` builds once and shares the promise,
-  forgets a failed build; `bootOrExit` exits 78 naming the key, 1 on other
-  failures, nothing on success; `MemoryRateLimiter` window and reset,
-  `MemoryCache` TTL and eviction, `MemorySessionStore`, `EmptyPluginRegistry`.
-- **`http/healthz.test.ts`** (3) — 200 with build stamps and store kind and
-  no configuration value, 503 degraded on store ping failure, 503
-  unavailable when the root cannot be built.
+- **`compose/compose.test.ts`** (15) — `buildRoot` from configuration
+  alone over the `:memory:` store (schema v1, empty registry); the store
+  receives the root's encryptor and a `RegistryCatalogIndex` (base ids,
+  env-qualified ids within `acceptable_in_envs`, unknown provider,
+  wildcard refused) and is closed with the root; provider apps are a
+  warning while no plugin is registered and a `ConfigError` naming
+  `providers.<id>` and `VAUBAAN_PROVIDER_<ID>_*` (exit 78) once a plugin
+  is; `checkProviderApps` passes on matching or absent apps; no secret in
+  the boot log; `getRoot` builds once and shares the promise, forgets a
+  failed build; `bootOrExit` exits 78 naming the key, 1 on other failures,
+  nothing on success; `MemoryRateLimiter` window and reset, `MemoryCache`
+  TTL and eviction, `MemorySessionStore`.
+- **`http/healthz.test.ts`** (3) — 200 with build stamps and store kind
+  (`memory`) and no configuration value, 503 degraded on store ping
+  failure, 503 unavailable when the root cannot be built.
+- **`tests/integration/compose/boot.test.ts`** (4) — the production
+  wiring against a temporary SQLite file: the database is created, the
+  migrations applied (`schema_version` 1, one `schema_migrations` row),
+  the store pings and `/healthz` reports `{ kind: 'sqlite', status: 'ok' }`,
+  the boot log carries `store opened`; a store secret is sealed with the
+  encryptor built from the configuration (blob not clear text, current
+  `key_version`) and reopens after a second boot without re-migrating; a
+  risk id the empty registry does not know is refused
+  (`UnknownRiskIdError`); an unreadable `store.path` exits 1 with a
+  message naming `store.path` and `VAUBAAN_STORE_PATH`.
 - **`apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`**
   (one test per scanned file, 32 at P0.4) — no literal URL, Supabase ref, GitHub /
   Stripe / mission token, private key or JWT in `apps/gateway/src/server`,

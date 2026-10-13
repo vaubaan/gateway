@@ -68,20 +68,20 @@ flowchart LR
 
 ### `ProviderPlugin` (`plugin.ts`)
 
-| Member                                               | Pure ? | Notes                                                                                                                                              |
-| ---------------------------------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`                                                 | —      | Provider slug ; also the first segment of every slice and the tool prefix (`cloudflare-dns` → `cloudflare_dns__`).                                 |
-| `displayName`, `version`, `description?`, `docsUrl?` | —      | `version` is semver and goes into telemetry.                                                                                                       |
-| `tools`                                              | —      | `McpToolDeclaration[]`. Every name starts with the prefix ; names unique. May be empty (experimental, classifier-only plugin).                     |
-| `dataModel`                                          | —      | `DataModel` of the risk-model spec §2 ; `validateDataModel` runs in `definePlugin`.                                                                |
-| `catalog`                                            | —      | `RiskCatalog` with `presets` ; loaded from YAML, see below.                                                                                        |
-| `credential`                                         | —      | `CredentialSpec`, see below.                                                                                                                       |
-| `classify(tool, args, resources)`                    | yes    | `{ slices: Slice[] } \| { denied: string }`. `resources` = the mission's resources on this connection ; used to derive the env and default refs.   |
-| `execute(ctx, tool, args)`                           | no     | `ctx: ExecuteContext` = credential (decrypted), appConfig, fetch, signal?, logger?, resources, agentLabel?. Throws `UpstreamAuthError` on 401/403. |
-| `discoverResources(ctx)`                             | no     | `ctx: ConnectionContext` (same minus resources/agentLabel). Returns `Resource[]`.                                                                  |
-| `refresh?(ctx)`                                      | no     | Returns a new `CredentialSecret` ; must not mutate the input. Required when `credential.refreshable` is true.                                      |
-| `normalizeForCaps?(args, caps)`                      | yes    | Scope caps (ADR scope-caps).                                                                                                                       |
-| `normalizeArgs?(args, resources)`                    | yes    | Only called when `PluginHostFlags.argNormalization` is on. **Default off** (plan §8-Q4).                                                           |
+| Member                                               | Pure ? | Notes                                                                                                                                                                                                                                         |
+| ---------------------------------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                                                 | —      | Provider slug ; also the first segment of every slice and the tool prefix (`cloudflare-dns` → `cloudflare_dns__`).                                                                                                                            |
+| `displayName`, `version`, `description?`, `docsUrl?` | —      | `version` is semver and goes into telemetry.                                                                                                                                                                                                  |
+| `tools`                                              | —      | `McpToolDeclaration[]`. Every name starts with the prefix ; names unique. May be empty (experimental, classifier-only plugin).                                                                                                                |
+| `dataModel`                                          | —      | `DataModel` of the risk-model spec §2 ; `validateDataModel` runs in `definePlugin`.                                                                                                                                                           |
+| `catalog`                                            | —      | `RiskCatalog` with `presets` ; loaded from YAML, see below.                                                                                                                                                                                   |
+| `credential`                                         | —      | `CredentialSpec`, see below.                                                                                                                                                                                                                  |
+| `classify(tool, args, resources)`                    | yes    | `{ slices: Slice[] } \| { denied: string }`. `resources` = the mission's resources on this connection ; used to derive the env and default refs. The gateway core's `Classifier` is exactly this member (`Pick<ProviderPlugin, 'classify'>`). |
+| `execute(ctx, tool, args)`                           | no     | `ctx: ExecuteContext` = credential (decrypted), appConfig, fetch, signal?, logger?, resources, agentLabel?. Throws `UpstreamAuthError` on 401/403.                                                                                            |
+| `discoverResources(ctx)`                             | no     | `ctx: ConnectionContext` (same minus resources/agentLabel). Returns `Resource[]`.                                                                                                                                                             |
+| `refresh?(ctx)`                                      | no     | Returns a new `CredentialSecret` ; must not mutate the input. Required when `credential.refreshable` is true.                                                                                                                                 |
+| `normalizeForCaps?(args, caps)`                      | yes    | Scope caps (ADR scope-caps).                                                                                                                                                                                                                  |
+| `normalizeArgs?(args, resources)`                    | yes    | Only called when `PluginHostFlags.argNormalization` is on. **Default off** (plan §8-Q4).                                                                                                                                                      |
 
 `definePlugin(def)` validates (`pluginIssues`) and `Object.freeze`s. Issues
 are aggregated into one `PluginDefinitionError` so a contributor fixes a
@@ -210,19 +210,27 @@ the barrel are erased and always safe. The SDK itself is server-side
 
 - `domain.ts` — v5 domain : `Resource { provider, ref, env?, displayName,
 metadata? }`, `ConnectionResource`, `Credential` (encrypted envelope),
-  `CredentialKind`, `Connection`, `Share`, `Restriction`, `Mission`,
-  `MissionPolicyEntry` (`risk_id`, `quota`, `rate_limit`, `gate`),
+  `CredentialKind` (how a _connection_ authenticates : `api-key`, `oauth2`,
+  `app-install`, `ssh-key` — the three kinds of _bearer_ a door receives
+  are `BearerKind` in `@vaubaan/gateway-core`), `Connection`, `Share`,
+  `Restriction`, `Mission`, `MissionPolicyEntry` (`risk_id`, `quota`,
+  `rate_limit`, `gate`), `MissionPolicy` (the explicit entry list),
   `Budget`, `RateLimit`, `Gate`, `Period`, `MissionToken`, `Session`,
   `SessionEvent`, `SessionCounter`, `Request`, `Approval`, `Delegation`,
-  `User`, `Group`, `Principal`, `acceptedRisksOf(mission)`.
+  `User`, `Group`, `Principal`, `acceptedRisksOf(mission)`, `AuditDecision`
+  (`allowed` | `refused`). These are the only definitions : `gateway-core`
+  re-exports them and builds its `MissionContext` from projections of
+  `Mission`, `Connection`, `ConnectionResource` and `Session`.
 - `risk.ts` — `Slice`, `RiskVector` + `RISK_VECTOR_AXES`, `RiskEntry`,
   `ScopeCaps`, `InfraLimits`, `Preset`, `PresetEntry`, `RiskCatalog`
-  (`presets?`, `catalog_version?`, `catalog_date?`), `RiskDecision`.
+  (`presets?`, `catalog_version?`, `catalog_date?`), `RiskDecision` — the
+  `denied` branch carries `code: RefusalCode` next to the free-text `hint`,
+  so the audit entry and the refusal body never guess the code.
 - `risk-id.ts` — `parseRiskId` → `{ provider, env | null, name }`,
   `formatRiskId`, `baseRiskId`, `isRiskId`, `isProviderId`,
   `isExplicitRiskId` (no `*`/`?`), `RISK_ID_PATTERN`, `PROVIDER_ID_PATTERN`,
   `ENV_LABEL_PATTERN`.
-- `refusal.ts` — `REFUSAL_CODES` (8) and `RefusalCode`.
+- `refusal.ts` — `REFUSAL_CODES` (8), `RefusalCode`, `isRefusalCode`.
 - `mcp.ts` — `toolPrefixFor`, `splitToolName`, `McpToolDeclaration`,
   `McpToolResult`, `McpToolContent`, `UpstreamAuthError`, JSON-RPC types.
 - `legacy-v4.ts` — quarantined v4 row types (`Provider`, `PROVIDERS`,

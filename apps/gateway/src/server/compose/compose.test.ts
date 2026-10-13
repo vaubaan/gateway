@@ -1,15 +1,19 @@
+import { PluginRegistry } from '@vaubaan/plugin-sdk';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { loadInstanceConfig } from '../config';
+import { ConfigError, loadInstanceConfig } from '../config';
 import { validEnv } from '../config/testing';
+import { openMemoryStore, type CatalogIndex } from '../store';
 import { bootOrExit, EXIT_CONFIG_ERROR } from './boot';
-import { EmptyPluginRegistry, MemoryCache, MemoryRateLimiter, MemorySessionStore } from './memory';
-import type { Store } from './ports';
+import { MemoryCache, MemoryRateLimiter, MemorySessionStore } from './memory';
+import { checkProviderApps, RegistryCatalogIndex } from './registry';
 import { buildRoot, getRoot, resetRoot, type RootDeps } from './root';
+import { fakePlugin, memoryStoreDeps } from './testing';
 
 const quiet: RootDeps = {
   loadConfig: () => loadInstanceConfig({ env: validEnv() }),
   logWrite: () => undefined,
+  ...memoryStoreDeps,
 };
 
 afterEach(async () => {
@@ -17,30 +21,58 @@ afterEach(async () => {
 });
 
 describe('buildRoot', () => {
-  it('builds config, logger, encryptor and in-memory ports from configuration alone', async () => {
+  it('builds config, logger, encryptor, an empty registry and the store from configuration alone', async () => {
     const root = await buildRoot(quiet);
     expect(root.config.publicUrl.origin).toBe('https://gateway.example.com');
     expect(root.configFile).toBeNull();
     expect(root.encryptor.currentKeyVersion).toBe(1);
-    expect(root.store.kind).toBe('none');
-    expect(root.registry.list()).toEqual([]);
+    expect(root.store.kind).toBe('memory');
+    expect(root.store.schemaVersion).toBe(1);
+    expect(root.registry.size).toBe(0);
+    expect(root.registry.labels()).toEqual([]);
     expect(root.build).toEqual({ version: 'dev', commit: 'dev' });
     const sealed = await root.encryptor.encrypt('conn-1', 'hello');
     await expect(root.encryptor.decrypt('conn-1', sealed)).resolves.toBe('hello');
     await root.close();
   });
 
-  it('plugs injected store and registry, and warns on provider apps for unknown plugins', async () => {
-    const lines: string[] = [];
+  it('hands the encryptor and a registry-backed catalog index to the store, and closes it', async () => {
+    let seenCatalog: CatalogIndex | null = null;
+    let seenEncryptor: unknown = null;
     let closed = false;
-    const store: Store = {
-      kind: 'fake',
-      ping: async () => undefined,
-      close: async () => {
-        closed = true;
-      },
-    };
     const root = await buildRoot({
+      ...quiet,
+      buildRegistry: async () => new PluginRegistry([fakePlugin()]),
+      openStore: async ({ encryptor, catalog }) => {
+        seenCatalog = catalog;
+        seenEncryptor = encryptor;
+        const store = openMemoryStore({ encryptor, catalog });
+        return {
+          ...store,
+          close: async () => {
+            closed = true;
+            await store.close();
+          },
+        };
+      },
+    });
+    expect(seenEncryptor).toBe(root.encryptor);
+    expect(seenCatalog).toBeInstanceOf(RegistryCatalogIndex);
+    expect(seenCatalog!.has('acme.read-things')).toBe(true);
+    expect(seenCatalog!.has('acme[staging].thing-write')).toBe(true);
+    expect(seenCatalog!.has('acme[dev].thing-write')).toBe(false);
+    expect(seenCatalog!.has('acme[prod].read-things')).toBe(false); // not env-scoped
+    expect(seenCatalog!.has('nope.read-things')).toBe(false);
+    expect(seenCatalog!.has('acme.*')).toBe(false);
+    expect(root.registry.ids).toEqual(['acme']);
+    await root.close();
+    expect(closed).toBe(true);
+  });
+
+  it('warns on provider apps while no plugin is registered', async () => {
+    const lines: string[] = [];
+    const root = await buildRoot({
+      ...quiet,
       loadConfig: () =>
         loadInstanceConfig({
           env: validEnv({
@@ -48,33 +80,75 @@ describe('buildRoot', () => {
             VAUBAAN_PROVIDER_NOPE_CLIENT_ID: 'x',
           }),
         }),
-      openStore: async () => store,
-      buildRegistry: async () => ({
-        list: () => [{ id: 'github', displayName: 'GitHub', version: '1.0.0' }],
-        has: (id) => id === 'github',
-      }),
       logWrite: (_lvl, line) => lines.push(line),
     });
-    expect(root.store).toBe(store);
     const warnings = lines.filter((l) => l.includes('"level":"warn"'));
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toContain('providers.nope');
-    expect(warnings[0]).not.toContain('providers.github');
+    expect(warnings).toHaveLength(2);
+    expect(warnings.join('\n')).toContain('providers.github');
+    expect(warnings.join('\n')).toContain('providers.nope');
     await root.close();
-    expect(closed).toBe(true);
+  });
+
+  it('refuses a provider app for an unknown plugin once plugins are registered', async () => {
+    const deps: RootDeps = {
+      ...quiet,
+      loadConfig: () =>
+        loadInstanceConfig({
+          env: validEnv({
+            VAUBAAN_PROVIDER_ACME_CLIENT_ID: 'ok',
+            VAUBAAN_PROVIDER_NOPE_CLIENT_ID: 'x',
+          }),
+        }),
+      buildRegistry: async () => new PluginRegistry([fakePlugin()]),
+    };
+    const err = await buildRoot(deps).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ConfigError);
+    const message = (err as ConfigError).message;
+    expect(message).toContain(
+      "providers.nope: no registered plugin has id 'nope' (registered: acme)",
+    );
+    expect(message).toContain('VAUBAAN_PROVIDER_NOPE_*');
+    expect(message).not.toContain('providers.acme');
+
+    let code: number | null = null;
+    await bootOrExit(deps, { stderr: () => undefined, exit: (c) => (code = c) });
+    expect(code).toBe(EXIT_CONFIG_ERROR);
   });
 
   it('never writes a secret to the boot log', async () => {
     const lines: string[] = [];
     const env = validEnv();
     await buildRoot({
+      ...quiet,
       loadConfig: () => loadInstanceConfig({ env }),
       logWrite: (_lvl, line) => lines.push(line),
     });
     const all = lines.join('');
     expect(all).toContain('configuration loaded');
+    expect(all).toContain('composition root ready');
     expect(all).not.toContain(env.VAUBAAN_MASTER_KEY);
     expect(all).not.toContain(env.VAUBAAN_BOOTSTRAP_TOKEN);
+  });
+});
+
+describe('checkProviderApps', () => {
+  const logger = { warn: () => undefined } as unknown as Parameters<typeof checkProviderApps>[2];
+
+  it('passes when every provider app names a registered plugin', () => {
+    const { config } = loadInstanceConfig({
+      env: validEnv({ VAUBAAN_PROVIDER_ACME_CLIENT_ID: 'ok' }),
+    });
+    expect(() =>
+      checkProviderApps(config, new PluginRegistry([fakePlugin()]), logger),
+    ).not.toThrow();
+  });
+
+  it('passes when no provider app is configured, whatever the registry', () => {
+    const { config } = loadInstanceConfig({ env: validEnv() });
+    expect(() => checkProviderApps(config, new PluginRegistry([]), logger)).not.toThrow();
+    expect(() =>
+      checkProviderApps(config, new PluginRegistry([fakePlugin()]), logger),
+    ).not.toThrow();
   });
 });
 
@@ -177,11 +251,5 @@ describe('in-memory ports (single-process only)', () => {
     expect(await sessions.get('s1')).toEqual({ user: 'u' });
     t = 10;
     expect(await sessions.get('s1')).toBeNull();
-  });
-
-  it('EmptyPluginRegistry knows nothing', () => {
-    const r = new EmptyPluginRegistry();
-    expect(r.list()).toEqual([]);
-    expect(r.has('github')).toBe(false);
   });
 });

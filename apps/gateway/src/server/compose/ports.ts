@@ -7,29 +7,20 @@
  * differ only in the implementations the root is built with
  * (plan §3.1; `_common.md` "keep the hosted/managed path open").
  *
- * The concrete `Store` (P0.3) and `PluginRegistry` (P0.2) are defined by
- * their own features; this file states only what the root needs from them.
+ * The embedded store (`../store`, P0.3) and the plugin registry
+ * (`@vaubaan/plugin-sdk`, P0.2) are owned by their own modules; the root
+ * holds them by their real types. This file states what the *host* side
+ * needs from the store (liveness, for `/healthz` and shutdown) and the
+ * in-memory ports the root still implements itself.
  */
 
-/** What the composition root needs from the embedded store (P0.3 owns the repositories). */
+/** What `/healthz` and `close()` need from the store; the embedded `Store` satisfies it. */
 export interface Store {
   /** `sqlite`, `memory`, `postgres`… for the boot log and `/healthz`. */
   readonly kind: string;
   /** Cheap liveness probe (`SELECT 1`); rejects when the store is unusable. */
   ping(): Promise<void>;
   close(): Promise<void>;
-}
-
-export interface PluginSummary {
-  readonly id: string;
-  readonly displayName: string;
-  readonly version: string;
-}
-
-/** The single source of truth for the provider list (P0.2 owns the real one). */
-export interface PluginRegistry {
-  list(): readonly PluginSummary[];
-  has(id: string): boolean;
 }
 
 export interface RateLimitDecision {

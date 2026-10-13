@@ -12,6 +12,8 @@
  * This file never imports `next`; the root is host-agnostic so a hosted
  * deployment can build the same root from another HTTP host.
  */
+import type { PluginRegistry } from '@vaubaan/plugin-sdk';
+
 import {
   loadInstanceConfig,
   type InstanceConfig,
@@ -20,14 +22,11 @@ import {
 } from '../config';
 import { createEncryptor, type Encryptor } from '../crypto';
 import { createLogger, createRedactor, type Logger, type LoggerOptions } from '../logging';
-import {
-  EmptyPluginRegistry,
-  MemoryCache,
-  MemoryRateLimiter,
-  MemorySessionStore,
-  NullStore,
-} from './memory';
-import type { CacheClient, PluginRegistry, RateLimiter, SessionStore, Store } from './ports';
+import type { Store } from '../store';
+import { MemoryCache, MemoryRateLimiter, MemorySessionStore } from './memory';
+import type { CacheClient, RateLimiter, SessionStore } from './ports';
+import { buildEmptyRegistry, checkProviderApps, RegistryCatalogIndex } from './registry';
+import { openEmbeddedStore, type StoreContext } from './store';
 
 export interface GatewayRoot {
   readonly config: InstanceConfig;
@@ -35,7 +34,9 @@ export interface GatewayRoot {
   readonly configFile: string | null;
   readonly logger: Logger;
   readonly encryptor: Encryptor;
+  /** The embedded store with its repositories (P0.3); satisfies the `Store` port of `ports.ts`. */
   readonly store: Store;
+  /** The single provider list (P0.2); empty until the plugins migrate (P1.2). */
   readonly registry: PluginRegistry;
   readonly rateLimiter: RateLimiter;
   readonly cache: CacheClient;
@@ -51,12 +52,13 @@ export interface BuildInfo {
 }
 
 /**
- * Injection points. Features that own a port (P0.3 store, P0.2 registry)
- * plug their factory here; tests inject fakes.
+ * Injection points. The defaults are the production wiring (SQLite store at
+ * `store.path`, the plugins the image ships); tests inject the `:memory:`
+ * store, a fixture registry or fakes of the in-memory ports.
  */
 export interface RootDeps {
   readonly loadConfig?: () => LoadedConfig;
-  readonly openStore?: (config: InstanceConfig, logger: Logger) => Promise<Store>;
+  readonly openStore?: (ctx: StoreContext) => Promise<Store>;
   readonly buildRegistry?: (config: InstanceConfig, logger: Logger) => Promise<PluginRegistry>;
   readonly rateLimiter?: RateLimiter;
   readonly cache?: CacheClient;
@@ -85,20 +87,18 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
   });
 
   const encryptor = await createEncryptor(config.encryption);
-  const store = deps.openStore ? await deps.openStore(config, logger) : new NullStore();
-  const registry = deps.buildRegistry
-    ? await deps.buildRegistry(config, logger)
-    : new EmptyPluginRegistry();
 
-  for (const id of config.providers.keys()) {
-    if (!registry.has(id)) {
-      // Becomes a boot failure once the plugin registry is wired (P1.2).
-      logger.warn('provider app configured for a plugin that is not registered', {
-        key: `providers.${id}`,
-        known: registry.list().map((p) => p.id),
-      });
-    }
-  }
+  // The registry comes first: the store checks every persisted RiskId
+  // against the loaded catalogs, and the provider apps against the ids.
+  const registry = await (deps.buildRegistry ?? buildEmptyRegistry)(config, logger);
+  checkProviderApps(config, registry, logger);
+
+  const store = await (deps.openStore ?? openEmbeddedStore)({
+    config,
+    logger,
+    encryptor,
+    catalog: new RegistryCatalogIndex(registry),
+  });
 
   const root: GatewayRoot = {
     config,
@@ -118,7 +118,8 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
   };
   logger.info('composition root ready', {
     store: store.kind,
-    plugins: registry.list().length,
+    schema_version: store.schemaVersion,
+    plugins: registry.ids,
     build,
   });
   return root;
