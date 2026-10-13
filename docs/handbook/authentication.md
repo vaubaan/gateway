@@ -241,13 +241,17 @@ admin rule; the JSON handlers answer 401/403 bodies.
 /auth/login`), or "No identity provider is configured yet" with a link to
   the bootstrap page while the token is active. Signed in, it shows the
   `PrincipalCard`: email, groups, the **operator marker** (`OperatorBadge`:
-  `Operator` / `User` / `Bootstrap operator`), the Administration link for
-  operators, and the sign-out form.
+  `Operator` / `User` / `Bootstrap operator`), the Connections link for a
+  signed-in user, the Administration link for operators, and the sign-out
+  form. The pages under `app/(app)/` get the v5 bar (`AppShell`) from the
+  same principal (handbook [connections](connections.md), "Pages").
 - **`/admin/bootstrap`** — the token form (`POST /api/auth/bootstrap`,
   field `token`), only while the state is `active`; otherwise says when it
   was revoked (or that none exists) and points to `/login`.
 - **`/admin`** — issuer, source (file or Admin page), admin rule, bootstrap
-  state, build.
+  state, build. The Administration bar links Identity provider and
+  Provider apps (`/admin/provider-apps`, handbook
+  [connections](connections.md)).
 - **`/admin/identity-provider`** — the settings form (`POST
 /api/admin/identity-provider`: `issuer`, `client_id`, `client_secret`,
   `claim_sub`, `claim_email`, `claim_groups`, `allowed_email_domains`),
