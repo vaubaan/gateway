@@ -220,6 +220,42 @@ describe('audit repository', () => {
     expect(await store.audit.countAllowedTouches('m1', READ, ...day)).toBe(0);
   });
 
+  it('counts a mission’s calls per agent label over a span, the unlabelled ones apart', async () => {
+    const at = (hour: string, label: string | null, decision: 'allowed' | 'refused' = 'allowed') =>
+      store.audit.append({
+        ...callEntry(`2026-10-13T${hour}:00:00.000Z`, decision),
+        agent_label: label,
+      });
+    await at('08', 'early'); // before the span
+    await at('09', 'coder');
+    await at('10', 'coder', 'refused');
+    await at('11', null);
+    await at('12', 'planner');
+    await at('13', 'coder');
+    await at('14', 'late'); // `until` is exclusive
+    await store.audit.append({ ...callEntry('2026-10-13T10:30:00.000Z'), mission_id: 'm2' });
+    await store.audit.append(adminEntry);
+
+    const span = { since: '2026-10-13T09:00:00.000Z', until: '2026-10-13T14:00:00.000Z' };
+    expect(await store.audit.agentLabelActivity('m1', span)).toEqual([
+      { label: 'coder', allowed: 2, refused: 1, lastSeenAt: '2026-10-13T13:00:00.000Z' },
+      { label: null, allowed: 1, refused: 0, lastSeenAt: '2026-10-13T11:00:00.000Z' },
+      { label: 'planner', allowed: 1, refused: 0, lastSeenAt: '2026-10-13T12:00:00.000Z' },
+    ]);
+    // An open span (a one-off mission's single period) has no upper bound.
+    const open = await store.audit.agentLabelActivity('m1', { since: span.since, until: null });
+    expect(open.map((a) => a.label)).toEqual(['coder', null, 'late', 'planner']);
+    expect(await store.audit.agentLabelActivity('none', span)).toEqual([]);
+  });
+
+  it('searches call entries by exact agent label', async () => {
+    const scope = { missionCreatorUserId: null, connectionOwners: [], allAdmin: true };
+    await store.audit.append(adminEntry);
+    // Nothing in scope but administrative entries: a label filter matches none of them.
+    expect(await store.audit.search({ scope, limit: 10, agentLabel: 'orchestrator' })).toEqual([]);
+    expect(await store.audit.search({ scope, limit: 10 })).toHaveLength(1);
+  });
+
   it('the schema refuses an incomplete entry atomically', () => {
     expect(() =>
       store.db

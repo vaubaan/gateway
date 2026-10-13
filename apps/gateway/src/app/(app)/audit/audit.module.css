@@ -32,12 +32,14 @@
   max-width: 34ch;
 }
 
-/* One row: four flexible filters, two short selects, two dates, the buttons. */
+/* One row: four flexible filters, the decision, the agent label, the kind,
+   two dates, the buttons. Nine filters do not fit the reading column, so the
+   form takes the width of the table below it (`.wide` on the same element). */
 .filters {
   display: grid;
   grid-template-columns:
     minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)
-    88px 88px 128px 128px auto;
+    88px minmax(0, 0.8fr) 88px 128px 128px auto;
   align-items: end;
   gap: var(--space-2);
   margin-bottom: var(--space-4);
@@ -55,6 +57,7 @@
 .filter span {
   font-size: var(--text-xs);
   color: var(--text-muted);
+  white-space: nowrap;
 }
 .filter input,
 .filter select {

@@ -166,6 +166,7 @@ export class AuditQueryService {
       ...(filters.connectionId ? { connectionId: filters.connectionId } : {}),
       ...(filters.tool ? { tool: filters.tool } : {}),
       ...(filters.decision ? { decision: filters.decision } : {}),
+      ...(filters.agentLabel ? { agentLabel: filters.agentLabel } : {}),
       ...(filters.kind ? { kind: filters.kind } : {}),
       ...(filters.since ? { since: filters.since } : {}),
       ...(filters.until ? { until: filters.until } : {}),

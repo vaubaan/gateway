@@ -207,6 +207,7 @@ export type {
 } from './repositories/delegations.ts';
 export { DEFAULT_AUDIT_RETENTION_DAYS } from './repositories/audit.ts';
 export type {
+  AgentLabelActivity,
   AgentLabelSeen,
   AuditCallRecord,
   AuditCursor,

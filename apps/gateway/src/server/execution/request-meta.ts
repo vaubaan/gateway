@@ -14,8 +14,8 @@
  * that holds no label (absent, empty, blank) or a rejected one leaves the
  * place to the next.
  *
- * Shape: 1 to `AGENT_LABEL_MAX_LENGTH` characters, ASCII letters and digits
- * plus `. _ - : / @ +`, starting with a letter or a digit; surrounding
+ * Shape: 1 to `AGENT_LABEL_MAX_LENGTH` (64) characters, ASCII letters and
+ * digits plus `. _ - : / @ +`, starting with a letter or a digit; surrounding
  * whitespace is trimmed. Anything else is REJECTED, not repaired: the label
  * is dropped, the door logs why (never the value), and the call proceeds
  * exactly as if no label had been sent. A label never causes a refusal.
@@ -30,12 +30,22 @@ import type { BlockList } from 'node:net';
 import type { ClientOrigin } from '@vaubaan/gateway-core';
 
 import { clientIpOf, trustedProxyList, UNKNOWN_CLIENT } from '../http/client-ip';
-import { AGENT_LABEL_HEADER, AGENT_LABEL_META_KEY } from '../missions/bootstrap-kit';
+import {
+  AGENT_LABEL_HEADER,
+  AGENT_LABEL_MAX_LENGTH,
+  AGENT_LABEL_META_KEY,
+  AGENT_LABEL_PUNCTUATION,
+} from '../missions/bootstrap-kit';
 
-export { AGENT_LABEL_HEADER, AGENT_LABEL_META_KEY, trustedProxyList };
-export const AGENT_LABEL_MAX_LENGTH = 64;
-/** The characters of a label; its length is checked apart, to name the reason. */
-const AGENT_LABEL_SHAPE = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]*$/;
+export { AGENT_LABEL_HEADER, AGENT_LABEL_MAX_LENGTH, AGENT_LABEL_META_KEY, trustedProxyList };
+/**
+ * The characters of a label, built from the list the bootstrap kit prints, so
+ * the door checks exactly what the agents are told. Its length is checked
+ * apart, to name the reason.
+ */
+const AGENT_LABEL_SHAPE = new RegExp(
+  `^[A-Za-z0-9][A-Za-z0-9${AGENT_LABEL_PUNCTUATION.replace(/[\\\]^-]/g, '\\$&')}]*$`,
+);
 const USER_AGENT_MAX_LENGTH = 256;
 
 /** Where a label travels, in precedence order. */

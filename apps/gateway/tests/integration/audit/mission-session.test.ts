@@ -5,7 +5,12 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { eventView, SESSION_EVENTS_PAGE_SIZE } from '../../../src/server/audit';
+import {
+  eventView,
+  MissionSessionService,
+  SESSION_EVENTS_PAGE_SIZE,
+} from '../../../src/server/audit';
+import { systemClock } from '../../../src/server/store/clock';
 import type { MissionRecord } from '../../../src/server/store/types';
 import {
   ARGUMENT_MARKER,
@@ -256,6 +261,170 @@ describe('mission session view', () => {
       { label: 'planner', calls: 2, lastSeenAt: t(2).toISOString() },
       { label: 'coder', calls: 1, lastSeenAt: t(1).toISOString() },
     ]);
+  });
+
+  describe('agent labels: who said they made the calls', () => {
+    // After the issuance (the period starts with it), one millisecond apart.
+    let started = 0;
+    beforeEach(() => {
+      started = Date.now();
+    });
+    const t = (step: number) => new Date(started + step);
+
+    it('counts the calls of the current period per label, allowed and refused, unlabelled apart', async () => {
+      await seedCall(rig, mission, { now: t(0), agentLabel: 'planner' });
+      await seedCall(rig, mission, { now: t(1), agentLabel: 'coder' });
+      await seedCall(rig, mission, { now: t(2) }); // no label
+      const pr = { tool: 'github__create_pull_request', risks: [PR], agentLabel: 'coder' } as const;
+      await seedCall(rig, mission, { ...pr, now: t(3) });
+      await seedCall(rig, mission, { ...pr, now: t(4) });
+      // The quota of pull requests is two: the third is refused.
+      await seedCall(rig, mission, { ...pr, now: t(5) });
+
+      const v = await view();
+      expect(v.label_activity).toEqual([
+        { label: 'coder', allowed: 3, refused: 1, last_seen_at: t(5).toISOString() },
+        { label: null, allowed: 1, refused: 0, last_seen_at: t(2).toISOString() },
+        { label: 'planner', allowed: 1, refused: 0, last_seen_at: t(0).toISOString() },
+      ]);
+      // Counts of calls, beside the budget and never instead of it: the counters are per
+      // risk, one per mission, whoever called.
+      expect(v.risks.find((r) => r.risk_id === READ)).toMatchObject({ consumed: 3, remaining: 2 });
+      expect(v.risks.find((r) => r.risk_id === PR)).toMatchObject({ consumed: 2, exhausted: true });
+      expect(v.periods[0]?.consumed).toEqual({ [READ]: 3, [PR]: 2 });
+    });
+
+    it('leaves out the calls of past periods, and has nothing for a mission that is not active', async () => {
+      const now = new Date();
+      const yesterday = new Date(now.getTime() - DAY_SECONDS * 1000);
+      const old = await rig.root.store.missions.create({
+        name: 'Three days in',
+        creatorUserId: rig.seeded.ada.id,
+        periodAnchor: new Date(now.getTime() - 3 * DAY_SECONDS * 1000).toISOString(),
+        periodSeconds: DAY_SECONDS,
+        expiresAt: null,
+        connections: [
+          { connectionId: rig.seeded.github.connection.id, resourceScope: 'all', resourceIds: [] },
+        ],
+        policy: [{ riskId: READ, quota: 50, rateLimit: 50, rateWindowSeconds: 60, gate: 'auto' }],
+      });
+      await seedCall(rig, old, { now: yesterday, agentLabel: 'night-shift' });
+      await seedCall(rig, old, { now: yesterday, agentLabel: 'coder' });
+      await seedCall(rig, old, { now, agentLabel: 'coder' });
+
+      const active = await view(rig.seeded.ada, old.id);
+      expect(active.label_activity.map((a) => [a.label, a.allowed])).toEqual([['coder', 1]]);
+      // "Labels seen" keeps the whole history the audit still holds.
+      expect(active.agent_labels.map((a) => a.label).sort()).toEqual(['coder', 'night-shift']);
+
+      await rig.root.missions.service.revoke(rig.seeded.ada, old.id);
+      const revoked = await view(rig.seeded.ada, old.id);
+      expect(revoked.state.kind).toBe('revoked');
+      expect(revoked.label_activity).toEqual([]);
+    });
+
+    it('filters the timeline to the calls of one label, or to the unlabelled ones', async () => {
+      await seedCall(rig, mission, { now: t(0), agentLabel: 'planner' });
+      await seedCall(rig, mission, { now: t(1), agentLabel: 'coder' });
+      await seedCall(rig, mission, { now: t(2) });
+      const pr = { tool: 'github__create_pull_request', risks: [PR], agentLabel: 'coder' } as const;
+      await seedCall(rig, mission, { ...pr, now: t(3) });
+      await seedCall(rig, mission, { ...pr, now: t(4) });
+      await seedCall(rig, mission, { ...pr, now: t(5) }); // refused, opens a claim
+      await rig.root.missions.service.rotate(rig.seeded.ada, mission.id);
+
+      const filtered = async (timeline: Parameters<typeof rig.root.audit.sessions.get>[2]) =>
+        (await rig.root.audit.sessions.get(rig.seeded.ada, mission.id, timeline))!;
+
+      const all = await view();
+      expect(all.timeline_filter).toEqual({ kind: 'all' });
+      expect(all.events.map((e) => e.kind)).toContain('rotation');
+      expect(all.events.map((e) => e.kind)).toContain('request');
+
+      const coder = await filtered({ timeline: { kind: 'label', label: 'coder' } });
+      expect(coder.timeline_filter).toEqual({ kind: 'label', label: 'coder' });
+      expect(coder.events.map((e) => [e.kind, e.tool, e.agent_label])).toEqual([
+        ['call-refused', 'github__create_pull_request', 'coder'],
+        ['call-allowed', 'github__create_pull_request', 'coder'],
+        ['call-allowed', 'github__create_pull_request', 'coder'],
+        ['call-allowed', 'github__get_file', 'coder'],
+      ]);
+      expect(coder.next_events).toBeNull();
+      expect(coder.events_scan_limited).toBe(false);
+
+      const unlabelled = await filtered({ timeline: { kind: 'unlabelled' } });
+      // The request and the rotation carry no label either, but they are not calls.
+      expect(unlabelled.events.map((e) => [e.kind, e.agent_label])).toEqual([
+        ['call-allowed', null],
+      ]);
+
+      const nobody = await filtered({ timeline: { kind: 'label', label: 'reviewer' } });
+      expect(nobody.events).toEqual([]);
+      // Whatever the filter, the budget and the per-label counts are the mission's.
+      expect(nobody.label_activity).toEqual(all.label_activity);
+      expect(nobody.risks).toEqual(all.risks);
+    });
+
+    it('pages a filtered timeline, and says when it stopped looking before the end', async () => {
+      const policy = [{ risk_id: READ, quota: 500, rate_limit: { max: 500, window_seconds: 60 } }];
+      const busy = await issueMission(
+        rig,
+        rig.seeded.ada,
+        githubDraft(rig, {
+          name: 'Busy',
+          connections: [{ connection_id: rig.seeded.github.connection.id, policy }],
+        }),
+      );
+      const base = Date.now() - 60_000;
+      // Oldest first: 3 calls of `scout`, then 40 unlabelled ones, then 2 of `scout`.
+      const labels = [
+        ...Array<string | null>(3).fill('scout'),
+        ...Array<string | null>(40).fill(null),
+        ...Array<string | null>(2).fill('scout'),
+      ];
+      for (const [i, agentLabel] of labels.entries()) {
+        await seedCall(rig, busy, { now: new Date(base + i * 100), agentLabel });
+      }
+      // Looks through 10 events at a time, 20 per page read.
+      const sessions = new MissionSessionService({
+        store: rig.root.store,
+        missions: rig.root.missions.service,
+        clock: systemClock,
+        timelineScan: { batch: 10, limit: 20 },
+      });
+      const scout = { kind: 'label', label: 'scout' } as const;
+
+      const first = (await sessions.get(rig.seeded.ada, busy.id, { timeline: scout }))!;
+      expect(first.events).toHaveLength(2);
+      expect(first.events_scan_limited).toBe(true);
+      expect(first.next_events).not.toBeNull();
+
+      // Following "Older" resumes where the scan stopped, until the timeline ends.
+      const seen = [...first.events];
+      let cursor = first.next_events;
+      let reads = 1;
+      while (cursor) {
+        const page = (await sessions.get(rig.seeded.ada, busy.id, {
+          timeline: scout,
+          eventsBefore: cursor,
+        }))!;
+        seen.push(...page.events);
+        cursor = page.next_events;
+        reads += 1;
+      }
+      expect(seen).toHaveLength(5);
+      expect(new Set(seen.map((e) => e.id)).size).toBe(5);
+      expect(seen.every((e) => e.agent_label === 'scout')).toBe(true);
+      expect(reads).toBe(3);
+
+      // With the default bounds the same timeline is one page.
+      const whole = (await rig.root.audit.sessions.get(rig.seeded.ada, busy.id, {
+        timeline: scout,
+      }))!;
+      expect(whole.events).toHaveLength(5);
+      expect(whole.events_scan_limited).toBe(false);
+      expect(whole.next_events).toBeNull();
+    });
   });
 
   it('the timeline is newest first and names tool, risks, what is left, the refusal and the request', async () => {

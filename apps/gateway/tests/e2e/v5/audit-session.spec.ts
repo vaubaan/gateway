@@ -78,8 +78,18 @@ test('a day of calls: session page, then the audit of the mission', async ({ pag
   await expect(page.locator('dd', { hasText: 'planner' })).toContainText('1 call');
   await expect(page.locator('dd', { hasText: 'planner' })).toContainText('coder');
 
+  // Calls of the current period per agent label: informational, beside the shared budget.
+  const activity = page.getByTestId('label-activity');
+  await expect(activity).toContainText('this is not a budget');
+  const labelRow = (label: string) => activity.locator(`tr[data-label="${label}"]`);
+  await expect(activity.locator('tbody tr')).toHaveCount(2);
+  await expect(labelRow('coder').locator('td').nth(1)).toHaveText('3'); // allowed
+  await expect(labelRow('coder').locator('td').nth(2)).toHaveText('2'); // refused
+  await expect(labelRow('planner').locator('td').nth(1)).toHaveText('1');
+  await expect(labelRow('planner').locator('td').nth(2)).toHaveText('0');
+
   // Timeline, newest first: the merge awaiting approval is on top.
-  const timeline = page.locator('table').nth(3);
+  const timeline = page.getByTestId('timeline').locator('table');
   await expect(timeline.locator('tbody tr')).toHaveCount(8); // 6 calls + 2 requests
   await expect(timeline.locator('tbody tr').first()).toContainText('approval-required');
   await expect(timeline.locator('tbody tr').last()).toContainText('github__get_file');
@@ -92,6 +102,20 @@ test('a day of calls: session page, then the audit of the mission', async ({ pag
   );
   await expect(page.locator('body')).not.toContainText(ARGUMENT_MARKER);
   await snap(page, 'mission-session');
+
+  // The timeline of one label: its calls only; the budget above does not move.
+  await labelRow('planner').getByRole('link', { name: 'in the timeline' }).click();
+  await expect(page).toHaveURL(new RegExp(`/missions/${day.mission_id}/session\\?agent=planner$`));
+  await expect(page.getByTestId('timeline-filter')).toContainText('planner');
+  await expect(timeline.locator('tbody tr')).toHaveCount(1);
+  await expect(timeline.locator('tbody tr').first()).toContainText('github__get_file');
+  await expect(timeline.locator('tbody tr').first()).toContainText('planner');
+  await expect(row('github.read-code').locator('td').nth(2)).toHaveText('2');
+  await expect(labelRow('coder').locator('td').nth(1)).toHaveText('3');
+  await snap(page, 'mission-session-one-label');
+  await page.getByRole('link', { name: 'Show the whole timeline' }).click();
+  await expect(page).toHaveURL(new RegExp(`/missions/${day.mission_id}/session$`));
+  await expect(timeline.locator('tbody tr')).toHaveCount(8);
 
   // ── The audit of this mission ─────────────────────────────────────────────
   await page.getByRole('link', { name: 'Audit of this mission' }).click();
@@ -116,7 +140,7 @@ test('a day of calls: session page, then the audit of the mission', async ({ pag
   const boxes = await filters
     .locator('label')
     .evaluateAll((labels) => labels.map((label) => Math.round(label.getBoundingClientRect().top)));
-  expect(boxes).toHaveLength(8);
+  expect(boxes).toHaveLength(9);
   expect(new Set(boxes).size).toBe(1);
   // And the table shows its last column without scrolling the page sideways.
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1280);
@@ -132,6 +156,14 @@ test('a day of calls: session page, then the audit of the mission', async ({ pag
 
   await page.getByLabel('Tool').fill('');
   await page.getByLabel('Decision').selectOption('');
+  // The calls one agent label declared.
+  await page.getByLabel('Agent label').fill('planner');
+  await page.getByRole('button', { name: 'Search' }).click();
+  await expect(page).toHaveURL(/[?&]agent=planner(&|$)/);
+  await expect(entries).toHaveCount(1);
+  await expect(entries.first()).toContainText('agent planner');
+  await expect(entries.first()).toContainText('github__get_file');
+  await page.getByLabel('Agent label').fill('');
   await page.getByLabel('From (UTC)').fill('2020-01-01');
   await page.getByLabel('To (UTC)').fill('2020-01-02');
   await page.getByRole('button', { name: 'Search' }).click();

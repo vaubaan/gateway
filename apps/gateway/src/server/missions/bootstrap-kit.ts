@@ -33,6 +33,13 @@ export const MCP_SERVER_NAME = 'vaubaan';
 export const AGENT_LABEL_HEADER = 'X-Vaubaan-Agent';
 /** Key of the same label inside `params._meta` of one `tools/call`; wins over the header. */
 export const AGENT_LABEL_META_KEY = 'agent';
+/**
+ * The shape of an agent label, stated once: the execution door checks it
+ * (`server/execution/request-meta.ts`) and the kit tells the agents.
+ * ASCII letters and digits, plus these characters after the first one.
+ */
+export const AGENT_LABEL_MAX_LENGTH = 64;
+export const AGENT_LABEL_PUNCTUATION = '._-:/@+';
 
 export interface KitResource {
   readonly ref: string;
@@ -129,6 +136,21 @@ export function managementDoorSection(managementEndpoint: string): string[] {
   ];
 }
 
+/**
+ * The label section of the instructions (spec §7.9): how an orchestrator
+ * hands its configuration to sub-agents, and how each says who it is.
+ */
+function agentLabelGuidance(): string[] {
+  const punctuation = [...AGENT_LABEL_PUNCTUATION].map((c) => `\`${c}\``).join(' ');
+  return [
+    '### Sub-agents and agent labels',
+    `- An orchestrator hands its sub-agents this MCP configuration as is: same endpoint, same \`${MISSION_TOKEN_ENV}\`. There is no token per agent, and nothing to request for a new one.`,
+    `- So that the session and the audit tell who did what, each agent names itself with a label. A sub-agent started with its own copy of the configuration adds the header \`${AGENT_LABEL_HEADER}: <label>\` next to \`Authorization\`. An orchestrator that sends the calls itself on behalf of several agents sets \`_meta.${AGENT_LABEL_META_KEY}\` on each \`tools/call\` instead; on a call that carries both, \`_meta.${AGENT_LABEL_META_KEY}\` wins.`,
+    `- A label is 1 to ${AGENT_LABEL_MAX_LENGTH} characters: letters, digits and ${punctuation}, starting with a letter or a digit (\`planner\`, \`sub-agent-2\`, \`team/reviewer\`). Anything else is ignored: the call is served, unlabelled.`,
+    '- A label is attribution only. It changes nothing about what is allowed or counted, it reserves no share of the budget, and it is not an identity: never put a secret in it.',
+  ];
+}
+
 function agentInstructions(
   input: BootstrapKitInput,
   endpoint: string,
@@ -148,7 +170,7 @@ function agentInstructions(
     '',
     `You reach the company's cloud providers only through the Vaubaan Gateway MCP server \`${MCP_SERVER_NAME}\` (${endpoint}), authenticated by the mission token in \`${MISSION_TOKEN_ENV}\`. You hold no provider credential and must not look for one. Sub-agents use the same MCP configuration and the same token: the budget below is shared, it is not multiplied.`,
     '',
-    `To tell several agents apart in the audit, each may add a label of its own: the HTTP header \`${AGENT_LABEL_HEADER}: <label>\` in its MCP configuration, or \`_meta.${AGENT_LABEL_META_KEY}\` on a single call. A label changes nothing about what is allowed.`,
+    ...agentLabelGuidance(),
     '',
     '### Connections and resources you may touch',
     ...connections,

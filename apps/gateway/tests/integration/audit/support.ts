@@ -171,6 +171,7 @@ export const NO_FILTER = {
   connectionId: null,
   tool: null,
   decision: null,
+  agentLabel: null,
   kind: null,
   since: null,
   until: null,
