@@ -52,7 +52,7 @@ only — never the gateway application.
        vector: { reversibility: …, blast: …, data: …, cost: …, visibility: …, persistence: … }
      - id: <id>.uncategorized-write # mandatory fallback, exactly one
        matches: '<id>.**.W'
-       fallback: true # touched only by writes no other entry covers
+       fallback: true # required ; touched only by writes no other entry covers
        …
    presets:
      - id: developer
@@ -68,10 +68,13 @@ only — never the gateway application.
    The loader refuses, at boot and in tests: unknown keys, malformed ids,
    patterns of another provider, a missing or duplicated fallback, zero
    presets, a preset entry that is not an explicit risk of this catalog, a
-   deprecated risk in a preset, a non-numeric budget. It warns when a preset
-   includes the fallback: the fallback fires only on writes no dedicated
-   entry covers, so a preset should not pre-accept them (ADR
+   deprecated risk in a preset, a non-numeric budget, and a preset that
+   includes the fallback (it fires only on writes no dedicated entry covers,
+   so a preset must not pre-accept them — ADR
    [`fallback-risk-only-when-uncategorized`](../docs/decisions/fallback-risk-only-when-uncategorized.md)).
+   The fallback entry carries `fallback: true`; an entry recognised by its
+   pattern or id alone only warns at boot (third-party catalogs) but fails
+   `assertPluginWellFormed`.
 
 5. **Tools** — `src/tools.ts`: `McpToolDeclaration[]`, names
    `<prefix>__<verb>_<noun>`, JSON input schemas. Take the resource ref as an
@@ -87,9 +90,12 @@ only — never the gateway application.
    `discoverResources` lists the refs the owner will label.
 8. **Credential** — in `src/index.ts`, the `credential: CredentialSpec`:
    `api-key` (form fields), `oauth2` (authorize/token URLs, scopes, PKCE,
-   client-auth method, `refreshable` + a `refresh()`), `app-install`
+   client-auth method, resource indicator, `refreshable` — the gateway runs
+   the standard `refresh_token` grant itself; declare `refresh()` only for a
+   non-standard flow), `app-install`
    (operator app settings, install URL), or `ssh-key`. The gateway runs the
-   flow; you declare it.
+   flow; you declare it. Set `experimental: true` on a plugin the gateway
+   should register but keep out of the default connect and issuance flows.
 9. **Environment** — if the environment lives in the call rather than on
    the resource (Vercel's `env[prod]` segment, GitHub's branch), declare
    `envOf` in `src/index.ts`: `envOf: envFromSliceSegment('env')` for a

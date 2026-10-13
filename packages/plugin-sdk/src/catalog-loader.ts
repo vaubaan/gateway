@@ -8,11 +8,14 @@
  * ADR  : docs/decisions/plugin-contract-and-credential-spec.md (YAML loaded
  *        at boot, TypeScript twins retired) ;
  *        docs/decisions/fallback-risk-only-when-uncategorized.md (one
- *        fallback per catalog, presets should not include it).
+ *        fallback per catalog, flagged `fallback: true`, never in a preset).
  *
  * The loader is strict : any structural issue, unknown key, malformed id,
- * duplicate, missing fallback, foreign or wildcard preset entry fails the
- * boot with every issue listed, path-qualified (`risks[3].vector.blast`).
+ * duplicate, missing fallback, foreign or wildcard preset entry, or a preset
+ * entry on the fallback fails the boot with every issue listed,
+ * path-qualified (`risks[3].vector.blast`). Its one warning : a fallback
+ * recognised by convention (pattern or id) instead of the `fallback: true`
+ * flag — accepted for third-party catalogs, refused by the test kit.
  * A catalog is reviewed in a pull request ; the loader is the CI gate that
  * makes the review mechanical.
  */
@@ -64,7 +67,7 @@ export interface LoadCatalogOptions {
   readonly requireFallback?: boolean;
   /** Fail when the catalog ships no preset. Default true (spec §10). */
   readonly requirePresets?: boolean;
-  /** Receives non-fatal findings (`catalogWarnings`). Defaults to `console.warn`. */
+  /** Receives non-fatal findings (`catalogWarnings` : a fallback without the flag). Defaults to `console.warn`. */
   readonly warn?: (message: string) => void;
 }
 
@@ -194,25 +197,31 @@ export function fallbackIssues(
 }
 
 /**
- * Non-fatal findings the loader reports through `warn`. Today : a preset
- * that includes the fallback. Since the fallback fires only on
- * uncategorized writes, offering it in a preset pre-accepts the very
- * writes the catalog has not reviewed (ADR fallback-risk-only-when-
- * uncategorized) ; a mission creator may still add it by hand.
+ * The fallback entry must carry `fallback: true` (ADR fallback-risk-only-
+ * when-uncategorized D2, as amended by P1.2-align) : a reader of the YAML
+ * sees that the entry behaves differently, and the runtime never depends on
+ * the pattern convention. An entry recognised by convention alone (the
+ * `<provider>.**.W` pattern or the `<provider>.uncategorized-` id) is
+ * reported here ; the loader surfaces it as a warning so a third-party
+ * catalog written before the flag still boots, the test kit
+ * (`assertPluginWellFormed`) as a failure.
+ */
+export function fallbackFlagIssues(catalog: RiskCatalog): string[] {
+  return fallbackEntriesOf(catalog)
+    .filter((entry) => entry.fallback !== true)
+    .map((entry) => {
+      const i = catalog.risks.indexOf(entry);
+      return `risks[${i}].id '${entry.id}' is the fallback by convention only — set fallback: true on it`;
+    });
+}
+
+/**
+ * Non-fatal findings the loader reports through `warn` : today only
+ * `fallbackFlagIssues`. A preset that includes the fallback used to be a
+ * warning ; it is an error since no plugin needs it (`presetIssues`).
  */
 export function catalogWarnings(catalog: RiskCatalog): string[] {
-  const warnings: string[] = [];
-  const fallbackIds = new Set(fallbackEntriesOf(catalog).map((r) => r.id));
-  (catalog.presets ?? []).forEach((preset, p) => {
-    preset.entries.forEach((entry, e) => {
-      if (fallbackIds.has(baseRiskId(entry.risk_id))) {
-        warnings.push(
-          `presets[${p}].entries[${e}].risk_id '${entry.risk_id}' is the fallback — presets should not pre-accept uncategorized writes (preset '${preset.id}')`,
-        );
-      }
-    });
-  });
-  return warnings;
+  return fallbackFlagIssues(catalog);
 }
 
 /** Risk ids and preset entries that are patterns or sentinels instead of explicit ids. */
@@ -237,7 +246,11 @@ export function wildcardIssues(catalog: RiskCatalog): string[] {
 /**
  * Preset rules (spec §3.2, §10) : at least one preset ; ids unique ; every
  * entry references a risk of this catalog ; an env-qualified entry targets
- * an env-scoped risk and an allowed env ; no duplicate risk within a preset.
+ * an env-scoped risk and an allowed env ; no duplicate risk within a preset ;
+ * never the fallback — it fires only on writes the catalog has not reviewed
+ * (ADR fallback-risk-only-when-uncategorized D3, tightened by P1.2-align),
+ * so a preset including it would pre-accept exactly those. A mission
+ * creator may still accept it by hand at issuance.
  */
 export function presetIssues(
   catalog: RiskCatalog,
@@ -250,6 +263,7 @@ export function presetIssues(
     return issues;
   }
   const byId = new Map<string, RiskEntry>(catalog.risks.map((r) => [r.id, r]));
+  const fallbackIds = new Set(fallbackEntriesOf(catalog).map((r) => r.id));
   const presetIds = new Set<string>();
   presets.forEach((preset, p) => {
     const at = `presets[${p}]`;
@@ -291,6 +305,10 @@ export function presetIssues(
       if (risk.deprecated)
         issues.push(
           `${where}.risk_id '${entry.risk_id}' is deprecated and must not be offered in a preset`,
+        );
+      if (fallbackIds.has(risk.id))
+        issues.push(
+          `${where}.risk_id '${entry.risk_id}' is the fallback — a preset must not pre-accept uncategorized writes (preset '${preset.id}')`,
         );
     });
   });

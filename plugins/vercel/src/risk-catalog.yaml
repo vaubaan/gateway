@@ -325,6 +325,7 @@ risks:
       matching catalog entry — operators must opt in explicitly (no
       implicit accept).
     matches: 'vercel.[**].W'
+    fallback: true
     vector:
       reversibility: costly
       blast: env

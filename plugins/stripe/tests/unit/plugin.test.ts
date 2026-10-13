@@ -102,8 +102,10 @@ describe('stripe plugin — structural kit', () => {
       { resources: [liveRes] },
     );
     expect(report.toolsChecked).toBe(27);
-    // The fallback matches every write and is never dropped by the engine ; it is touched too.
+    // Every named risk is reached ; the fallback is reachable by design only
+    // and left out of `risksUntouched` ; no sample lands on it.
     expect(report.risksUntouched).toEqual([]);
+    expect(report.fallbackHits).toEqual([]);
   });
 });
 

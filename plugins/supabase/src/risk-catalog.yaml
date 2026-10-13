@@ -435,6 +435,7 @@ risks:
       there ; the budget and the gate bound it. A tool firing only this risk
       is a catalog bug.
     matches: supabase.**.W
+    fallback: true
     vector:
       reversibility: costly
       blast: env

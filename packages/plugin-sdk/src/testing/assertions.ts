@@ -12,7 +12,7 @@
 import { risksTouchedBy, type IndexedRiskCatalog } from '@vaubaan/policy-engine';
 import { isExplicitRiskId, type Resource, type RiskCatalog, type RiskId } from '@vaubaan/shared';
 
-import { presetIssues, wildcardIssues } from '../catalog-loader.ts';
+import { fallbackFlagIssues, presetIssues, wildcardIssues } from '../catalog-loader.ts';
 import { pluginIssues } from '../define-plugin.ts';
 import type { ProviderPlugin } from '../plugin.ts';
 import { PluginRegistry } from '../registry.ts';
@@ -31,9 +31,19 @@ function fail(subject: string, findings: readonly string[]): void {
   if (findings.length > 0) throw new PluginAssertionError(subject, findings);
 }
 
-/** `definePlugin`'s checks, as an assertion (useful on a plugin built without it). */
+/**
+ * `definePlugin`'s checks, as an assertion (useful on a plugin built without
+ * it), plus the one rule the loader only warns about : the fallback entry
+ * must carry `fallback: true` (a plugin tested with the kit is first-party
+ * enough to be held to it).
+ */
 export function assertPluginWellFormed(plugin: ProviderPlugin): void {
-  fail(`plugin '${String(plugin.id)}' is not well-formed`, pluginIssues(plugin));
+  fail(`plugin '${String(plugin.id)}' is not well-formed`, [
+    ...pluginIssues(plugin),
+    ...(plugin.catalog && typeof plugin.catalog === 'object'
+      ? fallbackFlagIssues(plugin.catalog).map((m) => `catalog: ${m}`)
+      : []),
+  ]);
 }
 
 /**

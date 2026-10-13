@@ -24,7 +24,7 @@ function doc(overrides: Record<string, unknown> = {}): Record<string, unknown> {
         ...risk('acme.thing-write', 'acme.space[**].thing[**].W'),
         acceptable_in_envs: ['staging', 'prod'],
       },
-      risk('acme.uncategorized-write', 'acme.**.W'),
+      { ...risk('acme.uncategorized-write', 'acme.**.W'), fallback: true },
     ],
     presets: [
       {
@@ -195,11 +195,30 @@ describe('validateCatalog — errors are collected and path-qualified', () => {
     const bad = doc();
     (bad.risks as Record<string, unknown>[])[2]!.fallback = 'yes';
     expect(issuesOf(() => validateCatalog(bad))).toEqual(['risks[2].fallback: expected a boolean']);
-    // Legacy catalog without the flag : detected by pattern, no issue.
-    expect(() => validateCatalog(doc(), { warn: () => {} })).not.toThrow();
   });
 
-  test('a preset that includes the fallback is a warning, not an error', () => {
+  test('a fallback recognised by convention alone loads with a warning asking for the flag', () => {
+    // Third-party catalog written before the flag : pattern and id convention.
+    const legacy = doc({
+      risks: [
+        risk('acme.read-things', 'acme.space[**].R'),
+        risk('acme.uncategorized-write', 'acme.**.W'),
+      ],
+    });
+    const warnings: string[] = [];
+    const loaded = validateCatalog(legacy, { source: 'acme.yaml', warn: (m) => warnings.push(m) });
+    expect(loaded.indexed.entries.map((e) => e.fallback)).toEqual([false, true]);
+    expect(warnings).toEqual([
+      "[plugin-sdk] catalog 'acme.yaml': risks[1].id 'acme.uncategorized-write' is the fallback by convention only — set fallback: true on it",
+    ]);
+    expect(catalogWarnings(loaded.catalog)).toEqual([
+      "risks[1].id 'acme.uncategorized-write' is the fallback by convention only — set fallback: true on it",
+    ]);
+    // Flagged : silent.
+    expect(catalogWarnings(validateCatalog(doc()).catalog)).toEqual([]);
+  });
+
+  test('a preset that includes the fallback is an error', () => {
     const d = doc();
     (d.presets as Array<{ entries: unknown[] }>)[0]!.entries.push({
       risk_id: 'acme.uncategorized-write',
@@ -207,14 +226,9 @@ describe('validateCatalog — errors are collected and path-qualified', () => {
       rate_limit: { max: 1, window_seconds: 1 },
       gate: 'approval',
     });
-    const warnings: string[] = [];
-    expect(() =>
-      validateCatalog(d, { source: 'acme.yaml', warn: (m) => warnings.push(m) }),
-    ).not.toThrow();
-    expect(warnings).toEqual([
-      "[plugin-sdk] catalog 'acme.yaml': presets[0].entries[1].risk_id 'acme.uncategorized-write' is the fallback — presets should not pre-accept uncategorized writes (preset 'reader')",
+    expect(issuesOf(() => validateCatalog(d))).toEqual([
+      "presets[0].entries[1].risk_id 'acme.uncategorized-write' is the fallback — a preset must not pre-accept uncategorized writes (preset 'reader')",
     ]);
-    expect(catalogWarnings(validateCatalog(doc(), { warn: () => {} }).catalog)).toEqual([]);
   });
 
   test('zero presets is an error, unless disabled', () => {

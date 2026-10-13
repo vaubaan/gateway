@@ -196,6 +196,7 @@ risks:
       for tools added later (an `ssh__sftp_put`, say) and is never referenced
       by a preset.
     matches: 'ssh.**.W'
+    fallback: true
     vector:
       reversibility: costly
       blast: env

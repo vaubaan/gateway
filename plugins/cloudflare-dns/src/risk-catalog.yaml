@@ -221,6 +221,7 @@ risks:
       Catch-all for writes without a dedicated entry. Seen in production, it
       means a tool classifies to a slice no entry covers : add the entry.
     matches: 'cloudflare-dns.[**].W'
+    fallback: true
     vector:
       reversibility: costly
       blast: account

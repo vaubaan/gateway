@@ -287,6 +287,7 @@ risks:
       until a dedicated risk is added — fail-loud by design. Never offered in
       a preset.
     matches: 'gmail.[**].W'
+    fallback: true
     vector:
       reversibility: costly
       blast: env

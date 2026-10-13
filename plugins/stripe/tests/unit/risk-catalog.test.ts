@@ -16,10 +16,10 @@ import { stripeCatalog, stripePlugin, stripeRiskCatalog } from '../../src/index.
 const { catalog, indexed } = stripeCatalog;
 
 describe('stripe risk-catalog — shape', () => {
-  test('16 named risks + 1 fallback, version 2', () => {
+  test('16 named risks + 1 fallback, version 3', () => {
     expect(catalog.provider).toBe('stripe');
     expect(catalog.risks).toHaveLength(17);
-    expect(catalog.catalog_version).toBe(2);
+    expect(catalog.catalog_version).toBe(3);
     expect(catalog.risks.filter((r) => r.id.startsWith('stripe.uncategorized'))).toHaveLength(1);
   });
 
@@ -29,12 +29,10 @@ describe('stripe risk-catalog — shape', () => {
     }
   });
 
-  test('write presets carry the fallback of their mode (the engine never drops it)', () => {
+  test('no preset carries the fallback (it counts only when no dedicated entry matched)', () => {
     for (const preset of catalog.presets) {
-      const writes = preset.entries.some((e) => !e.risk_id.includes('.read-'));
       const fallback = preset.entries.find((e) => e.risk_id.endsWith('.uncategorized-write'));
-      if (writes) expect(fallback, preset.id).toBeDefined();
-      else expect(fallback, preset.id).toBeUndefined();
+      expect(fallback, preset.id).toBeUndefined();
     }
   });
 
@@ -105,5 +103,9 @@ describe('stripe risk-catalog — slices resolve to the expected risk', () => {
 
   test('a novel write falls into the fallback only', () => {
     expect(touched(`${root}.connect-account[acct_y].W`)).toEqual(['stripe.uncategorized-write']);
+  });
+
+  test('the cash side effect of create_subscription is covered by subscription-create, not the fallback', () => {
+    expect(touched(`${root}.payment-intent.W`)).toEqual(['stripe.subscription-create']);
   });
 });

@@ -346,6 +346,7 @@ risks:
       is updated, calls land here — fail-loud by design. Never offered in a
       preset.
     matches: 'resend.[**].W'
+    fallback: true
     vector:
       reversibility: costly
       blast: env

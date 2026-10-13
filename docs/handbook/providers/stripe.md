@@ -51,7 +51,7 @@ plugins/stripe/src/
   classify.ts         classifyStripe — pure, (tool, args, resources) → slices | denied
   execute.ts          executeStripe, discoverStripeResources, STRIPE_API_BASE ; legacy executeCall
   data-model.ts       plane `billing`, 23 entities, `mode` envScopable
-  risk-catalog.yaml   16 risks + fallback, 3 presets, catalog_version 2
+  risk-catalog.yaml   16 risks + fallback, 3 presets, catalog_version 3
   index.ts            definePlugin(...) → stripePlugin (default export) + legacy exports
   risk-classifier.ts  legacy classifyStripeV4 wrapper
   stripe-adapter.ts   legacy StripeAdapter
@@ -110,10 +110,15 @@ The other tools map one-to-one on their entity (see `classify.ts`).
 16 named risks + `stripe.uncategorized-write`, all with
 `acceptable_in_envs: [test, live]` (the fallback too, so a test-mode preset
 never accepts a live write). `refund-create` and `payout-create` carry
-`caps` + `infra_limits` (the two money-out actions). The fallback pattern
-`stripe.[**].W` matches every write and the engine keeps it in
-`risks_touched` ([`risk-evaluator.ts`](../../../packages/policy-engine/src/risk-evaluator.ts))
-: the two write presets therefore include `stripe[<mode>].uncategorized-write`.
+`caps` + `infra_limits` (the two money-out actions). `subscription-create`
+matches both slices of `create_subscription` (`customer[C].subscription.W`
+and the bare `payment-intent.W` of the immediate charge) since catalog v3 :
+the second used to reach only the fallback. The fallback pattern
+`stripe.[**].W` (`fallback: true`) counts only when no dedicated entry
+matched a write (ADR [[fallback-risk-only-when-uncategorized]]) : no preset
+includes it (P1.2-align removed `stripe[<mode>].uncategorized-write` from
+`test-mode-developer` and `finance-operator`), and its appearance in an audit
+log means a catalog entry is missing.
 
 Presets : `read-only` (no PII, hence no customer reads), `test-mode-developer`
 (everything on `[test]`, `auto`), `finance-operator` (`[live]` ; `approval`
@@ -140,7 +145,8 @@ argument is stripped before the call. Unknown tool → `isError` result.
 - **`test_key must be a test-mode key`** — the owner pasted a live key in
   the test field.
 - **A write is refused with `stripe[test].uncategorized-write` missing** —
-  the policy lacks the fallback ; the presets carry it for this reason.
+  the tool classifies to a slice no dedicated entry covers : add the catalog
+  entry (the fallback is never part of a preset).
 
 ## Tests
 

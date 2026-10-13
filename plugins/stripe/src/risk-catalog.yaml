@@ -12,9 +12,9 @@
 # resource the call targets, so a mission can accept
 # `stripe[test].refund-create` without `stripe[live].refund-create`.
 #
-# The fallback matches every write and the engine never drops it from
-# `risks_touched` (policy-engine `risk-evaluator.ts`) : a preset that allows
-# writes must therefore also carry the fallback of the same mode.
+# The fallback (`fallback: true`) counts only when no dedicated entry matched
+# a write (ADR fallback-risk-only-when-uncategorized) : no preset lists it,
+# and its appearance in an audit log means a catalog entry is missing.
 #
 # Two entries carry `caps` + `infra_limits` : `refund-create` and
 # `payout-create`, the two actions that move real money out of the account.
@@ -24,7 +24,7 @@
 # point `replaced_by` at its successor.
 
 provider: stripe
-catalog_version: 2
+catalog_version: 3
 catalog_date: 2026-10-13
 
 risks:
@@ -137,9 +137,12 @@ risks:
     reason: >-
       Creates a subscription. With immediate proration (the default without
       `billing_cycle_anchor`) Stripe charges the customer at creation. The
-      classifier also emits `payment-intent.W` so the cash side effect is
-      accepted explicitly.
-    matches: 'stripe.account[**].mode[**].customer[**].subscription.W'
+      classifier also emits `payment-intent.W` for that cash side effect ;
+      this entry covers both slices (the second used to fall to the fallback,
+      which presets no longer carry — catalog v3).
+    matches:
+      - 'stripe.account[**].mode[**].customer[**].subscription.W'
+      - 'stripe.account[**].mode[**].payment-intent.W'
     acceptable_in_envs: [test, live]
     vector:
       reversibility: costly
@@ -340,6 +343,7 @@ risks:
       means a tool classifies to a slice no entry covers : add the entry.
     matches: 'stripe.[**].W'
     acceptable_in_envs: [test, live]
+    fallback: true
     vector:
       reversibility: costly
       blast: account
@@ -439,11 +443,6 @@ presets:
         quota: 20
         rate_limit: { max: 10, window_seconds: 60 }
         gate: auto
-      # Co-touched by every write (see the header) ; same budget as the widest write.
-      - risk_id: stripe[test].uncategorized-write
-        quota: 1000
-        rate_limit: { max: 60, window_seconds: 60 }
-        gate: auto
 
   - id: finance-operator
     label: Finance operator
@@ -501,8 +500,3 @@ presets:
         quota: 10
         rate_limit: { max: 2, window_seconds: 60 }
         gate: approval
-      # Co-touched by every write (see the header) ; same budget as the widest write.
-      - risk_id: stripe[live].uncategorized-write
-        quota: 200
-        rate_limit: { max: 20, window_seconds: 60 }
-        gate: auto
