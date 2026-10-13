@@ -17,6 +17,10 @@
  * delegation with every token issued under it — and writes a
  * `delegation-revoked` entry (RFC 9700 §2.2.2, §4.14; the orchestrator's
  * decision for v5). The user grants a new delegation if the client was honest.
+ * The missions the delegation issued are **not** revoked — the honest client's
+ * agents may be at work on them — but the entry names the ones still running
+ * (`after.missions_to_review`) and the Delegations page lists them for the
+ * creator to review (`endDelegation`, `missionsToReview`).
  *
  * **One exception, the reuse window** (`oauth.refresh_reuse_window_seconds`,
  * 30 s by default, at most 60; ADR amendment of 2026-10-13). Two sessions of
@@ -49,6 +53,7 @@ import type { Logger } from '../logging';
 import type { Clock } from '../store/clock';
 import { toIso } from '../store/clock';
 import { REDEEM_DELEGATION_REVOKED, type DelegationsRepo } from '../store/repositories/delegations';
+import type { MissionsRepo } from '../store/repositories/missions';
 import type { UsersRepo } from '../store/repositories/users';
 import type { DelegationRecord, DelegationRevokeReason, OAuthClientRecord } from '../store/types';
 import type { ClientRegistry } from './clients';
@@ -105,6 +110,8 @@ export interface ClientCredentials {
 export interface TokenServiceDeps {
   readonly repo: DelegationsRepo;
   readonly users: Pick<UsersRepo, 'getById'>;
+  /** Read only when a replay ends a delegation: the missions it issued are named in the entry. */
+  readonly missions: Pick<MissionsRepo, 'listForCreator'>;
   readonly clients: ClientRegistry;
   readonly audit: AuditWriter;
   readonly rateLimiter: Pick<RateLimiter, 'take'>;

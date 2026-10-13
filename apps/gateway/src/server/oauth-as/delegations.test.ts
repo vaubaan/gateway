@@ -174,6 +174,138 @@ describe('DelegationService', () => {
   });
 });
 
+describe('a delegation revoked for a replay: the missions it issued are surfaced, never revoked silently', () => {
+  let rig: OAuthRig;
+  let client: OAuthClientRecord;
+
+  beforeEach(async () => {
+    rig = await openOAuthRig();
+    client = await rig.registerClient(undefined, 'Claude Code');
+  });
+  afterEach(() => rig.close());
+
+  async function missionOf(
+    name: string,
+    delegationId: string | null,
+    options: { expiresAt?: string | null } = {},
+  ) {
+    const connection =
+      (await rig.store.connections.listOwnedBy([{ kind: 'user', id: rig.ada.id }]))[0] ??
+      (await rig.store.connections.create({
+        provider: 'github',
+        owner: { kind: 'user', id: rig.ada.id },
+        displayName: 'gh',
+        credential: null,
+      }));
+    return rig.store.missions.create({
+      name,
+      creatorUserId: rig.ada.id,
+      periodSeconds: null,
+      expiresAt: options.expiresAt ?? null,
+      delegationId,
+      connections: [{ connectionId: connection.id, resourceScope: 'all', resourceIds: [] }],
+      policy: [
+        { riskId: 'github.code-read', quota: 1, rateLimit: 1, rateWindowSeconds: 60, gate: 'auto' },
+      ],
+    });
+  }
+
+  /** Renews once, lets the reuse window close, presents the first token again. */
+  async function replay(refreshToken: string): Promise<void> {
+    const refresh = (token: string) =>
+      rig.tokens.refresh(client, rig.form({ grant_type: 'refresh_token', refresh_token: token }));
+    await refresh(refreshToken);
+    rig.clock.advance(61_000);
+    await expect(refresh(refreshToken)).rejects.toMatchObject({ code: 'invalid_grant' });
+  }
+
+  it('names in the audit entry the missions still running, and leaves every one of them as it was', async () => {
+    const { tokens, delegationId } = await rig.issue(rig.ada, client);
+    const running = await missionOf('issued by the agent', delegationId);
+    const alsoRunning = await missionOf('issued by the agent, no expiry', delegationId);
+    const revoked = await missionOf('already revoked', delegationId);
+    await rig.store.missions.setStatus(revoked.id, 'revoked');
+    await missionOf('expired by then', delegationId, {
+      expiresAt: new Date(rig.clock.now().getTime() + 1_000).toISOString(),
+    });
+    const byHand = await missionOf('issued by hand', null);
+    rig.audit.entries.length = 0;
+
+    await replay(tokens.refresh_token);
+
+    const [entry] = rig.audit.admin.filter((e) => e.act === 'delegation-revoked');
+    expect(entry).toMatchObject({
+      user_id: rig.ada.id,
+      object: { type: 'delegation', id: delegationId },
+      after: {
+        status: 'revoked',
+        reason: 'refresh-token-replay',
+        missions_to_review: [
+          { mission_id: running.id, name: 'issued by the agent' },
+          { mission_id: alsoRunning.id, name: 'issued by the agent, no expiry' },
+        ],
+      },
+    });
+    // Surfaced, not revoked: nothing was written on any mission.
+    for (const mission of [running, alsoRunning, byHand]) {
+      expect((await rig.store.missions.getById(mission.id))?.status, mission.name).toBe('active');
+    }
+    expect(rig.audit.admin.some((e) => e.act === 'mission-revoked')).toBe(false);
+  });
+
+  it('the Delegations view lists them for review, until each is revoked or expires', async () => {
+    const { tokens, delegationId } = await rig.issue(rig.ada, client);
+    const first = await missionOf('first', delegationId);
+    const second = await missionOf('second', delegationId);
+    await replay(tokens.refresh_token);
+
+    let [view] = await rig.delegations.listFor(rig.ada);
+    expect(view).toMatchObject({ state: 'revoked', replayed: true });
+    expect(view?.toReview.map((m) => m.id)).toEqual([first.id, second.id]);
+    // Every mission it issued is still listed, as before.
+    expect(view?.missions.map((m) => m.id)).toEqual([first.id, second.id]);
+
+    await rig.store.missions.setStatus(first.id, 'revoked');
+    [view] = await rig.delegations.listFor(rig.ada);
+    expect(view?.toReview.map((m) => m.id)).toEqual([second.id]);
+  });
+
+  it('says nothing of the kind for a delegation the user, the client or an operator ended', async () => {
+    const { delegationId } = await rig.issue(rig.ada, client);
+    await missionOf('issued by the agent', delegationId);
+    rig.audit.entries.length = 0;
+    await rig.delegations.revoke(rig.ada, delegationId);
+    const [entry] = rig.audit.admin;
+    expect(entry?.after).not.toHaveProperty('missions_to_review');
+    const [view] = await rig.delegations.listFor(rig.ada);
+    expect(view).toMatchObject({ state: 'revoked', replayed: false, toReview: [] });
+  });
+
+  it('an authorization code presented twice is surfaced the same way', async () => {
+    const granted = await rig.grant(rig.ada, client);
+    const form = () =>
+      rig.form({
+        grant_type: 'authorization_code',
+        code: granted.code,
+        code_verifier: granted.pkce.verifier,
+        redirect_uri: granted.redirectUri,
+      });
+    await rig.tokens.exchangeCode(client, form());
+    const mission = await missionOf('issued between the two', granted.delegationId);
+    rig.audit.entries.length = 0;
+    await expect(rig.tokens.exchangeCode(client, form())).rejects.toMatchObject({
+      code: 'invalid_grant',
+    });
+    expect(rig.audit.admin[0]).toMatchObject({
+      act: 'delegation-revoked',
+      after: {
+        reason: 'authorization-code-replay',
+        missions_to_review: [{ mission_id: mission.id, name: 'issued between the two' }],
+      },
+    });
+  });
+});
+
 describe('DelegatedTokenVerifier', () => {
   let rig: OAuthRig;
   let client: OAuthClientRecord;
@@ -285,6 +417,7 @@ describe('DelegatedTokenVerifier', () => {
   describe('endDelegation: one function revokes and leaves the entry', () => {
     const deps = () => ({
       repo: rig.store.delegations,
+      missions: rig.store.missions,
       audit: rig.audit,
       clock: rig.clock,
       logger: silentLogger,

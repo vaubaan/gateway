@@ -37,9 +37,47 @@ export interface DelegationEnding {
 
 export interface EndDelegationDeps {
   readonly repo: Pick<DelegationsRepo, 'revokeIfActive' | 'getClient'>;
+  /** Read only when a replay ends the delegation: the missions it issued are named. */
+  readonly missions: Pick<MissionsRepo, 'listForCreator'>;
   readonly audit: AuditWriter;
   readonly clock: Clock;
   readonly logger: Logger;
+}
+
+/**
+ * True when the instance itself ended the delegation because a single-use
+ * credential came back: two parties held it, and the instance cannot tell which
+ * one issued what.
+ */
+export function endedByReplay(reason: DelegationRevokeReason | null): boolean {
+  return reason === 'refresh-token-replay' || reason === 'authorization-code-replay';
+}
+
+/**
+ * The missions a delegation issued that still serve, or may serve again: not
+ * revoked, not expired. After a replay these are the ones whoever held the
+ * stolen token may have issued, and whose mission token they would still
+ * hold. `orphaned` is kept in: the authority may come back.
+ *
+ * They are **named, never revoked** (ADR
+ * management-door-rotation-scope-and-replay-trace): most of the time the
+ * honest client issued them and its agents are at work; ending them is the
+ * creator's decision, made on the Delegations page with the list in front of
+ * them.
+ */
+export function missionsToReview(
+  delegation: Pick<DelegationRecord, 'id'>,
+  missionsOfUser: readonly MissionRecord[],
+  now: Date,
+): MissionRecord[] {
+  const nowIso = toIso(now);
+  return missionsOfUser.filter(
+    (mission) =>
+      mission.delegationId === delegation.id &&
+      mission.status !== 'revoked' &&
+      mission.status !== 'expired' &&
+      (mission.expiresAt === null || mission.expiresAt > nowIso),
+  );
 }
 
 /**
@@ -48,22 +86,26 @@ export interface EndDelegationDeps {
  * and the `delegation-revoked` entry. The entry names the client, and the
  * delegating user when somebody else acted (`after.delegating_user_id`); the
  * delegating user finds it in their audit either way (the store's scope reads
- * the delegation's owner).
+ * the delegation's owner). After a replay it also names the missions to review
+ * (`after.missions_to_review`: id and name of each mission the delegation
+ * issued that still runs), passed as `review`.
  */
 export async function recordDelegationEnded(
   deps: Pick<EndDelegationDeps, 'audit' | 'clock' | 'logger'>,
   delegation: DelegationRecord,
   client: OAuthClientRecord | null,
   by: DelegationEnding,
+  review: readonly MissionRecord[] = [],
 ): Promise<void> {
   const { audit, clock, logger } = deps;
-  const replay = by.reason === 'refresh-token-replay' || by.reason === 'authorization-code-replay';
+  const replay = endedByReplay(by.reason);
   const log = replay ? logger.warn.bind(logger) : logger.info.bind(logger);
   log('delegation revoked', {
     delegation_id: delegation.id,
     user_id: delegation.userId,
     client_id: client?.clientId ?? null,
     reason: by.reason,
+    ...(replay ? { missions_to_review: review.map((mission) => mission.id) } : {}),
   });
   await audit.write({
     kind: 'admin',
@@ -78,6 +120,14 @@ export async function recordDelegationEnded(
       ...(by.actorId === delegation.userId ? {} : { delegating_user_id: delegation.userId }),
       client_id: client?.clientId ?? null,
       client_name: client?.name ?? null,
+      ...(replay
+        ? {
+            missions_to_review: review.map((mission) => ({
+              mission_id: mission.id,
+              name: mission.name,
+            })),
+          }
+        : {}),
     },
     delegated_client_id: by.viaClient ? (client?.clientId ?? null) : null,
   });
@@ -96,7 +146,21 @@ export async function endDelegation(
 ): Promise<DelegationRecord | null> {
   const revoked = await deps.repo.revokeIfActive(delegationId, by.reason);
   if (!revoked) return null;
-  await recordDelegationEnded(deps, revoked, await deps.repo.getClient(revoked.clientId), by);
+  // Read after the revocation: nothing more can be issued through it.
+  const review = endedByReplay(by.reason)
+    ? missionsToReview(
+        revoked,
+        await deps.missions.listForCreator(revoked.userId),
+        deps.clock.now(),
+      )
+    : [];
+  await recordDelegationEnded(
+    deps,
+    revoked,
+    await deps.repo.getClient(revoked.clientId),
+    by,
+    review,
+  );
   return revoked;
 }
 
@@ -118,6 +182,14 @@ export interface DelegationView {
   readonly liveUntil: string | null;
   /** The missions issued through this delegation, in the user's name. */
   readonly missions: readonly MissionRecord[];
+  /** True when the instance revoked it on a replayed code or refresh token. */
+  readonly replayed: boolean;
+  /**
+   * After a replay: the missions among `missions` that still run. Somebody else
+   * held a token of this delegation and may have issued some of them. Empty for
+   * any other delegation.
+   */
+  readonly toReview: readonly MissionRecord[];
 }
 
 export type RevokeDelegationResult =
@@ -147,7 +219,8 @@ export class DelegationService {
     const issued = (await missions.listForCreator(user.id)).filter(
       (mission) => mission.delegationId !== null,
     );
-    const now = toIso(clock.now());
+    const instant = clock.now();
+    const now = toIso(instant);
     const views: DelegationView[] = [];
     // One read per client, however many delegations it holds.
     const clientsById = new Map<string, OAuthClientRecord | null>();
@@ -172,6 +245,10 @@ export class DelegationService {
         lastTokenAt: tokens?.lastTokenAt ?? null,
         liveUntil: delegation.status === 'revoked' ? null : liveUntil,
         missions: issued.filter((mission) => mission.delegationId === delegation.id),
+        replayed: endedByReplay(delegation.revokeReason),
+        toReview: endedByReplay(delegation.revokeReason)
+          ? missionsToReview(delegation, issued, instant)
+          : [],
       });
     }
     return views.reverse();
