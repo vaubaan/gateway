@@ -99,6 +99,22 @@ export function evaluateCall(input: EvaluateCallInput): RiskDecision {
     );
   }
 
+  // What a call does is concrete. "Any identifier" is a whole segment (`[*]`, `[**]`,
+  // or the identifier `*` the classifiers use as its placeholder); a `*` INSIDE an
+  // identifier can only be a caller's value that a classifier passed through, and the
+  // matcher would read it as a glob — pricing the call on whatever it happens to match
+  // instead of on what it names.
+  const globbed = executed_slices.filter(carriesGlobIdentifier);
+  if (globbed.length > 0) {
+    return denied(
+      executed_slices,
+      [],
+      [],
+      `${globbed.map(serializeSlice).join(' ; ')}: an executed slice may not carry '*' inside an identifier ` +
+        `(a classifier names what the call touches, or '[*]' for any). Refusing: the value would be read as a pattern.`,
+    );
+  }
+
   const { risks_touched, not_acceptable_here, uncovered } = collectQualifiedRisks(
     executed_slices,
     catalog,
@@ -181,6 +197,20 @@ function denied(
     executed_slices,
     hint,
   };
+}
+
+/**
+ * True when an identifier of the slice carries a glob: a `*` inside an `ident` value
+ * other than the value `*` itself, or any `*` in a `list` entry. Whole-segment
+ * wildcards (`wild-one`, `wild-rec`) and the placeholder identifier `*` are how a
+ * classifier says "any"; they are not globs of a caller's value.
+ */
+export function carriesGlobIdentifier(slice: Slice): boolean {
+  return slice.path.some((segment) => {
+    if (segment.kind === 'ident') return segment.value !== '*' && segment.value.includes('*');
+    if (segment.kind === 'list') return segment.values.some((value) => value.includes('*'));
+    return false;
+  });
 }
 
 /** The resolver of the host mode, or `null` in the unqualified mode. Decided by the input alone. */

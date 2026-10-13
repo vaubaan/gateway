@@ -44,7 +44,13 @@
  * mint (`W`) ; `list_env_vars decrypt=true` adds the plaintext slice.
  */
 
-import type { ClassifyOutcome, Resource, Slice, SliceSegment } from '@vaubaan/plugin-sdk';
+import {
+  NO_SINGLE_ENV,
+  type ClassifyOutcome,
+  type Resource,
+  type Slice,
+  type SliceSegment,
+} from '@vaubaan/plugin-sdk';
 
 import { isCustomTool, toolDeclaresProperty, toolRequiresProperty } from './tools.ts';
 
@@ -195,15 +201,23 @@ export function toVercelEnv(target: unknown): VercelEnv | null {
  * firewall, env-less deployment reads). Offered to the host as the resolver
  * for env-qualified Vercel risks : the project resource's owner label does
  * **not** carry the Vercel environment, the arguments do.
+ *
+ * `NO_SINGLE_ENV` for a slice whose `env` segment is followed by anything but
+ * one label of the triad (`env[*]`, `env[prod,preview]`, `env[staging]`) :
+ * such a slice reaches several environments, or one the provider does not
+ * have. No env-scoped risk can be priced on it, and the owner's label must
+ * not stand in — the host refuses. This classifier emits no such slice ; the
+ * rule is what keeps a future one from failing open.
  */
-export function vercelEnvOf(slice: Slice): VercelEnv | null {
+export function vercelEnvOf(slice: Slice): VercelEnv | null | typeof NO_SINGLE_ENV {
   if (slice.provider !== PROVIDER) return null;
   for (let i = 0; i < slice.path.length - 1; i++) {
     const seg = slice.path[i]!;
+    if (seg.kind !== 'name' || seg.value !== 'env') continue;
     const next = slice.path[i + 1]!;
-    if (seg.kind === 'name' && seg.value === 'env' && next.kind === 'ident') {
-      return toVercelEnv(next.value);
-    }
+    if (next.kind === 'name') return null;
+    const env = next.kind === 'ident' ? toVercelEnv(next.value) : null;
+    return env ?? NO_SINGLE_ENV;
   }
   return null;
 }

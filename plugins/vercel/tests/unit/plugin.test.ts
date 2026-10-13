@@ -24,7 +24,7 @@ import {
   mockFetch,
   type RecordedCall,
 } from '@vaubaan/plugin-sdk/testing';
-import { envResolverFor } from '@vaubaan/policy-engine';
+import { envResolverFor, NO_SINGLE_ENV } from '@vaubaan/policy-engine';
 
 import {
   classifyVercel,
@@ -290,6 +290,29 @@ describe('vercelEnvOf — the environment a slice touches', () => {
     expect(resolver.resolveEnv(parseSlice('vercel.project[prj_abc].project-settings.W'))).toBe(
       'staging',
     );
+  });
+
+  test.each([
+    'vercel.project[prj_abc].env[*].env-var[K].W',
+    'vercel.project[prj_abc].env[**].W',
+    'vercel.project[prj_abc].env[prod,preview].env-var[K].W',
+    'vercel.project[prj_abc].env[prod*].env-var[K].W',
+    'vercel.project[prj_abc].env[staging].env-var[K].W',
+  ])(
+    '%s names no single environment of the triad: none is resolved, the label is not used',
+    (s) => {
+      expect(vercelEnvOf(parseSlice(s))).toBe(NO_SINGLE_ENV);
+      const labelledStaging: Resource = { ...app, env: 'staging' };
+      const resolver = envResolverFor([labelledStaging], vercelPlugin.envOf);
+      expect(resolver.resolveEnv(parseSlice(s))).toBeNull();
+    },
+  );
+
+  test('no slice the classifier emits names several environments', () => {
+    // `upsert_env_var` without a target reaches all three: one slice per environment.
+    const out = classifyVercel('vercel__upsert_env_var', { key: 'K', value: 'v' }, [app]);
+    if (!('slices' in out)) throw new Error('expected slices');
+    expect(out.slices.map((s) => vercelEnvOf(s))).not.toContain(NO_SINGLE_ENV);
   });
 });
 

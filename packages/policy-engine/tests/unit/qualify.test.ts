@@ -17,6 +17,7 @@ import { parseSlice } from '../../src/slice-dsl.ts';
 import {
   envResolverFor,
   isEnvScopedEntry,
+  NO_SINGLE_ENV,
   noEnvResolver,
   qualifyRiskId,
   resolveVector,
@@ -154,7 +155,35 @@ describe('resourceEnvResolver', () => {
   const prod: Resource = { provider: 'supabase', ref: 'prd-ref', env: 'prod', displayName: 'Prod' };
   const unlabelled: Resource = { provider: 'github', ref: 'acme/app', displayName: 'acme/app' };
 
-  test('matches the first ident segment equal to a resource ref', () => {
+  test('two identifiers that name resources of different environments: no environment', () => {
+    // The resolver cannot know which segment is the resource. An identifier a caller
+    // chose (a table, a key, a branch) that equals the ref of another resource must not
+    // lend that resource's label to the call: the refs disagree, so nothing is resolved
+    // and an env-scoped risk is refused.
+    const r = resourceEnvResolver([staging, prod]);
+    expect(
+      r.resolveEnv(parseSlice('supabase.project[prd-ref].schema[public].table[stg-ref].W')),
+    ).toBeNull();
+    expect(
+      r.resolveEnv(parseSlice('supabase.schema[stg-ref].project[prd-ref].table[t].W')),
+    ).toBeNull();
+    expect(r.resolveEnv(parseSlice('supabase.project[stg-ref,prd-ref].table[t].W'))).toBeNull();
+  });
+
+  test('several identifiers that name resources of ONE environment keep it', () => {
+    const other: Resource = { ...staging, ref: 'stg-2' };
+    const r = resourceEnvResolver([staging, other, prod]);
+    expect(r.resolveEnv(parseSlice('supabase.project[stg-ref,stg-2].table[t].R'))).toBe('staging');
+    expect(r.resolveEnv(parseSlice('supabase.project[stg-ref].copy[stg-ref].R'))).toBe('staging');
+  });
+
+  test('a labelled and an unlabelled resource cited together: no environment', () => {
+    const bare: Resource = { provider: 'supabase', ref: 'bare-ref', displayName: 'Bare' };
+    const r = resourceEnvResolver([staging, bare]);
+    expect(r.resolveEnv(parseSlice('supabase.project[stg-ref].table[bare-ref].W'))).toBeNull();
+  });
+
+  test('matches the ident segment equal to a resource ref', () => {
     const r = resourceEnvResolver([staging, prod]);
     expect(
       r.resolveEnv(parseSlice('supabase.project[prd-ref].schema[public].table[t].row[*].W')),
@@ -266,6 +295,14 @@ describe('envResolverFor — plugin-derived env first, resource label next, else
     expect(envResolverFor(resources, () => null).resolveEnv(parseSlice('x.thing[r].W'))).toBe(
       'prod',
     );
+  });
+
+  test('NO_SINGLE_ENV from the hook: no environment, and the label does not stand in', () => {
+    // The slice names its environment, but not exactly one (`env[*]`, `env[prod,preview]`).
+    // Falling back to the owner's label would price a call that reaches `prod` as `staging`.
+    const resources: Resource[] = [{ provider: 'x', ref: 'r', env: 'staging', displayName: 'r' }];
+    const resolver = envResolverFor(resources, () => NO_SINGLE_ENV);
+    expect(resolver.resolveEnv(parseSlice('x.thing[r].env[*].var[K].W'))).toBeNull();
   });
 
   test('without a hook it is exactly resourceEnvResolver', () => {

@@ -24,6 +24,7 @@ import type {
 } from '@vaubaan/shared';
 
 import type { CredentialSecret, CredentialSpec, ProviderAppConfig } from './credential.ts';
+import type { EnvOf } from './env-of.ts';
 import type { ToolResultPartSink } from './streaming.ts';
 
 /**
@@ -187,11 +188,16 @@ export interface ProviderPlugin {
    * (spec vaubaan-gateway §0 "Resource"). Pure. Return `undefined` when the slice carries no
    * environment of its own ; the host then falls back to the owner's label
    * on the matching resource (`envResolverFor` in `@vaubaan/policy-engine`).
+   * Return `NO_SINGLE_ENV` when the slice names its environment but not
+   * exactly one (a wildcard, a list, a value outside the provider's closed
+   * set) : the host then resolves no environment at all and refuses every
+   * env-scoped risk the slice touches — the label never stands in for a
+   * slice that reaches several environments.
    * Absent when the environment always lives on the resource label
    * (Supabase, Railway, Stripe's per-mode resources). `envFromSliceSegment`
    * builds the common segment-lookup implementation.
    */
-  envOf?(slice: Slice, resources: readonly Resource[]): string | undefined;
+  envOf?(slice: Slice, resources: readonly Resource[]): ReturnType<EnvOf>;
 
   /**
    * Override of the credential refresh for a non-standard flow (a re-minted

@@ -126,8 +126,18 @@ export const noEnvResolver: EnvResolver = {
 
 /**
  * Default resolver : match the slice against the resources the mission may
- * touch. The slice's provider must equal `resource.provider` and the first
- * `ident` segment of the slice path that equals a `resource.ref` wins.
+ * touch. The slice's provider must equal `resource.provider` ; the
+ * identifiers of the slice path (`ident` segments and `list` entries) that
+ * equal a `resource.ref` name the resources the slice touches, and their
+ * environment is the answer **when they all carry the same one**.
+ *
+ * The resolver cannot know which segment of a slice is the resource : every
+ * identifier is compared. So an identifier a caller chose (a table, a key, a
+ * branch) that happens to equal the ref of another resource is counted too,
+ * and when the cited resources disagree — two labels, or a labelled and an
+ * unlabelled one — the answer is `null` : no environment, hence a refusal of
+ * every env-scoped risk the call touches. Taking the first match instead
+ * would let such an identifier lend its resource's label to the call.
  *
  * Returns `null` when no resource matches — either the slice is
  * account-rooted (no ref in the path, e.g. `vercel.account.team[…]`) or the
@@ -149,12 +159,17 @@ export function resourceEnvResolver(resources: ReadonlyArray<Resource>): EnvReso
       if (matching.length === 0) return null;
       const refToEnv = new Map<string, string | null>();
       for (const r of matching) refToEnv.set(r.ref, r.env ?? null);
+      const cited = new Set<string | null>();
       for (const seg of slice.path) {
-        if (seg.kind === 'ident') {
-          const env = refToEnv.get(seg.value);
-          if (env !== undefined) return env;
+        const values = seg.kind === 'ident' ? [seg.value] : seg.kind === 'list' ? seg.values : [];
+        for (const value of values) {
+          const env = refToEnv.get(value);
+          if (env !== undefined) cited.add(env);
         }
       }
+      if (cited.size === 1) return [...cited][0] ?? null;
+      // Resources that disagree on the environment : none can be named.
+      if (cited.size > 1) return null;
       if (matching.length === 1) return matching[0]!.env ?? null;
       return null;
     },
@@ -162,16 +177,30 @@ export function resourceEnvResolver(resources: ReadonlyArray<Resource>): EnvReso
 }
 
 /**
+ * What an `EnvDeriver` answers for a slice that names its environment but
+ * not exactly one — `env[*]`, `env[prod,preview]`, `env[prod*]` : the slice
+ * has no single environment, and the owner's label on the resource must not
+ * stand in for it (the label says what the *resource* is, the slice says the
+ * call reaches several environments of it). The composed resolver then
+ * answers `null`, and every env-scoped risk the slice touches is refused.
+ *
+ * A value of its own rather than `null` : `null` and `undefined` both mean
+ * "this slice says nothing about its environment, use the label".
+ */
+export const NO_SINGLE_ENV: unique symbol = Symbol.for('@vaubaan/policy-engine/no-single-env');
+
+/**
  * A plugin-side derivation of the environment of a slice : the `env[prod]`
  * segment for Vercel, the only shipped plugin with one. Returns `undefined` (or
  * `null`) when the slice carries no environment of its own, so the
- * resource label applies. Mirrors `ProviderPlugin.envOf` in the SDK
- * without importing it (the SDK depends on this package, not the reverse).
+ * resource label applies, and `NO_SINGLE_ENV` when it names several. Mirrors
+ * `ProviderPlugin.envOf` in the SDK without importing it (the SDK depends on
+ * this package, not the reverse).
  */
 export type EnvDeriver = (
   slice: Slice,
   resources: readonly Resource[],
-) => string | null | undefined;
+) => string | null | undefined | typeof NO_SINGLE_ENV;
 
 /**
  * The composed default resolver (ADR fallback-risk-only-when-uncategorized,
@@ -181,6 +210,8 @@ export type EnvDeriver = (
  *
  *   1. the plugin's `envOf(slice, resources)` when given and non-empty —
  *      the environment is a slice segment or an argument (Vercel) ;
+ *      `NO_SINGLE_ENV` ends the resolution there with `null` : the slice
+ *      names several environments and no label may replace them ;
  *   2. else the owner's label on the matching resource
  *      (`resourceEnvResolver`) — Supabase, Railway, and Stripe whose
  *      plugin labels one resource per mode at discovery ;
@@ -198,6 +229,7 @@ export function envResolverFor(
   return {
     resolveEnv(slice: Slice): string | null {
       const derived = derive(slice, resources);
+      if (derived === NO_SINGLE_ENV) return null;
       if (typeof derived === 'string' && derived.length > 0) return derived;
       return byLabel.resolveEnv(slice);
     },
