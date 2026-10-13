@@ -300,6 +300,34 @@ describe('CallPipeline', () => {
     expect(typeof e.upstream_latency_ms).toBe('number');
   });
 
+  test('an argument JSON cannot carry (Infinity) is rejected before any stage: the approver would have read `null`', async () => {
+    let touched = false;
+    const { p, audit } = pipeline({
+      resources: {
+        resolve: async () => {
+          touched = true;
+          return { ok: true, target: { connection, resource } };
+        },
+      },
+    });
+    // `1e999` in a JSON-RPC body parses to Infinity; serialized again it reads `null`.
+    const args = JSON.parse('{"query":"select 1","limit":1e999}') as Record<string, unknown>;
+    const out = await p.execute(ctx, { ...call, args });
+    expect(out.kind).toBe('rejected');
+    if (out.kind !== 'rejected') return;
+    expect(out.reason).toContain('limit');
+    expect(out.reason).toContain('Infinity');
+    expect(touched).toBe(false);
+    expect(audit.calls).toHaveLength(1);
+    expect(audit.calls[0]).toMatchObject({
+      decision: 'refused',
+      refusal_code: null,
+      refusal_reason: out.reason,
+      connection_id: null,
+      remaining_budget: null,
+    });
+  });
+
   test('inactive mission: refused first, nothing else consulted, audited with the code', async () => {
     let touched = false;
     const { p, audit } = pipeline({

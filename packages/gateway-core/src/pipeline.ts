@@ -59,7 +59,7 @@ import {
   refuse,
   type Refusal,
 } from './errors.ts';
-import { fingerprintArguments } from './fingerprint.ts';
+import { fingerprintArguments, unfaithfulArgument } from './fingerprint.ts';
 import type { CallVerdict } from './risk-gateway.ts';
 import type {
   BearerKind,
@@ -473,6 +473,19 @@ export class CallPipeline {
    */
   async execute(ctx: MissionContext, call: CallRequest): Promise<CallOutcome> {
     const now = this.now();
+    // Before the fingerprint is taken: a value JSON cannot carry (`1e999` parses to
+    // Infinity, written back as `null`) would be approved as one thing and executed
+    // as another. Structural, like an unknown tool: no stage sees the call.
+    const unfaithful = unfaithfulArgument(call.args);
+    if (unfaithful) {
+      return this.rejected(
+        // Its hash is still the canonical one (the value reads `null` there), so the
+        // entry joins the others of the same arguments. A BigInt has no canonical
+        // form and cannot come from a JSON body: the entry then carries no arguments.
+        this.baseEntry(ctx, unfaithful.kind === 'bigint' ? { ...call, args: {} } : call, now),
+        `argument '${unfaithful.path}' is ${unfaithful.value}: arguments must be JSON values (a finite number, a string, a boolean, null, an array or an object).`,
+      );
+    }
     const base = this.baseEntry(ctx, call, now);
 
     const inactive = checkMissionActive(ctx, now);

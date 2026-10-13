@@ -199,6 +199,34 @@ function logConfigurationSummary(
         ? 'enabled'
         : 'disabled',
     key_version: config.encryption.keyVersion,
+    trusted_proxies: config.trustedProxies.length,
+  });
+  warnWithoutTrustedProxies(logger, config);
+}
+
+/**
+ * The instance always sits behind a TLS terminator, so every request reaches it from
+ * that proxy: with `trusted_proxies` empty no client address is believed, and every
+ * limit keyed on the address is one window shared by all callers. Nothing is bypassed
+ * (a forged `X-Forwarded-For` is ignored), but one caller can then hold the others at
+ * 429: anybody on the request page, and — knowing a token prefix, which is not a
+ * secret — an agent whose token is not verified yet. Said once at boot, naming the key.
+ */
+export const NO_TRUSTED_PROXY_WARNING =
+  'trusted_proxies is empty: no client address is resolved, so the address-keyed limits are shared by all callers';
+
+function warnWithoutTrustedProxies(logger: Logger, config: InstanceConfig): void {
+  if (config.trustedProxies.length > 0) return;
+  logger.warn(NO_TRUSTED_PROXY_WARNING, {
+    key: 'trusted_proxies',
+    env: 'VAUBAAN_TRUSTED_PROXIES',
+    affected: [
+      'request page: one per-IP window for everybody',
+      'execution door: one token-verification window per token prefix (a flood of wrong secrets on a known prefix holds a not-yet-verified agent at 429)',
+      'audit: client_ip is not recorded',
+    ],
+    remedy:
+      'set it to the address or CIDR block of the reverse proxy in front of the instance (deploy/README.md)',
   });
 }
 
