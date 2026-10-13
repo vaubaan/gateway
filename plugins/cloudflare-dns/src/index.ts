@@ -34,7 +34,7 @@ export const cloudflareDnsPlugin = definePlugin({
     'DNS zones and records on Cloudflare : records, BIND import / export, zone settings, ' +
     'DNSSEC and cache purge — one resource per zone.',
   summary:
-    'One connection is one Cloudflare API token; one resource is one DNS zone (a domain). A mission touches only the zones it was given. DNS has no environment: ordinary records, apex / MX / NS changes, deletions, imports and zone settings are separate risks instead.',
+    'One account is one Cloudflare API token; one resource is one DNS zone (a domain). A mission touches only the zones it was given. DNS has no environment: ordinary records, apex / MX / NS changes, deletions, imports and zone settings are separate permissions instead.',
   manualRevocation:
     'Delete the API token in the Cloudflare dashboard, under My Profile, API Tokens.',
   docsUrl:

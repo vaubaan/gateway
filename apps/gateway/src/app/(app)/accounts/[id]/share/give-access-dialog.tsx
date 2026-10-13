@@ -33,14 +33,14 @@ import {
   Select,
   Tag,
 } from '@/components/ui';
-import { ACTIONS, count, formatNumber, giveAccessLabel, TERMS } from '@/lib/vocabulary';
+import { ACTIONS, formatNumber, giveAccessLabel } from '@/lib/vocabulary';
 import { groupByKind } from '@/server/missions/catalog-view';
 import type { CatalogRisk } from '@/server/missions/model';
 import { riskReferencePath } from '@/server/providers/links';
 import {
   envNotes,
   selectAllIds,
-  SEVERITY_ORDER,
+  summarizeRestriction,
   type EnvLabelling,
 } from '@/server/shares/restriction';
 
@@ -167,11 +167,6 @@ export function GiveAccessDialog({
     });
   }
 
-  const chosen = risks.filter((risk) => selected.has(risk.risk_id));
-  const perLevel = SEVERITY_ORDER.map((level) => ({
-    level,
-    n: chosen.filter((risk) => risk.level === level).length,
-  })).filter((entry) => entry.n > 0);
   const everything = selectAllIds(risks);
 
   if (confirming && restore) {
@@ -427,11 +422,7 @@ export function GiveAccessDialog({
         </div>
 
         <p className={styles.summary} data-testid="restriction-summary" aria-live="polite">
-          {selected.size === 0
-            ? 'Nothing ticked: this access would allow nothing.'
-            : `${formatNumber(chosen.length)} of ${count(risks.length, TERMS.risk)} · ${perLevel
-                .map((entry) => `${formatNumber(entry.n)} ${entry.level}`)
-                .join(', ')}`}
+          {summarizeRestriction(risks, selected)}
         </p>
 
         {notes.length > 0 && (

@@ -71,6 +71,11 @@
   flex-direction: column;
   min-width: 0;
 }
+.onText .sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .permission {
   display: -webkit-box;
   overflow: hidden;

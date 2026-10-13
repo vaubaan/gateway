@@ -225,8 +225,9 @@ describe.skipIf(!hasBuild())('npm run demo', () => {
     ['/accounts', 'Acme product repositories'],
     ['/waiting', 'Nightly dependency audit'],
     ['/activity', 'github__list_pull_requests'],
-    ['/shares', 'Acme billing'],
-    ['/delegations', 'Claude Code (demo)'],
+    // What a colleague gave access to is a region of Accounts; connected apps are a page of Settings.
+    ['/accounts', 'Acme billing'],
+    ['/settings/connected-apps', 'Claude Code (demo)'],
     ['/admin/provider-apps', 'installations verified'],
     ['/admin/groups', 'GitHub admins'],
   ])('shows seeded data on %s', async (path, seeded) => {
@@ -279,7 +280,7 @@ describe.skipIf(!hasBuild())('npm run demo', () => {
       await (await browser.get(`/activity?holder=${encodeURIComponent(CI_TOKEN_NAME)}`)).text(),
     );
     expect(byCi).toContain(CI_TOKEN_NAME);
-    expect(byCi).toContain('named token');
+    expect(byCi).toContain('machine key');
     expect(byCi).toContain('github__list_branches');
     const byBob = readable(
       await (await browser.get(`/activity?holder=${encodeURIComponent(BOB.email)}`)).text(),

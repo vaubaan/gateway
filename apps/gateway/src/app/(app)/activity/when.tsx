@@ -27,7 +27,7 @@ export function When({ ts }: { ts: string }) {
     ? date.toLocaleTimeString(undefined, { hour12: false })
     : iso.slice(TIME_START, TIME_END);
   const day = local
-    ? date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+    ? date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
     : shortDate(iso, date);
   return (
     <time dateTime={iso} title={iso} className={styles.when} suppressHydrationWarning>

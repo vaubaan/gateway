@@ -33,7 +33,7 @@ export const vercelCredential: ApiKeyCredentialSpec = {
       name: 'token',
       label: 'Access token',
       secret: true,
-      help: 'Create a token in Account Settings → Tokens, scoped to the team you connect. Pick an expiration ; the connection expires with it.',
+      help: 'Create a token in Account Settings → Tokens, scoped to the team you connect. Pick an expiration; the account needs reconnecting when it passes.',
     },
     {
       name: 'team_id',
@@ -41,7 +41,7 @@ export const vercelCredential: ApiKeyCredentialSpec = {
       secret: false,
       placeholder: 'team_…',
       pattern: VERCEL_TEAM_ID_PATTERN,
-      help: 'Team Settings → General → Team ID. Every call of this connection is made on behalf of this team.',
+      help: 'Team Settings → General → Team ID. Every call through this account is made on behalf of this team.',
     },
   ],
 };

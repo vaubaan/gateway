@@ -9,7 +9,7 @@
 import type { ProviderGrantOutcome } from '../store/types';
 
 /** When the plugin gives no sentence of its own. */
-export const DEFAULT_BY_HAND = "Remove the access in the provider's own settings.";
+export const DEFAULT_BY_HAND = "Remove the access in the service's own settings.";
 
 /** Said before the act: what revoking will do at the provider. */
 export function providerGrantForecast(
@@ -43,7 +43,7 @@ export function providerGrantReport(
       return {
         actionNeeded: false,
         title: `Access withdrawn at ${providerLabel}`,
-        text: `${providerLabel} confirmed that the access granted to this connection is withdrawn. Nothing is left to remove there.`,
+        text: `${providerLabel} confirmed that the access granted to this account is withdrawn. Nothing is left to remove there.`,
       };
     case 'failed':
       return {

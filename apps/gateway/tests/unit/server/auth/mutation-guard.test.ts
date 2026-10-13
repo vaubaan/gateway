@@ -272,7 +272,7 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
   ),
   'oauth.handlers.revokeDelegation': form('user', 303, (rig, headers) =>
     rig.root.oauth.handlers.revokeDelegation(
-      post(`/delegations/${rig.delegationId}/revoke`, headers, {}),
+      post(`/settings/connected-apps/${rig.delegationId}/revoke`, headers, {}),
       rig.delegationId,
     ),
   ),

@@ -9,6 +9,7 @@
 import { Callout, PageHeader, SubNav, SubNavFrame } from '@/components/ui';
 import { PAGES } from '@/lib/vocabulary';
 
+import { AccountSections } from './sections-accounts';
 import { ListSections, PermissionSections } from './sections-data';
 import { GallerySection } from './specimen';
 import { FormSections, LegacySections, OverlaySections, StateSections } from './sections-feedback';
@@ -73,6 +74,13 @@ export const GALLERY_SECTIONS: readonly {
       { id: 'legacy', label: 'Kept for older pages' },
     ],
   },
+  {
+    group: 'Accounts and settings',
+    items: [
+      { id: 'pick', label: 'Choice cards' },
+      { id: 'confirm-submit', label: 'Asked first' },
+    ],
+  },
 ];
 
 export function Gallery() {
@@ -112,6 +120,7 @@ export function Gallery() {
         <OverlaySections />
         <FormSections />
         <LegacySections />
+        <AccountSections />
       </SubNavFrame>
     </>
   );

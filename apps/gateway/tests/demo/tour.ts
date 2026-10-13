@@ -102,19 +102,20 @@ The named token "${seeded.team.named.name}" of "${seeded.team.mission.name}" (st
 Things to try
   1. Sign in as Alice. Missions lists ${seeded.counts.missions} missions in every state: active,
      quota spent, waiting for an approval, expired, revoked, issued by an agent.
-  2. Connect an account: Accounts -> Connect a provider.
+  2. Connect an account: Accounts -> Connect an account, then pick a service.
        Stripe      test key  sk_test_demo        live key  sk_live_demo
        Cloudflare  API token demo-cloudflare-token-0123456789
        Resend      API key   re_demo_key
        Upstash     email     any address         API key   demo-key
        Vercel      token     demo-vercel-token   team id   team_demo
        GitHub      opens a simulated installation page: pick an organisation.
-     Any value of the right shape is accepted. Supabase and Railway connect
-     through an OAuth app the demo does not configure: the picker says so.
-  3. Read what a service allows: Reference -> GitHub. What the plugin connects to,
-     then four tabs: its presets side by side against the risks, each risk with
-     the reason it is a risk and its six-cell profile, its data model, its
-     tools. Supabase adds a plane control (db, storage, auth, functions).
+     Any value of the right shape is accepted; each field says its shape.
+     Supabase and Railway need a company app the demo does not register: the
+     picker says so.
+  3. Read what a service allows: Reference -> GitHub. Its permissions compared
+     across its presets ("why?" unfolds the reason and the six words behind a
+     severity), its tools, how it is modelled. Supabase adds a filter by part
+     (db, storage, auth, functions).
   4. Issue a mission on one screen: Missions -> New mission. Include a
      connection and pick a preset: the block says what it allows, what waits
      for your approval and what it leaves out. Switch to Custom to accept risks
@@ -133,11 +134,13 @@ Things to try
      with its arguments (${seeded.openApprovalUrl}).
      Approve it, then replay the call with exactly the same arguments:
      ${approvalReplayCommand(origin, seeded)}
-  9. Share to Bob: Accounts -> "${seeded.sharedConnection.name}" -> Share. Bob already
-     holds a share of it; sign out, sign in as Bob: Accounts -> "Shared with you", and his mission.
- 10. As Alice, revoke that share; as Bob, his mission now reads "orphaned" and
-     every call with its token is refused. Share again as Alice: the same
-     mission comes back, same token, same counters.
+  9. Give access to Bob: Accounts -> "${seeded.sharedConnection.name}" -> Give access. Bob
+     already holds one ("Who has access"); sign out, sign in as Bob: Accounts ->
+     "Shared with you", and his mission.
+ 10. As Alice, remove that access ("Who has access" -> Remove); as Bob, his
+     mission is stopped and every call with its key is refused. Give access
+     again as Alice: the dialog names the mission it brings back — same key,
+     same limits.
  11. Work on a mission as a team. Alice added Bob as a member of
      "${seeded.team.mission.name}" and created the named token "${seeded.team.named.name}".
      Sign in as Bob: Missions -> "Shared with me" -> that mission. He reads it and
@@ -152,18 +155,21 @@ Things to try
      each token was last used; "Session" has "Calls per token holder", and each
      call of the timeline names its holder. Remove Bob: his token is refused at
      once (401, reason "holder-removed"), the others keep working.
- 12. Activity: every call and every administrative act, with filters (mission,
-     token holder, agent label, decision). On a mission, "Session" shows the
+ 12. Activity: every call and every change a person made, with filters (period,
+     mission, account, decision, key holder, agent). "detail" on a line shows the
+     key, the permissions touched and what is left. On a mission, "Session" shows the
      calls of the current period per token holder and per agent label
      ("planner", "coder").
- 13. Settings, as Alice (she administers the gateway): under Administration,
-     Sign-in, Company apps (the GitHub App), Teams ("GitHub admins",
-     "Contractors"), Accounts without owner, Registered apps ("Claude Code
-     (demo)"), Telemetry (off). Settings also holds the theme (System, Light,
-     Dark) and the interface reference (/design).
- 14. Sign in as Carol: she sees the GitHub connection owned by the group
+ 13. Settings, as Alice (she administers the gateway): Connected apps ("Claude
+     Code (demo)"); under Administration, Setup (a checklist of what is left),
+     Sign-in, Company apps (the GitHub App), People, Teams ("GitHub admins",
+     "Contractors"), Accounts without owner, Telemetry (off), Registered apps.
+     Settings also holds the theme (System, Light, Dark) and the interface
+     reference (/design).
+ 14. Sign in as Carol: she sees the GitHub account owned by the team
      "GitHub admins", which Alice transferred to it, and her own Stripe account
-     (test and live mode as two resources), whose test mode she shares to Alice.
+     (test and live mode as two resources), on which she gave Alice access to
+     the test mode.
 
 Data        ${input.directory}
             ${input.kept ? 'kept on exit (DEMO_KEEP=1)' : 'deleted on exit (DEMO_KEEP=1 keeps it)'}; gateway.log there is the instance log.

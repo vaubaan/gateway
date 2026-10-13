@@ -290,7 +290,7 @@ describe('what the person is told', () => {
     expect(providerGrantReport('OAuth Co', 'revoked', BY_HAND)).toEqual({
       actionNeeded: false,
       title: 'Access withdrawn at OAuth Co',
-      text: 'OAuth Co confirmed that the access granted to this connection is withdrawn. Nothing is left to remove there.',
+      text: 'OAuth Co confirmed that the access granted to this account is withdrawn. Nothing is left to remove there.',
     });
     const failed = providerGrantReport('OAuth Co', 'failed', BY_HAND);
     expect(failed).toMatchObject({

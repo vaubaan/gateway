@@ -31,7 +31,7 @@ export const resendPlugin = definePlugin({
     'Outbound email : transactional sends classified by recipient zone, segments and contacts, ' +
     'broadcast campaigns, sending domains — one resource per domain and per segment.',
   summary:
-    'One connection is one Resend API key; resources are the sending domains and the contact segments of the account. Sends are classified by who the email goes to (internal, allow-listed, anyone), and the connection owner labels each domain and segment with an environment so staging and production are accepted separately.',
+    'One account is one Resend API key; resources are its sending domains and its contact segments. Sends are told apart by who the email goes to (internal, allow-listed, anyone), and the owner of the account labels each domain and segment with an environment so that staging and production are held separately.',
   manualRevocation: 'Delete the API key in the Resend dashboard, under API Keys.',
   docsUrl:
     'https://github.com/sbw-vaubaan/vaubaan-gateway/blob/main/docs/handbook/providers/resend.md',

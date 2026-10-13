@@ -18,19 +18,19 @@ export const SHARE_ERROR_CODES = [
 export type ShareErrorCode = (typeof SHARE_ERROR_CODES)[number];
 
 export const SHARE_ERROR_MESSAGES: Readonly<Record<ShareErrorCode, string>> = {
-  'not-found': 'This connection or share does not exist, or the connection is not yours.',
-  'connection-revoked': 'This connection is revoked; it cannot be shared.',
+  'not-found': 'This account or this access does not exist, or the account is not yours.',
+  'connection-revoked': 'This account is disconnected; nobody can be given access to it.',
   'connection-unowned':
-    'This connection has no owner any more: nobody can share it until an operator reassigns an owner.',
-  'provider-unknown': 'The provider of this connection is not available on this instance.',
+    'This account has no owner any more: nobody can give access to it until an administrator names a new owner.',
+  'provider-unknown': 'The service of this account is not available on this gateway.',
   'target-unknown':
-    'Nobody matches this target. A user is known to the instance once they have signed in; a group must exist.',
+    'Nobody matches. A person is known to the gateway once they have signed in; a team must exist.',
   'target-ambiguous':
-    'Several users carry this email. Ask an operator to share through a group instead.',
+    'Several people carry this email. Ask an administrator for a team, and give access to the team instead.',
   'target-is-owner':
-    'The target already owns this connection — as its owner, or as a member of the group that owns it — and needs no share.',
-  'restriction-empty': 'Tick at least one risk: an empty restriction authorizes nothing.',
-  'risk-unknown': "Some risks are not in this provider's catalog; nothing was shared.",
+    'They already own this account — as its owner, or as a member of the team that owns it — and need no access.',
+  'restriction-empty': 'Tick at least one permission: an access with none allows nothing.',
+  'risk-unknown': "Some permissions are not in this service's catalog; no access was given.",
 };
 
 const STATUS_BY_CODE: Readonly<Record<ShareErrorCode, number>> = {

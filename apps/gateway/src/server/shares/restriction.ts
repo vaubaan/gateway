@@ -43,7 +43,7 @@ export function summarizeRestriction(
   selected: ReadonlySet<RiskId>,
 ): string {
   const chosen = risks.filter((risk) => selected.has(risk.risk_id));
-  if (chosen.length === 0) return 'No risk selected: the share would authorize nothing.';
+  if (chosen.length === 0) return 'Nothing ticked: this access would allow nothing.';
   const mostSevere = chosen.reduce((worst, risk) =>
     risk.severity > worst.severity ? risk : worst,
   );
@@ -54,7 +54,7 @@ export function summarizeRestriction(
     .filter((entry) => entry.count > 0)
     .map((entry) => `${entry.count} ${entry.level}`);
   return [
-    `${chosen.length} of ${risks.length} ${risks.length === 1 ? 'risk' : 'risks'}`,
+    `${chosen.length} of ${risks.length} ${risks.length === 1 ? 'permission' : 'permissions'}`,
     perLevel.join(', '),
     `most severe: ${mostSevere.label} (${mostSevere.level})`,
   ].join(' · ');
@@ -91,7 +91,7 @@ export function envNotes(
   const unreachable = envs.filter((env) => !labelling.labelledEnvs.includes(env));
   if (unreachable.length > 0) {
     notes.push(
-      `No resource of this connection is labelled ${listOf(unreachable)}: the risks qualified with ${
+      `No resource of this account is labelled ${listOf(unreachable)}: the permissions tied to ${
         unreachable.length === 1 ? 'that environment' : 'those environments'
       } cannot be used until a resource carries the label.`,
     );
@@ -100,7 +100,7 @@ export function envNotes(
     notes.push(
       `${labelling.unlabelledResources} ${
         labelling.unlabelledResources === 1 ? 'resource has' : 'resources have'
-      } no environment label: environment-qualified risks are refused on ${
+      } no environment label: permissions tied to an environment are refused on ${
         labelling.unlabelledResources === 1 ? 'it' : 'them'
       } until you label ${labelling.unlabelledResources === 1 ? 'it' : 'them'}.`,
     );

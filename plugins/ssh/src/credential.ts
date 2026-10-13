@@ -86,7 +86,7 @@ export const sshCredential: SshKeyCredentialSpec = {
       secret: false,
       placeholder: 'SHA256:…',
       pattern: SSH_FINGERPRINT_PATTERN,
-      help: 'Run `ssh-keyscan -t ed25519 <host> | ssh-keygen -lf -` on a machine that already trusts the host and paste the SHA256 value. The connection refuses any other host key.',
+      help: 'Run `ssh-keyscan -t ed25519 <host> | ssh-keygen -lf -` on a machine that already trusts the host and paste the SHA256 value. Any other host key is refused.',
     },
   ],
 };

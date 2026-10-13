@@ -84,7 +84,7 @@ export function createShareHandlers(deps: ShareHandlerDeps): ShareHandlers {
     return {
       tone: 'danger',
       title,
-      lines: ['An unexpected error occurred. The instance log has the detail.'],
+      lines: ['An unexpected error occurred. The log of the gateway has the detail.'],
     };
   }
 
@@ -111,14 +111,14 @@ export function createShareHandlers(deps: ShareHandlerDeps): ShareHandlers {
         const outcome = await deps.shares.share(actor, connectionId, input);
         const count = outcome.share.restriction.length;
         const lines = [
-          `${outcome.targetLabel} may now accept ${count} ${count === 1 ? 'risk' : 'risks'} of this connection in their missions, and nothing else.`,
+          `${holderOf(outcome.targetLabel)} may now allow ${count} ${count === 1 ? 'permission' : 'permissions'} of this account in their missions, and nothing else.`,
         ];
-        if (outcome.replaced) lines.push('This replaces the restriction they held before.');
+        if (outcome.replaced) lines.push('This replaces what they held before.');
         if (outcome.orphaned > 0) lines.push(orphanedLine(outcome.orphaned));
         if (outcome.restored > 0) lines.push(restoredLine(outcome.restored));
         return await redirectWithNotice(principal.sessionId, connectionPath(connectionId), {
           tone: 'success',
-          title: outcome.replaced ? 'Share updated' : 'Shared',
+          title: outcome.replaced ? 'Access updated' : 'Access given',
           lines,
         });
       } catch (err) {
@@ -126,7 +126,7 @@ export function createShareHandlers(deps: ShareHandlerDeps): ShareHandlers {
         return redirectWithNotice(
           principal.sessionId,
           missing ? CONNECTIONS_PATH : sharePath(connectionId),
-          failure(err, 'Not shared'),
+          failure(err, 'Access not given'),
         );
       }
     },
@@ -137,23 +137,25 @@ export function createShareHandlers(deps: ShareHandlerDeps): ShareHandlers {
       const { principal } = guard;
       try {
         const outcome = await deps.shares.revoke(actorOf(principal), shareId, connectionId);
-        const lines = [`${outcome.targetLabel} can no longer issue missions on this connection.`];
+        const lines = [
+          `${holderOf(outcome.targetLabel)} can no longer write missions on this account.`,
+        ];
         lines.push(
           outcome.orphaned > 0
             ? orphanedLine(outcome.orphaned)
-            : 'No active mission depended on this share.',
+            : 'No running mission depended on it.',
         );
         return await redirectWithNotice(
           principal.sessionId,
           connectionPath(outcome.share.connectionId),
-          { tone: 'success', title: 'Share revoked', lines },
+          { tone: 'success', title: 'Access removed', lines },
         );
       } catch (err) {
         const missing = err instanceof ShareError && err.code === 'not-found';
         return redirectWithNotice(
           principal.sessionId,
           missing ? CONNECTIONS_PATH : connectionPath(connectionId),
-          failure(err, 'Not revoked'),
+          failure(err, 'Access not removed'),
         );
       }
     },
@@ -177,11 +179,18 @@ function values(form: FormData, name: string): string[] {
 }
 
 function orphanedLine(count: number): string {
-  return `${count} ${count === 1 ? 'mission that depended on it is' : 'missions that depended on it are'} now orphaned and ${count === 1 ? 'refuses' : 'refuse'} every call, until a share covers ${count === 1 ? 'it' : 'them'} again.`;
+  return `${count} ${count === 1 ? 'mission that depended on it is' : 'missions that depended on it are'} stopped and ${count === 1 ? 'refuses' : 'refuse'} every call, until an access covers ${count === 1 ? 'it' : 'them'} again.`;
 }
 
 function restoredLine(count: number): string {
-  return `${count} orphaned ${count === 1 ? 'mission is' : 'missions are'} covered again and ${count === 1 ? 'serves' : 'serve'} calls from now on, with ${count === 1 ? 'its' : 'their'} session and counters as they were.`;
+  return `${count} stopped ${count === 1 ? 'mission is' : 'missions are'} covered again and ${count === 1 ? 'serves' : 'serve'} calls from now on, with ${count === 1 ? 'its' : 'their'} limits as they were.`;
+}
+
+/** "the Platform team": the service labels a group `group <name>`; a person keeps their email. */
+function holderOf(targetLabel: string): string {
+  return targetLabel.startsWith('group ')
+    ? `The ${targetLabel.slice('group '.length)} team`
+    : targetLabel;
 }
 
 function field(form: FormData, name: string): string {

@@ -175,10 +175,10 @@ export interface EnvironmentReference {
 }
 
 const ENVIRONMENT_EXPLANATIONS: Readonly<Record<EnvironmentSource, string>> = {
-  call: 'The environment is read from each call: the plugin derives it from what the call names, whatever label the resource carries. An environment-scoped risk is accepted per environment, and a call counts against the one it touches.',
+  call: 'The environment is read from each call: the plugin derives it from what the call names, whatever label the resource carries. A permission tied to an environment is held once per environment, and a call counts against the one it touches.',
   'resource-label':
-    'The environment is the label the connection owner puts on each resource. An environment-scoped risk is accepted per label, and is refused on a resource that has no label or a label the risk does not list.',
-  none: 'No risk of this catalog depends on an environment: every risk is accepted once, whatever the resource.',
+    'The environment is the label the owner of the account puts on each resource. A permission tied to an environment is held once per label, and is refused on a resource that has no label or a label the permission does not list.',
+  none: 'No permission of this service depends on an environment: each is held once, whatever the resource.',
 };
 
 function environmentOf({ plugin }: RegisteredPlugin): EnvironmentReference {
@@ -466,11 +466,11 @@ function toolReferenceOf(
  * The page says so instead of guessing.
  */
 export const TOOL_RISKS_NOTE =
-  'Which risks a call touches depends on its arguments: the same tool can touch a mild risk on one resource and a severe one on another, and the plugin decides call by call. A plugin declares no table of the risks of each tool, so none is shown here; the catalog above is the complete list of what any call can touch. For the same reason an agent is listed every tool of the providers its mission carries, and a listed tool can still be refused when it is called: what a given mission can call is answered precisely by the catalog endpoint of the execution door, not by the tool list.';
+  'Which permissions a call needs depends on its arguments: the same tool can need a mild one on one resource and a severe one on another, and the plugin decides call by call. A plugin declares no table of the permissions of each tool, so none is shown here; the list of permissions is the complete list of what any call can need. For the same reason an agent is listed every tool of the services its mission uses, and a listed tool can still be refused when it is called: what a given mission can call is answered precisely by the catalog endpoint of the execution door, not by the tool list.';
 
 /** What the mark "hands a token to the agent" means (spec §2.4). */
 export const TOKEN_HANDOUT_NOTE =
-  'Hands a token to the agent: the one deliberate exception to "the agent never sees a provider credential". The tool returns a short-lived, narrowly scoped provider token, because the work cannot go through the gateway (git clone, git push). What the agent then does with that token is outside the gateway: it is not classified, not counted and not audited. The call that obtains the token is: it is a risk of its own, never accepted by default, counted against the budget and audited. In a preset, a token that can write is handed only after the creator approves the call; a read-only token may be handed without asking. The long-lived credential never leaves the instance.';
+  'Hands a token to the agent: the one deliberate exception to "the agent never sees a credential of the service". The tool returns a short-lived, narrowly scoped token of the service, because the work cannot go through the gateway (git clone, git push). What the agent then does with that token is outside the gateway: it is not classified, not counted and not recorded. The call that obtains the token is: it is a permission of its own, never included by default, counted against its limit and recorded. In a preset, a token that can write is handed only after the creator approves the call; a read-only token may be handed without asking. The long-lived credential never leaves the gateway.';
 
 /** What a handed token can do at the provider. */
 export type TokenAccess = 'read-only' | 'write';
@@ -514,7 +514,7 @@ export interface PlaneFilter {
 
 /** How the page explains the `other` plane, and how tools are filed. */
 export const OTHER_PLANE_NOTE =
-  'A risk is filed under the plane of the first entity of its pattern that one plane alone declares. A tool declares no pattern: it is filed under a plane only when its name contains the name of such an entity. Whatever names none — a risk over the whole provider, a tool whose name says nothing — is under "other" rather than guessed.';
+  'The parts of a service: a permission is filed under the part of the first thing its pattern names that one part alone declares. A tool declares no pattern: it is filed under a part only when its name contains the name of such a thing. Whatever names none — a permission over the whole service, a tool whose name says nothing — is under "other" rather than guessed.';
 
 function planeFiltersOf(
   model: DataModel,

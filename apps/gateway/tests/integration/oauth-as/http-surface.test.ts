@@ -1005,7 +1005,7 @@ describe('authorization server over HTTP', () => {
     });
   });
 
-  describe('POST /delegations/:id/revoke', () => {
+  describe('POST /settings/connected-apps/:id/revoke', () => {
     beforeEach(async () => {
       instance = await openInstance();
     });
@@ -1013,9 +1013,12 @@ describe('authorization server over HTTP', () => {
     it('ends the delegation in one request and says so on the page it returns to', async () => {
       const browser = instance.browser();
       const delegated = await delegate(instance, ADA, browser);
-      const response = await browser.post(`/delegations/${delegated.delegationId}/revoke`, {});
+      const response = await browser.post(
+        `/settings/connected-apps/${delegated.delegationId}/revoke`,
+        {},
+      );
       expect(response.status).toBe(303);
-      expect(response.headers.get('location')).toBe('/delegations?revoked=1');
+      expect(response.headers.get('location')).toBe('/settings/connected-apps?revoked=1');
       expect(
         (await toolsList(instance, MANAGEMENT_URL, bearer(delegated.tokens.access_token))).status,
       ).toBe(401);
@@ -1025,8 +1028,11 @@ describe('authorization server over HTTP', () => {
       const delegated = await delegate(instance, ADA);
       const bob = instance.browser();
       await bob.signIn(BOB);
-      const response = await bob.post(`/delegations/${delegated.delegationId}/revoke`, {});
-      expect(response.headers.get('location')).toBe('/delegations?problem=not-found');
+      const response = await bob.post(
+        `/settings/connected-apps/${delegated.delegationId}/revoke`,
+        {},
+      );
+      expect(response.headers.get('location')).toBe('/settings/connected-apps?problem=not-found');
       expect(
         (await toolsList(instance, MANAGEMENT_URL, bearer(delegated.tokens.access_token))).status,
       ).toBe(200);

@@ -35,7 +35,7 @@ export const stripePlugin = definePlugin({
     'Billing operations on a Stripe account : catalog, customers, subscriptions, invoices, ' +
     'refunds, payouts, webhooks — test and live modes as separate resources.',
   summary:
-    'One connection is one Stripe account, given as a test key, a live key, or both; each mode is its own resource, labelled test or live by the plugin. Every risk is accepted per mode, so a mission can work freely in test mode and touch live billing only under its budget and your approval.',
+    'One account is one Stripe account, given as a test key, a live key, or both; each mode is its own resource, labelled test or live by the plugin. Every permission is held per mode, so a mission can work freely in test mode and touch live billing only within its limits and after your yes.',
   manualRevocation:
     'Delete or roll the API key in the Stripe Dashboard, under Developers, API keys.',
   docsUrl:
@@ -54,7 +54,7 @@ export const stripePlugin = definePlugin({
         required: false,
         placeholder: 'sk_test_… or rk_test_…',
         pattern: '^(sk|rk)_test_[A-Za-z0-9]+$',
-        help: `Key of the sandbox. Leave empty for a live-only connection. ${KEY_HELP}`,
+        help: `Key of the sandbox. Leave empty for a live-only account. ${KEY_HELP}`,
       },
       {
         name: 'live_key',
@@ -63,7 +63,7 @@ export const stripePlugin = definePlugin({
         required: false,
         placeholder: 'sk_live_… or rk_live_…',
         pattern: '^(sk|rk)_live_[A-Za-z0-9]+$',
-        help: `Key of the live account (real money). Leave empty for a test-only connection. ${KEY_HELP}`,
+        help: `Key of the live account (real money). Leave empty for a test-only account. ${KEY_HELP}`,
       },
     ],
   },

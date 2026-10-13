@@ -125,8 +125,8 @@ export const ROUTES: readonly Route[] = [
     handle: (root, request) => root.auth.handlers.loginCallback(request),
   },
   {
-    path: '/delegations/:id/revoke',
-    file: '(app)/delegations/[id]/revoke/route.ts',
+    path: '/settings/connected-apps/:id/revoke',
+    file: '(app)/settings/connected-apps/[id]/revoke/route.ts',
     delegatesTo: 'oauth.handlers.revokeDelegation',
     handle: (root, request, id) => root.oauth.handlers.revokeDelegation(request, id),
   },

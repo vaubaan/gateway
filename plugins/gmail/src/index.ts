@@ -63,7 +63,7 @@ export const gmailPlugin: ProviderPlugin = definePlugin({
   description:
     'Experimental, classifier-only : identity-zoned risks for reading, drafting and labelling in a Gmail mailbox. No tool is executable yet.',
   summary:
-    'Experimental. One connection is one Gmail mailbox, which is also its single resource. The plugin models the risks of reading, drafting and labelling by who the sender or the recipient is, but it executes nothing yet: no tool is offered to agents.',
+    'Experimental. One account is one Gmail mailbox, which is also its single resource. The plugin models the permissions of reading, drafting and labelling by who the sender or the recipient is, but it executes nothing yet: no tool is offered to agents.',
   manualRevocation:
     "Remove the application's access in the Google Account of the mailbox, under Security, in the list of third-party apps with account access.",
   docsUrl:

@@ -31,9 +31,9 @@ export const githubPlugin = definePlugin({
   description:
     'Repositories, branches, files, pull requests, issues, releases and workflows of the GitHub App installation.',
   summary:
-    "One connection is one installation of your company's GitHub App on an organisation; one resource is one repository. A mission picks repositories and the risks it accepts on them. GitHub has no environment label: protected branches (main, master, release-*) and working branches (feature/*, fix/*, …) are told apart by two different risks.",
+    "One account is one installation of your company's GitHub App on an organisation; one resource is one repository. A mission picks repositories and the permissions it holds on them. GitHub has no environment label: protected branches (main, master, release-*) and working branches (feature/*, fix/*, …) are told apart by two different permissions.",
   manualRevocation:
-    "Uninstall your company's GitHub App from the organisation, in the organisation's settings under GitHub Apps, once no other connection of this instance uses that installation. The gateway never uninstalls it: one installation may serve several connections.",
+    "Uninstall your company's GitHub App from the organisation, in the organisation's settings under GitHub Apps, once no other account of this gateway uses that installation. The gateway never uninstalls it: one installation may serve several accounts.",
   docsUrl:
     'https://github.com/sbw-vaubaan/vaubaan-gateway/blob/main/docs/handbook/providers/github.md',
   // The one tool that hands the agent a provider token (spec §2.4) : a short-lived

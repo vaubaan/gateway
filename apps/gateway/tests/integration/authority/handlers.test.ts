@@ -78,8 +78,8 @@ describe('share, transfer, groups and reassignment over HTTP', () => {
       );
       const { path, notice } = await landing(response, ada);
       expect(path).toBe(`/accounts/${rig.connection.id}`);
-      expect(notice).toMatchObject({ tone: 'success', title: 'Shared' });
-      expect(notice?.lines[0]).toContain('bob@example.com may now accept 5 risks');
+      expect(notice).toMatchObject({ tone: 'success', title: 'Access given' });
+      expect(notice?.lines[0]).toContain('bob@example.com may now allow 5 permissions');
 
       const [share] = await rig.root.store.shares.listForConnection(rig.connection.id);
       expect(share?.restriction).toEqual([...ticked].sort());
@@ -103,16 +103,16 @@ describe('share, transfer, groups and reassignment over HTTP', () => {
           ]),
           rig.connection.id,
         );
-      expect((await landing(await post([READ, PURGE]), ada)).notice?.title).toBe('Shared');
+      expect((await landing(await post([READ, PURGE]), ada)).notice?.title).toBe('Access given');
       const updated = await landing(await post([READ]), ada);
-      expect(updated.notice).toMatchObject({ title: 'Share updated' });
-      expect(updated.notice?.lines).toContain('This replaces the restriction they held before.');
+      expect(updated.notice).toMatchObject({ title: 'Access updated' });
+      expect(updated.notice?.lines).toContain('This replaces what they held before.');
     });
 
     it.each([
-      ['nothing ticked', [], 'Tick at least one risk'],
-      ['the literal "all"', ['all'], 'not in this provider'],
-      ['a wildcard', ['depot.*'], 'not in this provider'],
+      ['nothing ticked', [], 'Tick at least one permission'],
+      ['the literal "all"', ['all'], 'not in this service'],
+      ['a wildcard', ['depot.*'], 'not in this service'],
     ])('refuses %s and lands back on the dialog', async (_case, risks, sentence) => {
       const ada = await sessionOf(rig.ada);
       const response = await rig.root.shares.handlers.share(
@@ -125,7 +125,7 @@ describe('share, transfer, groups and reassignment over HTTP', () => {
       );
       const { path, notice } = await landing(response, ada);
       expect(path).toBe(`/accounts/${rig.connection.id}/share`);
-      expect(notice).toMatchObject({ tone: 'danger', title: 'Not shared' });
+      expect(notice).toMatchObject({ tone: 'danger', title: 'Access not given' });
       expect(notice?.lines.join(' ')).toContain(sentence);
       expect(await rig.root.store.shares.listForConnection(rig.connection.id)).toEqual([]);
     });
@@ -162,8 +162,8 @@ describe('share, transfer, groups and reassignment over HTTP', () => {
     );
     const { path, notice } = await landing(response, ada);
     expect(path).toBe(`/accounts/${rig.connection.id}`);
-    expect(notice).toMatchObject({ tone: 'success', title: 'Share revoked' });
-    expect(notice?.lines.join(' ')).toContain('1 mission that depended on it is now orphaned');
+    expect(notice).toMatchObject({ tone: 'success', title: 'Access removed' });
+    expect(notice?.lines.join(' ')).toContain('1 mission that depended on it is stopped');
   });
 
   it('POST /accounts/<id>/transfer moves the ownership to a group of the owner, and to no other', async () => {
@@ -179,10 +179,10 @@ describe('share, transfer, groups and reassignment over HTTP', () => {
 
     const refused = await landing(await post(theirs.id), ada);
     expect(refused.notice).toMatchObject({ tone: 'danger', title: 'Not transferred' });
-    expect(refused.notice?.lines[0]).toContain('a group you belong to');
+    expect(refused.notice?.lines[0]).toContain('a team you belong to');
 
     const done = await landing(await post(mine.id), ada);
-    expect(done.notice).toMatchObject({ tone: 'success', title: 'Transferred to group mine' });
+    expect(done.notice).toMatchObject({ tone: 'success', title: 'Transferred to the mine team' });
     expect((await rig.root.store.connections.getById(rig.connection.id))?.owner).toEqual({
       kind: 'group',
       id: mine.id,
@@ -200,7 +200,7 @@ describe('share, transfer, groups and reassignment over HTTP', () => {
       );
       expect(created).toMatchObject({
         path: '/admin/groups',
-        notice: { tone: 'success', title: 'Group "depot-admins" created' },
+        notice: { tone: 'success', title: 'Team “depot-admins” created' },
       });
       const group = (await rig.root.store.groups.getByName('depot-admins'))!;
 
@@ -211,7 +211,7 @@ describe('share, transfer, groups and reassignment over HTTP', () => {
         ),
         ops,
       );
-      expect(added.notice?.title).toBe('ada@example.com added to "depot-admins"');
+      expect(added.notice?.title).toBe('ada@example.com added to “depot-admins”');
 
       await connections.service.transfer(await rig.actor(rig.ada), rig.connection.id, group.id);
       const removed = await landing(
@@ -224,9 +224,9 @@ describe('share, transfer, groups and reassignment over HTTP', () => {
       );
       expect(removed.notice).toMatchObject({
         tone: 'warning',
-        title: 'ada@example.com removed from "depot-admins"',
+        title: 'ada@example.com removed from “depot-admins”',
       });
-      expect(removed.notice?.lines.join(' ')).toContain('1 connection has no owner left');
+      expect(removed.notice?.lines.join(' ')).toContain('1 account has no owner left');
 
       const reassigned = await landing(
         await connections.handlers.reassign(
@@ -240,7 +240,7 @@ describe('share, transfer, groups and reassignment over HTTP', () => {
       );
       expect(reassigned).toMatchObject({
         path: '/admin/connections',
-        notice: { tone: 'success', title: 'Depot main: owner reassigned' },
+        notice: { tone: 'success', title: 'Depot main has a new owner' },
       });
       expect(await rig.root.store.connections.getById(rig.connection.id)).toMatchObject({
         status: 'active',
@@ -291,7 +291,7 @@ describe('share, transfer, groups and reassignment over HTTP', () => {
         ),
         ops,
       );
-      expect(owned.notice).toMatchObject({ tone: 'danger', title: 'Not reassigned' });
+      expect(owned.notice).toMatchObject({ tone: 'danger', title: 'No owner named' });
       expect((await rig.root.store.connections.getById(rig.connection.id))?.owner).toEqual({
         kind: 'user',
         id: rig.ada.id,
