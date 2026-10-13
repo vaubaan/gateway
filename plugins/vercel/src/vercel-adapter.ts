@@ -1,33 +1,29 @@
 /**
- * VercelAdapter — rewraps the official Vercel MCP server.
+ * @deprecated legacy v4, deleted in P1.6.
  *
- * Spec : docs/spec/vaubaan-gateway.md §5.1.
- * ADR  : docs/decisions/rewrap-official-mcps.md.
- *
- * Vaubaan's policy engine and audit live in front ; the actual tool execution
- * is forwarded as JSON-RPC `tools/call` to https://mcp.vercel.com/.
- *
- * Auth model : Personal Access Token (PAT) scoped to a team, pasted by the user.
- * PATs do not expire and do not need refresh.
+ * `VercelAdapter` — the v4 `UpstreamAdapter` duck type the gateway pipeline
+ * (`apps/gateway/src/lib/gateway/build.ts`) still instantiates. It is a thin
+ * shell over the v5 modules : the one classifier (`classify.ts`) and the one
+ * upstream caller (`execute.ts`). The v4 `*_from_venv` secret transfer is
+ * gone (plan §8-Q5 : no v5 counterpart) ; the `venvStore` option is accepted
+ * and ignored so the v4 app keeps compiling.
  */
 
 import type { McpToolDeclaration, ProviderAdmin, ProviderBinding } from '@vaubaan/shared';
-import { availableTools } from './tools.ts';
-import { executeCall, type FetchImpl } from './execute.ts';
+
+import { callVercelTool, type FetchImpl } from './execute.ts';
 import { classifyVercelV4, type ClassifyResult } from './risk-classifier.ts';
-import { UPSERT_ENV_FROM_VENV } from './custom-tools.ts';
+import { vercelTools } from './tools.ts';
 
-export interface VenvStoreReader {
-  get(projectId: string, key: string): Promise<string>;
-}
-
+/** @deprecated legacy v4, deleted in P1.6. */
 export interface VercelAdapterConfig {
   /** Override fetch in tests. */
   fetchImpl?: FetchImpl;
-  /** Project env var store for _from_venv tools. */
-  venvStore?: VenvStoreReader | null;
+  /** @deprecated ignored — the venv store has no v5 counterpart (plan §8-Q5). */
+  venvStore?: unknown;
 }
 
+/** @deprecated legacy v4, deleted in P1.6. */
 export interface ValidateResult {
   ok: boolean;
   displayName?: string;
@@ -35,15 +31,14 @@ export interface ValidateResult {
   warnings?: string[];
 }
 
+/** @deprecated legacy v4, deleted in P1.6 — use `vercelPlugin`. */
 export class VercelAdapter {
   readonly provider = 'vercel' as const;
-  readonly availableTools: ReadonlyArray<McpToolDeclaration> = availableTools;
+  readonly availableTools: ReadonlyArray<McpToolDeclaration> = vercelTools;
   private readonly fetchImpl: FetchImpl;
-  private readonly venvStore: VenvStoreReader | null;
 
   constructor(config: VercelAdapterConfig = {}) {
     this.fetchImpl = config.fetchImpl ?? fetch;
-    this.venvStore = config.venvStore ?? null;
   }
 
   async mintUpstreamToken(admin: ProviderAdmin): Promise<{ token: string; expiresAt: Date }> {
@@ -60,9 +55,11 @@ export class VercelAdapter {
     }
     try {
       const { token } = await this.mintUpstreamToken(admin);
-      const data = (await executeCall(this.fetchImpl, token, admin.team_id, 'vercel__get_project', {
-        projectId: resourceRef,
-      })) as { content?: Array<{ text?: string }>; name?: string };
+      const data = (await callVercelTool(
+        { fetch: this.fetchImpl, token, teamId: admin.team_id },
+        'vercel__get_project',
+        { projectId: resourceRef },
+      )) as { content?: Array<{ text?: string }>; name?: string };
       // The upstream MCP wraps results in {content:[{type:'text',text:<JSON>}]} ;
       // we accept either shape for the display name.
       let displayName = data.name ?? resourceRef;
@@ -94,48 +91,14 @@ export class VercelAdapter {
 
   async executeCall(
     admin: ProviderAdmin,
-    binding: ProviderBinding,
+    _binding: ProviderBinding,
     tool: string,
     args: Record<string, unknown>,
   ): Promise<unknown> {
     const { token } = await this.mintUpstreamToken(admin);
-    if (tool === UPSERT_ENV_FROM_VENV) {
-      return this.executeUpsertEnvFromVenv(token, admin.team_id, binding.project_id, args);
-    }
-    return executeCall(this.fetchImpl, token, admin.team_id, tool, args);
+    return callVercelTool({ fetch: this.fetchImpl, token, teamId: admin.team_id }, tool, args);
   }
 
-  private async executeUpsertEnvFromVenv(
-    token: string,
-    teamId: string | null,
-    projectId: string,
-    args: Record<string, unknown>,
-  ): Promise<unknown> {
-    if (!this.venvStore) throw new Error('venv store is not configured on this gateway.');
-    const venvKey = typeof args.venv_key === 'string' ? args.venv_key : '';
-    if (!venvKey) throw new Error('vercel__upsert_env_from_venv requires venv_key.');
-    const vercelProjectId = typeof args.projectId === 'string' ? args.projectId : '';
-    if (!vercelProjectId) throw new Error('vercel__upsert_env_from_venv requires projectId.');
-    const value = await this.venvStore.get(projectId, venvKey);
-    const target = Array.isArray(args.target)
-      ? args.target
-      : ['production', 'preview', 'development'];
-    const type = typeof args.type === 'string' ? args.type : 'encrypted';
-    await executeCall(this.fetchImpl, token, teamId, 'vercel__upsert_env_var', {
-      projectId: vercelProjectId,
-      key: venvKey,
-      value,
-      target,
-      type,
-    });
-    const dest = `vercel/${vercelProjectId}/${(target as string[]).join(',')}`;
-    return { venv_key: venvKey, destination: dest, status: 'deployed' };
-  }
-
-  /**
-   * v4 classifier — emit the slice(s) the call touches. The provider plugin's
-   * sole authorization responsibility.
-   */
   classifyV4(
     tool: string,
     args: Record<string, unknown>,

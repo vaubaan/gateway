@@ -35,6 +35,13 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   with a Caddy TLS proxy, documented `deploy/config/gateway.example.yaml`
   and `.env.example`, and a CI job that builds the image and runs the
   container smoke test. ADR `docker-image-and-config-format`.
+- **Vercel plugin on the v5 SDK (P1.2b).** `@vaubaan/plugin-vercel` 1.0.0 is a
+  `definePlugin()` descriptor: `api-key` credential (access token + team id),
+  resource discovery (team projects, paged), classifier re-keyed to mission
+  resources, three presets (`read-only`, `developer`, `operator` with
+  approval on production-affecting entries), catalog v2 loaded from YAML (TS
+  twin and sync test removed), venv tool removed. Legacy v4 exports kept
+  `@deprecated` until P1.6. Handbook `providers/vercel` rewritten in English.
 - **Plugin SDK (P0.2).** `@vaubaan/plugin-sdk`: the `ProviderPlugin`
   contract and `definePlugin()`, the `CredentialSpec` union (api-key,
   oauth2, app-install, ssh-key), the YAML catalog loader with presets

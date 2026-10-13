@@ -1,21 +1,31 @@
-# Vercel risk catalog — v4 risk-based model.
+# Risk catalog of the `vercel` provider.
 #
-# Spec    : docs/spec/gateway-risk-model.md §4.
-# Research : .vaubaan/research/providers/vercel.md §3.
+# Spec     : docs/spec/gateway-risk-model.md §4 (schema), docs/spec/vaubaan-gateway.md §3.2 (presets).
+# Handbook : docs/handbook/providers/vercel.md.
 #
-# 16 named risks + 1 fallback. RiskId format follows
-# `<provider>.<name>` (cf. shared/src/risk.ts RISK_ID_REGEX). Env-specific
-# pairs (deploy-preview / deploy-prod, env-var-write-preview /
-# env-var-write-prod) are merged into single entries with
-# `vector_overrides` for the prod env — the runtime resolves the effective
-# vector via `resolveVector(entry, env)` in policy-engine.
+# Loaded at boot by `@vaubaan/plugin-sdk` (`loadCatalogFile`) ; this file is
+# the only catalog artefact (the TypeScript twin of v4 is gone).
 #
-# Slice patterns use the DSL declared in policy-engine/src/slice-dsl.ts
-# (no regex, only `[*]` / `[**]` wildcards and `[a,b,c]` lists). Each
-# pattern must match at least one tool's emitted slice — verified by the
-# `risk-catalog.test.ts` coverage lint.
+# 16 named risks + 1 fallback. Env-specific pairs of the v4 research
+# (deploy-preview / deploy-prod, env-var-write-preview / env-var-write-prod)
+# are single entries with `acceptable_in_envs` and a `vector_overrides.prod`
+# block ; the runtime qualifies them per environment (`vercel[prod].deploy`).
+# The Vercel environment is the closed triad prod | preview | development and
+# lives in the call arguments (`target`), which the classifier turns into the
+# `env[<label>]` segment of the slice.
+#
+# Rules the loader enforces : every id starts with `vercel.` ; every pattern
+# parses as a slice of this provider ; the `vercel.uncategorized-*` fallback
+# exists ; at least one preset ; every preset entry names an explicit risk of
+# THIS catalog with a numeric quota, a rate limit and a gate.
+#
+# Adding a risk : append an entry, bump `catalog_version`, update `catalog_date`.
+# Removing or renaming a risk : forbidden — mark it `deprecated: true` and
+# point `replaced_by` at its successor, so existing missions keep working.
 
 provider: vercel
+catalog_version: 2
+catalog_date: 2026-10-13
 
 risks:
   # ─── READS ─────────────────────────────────────────────────────────────
@@ -287,7 +297,7 @@ risks:
       visibility: public
       persistence: posture
 
-  # ─── WRITES — DOMAINS (DNS posture-shift externe) ──────────────────────
+  # ─── WRITES — DOMAINS (external DNS posture shift) ──────────────────────
 
   - id: vercel.domain-write
     label: 'Attach / verify / detach a custom domain'
@@ -322,3 +332,168 @@ risks:
       cost: free
       visibility: internal
       persistence: session
+
+# ─── PRESETS (spec §3.2 — UI sugar ; the persisted policy is always explicit) ──
+#
+# Budgets are per period ; rate limits per sliding window. `approval` is a
+# default suggestion on production-affecting configuration (prod deploys and
+# env vars, project settings, domains, firewall) : the mission creator may
+# relax it at issuance. Env-qualified entries (`vercel[prod].deploy`) rely on
+# the host resolving the environment from the `env[<label>]` segment the
+# classifier emits — see docs/handbook/providers/vercel.md §Environment axis.
+
+presets:
+  - id: read-only
+    label: Read-only
+    description: Inspect projects, deployments, logs, env-var keys and the firewall ; no write.
+    entries:
+      - risk_id: vercel.read-account
+        quota: 2000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: vercel.read-deployment
+        quota: 2000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: vercel.read-env-var
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: vercel.fetch-deployment-url
+        quota: 300
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: vercel.firewall-read
+        quota: 200
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+
+  - id: developer
+    label: Developer
+    description: One token per code project — preview and development deploys, logs, preview env vars, toolbar comments ; nothing that touches production configuration.
+    entries:
+      - risk_id: vercel.read-account
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: vercel.read-deployment
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: vercel.read-env-var
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: vercel.fetch-deployment-url
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: vercel[preview].deploy
+        quota: 200
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: vercel[development].deploy
+        quota: 200
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: vercel[preview].env-var-write
+        quota: 200
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: vercel[development].env-var-write
+        quota: 200
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: vercel.toolbar-write
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: vercel.mint-bypass-token
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: auto
+
+  - id: operator
+    label: Operator
+    description: Everything a developer can do, plus production deploys, production env vars, project settings, domains and firewall — production-affecting changes behind approval.
+    entries:
+      - risk_id: vercel.read-account
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: vercel.read-deployment
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: vercel.read-env-var
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: vercel.read-env-var-plaintext
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+      - risk_id: vercel.fetch-deployment-url
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: vercel[preview].deploy
+        quota: 200
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: vercel[development].deploy
+        quota: 200
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: vercel[prod].deploy
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+      - risk_id: vercel[preview].env-var-write
+        quota: 200
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: vercel[development].env-var-write
+        quota: 200
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: vercel[prod].env-var-write
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+      - risk_id: vercel.env-var-fan-out
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+      - risk_id: vercel.project-settings-write
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+      - risk_id: vercel.domain-write
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+      - risk_id: vercel.firewall-read
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: vercel.firewall-write
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+      - risk_id: vercel.firewall-rule-write
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: approval
+      - risk_id: vercel.ip-rule-write
+        quota: 100
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: approval
+      - risk_id: vercel.toolbar-write
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: vercel.mint-bypass-token
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto

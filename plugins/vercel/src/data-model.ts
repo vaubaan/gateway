@@ -1,61 +1,59 @@
 /**
- * Vercel data-model — declarative entity graph for the v4 risk-based engine.
+ * Data model of the `vercel` provider.
  *
- * Spec : docs/spec/gateway-risk-model.md §2.4.
- * Research : .vaubaan/research/providers/vercel.md §1.
+ * Spec     : docs/spec/gateway-risk-model.md §2.
+ * Handbook : docs/handbook/providers/vercel.md §1.
  *
- * Vercel exposes a single plane (`runtime`). Every entity lives under a
- * `team` (which is under an `account`), and almost everything is project-
- * scoped. The triad `env ∈ {prod, preview, development}` is closed (no
- * custom "stage" environments). `deployment` is the only entity Vercel
- * keeps unbounded history of ; everything else is bounded by quota or by
- * containment.
+ * Vercel exposes a single plane, `runtime`. Every entity lives under a
+ * `team` (itself under the `account` the credential belongs to) and almost
+ * everything is project-scoped. The **project** is the resource a connection
+ * exposes and a mission selects. The environment axis is the closed Vercel
+ * triad `env ∈ {prod, preview, development}` : it is not a separate resource
+ * but a segment of the slice, derived from the call arguments (`target`).
+ * `deployment` is the only entity Vercel keeps an unbounded history of ;
+ * everything else is bounded by quota or by containment.
  *
- * This data-model is the canonical source for :
- *   - the mermaid diagram auto-rendered into the handbook (spec §2),
- *   - the catalog's `matches` patterns (each pattern must refer to entity
- *     slugs declared here — lint at CI),
- *   - the lint that every MCP tool exposed by this provider classifies
- *     into at least one slice rooted at a declared entity.
+ * Every slice the classifier emits walks this graph ; every `matches` pattern
+ * of the catalog names entities declared here.
  *
- * Side-effect note : `bypass-token` is the one entity created by an HTTP
- * GET on the upstream API (`get_access_to_vercel_url`) — but Vaubaan
- * classifies the call as a `W` because it *mints* a credential.
+ * Side-effect note : `bypass-token` is created by an HTTP GET on the upstream
+ * API (`get_access_to_vercel_url`) — the classifier emits a `W` because the
+ * call *mints* a credential.
  */
 
-import type { DataModel } from '@vaubaan/shared';
+import type { DataModel } from '@vaubaan/plugin-sdk';
 
-export const dataModel: DataModel = {
+export const vercelDataModel: DataModel = {
   provider: 'vercel',
   planes: [
     {
       slug: 'runtime',
       description:
-        'The only Vercel plane Vaubaan exposes — covers projects, deployments, env vars, ' +
-        'domains, and the toolbar comment surface.',
+        'The only Vercel plane the gateway exposes — projects, deployments, env vars, ' +
+        'domains, firewall, and the toolbar comment surface.',
       entities: [
         {
           name: 'account',
           parent: null,
           cardinalities: ['one'],
           description:
-            'The Vercel account / Integration installation backing the bearer used by Vaubaan. ' +
-            'Singleton per ProviderAdmin row.',
+            'The Vercel account behind the access token of a connection. One per connection.',
         },
         {
           name: 'team',
           parent: 'account',
           cardinalities: ['bounded'],
           description:
-            'A Vercel team. The PAT/Integration is team-scoped (usually one, sometimes listed via ' +
-            '`list_teams`).',
+            'A Vercel team. A connection is pinned to one team (`team_id` credential field) ; ' +
+            '`list_teams` may still enumerate the others the token can see.',
         },
         {
           name: 'project',
           parent: 'team',
           cardinalities: ['bounded'],
           description:
-            'A Vercel project. The Vaubaan binding pins which project ids the access token can reach.',
+            'A Vercel project — the resource discovered at connection time (`prj_xxx` ref) and ' +
+            'selected by a mission.',
         },
         {
           name: 'project-settings',
@@ -71,7 +69,7 @@ export const dataModel: DataModel = {
           cardinalities: ['bounded'],
           description:
             'A custom domain attached to the project. Couples Vercel routing to external DNS — ' +
-            'attach / detach is a posture-shift visible publicly.',
+            'attach / detach is a posture shift visible publicly.',
         },
         {
           name: 'firewall',
@@ -104,7 +102,8 @@ export const dataModel: DataModel = {
           envScopable: true,
           description:
             'The triad of Vercel environments `{prod, preview, development}`. Closed set — ' +
-            'Vercel does not accept custom env slugs at this layer.',
+            'Vercel does not accept custom env slugs at this layer. The ident of this segment ' +
+            'IS the environment label the runtime qualifies env-scoped risks with.',
         },
         {
           name: 'deployment',
@@ -149,7 +148,7 @@ export const dataModel: DataModel = {
           parent: 'deployment',
           cardinalities: ['bounded'],
           description:
-            'Short-TTL credential that bypasses deployment-protection on a single deployment URL. ' +
+            'Short-TTL credential that bypasses deployment protection on a single deployment URL. ' +
             'Minted by `get_access_to_vercel_url` — classified as `W` even though the upstream API ' +
             'is a GET (semantically a credential creation).',
         },
