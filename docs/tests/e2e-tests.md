@@ -15,10 +15,12 @@ tracks:
 Two kinds of end-to-end check exist today:
 
 1. the **container smoke test** (`deploy/docker/smoke.sh`), automated in CI
-   since P0.4 — the only E2E check of the v5 build so far;
-2. the **Playwright harness** (`playwright.config.ts`), wired but holding
-   only legacy v4 specs that target the retired SaaS; nothing in CI runs
-   it.
+   since P0.4;
+2. the **Playwright harness**: the root `playwright.config.ts` holds only
+   legacy v4 specs that target the retired SaaS; the v5 specs run against an
+   ephemeral instance with their own configuration
+   (`apps/gateway/tests/e2e/v5/`, `npm run test:e2e:v5`, since P1.5). Nothing
+   in CI runs Playwright.
 
 The v5 browser scenarios (connection creation, mission issuance, inbox
 approval, the agent's structured refusal) are written when the
@@ -168,6 +170,30 @@ only. Without `E2E_BASE_URL` the config starts `npm run dev` on
 `E2E_USER_PASSWORD`, `E2E_ORG_SLUG`, `E2E_PROJECT_SLUG`. Playwright is not
 part of `npm run ci` and no workflow runs it.
 
+### Ephemeral v5 instance (`tests/e2e/v5/`, P1.5)
+
+`npm run test:e2e:v5` builds the app, then runs
+`apps/gateway/tests/e2e/v5/playwright.config.ts` (its own configuration: the
+root one targets a deployed v4 instance). Its `webServer` is
+`ephemeral-instance.ts`: one process that builds the real composition root with
+the `:memory:` store, the shipped plugins and P1.1's `FakeIdp` as the relying
+party's `fetch`, seeds a user's connections through the repositories, and
+serves the built app on it (`E2E_V5_PORT`, default 3105). No credential, no
+network, not part of `npm run ci`.
+
+The instance's `public_url` is `https://gateway.e2e.test`; the browser context
+routes that origin to the local listener (`browser.ts`), so cookies stay
+`Secure` and the origin check sees the public origin. Navigation redirects are
+answered as pages that navigate, because Playwright does not route the hops of
+a redirect. Two control endpoints exist only in the launcher: the simulated
+IdP's consent, and `verify-token`. `E2E_V5_SCREENSHOT_DIR=<folder>` keeps a
+screenshot of each step.
+
+| Spec                    | Scenario                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `issue-mission.spec.ts` | **Issue a mission**: no session → sign-in through the simulated IdP; experimental provider hidden until toggled; name, three connections, one preset each; the three-line summary; **one page** (per-risk detail folded, ≤ 6 visible checkboxes, page ≤ 2 viewports at 1280×800, Issue button in view); resource deselection drops the preset's staging entries and says so; one quota and one gate adjusted; unresolvable entries shown and not tickable; reveal-once dialog and kit; the token verifies; the detail page masks it; rotate (old token refused); revoke (`revoked`). |
+| `issue-mission.spec.ts` | **Proposal and duplicate**: an agent's JSON proposal (provider and refs) is checked, what passes fills the form, what cannot resolve is listed; issue; duplicate → same policy, its own token.                                                                                                                                                                                                                                                                                                                                                                                       |
+
 ### Implemented specs (legacy v4, deleted with the v4 UI in Phase 1)
 
 The four specs predate the pivot and exercise the v4 SaaS (Supabase
@@ -190,8 +216,7 @@ that makes it possible. Target list (spec §4, §5, §7):
    token, configures the IdP, a user signs in through OIDC (P1.1).
 2. **Connection and share** — a user connects a provider, shares the
    connection with a group under a restriction (P1.2, P1.4).
-3. **Mission issuance** — a mission over two connections with a budget per
-   risk; the token is shown once (P1.3, P1.5).
+3. **Mission issuance** — done: `v5/issue-mission.spec.ts` (P1.5).
 4. **Agent call through the execution door** — an MCP client calls a tool
    within budget (allowed, audited), then beyond it (`budget-exhausted`
    with a claim URL) (P1.6).

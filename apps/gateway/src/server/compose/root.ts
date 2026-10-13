@@ -26,6 +26,7 @@ import {
 import { createEncryptor, type Encryptor } from '../crypto';
 import { createLogger, createRedactor, type Logger, type LoggerOptions } from '../logging';
 import { ProviderAppsService } from '../provider-apps';
+import { createMissionsModule, type MissionsModule } from '../missions';
 import { SqliteSessionStore } from '../session';
 import type { Store } from '../store';
 import { MemoryRateLimiter } from './memory';
@@ -53,6 +54,8 @@ export interface GatewayRoot {
   readonly providerApps: ProviderAppsService;
   /** Connect flows, resources, credential broker with the generic OAuth refresh (P1.4). */
   readonly connections: ConnectionsModule;
+  /** Missions: authority, preview / issue / rotate / revoke, bootstrap kit (P1.5). */
+  readonly missions: MissionsModule;
   readonly build: BuildInfo;
   readonly startedAt: Date;
   close(): Promise<void>;
@@ -121,6 +124,13 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
   // `SessionStore` instead.
   const sessions = deps.sessions ?? new SqliteSessionStore({ db: store.db });
   const auth = createAuthModule({ config, store, sessions, logger, oidc: deps.oidc });
+  const missions = createMissionsModule({
+    config,
+    store,
+    registry,
+    authenticator: auth.authenticator,
+    logger,
+  });
 
   const rateLimiter = deps.rateLimiter ?? new MemoryRateLimiter();
   const providerApps = new ProviderAppsService(config.providers, store.config, registry);
@@ -149,6 +159,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
     auth,
     providerApps,
     connections,
+    missions,
     build,
     startedAt: new Date(),
     async close() {

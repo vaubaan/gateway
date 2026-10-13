@@ -25,6 +25,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:real-clouds": "playwright test --project=e2e-real-clouds",
+    "test:e2e:v5": "npm run build --workspace @vaubaan/gateway-app && playwright test -c apps/gateway/tests/e2e/v5/playwright.config.ts",
     "dev": "npm run --workspace @vaubaan/gateway-app dev",
     "prepare": "husky || true",
     "gen-master-key": "node scripts/gen-master-key.mjs",
