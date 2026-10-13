@@ -1,0 +1,93 @@
+/* Request inbox and the creator's view of one request. Reading order of the
+   view: what is asked, the four actions with their consequence, the other
+   risks of the period, the last session events. */
+
+.pageHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+.pageHead h1 {
+  margin: 0;
+}
+.muted {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+.mono {
+  font-family: var(--font-geist-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--text-xs);
+  color: var(--text-subtle);
+}
+.rowLink {
+  font-weight: var(--font-weight-medium);
+}
+.empty {
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  font-size: var(--text-sm);
+}
+.facts dt {
+  color: var(--text-muted);
+}
+.facts dd {
+  margin: 0;
+}
+
+/* ── The four actions ──────────────────────────────────────────────────── */
+
+.actions {
+  display: grid;
+}
+.action {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: var(--space-2) var(--space-4);
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.action:last-child {
+  border-bottom: 0;
+}
+.action form {
+  display: contents;
+}
+.action button {
+  width: 100%;
+}
+.consequence {
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+.unavailable {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+.inline input {
+  width: auto;
+}
+@media (max-width: 640px) {
+  .action {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -172,10 +172,14 @@ export type {
   DecideInput,
   DecideResult,
   DecisionOutcome,
+  ListEventsOptions,
   SessionsRepo,
 } from './repositories/sessions.ts';
 export { prepareRequestArguments } from './repositories/requests.ts';
 export type {
+  ClaimDecisionContext,
+  ClaimDecisionOutcome,
+  ClaimDecisionResult,
   CreateRequestInput,
   InsertRequestInput,
   OpenRequestLookup,

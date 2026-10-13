@@ -309,6 +309,23 @@ describe('sessions repository', () => {
     expect(later.actorUserId).toBe(creator);
     expect(await store.sessions.listEvents(r.session.id, { since: later.ts })).toEqual([later]);
     expect(await store.sessions.listEvents(r.session.id, { limit: 1 })).toHaveLength(1);
+
+    // Additive options: filter by kind, read the tail of the timeline first.
+    const all = await store.sessions.listEvents(r.session.id);
+    expect(await store.sessions.listEvents(r.session.id, { kinds: ['reset'] })).toEqual([later]);
+    expect(await store.sessions.listEvents(r.session.id, { kinds: [] })).toEqual([]);
+    expect(await store.sessions.listEvents(r.session.id, { order: 'desc' })).toEqual(
+      [...all].reverse(),
+    );
+    expect(await store.sessions.listEvents(r.session.id, { order: 'desc', limit: 1 })).toEqual([
+      later,
+    ]);
+    expect(
+      await store.sessions.listEvents(r.session.id, { kinds: ['reset'], since: later.ts }),
+    ).toEqual([later]);
+    expect(
+      await store.sessions.listEvents(r.session.id, { kinds: ['no-such-kind'], order: 'desc' }),
+    ).toEqual([]);
   });
 
   it('counters and audit agree after a mixed run (structural check)', async () => {

@@ -28,6 +28,19 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Added
 
+- **Claims and the request inbox (P1.7).** The URL a `budget-exhausted` refusal carries,
+  `<public_url>/r/<id>`, now answers: it asks for a sign-in, lets only the mission's creator
+  through (anyone else — including an owner of the same connection — gets a 403 that says
+  only "This request is addressed to its creator"), refuses a mission token or any other
+  bearer, and is rate limited per client address. The creator sees the mission, the risk
+  with its quota and consumption, the other risks, the last session events, and four
+  actions with their consequence: reset the period, give back up to what was consumed on the
+  risk for the current period, extend the expiry, or refuse. The decision is recorded as a
+  session event and an admin audit entry; the token does not change and the agent replays
+  its call. "Requests" in the application bar lists what awaits you, with a count.
+  Unanswered requests expire after `requests.expiry` (default 24 h). Approval requests are
+  listed but cannot be decided yet.
+
 - **Declarative installation verification in the plugin SDK (P1.4b).** The `app-install`
   `CredentialSpec` accepts an optional `userVerification` block (authorization-code
   parameter, token endpoint, installations endpoint, response shape, pagination) that the

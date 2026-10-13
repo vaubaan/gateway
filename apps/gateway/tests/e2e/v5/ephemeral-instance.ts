@@ -9,9 +9,12 @@
  *     does — so the Next server started below serves the built app on this
  *     root (`getRoot()` returns the promise already there);
  *   - connections and resources seeded straight through the repositories;
- *   - two control endpoints under `/__e2e`, which exist only in this file:
- *     the IdP's consent screen (the browser cannot reach the in-process
- *     IdP), and a token check through `MissionService.verifyToken`.
+ *   - control endpoints under `/__e2e`, which exist only in this file: the
+ *     IdP's consent screen (the browser cannot reach the in-process IdP) and
+ *     who signs in next, a token check through `MissionService.verifyToken`,
+ *     and the executor's side of "exhaust and claim" — calls recorded
+ *     straight through the budget's `SessionService.recordCall`, as the
+ *     execution door does.
  *
  * Run by Playwright's `webServer` (see `playwright.config.ts` next to this
  * file) after `next build`. Never part of the image.
@@ -23,7 +26,10 @@ import { fileURLToPath } from 'node:url';
 
 import nextModule from 'next';
 
-import { getRoot } from '../../../src/server/compose/root';
+import { budgetMissionOf, SessionService } from '../../../src/server/budget';
+import { getRoot, type GatewayRoot } from '../../../src/server/compose/root';
+import { SlidingWindowRateLimiter } from '../../../src/server/rate-limit';
+import type { UserRecord } from '../../../src/server/store/types';
 import { FakeIdp } from '../../integration/auth/fake-idp';
 import { seedInstance, testRootDeps } from '../../integration/missions/support';
 import { CONTROL_PREFIX, E2E_USER, IDP_ISSUER, instancePort, PUBLIC_URL } from './instance';
@@ -45,6 +51,80 @@ async function readBody(req: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
   for await (const chunk of req) chunks.push(chunk as Buffer);
   return Buffer.concat(chunks).toString('utf8');
+}
+
+/** The risk the executor of "exhaust and claim" spends, and its quota. */
+const EXHAUST_RISK = 'github.read-code';
+const EXHAUST_QUOTA = 2;
+
+/**
+ * The executor's side of spec §7.6, without the execution door: a mission of
+ * `creator` with a two-action quota, called until the budget refuses.
+ */
+function executor(root: GatewayRoot, creator: UserRecord, githubConnectionId: string) {
+  const budget = new SessionService({
+    sessions: root.store.sessions,
+    requests: root.store.requests,
+    rateWindows: new SlidingWindowRateLimiter(),
+    requestUrl: root.requests.requestUrl,
+    requestExpirySeconds: root.config.requests.expirySeconds,
+  });
+
+  async function call(missionId: string) {
+    const mission = await root.store.missions.getById(missionId);
+    if (!mission) throw new Error(`no mission ${missionId}`);
+    return budget.recordCall({
+      mission: budgetMissionOf(mission),
+      tool: 'github__get_file_contents',
+      args: { repo: 'acme/app', path: 'README.md' },
+      risks_touched: [EXHAUST_RISK],
+      agent_label: 'e2e-agent',
+      now: new Date(),
+    });
+  }
+
+  return {
+    async exhaust(name: string) {
+      const issued = await root.missions.service.issue(creator, {
+        name,
+        connections: [
+          {
+            connection_id: githubConnectionId,
+            policy: [
+              {
+                risk_id: EXHAUST_RISK,
+                quota: EXHAUST_QUOTA,
+                rate_limit: { max: 60, window_seconds: 60 },
+                gate: 'auto',
+              },
+              {
+                risk_id: 'github.read-meta',
+                quota: 10,
+                rate_limit: { max: 60, window_seconds: 60 },
+                gate: 'auto',
+              },
+            ],
+          },
+        ],
+        period: { kind: 'recurring', length_seconds: 86_400 },
+        expires_at: null,
+      });
+      if (!issued.ok) throw new Error(`mission "${name}" was not issued`);
+      for (let i = 0; i <= EXHAUST_QUOTA; i += 1) {
+        const result = await call(issued.mission.id);
+        if (result.outcome === 'refused') {
+          return { mission_id: issued.mission.id, refusal: result.refusal };
+        }
+      }
+      throw new Error('the budget never refused');
+    },
+    async replay(missionId: string) {
+      const result = await call(missionId);
+      return result.outcome === 'allowed'
+        ? { outcome: result.outcome, refusal: null }
+        : { outcome: result.outcome, refusal: result.refusal };
+    },
+  };
 }
 
 async function main(): Promise<void> {
@@ -69,7 +149,8 @@ async function main(): Promise<void> {
     claims: { sub: 'sub', email: 'email', groups: 'groups' },
     allowedEmailDomains: [],
   });
-  await seedInstance(root);
+  const seeded = await seedInstance(root);
+  const agent = executor(root, seeded.ada, seeded.github.connection.id);
 
   const next = (
     typeof nextModule === 'function' ? nextModule : (nextModule as { default: unknown }).default
@@ -87,6 +168,27 @@ async function main(): Promise<void> {
         const authorization = new URL('/authorize', idp.issuer);
         authorization.search = url.search;
         sendJson(res, 200, { callback: idp.authorize(authorization).href });
+        return;
+      }
+      if (url.pathname === `${CONTROL_PREFIX}/idp/next-user` && req.method === 'POST') {
+        // Who the simulated IdP signs in at the next consent.
+        const user = JSON.parse(await readBody(req)) as {
+          sub: string;
+          email: string;
+          name: string;
+        };
+        idp.nextClaims = { ...user, groups: [] };
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+      if (url.pathname === `${CONTROL_PREFIX}/exhaust` && req.method === 'POST') {
+        const { name } = JSON.parse(await readBody(req)) as { name: string };
+        sendJson(res, 200, await agent.exhaust(name));
+        return;
+      }
+      if (url.pathname === `${CONTROL_PREFIX}/replay` && req.method === 'POST') {
+        const { mission_id: missionId } = JSON.parse(await readBody(req)) as { mission_id: string };
+        sendJson(res, 200, await agent.replay(missionId));
         return;
       }
       if (url.pathname === `${CONTROL_PREFIX}/verify-token` && req.method === 'POST') {

@@ -100,7 +100,16 @@ export interface SessionsRepo {
   /** A granted claim "reset": the counters of the period go back to zero. */
   resetCounters(sessionId: string, periodStart: Iso, riskId?: RiskId): Promise<number>;
   recordEvent(sessionId: string, event: NewEvent): Promise<EventRecord>;
-  listEvents(sessionId: string, options?: { since?: Iso; limit?: number }): Promise<EventRecord[]>;
+  listEvents(sessionId: string, options?: ListEventsOptions): Promise<EventRecord[]>;
+}
+
+export interface ListEventsOptions {
+  readonly since?: Iso;
+  readonly limit?: number;
+  /** Only these event kinds. */
+  readonly kinds?: readonly string[];
+  /** `desc` returns the most recent events first (the tail of the timeline). Default `asc`. */
+  readonly order?: 'asc' | 'desc';
 }
 
 interface SessionRow {
@@ -301,10 +310,33 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
     },
     async listEvents(sessionId, options = {}) {
       const limit = options.limit ?? DEFAULT_LIST_LIMIT;
-      const rows = options.since
-        ? eventsSince.all(sessionId, options.since, limit)
-        : eventsAll.all(sessionId, limit);
-      return rows.map(eventToRecord);
+      if (!options.kinds && options.order !== 'desc') {
+        const rows = options.since
+          ? eventsSince.all(sessionId, options.since, limit)
+          : eventsAll.all(sessionId, limit);
+        return rows.map(eventToRecord);
+      }
+      const kinds = options.kinds ?? [];
+      if (options.kinds && kinds.length === 0) return [];
+      const direction = options.order === 'desc' ? 'DESC' : 'ASC';
+      const where = ['session_id = ?'];
+      const params: (string | number)[] = [sessionId];
+      if (options.since) {
+        where.push('ts >= ?');
+        params.push(options.since);
+      }
+      if (kinds.length > 0) {
+        where.push(`kind IN (${placeholders(kinds.length)})`);
+        params.push(...kinds);
+      }
+      params.push(limit);
+      return db
+        .prepare<(string | number)[], EventRow>(
+          `SELECT id, session_id, ts, kind, risk_id, actor_user_id, details_json FROM events
+           WHERE ${where.join(' AND ')} ORDER BY ts ${direction}, id ${direction} LIMIT ?`,
+        )
+        .all(...params)
+        .map(eventToRecord);
     },
   };
 }

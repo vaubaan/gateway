@@ -1,7 +1,16 @@
 import { withImmediateTransaction } from '../db.ts';
 import { openSealedColumn, sealText, type Encryptor } from '../encryptor.ts';
 import { InvariantError, NotFoundError } from '../errors.ts';
-import type { Iso, RequestKind, RequestRecord, RequestState, RiskId } from '../types.ts';
+import type {
+  EventRecord,
+  Iso,
+  NewEvent,
+  RequestKind,
+  RequestRecord,
+  RequestState,
+  RiskId,
+  SessionRecord,
+} from '../types.ts';
 import { nowIso, parseJsonObject, requireRow, toJson, type RepoContext } from './context.ts';
 
 /**
@@ -36,6 +45,40 @@ export interface InsertRequestInput extends RequestInput {
   readonly prepared?: PreparedArguments | null;
 }
 
+/**
+ * What the `apply` callback of `decideClaim` sees and may do, all inside the open
+ * transaction. The rules (which resolution, which amount, which date) belong to the
+ * `RequestService`; this context only makes their effects atomic with the decision.
+ */
+export interface ClaimDecisionContext {
+  /** The claim, still `open` and unexpired at `now`. */
+  readonly request: RequestRecord;
+  /** The mission's session; null only when the session row was deleted since. */
+  readonly session: SessionRecord | null;
+  readonly now: Iso;
+  /** Consumed count per risk in the period starting at `periodStart`. */
+  counters(periodStart: Iso): ReadonlyMap<RiskId, number>;
+  /** Sets every counter of the period to zero; returns what each one held. */
+  resetCounters(periodStart: Iso): ReadonlyMap<RiskId, number>;
+  /** Gives `amount` actions back on one risk; false (nothing written) when fewer were consumed. */
+  creditCounter(periodStart: Iso, riskId: RiskId, amount: number): boolean;
+  /** Moves the mission's expiry; a mission stored `expired` becomes `active` again. */
+  setMissionExpiry(expiresAt: Iso): void;
+  /** Records an event on the mission's session; null when there is no session. */
+  recordEvent(event: NewEvent): EventRecord | null;
+}
+
+export interface ClaimDecisionOutcome {
+  readonly state: 'granted' | 'refused';
+  /** Persisted in `requests.decision_json` (resolution, amounts, dates). */
+  readonly decision: Record<string, unknown>;
+}
+
+export type ClaimDecisionResult<R extends ClaimDecisionOutcome> =
+  | { readonly status: 'decided'; readonly request: RequestRecord; readonly outcome: R }
+  /** Already granted, refused or expired (an overdue open request is expired here). */
+  | { readonly status: 'not-open'; readonly request: RequestRecord };
+
 export interface RequestsRepo {
   create(input: CreateRequestInput): Promise<RequestRecord>;
   /** Seals arguments for a request that a decision transaction will drop. */
@@ -53,8 +96,24 @@ export interface RequestsRepo {
     decidedByUserId: string,
     decision?: Record<string, unknown> | null,
   ): Promise<RequestRecord>;
+  /**
+   * Decides an open claim and applies the creator's resolution in one `BEGIN IMMEDIATE`
+   * transaction: the state change, the counter / expiry effects done through the
+   * context, and the events. `apply` must be synchronous; if it throws, nothing is
+   * written. A request that is not a claim is an `InvariantError`.
+   */
+  decideClaim<R extends ClaimDecisionOutcome>(
+    id: string,
+    decidedByUserId: string,
+    apply: (ctx: ClaimDecisionContext) => R,
+  ): Promise<ClaimDecisionResult<R>>;
   /** Sweeper: flips open requests past their expiry to `expired` and erases blobs. */
   expireOpen(): Promise<number>;
+  /**
+   * Same flip as `expireOpen`, returning the expired requests and recording one
+   * `request` event (`state: 'expired'`) per request on its mission's session.
+   */
+  sweepExpired(): Promise<RequestRecord[]>;
 }
 
 interface RequestRow {
@@ -217,6 +276,121 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
      WHERE state = 'open' AND expires_at <= ?`,
   );
 
+  const overdue = db.prepare<[string], RequestRow>(
+    `SELECT ${COLUMNS} FROM requests r WHERE r.state = 'open' AND r.expires_at <= ? ORDER BY r.created_at`,
+  );
+  const expireOne = db.prepare<[string]>(
+    `UPDATE requests SET state = 'expired', args_blob = NULL, key_version = NULL
+     WHERE id = ? AND state = 'open'`,
+  );
+  const sessionOfMission = db.prepare<
+    [string],
+    { id: string; mission_id: string; created_at: string }
+  >('SELECT id, mission_id, created_at FROM sessions WHERE mission_id = ?');
+  const countersOfPeriod = db.prepare<[string, string], { risk_id: string; consumed: number }>(
+    `SELECT risk_id, consumed FROM session_counters
+     WHERE session_id = ? AND period_start = ? ORDER BY risk_id`,
+  );
+  const zeroPeriod = db.prepare<[string, string]>(
+    'UPDATE session_counters SET consumed = 0 WHERE session_id = ? AND period_start = ?',
+  );
+  const creditOne = db.prepare<[number, string, string, string, number]>(
+    `UPDATE session_counters SET consumed = consumed - ?
+     WHERE session_id = ? AND period_start = ? AND risk_id = ? AND consumed >= ?`,
+  );
+  const extendMission = db.prepare<[string, string, string]>(
+    `UPDATE missions SET expires_at = ?, updated_at = ?,
+       status = CASE WHEN status = 'expired' THEN 'active' ELSE status END,
+       closed_at = CASE WHEN status = 'expired' THEN NULL ELSE closed_at END
+     WHERE id = ?`,
+  );
+  const insertEvent = db.prepare<
+    [string, string, string, string, string | null, string | null, string | null]
+  >(
+    `INSERT INTO events (id, session_id, ts, kind, risk_id, actor_user_id, details_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  );
+
+  function sessionOf(missionId: string): SessionRecord | null {
+    const row = sessionOfMission.get(missionId);
+    return row ? { id: row.id, missionId: row.mission_id, createdAt: row.created_at } : null;
+  }
+
+  function recordEventSync(sessionId: string, event: NewEvent, now: Iso): EventRecord {
+    const id = ctx.newId();
+    const details = event.details ?? null;
+    insertEvent.run(
+      id,
+      sessionId,
+      now,
+      event.kind,
+      event.riskId ?? null,
+      event.actorUserId ?? null,
+      toJson(details),
+    );
+    return {
+      id,
+      sessionId,
+      ts: now,
+      kind: event.kind,
+      riskId: event.riskId ?? null,
+      actorUserId: event.actorUserId ?? null,
+      details,
+    };
+  }
+
+  /** Flips one overdue request and leaves its trace on the session. In-transaction. */
+  function expireSync(request: RequestRecord, now: Iso): RequestRecord {
+    expireOne.run(request.id);
+    const session = sessionOf(request.missionId);
+    if (session) {
+      recordEventSync(
+        session.id,
+        {
+          kind: 'request',
+          riskId: request.riskId,
+          details: { request_id: request.id, request_kind: request.kind, state: 'expired' },
+        },
+        now,
+      );
+    }
+    return requireRow(getRequestRecord(ctx, request.id) ?? undefined, 'request', request.id);
+  }
+
+  function claimContext(
+    request: RequestRecord,
+    session: SessionRecord | null,
+    now: Iso,
+  ): ClaimDecisionContext {
+    const read = (periodStart: Iso): Map<RiskId, number> =>
+      new Map(
+        session
+          ? countersOfPeriod.all(session.id, periodStart).map((r) => [r.risk_id, r.consumed])
+          : [],
+      );
+    return {
+      request,
+      session,
+      now,
+      counters: read,
+      resetCounters(periodStart) {
+        const before = read(periodStart);
+        if (session) zeroPeriod.run(session.id, periodStart);
+        return before;
+      },
+      creditCounter(periodStart, riskId, amount) {
+        if (!session || !Number.isInteger(amount) || amount < 1) return false;
+        return creditOne.run(amount, session.id, periodStart, riskId, amount).changes === 1;
+      },
+      setMissionExpiry(expiresAt) {
+        extendMission.run(expiresAt, now, request.missionId);
+      },
+      recordEvent(event) {
+        return session ? recordEventSync(session.id, event, now) : null;
+      },
+    };
+  }
+
   async function prepareArguments(args: unknown): Promise<PreparedArguments> {
     return prepareRequestArguments(ctx.encryptor, ctx.newId(), args);
   }
@@ -259,8 +433,38 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
       }
       return current;
     },
+    async decideClaim(id, decidedByUserId, apply) {
+      const now = nowIso(ctx);
+      return withImmediateTransaction(db, () => {
+        const request = getRequestRecord(ctx, id);
+        if (!request) throw new NotFoundError('request', id);
+        if (request.kind !== 'claim') {
+          throw new InvariantError(`request ${id} is not a claim (kind '${request.kind}')`);
+        }
+        if (request.state !== 'open') return { status: 'not-open' as const, request };
+        if (request.expiresAt <= now) {
+          return { status: 'not-open' as const, request: expireSync(request, now) };
+        }
+        const outcome = apply(claimContext(request, sessionOf(request.missionId), now));
+        decideOpen.run(outcome.state, now, decidedByUserId, toJson(outcome.decision), id);
+        return {
+          status: 'decided' as const,
+          request: requireRow(getRequestRecord(ctx, id) ?? undefined, 'request', id),
+          outcome,
+        };
+      });
+    },
     async expireOpen() {
       return expire.run(nowIso(ctx)).changes;
+    },
+    async sweepExpired() {
+      const now = nowIso(ctx);
+      return withImmediateTransaction(db, () =>
+        overdue
+          .all(now)
+          .map(toRecord)
+          .map((request) => expireSync(request, now)),
+      );
     },
   };
 }

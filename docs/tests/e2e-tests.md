@@ -194,14 +194,19 @@ The instance's `public_url` is `https://gateway.e2e.test`; the browser context
 routes that origin to the local listener (`browser.ts`), so cookies stay
 `Secure` and the origin check sees the public origin. Navigation redirects are
 answered as pages that navigate, because Playwright does not route the hops of
-a redirect. Two control endpoints exist only in the launcher: the simulated
-IdP's consent, and `verify-token`. `E2E_V5_SCREENSHOT_DIR=<folder>` keeps a
-screenshot of each step.
+a redirect. Control endpoints exist only in the launcher, under `/__e2e`: the
+simulated IdP's consent and `idp/next-user` (who signs in next),
+`verify-token`, and the executor's side of a claim — `exhaust` (issues a
+mission with a two-action quota and records calls through
+`SessionService.recordCall` until the budget refuses) and `replay`. A request
+still in flight when a test ends is ignored by the router.
+`E2E_V5_SCREENSHOT_DIR=<folder>` keeps a screenshot of each step.
 
-| Spec                    | Scenario                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `issue-mission.spec.ts` | **Issue a mission**: no session → sign-in through the simulated IdP; experimental provider hidden until toggled; name, three connections, one preset each; the three-line summary; **one page** (per-risk detail folded, ≤ 6 visible checkboxes, page ≤ 2 viewports at 1280×800, Issue button in view); resource deselection drops the preset's staging entries and says so; one quota and one gate adjusted; unresolvable entries shown and not tickable; reveal-once dialog and kit; the token verifies; the detail page masks it; rotate (old token refused); revoke (`revoked`). |
-| `issue-mission.spec.ts` | **Proposal and duplicate**: an agent's JSON proposal (provider and refs) is checked, what passes fills the form, what cannot resolve is listed; issue; duplicate → same policy, its own token.                                                                                                                                                                                                                                                                                                                                                                                       |
+| Spec                        | Scenario                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `issue-mission.spec.ts`     | **Issue a mission**: no session → sign-in through the simulated IdP; experimental provider hidden until toggled; name, three connections, one preset each; the three-line summary; **one page** (per-risk detail folded, ≤ 6 visible checkboxes, page ≤ 2 viewports at 1280×800, Issue button in view); resource deselection drops the preset's staging entries and says so; one quota and one gate adjusted; unresolvable entries shown and not tickable; reveal-once dialog and kit; the token verifies; the detail page masks it; rotate (old token refused); revoke (`revoked`).                         |
+| `issue-mission.spec.ts`     | **Proposal and duplicate**: an agent's JSON proposal (provider and refs) is checked, what passes fills the form, what cannot resolve is listed; issue; duplicate → same policy, its own token.                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `exhaust-and-claim.spec.ts` | **Exhaust and claim** (P1.7): the executor's third call is refused `budget-exhausted` with `<public_url>/r/<id>`; another signed-in user opens it → **403**, one sentence, no mission name, risk or creator, nothing in their inbox; the creator opens it without a session → sign-in → the request: budget of the risk, other risks, session events, four actions with their consequence (expiry extension unavailable: the mission never expires); the inbox and its count in the bar; the replay is still refused; **Reset the period** → `granted`, counters at zero, count gone; **the replay passes**. |
 
 ### Implemented specs (legacy v4, deleted with the v4 UI in Phase 1)
 
@@ -228,7 +233,9 @@ that makes it possible. Target list (spec §4, §5, §7):
 3. **Mission issuance** — done: `v5/issue-mission.spec.ts` (P1.5).
 4. **Agent call through the execution door** — an MCP client calls a tool
    within budget (allowed, audited), then beyond it (`budget-exhausted`
-   with a claim URL) (P1.6).
+   with a claim URL) (P1.6). The claim itself — who may open the URL, the
+   creator's decision, the replay — is done: `v5/exhaust-and-claim.spec.ts`
+   (P1.7), with the calls recorded below the door.
 5. **Approval from the inbox** — a gated call produces an approval request;
    the human grants it from the inbox and the agent's retry passes (P2.1).
 6. **Refusal surfaces** — `risk-not-accepted`, `resource-not-in-mission`,

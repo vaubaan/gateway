@@ -68,7 +68,9 @@ form imports them directly and runs the same decision as the server. The
 
 The pages live in the `(app)` route group and take its layout: a v5 web
 session gets the `AppShell` (`components/shell/AppShell.tsx`), where "Missions"
-is one entry of `APP_NAV`; a visitor with no session is sent to `/login`. The
+is one entry of `APP_NAV` (an entry may carry a `Count` server component, used
+by "Requests": handbook [requests](requests.md)); a visitor with no session is
+sent to `/login`. The
 bootstrap operator has a session but is not a user: each page then renders
 `NeedsUser` (a mission always has an identified human behind it).
 

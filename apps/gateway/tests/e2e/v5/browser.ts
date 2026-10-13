@@ -11,7 +11,7 @@
  */
 import type { APIRequestContext, BrowserContext, Route } from '@playwright/test';
 
-import { CONTROL_PREFIX, IDP_ISSUER, localOrigin, PUBLIC_URL } from './instance';
+import { CONTROL_PREFIX, E2E_USER, IDP_ISSUER, localOrigin, PUBLIC_URL } from './instance';
 
 /** Headers that describe the browser's connection, not the request. */
 const HOP_HEADERS = new Set(['host', 'connection', 'content-length', 'accept-encoding']);
@@ -46,28 +46,42 @@ async function fulfillRedirect(route: Route, location: string, setCookies: strin
   });
 }
 
-export async function routeToInstance(context: BrowserContext): Promise<void> {
-  await context.route(`${PUBLIC_URL}/**`, async (route) => {
-    const request = route.request();
-    const url = new URL(request.url());
-    const navigation = request.isNavigationRequest();
-    const response = await route.fetch({
-      url: `${localOrigin()}${url.pathname}${url.search}`,
-      headers: await forwardedHeaders(route),
-      // A navigation's redirects are the browser's to follow: they carry the session cookies.
-      maxRedirects: navigation ? 0 : undefined,
-    });
-    const location = response.headers().location;
-    if (navigation && response.status() >= 300 && response.status() < 400 && location) {
-      const setCookies = response
-        .headersArray()
-        .filter((h) => h.name.toLowerCase() === 'set-cookie')
-        .map((h) => h.value);
-      await fulfillRedirect(route, location, setCookies);
-      return;
-    }
-    await route.fulfill({ response });
+/**
+ * A request still in flight when its test ends (a link prefetch, typically)
+ * fails with "Target page, context or browser has been closed". Nobody waits
+ * for that answer; anything else is a real failure and is rethrown.
+ */
+function ignoreClosedTarget(err: unknown): void {
+  if (err instanceof Error && /has been closed/.test(err.message)) return;
+  throw err;
+}
+
+async function forwardToInstance(route: Route): Promise<void> {
+  const request = route.request();
+  const url = new URL(request.url());
+  const navigation = request.isNavigationRequest();
+  const response = await route.fetch({
+    url: `${localOrigin()}${url.pathname}${url.search}`,
+    headers: await forwardedHeaders(route),
+    // A navigation's redirects are the browser's to follow: they carry the session cookies.
+    maxRedirects: navigation ? 0 : undefined,
   });
+  const location = response.headers().location;
+  if (navigation && response.status() >= 300 && response.status() < 400 && location) {
+    const setCookies = response
+      .headersArray()
+      .filter((h) => h.name.toLowerCase() === 'set-cookie')
+      .map((h) => h.value);
+    await fulfillRedirect(route, location, setCookies);
+    return;
+  }
+  await route.fulfill({ response });
+}
+
+export async function routeToInstance(context: BrowserContext): Promise<void> {
+  await context.route(`${PUBLIC_URL}/**`, (route) =>
+    forwardToInstance(route).catch(ignoreClosedTarget),
+  );
 
   await context.route(`${IDP_ISSUER}/authorize**`, async (route) => {
     const url = new URL(route.request().url());
@@ -91,4 +105,46 @@ export async function checkToken(request: APIRequestContext, token: string): Pro
     data: { token },
   });
   return (await response.json()) as TokenCheck;
+}
+
+/** Chooses who the simulated IdP signs in at the next consent. */
+export async function signInAs(
+  request: APIRequestContext,
+  user: { readonly sub: string; readonly email: string; readonly name: string } = E2E_USER,
+): Promise<void> {
+  await request.post(`${localOrigin()}${CONTROL_PREFIX}/idp/next-user`, { data: user });
+}
+
+export interface ExhaustedMission {
+  readonly mission_id: string;
+  /** The `budget-exhausted` refusal the executor received. */
+  readonly refusal: { readonly code: string; readonly claim_url: string; readonly hint: string };
+}
+
+/**
+ * The executor's side of "exhaust and claim": issues a mission of the default
+ * user with a two-action quota and calls it until the budget refuses.
+ */
+export async function exhaustMission(
+  request: APIRequestContext,
+  name: string,
+): Promise<ExhaustedMission> {
+  const response = await request.post(`${localOrigin()}${CONTROL_PREFIX}/exhaust`, {
+    data: { name },
+  });
+  return (await response.json()) as ExhaustedMission;
+}
+
+/** The executor replays its call with the same token. */
+export async function replayCall(
+  request: APIRequestContext,
+  missionId: string,
+): Promise<{ outcome: 'allowed' | 'refused'; refusal: { code: string } | null }> {
+  const response = await request.post(`${localOrigin()}${CONTROL_PREFIX}/replay`, {
+    data: { mission_id: missionId },
+  });
+  return (await response.json()) as {
+    outcome: 'allowed' | 'refused';
+    refusal: { code: string } | null;
+  };
 }
