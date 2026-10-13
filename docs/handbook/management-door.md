@@ -891,11 +891,11 @@ since, next, access?)` — with `access`, the access token of the renewal is
 - `createCode` and `createAccessToken` check that the delegation is active
   and insert in one transaction (on a synchronous driver the two statements
   could not interleave; on another they could).
-- `consumeCode(hash)` and `createRefreshToken(input)` are gone: a code is
+- No method spends a code or writes a refresh token on its own: a code is
   spent and the first refresh token written by `redeemCode` only, a later one
   by a rotation.
-- `revokeRefreshToken(id)` is gone: nothing revokes one refresh token alone
-  (a rotation replaces it, a revocation ends the family).
+- No method revokes one refresh token alone: a rotation replaces it, a
+  revocation ends the family.
 
 `DELEGATION_REVOKE_REASONS`: `user`, `client`, `operator`,
 `refresh-token-replay`, `authorization-code-replay`.

@@ -413,10 +413,11 @@ pivot D1; the Upstash ADR is superseded).
 
 `packages/gateway-core/tests/unit/`, vitest, no network, no store:
 
-- `errors.test.ts` (28) — eight codes, one sample each, every field, hint
+- `errors.test.ts` (29) — eight codes, one sample each, every field, hint
   non-empty and serializable; `isRefusal`; `isUnavailableConnectionStatus`;
   `rpcError` / `rpcSuccess`; `AuthError` code and status;
-  `refusalToRpcError` (-32603, data = refusal).
+  `refusalToRpcError` (-32603, data = refusal); the `mission-inactive` hint of
+  an orphaned mission says how long an earlier request stays grantable.
 - `audit.test.ts` (2) — `MemoryAuditWriter` over both kinds; the call entry
   carries every §8 field.
 - `fingerprint.test.ts` (8) — key sorting, `undefined` and array holes,

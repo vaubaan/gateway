@@ -704,7 +704,7 @@ fallback hit), resource resolution and `modeOf` (ref suffix, metadata; the
 env label is never a source of the mode), argument handling, `execute`
 (form-encoded REST v1) and `discoverResources` (one resource per mode)
 against `mockFetch`, `api-key` credential spec. `risk-catalog` (20): 16
-named risks + fallback at catalog v3, every risk env-scoped on the mode, no
+named risks + fallback at catalog v4, every risk env-scoped on the mode, no
 preset carries the fallback, the money-out risks carry the rate ceiling and
 no cap the door does not enforce, slice → risk resolution including the
 `payment-intent.W` side effect of `create_subscription` resolving to

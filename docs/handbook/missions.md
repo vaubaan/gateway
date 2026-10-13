@@ -627,10 +627,12 @@ and resources are read through the store repositories only
 
 ## Tests
 
-Unit, beside the code (130): `authority/authority-service.test.ts` (20),
-`missions/preview.test.ts` (44), `catalog-view.test.ts` (11), `summary.test.ts`
+Unit, beside the code (133): `authority/authority-service.test.ts` (20),
+`missions/preview.test.ts` (44), `catalog-view.test.ts` (12), `summary.test.ts`
 (8), `bootstrap-kit.test.ts` (13), `orphan-reason.test.ts` (4), `token.test.ts`
-(8, with the draft schema), `app/(app)/missions/new/form-state.test.ts` (22).
+(8, with the draft schema), `app/(app)/missions/new/form-state.test.ts` (22),
+`app/(app)/missions/message-of.test.ts` (2: the sentence a mission page shows
+for a refusal of the mission API).
 
 Integration, `tests/integration/missions/` (53) on the real root over
 `:memory:`: `mission-lifecycle.test.ts` (28), `mission-handlers.test.ts` (8) and
