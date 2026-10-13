@@ -1,44 +1,45 @@
 .list {
   display: flex;
-  gap: var(--space-1);
+  gap: var(--space-4);
   min-width: 0;
   overflow-x: auto;
+  border-bottom: 1px solid var(--line);
 }
 .tab {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
-  min-height: var(--space-10);
-  padding: 0 var(--space-3);
+  gap: 6px;
+  min-height: var(--control-lg);
+  /* The rule of the selected tab sits on the hairline of the list. */
+  margin-bottom: -1px;
+  padding: 0 var(--space-half);
   border: 0;
   border-bottom: 2px solid transparent;
   background: none;
-  color: var(--text-muted);
-  font-size: var(--text-base);
-  font-weight: var(--font-weight-medium);
+  color: var(--ink-3);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-regular);
   white-space: nowrap;
   transition:
     color var(--duration-fast) var(--ease-out),
     border-color var(--duration-fast) var(--ease-out);
 }
 .tab:hover {
-  color: var(--text-foreground);
+  color: var(--ink);
 }
 /* The selected tab: a heavier word and a rule under it, not a colour. */
 .tabOn {
-  color: var(--text-foreground);
-  font-weight: var(--font-weight-semibold);
-  border-bottom-color: var(--text-foreground);
+  color: var(--ink);
+  font-weight: var(--weight-strong);
+  border-bottom-color: var(--ink);
 }
 .tab:focus-visible {
   border-radius: var(--radius-sm);
   box-shadow: inset var(--focus-ring);
 }
 .count {
-  padding: 0 var(--space-2);
-  border-radius: var(--radius-full);
-  background: var(--surface-sunken);
-  color: var(--text-muted);
+  color: var(--ink-3);
   font-size: var(--text-xs);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--weight-regular);
+  font-variant-numeric: tabular-nums;
 }

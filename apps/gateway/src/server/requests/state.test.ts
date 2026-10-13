@@ -58,6 +58,6 @@ describe('request URL', () => {
 
   it('encodes the id: a crafted id cannot leave the prefix', () => {
     expect(requestPath('../admin')).toBe('/r/..%2Fadmin');
-    expect(inboxRequestPath('a b')).toBe('/requests/a%20b');
+    expect(inboxRequestPath('a b')).toBe('/waiting/a%20b');
   });
 });

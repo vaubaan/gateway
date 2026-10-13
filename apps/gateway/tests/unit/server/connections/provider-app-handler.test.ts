@@ -169,11 +169,11 @@ describe('provider-app handler: audit failure and malformed bodies', () => {
         'oauthco',
       ),
       await root.connections.handlers.connect(
-        await jsonPost('/connections/connect/oauthco'),
+        await jsonPost('/accounts/connect/oauthco'),
         'oauthco',
       ),
       await root.connections.handlers.updateResource(
-        await jsonPost('/connections/c1/resources/r1'),
+        await jsonPost('/accounts/c1/resources/r1'),
         'c1',
         'r1',
       ),

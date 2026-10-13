@@ -52,7 +52,7 @@ export function PrincipalCard({ principal }: { principal: Principal }) {
           </div>
           <div className={styles.actions}>
             <OperatorBadge principal={principal} />
-            {principal.kind === 'user' && <Link href="/connections">Connections</Link>}
+            {principal.kind === 'user' && <Link href="/">Open the gateway</Link>}
             {isOperatorPrincipal(principal) && <Link href="/admin">Administration</Link>}
             <SignOutButton />
           </div>

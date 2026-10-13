@@ -1,0 +1,127 @@
+.scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+.table th {
+  padding: 6px var(--cell-x);
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-regular);
+  text-align: left;
+  white-space: nowrap;
+}
+.table td {
+  padding: 6px var(--cell-x);
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+.table tbody:last-child tr:last-child td {
+  border-bottom: 0;
+}
+
+.selectCell {
+  width: 28px;
+  padding-right: 0 !important;
+}
+.table .number {
+  width: 100px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.severityCell {
+  width: 84px;
+  white-space: nowrap;
+}
+.usageCell {
+  width: 230px;
+}
+.gateCell {
+  width: 170px;
+  white-space: nowrap;
+}
+.gateRow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.label {
+  display: block;
+}
+.tag {
+  margin-left: 6px;
+}
+.id {
+  display: block;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  /* An id wraps between its words, never inside one. */
+  overflow-wrap: anywhere;
+}
+
+.table tbody tr.group th,
+.table tbody tr.group td {
+  padding: 5px var(--cell-x);
+  border-bottom: 1px solid var(--line);
+  background: var(--paper-side);
+  color: var(--ink-2);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-strong);
+}
+.groupNote {
+  margin-left: 6px;
+  color: var(--ink-3);
+  font-weight: var(--weight-regular);
+}
+
+/* Listed, not included: the row is quiet and holds no limit. */
+.out td {
+  color: var(--ink-3);
+}
+
+.why {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: var(--text-xs);
+}
+.why:hover {
+  text-decoration: underline;
+}
+.why[aria-expanded='true'] {
+  font-weight: var(--weight-strong);
+}
+.severityCell .why {
+  margin-left: var(--space-2);
+}
+
+.table tbody tr.whyRow td {
+  padding: 10px var(--cell-x) var(--space-3) var(--space-10);
+  background: var(--paper-side);
+}
+.whyBox {
+  display: grid;
+  gap: var(--space-2);
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+}
+.reason {
+  max-width: var(--measure);
+}
+.reference {
+  color: var(--accent);
+}
+.tools {
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}

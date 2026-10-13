@@ -43,7 +43,7 @@ Packaging and deployment (image, compose file, reverse proxy) are in
 | [missions](missions.md)             | How a connection owner issues a mission (a per-risk budget and gate on selected resources): authority, presets, resources, members and per-holder tokens, the bootstrap kit.                    |
 | [requests](requests.md)             | Claims and approval requests once a refusal dropped them into the creator's inbox: the request URL, who may open it, the decision, events, expiry.                                              |
 | [audit](audit.md)                   | How what happened is made visible: the Audit page's search, the Mission session page, the retention sweeper, administrative entries.                                                            |
-| [web-app](web-app.md)               | The frame of the human surface: route map, layouts, the shell of the application and of Administration, session helpers, UI primitives and type colours; the provider reference (`/providers`). |
+| [web-app](web-app.md)               | The frame of the human surface: route map, layouts, the shell of the application and of Administration, session helpers, UI primitives and type colours; the provider reference (`/reference`). |
 
 ## Agents
 

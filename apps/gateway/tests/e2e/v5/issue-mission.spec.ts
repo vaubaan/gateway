@@ -137,7 +137,7 @@ test('issue a three-connection mission on one page, then rotate and revoke', asy
   await excluded.locator('summary').click();
   await expect(
     page.getByTestId('preset-detail-github').getByRole('link', { name: /GitHub reference/ }),
-  ).toHaveAttribute('href', '/providers/github#preset-developer');
+  ).toHaveAttribute('href', '/reference/github#preset-developer');
   // The choice itself carries the width of each preset.
   await expect(
     page.getByRole('group', { name: 'Preset for GitHub acme-org' }).getByRole('radio'),
@@ -193,7 +193,7 @@ test('issue a three-connection mission on one page, then rotate and revoke', asy
   await expect(why).toHaveAttribute('open', '');
   await expect(merge.getByRole('link', { name: 'github.merge-protected' })).toHaveAttribute(
     'href',
-    '/providers/github#risk-github.merge-protected',
+    '/reference/github#risk-github.merge-protected',
   );
   await expect(page.getByLabel('Accept risk github.merge-protected')).not.toBeChecked();
   await expect(page.getByLabel('Accept risk github.read-code')).toBeChecked();
@@ -297,7 +297,7 @@ test('issue a three-connection mission on one page, then rotate and revoke', asy
   // Each risk id links to its entry in the provider reference.
   const missionUrl = page.url();
   await readCode.getByRole('link', { name: 'github.read-code' }).click();
-  await expect(page).toHaveURL(/\/providers\/github#risk-github\.read-code$/);
+  await expect(page).toHaveURL(/\/reference\/github#risk-github\.read-code$/);
   await expect(page.getByTestId('risk-github.read-code')).toBeInViewport();
   await expect(page.getByTestId('risk-github.read-code')).toContainText(
     'Read code, branches, commits, files',
@@ -423,9 +423,9 @@ test('the provider reference explains each plugin: model, risks, presets, tools'
   await signIn(page);
   await page
     .getByRole('navigation', { name: 'Main' })
-    .getByRole('link', { name: 'Providers' })
+    .getByRole('link', { name: 'Reference' })
     .click();
-  await expect(page.getByRole('heading', { name: 'Providers', level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Reference', level: 1 })).toBeVisible();
   // One card per shipped plugin, from the registry; the experimental one says so.
   await expect(page.getByTestId('provider-github')).toContainText('App installation');
   await expect(page.getByTestId('provider-github')).toContainText('15 risks');
@@ -438,19 +438,14 @@ test('the provider reference explains each plugin: model, risks, presets, tools'
     /functions/,
   ]);
   await expect(page.getByTestId('provider-supabase')).toContainText('staging');
-  // The bar holds on one line at 1280 px, and marks the current section.
+  // The side navigation marks the current section.
   const nav = page.getByRole('navigation', { name: 'Main' });
-  const tops = await nav
-    .getByRole('link')
-    .evaluateAll((links) => links.map((link) => Math.round(link.getBoundingClientRect().top)));
-  expect(new Set(tops).size).toBe(1);
-  expect((await page.locator('header').first().boundingBox())?.height).toBeLessThan(64);
-  await expect(nav.getByRole('link', { name: 'Providers' })).toHaveAttribute(
+  await expect(nav.getByRole('link', { name: 'Reference' })).toHaveAttribute(
     'aria-current',
     'page',
   );
   await expect(nav.getByRole('link', { name: 'Missions' })).not.toHaveAttribute('aria-current');
-  // The account is one compact control; signing out is behind it.
+  // The person is one control at the foot of the navigation; signing out is behind it.
   await expect(page.getByRole('button', { name: 'Sign out' })).toBeHidden();
   await page.getByTestId('user-menu').click();
   await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
@@ -532,7 +527,7 @@ test('the provider reference explains each plugin: model, risks, presets, tools'
 
   // A risk anchor opens the Risks tab on a plane that shows the entry, and unfolds it.
   await planes.getByRole('radio', { name: /^auth/ }).check();
-  await page.goto('/providers/supabase#risk-supabase.bulk-row-write');
+  await page.goto('/reference/supabase#risk-supabase.bulk-row-write');
   await expect(tabs.getByRole('tab', { name: /Risks/ })).toHaveAttribute('aria-selected', 'true');
   const entry = page.getByTestId('risk-supabase.bulk-row-write');
   await expect(entry).toBeInViewport();
@@ -576,7 +571,7 @@ test('the provider reference explains each plugin: model, risks, presets, tools'
   await expect(page.getByTestId('preset-migration-operator')).toBeInViewport();
 
   // A preset anchor, as mission creation links to it; a single-plane provider has no plane control.
-  await page.goto('/providers/github#preset-developer');
+  await page.goto('/reference/github#preset-developer');
   await expect(page.getByTestId('preset-developer')).toBeInViewport();
   await expect(page.getByTestId('plane-control')).toHaveCount(0);
   await expect(page.getByTestId('preset-matrix')).toContainText('Modify a GitHub Actions workflow');
@@ -584,7 +579,7 @@ test('the provider reference explains each plugin: model, risks, presets, tools'
     'approval',
   );
   // Fifteen risks, collapsed, read in about one and a half screens.
-  await page.goto('/providers/github#risks');
+  await page.goto('/reference/github#risks');
   await expect(page.locator('article[data-testid^="risk-github."]')).toHaveCount(15);
   const first = await page.getByTestId('risk-github.read-code').boundingBox();
   const last = await page.getByTestId('risk-github.delete-release').boundingBox();
@@ -592,13 +587,13 @@ test('the provider reference explains each plugin: model, risks, presets, tools'
   if (!first || !last || !viewport) throw new Error('the risk list is not laid out');
   expect((last.y + last.height - first.y) / viewport.height).toBeLessThan(1.75);
   // The one tool that hands a provider token to the agent, and its risks, say so.
-  await page.goto('/providers/github#tools');
+  await page.goto('/reference/github#tools');
   await expect(page.getByRole('tab', { name: /Tools/ })).toHaveAttribute('aria-selected', 'true');
   const mint = page.getByRole('row', { name: /github__mint_install_token/ });
   await expect(mint).toContainText('hands a token to the agent');
   await expect(mint.getByRole('link', { name: 'github.mint-install-token-push' })).toHaveAttribute(
     'href',
-    '/providers/github#risk-github.mint-install-token-push',
+    '/reference/github#risk-github.mint-install-token-push',
   );
   await expect(page.getByTestId('token-handout-note')).toContainText(
     'What the agent then does with that token is outside the gateway',
@@ -610,6 +605,6 @@ test('the provider reference explains each plugin: model, risks, presets, tools'
   await expect(push.locator('[data-kind="tool"]')).toHaveText(/github__mint_install_token/);
   await expect(page.getByTestId('risk-github.read-code')).not.toContainText('hands a token');
   // An unknown provider is not found.
-  const missing = await page.goto('/providers/no-such-provider');
+  const missing = await page.goto('/reference/no-such-provider');
   expect(missing?.status()).toBe(404);
 });

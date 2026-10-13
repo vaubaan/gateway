@@ -18,9 +18,9 @@ tracks:
   - apps/gateway/src/server/store/repositories/shares.ts
   - apps/gateway/src/server/store/repositories/groups.ts
   - apps/gateway/src/server/store/repositories/connections.ts
-  - apps/gateway/src/app/(app)/connections/[id]/share/
-  - apps/gateway/src/app/(app)/connections/[id]/shares/
-  - apps/gateway/src/app/(app)/connections/[id]/transfer/
+  - apps/gateway/src/app/(app)/accounts/[id]/share/
+  - apps/gateway/src/app/(app)/accounts/[id]/shares/
+  - apps/gateway/src/app/(app)/accounts/[id]/transfer/
   - apps/gateway/src/app/(app)/shares/
   - apps/gateway/src/app/admin/(guarded)/groups/
   - apps/gateway/src/app/admin/(guarded)/connections/
@@ -77,7 +77,7 @@ apps/gateway/src/server/shares/
   restriction.ts         groupBySeverity(), selectAllIds(), summarizeRestriction(), envNotes()   (pure, browser-safe)
   service.ts             ShareService: contextFor / share / revoke / received; labellingOf()
   errors.ts              ShareError, SHARE_ERROR_MESSAGES, isShareError()
-  handlers.ts            POST /connections/<id>/shares, …/shares/<shareId>/revoke
+  handlers.ts            POST /accounts/<id>/shares, …/shares/<shareId>/revoke
   index.ts               createSharesModule(deps) → root.shares
 apps/gateway/src/server/groups/
   service.ts             GroupService: list / create / addMember / removeMember
@@ -512,11 +512,11 @@ group overage) never reaches the sync: the sign-in is refused with
 
 | Path                                                                            | What                                                                                                                                                                              | Guard    |
 | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| `/connections/<id>`                                                             | "Shares" card (target, restriction on demand, Edit, Revoke), "Ownership" card (transfer)                                                                                          | owner    |
-| `/connections/<id>/share[?share=<id>]`                                          | the Share dialog (`share-form.tsx`, client): the checklist open under its summary, each risk a compact `RiskExplain` row ([missions](missions.md)), the helper text behind "More" | owner    |
-| `POST /connections/<id>/shares`                                                 | `shares.handlers.share`                                                                                                                                                           | user     |
-| `POST /connections/<id>/shares/<shareId>/revoke`                                | `shares.handlers.revoke`                                                                                                                                                          | user     |
-| `POST /connections/<id>/transfer`                                               | `connections.handlers.transfer` (`group_id`)                                                                                                                                      | user     |
+| `/accounts/<id>`                                                                | "Shares" card (target, restriction on demand, Edit, Revoke), "Ownership" card (transfer)                                                                                          | owner    |
+| `/accounts/<id>/share[?share=<id>]`                                             | the Share dialog (`share-form.tsx`, client): the checklist open under its summary, each risk a compact `RiskExplain` row ([missions](missions.md)), the helper text behind "More" | owner    |
+| `POST /accounts/<id>/shares`                                                    | `shares.handlers.share`                                                                                                                                                           | user     |
+| `POST /accounts/<id>/shares/<shareId>/revoke`                                   | `shares.handlers.revoke`                                                                                                                                                          | user     |
+| `POST /accounts/<id>/transfer`                                                  | `connections.handlers.transfer` (`group_id`)                                                                                                                                      | user     |
 | `/shares`                                                                       | Shares received                                                                                                                                                                   | user     |
 | `/admin/groups`                                                                 | groups, members                                                                                                                                                                   | operator |
 | `POST /admin/groups/create`, `…/<id>/members`, `…/<id>/members/<userId>/remove` | `groups.handlers.*`                                                                                                                                                               | operator |

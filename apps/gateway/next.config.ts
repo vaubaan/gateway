@@ -50,7 +50,41 @@ const NEVER_SHIPPED = [
   './tsconfig.tsbuildinfo',
 ];
 
+/**
+ * The paths the interface had before its words changed (ADR
+ * interface-redesign-vocabulary-and-design-system): connection → account,
+ * request → waiting for you, audit → activity, provider → reference. Every old
+ * path answers with a permanent redirect (308: the method and the body of a
+ * form post are kept, the query string too), so bookmarks, links in tickets and
+ * the address an agent was handed keep working.
+ *
+ * One path is NOT redirected: `/connections/callback/<provider>`. It is
+ * registered at the provider as the callback of the company's app — part of
+ * the protocol, like `/r/<id>`, `/mcp` and `/api/**`, which keep their names.
+ *
+ * `tests/unit/app/legacy-redirects.test.ts` holds each rule to a page or a
+ * route that exists.
+ */
+export const LEGACY_REDIRECTS: readonly {
+  readonly source: string;
+  readonly destination: string;
+}[] = [
+  { source: '/connections', destination: '/accounts' },
+  // A first segment that is not `callback`, then anything under it.
+  { source: '/connections/:first((?!callback(?:/|$))[^/]+)', destination: '/accounts/:first' },
+  {
+    source: '/connections/:first((?!callback(?:/|$))[^/]+)/:rest*',
+    destination: '/accounts/:first/:rest*',
+  },
+  { source: '/requests', destination: '/waiting' },
+  { source: '/requests/:path*', destination: '/waiting/:path*' },
+  { source: '/audit', destination: '/activity' },
+  { source: '/providers', destination: '/reference' },
+  { source: '/providers/:path*', destination: '/reference/:path*' },
+];
+
 const nextConfig: NextConfig = {
+  redirects: async () => LEGACY_REDIRECTS.map((rule) => ({ ...rule, permanent: true })),
   env: {
     NEXT_PUBLIC_COMMIT_SHA: commitSha,
     NEXT_PUBLIC_GATEWAY_VERSION: resolveVersion(),

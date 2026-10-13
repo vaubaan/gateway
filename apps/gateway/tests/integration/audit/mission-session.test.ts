@@ -97,7 +97,7 @@ describe('mission session view', () => {
 
     // The request is the creator's: she gets the link, he sees that it waits.
     expect(asAda.open_requests).toHaveLength(1);
-    expect(asAda.open_requests[0]?.path).toMatch(/^\/requests\//);
+    expect(asAda.open_requests[0]?.path).toMatch(/^\/waiting\//);
     expect(asBob.open_requests).toEqual([{ ...asAda.open_requests[0], path: null }]);
     // Arguments are shown to nobody.
     expect(JSON.stringify(asBob)).not.toContain(ARGUMENT_MARKER);
@@ -228,8 +228,8 @@ describe('mission session view', () => {
     const v = await view();
     expect(v.open_requests.map((r) => [r.kind, r.risk_id, r.path]).sort()).toEqual(
       [
-        ['approval', MERGE, `/requests/${approval.result.request_id}`],
-        ['claim', PR, `/requests/${claim.result.request_id}`],
+        ['approval', MERGE, `/waiting/${approval.result.request_id}`],
+        ['claim', PR, `/waiting/${claim.result.request_id}`],
       ].sort(),
     );
     expect(Object.keys(v.open_requests[0] ?? {}).sort()).toEqual([

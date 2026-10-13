@@ -36,17 +36,15 @@ describe('readCredentialFields', () => {
 describe('resolveReturnTo — return URL limited to public_url', () => {
   it('accepts a path and an absolute URL of the public origin', () => {
     expect(resolveReturnTo('/missions/new?step=2#c', PUBLIC_URL)).toBe('/missions/new?step=2#c');
-    expect(resolveReturnTo('https://gateway.example.com/connections', PUBLIC_URL)).toBe(
-      '/connections',
-    );
-    expect(resolveReturnTo('connections', PUBLIC_URL)).toBe('/connections');
+    expect(resolveReturnTo('https://gateway.example.com/accounts', PUBLIC_URL)).toBe('/accounts');
+    expect(resolveReturnTo('accounts', PUBLIC_URL)).toBe('/accounts');
   });
 
   it.each([
     'https://evil.example.net/connections',
     '//evil.example.net/x',
     '/\\evil.example.net/x',
-    'http://gateway.example.com/connections',
+    'http://gateway.example.com/accounts',
     'https://gateway.example.com:8443/x',
     'https://gateway.example.com.evil.example.net/',
     'https://gateway.example.com@evil.example.net/',

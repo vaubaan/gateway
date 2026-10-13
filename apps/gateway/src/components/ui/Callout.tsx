@@ -1,47 +1,90 @@
 /**
- * A note that interrupts on purpose: an icon, a short title, a sentence or
- * two. Used sparingly — the four notes of the risk model (fallback, token
- * hand-out, deprecated, experimental) — and never as a tinted paragraph: the
- * surface stays neutral, only the icon and the title carry the tone.
+ * A note that interrupts on purpose: an optional short title, a sentence or
+ * two. Tinted by its tone, and used sparingly — a filled box is a claim that
+ * something is a separate object, so a page holds **one at most** for the
+ * thing that needs the person. Never a tinted paragraph of help: help is one
+ * sentence in the lede, or behind a disclosure.
+ *
+ * `neutral` — a fact worth setting apart; `info` — where to go next;
+ * `warn` — needs you; `bad` — stopped, refused, failed; `ok` — done (rare:
+ * the absence of a problem needs no box).
+ *
+ * `Banner` is the same component under the name older pages import.
  */
-import type { BadgeTone } from './Badge.tsx';
+import type { Tone } from '@/lib/vocabulary';
+
+import { toneOfBadge, type BadgeTone } from './Badge.tsx';
 import styles from './Callout.module.css';
 import { Glyph, type GlyphName } from './Glyph.tsx';
+import { Icon, type IconName } from './Icon.tsx';
 
-const TONE_GLYPH: Readonly<Record<BadgeTone, GlyphName>> = {
-  neutral: 'info',
+const TONE_ICON: Readonly<Record<Tone, IconName | null>> = {
+  neutral: null,
   info: 'info',
-  success: 'info',
-  warning: 'warning',
-  danger: 'warning',
+  ok: 'check',
+  warn: 'alert',
+  bad: 'alert',
 };
 
+const BADGE_TONES: readonly string[] = ['success', 'warning', 'danger'];
+
+function toneOf(tone: Tone | BadgeTone): Tone {
+  return BADGE_TONES.includes(tone) ? toneOfBadge(tone as BadgeTone) : (tone as Tone);
+}
+
 export function Callout({
-  tone = 'info',
+  tone = 'neutral',
   icon,
   title,
   children,
+  action,
   testId,
 }: {
-  tone?: BadgeTone;
+  tone?: Tone | BadgeTone;
+  /** A glyph of the older set, for the notes of the risk model that name one. */
   icon?: GlyphName;
-  title: React.ReactNode;
+  title?: React.ReactNode;
   children: React.ReactNode;
+  /** One action at the end of the note (a small `Button` or `ButtonLink`). */
+  action?: React.ReactNode;
   testId?: string;
 }) {
+  const resolved = toneOf(tone);
+  const toneIcon = TONE_ICON[resolved];
   return (
     <div
-      className={[styles.callout, styles[`tone_${tone}`]].join(' ')}
+      className={[styles.callout, styles[`tone_${resolved}`]].join(' ')}
       role="note"
+      data-tone={resolved}
       data-testid={testId}
     >
-      <span className={styles.icon}>
-        <Glyph name={icon ?? TONE_GLYPH[tone]} />
-      </span>
+      {(icon || toneIcon) && (
+        <span className={styles.icon}>
+          {icon ? <Glyph name={icon} /> : toneIcon && <Icon name={toneIcon} size={16} />}
+        </span>
+      )}
       <div className={styles.body}>
-        <div className={styles.title}>{title}</div>
+        {title && <div className={styles.title}>{title}</div>}
         <div className={styles.text}>{children}</div>
       </div>
+      {action && <div className={styles.action}>{action}</div>}
     </div>
+  );
+}
+
+/** The name older pages use for a block message; the same component. */
+export function Banner({
+  tone = 'info',
+  title,
+  children,
+}: {
+  tone?: Tone | BadgeTone;
+  title?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <Callout tone={tone} title={title}>
+      {children}
+    </Callout>
   );
 }

@@ -106,7 +106,7 @@ identity provider, which shows an account picker.
 | Carol   | member of the "GitHub admins" group | the GitHub connection owned by that group, her own Stripe connection (test and live as two resources), whose test mode she shares to Alice             |
 
 Alice is the operator because the demo's admin rule lists her email. To
-switch account, open the account button at the end of the bar and "Sign
+switch account, open your name at the foot of the side navigation and "Sign
 out": it returns to the picker.
 
 ## What is seeded

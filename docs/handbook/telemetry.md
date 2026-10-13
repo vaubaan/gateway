@@ -241,7 +241,7 @@ reads is produced by the code that sends. A warning banner explains the
 ## The validation badge
 
 `PluginStatsReader.statusFor(pluginId)` (`stats.ts`) backs
-`<ValidationBadge>` on `/connections` and `/connections/<id>`:
+`<ValidationBadge>` on `/accounts` and `/accounts/<id>`:
 
 - active only when the client's state is `sending`; otherwise `null` and no
   request — an instance that does not contribute never contacts the collector;

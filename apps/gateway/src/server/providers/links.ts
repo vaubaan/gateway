@@ -9,9 +9,9 @@
 import type { RiskId } from '@vaubaan/shared';
 import { formatRiskId, parseRiskId } from '@vaubaan/shared/risk-id';
 
-export const PROVIDERS_PATH = '/providers';
+export const PROVIDERS_PATH = '/reference';
 
-/** `/providers/<id>`: the reference of one plugin. */
+/** `/reference/<id>`: the reference of one plugin. */
 export function providerPath(providerId: string): string {
   return `${PROVIDERS_PATH}/${encodeURIComponent(providerId)}`;
 }
@@ -37,7 +37,7 @@ export function presetAnchor(presetId: string): string {
 
 /**
  * The catalog entry of a risk id, qualified or not:
- * `supabase[staging].bulk-row-write` → `/providers/supabase#risk-supabase.bulk-row-write`.
+ * `supabase[staging].bulk-row-write` → `/reference/supabase#risk-supabase.bulk-row-write`.
  * `null` when the string is not a risk id; the caller then shows it as text.
  */
 export function riskReferencePath(riskId: RiskId): string | null {

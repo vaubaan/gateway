@@ -143,7 +143,7 @@ describe('the arguments of an approval request are for the creator only', () => 
       requestId,
     );
     expect(opened.status).toBe(303);
-    expect(opened.headers.get('location')).toBe(`/requests/${requestId}`);
+    expect(opened.headers.get('location')).toBe(`/waiting/${requestId}`);
   });
 
   describe.each([
@@ -296,7 +296,7 @@ describe('the arguments of an approval request are for the creator only', () => 
         requestId,
       );
       expect(decided.status).toBe(303);
-      expect(decided.headers.get('location')).toBe(`/requests/${requestId}?decided=1`);
+      expect(decided.headers.get('location')).toBe(`/waiting/${requestId}?decided=1`);
       const view = await creatorView();
       expect(view.request.state).toBe('granted');
       expect(view.gate.open_until).toBe(view.period.end);
@@ -323,14 +323,14 @@ describe('the arguments of an approval request are for the creator only', () => 
         requestId,
       );
       expect(refusedByRules.headers.get('location')).toBe(
-        `/requests/${requestId}?problem=mission-closed`,
+        `/waiting/${requestId}?problem=mission-closed`,
       );
       const unknown = await rig.root.requests.handlers.decide(
         decideRequest(headers, { resolution: 'reset-period' }),
         requestId,
       );
       expect(unknown.headers.get('location')).toBe(
-        `/requests/${requestId}?problem=invalid-decision`,
+        `/waiting/${requestId}?problem=invalid-decision`,
       );
       const json = await rig.root.requests.handlers.decide(
         decideRequest(await sessionHeaders(rig.root, rig.seeded.ada), {

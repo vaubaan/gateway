@@ -1,0 +1,241 @@
+/* Audit and Mission session pages: plain tables, filters in one row. */
+
+.pageHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+.pageHead h1 {
+  margin: 0;
+}
+.muted {
+  color: var(--ink-3);
+  font-size: var(--text-sm);
+}
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-3);
+  overflow-wrap: break-word;
+}
+/* The argument fingerprint is 64 hex characters with no break opportunity. In
+   an auto-layout table `overflow-wrap: break-word` does not shrink the cell's
+   minimum width, so the column pushed the table wider than the window;
+   `anywhere` does, and the value wraps on about two lines, whole and
+   selectable. */
+.hash {
+  overflow-wrap: anywhere;
+  min-width: 16ch;
+  max-width: 34ch;
+}
+
+/* Ten filters in three named groups — what, who, when — on two rows: the
+   first group has the row to itself, the two others share the second with the
+   buttons. The form takes the width of the table below it (`.wide` on the same
+   element). */
+.filters {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr) auto;
+  align-items: end;
+  gap: var(--space-3) var(--space-5);
+  margin-bottom: var(--space-4);
+}
+.filterGroup {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-columns: 52px;
+  grid-auto-columns: minmax(0, 1fr);
+  align-items: end;
+  gap: var(--space-2);
+  min-width: 0;
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--line);
+}
+.filterGroup:first-child {
+  grid-column: 1 / -1;
+}
+/* The name of the group, turned on its side of the rule: a caption, not a field. */
+.filterCaption {
+  align-self: center;
+  width: 52px;
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-strong);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+@media (max-width: 900px) {
+  .filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .filterGroup {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    grid-auto-columns: auto;
+  }
+  .filterCaption {
+    grid-column: 1 / -1;
+  }
+}
+.filter {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.filter span {
+  font-size: var(--text-xs);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.filter input,
+.filter select {
+  height: 32px;
+  padding: 5px 8px;
+  font-size: var(--text-sm);
+  min-width: 0;
+}
+.filter select {
+  padding-right: 24px;
+  text-overflow: ellipsis;
+}
+.filter input[type='date'] {
+  padding-left: 6px;
+  padding-right: 4px;
+}
+.filterActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+  height: 32px;
+}
+
+.scroll {
+  overflow-x: auto;
+}
+/* The activity table and the session timeline need more than the reading
+   column: the page that holds one takes the wide measure of the shell
+   (`--page-max-wide`), and the table scrolls sideways inside its own box
+   below that. */
+.wide {
+  width: 100%;
+  min-width: 0;
+}
+main:has(.wide) {
+  max-width: var(--page-max-wide);
+}
+.nowrap {
+  white-space: nowrap;
+}
+/* The session timeline at 1280 px. A risk id has no break opportunity, and in
+   an auto-layout table `break-word` does not shrink a cell's minimum width:
+   `anywhere` does, so the risks column gives way (a long id wraps, whole and
+   selectable) before the table grows past its card. */
+.wraps {
+  overflow-wrap: anywhere;
+  min-width: 16ch;
+}
+/* The token holder: an email or a token name. Wide enough for a usual address
+   on one line; a longer one wraps rather than widen the table past its card
+   (same reason as `.wraps`). The column was added to tables that were full at
+   1280 px: the tool name and the risk ids next to it give way the same way. */
+.holder {
+  overflow-wrap: anywhere;
+  min-width: 14ch;
+}
+/* A tool name: it asks for the width of a usual name, and gives way (wrapping,
+   whole and selectable) only when the table has no room left at 1280 px. */
+.tool {
+  overflow-wrap: anywhere;
+  min-width: 16ch;
+  width: 30ch;
+}
+/* The Detail cell: sentences and dates wrap, so the last column stays on
+   screen instead of widening the table. */
+.detail {
+  min-width: 14ch;
+  overflow-wrap: anywhere;
+}
+.empty {
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+  color: var(--ink-3);
+}
+.pager {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--ink-3);
+}
+.problems {
+  margin: 0 0 var(--space-3);
+  padding-left: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--bad);
+}
+
+.risks {
+  display: grid;
+  gap: 2px;
+}
+.state {
+  margin: var(--space-1) 0 0;
+  padding: var(--space-2);
+  background: var(--fill);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-width: 420px;
+  max-height: 200px;
+  overflow: auto;
+}
+.fold > summary {
+  cursor: pointer;
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+.reason {
+  margin: var(--space-1) 0 0;
+  max-width: 420px;
+  font-size: var(--text-xs);
+  color: var(--ink-3);
+  line-height: 1.5;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  font-size: var(--text-sm);
+}
+.facts dt {
+  color: var(--ink-3);
+}
+.facts dd {
+  margin: 0;
+}
+.labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+}
+
+/* Where a call landed: the connection and the resource, as their slugs. */
+.where {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: 2px;
+}

@@ -155,19 +155,19 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
   ),
   'connections.handlers.connect': form('user', 303, (rig, headers) =>
     rig.root.connections.handlers.connect(
-      post('/connections/connect/vercel', headers, { name: 'Another', 'field.token': 'k' }),
+      post('/accounts/connect/vercel', headers, { name: 'Another', 'field.token': 'k' }),
       'vercel',
     ),
   ),
   'connections.handlers.discover': form('user', 303, (rig, headers) =>
     rig.root.connections.handlers.discover(
-      post(`/connections/${rig.seeded.github.connection.id}/discover`, headers, {}),
+      post(`/accounts/${rig.seeded.github.connection.id}/discover`, headers, {}),
       rig.seeded.github.connection.id,
     ),
   ),
   'connections.handlers.revoke': form('user', 303, (rig, headers) =>
     rig.root.connections.handlers.revoke(
-      post(`/connections/${rig.seeded.vercel.connection.id}/revoke`, headers, {}),
+      post(`/accounts/${rig.seeded.vercel.connection.id}/revoke`, headers, {}),
       rig.seeded.vercel.connection.id,
     ),
   ),
@@ -175,7 +175,7 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
     const connectionId = rig.seeded.github.connection.id;
     const resourceId = rig.seeded.github.resources[0]?.id ?? 'missing';
     return rig.root.connections.handlers.updateResource(
-      post(`/connections/${connectionId}/resources/${resourceId}`, headers, {
+      post(`/accounts/${connectionId}/resources/${resourceId}`, headers, {
         display_name: 'Renamed',
       }),
       connectionId,
@@ -184,7 +184,7 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
   }),
   'connections.handlers.transfer': form('user', 303, (rig, headers) =>
     rig.root.connections.handlers.transfer(
-      post(`/connections/${rig.seeded.github.connection.id}/transfer`, headers, {
+      post(`/accounts/${rig.seeded.github.connection.id}/transfer`, headers, {
         group_id: 'no-such-group',
       }),
       rig.seeded.github.connection.id,
@@ -201,7 +201,7 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
   ),
   'shares.handlers.share': form('user', 303, (rig, headers) =>
     rig.root.shares.handlers.share(
-      post(`/connections/${rig.seeded.github.connection.id}/shares`, headers, {
+      post(`/accounts/${rig.seeded.github.connection.id}/shares`, headers, {
         target_kind: 'user',
         target_email: OPERATOR_EMAIL,
         risk: PR,
@@ -211,7 +211,7 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
   ),
   'shares.handlers.revoke': form('user', 303, (rig, headers) =>
     rig.root.shares.handlers.revoke(
-      post(`/connections/${rig.seeded.github.connection.id}/shares/none/revoke`, headers, {}),
+      post(`/accounts/${rig.seeded.github.connection.id}/shares/none/revoke`, headers, {}),
       rig.seeded.github.connection.id,
       'none',
     ),

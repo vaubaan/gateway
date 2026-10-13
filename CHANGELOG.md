@@ -17,6 +17,14 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
 **Upgrade notes** — only for an instance that already runs a build made from the
 `v5` branch:
 
+- **Page addresses follow new words; old links keep working.** Connections are now
+  under `/accounts`, the request inbox under `/waiting`, the audit under `/activity`,
+  the provider reference under `/reference`, and `/` is the home. Every earlier
+  address answers with a permanent redirect, a form post included. **The callback
+  registered at a provider does not move**: `/connections/callback/<provider>` is still
+  the URL of your GitHub App and of your OAuth apps; change nothing there. `/mcp`,
+  `/mcp/manage`, `/r/<id>`, `/api/**` and `/oauth/**` are unchanged, and so are tool
+  names, refusal codes, risk ids and configuration keys.
 - **Sign in once before you change the identity provider.** Starting the new image
   applies schema migration `0011` (forward-only: an older image refuses to start
   on the migrated database). A user is now identified by the issuer of their
@@ -45,6 +53,24 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
   affected; trying again once the identity provider answers is the remedy.
 
 ### Added
+
+- **A redesigned frame for the interface, and one vocabulary.** A short side navigation
+  replaces the top bar: Now, Waiting for you (with the count of what waits), Missions,
+  Accounts, Activity, Reference, then Settings, with your name and the theme at its
+  foot; it collapses to its icons in a narrow window. Administration is part of
+  Settings and keeps the same navigation. The interface now says _account_ for a
+  connection, _permission_ for a risk, _key_ and _machine key_ for a mission token and
+  a named token, _limits_ for quotas and rate limits, _runs freely_ / _ask me first_
+  for the gate, _connected app_ for a delegation, _teammate_, _administrator_ and
+  _team_; _mission_ and _preset_ stay. This release delivers the frame, the words of
+  the navigation and the page titles; the content of each page keeps its earlier
+  wording until that page is redesigned.
+- **Light and dark themes.** Light by default; a toggle at the foot of the navigation,
+  and Settings, choose among System, Light and Dark. The choice is kept in a cookie
+  (`vaubaan_theme`, a display preference and nothing else) so that a page never
+  flashes in the other theme while loading.
+- **An interface reference at `/design`** (linked from Settings): every component of
+  the interface in every state, in both themes, with invented data.
 
 - **The execution door.** `POST /mcp` takes a mission token: `tools/list` shows the tools
   of the providers the mission holds a connection and an accepted risk for; `tools/call`
