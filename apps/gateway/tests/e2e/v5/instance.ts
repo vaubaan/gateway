@@ -30,3 +30,5 @@ export function localOrigin(): string {
 
 /** Who signs in through the simulated IdP. */
 export const E2E_USER = { sub: 'idp|ada', email: 'ada@example.com', name: 'Ada' } as const;
+/** A second user of the same IdP, who created nothing. */
+export const E2E_OTHER_USER = { sub: 'idp|bob', email: 'bob@example.com', name: 'Bob' } as const;
