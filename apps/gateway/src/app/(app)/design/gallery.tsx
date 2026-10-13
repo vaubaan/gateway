@@ -18,6 +18,7 @@ import {
   PageFrameSections,
   TokenSections,
 } from './sections-foundation';
+import { MISSION_SECTION_ITEMS, MissionSections } from './sections-missions';
 
 /** The sections, as the local navigation lists them. Each `id` is a section anchor. */
 export const GALLERY_SECTIONS: readonly {
@@ -73,6 +74,7 @@ export const GALLERY_SECTIONS: readonly {
       { id: 'legacy', label: 'Kept for older pages' },
     ],
   },
+  { group: 'Mission pages', items: MISSION_SECTION_ITEMS },
 ];
 
 export function Gallery() {
@@ -112,6 +114,7 @@ export function Gallery() {
         <OverlaySections />
         <FormSections />
         <LegacySections />
+        <MissionSections />
       </SubNavFrame>
     </>
   );

@@ -132,3 +132,10 @@ export { Slug } from './Slug.tsx';
 export { Glyph, type GlyphName } from './Glyph.tsx';
 export { KindLegend } from './KindLegend.tsx';
 export { ITEM_KINDS, ITEM_KIND_WORDS, type ItemKind } from './kinds.ts';
+
+// Added with the mission pages: the rest behind "···", a choice among presets, a key shown
+// once, a form with its rail
+export { MoreMenu, MenuItem } from './Menu.tsx';
+export { ChoiceRow, ChoiceChip } from './Choice.tsx';
+export { SecretBox } from './Secret.tsx';
+export { FormWithRail, FormStep, FormColumns } from './Form.tsx';
