@@ -224,7 +224,7 @@ function ApprovalBody({ view }: { view: ApprovalView }) {
           <CardHeader>
             <CardTitle>Your decision</CardTitle>
           </CardHeader>
-          <div className={styles.actions}>
+          <div className={`${styles.actions} ${styles.actionsWide}`}>
             {view.options.map((option) => (
               <ApprovalAction key={option.resolution} requestId={request.id} option={option} />
             ))}

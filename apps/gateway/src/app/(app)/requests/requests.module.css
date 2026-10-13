@@ -78,6 +78,10 @@
 .action:last-child {
   border-bottom: 0;
 }
+/* An approval's longest label ("Open the gate for the rest of the period"). */
+.actionsWide .action {
+  grid-template-columns: 320px minmax(0, 1fr);
+}
 .action form {
   display: contents;
 }
@@ -104,7 +108,12 @@
   width: auto;
 }
 @media (max-width: 640px) {
-  .action {
+  .action,
+  .actionsWide .action {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .action button {
+    white-space: normal;
+    height: auto;
   }
 }

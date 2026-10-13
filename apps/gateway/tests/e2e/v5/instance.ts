@@ -44,6 +44,12 @@ export const E2E_AUDIT_USER = {
   email: 'grace@example.com',
   name: 'Grace',
 } as const;
+/** Who "approve an action" signs in as: their requests stay out of the other specs' inbox. */
+export const E2E_APPROVER_USER = {
+  sub: 'idp|hedy',
+  email: 'hedy@example.com',
+  name: 'Hedy',
+} as const;
 /** Who the cutover smoke signs in as: they start with no connection and no mission. */
 export const E2E_CUTOVER_USER = {
   sub: 'idp|margaret',
