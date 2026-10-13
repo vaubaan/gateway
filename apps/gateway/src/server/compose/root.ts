@@ -27,6 +27,7 @@ import { createEncryptor, type Encryptor } from '../crypto';
 import { createLogger, createRedactor, type Logger, type LoggerOptions } from '../logging';
 import { ProviderAppsService } from '../provider-apps';
 import { createMissionsModule, type MissionsModule } from '../missions';
+import { createRequestsModule, type RequestsModule } from '../requests';
 import { SqliteSessionStore } from '../session';
 import type { Store } from '../store';
 import { MemoryRateLimiter } from './memory';
@@ -56,6 +57,8 @@ export interface GatewayRoot {
   readonly connections: ConnectionsModule;
   /** Missions: authority, preview / issue / rotate / revoke, bootstrap kit (P1.5). */
   readonly missions: MissionsModule;
+  /** Requests to the creator: inbox, claim decisions, expiry sweeper, request URL (P1.7). */
+  readonly requests: RequestsModule;
   readonly build: BuildInfo;
   readonly startedAt: Date;
   close(): Promise<void>;
@@ -145,6 +148,15 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
     logger,
     fetch: deps.providerFetch,
   });
+  // Starts the expiry sweeper of the inbox; `close()` stops it.
+  const requests = createRequestsModule({
+    config,
+    store,
+    registry,
+    authenticator: auth.authenticator,
+    rateLimiter,
+    logger,
+  });
 
   const root: GatewayRoot = {
     config,
@@ -160,9 +172,11 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
     providerApps,
     connections,
     missions,
+    requests,
     build,
     startedAt: new Date(),
     async close() {
+      requests.sweeper.stop();
       await store.close();
     },
   };

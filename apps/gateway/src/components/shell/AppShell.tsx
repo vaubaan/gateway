@@ -10,14 +10,19 @@ import styles from '@/components/auth/auth.module.css';
 import { Container } from '@/components/ui';
 import type { Principal } from '@/server/auth';
 
+import { OpenRequestCount } from './OpenRequestCount';
+
 export interface AppNavEntry {
   readonly href: string;
   readonly label: string;
+  /** A count shown after the label (a server component; renders nothing at zero). */
+  readonly Count?: (props: { principal: Principal }) => React.ReactNode | Promise<React.ReactNode>;
 }
 
 export const APP_NAV: readonly AppNavEntry[] = [
   { href: '/connections', label: 'Connections' },
   { href: '/missions', label: 'Missions' },
+  { href: '/requests', label: 'Requests', Count: OpenRequestCount },
 ];
 
 export function AppShell({
@@ -39,6 +44,7 @@ export function AppShell({
           {APP_NAV.map((entry) => (
             <Link key={entry.href} href={entry.href}>
               {entry.label}
+              {entry.Count && <entry.Count principal={principal} />}
             </Link>
           ))}
           {operator && <Link href="/admin">Administration</Link>}

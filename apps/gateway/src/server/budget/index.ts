@@ -45,7 +45,9 @@ export {
 export { createBudgetStage, type BudgetStageDeps } from './budget-stage.ts';
 export {
   countersAgreeWithAudit,
+  CREDIT_EVENT_KINDS,
   type ConsistencyDeps,
+  type CounterAuditLine,
   type CounterAuditMismatch,
   type CounterAuditReport,
 } from './consistency.ts';

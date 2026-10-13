@@ -19,6 +19,8 @@ import {
   createBudgetStage,
   type BudgetMission,
 } from '../../../src/server/budget/index.ts';
+import { createLogger } from '../../../src/server/logging/index.ts';
+import { RequestService } from '../../../src/server/requests/index.ts';
 import { at, MERGE, openBudgetFixture, READ, WRITE, type BudgetFixture } from './fixture.ts';
 
 /** Stages that let the test drive the risks touched and the upstream outcome through
@@ -128,9 +130,9 @@ describe('budget stage in the pipeline — counters vs audit', () => {
     expect(report.mismatches).toEqual([]);
     expect(new Map(report.risks.map((r) => [r.risk_id, r]))).toEqual(
       new Map([
-        [READ, { risk_id: READ, counted: 6, audited: 6 }],
-        [WRITE, { risk_id: WRITE, counted: 1, audited: 1 }],
-        [MERGE, { risk_id: MERGE, counted: 0, audited: 0 }],
+        [READ, { risk_id: READ, counted: 6, credited: 0, audited: 6 }],
+        [WRITE, { risk_id: WRITE, counted: 1, credited: 0, audited: 1 }],
+        [MERGE, { risk_id: MERGE, counted: 0, credited: 0, audited: 0 }],
       ]),
     );
   });
@@ -167,6 +169,65 @@ describe('budget stage in the pipeline — counters vs audit', () => {
     expect(report.risks.find((r) => r.risk_id === WRITE)).toEqual({
       risk_id: WRITE,
       counted: 1,
+      credited: 0,
+      audited: 1,
+    });
+  });
+
+  it('granted claims lower the counters; the check adds back the credits their events record', async () => {
+    const requests = new RequestService({
+      store: f.store,
+      registry: { get: () => undefined },
+      publicUrl: new URL('https://gateway.example.com'),
+      clock: f.clock,
+      logger: createLogger({ level: 'error', redact: (text) => text, write: () => undefined }),
+    });
+    const creator = { id: f.creatorId };
+    const pipeline = buildPipeline(f, () => f.clock.now());
+    const ctx = contextOf(f, f.mission);
+    const claimOf = async (): Promise<string> => {
+      const outcome = await pipeline.execute(ctx, request([WRITE]));
+      expect(outcome.audit.refusal_code).toBe('budget-exhausted');
+      const [open] = await requests.inbox(creator);
+      if (!open) throw new Error('expected an open claim');
+      return open.id;
+    };
+    const check = async () => countersAgreeWithAudit(f.store, f.mission, f.clock.now());
+
+    await pipeline.execute(ctx, request([READ, WRITE])); // READ 1, WRITE 1 (exhausted)
+    await pipeline.execute(ctx, request([READ])); // READ 2
+
+    // Quota extension: one action back on WRITE.
+    await requests.decide(creator, await claimOf(), { resolution: 'extend-quota', amount: 1 });
+    expect((await check()).mismatches).toEqual([]);
+    expect((await pipeline.execute(ctx, request([WRITE]))).kind).toBe('allowed');
+
+    // Period reset: every counter back to zero.
+    await requests.decide(creator, await claimOf(), { resolution: 'reset-period' });
+    expect((await pipeline.execute(ctx, request([READ, WRITE]))).kind).toBe('allowed');
+
+    // A refusal and an expiry extension give nothing back.
+    await requests.decide(creator, await claimOf(), { resolution: 'refuse' });
+
+    const report = await check();
+    expect(report.mismatches).toEqual([]);
+    expect(new Map(report.risks.map((r) => [r.risk_id, r]))).toEqual(
+      new Map([
+        [READ, { risk_id: READ, counted: 1, credited: 2, audited: 3 }],
+        [WRITE, { risk_id: WRITE, counted: 1, credited: 2, audited: 3 }],
+        [MERGE, { risk_id: MERGE, counted: 0, credited: 0, audited: 0 }],
+      ]),
+    );
+
+    // Credits belong to their period: the next one starts clean on both sides.
+    f.clock.set('2026-10-14T09:00:00.000Z');
+    await pipeline.execute(ctx, request([READ]));
+    const next = await check();
+    expect(next.mismatches).toEqual([]);
+    expect(next.risks.find((r) => r.risk_id === READ)).toEqual({
+      risk_id: READ,
+      counted: 1,
+      credited: 0,
       audited: 1,
     });
   });
