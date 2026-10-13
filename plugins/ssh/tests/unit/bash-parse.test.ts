@@ -80,7 +80,7 @@ describe('parseAnnotatedBash', () => {
     expect(svc.tools.find((t) => t.functionName === '_log')).toBeUndefined();
   });
 
-  test('ignores @vaubaan-service: directives (legacy, harmless)', () => {
+  test('ignores @vaubaan-service: directives (unknown directive, harmless)', () => {
     const svc = parseAnnotatedBash(
       `# @vaubaan-service: ignored\n# @vaubaan-rings: a\n# @vaubaan: ring=a action=read\nx() {}\n`,
     );

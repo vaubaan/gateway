@@ -77,13 +77,14 @@ The gateway then runs the authorization-code flow declared by
 PKCE S256, `prompt=consent` (needed for a refresh token) and the RFC 8707
 resource indicator `https://mcp.railway.com` on both the authorization and
 token requests — the MCP server refuses tokens minted without it. Access
-tokens last one hour; `railwayNeedsRefresh` and `refreshRailwayCredential`
-let the host refresh within 60 s of expiry or after an `UpstreamAuthError`.
+tokens last one hour; the host refreshes them with the standard
+`refresh_token` grant declared by the spec (`refreshable: true`), including
+after an `UpstreamAuthError`.
 
 ## Development
 
 ```
-npx vitest run plugins/railway     # 88 tests, no network
+npx vitest run plugins/railway     # 63 tests, no network
 npx tsc -p plugins/railway/tsconfig.json --noEmit
 ```
 
@@ -91,7 +92,3 @@ Refreshing the upstream tool list: `POST tools/list` to
 `https://mcp.railway.com/` with a Bearer scoped to the MCP resource, prefix
 every name with `railway__`, commit `src/upstream-tools.json`, bump
 `version` in `src/index.ts`.
-
-Legacy v4 exports (`RailwayAdapter`, `railwayAvailableTools`,
-`railwayRiskCatalog`, `classifyRailwayV4`) remain for the v4 application and
-are deleted in P1.6.

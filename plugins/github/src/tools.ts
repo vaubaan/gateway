@@ -360,6 +360,3 @@ export const githubTools: readonly McpToolDeclaration[] = [
     },
   },
 ];
-
-/** @deprecated legacy v4 name, deleted in P1.6 — use `githubTools`. */
-export const availableTools = githubTools;

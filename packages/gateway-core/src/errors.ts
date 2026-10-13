@@ -161,6 +161,14 @@ const INACTIVE_MISSION_NEXT_STEP: Readonly<Record<Exclude<MissionStatus, 'active
   revoked: 'A new mission must be issued.',
 };
 
+/** Where each kind of bearer IS accepted (spec §4.1: the refusal names "the door that
+ *  would accept it"). Keyed by kind, so a new kind fails to compile until it has its line. */
+const ACCEPTED_AT: Readonly<Record<BearerKind, string>> = {
+  'mission-token': 'A mission-token opens the execution door only.',
+  'delegated-token': 'A delegated-token opens the management door only.',
+  'human-session': 'A human-session opens the web interface only, never an MCP door.',
+};
+
 export const refuse = {
   riskNotAccepted(input: {
     missing_risks: readonly RiskId[];
@@ -288,7 +296,7 @@ export const refuse = {
       door: input.door,
       presented: input.presented,
       expected: input.expected,
-      hint: `A ${input.presented} cannot open the ${input.door} door; it expects a ${input.expected}. Credentials never cross over: use the ${input.expected} issued for this door.`,
+      hint: `A ${input.presented} cannot open the ${input.door} door; it expects a ${input.expected}. ${ACCEPTED_AT[input.presented]} Credentials never cross over: use the ${input.expected} issued for this door.`,
     };
   },
 } as const;

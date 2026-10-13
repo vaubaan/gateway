@@ -5,5 +5,5 @@
     "allowJs": false,
     "types": ["node"]
   },
-  "include": ["vitest.config.ts", "playwright.config.ts", "eslint.config.js", "scripts/**/*.ts"]
+  "include": ["vitest.config.ts", "eslint.config.js", "scripts/**/*.ts"]
 }

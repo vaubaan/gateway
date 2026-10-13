@@ -80,6 +80,3 @@ export const upstashRedisDataModel: DataModel = {
     },
   ],
 };
-
-/** @deprecated legacy v4, deleted in P1.6 — use `upstashRedisDataModel`. */
-export const dataModel: DataModel = upstashRedisDataModel;

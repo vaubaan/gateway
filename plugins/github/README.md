@@ -14,7 +14,7 @@ ADR [`plugin-contract-and-credential-spec`](../../docs/decisions/plugin-contract
 
 | File                      | Role                                                                                                             |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `src/index.ts`            | `definePlugin({...})` → `githubPlugin` (default export). Legacy v4 exports at the bottom, deleted in P1.6.       |
+| `src/index.ts`            | `definePlugin({...})` → `githubPlugin` (default export).                                                         |
 | `src/risk-catalog.yaml`   | 14 risks + fallback, 3 presets. Loaded by the SDK at boot; the only catalog artefact.                            |
 | `src/data-model.ts`       | Plane `repo`: repo → branch → file / commit; tag, release, pull_request, issue → comment, workflow → run, rules. |
 | `src/tools.ts`            | 26 MCP tools `github__<verb>_<noun>`; every repo-scoped tool takes `owner` + `repo`.                             |
@@ -23,7 +23,6 @@ ADR [`plugin-contract-and-credential-spec`](../../docs/decisions/plugin-contract
 | `src/app-install.ts`      | RS256 App JWT → `POST /app/installations/{id}/access_tokens` (scoped to repositories and permissions).           |
 | `src/execute.ts`          | `execute` (per-call token + Octokit over `ctx.fetch`), `mint_install_token`, `discoverResources` (paged).        |
 | `src/octokit-dispatch.ts` | Tool name → Octokit call.                                                                                        |
-| `src/github-adapter.ts`   | Legacy v4 adapter (`@deprecated`), kept for `apps/gateway` until P1.6.                                           |
 
 The plugin imports the SDK only (plus `@octokit/rest` and `jose`); nothing
 from `apps/` or `@vaubaan/gateway-core`.
@@ -118,9 +117,9 @@ to the mission's repositories with the `clone` (`contents:read`) or `push`
 (`contents, pull_requests, workflows: write; metadata: read`) permission
 set — that token leaves the gateway's perimeter.
 
-No personal-access-token path: the v4 adapter accepted a PAT for E2E runs
-before an App existed; the v5 contract carries one `CredentialSpec` per
-plugin and an on-prem instance always registers its own App.
+No personal-access-token path: the plugin contract carries one
+`CredentialSpec` per plugin and an on-prem instance always registers its own
+App.
 
 ## Tests
 
@@ -131,9 +130,10 @@ npx vitest run plugins/github
 - `plugin.test.ts` — SDK kit (`assertPluginWellFormed`, `assertPresetsValid`,
   `assertNoWildcard`, `assertCatalogCoverage` with a sample per tool, every
   risk reachable), fallback lint, preset invariants, credential spec.
-- `risk-classifier.test.ts` — the v4 classifier contract, unchanged.
+- `classify.test.ts` — the classifier's security suite: `(tool, args, resources)` → exact slices or denial.
 - `execute.test.ts` — JWT claims, mint request shape, per-call scoping,
   Octokit over `mockFetch`, `UpstreamAuthError`, mint tool, paged discovery.
-- `adapter.test.ts`, `data-model.test.ts` — legacy adapter and data-model integrity.
+- `data-model.test.ts` — data-model integrity.
+- `token-cache.test.ts` — connection-scoped reuse of installation tokens.
 
 No test reaches GitHub.

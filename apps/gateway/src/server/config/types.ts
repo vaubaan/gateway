@@ -111,6 +111,8 @@ export interface InstanceConfig {
   readonly retentionDays: number;
   readonly requests: { readonly expirySeconds: number };
   readonly approvals: { readonly expirySeconds: number };
+  /** Surface rate limit of the execution door: requests per minute, per mission (spec §6). */
+  readonly mcp: { readonly rateLimitPerMinute: number };
   readonly log: { readonly level: LogLevel };
 }
 

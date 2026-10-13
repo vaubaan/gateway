@@ -3,9 +3,6 @@ title: Bash provider — annotated-script dispatcher over SSH (legacy v4)
 status: legacy
 date: 2026-06-15
 superseded_by: providers/ssh
-tracks:
-  - apps/gateway/src/app/api/v1/bash-bindings/
-  - apps/gateway/src/app/(app)/orgs/[slug]/projects/[project]/bash-bindings/
 ---
 
 > **Legacy v4 document (French).** Superseded on 2026-10-13 by

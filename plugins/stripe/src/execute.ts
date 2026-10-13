@@ -33,7 +33,6 @@ import {
   stripeResourceRef,
   type StripeMode,
 } from './resources.ts';
-import { availableTools } from './tools.ts';
 
 /** Public API of the provider — a fact about Stripe, not instance configuration. */
 export const STRIPE_API_BASE = 'https://api.stripe.com/v1';
@@ -94,7 +93,7 @@ const ROUTES: Readonly<Record<string, Route>> = {
   stripe__create_webhook_endpoint: { method: 'POST', path: () => '/webhook_endpoints' },
 };
 
-// ─── v5 entry points ──────────────────────────────────────────────────────────
+// ─── Entry points ─────────────────────────────────────────────────────────────
 
 export async function executeStripe(
   ctx: ExecuteContext,
@@ -255,34 +254,4 @@ async function callStripeApi(
   } catch {
     return text;
   }
-}
-
-// ─── Legacy v4 entry point ───────────────────────────────────────────────────
-
-/** @deprecated legacy v4, deleted in P1.6 — use `executeStripe(ctx, tool, args)`. */
-export type FetchImpl = typeof fetch;
-
-const V4_TOOL_NAMES: ReadonlySet<string> = new Set(availableTools.map((t) => t.name));
-
-/**
- * The v4 dispatcher : one raw API key, no resource. Kept for
- * `apps/gateway/src/lib/gateway/build.ts` until P1.6.
- *
- * @deprecated legacy v4, deleted in P1.6 — use `executeStripe(ctx, tool, args)`.
- */
-export async function executeCall(
-  fetchImpl: FetchImpl,
-  token: string,
-  tool: string,
-  args: Record<string, unknown>,
-): Promise<unknown> {
-  const route = V4_TOOL_NAMES.has(tool) ? ROUTES[tool] : undefined;
-  if (!route) throw new Error(`Stripe tool not implemented: ${tool}`);
-  return callStripeApi(
-    fetchImpl,
-    token,
-    route.method,
-    route.path(args),
-    forwardedArgs(route, args),
-  );
 }

@@ -12,22 +12,21 @@ only.
 
 ## Layout
 
-| File                                                     | Role                                                                                                                   |
-| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `src/index.ts`                                           | `definePlugin({...})` — default export `upstashRedisPlugin`, plus the `@deprecated` v4 exports (deleted in P1.6).      |
-| `src/risk-catalog.yaml`                                  | 10 risks + fallback, three presets, `catalog_version: 2`. Loaded at boot by the SDK; the only catalog artefact.        |
-| `src/data-model.ts`                                      | One plane `cache`, 6 entities; `database` is the env-scopable entity (the resource).                                   |
-| `src/tools.ts`                                           | 21 custom tools: 6 management (Management API) + 15 data (per-database REST).                                          |
-| `src/classify.ts`                                        | `(tool, args, resources) → slices`. Pure. Database resolution against the mission's resources; `execute` verb routing. |
-| `src/credential.ts`                                      | `api-key` spec: account email + Management API key; `upstashAuth()` narrows the secret.                                |
-| `src/execute.ts`                                         | Management API (Basic auth) and Data API (per-database Bearer), redaction, `discoverResources`.                        |
-| `src/risk-classifier.ts`, `src/upstash-redis-adapter.ts` | Legacy v4 shells over the modules above. `// legacy v4, deleted in P1.6`.                                              |
+| File                    | Role                                                                                                                   |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `src/index.ts`          | `definePlugin({...})` — default export `upstashRedisPlugin`.                                                           |
+| `src/risk-catalog.yaml` | 10 risks + fallback, three presets, `catalog_version: 2`. Loaded at boot by the SDK; the only catalog artefact.        |
+| `src/data-model.ts`     | One plane `cache`, 6 entities; `database` is the env-scopable entity (the resource).                                   |
+| `src/tools.ts`          | 21 custom tools: 6 management (Management API) + 15 data (per-database REST).                                          |
+| `src/classify.ts`       | `(tool, args, resources) → slices`. Pure. Database resolution against the mission's resources; `execute` verb routing. |
+| `src/credential.ts`     | `api-key` spec: account email + Management API key; `upstashAuth()` narrows the secret.                                |
+| `src/execute.ts`        | Management API (Basic auth) and Data API (per-database Bearer), redaction, `discoverResources`.                        |
 
-`src/index.ts` resolves the YAML path with
-`join(dirname(fileURLToPath(import.meta.url)), 'risk-catalog.yaml')`, not
-with `new URL('./risk-catalog.yaml', import.meta.url)`: Turbopack, which
-bundles the plugin into `apps/gateway`, rewrites that pattern into an asset
-URL that Node's `fileURLToPath` rejects. An SDK helper replaces this later.
+`src/index.ts` resolves the YAML path with the SDK helper
+`catalogPathNextTo(import.meta.url)`, not with
+`new URL('./risk-catalog.yaml', import.meta.url)`: the bundler rewrites that
+pattern into an asset URL that Node's `fileURLToPath` rejects (ADR
+`plugin-catalog-path-and-standalone-tracing`).
 
 ## Data model
 
@@ -56,8 +55,7 @@ label. No plugin-side env hook is needed.
 | `api_key` | yes    | A Management API key (Upstash console → Account → Management API). Basic auth password. |
 
 There is no OAuth app to register: the Upstash Developer API is reached with
-HTTP Basic auth, which is what v4 did (as an `email:api_key` concatenation)
-and what works. The key does not expire (`refresh` is absent); revoke it in
+HTTP Basic auth (`email:api_key`). The key does not expire (`refresh` is absent); revoke it in
 the console to end the connection.
 
 The per-database REST tokens (Data API) are **not** part of the credential:
@@ -104,20 +102,10 @@ npx vitest run plugins/upstash-redis
 
 `tests/unit/plugin.test.ts` runs the SDK kit (`assertPluginWellFormed`,
 `assertPresetsValid`, `assertNoWildcard`, `assertCatalogCoverage` with one
-sample per tool), the v5 classifier conventions, env resolution through the
+sample per tool), the classifier conventions, env resolution through the
 resource label, the credential spec, and `execute` / `discoverResources`
-against `mockFetch`. `risk-classifier.test.ts` (30 v4 cases),
-`risk-catalog.test.ts` (49) and `adapter.test.ts` (16) are the v4 suites,
-kept unchanged until P1.6. No test reaches the network.
-
-## Changed from v4
-
-- `risk-catalog.ts` (TypeScript twin) and its sync test: the YAML is the
-  only catalog artefact.
-- Credential: two fields (`email`, `api_key`) instead of the `email:api_key`
-  concatenation; the legacy adapter still splits the v4 secret.
-- Management API answers about a database are redacted of their tokens.
-- Redis keys containing `:` (`session:123`) are no longer embedded in the
-  slice: they are not slice-DSL idents and v4 produced unparseable slices
-  for them. They fall back to `[*]`, as glob patterns already did.
-- No venv tool existed for this provider; nothing to drop (plan §8-Q5).
+against `mockFetch`. `classify.test.ts` is the classifier's security suite
+(the expected slice of every tool, `execute` verb routing, denials),
+`risk-catalog.test.ts` lints the loaded catalog and its coverage of every
+tool, and `execute.test.ts` pins the request shapes sent upstream. No test
+reaches the network.

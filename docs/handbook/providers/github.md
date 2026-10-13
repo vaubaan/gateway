@@ -12,6 +12,7 @@ tracks:
   - plugins/github/src/app-install.ts
   - plugins/github/src/execute.ts
   - plugins/github/src/octokit-dispatch.ts
+  - plugins/github/src/token-cache.ts
   - plugins/github/tests/unit/
 ---
 
@@ -81,25 +82,29 @@ sequenceDiagram
   Plugin-->>Host: McpToolResult (JSON text)
 ```
 
-No token is cached: one mint per call, scoped to the repository the call
-names (installation-wide for the two search tools). 401/403 anywhere →
-`UpstreamAuthError`. No PAT path (see README).
+The token is scoped to the repository the call names (installation-wide
+for the two search tools). `installationTokenForCall(ctx, repo)`
+(`src/token-cache.ts`) reuses it for up to 50 minutes per connection and
+repository through the host-provided `ExecuteContext.credentialCache`, so
+the diagram above is the cache-miss path; without a cache every call mints.
+`github__mint_install_token` never uses the cache: the token it hands out
+is always minted for that call. 401/403 anywhere → `UpstreamAuthError`. No
+PAT path.
 
 ## Files
 
-| File                      | Role                                                                                                                                                                                |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/index.ts`            | `definePlugin` → `githubPlugin` v1.0.0; legacy v4 exports (`GitHubAdapter`, `classifyGithubV4`, `githubAvailableTools`, `githubRiskCatalog`) marked `@deprecated`, deleted in P1.6. |
-| `src/risk-catalog.yaml`   | 14 risks + fallback, 3 presets, `catalog_version: 2`.                                                                                                                               |
-| `src/data-model.ts`       | Plane `repo`, 16 entities; `branch` is `envScopable`.                                                                                                                               |
-| `src/tools.ts`            | 26 tools. Retired by risk-model §7.2 #1 and not declared: `dispatch_workflow`, `cancel_workflow_run`, `rerun_workflow_run`.                                                         |
-| `src/classify.ts`         | `classifyGithub(tool, args, resources)`; core `classifyGithubRefs` over repo refs.                                                                                                  |
-| `src/risk-classifier.ts`  | `@deprecated` v4 wrapper `classifyGithubV4(tool, args, bindings)` over the same core.                                                                                               |
-| `src/credential.ts`       | `githubCredential` (app-install spec), `installationTokenFor(ctx, scope)`.                                                                                                          |
-| `src/app-install.ts`      | `buildAppJwt`, `mintInstallationToken`, `GITHUB_API_BASE`, `GITHUB_API_HEADERS`.                                                                                                    |
-| `src/execute.ts`          | `executeGithub`, `discoverGithubResources`, `MINT_PERMISSIONS`, discovery paging constants.                                                                                         |
-| `src/octokit-dispatch.ts` | `dispatchGithubTool(octokit, tool, args)`; legacy `executeCall(factory, token, …)`.                                                                                                 |
-| `src/github-adapter.ts`   | Legacy v4 adapter, unchanged behaviour, `@deprecated`.                                                                                                                              |
+| File                      | Role                                                                                                                          |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `src/index.ts`            | `definePlugin` → `githubPlugin` v1.0.0.                                                                                       |
+| `src/risk-catalog.yaml`   | 14 risks + fallback, 3 presets, `catalog_version: 2`.                                                                         |
+| `src/data-model.ts`       | Plane `repo`, 16 entities; `branch` is `envScopable`.                                                                         |
+| `src/tools.ts`            | 26 tools. Retired by risk-model §7.2 #1 and not declared: `dispatch_workflow`, `cancel_workflow_run`, `rerun_workflow_run`.   |
+| `src/classify.ts`         | `classifyGithub(tool, args, resources)`; core `classifyGithubRefs` over repo refs.                                            |
+| `src/credential.ts`       | `githubCredential` (app-install spec), `installationTokenFor(ctx, scope)`.                                                    |
+| `src/app-install.ts`      | `buildAppJwt`, `mintInstallationToken`, `GITHUB_API_BASE`, `GITHUB_API_HEADERS`.                                              |
+| `src/execute.ts`          | `executeGithub`, `discoverGithubResources`, `MINT_PERMISSIONS`, discovery paging constants.                                   |
+| `src/token-cache.ts`      | `installationTokenForCall(ctx, repo)`: per-call token served from `ctx.credentialCache`, 50 min at most, 5 min expiry margin. |
+| `src/octokit-dispatch.ts` | `dispatchGithubTool(octokit, tool, args)`.                                                                                    |
 
 ## Tool → slice mapping
 
@@ -174,22 +179,26 @@ plugins. `branch-protection-write` is in no preset.
 
 ## Tests
 
-`npx vitest run plugins/github` — 81 tests, no network:
+`npx vitest run plugins/github` — 71 tests, no network:
 
-- `plugin.test.ts` (13): kit assertions, coverage with a sample per tool
+- `plugin.test.ts` (14): kit assertions, coverage with a sample per tool
   (every catalog risk reachable), fallback-only lint, fallback catching an
   unconventional branch, preset invariants, credential spec, resource check.
-- `risk-classifier.test.ts` (31): the v4 classifier contract, unchanged by
-  the migration.
-- `execute.test.ts` (18): JWT claims (RS256, `iss`, 540 s), mint request
+- `classify.test.ts` (31): the per-tool security suite of `classifyGithub`
+  (reads, branch and file writes, pull requests, comments, releases, rules,
+  mint, retired tools, structural denials).
+- `execute.test.ts` (20): JWT claims (RS256, `iss`, 540 s), mint request
   (Bearer JWT, scoping body, PEM un-escaping, missing key names the key,
   kind mismatch, 401 → `UpstreamAuthError`), Octokit over `mockFetch`
   (per-call repository scoping, installation-wide for search, JSON body,
-  403 → `UpstreamAuthError`), mint tool (clone/push permission sets, fan-out
-  over mission resources, refusals before any call), discovery (metadata,
-  paging to `total_count`, 401).
-- `adapter.test.ts` (18), `data-model.test.ts` (1): legacy adapter and
-  data-model integrity.
+  403 → `UpstreamAuthError`), branch-protection and release tools, mint tool
+  (clone/push permission sets, fan-out over mission resources, refusals
+  before any call), discovery (metadata, paging to `total_count`, 401).
+- `token-cache.test.ts` (5): a mint per call without a host cache, one mint
+  per repository scope with one, no token served or stored close to its
+  expiry, lifetime bounded by what is left of the token,
+  `github__mint_install_token` never cached.
+- `data-model.test.ts` (1): data-model integrity.
 
 ## How to debug
 
@@ -224,10 +233,6 @@ plugins. `branch-protection-write` is in no preset.
 
 ## Not done, on purpose
 
-- No installation-token cache (two HTTP calls per tool call). A cache would
-  be in-memory, per-installation state behind an interface
-  (`// single-process only`); deferred until the execution door (P1.6)
-  shows the call volume.
 - The `search_*` queries are not forced to `repo:<mission resource>`; the
   risk `search-global` (blast `account`) is the guard.
 - Missing tools identified in v4 (`create_issue`, `update_issue`,

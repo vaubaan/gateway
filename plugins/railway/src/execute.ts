@@ -19,8 +19,8 @@
  * API bases are facts about the provider, not instance configuration.
  *
  * The lower layer (`callUpstream`, `callGraphql`, `executeCall`) takes a
- * bare `fetch` + token and is shared with the legacy v4 adapter
- * (`railway-adapter.ts`, deleted in P1.6).
+ * bare `fetch` + token ; `executeRailway` and `discoverRailwayResources`
+ * feed it from the context.
  */
 
 import {
@@ -313,7 +313,7 @@ function stripUndefined(obj: Record<string, unknown>): Record<string, unknown> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// v5 contract : execute(ctx, tool, args) and discoverResources(ctx)
+// Plugin contract : execute(ctx, tool, args) and discoverResources(ctx)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DECLARED_TOOLS: ReadonlySet<string> = new Set(railwayTools.map((t) => t.name));

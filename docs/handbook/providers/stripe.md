@@ -11,8 +11,6 @@ tracks:
   - plugins/stripe/src/tools.ts
   - plugins/stripe/src/data-model.ts
   - plugins/stripe/src/risk-catalog.yaml
-  - plugins/stripe/src/risk-classifier.ts
-  - plugins/stripe/src/stripe-adapter.ts
   - plugins/stripe/tests/unit/
 ---
 
@@ -37,24 +35,23 @@ Contributor-facing details (fields, tools list, preset table) :
 | 25 tools                                                                        | 27 : `create_payout` and `delete_customer` added, each behind its own irreversible risk       |
 | No presets                                                                      | `read-only`, `test-mode-developer`, `finance-operator`                                        |
 
-The v4 surface (`StripeAdapter`, `stripeAvailableTools`, `stripeExecuteCall`,
-`stripeRiskCatalog`, `classifyStripeV4`) stays exported, `@deprecated`, until
-P1.6 ; `classifyStripeV4` maps the first Stripe binding onto a resource and
-delegates, with the v4 tool list frozen at 25.
+The v4 surface (the adapter, the binding-based classifier wrapper, the
+25-tool list and the deprecated aliases of `index.ts`) is deleted ; the
+plugin exports only the v5 surface below. The v4 classifier and dispatcher
+suites were ported to `classifyStripe` and `stripePlugin.execute`
+(`tests/unit/classify.test.ts`, `tests/unit/execute.test.ts`).
 
 ## Layout
 
 ```
 plugins/stripe/src/
   resources.ts        STRIPE_MODES, stripeResourceRef, modeOf, resolveStripeResource, keyMatchesMode
-  tools.ts            27 McpToolDeclaration (+ `account` arg) ; `availableTools` = legacy 25
+  tools.ts            27 McpToolDeclaration (+ `account` arg)
   classify.ts         classifyStripe — pure, (tool, args, resources) → slices | denied
-  execute.ts          executeStripe, discoverStripeResources, STRIPE_API_BASE ; legacy executeCall
+  execute.ts          executeStripe, discoverStripeResources, STRIPE_API_BASE
   data-model.ts       plane `billing`, 23 entities, `mode` envScopable
   risk-catalog.yaml   16 risks + fallback, 3 presets, catalog_version 3
-  index.ts            definePlugin(...) → stripePlugin (default export) + legacy exports
-  risk-classifier.ts  legacy classifyStripeV4 wrapper
-  stripe-adapter.ts   legacy StripeAdapter
+  index.ts            definePlugin(...) → stripePlugin (default export)
 ```
 
 ## Resources and the mode
@@ -150,9 +147,9 @@ argument is stripped before the call. Unknown tool → `isError` result.
 
 ## Tests
 
-`npx vitest run plugins/stripe` — 119 : `plugin.test.ts` (28 : kit, v5
-classifier, execute, discovery, credential, presets), `risk-catalog.test.ts`
-(17 : invariants, catalog v3, no preset on the fallback), `data-model.test.ts`
-(8), and the unchanged v4 suites
-`risk-classifier.test.ts` (39), `execute.test.ts` (16), `adapter.test.ts`
-(11) on the legacy exports.
+`npx vitest run plugins/stripe` — 110 : `plugin.test.ts` (28 : kit,
+resource resolution, execute, discovery, credential, presets),
+`classify.test.ts` (41 : the security suite of `classifyStripe`),
+`execute.test.ts` (17 : REST routing and form-encoding through
+`stripePlugin.execute`), `risk-catalog.test.ts` (16 : invariants, catalog v3,
+no preset on the fallback), `data-model.test.ts` (8).

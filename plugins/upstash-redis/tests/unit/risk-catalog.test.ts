@@ -1,35 +1,24 @@
 /**
- * Catalog lint — parses the YAML, validates the static schema, parses every
+ * Catalog lint — takes the catalog as the plugin loads it from the YAML,
+ * validates the static schema, parses every
  * `matches` slice pattern, and walks every MCP tool exposed by the provider
  * to assert that AT LEAST ONE non-fallback risk matches at least one of the
  * tool's emitted slices.
  */
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
-
 import { describe, expect, test } from 'vitest';
-import yaml from 'js-yaml';
-import type { ProviderBinding, RiskCatalog, RiskEntry, Slice } from '@vaubaan/shared';
+import type { Resource, RiskEntry, Slice } from '@vaubaan/plugin-sdk';
 import { matches, parseSlice } from '@vaubaan/policy-engine';
 
-import { availableTools as upstashRedisAvailableTools } from '../../src/tools.ts';
-import { classifyUpstashRedisV4 } from '../../src/risk-classifier.ts';
+import { classifyUpstashRedis, upstashRedisCatalog, upstashRedisTools } from '../../src/index.ts';
 
-// ─── Load + parse the YAML catalog ──────────────────────────────────────────
+// ─── The catalog, loaded from the YAML through the SDK ──────────────────────
 
-const here = dirname(fileURLToPath(import.meta.url));
-const yamlPath = resolve(here, '../../src/risk-catalog.yaml');
-const rawYaml = readFileSync(yamlPath, 'utf8');
-const parsedCatalog = yaml.load(rawYaml) as RiskCatalog;
+const parsedCatalog = upstashRedisCatalog.catalog;
 
-const binding: ProviderBinding = {
-  id: 'b1',
-  project_id: 'p1',
+const database: Resource = {
   provider: 'upstash-redis',
-  resource_ref: 'db-abc-123',
-  display_name: null,
-  created_at: '2026-01-01',
+  ref: 'db-abc-123',
+  displayName: 'db-abc-123',
 };
 
 const RISK_ID_REGEX =
@@ -179,7 +168,7 @@ function syntheticArgsForTool(tool: string): Array<Record<string, unknown>> {
 function slicesForTool(tool: string): Slice[] {
   const out: Slice[] = [];
   for (const args of syntheticArgsForTool(tool)) {
-    const result = classifyUpstashRedisV4(tool, args, [binding]);
+    const result = classifyUpstashRedis(tool, args, [database]);
     if ('slices' in result) out.push(...result.slices);
   }
   return out;
@@ -198,7 +187,7 @@ function risksForTool(tool: string): string[] {
 }
 
 describe('upstash-redis risk-catalog — coverage lint (every tool matched by >=1 non-fallback risk)', () => {
-  for (const tool of upstashRedisAvailableTools) {
+  for (const tool of upstashRedisTools) {
     test(`'${tool.name}' is covered by at least one non-fallback risk`, () => {
       const hit = risksForTool(tool.name);
       expect(hit.length, `tool '${tool.name}' matched zero catalog risks`).toBeGreaterThan(0);

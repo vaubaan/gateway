@@ -37,28 +37,3 @@ export const sshTools: readonly McpToolDeclaration[] = [
     },
   },
 ];
-
-// ─── legacy v4, deleted in P1.6 ──────────────────────────────────────────────
-
-/**
- * @deprecated legacy v4, deleted in P1.6 — use `sshTools`. The v4 declaration
- * took the host as `host_slug`, the slug of an `ssh_bindings` row.
- */
-export const availableTools: ReadonlyArray<McpToolDeclaration> = [
-  {
-    name: SSH_EXEC,
-    description: 'Execute a shell command on a registered SSH host.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        host_slug: {
-          type: 'string',
-          description: 'The host slug registered for this project (e.g. vps-rp).',
-        },
-        cmd: { type: 'string', description: 'Shell command to execute.' },
-        timeout_s: { type: 'number', description: 'Timeout in seconds (default 30, max 300).' },
-      },
-      required: ['host_slug', 'cmd'],
-    },
-  },
-] as const;

@@ -81,11 +81,10 @@ describe('supabase plugin — structural kit', () => {
     assertNoWildcard(supabasePlugin);
   });
 
-  test('declares 44 tools, the same set the classifier knows ; no venv tool', () => {
+  test('declares 44 tools, the same set the classifier knows', () => {
     const declared = supabasePlugin.tools.map((t) => t.name).sort();
     expect(declared).toHaveLength(44);
     expect(declared).toEqual([...SUPABASE_CLASSIFIED_TOOLS].sort());
-    expect(declared.some((n) => n.endsWith('_to_venv'))).toBe(false);
   });
 
   test('every tool classifies to slices the catalog covers', () => {
@@ -437,7 +436,7 @@ describe('executeSupabase with mockFetch', () => {
 
   test('an undeclared tool is an error result, not a call', async () => {
     const fetch = mockFetch([]);
-    const result = await supabasePlugin.execute(execCtx(fetch), 'supabase__url_to_venv', {
+    const result = await supabasePlugin.execute(execCtx(fetch), 'supabase__not_a_tool', {
       project_ref: STAGING_REF,
     });
     expect(result.isError).toBe(true);

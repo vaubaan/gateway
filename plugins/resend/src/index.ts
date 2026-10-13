@@ -2,7 +2,7 @@
  * `@vaubaan/plugin-resend` — outbound email (Resend) on the v5 Plugin SDK.
  *
  * Spec : docs/spec/vaubaan-gateway.md §5 (plugins) ; docs/spec/gateway-risk-model.md §7 ;
- *        docs/spec/resend.md (v4 modelling of the provider).
+ *        docs/spec/resend.md (modelling of the provider).
  * ADR  : docs/decisions/plugin-contract-and-credential-spec.md.
  * Handbook : docs/handbook/providers/resend.md ; guide : plugins/resend/README.md.
  *
@@ -12,12 +12,7 @@
  * here, once, at import (that is, at gateway boot).
  */
 
-import {
-  catalogPathNextTo,
-  definePlugin,
-  loadCatalogFile,
-  type RiskCatalog,
-} from '@vaubaan/plugin-sdk';
+import { catalogPathNextTo, definePlugin, loadCatalogFile } from '@vaubaan/plugin-sdk';
 
 import { classifyResend } from './classify.ts';
 import { resendDataModel } from './data-model.ts';
@@ -101,18 +96,3 @@ export {
   type ToZone,
 } from './zones.ts';
 export { RESEND_WRITE_TOOL_NAMES } from './tools.ts';
-
-// ─── Legacy v4 surface — kept so apps/gateway compiles until P1.6 ────────────
-
-/** @deprecated legacy v4, deleted in P1.6 — use `resendPlugin`. */
-export { ResendAdapter } from './resend-adapter.ts';
-/** @deprecated legacy v4, deleted in P1.6 — use `resendPlugin.tools` (the v4 list has 25 audience-era tools). */
-export { availableTools as resendAvailableTools } from './legacy-tools.ts';
-/** @deprecated legacy v4, deleted in P1.6 — use `resendPlugin.execute`. */
-export { executeCall as resendExecuteCall } from './legacy-execute.ts';
-/** @deprecated legacy v4, deleted in P1.6 — use `resendPlugin.catalog` (loaded from the YAML). */
-export const resendRiskCatalog: RiskCatalog = resendCatalog.catalog;
-/** @deprecated legacy v4, deleted in P1.6 — use `resendPlugin.classify` (the v4 classifier emits account-rooted slices). */
-export { classifyResendV4 } from './risk-classifier.ts';
-/** @deprecated legacy v4, deleted in P1.6 — use `ClassifyOutcome` from the SDK. */
-export type { ClassifyResult as ResendClassifyV4Result } from './risk-classifier.ts';

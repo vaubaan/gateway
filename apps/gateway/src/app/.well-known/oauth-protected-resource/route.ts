@@ -1,48 +1,30 @@
 /**
- * OAuth 2.0 Protected Resource Metadata — `GET /.well-known/oauth-protected-resource`.
+ * `GET /.well-known/oauth-protected-resource` — RFC 9728 metadata of the
+ * execution door.
  *
- * RFC 9728. Advertises that `/mcp` is a protected resource that accepts
- * Bearer tokens in the `Authorization` header and has *no* OAuth
- * authorization server. Clients should use the static bearer they were
- * already given (`vbn_live_*`) and not attempt dynamic client registration.
- *
- * Why this exists : Claude Code (and other MCP clients) probe this URL on
- * connect. When it 404s, Claude Code's auth fallback misbehaves and never
- * sends the configured `Authorization` header — see
- * https://github.com/anthropics/claude-code/issues/59467. Returning an
- * explicit 200 with `authorization_servers: []` short-circuits the probe
- * and lets the bearer header through.
+ * The execution door (`/mcp`) takes a static bearer, the mission token, and has
+ * no OAuth authorization server. MCP clients probe this URL on connect; some
+ * (Claude Code among them) do not send the configured `Authorization` header
+ * when the probe is a 404. Answering 200 with an empty `authorization_servers`
+ * tells them to use the bearer they were given and not to attempt a
+ * registration. The management door (P2.3) will publish its own metadata under
+ * its own path.
  */
-
-import { type NextRequest, NextResponse } from 'next/server';
+import { getRoot } from '@/server/compose';
+import { EXECUTION_DOOR_PATH } from '@/server/missions';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const CORS_HEADERS: Record<string, string> = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
-  'Access-Control-Allow-Headers': 'Authorization, Content-Type',
-  'Access-Control-Max-Age': '86400',
-};
-
-function withCors(res: NextResponse): NextResponse {
-  for (const [k, v] of Object.entries(CORS_HEADERS)) res.headers.set(k, v);
-  return res;
-}
-
-export function OPTIONS(): NextResponse {
-  return withCors(new NextResponse(null, { status: 204 }));
-}
-
-export function GET(req: NextRequest): NextResponse {
-  const origin = new URL(req.url).origin;
-  return withCors(
-    NextResponse.json({
-      resource: `${origin}/mcp`,
+export async function GET(): Promise<Response> {
+  const { config } = await getRoot();
+  const base = config.publicUrl.href.replace(/\/+$/, '');
+  return Response.json(
+    {
+      resource: `${base}${EXECUTION_DOOR_PATH}`,
       authorization_servers: [],
       bearer_methods_supported: ['header'],
-      resource_documentation: origin,
-    }),
+    },
+    { headers: { 'Cache-Control': 'no-store' } },
   );
 }

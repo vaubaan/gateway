@@ -12,7 +12,7 @@
  *   segment / broadcast tools  segment[<segment_id>]…
  *   contacts, sent emails      contact[…] / email[…] (account-level)
  *
- * Resend-specific rules, carried over from the v4 modelling and tightened :
+ * Resend-specific rules :
  *
  *   1. **The from domain is the resource.** A send whose `from` is not on a
  *      sending domain of the mission is `denied` — never widened.

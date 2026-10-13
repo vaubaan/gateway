@@ -12,7 +12,7 @@
  * and emits synthetic marker slices (`from-zone[z]`, `to-zone[z]`,
  * `bulk-marker`, `sensitive-label[l]`) the catalog matches.
  *
- * Rules kept from the v4 modelling (handbook §4) :
+ * Modelling rules (handbook §4) :
  *
  *   1. `get_thread` is classified worst-case `from-zone[unknown]` : the sender
  *      is unknown until the thread is fetched. Agents search first.
@@ -211,7 +211,7 @@ function sensitiveLabelsTouched(parsed: QParsed, md: GmailMailboxMetadata): stri
 /**
  * The single mailbox of the mission. No tool argument selects a mailbox, so
  * two or more gmail resources are ambiguous and denied (multi-account is a
- * later decision ; v4 silently took the first binding).
+ * later decision).
  */
 export function selectMailbox(resources: readonly Resource[]): Resource | { denied: string } {
   const mailboxes = resources.filter((r) => r.provider === 'gmail');

@@ -21,8 +21,7 @@ refresh performed by the host. Each handbook follows the same structure
    `acceptable_in_envs` where relevant) and the shipped presets.
 4. **Coverage** — every tool covered by at least one non-fallback risk.
 5. **Edge cases** — the non-obvious classification decisions, argued.
-6. **Credential, discovery, execution, tests, legacy** — how the plugin runs
-   today and what P1.6 deletes.
+6. **Credential, discovery, execution, tests** — how the plugin runs today.
 
 These handbooks are the human source of truth for a provider's model. The
 code under `plugins/<id>/src/` materialises them; the `tracks:` frontmatter

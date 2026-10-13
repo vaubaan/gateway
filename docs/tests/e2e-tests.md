@@ -4,7 +4,7 @@ status: current
 date: 2026-05-22
 last_synced: 2026-10-13
 tracks:
-  - playwright.config.ts
+  - apps/gateway/tests/e2e/v5/playwright.config.ts
   - apps/gateway/tests/e2e/
   - deploy/docker/smoke.sh
   - .github/workflows/ci.yml
@@ -16,11 +16,11 @@ Two kinds of end-to-end check exist today:
 
 1. the **container smoke test** (`deploy/docker/smoke.sh`), automated in CI
    since P0.4;
-2. the **Playwright harness**: the root `playwright.config.ts` holds only
-   legacy v4 specs that target the retired SaaS; the v5 specs run against an
-   ephemeral instance with their own configuration
-   (`apps/gateway/tests/e2e/v5/`, `npm run test:e2e:v5`, since P1.5). Nothing
-   in CI runs Playwright.
+2. the **Playwright harness**: the specs run against an ephemeral instance
+   (`apps/gateway/tests/e2e/v5/`, `npm run test:e2e`, since P1.5). The v4
+   specs and the root `playwright.config.ts` that targeted the retired SaaS
+   were deleted with the v4 application (P1.6). Nothing in CI runs
+   Playwright.
 
 The v5 browser scenarios (connection creation, mission issuance, inbox
 approval, the agent's structured refusal) are written when the
@@ -167,23 +167,14 @@ connections"` shows blobs starting with `01`, never readable text.
 
 ## Playwright harness
 
-`playwright.config.ts` defines two projects over `apps/gateway/tests/e2e/`:
-
-- `smoke` — `smoke.spec.ts`;
-- `e2e-real-clouds` — every spec under `real-clouds/`.
-
-`npm run test:e2e` runs both, `npm run test:e2e:real-clouds` the second
-only. Without `E2E_BASE_URL` the config starts `npm run dev` on
-`localhost:3000`; with it, the specs target that URL. Credentials come from
-`.env.test` (gitignored) or the environment: `E2E_USER_EMAIL`,
-`E2E_USER_PASSWORD`, `E2E_ORG_SLUG`, `E2E_PROJECT_SLUG`. Playwright is not
-part of `npm run ci` and no workflow runs it.
+One configuration, `apps/gateway/tests/e2e/v5/playwright.config.ts`, and one
+project. Playwright is not part of `npm run ci` and no workflow runs it.
 
 ### Ephemeral v5 instance (`tests/e2e/v5/`, P1.5)
 
-`npm run test:e2e:v5` builds the app, then runs
-`apps/gateway/tests/e2e/v5/playwright.config.ts` (its own configuration: the
-root one targets a deployed v4 instance). Its `webServer` is
+`npm run test:e2e` (alias of `npm run test:e2e:v5`) builds the app, then runs
+`apps/gateway/tests/e2e/v5/playwright.config.ts`, the only Playwright
+configuration of the repository. Its `webServer` is
 `ephemeral-instance.ts`: one process that builds the real composition root with
 the `:memory:` store, the shipped plugins and P1.1's `FakeIdp` as the relying
 party's `fetch`, seeds a user's connections through the repositories, and
@@ -212,19 +203,6 @@ still in flight when a test ends is ignored by the router.
 | `audit-session.spec.ts`     | **A day of calls** (P1.8): from the mission page to its session — state badge with the exhausted risk, quota / counted / left / gate per risk, the current period's counters, the two open requests as links to `/requests/<id>`, the agent labels seen, the timeline newest first with what is left after each call; then "Audit of this mission" — six calls and the issuance, remaining budget and argument hash per call, **the argument marker on neither page**, the eight filters on one row and the table without sideways scroll at 1280 px, filters by decision, tool and period, "Clear", the "Audit" entry of the navigation. |
 | `audit-session.spec.ts`     | **Not yours**: the session page of an unknown mission answers 404.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 
-### Implemented specs (legacy v4, deleted with the v4 UI in Phase 1)
-
-The four specs predate the pivot and exercise the v4 SaaS (Supabase
-sign-in, organisations, bindings, `/api/v1/*` routes). They are kept only
-until P1.6 replaces the UI; none of them passes against a v5 instance.
-
-| Spec                                 | What it did                                                                                                                                                    |
-| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `smoke.spec.ts`                      | the landing page of the deployed SaaS renders a "Sign in" call to action                                                                                       |
-| `golden-path.spec.ts`                | password sign-in → dashboard → organisation → project → roles catalogue (skipped without credentials)                                                          |
-| `mint-flow.spec.ts`                  | authenticated `/tokens/new`: binding cards, risk rows, "Mint token" disabled until a risk is accepted (skipped without credentials)                            |
-| `real-clouds/stripe-connect.spec.ts` | `POST /api/v1/stripe-bindings` validation (account id prefix, missing keys) and the Stripe binding UI; credentials from `E2E_USER_EMAIL` / `E2E_USER_PASSWORD` |
-
 ### Planned v5 scenarios (written with the features)
 
 Each scenario is added to this file, with its spec file, by the feature
@@ -237,14 +215,51 @@ that makes it possible. Target list (spec §4, §5, §7):
 3. **Mission issuance** — done: `v5/issue-mission.spec.ts` (P1.5).
 4. **Agent call through the execution door** — an MCP client calls a tool
    within budget (allowed, audited), then beyond it (`budget-exhausted`
-   with a claim URL) (P1.6). The claim itself — who may open the URL, the
-   creator's decision, the replay — is done: `v5/exhaust-and-claim.spec.ts`
-   (P1.7), with the calls recorded below the door.
+   with a claim URL). Automated below the browser, in the integration suite
+   (`tests/integration/execution/`, the official MCP client against the
+   door's handler; [integration-tests](./integration-tests.md)), and checked
+   by hand on a standalone build (below). The claim itself — who may open the
+   URL, the creator's decision, the replay — is done:
+   `v5/exhaust-and-claim.spec.ts` (P1.7), with the calls recorded below the
+   door.
 5. **Approval from the inbox** — a gated call produces an approval request;
    the human grants it from the inbox and the agent's retry passes (P2.1).
 6. **Refusal surfaces** — `risk-not-accepted`, `resource-not-in-mission`,
    `connection-unavailable`, `mission-inactive` each reach the agent with
-   its hint (P1.6).
+   its hint: done in the integration suite (P1.6), every code with its
+   fields.
+
+## Manual — an agent through the execution door (v5, P1.6, by hand)
+
+> Covers: handbook [execution-door](../handbook/execution-door.md). Spec §4.1,
+> §4.4 (bootstrap kit), §7.5.
+
+Done once on 2026-10-13 on the standalone build with a temporary
+configuration and SQLite file; the transcript is in the handbook ("Manual
+check").
+
+1. Build (`npm run build --workspace @vaubaan/gateway-app`), export the
+   `VAUBAAN_*` variables of a throw-away instance, and seed it:
+   `cd apps/gateway && npx tsx tests/manual/seed-demo.ts` creates a user, a
+   GitHub connection with two repositories (placeholder installation) and a
+   `read-only` mission on one of them, and prints the bootstrap kit.
+2. Start `node apps/gateway/.next/standalone/apps/gateway/server.js`.
+3. Run the kit's `curl … tools/list` against the instance → the GitHub tools,
+   as plain JSON.
+4. `tools/call` on the repository outside the mission → JSON-RPC error
+   `-32603` whose `data` is the `resource-not-in-mission` refusal with
+   `allowed_resources` and the hint.
+5. `GET /mcp/catalog` → tool surface, callable set, resources, remaining
+   budget. No `Authorization` → 401.
+6. An MCP client (`@modelcontextprotocol/client`) connects over HTTP with the
+   2025-era handshake and with the 2026-07-28 revision, and lists the tools.
+7. The server log holds one `tools/call` line with the token prefix and a
+   64-hex `arguments_hash`, and never the token secret.
+
+**Still to do by a human, before the cutover:** the same with Claude Code
+itself (paste the kit's `.mcp.json`, export the token, list the tools, call
+one) against an instance behind TLS with a real connection — the acceptance
+criterion of spec §10.
 
 ## Conventions
 

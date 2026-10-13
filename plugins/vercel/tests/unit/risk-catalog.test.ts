@@ -22,11 +22,11 @@ import { dirname, resolve } from 'node:path';
 
 import { describe, expect, test } from 'vitest';
 import yaml from 'js-yaml';
-import type { ProviderBinding, RiskCatalog, RiskEntry, Slice } from '@vaubaan/shared';
+import type { Resource, RiskCatalog, RiskEntry, Slice } from '@vaubaan/plugin-sdk';
 import { matches, parseSlice } from '@vaubaan/policy-engine';
 
-import { availableTools as vercelAvailableTools } from '../../src/tools.ts';
-import { classifyVercelV4 } from '../../src/risk-classifier.ts';
+import { classifyVercel } from '../../src/classify.ts';
+import { vercelTools } from '../../src/tools.ts';
 
 // ─── Load + parse the YAML catalog ──────────────────────────────────────────
 
@@ -35,14 +35,7 @@ const yamlPath = resolve(here, '../../src/risk-catalog.yaml');
 const rawYaml = readFileSync(yamlPath, 'utf8');
 const parsedCatalog = yaml.load(rawYaml) as RiskCatalog;
 
-const binding: ProviderBinding = {
-  id: 'b1',
-  project_id: 'p1',
-  provider: 'vercel',
-  resource_ref: 'prj_abc',
-  display_name: null,
-  created_at: '2026-01-01',
-};
+const resource: Resource = { provider: 'vercel', ref: 'prj_abc', displayName: 'prj_abc' };
 
 // Mirror the regex from shared/src/risk.ts so we can lint catalog ids
 // without importing a private symbol (cf. risk-policy.ts:RISK_ID_REGEX).
@@ -192,7 +185,7 @@ function syntheticArgsForTool(tool: string): Array<Record<string, unknown>> {
 function slicesForTool(tool: string): Slice[] {
   const out: Slice[] = [];
   for (const args of syntheticArgsForTool(tool)) {
-    const result = classifyVercelV4(tool, args, [binding]);
+    const result = classifyVercel(tool, args, [resource]);
     if ('slices' in result) out.push(...result.slices);
   }
   return out;
@@ -212,7 +205,7 @@ function risksForTool(tool: string): string[] {
 }
 
 describe('vercel risk-catalog — coverage lint (every tool matched by ≥1 non-fallback risk)', () => {
-  for (const tool of vercelAvailableTools) {
+  for (const tool of vercelTools) {
     test(`'${tool.name}' is covered by at least one non-fallback risk`, () => {
       const hit = risksForTool(tool.name);
       expect(hit.length, `tool '${tool.name}' matched zero catalog risks`).toBeGreaterThan(0);

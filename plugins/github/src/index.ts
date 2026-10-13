@@ -8,9 +8,6 @@
  * The plugin imports `@vaubaan/plugin-sdk` only. `definePlugin` validates
  * the definition at import time ; the YAML catalog is loaded here, once,
  * when the module is first imported (that is, at gateway boot).
- *
- * The legacy v4 exports at the bottom keep `apps/gateway` compiling until
- * the execution door (P1.6) replaces the v4 gateway ; they are deleted with it.
  */
 
 import { catalogPathNextTo, definePlugin, loadCatalogFile } from '@vaubaan/plugin-sdk';
@@ -49,16 +46,3 @@ export default githubPlugin;
 export { classifyGithub, githubCredential, githubDataModel, githubTools };
 export { buildAppJwt, mintInstallationToken } from './app-install.ts';
 export { discoverGithubResources, executeGithub, MINT_PERMISSIONS } from './execute.ts';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Legacy v4 surface — deleted in P1.6 with the v4 gateway.
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** @deprecated legacy v4, deleted in P1.6 — use `githubPlugin.tools`. */
-export const githubAvailableTools = githubTools;
-/** @deprecated legacy v4, deleted in P1.6 — use `githubPlugin.catalog`. */
-export const githubRiskCatalog = githubCatalog.catalog;
-// legacy v4, deleted in P1.6
-export { GitHubAdapter } from './github-adapter.ts';
-// legacy v4, deleted in P1.6
-export { classifyGithubV4, type ClassifyV4Result } from './risk-classifier.ts';

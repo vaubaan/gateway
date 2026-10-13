@@ -23,20 +23,18 @@ audience binding, refresh) and [[plugin-contract-and-credential-spec]]
 ```
 plugins/railway/
   src/
-    index.ts             definePlugin({...}) + legacy v4 exports (deleted in P1.6)
+    index.ts             definePlugin({...})
     risk-catalog.yaml    9 risks + fallback, 3 presets — the only catalog artefact
     data-model.ts        plane `runtime`, 9 entities
     tools.ts             railwayTools = upstream-tools.json (10) + custom-tools.ts (4)
     classify.ts          classifyRailway(tool, args, resources) — security-critical, pure
-    credential.ts        railwayCredentialSpec (+ RAILWAY_REFRESH_THRESHOLD_MS for the legacy adapter)
+    credential.ts        railwayCredentialSpec
     execute.ts           executeRailway, discoverRailwayResources, callUpstream, callGraphql
-    risk-classifier.ts   legacy bridge classifyRailwayV4(bindings) → classifyRailway
-    railway-adapter.ts   legacy v4 RailwayAdapter (apps/gateway build.ts, state.ts)
   tests/unit/
-    plugin.test.ts           kit, v5 classifier, credential, execute, discover (30)
-    risk-classifier.test.ts  v4 classifier behaviour, unchanged (20)
+    plugin.test.ts           kit, classifier on Resource[], credential, execute, discover (27)
+    classify.test.ts         per-tool slices of classifyRailway (20)
     risk-catalog.test.ts     catalog shape and risksTouchedBy (15)
-    adapter.test.ts          legacy adapter (22) ; data-model.test.ts (1)
+    data-model.test.ts       data-model integrity (1)
 ```
 
 ## Data model and resources
@@ -79,10 +77,6 @@ else is `denied` ("ambiguous railway target"). Identifiers embedded in a
 slice (`serviceId`, variable names) must match `[a-zA-Z0-9_./~-]+` or the
 call is denied. An unknown tool is denied.
 
-`classifyRailwayV4(tool, args, bindings)` (legacy) maps bindings to
-resources, keeps the v4 rule "an explicit `projectId` must be bound" and
-delegates; its 20 tests run unchanged.
-
 ## Catalog and presets
 
 `risk-catalog.yaml` (`catalog_version: 2`) keeps the nine v4 risk ids and
@@ -119,9 +113,8 @@ standard RFC 6749 `refresh_token` grant with Basic client authentication
 plus the same `resource=https://mcp.railway.com` indicator, which the host
 performs from `tokenUrl`, `clientAuthMethod` and `resourceIndicator`. The
 plugin therefore declares `refreshable: true` and implements no `refresh`
-(P1.2-align removed `refreshRailwayCredential` and `railwayNeedsRefresh`);
-`RAILWAY_REFRESH_THRESHOLD_MS` (60 s) survives for the legacy v4 adapter
-only. The plugin never persists: the host refreshes and stores the result.
+(P1.2-align removed `refreshRailwayCredential` and `railwayNeedsRefresh`).
+The plugin never persists: the host refreshes and stores the result.
 
 ## Execution
 
@@ -164,21 +157,14 @@ a refusal surfaces as `UpstreamAuthError` with the upstream message.
 
 ## Tests
 
-`npx vitest run plugins/railway` — 83 tests (v4: 58). `plugin.test.ts` (25)
+`npx vitest run plugins/railway` — 63 tests. `plugin.test.ts` (27)
 runs the kit (`assertPluginWellFormed`, `assertPresetsValid`,
 `assertNoWildcard`, `assertCatalogCoverage` with every risk touched),
 classifier branches on `Resource[]`, the credential spec, `execute` and
-`discoverResources` against `mockFetch`. No test reaches Railway.
-
-## Legacy and removal plan
-
-`RailwayAdapter`, `railwayAvailableTools`, `railwayRiskCatalog` (now the
-loaded YAML), `classifyRailwayV4` and `RailwayClassifyResult` are kept
-`@deprecated` for `apps/gateway` (`build.ts`, `state.ts`,
-`risk-catalog/loader.ts`, `provider-info.ts`, `api/v1/catalog`) and are
-deleted in P1.6 with their tests. The v4 OAuth routes under
-`apps/gateway/src/app/api/integrations/railway/` are superseded by the
-generic connect driver of P1.4 reading `railwayCredentialSpec`.
+`discoverResources` against `mockFetch`. `classify.test.ts` (20) pins the
+slices of each tool, `risk-catalog.test.ts` (15) the catalog shape and
+`risksTouchedBy`, `data-model.test.ts` (1) the data model. No test reaches
+Railway.
 
 ## References
 

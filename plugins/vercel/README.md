@@ -13,16 +13,15 @@ Written against [`@vaubaan/plugin-sdk`](../../packages/plugin-sdk) only.
 
 ## Layout
 
-| File                                              | Role                                                                                                           |
-| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `src/index.ts`                                    | `definePlugin({...})` — default export `vercelPlugin`, plus the `@deprecated` v4 exports (deleted in P1.6).    |
-| `src/risk-catalog.yaml`                           | 16 risks + fallback, three presets. Loaded at boot by the SDK; the only catalog artefact.                      |
-| `src/data-model.ts`                               | One plane `runtime`, 17 entities; `env` is the env-scopable entity.                                            |
-| `src/tools.ts`                                    | 31 tools: 18 rewrapped from `mcp.vercel.com` (`upstream-tools.json`) + 13 custom REST (`custom-tools.ts`).     |
-| `src/classify.ts`                                 | `(tool, args, resources) → slices`. Pure. Project resolution against the mission's resources.                  |
-| `src/credential.ts`                               | `api-key` spec: access token + team id; `vercelAuth()` narrows the secret.                                     |
-| `src/execute.ts`                                  | JSON-RPC forward to the Vercel MCP server, REST for custom tools, `discoverResources` (paged project listing). |
-| `src/risk-classifier.ts`, `src/vercel-adapter.ts` | Legacy v4 shells over the modules above. `// legacy v4, deleted in P1.6`.                                      |
+| File                    | Role                                                                                                           |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `src/index.ts`          | `definePlugin({...})` — default export `vercelPlugin`.                                                         |
+| `src/risk-catalog.yaml` | 16 risks + fallback, three presets. Loaded at boot by the SDK; the only catalog artefact.                      |
+| `src/data-model.ts`     | One plane `runtime`, 17 entities; `env` is the env-scopable entity.                                            |
+| `src/tools.ts`          | 31 tools: 18 rewrapped from `mcp.vercel.com` (`upstream-tools.json`) + 13 custom REST (`custom-tools.ts`).     |
+| `src/classify.ts`       | `(tool, args, resources) → slices`. Pure. Project resolution against the mission's resources.                  |
+| `src/credential.ts`     | `api-key` spec: access token + team id; `vercelAuth()` narrows the secret.                                     |
+| `src/execute.ts`        | JSON-RPC forward to the Vercel MCP server, REST for custom tools, `discoverResources` (paged project listing). |
 
 `src/index.ts` resolves the YAML path from `import.meta.url` as a **string**
 (`VERCEL_CATALOG_PATH`), not with `new URL('./risk-catalog.yaml', import.meta.url)`:
@@ -59,7 +58,7 @@ and emitted as the `env[<label>]` segment of the slice.
 | `team_id` | no     | The team id (`team_…`, Team Settings → General). Every call of the connection acts on behalf of it.      |
 
 There is no OAuth app to register: Vercel's REST API and MCP server are both
-reached with a personal access token, which is what v4 did and what works.
+reached with a personal access token, which is what works.
 The token does not refresh (`refresh` is absent); pick an expiration when
 creating it and reconnect when it expires. An explicit `teamId` argument that
 differs from the connection's team is refused before any network call.
@@ -110,16 +109,8 @@ npx vitest run plugins/vercel
 
 `tests/unit/plugin.test.ts` runs the SDK kit (`assertPluginWellFormed`,
 `assertPresetsValid`, `assertNoWildcard`, `assertCatalogCoverage` with one
-sample per tool), the v5 classifier conventions, the credential spec, and
-`execute` / `discoverResources` against `mockFetch`. `risk-classifier.test.ts`
-(31 v4 cases), `risk-catalog.test.ts` and `adapter.test.ts` are the v4
-suites, kept unchanged until P1.6. No test reaches the network.
-
-## Removed from v4
-
-- `vercel__upsert_env_from_venv` and the venv store: no v5 counterpart
-  (plan §8-Q5).
-- `risk-catalog.ts` (TypeScript twin) and its sync test: the YAML is the
-  only catalog artefact.
-- `teamId` override from the arguments: the connection's team always applies
-  on the v5 path.
+sample per tool), the classifier conventions, the credential spec, and
+`execute` / `discoverResources` against `mockFetch` (including the request
+shapes of the custom REST tools). `classify.test.ts` pins the slices of each
+tool; `risk-catalog.test.ts` lints the YAML catalog against the classifier.
+No test reaches the network.

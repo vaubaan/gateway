@@ -4,9 +4,9 @@
 # Handbook : docs/handbook/providers/vercel.md.
 #
 # Loaded at boot by `@vaubaan/plugin-sdk` (`loadCatalogFile`) ; this file is
-# the only catalog artefact (the TypeScript twin of v4 is gone).
+# the only catalog artefact.
 #
-# 16 named risks + 1 fallback. Env-specific pairs of the v4 research
+# 16 named risks + 1 fallback. Env-specific pairs of the provider research
 # (deploy-preview / deploy-prod, env-var-write-preview / env-var-write-prod)
 # are single entries with `acceptable_in_envs` and a `vector_overrides.prod`
 # block ; the runtime qualifies them per environment (`vercel[prod].deploy`).

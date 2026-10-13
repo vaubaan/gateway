@@ -20,10 +20,6 @@
  *     is refused before any network call ;
  *   - `projectId` absent → the mission's single project, when the tool's
  *     schema declares that argument.
- *
- * The response of `fetch` is only read through `ok`, `status` and `text()`,
- * so the legacy adapter tests (hand-rolled response objects) keep passing
- * until P1.6 deletes them.
  */
 
 import {
@@ -62,29 +58,17 @@ export const VERCEL_API_BASE = 'https://api.vercel.com';
 export const DISCOVERY_PAGE_SIZE = 100;
 export const DISCOVERY_MAX_PAGES = 10;
 
-/** @deprecated legacy v4, deleted in P1.6. */
-export type FetchImpl = typeof fetch;
-
-/** What one upstream call needs. Built from the context by `execute`, by hand by the legacy adapter. */
-export interface VercelCall {
+/** What one upstream call needs, built from the context. */
+interface VercelCall {
   readonly fetch: typeof fetch;
   readonly token: string;
-  /** The connection's team ; `null` only on the legacy path. */
-  readonly teamId: string | null;
+  /** The connection's team. */
+  readonly teamId: string;
   readonly signal?: AbortSignal;
 }
 
-export interface CallOptions {
-  /**
-   * Legacy v4 behaviour : add `teamId` to every forwarded upstream call that
-   * lacks one, whatever the tool's schema. The v5 path does its own
-   * schema-aware injection and passes `false`.
-   */
-  readonly injectTeamId?: boolean;
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
-// v5 entry points
+// Plugin entry points
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function executeVercel(
@@ -108,7 +92,7 @@ export async function executeVercel(
   const finalArgs = normalizeArgs(tool, args, teamId, ctx.resources);
 
   try {
-    return toToolResult(await callVercelTool(call, tool, finalArgs, { injectTeamId: false }));
+    return toToolResult(await callVercelTool(call, tool, finalArgs));
   } catch (e) {
     if (e instanceof UpstreamAuthError) throw e;
     return errorResult(e instanceof Error ? e.message : String(e));
@@ -234,29 +218,13 @@ function errorResult(message: string): McpToolResult {
  * `result` for rewrapped tools, the parsed REST body for custom tools.
  * Throws `UpstreamAuthError` on 401/403, a plain `Error` otherwise.
  */
-export async function callVercelTool(
+async function callVercelTool(
   call: VercelCall,
   tool: string,
   args: Readonly<Record<string, unknown>>,
-  options: CallOptions = {},
 ): Promise<unknown> {
   if (isCustomTool(tool)) return executeCustom(call, tool, args);
-  const name = toUpstreamName(tool);
-  const inject = options.injectTeamId ?? true;
-  const finalArgs =
-    inject && call.teamId && !('teamId' in args) ? { ...args, teamId: call.teamId } : args;
-  return callUpstreamMcp(call, 'tools/call', { name, arguments: finalArgs });
-}
-
-/** @deprecated legacy v4, deleted in P1.6 — use `callVercelTool`. */
-export async function executeCall(
-  fetchImpl: FetchImpl,
-  token: string,
-  teamId: string | null,
-  tool: string,
-  args: Record<string, unknown>,
-): Promise<unknown> {
-  return callVercelTool({ fetch: fetchImpl, token, teamId }, tool, args);
+  return callUpstreamMcp(call, 'tools/call', { name: toUpstreamName(tool), arguments: args });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -2,8 +2,8 @@
  * Mandatory suite of the Resend plugin : the SDK kit, the v5 classifier
  * (resource resolution, recipient zones, batch, out-of-scope refusals,
  * broadcasts), `execute` and `discoverResources` against `mockFetch`, the
- * credential spec and the presets. The v4 classifier cases live unchanged in
- * `risk-classifier.test.ts`.
+ * credential spec and the presets. The per-tool classifier scenarios live in
+ * `classify.test.ts`.
  */
 import { describe, expect, test } from 'vitest';
 
@@ -153,7 +153,7 @@ describe('resend plugin — structural kit', () => {
       { resources: mission },
     );
     expect(report.toolsChecked).toBe(27);
-    // Only the two deprecated v4 ids (account-rooted patterns) are never touched.
+    // Only the two retired catalog ids (account-rooted patterns) are never touched.
     expect(report.risksUntouched).toEqual(['resend.read-audiences', 'resend.audience-write']);
   });
 });

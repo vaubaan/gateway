@@ -80,8 +80,7 @@ Writes (17): `create_product`, `update_product`, `create_price`,
 `create_refund`, `create_payout`, `delete_customer`,
 `create_webhook_endpoint`.
 
-`create_payout` and `delete_customer` are new in v5 (v4 excluded them); both
-are irreversible and gated `approval` on live in the shipped preset.
+`create_payout` and `delete_customer` are both irreversible and gated `approval` on live in the shipped preset.
 
 ## Catalog
 
@@ -125,16 +124,9 @@ the two write presets also carry `stripe[<mode>].uncategorized-write`.
 
 ## Tests
 
-`npx vitest run plugins/stripe` — 118 tests: the SDK kit
+`npx vitest run plugins/stripe` — 110 tests: the SDK kit
 (`assertPluginWellFormed`, `assertCatalogCoverage`, `assertNoWildcard`,
-`assertPresetsValid`), the v5 classifier, `execute` and
-`discoverResources` against `mockFetch`, the credential spec and presets,
-catalog invariants, and the v4 suites kept unchanged for the legacy
-surface. No test ever calls Stripe.
-
-## Legacy v4 surface
-
-`StripeAdapter`, `stripeAvailableTools` (the 25 v4 tools), `stripeExecuteCall`,
-`stripeRiskCatalog` (now the loaded YAML) and `classifyStripeV4` are kept,
-`@deprecated`, so `apps/gateway` compiles until P1.6 replaces the execution
-door. They are deleted with it.
+`assertPresetsValid`), the classifier's tool-by-tool security suite
+(`classify.test.ts`), the request shapes sent to Stripe (`execute.test.ts`),
+`execute` and `discoverResources` against `mockFetch`, the credential spec
+and presets, and catalog invariants. No test ever calls Stripe.

@@ -180,6 +180,79 @@ describe('execute — Octokit over the injected fetch', () => {
   });
 });
 
+describe('execute — rules and release tools', () => {
+  const repo = { owner: 'acme', repo: 'app' };
+
+  test('update_branch_protection PUTs the protection settings of the branch', async () => {
+    const fetch = mockFetch([
+      mintRoute(),
+      {
+        method: 'PUT',
+        url: 'https://api.github.com/repos/acme/app/branches/main/protection',
+        body: { url: 'p' },
+      },
+    ]);
+    const result = await githubPlugin.execute(
+      executeCtx(fetch),
+      'github__update_branch_protection',
+      {
+        ...repo,
+        branch: 'main',
+        required_status_checks: { strict: true, contexts: ['ci'] },
+        enforce_admins: true,
+        required_pull_request_reviews: { required_approving_review_count: 1 },
+        restrictions: null,
+      },
+    );
+    expect(JSON.parse(text(result))).toEqual({ url: 'p' });
+    expect(fetch.calls[1]!.json).toMatchObject({
+      required_status_checks: { strict: true, contexts: ['ci'] },
+      enforce_admins: true,
+      required_pull_request_reviews: { required_approving_review_count: 1 },
+      restrictions: null,
+    });
+  });
+
+  test('list_releases / list_tags / create_release / delete_release', async () => {
+    const fetch = mockFetch([
+      mintRoute(),
+      {
+        method: 'GET',
+        url: 'https://api.github.com/repos/acme/app/releases',
+        body: [{ tag_name: 'v1' }],
+      },
+      { method: 'GET', url: 'https://api.github.com/repos/acme/app/tags', body: [{ name: 'v1' }] },
+      {
+        method: 'POST',
+        url: 'https://api.github.com/repos/acme/app/releases',
+        status: 201,
+        body: { id: 999, tag_name: 'v2' },
+      },
+      {
+        method: 'DELETE',
+        url: 'https://api.github.com/repos/acme/app/releases/999',
+        status: 204,
+      },
+    ]);
+    const ctx = executeCtx(fetch);
+    const call = async (tool: string, args: Record<string, unknown>) =>
+      JSON.parse(text(await githubPlugin.execute(ctx, tool, { ...repo, ...args }))) as unknown;
+
+    expect(await call('github__list_releases', {})).toEqual([{ tag_name: 'v1' }]);
+    expect(await call('github__list_tags', {})).toEqual([{ name: 'v1' }]);
+    expect(await call('github__create_release', { tag_name: 'v2', name: 'Two' })).toEqual({
+      id: 999,
+      tag_name: 'v2',
+    });
+    const created = fetch.calls.find((c) => c.method === 'POST' && c.url.endsWith('/releases'));
+    expect(created!.json).toMatchObject({ tag_name: 'v2', name: 'Two' });
+    expect(await call('github__delete_release', { release_id: 999 })).toEqual({
+      deleted: true,
+      release_id: 999,
+    });
+  });
+});
+
 describe('execute — github__mint_install_token', () => {
   test('purpose=clone, no repoFullName → token over every GitHub resource of the mission, contents:read', async () => {
     const fetch = mockFetch([

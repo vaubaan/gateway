@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import type { ProviderBinding, Resource, RiskCatalog } from '@vaubaan/shared';
+import type { Resource, RiskCatalog } from '@vaubaan/shared';
 
 import { indexCatalog } from '../../src/risk-evaluator.ts';
 import { evaluateCall, evaluateCallSimple } from '../../src/risk-runtime.ts';
@@ -311,25 +311,6 @@ describe('evaluateCall — env-qualified subset check', () => {
       // is given (this is the test entrypoint).
       token_accepted_risks: new Set(['supabase.bulk-row-write']),
       catalog: supabaseIdx,
-    });
-    expect(d.outcome).toBe('allowed');
-  });
-
-  test('deprecated `bindings` input still qualifies through the legacy bridge', () => {
-    const stagingBinding: ProviderBinding = {
-      id: 'b1',
-      project_id: 'p1',
-      provider: 'supabase',
-      resource_ref: 'staging-ref',
-      display_name: null,
-      environment: 'staging',
-      created_at: '2026-01-01',
-    };
-    const d = evaluateCall({
-      executed_slices: [stagingBulkSlice],
-      token_accepted_risks: new Set(['supabase[staging].bulk-row-write']),
-      catalog: supabaseIdx,
-      bindings: [stagingBinding],
     });
     expect(d.outcome).toBe('allowed');
   });

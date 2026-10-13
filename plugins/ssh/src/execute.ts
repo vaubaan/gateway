@@ -112,35 +112,3 @@ function execResultToTool(result: ExecResult): McpToolResult {
 function errorResult(message: string): McpToolResult {
   return { content: [{ type: 'text', text: message }], isError: true };
 }
-
-// ─── legacy v4, deleted in P1.6 ──────────────────────────────────────────────
-
-/** @deprecated legacy v4, deleted in P1.6 — an `ssh_bindings` row as `exec-host.ts` loads it. */
-export interface VpsSshBinding {
-  host_address: string;
-  port: number;
-  ssh_user: string;
-  ssh_private_key_pem: string;
-}
-
-/**
- * @deprecated legacy v4, deleted in P1.6 — use `sshPlugin.execute`. Runs over
- * the same transport **without a host key pin** (v4 stored none) ; the
- * transport logs a warning for every unpinned connection.
- */
-export async function sshExec(
-  binding: VpsSshBinding,
-  cmd: string,
-  timeout_s: number = DEFAULT_TIMEOUT_S,
-): Promise<ExecResult> {
-  const target: SshTarget = {
-    host: binding.host_address,
-    port: binding.port,
-    user: binding.ssh_user,
-    privateKeyPem: binding.ssh_private_key_pem,
-    hostKeyFingerprint: null,
-  };
-  return ssh2Transport.exec(target, cmd, {
-    timeoutMs: Math.min(timeout_s, MAX_TIMEOUT_S) * 1000,
-  });
-}

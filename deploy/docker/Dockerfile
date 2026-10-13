@@ -45,7 +45,9 @@ RUN npm ci --no-audit --no-fund
 FROM base AS build
 ARG GIT_COMMIT_SHA=unknown
 ENV GIT_COMMIT_SHA=${GIT_COMMIT_SHA}
-COPY --from=deps /app/node_modules ./node_modules
+# The whole dependency tree: the hoisted node_modules and the ones npm nests
+# under a workspace when two majors of a package coexist (apps/gateway/node_modules).
+COPY --from=deps /app ./
 COPY . .
 RUN npm run build --workspace @vaubaan/gateway-app
 

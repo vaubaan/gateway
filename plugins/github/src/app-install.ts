@@ -56,7 +56,7 @@ export interface MintInstallationTokenInput extends AppCredentials {
    * App was granted at install). Omit for the App's full granted permissions.
    */
   permissions?: Record<string, string>;
-  /** The injected fetch (`ctx.fetch`). Defaults to the global fetch for the legacy v4 adapter only. */
+  /** The injected fetch (`ctx.fetch`). Defaults to the global fetch when a caller passes none. */
   fetchImpl?: typeof fetch;
   signal?: AbortSignal;
 }

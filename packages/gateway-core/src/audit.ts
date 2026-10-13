@@ -13,7 +13,6 @@
  * contract between the two and must stay stable.
  */
 
-import { createHash } from 'node:crypto';
 import type { AuditDecision, RefusalCode, RiskId, Slice } from '@vaubaan/shared';
 
 export type { AuditDecision } from '@vaubaan/shared';
@@ -33,7 +32,8 @@ export interface CallAuditEntry {
   readonly connection_id: string | null;
   readonly resource_ref: string | null;
   readonly tool: string;
-  /** `hashArguments(args)`: sha256 truncated to 16 hex characters. Never the
+  /** `fingerprintArguments(args)`: sha256 (64 hex) of the canonical JSON of
+   *  the arguments — the same value that binds approvals. Never the
    *  arguments themselves. */
   readonly arguments_hash: string;
   /** Slices the plugin emitted for the call (empty when refused before
@@ -142,17 +142,6 @@ export type AuditEntry = CallAuditEntry | AdminAuditEntry;
  */
 export interface AuditWriter {
   write(entry: AuditEntry): Promise<void>;
-}
-
-/** sha256 of the JSON-serialized arguments, truncated to 16 hex characters.
- *  Unchanged since v4 (audit rows stay comparable across the pivot). Not a
- *  canonical fingerprint: key order matters. The canonical fingerprint that
- *  binds approvals is feature P1.3's. */
-export function hashArguments(args: unknown): string {
-  return createHash('sha256')
-    .update(JSON.stringify(args ?? {}))
-    .digest('hex')
-    .slice(0, 16);
 }
 
 /** In-memory writer for tests. */

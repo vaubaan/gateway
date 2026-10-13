@@ -12,7 +12,6 @@ tracks:
   - apps/gateway/tests/integration/compose/
   - apps/gateway/src/instrumentation.ts
   - apps/gateway/src/app/healthz/route.ts
-  - apps/gateway/src/lib/crypto/index.ts
   - apps/gateway/next.config.ts
   - apps/gateway/tsconfig.json
   - apps/gateway/tests/integration/standalone-native-addons.test.ts
@@ -52,12 +51,12 @@ apps/gateway/src/
       redact.ts                 token-prefix and secret redaction
     compose/
       ports.ts                  StoreLiveness, RateLimiter, SessionStore; re-exports gateway-core's CacheClient
-      memory.ts                 MemoryRateLimiter, MemorySessionStore  // single-process only
+      memory.ts                 MemoryRateLimiter, MemorySessionStore  // single-process only; tests
       registry.ts               buildEmptyRegistry(), RegistryCatalogIndex, checkProviderApps()
       shipped-plugins.ts        SHIPPED_PLUGINS, buildShippedRegistry(): the plugins the image ships
       store.ts                  openEmbeddedStore(): the SQLite store from store.path
       root.ts                   buildRoot(), getRoot() (globalThis), resetRoot(); wires session/, auth/,
-                                provider-apps/ and connections/
+                                missions/, provider-apps/, connections/, budget/ and execution/
       boot.ts                   bootOrExit(): exit 78 on ConfigError, 1 otherwise
       testing.ts                memoryStoreDeps, fakePlugin() — tests only
     http/
@@ -66,7 +65,9 @@ apps/gateway/src/
     auth/                       OIDC relying party, web session, bootstrap, admin rule (handbook authentication)
     provider-apps/              the company's app per provider: file or Admin page (handbook connections)
     connections/                connect flows, resources, credential broker (handbook connections)
-  lib/crypto/index.ts           LEGACY v4 shim over the new encryptor (deleted in Phase 1)
+    missions/, authority/       issuance, tokens, bootstrap kit (handbook missions)
+    budget/, rate-limit/        session service, sliding windows (handbook budget-and-sessions)
+    execution/                  the execution MCP door (handbook execution-door)
 scripts/gen-master-key.mjs      prints 32 random bytes, base64
 deploy/config/                  gateway.example.yaml, .env.example (every key documented)
 ```
@@ -114,7 +115,10 @@ deploy/config/                  gateway.example.yaml, .env.example (every key do
      relying party's outbound `fetch` and the test-only insecure issuer;
    - `createMissionsModule()` → `root.missions` (`authority`, `service`,
      `handlers`; handbook [missions](missions.md));
-   - the in-memory rate limiter and cache unless injected;
+   - one `SlidingWindowRateLimiter` — the budget's per-risk windows and,
+     unless `RootDeps.rateLimiter` injects another one, the surface
+     `RateLimiter` — and the `MemoryCacheClient` unless `RootDeps.cache`
+     injects another one;
    - `ProviderAppsService(config.providers, store.config, registry)` →
      `root.providerApps`, then `createConnectionsModule()` →
      `root.connections` (`service`, `credentials`, `notices`,
@@ -131,6 +135,13 @@ deploy/config/                  gateway.example.yaml, .env.example (every key do
      `retention.start()`, which purges the audit entries older than
      `retention_days` once and then every hour, and `root.close()` stops
      that timer before closing the store;
+   - the budget's `SessionService` → `root.budget` (claim and approval URLs
+     come from `root.requests.requestUrl`; handbook
+     [budget-and-sessions](budget-and-sessions.md)), then
+     `createExecutionModule()` → `root.execution` (`pipeline`,
+     `credentialCache`, `door`, `handlers`; handbook
+     [execution-door](execution-door.md)), with `RootDeps.delegatedTokens`
+     for the resolver that lets the door refuse delegated tokens by kind;
    - the boot line `composition root ready` (`store`, `schema_version`,
      `plugins`, `build`) closes the sequence.
 5. On `ConfigError`, `bootOrExit()` prints the error to stderr with a
@@ -214,6 +225,7 @@ accept `<VAR>_FILE`.
 | `retention_days`                | `VAUBAAN_RETENTION_DAYS`               | integer >= 1, default 90                                                                                       |
 | `requests.expiry`               | `VAUBAAN_REQUEST_EXPIRY`               | duration, default `24h`                                                                                        |
 | `approvals.expiry`              | `VAUBAAN_APPROVAL_EXPIRY`              | duration, default `10m`                                                                                        |
+| `mcp.rate_limit_per_minute`     | `VAUBAAN_MCP_RATE_LIMIT_PER_MINUTE`    | integer >= 1, default 600: requests per minute on the execution door, per mission (spec §6)                    |
 | `log.level`                     | `VAUBAAN_LOG_LEVEL`                    | `debug` `info` `warn` `error`, default `info`                                                                  |
 
 Not in the tree: `VAUBAAN_CONFIG_FILE` (path of the YAML; unset means
@@ -271,14 +283,9 @@ a new `master_key` with `key_version: n+1` and keeps the old key under
 carry the new version. A blob whose version has no key fails with a message
 naming `encryption.previous_keys`.
 
-`lib/crypto/index.ts` keeps the v4 `encryptProviderSecret` /
-`decryptProviderSecret` signature for the UI and `/mcp` route that still
-exist, reading `ENCRYPTION_MASTER_KEY` lazily. It is the only v5-era shim
-reading a secret from `process.env` outside `server/config`; the v4 UI and
-`lib/` code (`lib/providers/state.ts`, `lib/gateway/build.ts`,
-`lib/supabase/`, the `api/integrations/*` routes) still read their own
-`*_SECRET` / `*_KEY` variables until Phase 1 deletes them, and the
-structural test scopes itself to the v5 perimeter for that reason.
+Nothing reads a secret from `process.env` outside `server/config`: the v4
+shim `lib/crypto/index.ts` and the v4 `lib/` code that read their own
+`*_SECRET` / `*_KEY` variables were deleted with the v4 application.
 
 ## Logging
 
@@ -291,20 +298,13 @@ bindings. `silentLogger` is for tests.
 
 ## Ports and their single-process implementations
 
-| Port             | Today                                                                                                                                                                                       | Hosted replacement                                               |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `StoreLiveness`  | the embedded SQLite store of [store](store.md) (`openEmbeddedStore`)                                                                                                                        | Postgres behind the same repositories                            |
-| `PluginRegistry` | `@vaubaan/plugin-sdk`'s registry over `SHIPPED_PLUGINS` (`compose/shipped-plugins.ts`)                                                                                                      | same (static)                                                    |
-| `RateLimiter`    | `MemoryRateLimiter` fixed window per key (`compose/memory.ts`); `SlidingWindowRateLimiter` (`server/rate-limit/`, handbook [budget-and-sessions](budget-and-sessions.md)) also satisfies it | Redis `INCR` + `PEXPIRE`, or a sorted set for the sliding window |
-| `CacheClient`    | `@vaubaan/gateway-core`'s `MemoryCacheClient` (TTL in seconds, bounded); one definition                                                                                                     | Redis                                                            |
-| `SessionStore`   | `MemorySessionStore`, built on `MemoryCacheClient` (TTL in ms at the port)                                                                                                                  | store-backed rows or Redis                                       |
-| Port             | Today                                                                                                                                                                                       | Hosted replacement                                               |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------                                                                 | --------------------------------------------                     |
-| `StoreLiveness`  | the embedded SQLite store of [store](store.md) (`openEmbeddedStore`)                                                                                                                        | Postgres behind the same repositories                            |
-| `PluginRegistry` | `@vaubaan/plugin-sdk`'s registry over `SHIPPED_PLUGINS`                                                                                                                                     | same (static)                                                    |
-| `RateLimiter`    | `MemoryRateLimiter` fixed window per key (`compose/memory.ts`)                                                                                                                              | Redis `INCR` + `PEXPIRE`                                         |
-| `CacheClient`    | `@vaubaan/gateway-core`'s `MemoryCacheClient` (TTL in seconds, bounded); one definition                                                                                                     | Redis                                                            |
-| `SessionStore`   | `SqliteSessionStore` (`server/session/`, table `web_sessions`, migration 0003); `MemorySessionStore` remains for unit tests                                                                 | Redis, or Postgres rows behind the same port                     |
+| Port             | Today                                                                                                                                                                                          | Hosted replacement                                                       |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `StoreLiveness`  | the embedded SQLite store of [store](store.md) (`openEmbeddedStore`)                                                                                                                           | Postgres behind the same repositories                                    |
+| `PluginRegistry` | `@vaubaan/plugin-sdk`'s registry over `SHIPPED_PLUGINS` (`compose/shipped-plugins.ts`)                                                                                                         | same (static)                                                            |
+| `RateLimiter`    | `SlidingWindowRateLimiter` (`server/rate-limit/`, handbook [budget-and-sessions](budget-and-sessions.md)): the same instance holds the budget's windows; `MemoryRateLimiter` remains for tests | one Redis sorted set per key                                             |
+| `CacheClient`    | `@vaubaan/gateway-core`'s `MemoryCacheClient` (TTL in seconds, bounded): verified-token proofs and the plugins' derived upstream credentials ([execution-door](execution-door.md))             | Redis for the proofs; upstream credentials stay per replica or encrypted |
+| `SessionStore`   | `SqliteSessionStore` (`server/session/`, table `web_sessions`, migration 0003); `MemorySessionStore` remains for unit tests                                                                    | Redis, or Postgres rows behind the same port                             |
 
 `GatewayRoot.store` is the full store with its repositories
 (`StoreLiveness` of `ports.ts` is only the slice `/healthz` and `close()`
@@ -315,11 +315,15 @@ derives from one object; `GatewayRoot.auth` is the authentication module
 (P1.1); `GatewayRoot.providerApps` and `GatewayRoot.connections` are the
 provider-app settings and the connections module (P1.4), which share the
 root's `SessionStore` (keys `connect:<state>` and `notice:<id>` next to
-`session:` and `login:`) and its `RateLimiter` (key `connect:<userId>`).
+`session:` and `login:`) and its `RateLimiter` (key `connect:<userId>`);
+`GatewayRoot.budget` and `GatewayRoot.execution` are the budget's session
+service and the execution door (rate-limit keys `mission:<id>:risk:<id>`,
+`mcp:mission:<id>`, `mcp-verify:<prefix>`; cache keys `mission-token:<hash>`,
+`upstream-credential:<connection>:…`).
 Features plug their factories through `RootDeps`
 (`openStore(ctx: { config, logger, encryptor, catalog })`,
 `buildRegistry(config, logger)`, `rateLimiter`, `cache`, `sessions`, `oidc`
-(`fetch`, `allowInsecureIssuer`), `providerFetch`, plus
+(`fetch`, `allowInsecureIssuer`), `providerFetch`, `delegatedTokens`, plus
 `loadConfig`, `logWrite` and `build` that tests override);
 tests use `memoryStoreDeps` (the `:memory:` store) and `fakePlugin()` from
 `compose/testing.ts`, and call `resetRoot()` between cases.

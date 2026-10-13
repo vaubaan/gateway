@@ -323,7 +323,6 @@ export interface Approval {
  * What the gateway decided for a call (spec §8 : "one entry per call,
  * allowed or refused"). An allowed call whose provider then failed stays
  * `allowed` with `upstream_error` set ; a structural rejection without a
- * code is `refused` with a null `refusal_code`. The v4 rows said `denied`
- * (`AuditLogRow` in `legacy-v4.ts`).
+ * code is `refused` with a null `refusal_code`.
  */
 export type AuditDecision = 'allowed' | 'refused';

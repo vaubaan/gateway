@@ -10,10 +10,6 @@
  * UI bundles (`@vaubaan/policy-engine`) import values from the subpaths
  * `@vaubaan/shared/risk-id` and `@vaubaan/shared/api-key` instead ; type
  * imports from the barrel are erased and always safe.
- *
- * The legacy v4 row types stay reachable from this barrel until the last
- * plugin migrates (feature P1.2) ; see `legacy-v4.ts` for the list and the
- * removal rule.
  */
 
 export * from './mcp.ts';
@@ -23,4 +19,3 @@ export * from './risk-id.ts';
 export * from './refusal.ts';
 export * from './domain.ts';
 export * from './data-model.ts';
-export * from './legacy-v4.ts';

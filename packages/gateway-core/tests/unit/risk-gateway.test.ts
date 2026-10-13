@@ -12,10 +12,8 @@ import type { Resource, RiskCatalog, Slice } from '@vaubaan/shared';
 import { indexCatalog, noEnvResolver } from '@vaubaan/policy-engine';
 
 import {
-  denyResponseBody,
   evaluateCallForToken,
   type AcceptedRisksSnapshot,
-  type CallVerdict,
   type Classifier,
 } from '../../src/risk-gateway.ts';
 
@@ -295,29 +293,5 @@ describe('evaluateCallForToken', () => {
       catalog: indexed,
     });
     expect(verdict.kind).toBe('deny');
-  });
-});
-
-describe('denyResponseBody', () => {
-  test('shapes the spec-mandated 403 body', () => {
-    const verdict: Extract<CallVerdict, { kind: 'deny' }> = {
-      kind: 'deny',
-      code: 'risk-not-accepted',
-      missing_risks: ['supabase.bulk-row-write'],
-      risks_touched: ['supabase.bulk-row-write'],
-      executed_slices: [
-        {
-          provider: 'supabase',
-          path: [{ kind: 'name', value: 'project' }],
-          action: 'W',
-        },
-      ],
-      hint: 'rerun with broader risk',
-    };
-    const body = denyResponseBody(verdict);
-    expect(body.error).toBe('risk-not-accepted');
-    expect(body.missing_risks).toEqual(['supabase.bulk-row-write']);
-    expect(body.executed_slices.length).toBe(1);
-    expect(body.hint).toBe('rerun with broader risk');
   });
 });

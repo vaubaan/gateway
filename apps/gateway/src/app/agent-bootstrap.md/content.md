@@ -85,13 +85,21 @@ they are the only refs the mission knows.
 Sub-agents use the **same** MCP configuration and the **same** token. Every
 allowed call decrements the same counters: multiplying agents does not
 multiply the budget. A refused call consumes nothing. If you run several
-agents, each may set a free-form agent label on its calls so the audit tells
-them apart; the label changes nothing about what is allowed.
+agents, each may set a free-form agent label so the audit tells them apart:
+the HTTP header `X-Vaubaan-Agent: <label>` in its MCP configuration, or
+`_meta.agent` on a single `tools/call` (the per-call value wins). The label
+changes nothing about what is allowed.
+
+`GET <instance URL>/mcp/catalog`, with the same `Authorization` header,
+returns the tools of the instance and which ones your mission can call, the
+resource refs and environment labels you may cite, and what is left of each
+risk's quota in the current period.
 
 ## 5. When a call is refused
 
-A refusal is a structured error with a `code` and a `hint`. Read the hint,
-then act according to the code:
+A refusal is a JSON-RPC error (code `-32603`) whose `data` is the refusal:
+its `code`, the fields of that code and a `hint`. Read the hint, then act
+according to the code:
 
 | Code                      | What happened                                      | What you do                                                                                                                |
 | ------------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |

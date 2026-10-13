@@ -19,18 +19,17 @@ modelling rationale (research, edge cases) is preserved in git history
 
 ## Shape
 
-| Member              | Where                                               | Facts                                                                                                              |
-| ------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `id` / `version`    | `src/index.ts`                                      | `supabase`, `1.0.0`. Default export `supabasePlugin`.                                                              |
-| `tools`             | `src/tools.ts`                                      | 44, prefix `supabase__`. The three v4 `*_to_venv` tools are gone (plan §8-Q5).                                     |
-| `dataModel`         | `src/data-model.ts`                                 | 4 planes (`db`, `storage`, `auth`, `functions`) rooted on `project` (`envScopable`).                               |
-| `catalog`           | `src/risk-catalog.yaml`                             | `catalog_version: 1`, 24 risks + `supabase.uncategorized-write`, 3 presets. Loaded by `loadCatalogFile` at import. |
-| `credential`        | `src/credential.ts`                                 | `oauth2`, PKCE, `client_secret_basic`, scope `all`, `refreshable: true`.                                           |
-| `classify`          | `src/classify.ts`                                   | Pure ; v4 emission rules kept, identifiers validated, missing identifiers denied.                                  |
-| `execute`           | `src/execute.ts`                                    | Management API + per-project data plane ; `UpstreamAuthError` on 401/403 ; `fetch` and `signal` from the context.  |
-| `discoverResources` | `src/execute.ts`                                    | One `Resource` per project of every organization, capped at 200.                                                   |
-| `refresh`           | —                                                   | None : the standard `refresh_token` grant (Basic client auth) is performed by the host from the spec (P1.2-align). |
-| legacy              | `src/risk-classifier.ts`, `src/supabase-adapter.ts` | `classifySupabaseV4(bindings)` and `SupabaseAdapter` as `@deprecated` shims over the v5 code ; deleted in P1.6.    |
+| Member              | Where                   | Facts                                                                                                              |
+| ------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `id` / `version`    | `src/index.ts`          | `supabase`, `1.0.0`. Default export `supabasePlugin`.                                                              |
+| `tools`             | `src/tools.ts`          | 44, prefix `supabase__`. The three v4 `*_to_venv` tools are gone (plan §8-Q5).                                     |
+| `dataModel`         | `src/data-model.ts`     | 4 planes (`db`, `storage`, `auth`, `functions`) rooted on `project` (`envScopable`).                               |
+| `catalog`           | `src/risk-catalog.yaml` | `catalog_version: 1`, 24 risks + `supabase.uncategorized-write`, 3 presets. Loaded by `loadCatalogFile` at import. |
+| `credential`        | `src/credential.ts`     | `oauth2`, PKCE, `client_secret_basic`, scope `all`, `refreshable: true`.                                           |
+| `classify`          | `src/classify.ts`       | Pure ; v4 emission rules kept, identifiers validated, missing identifiers denied.                                  |
+| `execute`           | `src/execute.ts`        | Management API + per-project data plane ; `UpstreamAuthError` on 401/403 ; `fetch` and `signal` from the context.  |
+| `discoverResources` | `src/execute.ts`        | One `Resource` per project of every organization, capped at 200.                                                   |
+| `refresh`           | —                       | None : the standard `refresh_token` grant (Basic client auth) is performed by the host from the spec (P1.2-align). |
 
 ## Classification rules
 
@@ -99,7 +98,6 @@ flow from `supabaseCredential` and the refresh : Supabase's is the standard
 RFC 6749 `refresh_token` grant with Basic client authentication, so the
 plugin declares `refreshable: true` and implements nothing (P1.2-align
 removed `refreshSupabaseCredential` and `shouldRefreshSupabaseCredential`).
-`REFRESH_THRESHOLD_MS` (60 s) survives for the legacy v4 adapter only.
 `discoverResources` reads `/organizations` and `/projects` (unpaged upstream,
 capped at `MAX_DISCOVERED_PROJECTS` with a logger warning) and returns
 `{ ref, displayName: "<org> / <project>", metadata: { organization,
@@ -107,12 +105,13 @@ organization_name, region, status } }` ; the owner labels `env`.
 
 ## Tests
 
-`npx vitest run plugins/supabase` — 116 tests : `plugin.test.ts` (22 : SDK
+`npx vitest run plugins/supabase` — 109 tests : `plugin.test.ts` (22 : SDK
 kit with one sample per tool, presets, credential spec, execute and
 discovery against `mockFetch`), `risk-catalog.test.ts`
 (33 : loaded catalog lint, coverage, cardinality exclusion, spot checks),
-`risk-classifier.test.ts` (30, v4 suite unchanged through the shim),
-`adapter.test.ts` (30, v4 suite unchanged), `data-model.test.ts` (1).
+`classify.test.ts` (30 : the security suite of `classifySupabase`),
+`execute.test.ts` (23 : request shapes sent to the Management API and the
+per-project data plane), `data-model.test.ts` (1).
 
 ## How to debug
 
@@ -125,6 +124,6 @@ discovery against `mockFetch`), `risk-catalog.test.ts`
 - **`assertCatalogCoverage` lists a new untouched risk** — either the tool's
   sample is missing in `plugin.test.ts` or the pattern does not match the
   emitted slice (compare with `serializeSlice` output in
-  `risk-classifier.test.ts`).
+  `classify.test.ts`).
 - **`mockFetch: unexpected POST …/database/query`** — a read tool must use
   `/database/query/read-only` ; only `apply_migration` posts elsewhere.

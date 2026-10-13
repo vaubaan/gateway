@@ -17,6 +17,7 @@ import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import { createAuditModule, type AuditModule } from '../audit';
 import { createAuthModule, type AuthModule, type OidcOptions } from '../auth';
+import { SessionService } from '../budget';
 import { createConnectionsModule, type ConnectionsModule } from '../connections';
 import {
   loadInstanceConfig,
@@ -25,13 +26,18 @@ import {
   secretValues,
 } from '../config';
 import { createEncryptor, type Encryptor } from '../crypto';
+import {
+  createExecutionModule,
+  type DelegatedTokenResolver,
+  type ExecutionModule,
+} from '../execution';
 import { createLogger, createRedactor, type Logger, type LoggerOptions } from '../logging';
 import { ProviderAppsService } from '../provider-apps';
 import { createMissionsModule, type MissionsModule } from '../missions';
 import { createRequestsModule, type RequestsModule } from '../requests';
+import { SlidingWindowRateLimiter } from '../rate-limit';
 import { SqliteSessionStore } from '../session';
 import type { Store } from '../store';
-import { MemoryRateLimiter } from './memory';
 import type { CacheClient, RateLimiter, SessionStore } from './ports';
 import { checkProviderApps, RegistryCatalogIndex } from './registry';
 import { buildShippedRegistry } from './shipped-plugins';
@@ -62,6 +68,10 @@ export interface GatewayRoot {
   readonly requests: RequestsModule;
   /** Audit search, mission session view, retention sweeper (P1.8). */
   readonly audit: AuditModule;
+  /** Budget: the session service deciding and counting every allowed call (P1.3). */
+  readonly budget: SessionService;
+  /** The execution MCP door: `/mcp`, `/mcp/catalog`, the call pipeline (P1.6). */
+  readonly execution: ExecutionModule;
   readonly build: BuildInfo;
   readonly startedAt: Date;
   close(): Promise<void>;
@@ -88,6 +98,8 @@ export interface RootDeps {
   readonly oidc?: OidcOptions;
   /** Outbound HTTP of the connect flows and of plugin discovery (tests inject a mock provider). */
   readonly providerFetch?: typeof fetch;
+  /** Recognises delegated tokens at the execution door so they are refused by kind (P2.3 wires the real one). */
+  readonly delegatedTokens?: DelegatedTokenResolver;
   readonly logWrite?: LoggerOptions['write'];
   readonly build?: BuildInfo;
 }
@@ -138,7 +150,12 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
     logger,
   });
 
-  const rateLimiter = deps.rateLimiter ?? new MemoryRateLimiter();
+  // One sliding-window limiter, two faces: the budget's per-risk windows
+  // (`mission:<id>:risk:<id>`, probed and recorded inside the decision) and the
+  // surface limits (`mcp:mission:<id>`, `connect:<user>`), on disjoint keys.
+  const windows = new SlidingWindowRateLimiter();
+  const rateLimiter = deps.rateLimiter ?? windows;
+  const cache = deps.cache ?? new MemoryCacheClient();
   const providerApps = new ProviderAppsService(config.providers, store.config, registry);
   const connections = createConnectionsModule({
     config,
@@ -165,6 +182,28 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
   // that `close()` stops (handbook audit).
   const audit = createAuditModule({ config, store, missions: missions.service, logger });
   await audit.retention.start();
+  const budget = new SessionService({
+    sessions: store.sessions,
+    requests: store.requests,
+    rateWindows: windows,
+    // The single builder of `<public_url>/r/<id>` (requests module).
+    requestUrl: requests.requestUrl,
+    requestExpirySeconds: config.requests.expirySeconds,
+  });
+  const execution = createExecutionModule({
+    config,
+    store,
+    registry,
+    auth,
+    missions,
+    connections,
+    budget,
+    cache,
+    rateLimiter,
+    logger,
+    build,
+    delegations: deps.delegatedTokens,
+  });
 
   const root: GatewayRoot = {
     config,
@@ -174,7 +213,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
     store,
     registry,
     rateLimiter,
-    cache: deps.cache ?? new MemoryCacheClient(),
+    cache,
     sessions,
     auth,
     providerApps,
@@ -182,6 +221,8 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
     missions,
     requests,
     audit,
+    budget,
+    execution,
     build,
     startedAt: new Date(),
     async close() {

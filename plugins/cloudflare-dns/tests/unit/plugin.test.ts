@@ -1,9 +1,8 @@
 /**
- * Mandatory suite of the Cloudflare DNS plugin : the SDK kit, the v5
+ * Mandatory suite of the Cloudflare DNS plugin : the SDK kit, the
  * classifier (zone resolution, critical / delete overlays, malformed ids),
  * `execute` and `discoverResources` against `mockFetch`, the credential spec
- * and the presets. The v4 classifier cases live unchanged in
- * `risk-classifier.test.ts`.
+ * and the presets. The per-tool classifier cases live in `classify.test.ts`.
  */
 import { describe, expect, test } from 'vitest';
 

@@ -15,10 +15,9 @@ feature P1.2d; the current handbook is
 `Resource[]`, catalog and presets, OAuth2 credential spec and refresh,
 execution, tests).
 
-What remains of v4 in the code is listed there under "Legacy and removal
-plan": `RailwayAdapter`, `railwayAvailableTools`, `railwayRiskCatalog` and
-`classifyRailwayV4` stay exported `@deprecated` for the v4 application and
-are deleted in P1.6, together with the v4 OAuth routes replaced by the
-generic connect driver of P1.4.
+Nothing of v4 remains in the code: `RailwayAdapter`, `railwayAvailableTools`,
+`railwayRiskCatalog`, `classifyRailwayV4` and the v4 OAuth routes are
+deleted. The connect flow is the generic driver documented in
+[`connections.md`](./connections.md), which reads `railwayCredentialSpec`.
 
 Decisions: [[railway-rewrap-remote-mcp]], [[plugin-contract-and-credential-spec]].

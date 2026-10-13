@@ -13,8 +13,9 @@ import {
   checkConnectionAvailable,
   checkMissionActive,
   evaluateCallForToken,
-  hashArguments,
+  fingerprintArguments,
   refuse,
+  UpstreamRefusalError,
   type AuditWriter,
   type BudgetStage,
   type CallPipelineDeps,
@@ -258,7 +259,7 @@ describe('CallPipeline', () => {
       connection_id: 'con_1',
       resource_ref: 'prj_x',
       tool: 'supabase__execute_sql',
-      arguments_hash: hashArguments(call.args),
+      arguments_hash: fingerprintArguments(call.args),
       risks_touched: ['supabase.read-data'],
       accepted_risks_snapshot: ['supabase.read-data'],
       decision: 'allowed',
@@ -442,6 +443,68 @@ describe('CallPipeline', () => {
       decision: 'allowed',
       upstream_error: 'boom',
       session_id: 'ses_1',
+    });
+  });
+
+  test('a plain upstream failure carries no refusal', async () => {
+    const { p } = pipeline({
+      upstream: {
+        execute: async () => {
+          throw new Error('boom');
+        },
+      },
+    });
+    const out = await p.execute(ctx, call);
+    expect(out.kind === 'failed' && out.refusal).toBeNull();
+  });
+
+  test('UpstreamRefusalError: the entry stays allowed, the outcome carries the refusal', async () => {
+    const refusal = refuse.connectionUnavailable({
+      connection: { id: connection.id, name: connection.display_name },
+      status: 'expired',
+      owner: connection.owner,
+    });
+    const { p, audit } = pipeline({
+      upstream: {
+        execute: async () => {
+          throw new UpstreamRefusalError(refusal, 'the provider rejected the credential');
+        },
+      },
+    });
+    const out = await p.execute(ctx, call);
+    expect(out.kind).toBe('failed');
+    if (out.kind === 'failed') {
+      expect(out.refusal).toBe(refusal);
+      expect(out.error).toBe('connection-unavailable: the provider rejected the credential');
+    }
+    expect(audit.calls).toHaveLength(1);
+    expect(audit.calls[0]).toMatchObject({
+      decision: 'allowed',
+      refusal_code: null,
+      upstream_error: 'connection-unavailable: the provider rejected the credential',
+      remaining_budget: expect.any(Object) as object,
+    });
+  });
+
+  test('a call with no target is a structural rejection, audited without a code', async () => {
+    let evaluated = false;
+    const { p, audit } = pipeline({
+      resources: { resolve: async () => ({ ok: false, reason: "unknown tool 'x__y'" }) },
+      risks: {
+        evaluate: async () => {
+          evaluated = true;
+          return { kind: 'no-catalog', provider: 'x' };
+        },
+      },
+    });
+    const out = await p.execute(ctx, call);
+    expect(out).toMatchObject({ kind: 'rejected', reason: "unknown tool 'x__y'" });
+    expect(evaluated).toBe(false);
+    expect(audit.calls[0]).toMatchObject({
+      decision: 'refused',
+      refusal_code: null,
+      refusal_reason: "unknown tool 'x__y'",
+      connection_id: null,
     });
   });
 

@@ -9,10 +9,6 @@
  * explicitly as `project_ref` (the resource ref the mission catalog lists) ;
  * the classifier falls back to the mission's single Supabase project when
  * the argument is absent.
- *
- * Removed in v5 : `supabase__service_role_to_venv`, `supabase__anon_key_to_venv`
- * and `supabase__url_to_venv` (the v4 project env-var store has no v5
- * counterpart, plan §8-Q5).
  */
 
 import type { McpToolDeclaration } from '@vaubaan/plugin-sdk';

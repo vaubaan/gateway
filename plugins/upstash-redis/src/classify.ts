@@ -24,8 +24,8 @@
  *   - `execute` is routed on its Redis verb : known reads → `R`, known
  *     writes → `W`, FLUSHDB / FLUSHALL → the `flush` marker, anything else →
  *     the `execute` marker (catch-all risk). A DEL through `execute` is a
- *     plain key-space write, as in v4 (the dedicated `del` tool carries the
- *     `delete` marker).
+ *     plain key-space write (the dedicated `del` tool carries the `delete`
+ *     marker).
  */
 
 import type { ClassifyOutcome, Resource, Slice, SliceSegment } from '@vaubaan/plugin-sdk';
@@ -35,8 +35,8 @@ export const PROVIDER = 'upstash-redis';
 /**
  * Slice DSL ident characters (`slice-dsl.ts` bracket grammar). Database ids
  * are UUIDs ; Redis keys with `:` (`session:123`) are NOT slice-safe and
- * fall back to `[*]` — v4 embedded them and produced slices the DSL could
- * not parse back.
+ * fall back to `[*]` — embedding them would produce slices the DSL cannot
+ * parse back.
  */
 const SAFE_IDENT = /^[a-zA-Z0-9_./~-]+$/;
 

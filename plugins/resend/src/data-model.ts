@@ -1,11 +1,11 @@
 /**
  * Resend data model — the entities a slice path can name (risk-model spec §2).
  *
- * Spec : docs/spec/resend.md §2 (v4 shape) ; docs/spec/vaubaan-gateway.md §0
- *        "Resource" (v5 : domains and segments are the resources).
+ * Spec : docs/spec/resend.md §2 ; docs/spec/vaubaan-gateway.md §0
+ *        "Resource" (domains and segments are the resources).
  *
- * One plane, `email`. The v4 model hung everything under a synthetic
- * `account[<binding slug>]` root ; v5 roots the slices at the **resources**
+ * One plane, `email`. Version 1 of the catalog hung everything under a
+ * synthetic `account[<slug>]` root ; slices are now rooted at the **resources**
  * a mission selects, so the default env resolver finds the ref as the first
  * ident of the path :
  *
@@ -20,7 +20,7 @@
  *   email[<id>]            a sent transactional email (status read only)
  *
  * ★ Synthetic entities exist for classification only ; Resend exposes no such
- * object. The v4 `batch` marker is gone : `recipient-count[batch]` carries the
+ * object. The version 1 `batch` marker is gone : `recipient-count[batch]` carries the
  * bulk-send risk on its own.
  */
 

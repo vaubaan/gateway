@@ -6,14 +6,12 @@ tracks:
   - packages/gateway-core/src/
   - apps/gateway/src/app/mcp/route.ts
   - apps/gateway/src/app/.well-known/oauth-protected-resource/route.ts
-  - apps/gateway/src/lib/gateway/build.ts
-  - apps/gateway/src/lib/crypto/
-  - packages/shared/src/types.ts
 ---
 
 > **Legacy v4 document.** Kept for history; superseded by the v5 spec. Not maintained.
-> The v5 package is documented in [gateway-core](./gateway-core.md); the v4 orchestrator
-> described below now lives in `apps/gateway/src/lib/gateway/legacy-v4-gateway.ts` until P1.6.
+> The v5 package is documented in [gateway-core](./gateway-core.md) and the v5 door in
+> [execution-door](./execution-door.md); the v4 orchestrator and the `/mcp` route described
+> below were deleted with the v4 application (P1.6).
 
 # MCP gateway — `@vaubaan/gateway-core` + `/mcp` route
 

@@ -3,16 +3,16 @@ title: Railway + SSH providers — modélisation v4 risk-based
 status: current
 date: 2026-06-15
 tracks:
-  - plugins/railway/src/risk-classifier.ts
-  - plugins/ssh/src/risk-classifier.ts
+  - plugins/railway/src/classify.ts
+  - plugins/ssh/src/classify.ts
 ---
 
 > **v4 document.** English rewrite scheduled by the v5 plan; `tracks` paths updated for the new layout.
 >
 > **Both halves are legacy since 2026-10-13**: Railway is on the v5 SDK and
 > documented in [`railway.md`](./railway.md) (P1.2d); SSH is on the v5 SDK and
-> documented in [`ssh.md`](./ssh.md) (P1.2i). Only the two kept v4 classifiers
-> (`@deprecated` until P1.6) are still tracked here.
+> documented in [`ssh.md`](./ssh.md) (P1.2i). The v4 classifiers are deleted;
+> `tracks` names the v5 classifiers that replaced them.
 
 # Railway & SSH — modélisation v4 (data-model, slices, risk catalog)
 
@@ -24,8 +24,8 @@ tracks:
 >
 > État courant — Railway : migré sur le Plugin SDK v5, voir
 > [`railway.md`](./railway.md) (la section 1 ci-dessous n'est plus qu'un
-> renvoi). SSH : classifier legacy `ssh__exec` + `policy.ts:isReadAllowed()` (regex
-> whitelist). Le provider `bash` (annotated scripts, cf.
+> renvoi). SSH: migrated to the v5 Plugin SDK as well, see
+> [`ssh.md`](./ssh.md); section 2 below is the v4 model. Le provider `bash` (annotated scripts, cf.
 > `docs/handbook/bash-provider.md`) sort du périmètre de ce doc — il sera
 > traité dans un doc séparé quand le wiring `/mcp` bash sera en place.
 

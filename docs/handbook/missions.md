@@ -282,9 +282,11 @@ them leaves a mission without a token, which `rotate` repairs.
   `missions.findTokenByPrefix` → `bearerMatches` (argon2 verify) →
   `{ outcome: 'verified', mission, token }`, `{ outcome: 'retired', reason:
 'rotated' | 'revoked', mission, token }` or `{ outcome: 'unknown' }` (malformed,
-  unknown prefix and wrong secret are one answer). The execution door (P1.6)
-  turns `retired/rotated` into an authentication failure and a revoked mission
-  into `mission-inactive` through gateway-core's `checkMissionActive`.
+  unknown prefix and wrong secret are one answer). The execution door
+  ([execution-door](execution-door.md)) calls it behind its verified-token
+  cache, turns `retired/rotated` into an authentication failure (401) and a
+  revoked mission into `mission-inactive` through gateway-core's
+  `checkMissionActive`.
 - **`list` / `get`** — the creator's missions with `deriveMissionState` and the
   active token's prefix; `get` adds connections, resources, labelled policy
   lines with what is left this period, and the kit with the masked prefix.

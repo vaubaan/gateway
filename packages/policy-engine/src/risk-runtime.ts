@@ -16,7 +16,7 @@
  * input ; they never run on a denied call.
  */
 
-import type { ProviderBinding, RiskCatalog, RiskDecision, RiskId, Slice } from '@vaubaan/shared';
+import type { RiskCatalog, RiskDecision, RiskId, Slice } from '@vaubaan/shared';
 
 import {
   findRiskEntry,
@@ -24,7 +24,6 @@ import {
   risksTouchedBy,
   type IndexedRiskCatalog,
 } from './risk-evaluator.ts';
-import { bindingsEnvResolver } from './legacy-bindings.ts';
 import { isAcceptableInEnv, noEnvResolver, qualifyRiskId, type EnvResolver } from './qualify.ts';
 import { serializeSlice } from './slice-dsl.ts';
 
@@ -33,7 +32,7 @@ export interface EvaluateCallInput {
   readonly executed_slices: readonly Slice[];
   /** The mission's accepted risks — the keys of its policy. */
   readonly token_accepted_risks: ReadonlySet<RiskId>;
-  /** Explicit opt-outs, when the caller keeps them (v4 tokens). Trump acceptance. */
+  /** Explicit opt-outs, when the caller keeps them. Trump acceptance. v5 missions carry none. */
   readonly token_denied_risks?: ReadonlySet<RiskId>;
   /** The indexed catalog of the provider in question. */
   readonly catalog: IndexedRiskCatalog;
@@ -44,11 +43,9 @@ export interface EvaluateCallInput {
    * `token_accepted_risks`, which are stored qualified (spec §4.4). Build
    * one with `resourceEnvResolver(mission resources)`. When omitted, no
    * qualification happens and `acceptable_in_envs` is not filtered —
-   * the test and legacy mode.
+   * the test mode.
    */
   readonly envResolver?: EnvResolver;
-  /** @deprecated v4 bindings ; wrapped by `bindingsEnvResolver`. Ignored when `envResolver` is set. */
-  readonly bindings?: ReadonlyArray<ProviderBinding>;
 }
 
 /**
@@ -95,7 +92,7 @@ export function evaluateCall(input: EvaluateCallInput): RiskDecision {
       // this slice's env. Without this, overlapping patterns (two entries
       // sharing a pattern with disjoint acceptable_in_envs) would produce
       // phantom qualified ids that no mission can ever contain. Skipped in
-      // the test/legacy mode where env qualification is disabled entirely.
+      // the test mode where env qualification is disabled entirely.
       if (qualifying && !isAcceptableInEnv(entry, env)) continue;
       const qualified = qualifyRiskId(baseId, env, entry);
       if (!seen.has(qualified)) {
@@ -154,9 +151,7 @@ export function evaluateCall(input: EvaluateCallInput): RiskDecision {
 }
 
 function selectResolver(input: EvaluateCallInput): EnvResolver {
-  if (input.envResolver) return input.envResolver;
-  if (input.bindings) return bindingsEnvResolver(input.bindings);
-  return noEnvResolver;
+  return input.envResolver ?? noEnvResolver;
 }
 
 /**

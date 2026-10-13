@@ -1,8 +1,8 @@
 /**
  * SSH read-vs-write classification — a small regex whitelist of "this
  * command shape is benign". Anything else is treated as a write. Used by
- * the v4 classifier (`risk-classifier.ts`) to decide which slice (`R`
- * or `W`) to emit on `ssh__exec`.
+ * the command profiler (`command-classes.ts`) to decide which side (`R`
+ * or `W`) each simple command of an `ssh__exec` line falls on.
  *
  * The whitelist is intentionally narrow ; growing it adds R-side surface
  * the runtime catalog will then have to gate. New entries should be

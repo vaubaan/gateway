@@ -26,6 +26,12 @@ Nothing on `main` or `v5` is deployable yet.
   human can grant more; the human answers from an inbox, never from the
   agent's terminal.
 
+- **One door for agents.** `POST /mcp` (MCP Streamable HTTP, stateless)
+  with `Authorization: Bearer <mission token>`: `tools/list`, `tools/call`,
+  and `GET /mcp/catalog` for the resources and the remaining budget. The
+  human interface (`/connections`, `/missions`, `/requests`, `/admin`) opens
+  with a browser session only; neither credential opens the other surface.
+
 The full picture is in the spec; the reasoning is in the pivot ADR.
 
 ## Layout
@@ -35,6 +41,7 @@ apps/gateway/        the deployable: server + Next.js UI       @vaubaan/gateway-
 packages/shared/     risk types, api-key, data-model            @vaubaan/shared
 packages/policy-engine/  slice DSL, matcher, evaluator, runtime @vaubaan/policy-engine
 packages/gateway-core/   pipeline, decisions, refusals, audit   @vaubaan/gateway-core
+packages/plugin-sdk/     the plugin contract, registry, test kit @vaubaan/plugin-sdk
 plugins/<provider>/  one provider plugin per folder             @vaubaan/plugin-<provider>
 deploy/              Dockerfile, compose, example configuration
 docs/                spec, decisions (ADRs), handbook, tests, workflow

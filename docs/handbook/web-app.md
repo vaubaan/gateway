@@ -4,16 +4,7 @@ status: legacy
 date: 2026-06-16
 tracks:
   - apps/gateway/src/app/
-  - apps/gateway/src/components/sidebar/Sidebar.tsx
-  - apps/gateway/src/components/providers/
-  - apps/gateway/src/lib/mint/
-  - apps/gateway/src/lib/risk-catalog/
   - apps/gateway/src/lib/auth/
-  - apps/gateway/src/lib/oauth/
-  - apps/gateway/src/lib/providers/
-  - apps/gateway/src/lib/crypto/
-  - apps/gateway/src/lib/supabase/
-  - apps/gateway/src/lib/gateway/
   - apps/gateway/next.config.ts
 ---
 

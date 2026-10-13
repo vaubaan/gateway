@@ -12,12 +12,7 @@
  * here, once, at import (that is, at gateway boot).
  */
 
-import {
-  catalogPathNextTo,
-  definePlugin,
-  loadCatalogFile,
-  type RiskCatalog,
-} from '@vaubaan/plugin-sdk';
+import { catalogPathNextTo, definePlugin, loadCatalogFile } from '@vaubaan/plugin-sdk';
 
 import { classifyStripe } from './classify.ts';
 import { stripeDataModel } from './data-model.ts';
@@ -83,18 +78,3 @@ export {
   stripeResourceRef,
   type StripeMode,
 } from './resources.ts';
-
-// ─── Legacy v4 surface — kept so apps/gateway compiles until P1.6 ────────────
-
-/** @deprecated legacy v4, deleted in P1.6 — use `stripePlugin`. */
-export { StripeAdapter } from './stripe-adapter.ts';
-/** @deprecated legacy v4, deleted in P1.6 — use `stripePlugin.tools`. */
-export { availableTools as stripeAvailableTools } from './tools.ts';
-/** @deprecated legacy v4, deleted in P1.6 — use `stripePlugin.execute`. */
-export { executeCall as stripeExecuteCall } from './execute.ts';
-/** @deprecated legacy v4, deleted in P1.6 — use `stripePlugin.catalog` (loaded from the YAML). */
-export const stripeRiskCatalog: RiskCatalog = stripeCatalog.catalog;
-/** @deprecated legacy v4, deleted in P1.6 — use `stripePlugin.classify`. */
-export { classifyStripeV4 } from './risk-classifier.ts';
-/** @deprecated legacy v4, deleted in P1.6 — use `ClassifyOutcome`. */
-export type { ClassifyResult as StripeClassifyV4Result } from './risk-classifier.ts';

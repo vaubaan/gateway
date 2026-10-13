@@ -11,9 +11,6 @@
  * The plugin imports `@vaubaan/plugin-sdk` only. `definePlugin` validates the
  * definition at import time ; the YAML catalog is loaded here, once, when the
  * module is first imported (that is, at gateway boot).
- *
- * The legacy v4 exports at the bottom keep the v4 application compiling until
- * P1.6 replaces its last consumers with the registry.
  */
 
 import {
@@ -108,16 +105,3 @@ export type { FromZone, GmailMailboxMetadata, ToZone } from './classify.ts';
 export type { GmailClassifiedTool } from './tools.ts';
 export { parseQ as parseGmailQ } from './q-parser.ts';
 export type { QParsed as GmailQParsed } from './q-parser.ts';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Legacy v4 exports — consumed by apps/gateway until P1.6 ; deleted with it.
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** @deprecated legacy v4, deleted in P1.6 — use `gmailPlugin.catalog`. */
-export const gmailRiskCatalog = gmailCatalog.catalog;
-/** @deprecated legacy v4, deleted in P1.6 — use `gmailPlugin.tools`. */
-export { gmailTools as gmailAvailableTools } from './tools.ts';
-/** @deprecated legacy v4, deleted in P1.6 — use `gmailPlugin.classify`. */
-export { classifyGmailV4 } from './risk-classifier.ts';
-/** @deprecated legacy v4, deleted in P1.6 — use `ClassifyOutcome` from the SDK. */
-export type { ClassifyResult as GmailClassifyV4Result } from './risk-classifier.ts';

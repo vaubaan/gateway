@@ -395,7 +395,7 @@ describe('audit search: visibility, filters, paging', () => {
     }
     const [call] = calls(await search(userViewer(rig.seeded.ada), { tool: 'github__get_file' }));
     expect(call?.arguments_hash).toBe(entry.arguments_hash);
-    expect(call?.arguments_hash).toMatch(/^[0-9a-f]{16}$/);
+    expect(call?.arguments_hash).toMatch(/^[0-9a-f]{64}$/);
     expect(Object.keys(call ?? {})).not.toEqual(expect.arrayContaining(['args', 'arguments']));
   });
 

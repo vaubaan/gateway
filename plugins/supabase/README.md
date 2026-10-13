@@ -17,11 +17,9 @@ plugins/supabase/
     tools.ts              44 MCP tools, prefix `supabase__`
     classify.ts           (tool, args, resources) → slices ; security-critical
     execute.ts            Management API + data plane ; discoverResources
-    credential.ts         oauth2 spec, refresh, refresh threshold
+    credential.ts         oauth2 spec (the host runs the flow and the refresh)
     index.ts              definePlugin() — default export `supabasePlugin`
-    risk-classifier.ts    legacy v4 shim (deleted in P1.6)
-    supabase-adapter.ts   legacy v4 shim (deleted in P1.6)
-  tests/unit/             plugin.test.ts (kit), risk-catalog, risk-classifier, adapter, data-model
+  tests/unit/             plugin.test.ts (kit), classify, execute, risk-catalog, data-model
 ```
 
 ## Data model
@@ -77,17 +75,15 @@ Rules a reviewer must know (`src/classify.ts`) :
   match `[a-zA-Z0-9_.@+:/~-]+` ; anything else, or a missing required
   identifier, is a denial — never a broad slice.
 
-Removed in v5 : `supabase__service_role_to_venv`, `supabase__anon_key_to_venv`,
-`supabase__url_to_venv` (the v4 project env-var store has no v5 counterpart,
-plan §8-Q5). `supabase__get_anon_key` still returns the project URL and the
-anon key ; `service_role` is fetched gateway-side for the data-plane tools
-and never surfaced.
+`supabase__get_anon_key` returns the project URL and the anon key ;
+`service_role` is fetched gateway-side for the data-plane tools and never
+surfaced.
 
 ## Catalog
 
 `src/risk-catalog.yaml`, `catalog_version: 1`, 24 named risks + the fallback
-`supabase.uncategorized-write` (`supabase.**.W`). The ids are the v4 ids,
-unchanged ; a risk is never renamed or deleted, only deprecated.
+`supabase.uncategorized-write` (`supabase.**.W`). A risk is never renamed or
+deleted, only deprecated.
 
 **Every write risk is env-scoped** (`acceptable_in_envs`) : a mission accepts
 `supabase[staging].migration-write`, never a bare `supabase.migration-write`,
@@ -98,7 +94,7 @@ bulk write on a prod project is refused structurally, whatever the policy.
 Reads are account-scoped except `auth.read-users` (PII).
 
 The fallback counts only when no specific entry matched the write
-(policy-engine rule, P1.2-SDK). Presets never carry it ; a creator who
+(policy-engine rule). Presets never carry it ; a creator who
 accepts it for an environment accepts every uncategorized write there, which
 should stay the exception.
 
@@ -145,11 +141,10 @@ provisional until the `mission-presets-default-values` ADR.
 
 Connecting is then one click : the host runs the authorization-code flow
 from the spec above and stores the token pair encrypted. Access tokens live
-one hour ; `refresh()` posts `grant_type=refresh_token` with HTTP Basic
-client authentication and returns a new secret (the refresh token rotates).
-`shouldRefreshSupabaseCredential(secret, now)` says when a proactive refresh
-is due (`REFRESH_THRESHOLD_MS` = 60 s before expiry) ; a 401/403 upstream
-throws `UpstreamAuthError`, which also triggers a refresh in the host.
+one hour ; the host refreshes them with the standard `refresh_token` grant
+and HTTP Basic client authentication (the refresh token rotates), and owns
+the refresh timing. A 401/403 upstream throws `UpstreamAuthError`, which
+also triggers a refresh in the host.
 
 ### Resource discovery
 
@@ -160,15 +155,6 @@ The Management API returns the whole list (no paging) ; the plugin caps it
 at `MAX_DISCOVERED_PROJECTS` (200) and warns through the logger. The owner
 labels each project's `env` on the Connections page.
 
-## Legacy v4 exports
-
-Until P1.6 the v4 application still imports `SupabaseAdapter`,
-`supabaseAvailableTools`, `supabaseRiskCatalog`, `supabaseDataModel`,
-`classifySupabaseV4`, `supabaseSupportedTools` and `supabaseToolPlanes` from
-this package. They are kept, marked `@deprecated`, and implemented on top of
-the v5 code (`risk-classifier.ts`, `supabase-adapter.ts`). They are deleted
-with the v4 pipeline.
-
 ## Tests
 
 `npx vitest run plugins/supabase` — `plugin.test.ts` runs the SDK kit
@@ -176,5 +162,7 @@ with the v4 pipeline.
 `assertCatalogCoverage` with a sample per tool), the credential spec and
 refresh against `mockFetch`, `execute` and `discoverResources` against
 `mockFetch`, and the presets ; `risk-catalog.test.ts` lints the loaded
-catalog ; `risk-classifier.test.ts` and `adapter.test.ts` are the v4 suites,
-unchanged. No test ever reaches Supabase.
+catalog ; `classify.test.ts` is the classifier's security suite (one expected
+slice list per tool family, plus the denials) ; `execute.test.ts` pins the
+request shapes sent to the Management API and to the data plane. No test ever
+reaches Supabase.

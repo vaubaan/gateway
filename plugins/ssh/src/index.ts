@@ -10,9 +10,6 @@
  * YAML catalog is loaded here, once, when the module is first imported (that
  * is, at gateway boot). `createSshPlugin({ transport })` builds the same
  * plugin over a fake transport for tests.
- *
- * The block at the end re-exports the v4 shapes `apps/gateway` still imports.
- * They are deleted in P1.6 with the v4 pipeline.
  */
 
 import {
@@ -124,8 +121,7 @@ export {
 export { isReadAllowed } from './policy.ts';
 
 // Annotated bash scripts — parser, argument materialisation and invocation
-// builder, moved here from `apps/gateway/src/lib/bash` (P1.2i). Not wired to
-// a tool yet : an owner-curated script needs per-connection configuration
+// builder. Not wired to a tool yet : an owner-curated script needs per-connection configuration
 // the connection model does not carry (see the handbook, "Annotated scripts").
 export {
   parseAnnotatedBash,
@@ -137,18 +133,3 @@ export {
 } from './bash/parse.ts';
 export { materializeArgs, type MaterializeResult, type RawArgs } from './bash/args.ts';
 export { buildToolInvocation, type BuiltCommand } from './bash/exec.ts';
-
-// ─── legacy v4, deleted in P1.6 ──────────────────────────────────────────────
-// Same import paths as before so `apps/gateway` keeps compiling until the v4
-// pipeline goes. Nothing new may import these.
-
-/** @deprecated legacy v4, deleted in P1.6 — use `sshPlugin.tools`. */
-export { availableTools as sshAvailableTools } from './tools.ts';
-/** @deprecated legacy v4, deleted in P1.6 — use `sshPlugin.execute`. */
-export { sshExec } from './execute.ts';
-/** @deprecated legacy v4, deleted in P1.6. */
-export type { VpsSshBinding } from './execute.ts';
-/** @deprecated legacy v4, deleted in P1.6 — use `sshPlugin.catalog` (same object, loaded from the YAML). */
-export const sshRiskCatalog = sshCatalog.catalog;
-/** @deprecated legacy v4, deleted in P1.6 — use `sshPlugin.classify(tool, args, resources)`. */
-export { classifySshV4, type ClassifyV4Result } from './risk-classifier.ts';

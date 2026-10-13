@@ -2,11 +2,7 @@
 title: Escalation — runtime channel for risk re-mint
 status: legacy
 tracks:
-  - apps/gateway/src/lib/mint/child-mint.ts
   - packages/shared/src/risk.ts
-  - packages/shared/src/types.ts
-  - apps/gateway/src/app/api/v1/tokens/mint/route.ts
-  - apps/gateway/src/app/api/v1/tokens/preview/route.ts
   - docs/decisions/unified-tokens-delegation-chain-and-escalation-channel.md
   - docs/decisions/unified-gates-drop-confirm.md
 last_synced: 2026-06-16

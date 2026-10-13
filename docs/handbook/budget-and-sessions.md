@@ -34,7 +34,7 @@ apps/gateway/src/server/budget/
   index.ts            barrel
   errors.ts           BudgetInvariantError (not a refusal: an upstream guarantee failed)
   period.ts           PeriodSpec, CurrentPeriod, periodIndex(), currentPeriod(), periodSpecOf()
-  fingerprint.ts      canonicalJson(), fingerprintArguments()  — sha256 of key-sorted JSON
+  fingerprint.ts      re-exports canonicalJson(), fingerprintArguments() from @vaubaan/gateway-core
   decide.ts           decide(input) → Allow | Refuse   (pure, no IO)
   mission-state.ts    deriveMissionState(), consumedInPeriod()  — active | exhausted | expired | …
   mapping.ts          BudgetMission, budgetMissionOf(record), policyEntryOf(), sessionCounterOf()
@@ -92,9 +92,11 @@ carries no anchor, so the caller passes the store's `MissionRecord.periodAnchor`
 object keys sorted recursively, arrays in order, `undefined` members dropped, `toJSON`
 honoured, no whitespace, BigInt refused. It binds approval requests, approvals and the
 `approval-required` refusal (spec §3.5); a replay whose arguments were re-serialized in
-another key order matches, a one-byte change does not. `@vaubaan/gateway-core`'s
-`hashArguments` (16 hex, order-sensitive) remains the audit's `arguments_hash` until P1.6
-decides otherwise (ADR, Consequences).
+another key order matches, a one-byte change does not. The implementation lives in
+`@vaubaan/gateway-core` (`fingerprint.ts`), where the pipeline uses the same function for
+the audit entry's `arguments_hash`: one hash everywhere (ADR
+[upstream-credential-cache-and-rejected-credentials](../decisions/upstream-credential-cache-and-rejected-credentials.md)
+D4). This module re-exports it.
 
 ## The pure decision (`decide.ts`)
 
@@ -221,9 +223,12 @@ their last window. `rateWindowKey(missionId, riskId)` = `mission:<id>:risk:<risk
 
 `// single-process only` — hosted replacement: one Redis sorted set per key
 (`ZREMRANGEBYSCORE`, `ZCARD`, `ZADD`, `PEXPIRE` in a Lua script); the budget would probe
-before its SQLite transaction and record after commit (ADR). The root still wires P0.4's
-fixed-window `MemoryRateLimiter` for the surface limits until the door (P1.6) composes the
-budget; both satisfy the port.
+before its SQLite transaction and record after commit (ADR). The composition root builds one
+`SlidingWindowRateLimiter`: it is the budget's `rateWindows` and, unless a test injects
+another `RateLimiter`, the surface limiter of the execution door and of the connect flows
+(disjoint keys). The root also builds the `SessionService` (`root.budget`) and hands it to
+the execution door, which wraps it with `createBudgetStage`
+([execution-door](execution-door.md)).
 
 ## Structural check (`consistency.ts`)
 
@@ -250,9 +255,8 @@ fingerprint applies to approval requests only). Nothing was renamed.
 - `tests/unit/server/budget/period.test.ts` (8) — `periodIndex` across boundaries and
   before the anchor, invalid lengths, `currentPeriod` recurring / one-off / canonical
   anchor / boundary, `periodSpecOf`.
-- `tests/unit/server/budget/fingerprint.test.ts` (8) — key sorting, `undefined` and
-  array holes, `toJSON`, primitives, BigInt refused, sha256 vector, key order vs value
-  change, no-arguments, contrast with `hashArguments`.
+- `packages/gateway-core/tests/unit/fingerprint.test.ts` (8) — the fingerprint, next to its
+  implementation ([gateway-core](gateway-core.md)).
 - `tests/unit/server/budget/decide.test.ts` (15) — N risks → N decrements, no risk,
   remaining, approval to consume, opened gate; `budget-exhausted` (recurring and one-off),
   whole-call refusal, `rate-limited` (≥ 1 s), `approval-required`, multi-risk gate

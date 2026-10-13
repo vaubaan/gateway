@@ -115,6 +115,3 @@ export const cloudflareDnsDataModel: DataModel = {
     },
   ],
 };
-
-/** @deprecated legacy v4, deleted in P1.6 — use `cloudflareDnsDataModel`. */
-export const dataModel = cloudflareDnsDataModel;

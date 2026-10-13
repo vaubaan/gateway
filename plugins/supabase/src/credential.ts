@@ -7,8 +7,7 @@
  * ADR  : docs/decisions/plugin-contract-and-credential-spec.md D2.
  *
  * The host runs the authorization-code dance from `supabaseCredential`
- * (authorize URL, PKCE, state, token exchange) — what the v4 web routes
- * `/api/integrations/supabase/{connect,callback}` did by hand — and the
+ * (authorize URL, PKCE, state, token exchange) and the
  * refresh : Supabase's is the standard RFC 6749 `refresh_token` grant with
  * HTTP Basic client authentication, which the host performs from `tokenUrl`
  * + `clientAuthMethod` (`refreshable: true` is the whole declaration). The
@@ -31,12 +30,6 @@ export const SUPABASE_APP_CONFIG_KEYS = {
   clientId: 'client_id',
   clientSecret: 'client_secret',
 } as const;
-
-/**
- * Refresh when the access token expires within this window (v4 value).
- * Read by the legacy v4 adapter only ; the v5 host owns the refresh timing.
- */
-export const REFRESH_THRESHOLD_MS = 60_000;
 
 export const supabaseCredential: OAuth2CredentialSpec = {
   kind: 'oauth2',

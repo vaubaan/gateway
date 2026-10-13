@@ -116,15 +116,7 @@ persisted policy is the explicit enumeration.
 
 `npx vitest run plugins/cloudflare-dns` — 95 tests: the SDK kit
 (`assertPluginWellFormed`, `assertCatalogCoverage`, `assertNoWildcard`,
-`assertPresetsValid`), the v5 classifier, `execute` and
-`discoverResources` against `mockFetch`, the credential spec and presets,
-catalog invariants, the data model, and the v4 classifier suite kept
-unchanged for the legacy surface. No test ever calls Cloudflare.
-
-## Legacy v4 surface
-
-`CloudflareDnsAdapter`, `cloudflareDnsAvailableTools`,
-`cloudflareDnsExecuteCall`, `cloudflareDnsRiskCatalog` (now the loaded YAML)
-and `classifyCloudflareDnsV4` are kept, `@deprecated`, so `apps/gateway`
-compiles until P1.6 replaces the execution door. The v4 dispatcher still
-accepts a Global API Key as `email|key`; the v5 credential does not.
+`assertPresetsValid`), the classifier (`plugin.test.ts` and the per-tool
+suite `classify.test.ts`), `execute` and `discoverResources` against
+`mockFetch`, the credential spec and presets, catalog invariants and the
+data model. No test ever calls Cloudflare.

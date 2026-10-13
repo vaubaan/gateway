@@ -27,11 +27,6 @@ export const RAILWAY_TOKEN_URL = 'https://backboard.railway.com/oauth/token';
 /** RFC 8707 resource indicator binding the token to the MCP audience. */
 export const RAILWAY_MCP_RESOURCE = 'https://mcp.railway.com';
 export const RAILWAY_SCOPES: readonly string[] = ['openid', 'offline_access', 'workspace:member'];
-/**
- * Refresh when the access token is within this window of expiry. Read by the
- * legacy v4 adapter only ; the v5 host owns the refresh timing.
- */
-export const RAILWAY_REFRESH_THRESHOLD_MS = 60_000;
 
 /** Keys of `ProviderAppConfig` the host collects for every oauth2 plugin. */
 export const RAILWAY_APP_CONFIG_KEYS = {

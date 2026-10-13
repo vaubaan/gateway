@@ -44,7 +44,7 @@ export function stripeResourceRef(accountId: string, mode: StripeMode): string {
 /**
  * The mode a resource pins, or `null` when it cannot be determined. Order :
  * the ref suffix (set by `discoverResources`), then `metadata.mode`, then
- * the `env` label (the only source a v4 binding offers).
+ * the `env` label the owner put on the resource.
  */
 export function modeOf(resource: Resource): StripeMode | null {
   const fromRef = REF_MODE_SUFFIX.exec(resource.ref)?.[1];

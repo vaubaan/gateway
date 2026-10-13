@@ -17,7 +17,9 @@ import { describe, expect, test } from 'vitest';
 import { indexCatalog, prepareCatalog, risksTouchedBy } from '@vaubaan/policy-engine';
 import type { Slice } from '@vaubaan/shared';
 
-import { railwayRiskCatalog } from '../../src/index.ts';
+import { railwayPlugin } from '../../src/index.ts';
+
+const catalog = railwayPlugin.catalog;
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -104,13 +106,13 @@ function logsReadSlice(): Slice {
 
 // ─── Shape ─────────────────────────────────────────────────────────────────
 
-describe('railwayRiskCatalog — shape', () => {
+describe('railway risk catalog — shape', () => {
   test('provider is railway', () => {
-    expect(railwayRiskCatalog.provider).toBe('railway');
+    expect(catalog.provider).toBe('railway');
   });
 
   test('declares the 9 risks + 1 fallback of the handbook', () => {
-    const ids = railwayRiskCatalog.risks.map((r) => r.id);
+    const ids = catalog.risks.map((r) => r.id);
     expect(ids).toEqual([
       'railway.read-account',
       'railway.read-runtime',
@@ -126,7 +128,7 @@ describe('railwayRiskCatalog — shape', () => {
   });
 
   test('every entry has the required RiskEntry fields', () => {
-    for (const entry of railwayRiskCatalog.risks) {
+    for (const entry of catalog.risks) {
       expect(entry.id).toMatch(/^railway(\[[a-z][a-z0-9-]*\])?\.[a-z][a-z0-9-]+$/);
       expect(entry.label.length).toBeGreaterThan(0);
       expect(entry.reason.length).toBeGreaterThan(0);
@@ -136,7 +138,7 @@ describe('railwayRiskCatalog — shape', () => {
   });
 
   test('deploy covers all envs via acceptable_in_envs and overrides prod vector', () => {
-    const entry = railwayRiskCatalog.risks.find((r) => r.id === 'railway.deploy');
+    const entry = catalog.risks.find((r) => r.id === 'railway.deploy');
     expect(entry?.acceptable_in_envs).toEqual(['staging', 'preview', 'dev', 'prod']);
     expect(entry?.vector.reversibility).toBe('reversible');
     expect(entry?.vector_overrides).toEqual({
@@ -145,34 +147,34 @@ describe('railwayRiskCatalog — shape', () => {
   });
 
   test('upsert-variable covers all envs via acceptable_in_envs and overrides prod vector', () => {
-    const entry = railwayRiskCatalog.risks.find((r) => r.id === 'railway.upsert-variable');
+    const entry = catalog.risks.find((r) => r.id === 'railway.upsert-variable');
     expect(entry?.acceptable_in_envs).toEqual(['staging', 'preview', 'dev', 'prod']);
     expect(entry?.vector.reversibility).toBe('reversible');
     expect(entry?.vector_overrides).toEqual({ prod: { reversibility: 'costly' } });
   });
 
   test('uncategorized-write is the fallback (matches railway.**.W)', () => {
-    const entry = railwayRiskCatalog.risks.find((r) => r.id === 'railway.uncategorized-write');
+    const entry = catalog.risks.find((r) => r.id === 'railway.uncategorized-write');
     expect(entry?.matches).toBe('railway.**.W');
   });
 });
 
 // ─── Engine plumbing — parses + indexable ──────────────────────────────────
 
-describe('railwayRiskCatalog — passes policy-engine prepareCatalog', () => {
+describe('railway risk catalog — passes policy-engine prepareCatalog', () => {
   test('prepareCatalog accepts the catalog (RiskId regex, unique ids, fallback present)', () => {
-    expect(() => prepareCatalog(railwayRiskCatalog)).not.toThrow();
+    expect(() => prepareCatalog(catalog)).not.toThrow();
   });
 
   test('every `matches` pattern parses as a valid slice (indexCatalog succeeds)', () => {
-    expect(() => indexCatalog(railwayRiskCatalog)).not.toThrow();
+    expect(() => indexCatalog(catalog)).not.toThrow();
   });
 });
 
 // ─── Runtime risksTouchedBy : sanity checks on representative slices ───────
 
-describe('railwayRiskCatalog — runtime risksTouchedBy', () => {
-  const indexed = indexCatalog(railwayRiskCatalog);
+describe('railway risk catalog — runtime risksTouchedBy', () => {
+  const indexed = indexCatalog(catalog);
 
   test('account-level read touches read-account only (account[**].R)', () => {
     const touched = risksTouchedBy(readAccountSlice(), indexed);
@@ -217,14 +219,14 @@ describe('railwayRiskCatalog — runtime risksTouchedBy', () => {
 
 // ─── Lint coverage : every tool covered by ≥ 1 risk (handbook coverage matrix) ────────
 
-describe('railwayRiskCatalog — lint coverage', () => {
+describe('railway risk catalog — lint coverage', () => {
   test('every Railway tool surface has a corresponding risk', () => {
     // This test reads the catalog and checks that the union of ids covers
     // the conceptual surface of the handbook coverage matrix. We do NOT test the
     // classifier↔catalog round-trip here (that's risk-classifier.test.ts) ;
     // we only check that the catalog has the *names* the coverage matrix
     // references.
-    const ids = new Set(railwayRiskCatalog.risks.map((r) => r.id));
+    const ids = new Set(catalog.risks.map((r) => r.id));
     const requiredCoverage = [
       'railway.read-account', // whoami, list-projects
       'railway.read-runtime', // list-services, list-deployments, get-status, get-logs

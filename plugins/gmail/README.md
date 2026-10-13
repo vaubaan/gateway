@@ -112,9 +112,6 @@ current SDK check and goes away with the SDK's generic refresh.
 ## Development
 
 ```
-npx vitest run plugins/gmail       # 123 tests, no network
+npx vitest run plugins/gmail       # 124 tests, no network
 npx tsc -p plugins/gmail/tsconfig.json --noEmit
 ```
-
-Legacy v4 exports (`gmailRiskCatalog`, `gmailAvailableTools`,
-`classifyGmailV4`) remain for the v4 application and are deleted in P1.6.

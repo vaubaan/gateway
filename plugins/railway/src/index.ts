@@ -9,9 +9,6 @@
  * The plugin imports `@vaubaan/plugin-sdk` only. `definePlugin` validates the
  * definition at import time ; the YAML catalog is loaded here, once, when the
  * module is first imported (that is, at gateway boot).
- *
- * The legacy v4 exports at the bottom keep the v4 application compiling until
- * P1.6 replaces its last consumers with the registry.
  */
 
 import { catalogPathNextTo, definePlugin, loadCatalogFile } from '@vaubaan/plugin-sdk';
@@ -21,7 +18,6 @@ import {
   RAILWAY_APP_CONFIG_KEYS,
   RAILWAY_AUTHORIZATION_URL,
   RAILWAY_MCP_RESOURCE,
-  RAILWAY_REFRESH_THRESHOLD_MS,
   RAILWAY_SCOPES,
   RAILWAY_TOKEN_URL,
   railwayCredentialSpec,
@@ -66,7 +62,6 @@ export {
   RAILWAY_GRAPHQL_URL,
   RAILWAY_MCP_RESOURCE,
   RAILWAY_MCP_URL,
-  RAILWAY_REFRESH_THRESHOLD_MS,
   RAILWAY_SCOPES,
   RAILWAY_TOKEN_URL,
   RAILWAY_TOOL_PREFIX,
@@ -81,21 +76,3 @@ export {
   toUpstreamName,
 };
 export type { RailwayEnvironmentRef } from './classify.ts';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// legacy v4, deleted in P1.6 — consumed by apps/gateway (build.ts, state.ts,
-// risk-catalog/loader.ts, provider-info.ts, api/v1/catalog). No new import.
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** @deprecated legacy v4, deleted in P1.6 — use `railwayPlugin`. */
-export { RailwayAdapter } from './railway-adapter.ts';
-/** @deprecated legacy v4, deleted in P1.6. */
-export type { RailwayAdapterConfig, RailwayRefreshedTokens } from './railway-adapter.ts';
-/** @deprecated legacy v4, deleted in P1.6 — use `railwayPlugin.tools`. */
-export { availableTools as railwayAvailableTools } from './tools.ts';
-/** @deprecated legacy v4, deleted in P1.6 — use `railwayPlugin.catalog` (the same object, loaded from YAML). */
-export const railwayRiskCatalog = railwayCatalog.catalog;
-/** @deprecated legacy v4, deleted in P1.6 — use `classifyRailway(tool, args, resources)`. */
-export { classifyRailwayV4 } from './risk-classifier.ts';
-/** @deprecated legacy v4, deleted in P1.6 — use `ClassifyOutcome` from the SDK. */
-export type { RailwayClassifyResult } from './risk-classifier.ts';

@@ -11,8 +11,6 @@ tracks:
   - packages/policy-engine/src/risk-policy.ts
   - packages/policy-engine/src/risk-runtime.ts
   - packages/policy-engine/src/qualify.ts
-  - packages/policy-engine/src/legacy-bindings.ts
-  - packages/policy-engine/src/scope-injection.ts
   - packages/policy-engine/tests/unit/
 ---
 
@@ -35,16 +33,14 @@ quarantined.
 
 ## Modules
 
-| Module               | Responsibility                                                                                                                                              | Called from                                         |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| `slice-dsl.ts`       | Parse / serialize the slice grammar (path on the data model + action `R`/`W`).                                                                              | catalog loader (SDK), classifiers, audit, tests     |
-| `slice-matcher.ts`   | Predicates `matches` / `covers` / `intersects` between slice patterns.                                                                                      | `risk-evaluator`, lints                             |
-| `risk-evaluator.ts`  | `indexCatalog` (parse every `matches` once, unique ids) + `risksTouchedBy[All]` for executed slices.                                                        | `risk-runtime`, SDK registry, test kit              |
-| `risk-policy.ts`     | `checkAcceptableInEnv` (issuance-time structural restriction) + `prepareCatalog` (boot checks, injectable `warn`) + `hasFallbackRisk`.                      | SDK catalog loader, issuance                        |
-| `qualify.ts`         | Env-qualify a `RiskId` (`provider.name` → `provider[env].name`) and back ; `EnvResolver` + `resourceEnvResolver` ; `resolveVector`.                         | `risk-runtime`, issuance UI, SDK                    |
-| `risk-runtime.ts`    | `evaluateCall` — the pure risk step of the call decision : strict-fail if `risks_touched ⊄ accepted`.                                                       | gateway-core `risk-gateway.ts` (with `envResolver`) |
-| `legacy-bindings.ts` | **Quarantined.** `resourceFromBinding` / `bindingsEnvResolver(ProviderBinding[])` bridge for the v4 app. Deleted at P1.2 / P1.6 with `shared/legacy-v4.ts`. | `apps/gateway/src/lib/gateway/legacy-v4-gateway.ts` |
-| `scope-injection.ts` | **Quarantined.** v4 auto-fill of owner/repo, projectId, project_ref, teamId. Returns `null` unless `{ enabled: true }` (plan §8-Q4).                        | `apps/gateway/src/lib/gateway/legacy-v4-gateway.ts` |
+| Module              | Responsibility                                                                                                                         | Called from                                         |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| `slice-dsl.ts`      | Parse / serialize the slice grammar (path on the data model + action `R`/`W`).                                                         | catalog loader (SDK), classifiers, audit, tests     |
+| `slice-matcher.ts`  | Predicates `matches` / `covers` / `intersects` between slice patterns.                                                                 | `risk-evaluator`, lints                             |
+| `risk-evaluator.ts` | `indexCatalog` (parse every `matches` once, unique ids) + `risksTouchedBy[All]` for executed slices.                                   | `risk-runtime`, SDK registry, test kit              |
+| `risk-policy.ts`    | `checkAcceptableInEnv` (issuance-time structural restriction) + `prepareCatalog` (boot checks, injectable `warn`) + `hasFallbackRisk`. | SDK catalog loader, issuance                        |
+| `qualify.ts`        | Env-qualify a `RiskId` (`provider.name` → `provider[env].name`) and back ; `EnvResolver` + `resourceEnvResolver` ; `resolveVector`.    | `risk-runtime`, issuance UI, SDK                    |
+| `risk-runtime.ts`   | `evaluateCall` — the pure risk step of the call decision : strict-fail if `risks_touched ⊄ accepted`.                                  | gateway-core `risk-gateway.ts` (with `envResolver`) |
 
 The barrel `src/index.ts` re-exports all eight. The listing below names
 functions; the exported types travel with them (`SliceSegment` lives in
@@ -63,11 +59,9 @@ packages/policy-engine/
                           EnvResolver / noEnvResolver / resourceEnvResolver / envResolverFor /
                           EnvDeriver / resolveVector
     risk-runtime.ts       evaluateCall / evaluateCallSimple
-    legacy-bindings.ts    resourceFromBinding / bindingsEnvResolver            (quarantine)
-    scope-injection.ts    injectionPlanFor / stripInjectedArgs / mergeInjectedArgs (quarantine, flag)
   tests/unit/
     slice-dsl (23)  slice-matcher (29)  risk-evaluator (11)  risk-policy (9)
-    qualify (21)    risk-runtime (17)   scope-injection (13)
+    qualify (26)    risk-runtime (17)
 ```
 
 ## Decision flow
@@ -227,24 +221,14 @@ operation) ; the structured refusal body is gateway-core's job (P0.5).
 `evaluateCallSimple(catalog, slices, accepted)` is for tests and
 integration code ; never on the hot path (pre-index at boot).
 
-### Quarantined modules
+### What was removed with the v4 application
 
-`legacy-bindings.ts` maps a `ProviderBinding` to a `Resource`
-(`resource_ref → ref`, `environment → env`, `display_name → displayName`,
-`metadata`) and wraps `resourceEnvResolver`. `risk-runtime` uses it only
-when a caller still passes `bindings` (none in v5) ; the legacy v4 app
-uses `resourceFromBinding` to feed gateway-core's decision core. Deleted
-at P1.2 / P1.6 with the v4 pipeline and `shared/legacy-v4.ts`.
-
-`scope-injection.ts` keeps the v4 behaviour (auto-fill `owner`/`repo`,
-`projectId`, `project_ref`, `teamId` when a token has exactly one binding
-of the provider) but `injectionPlanFor(provider, scope, flags)` returns
-`null` unless `flags.enabled` is true ; the default
-`SCOPE_INJECTION_DEFAULT_FLAGS` is `{ enabled: false }`.
-`stripInjectedArgs` and `mergeInjectedArgs` are unchanged. The v5
-replacement, if plan §8-Q4 says yes, is the plugin hook `normalizeArgs`
-behind the SDK's `argNormalization` flag ([[plugin-sdk]]). Nothing else in
-v5 may depend on this module.
+`legacy-bindings.ts` (the `ProviderBinding` → `Resource` bridge and the
+`bindings` input of `evaluateCall`) and `scope-injection.ts` (v4's auto-fill
+of `owner`/`repo`, `projectId`, `project_ref`, `teamId` from project
+bindings, which had been quarantined behind a flag that defaulted to off).
+If plan §8-Q4 is answered "yes", the v5 form is the plugin hook
+`normalizeArgs` behind the SDK's `argNormalization` flag ([[plugin-sdk]]).
 
 ## Wiring
 
@@ -271,9 +255,9 @@ if (decision.outcome === 'allowed') {
 ```
 
 `gateway-core`'s `evaluateCallForToken` does exactly this, with
-`resourceEnvResolver(resources)` as the default resolver. Nothing in v5
-passes `bindings` any more ; the field and `legacy-bindings.ts` stay until
-P1.6 deletes the v4 app that still holds bindings.
+`resourceEnvResolver(resources)` as the default resolver. The v4
+`bindings` input and its bridge (`legacy-bindings.ts`) were deleted with the
+v4 application.
 
 ## How to debug
 

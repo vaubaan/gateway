@@ -2,12 +2,6 @@
 title: OAuth & marketplace submission kit
 status: legacy
 date: 2026-05-26
-tracks:
-  - packages/web/src/app/(public)/privacy/page.tsx
-  - packages/web/src/app/(public)/terms/page.tsx
-  - packages/web/src/app/(public)/security/page.tsx
-  - packages/web/src/app/(public)/brand/page.tsx
-  - packages/web/public/marketing/screenshots/
 ---
 
 > **Legacy v4 document.** Kept for history; superseded by the v5 spec. Not maintained.

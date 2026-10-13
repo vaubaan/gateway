@@ -12,10 +12,6 @@ tracks:
   - plugins/resend/src/tools.ts
   - plugins/resend/src/data-model.ts
   - plugins/resend/src/risk-catalog.yaml
-  - plugins/resend/src/risk-classifier.ts
-  - plugins/resend/src/legacy-tools.ts
-  - plugins/resend/src/legacy-execute.ts
-  - plugins/resend/src/resend-adapter.ts
   - plugins/resend/tests/unit/
 ---
 
@@ -43,11 +39,11 @@ rationale). Contributor-facing details (fields, tool list, preset table) :
 | `risk-catalog.ts` twin + sync test                                             | YAML loaded by `loadCatalogFile` at boot ; twin and sync test deleted                                         |
 | No presets                                                                     | `read-only`, `developer`, `marketing-operator`, `domain-admin`                                                |
 
-The v4 surface (`ResendAdapter`, `resendAvailableTools`, `resendExecuteCall`,
-`resendRiskCatalog`, `classifyResendV4`) stays exported, `@deprecated`, until
-P1.6. Because the slice shape changed, `classifyResendV4` is **kept verbatim**
-(not delegated) with its own 46 tests ; the v2 catalog no longer matches its
-`account[…]` slices, so the v4 app's Resend path only compiles.
+The v4 surface (the adapter, the binding-based classifier, the audience-era
+tool declarations and executor, the deprecated aliases of `index.ts`) is
+deleted ; the plugin exports only the v5 surface below. The per-tool suite
+of the v4 classifier was ported to `classifyResend`
+(`tests/unit/classify.test.ts`).
 
 ## Layout
 
@@ -60,11 +56,7 @@ plugins/resend/src/
   execute.ts          executeResend, discoverResendResources, RESEND_API_BASE, paging constants
   data-model.ts       plane `email`, 9 entities, `domain` and `segment` envScopable
   risk-catalog.yaml   16 risks + fallback + 2 deprecated v4 ids, 4 presets, catalog_version 2
-  index.ts            definePlugin(...) → resendPlugin (default export) + legacy exports
-  risk-classifier.ts  legacy classifyResendV4 (verbatim)        ┐
-  legacy-tools.ts     legacy 25 audience-era declarations       │ deleted in P1.6
-  legacy-execute.ts   legacy executeCall (one raw key)          │
-  resend-adapter.ts   legacy ResendAdapter                      ┘
+  index.ts            definePlugin(...) → resendPlugin (default export)
 ```
 
 ## Resources, zones and the environment
@@ -171,10 +163,8 @@ unverified `from` domain is a 403 too). Unknown tool → `isError` result.
 
 ## Tests
 
-`npx vitest run plugins/resend` — 136 : `plugin.test.ts` (kit, v5
-classifier, execute, discovery, credential, presets ; 40),
+`npx vitest run plugins/resend` — 121 : `plugin.test.ts` (kit,
+cross-cutting classifier rules, execute, discovery, credential, presets ;
+40), `classify.test.ts` (one scenario per tool on `classifyResend` ; 43),
 `risk-catalog.test.ts` (invariants and disjointness ; 32),
-`data-model.test.ts` (6), and the unchanged v4 suites
-`risk-classifier.test.ts` (46) and `adapter.test.ts` (12) on the legacy
-exports. Before the migration : 149 (the 19 sync and 63 lint cases are
-replaced by the kit and the invariants file).
+`data-model.test.ts` (6).

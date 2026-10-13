@@ -14,7 +14,6 @@
   "dependencies": {
     "@octokit/rest": "^21.0.2",
     "@vaubaan/plugin-sdk": "*",
-    "@vaubaan/shared": "*",
     "jose": "^5.9.6"
   },
   "devDependencies": {

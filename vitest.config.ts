@@ -18,7 +18,6 @@ export default defineConfig({
   test: {
     environment: 'node',
     globals: false,
-    env: { SKIP_LIVE: '1' },
     include: [
       'apps/*/tests/unit/**/*.test.ts',
       'apps/*/tests/unit/**/*.test.tsx',
@@ -31,7 +30,6 @@ export default defineConfig({
       'apps/*/src/**/*.test.ts',
     ],
     exclude: ['node_modules', 'dist', '.next', 'apps/*/tests/e2e/**'],
-    environmentMatchGlobs: [['apps/gateway/tests/unit/components/**', 'jsdom']],
     passWithNoTests: false,
     reporters: ['default'],
     coverage: {
