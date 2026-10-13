@@ -487,7 +487,12 @@ the risk's gate to `approval` at issuance, or later.
   against the risk's quota and rate limit.
 
 Both kinds of request share the inbox, the page, the IdP
-authentication, the states and the expiry delay. The v4 mint-time
+authentication, the states and the expiry delay. That delay is the
+request's: an unanswered approval request expires like a claim, and its
+sealed arguments are erased then; the short validity configured for
+approvals starts only when the creator grants. A request on an orphaned
+mission cannot be granted and expires on the same delay, so that
+arguments are never held longer because a mission lost its authority. The v4 mint-time
 `confirm` asked a human to validate _the issuance_; the v5 `approval`
 gate asks them to validate _each action_, holding neither the call nor
 the mint.
@@ -585,6 +590,11 @@ vision's invariant: if the agent executing a mission may also act by
 delegation for its creator, there must be no path by which it enlarges
 itself. Issuing a wider mission is possible but visible, within the
 user's authority, and under their name; approving itself never is.
+
+A client's standing (approved by the operator, or a loopback-only
+client admitted automatically) is checked at every use of a delegated
+token, not only at consent: disabling a client stops its delegations at
+the next request.
 
 A user sees their delegations in the interface, with the client holding
 each one and the missions it issued, and may revoke them in one click.
