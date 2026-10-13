@@ -26,7 +26,7 @@ export default tseslint.config(
       'eslint.config.js',
       '**/postcss.config.mjs',
       '**/next.config.ts',
-      'playwright.config.ts',
+      '**/playwright.config.ts',
       'vitest.config.ts',
       // Next.js generates this file; the triple-slash reference is required.
       '**/next-env.d.ts',
