@@ -1149,7 +1149,8 @@ Browser (`tests/e2e/v5/delegate-agent.spec.ts`): consent in a real browser,
 then the agent reads the authority, previews, issues, uses the mission token
 on `/mcp`; the user sees the mission marked delegated on Missions, the
 mission page and the Delegations card, revokes the delegation, keeps the
-mission.
+mission. A second test: the navigation shows Delegations, and an empty page
+says how to authorize an agent.
 
 Not automated: a run with Claude Code itself against a deployed instance —
 see "How to use it".
