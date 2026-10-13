@@ -8,7 +8,7 @@ tracks:
   - apps/gateway/src/server/missions/
   - apps/gateway/src/app/(app)/missions/
   - apps/gateway/src/app/api/missions/
-  - apps/gateway/src/app/agent-bootstrap.md/content.md
+  - apps/gateway/src/app/agent-bootstrap.md/
   - apps/gateway/src/components/shell/AppShell.tsx
   - apps/gateway/tests/integration/missions/
   - apps/gateway/tests/e2e/v5/
@@ -40,7 +40,7 @@ apps/gateway/src/server/missions/
   catalog-view.ts        enumerateCatalog(), severityOf(), isResolvable(), presetWidth()           (pure)
   preview.ts             previewDraft(), previewConnection(), expandPreset(), budgetProblem()      (pure)
   summary.ts             summarize() — the three lines; period / expiry phrases                    (pure)
-  bootstrap-kit.ts       buildBootstrapKit(), REFUSAL_GUIDANCE, MISSION_TOKEN_ENV                  (pure)
+  bootstrap-kit.ts       buildBootstrapKit(), REFUSAL_GUIDANCE, MISSION_TOKEN_ENV, AGENT_LABEL_*   (pure)
   draft-schema.ts        parseMissionDraft() — zod shape check of a JSON draft
   token.ts               mintMissionToken(), prefixOfBearer(), bearerMatches(), maskedToken()
   mission-service.ts     MissionService: issuanceContext / preview / issue / draftFrom / duplicate /
@@ -59,6 +59,9 @@ apps/gateway/src/app/(app)/missions/
   [id]/session/page.tsx  /missions/<id>/session — counters, requests, timeline (handbook audit)
   [id]/mission-actions.tsx  Duplicate / Rotate / Revoke (client)
   bootstrap-kit-view.tsx BootstrapKitView, RevealDialog (client)
+  state-badge.tsx        StateBadge — the derived mission state (list and detail)
+  new/labels.ts          GATE_LABELS
+  missions.module.css    styles of the Missions pages
 apps/gateway/src/app/api/missions/   route.ts, preview/route.ts, [id]/rotate, [id]/revoke — one-line adapters
 ```
 
@@ -67,7 +70,7 @@ only from `@vaubaan/shared/risk-id` and `@vaubaan/policy-engine`): the creation
 form imports them directly and runs the same decision as the server. The
 `index.ts` barrel is server-only (argon2 through `token.ts`).
 
-The pages live in the `(app)` route group and take its layout: a v5 web
+The pages live in the `(app)` route group and take its layout: a web
 session gets the `AppShell` (`components/shell/AppShell.tsx`), where "Missions"
 is one entry of `APP_NAV` (an entry may carry a `Count` server component, used
 by "Requests": handbook [requests](requests.md)); a visitor with no session is
@@ -267,6 +270,13 @@ Defaults the form adds: period **daily reload** (`DEFAULT_PERIOD`), expiry
 Mission creation and token insertion are two transactions; a failure between
 them leaves a mission without a token, which `rotate` repairs.
 
+`issue` and `duplicate` take an optional `IssueOptions { delegation: { id,
+clientId } }`: the mission is stored with that `delegationId` and the audit
+entry carries `delegated_client_id` (reserved for the management door, P2.4;
+no caller sets it today). `duplicate` also takes `overrides` for `name`,
+`period` and `expires_at`, and answers `not-found` for a mission that is not
+the creator's.
+
 - **`draftFrom(user, missionId)` / `duplicate(...)`** — the creator's own
   mission as a draft: same connections, the selected resources that still exist
   and are not stale,
@@ -353,9 +363,10 @@ Behaviour worth knowing (`form-state.ts`):
 - the browser's preview decides nothing: `issue()` recomputes it, and a 422
   replaces the list of blockers with the server's.
 
-With three connections and their presets the page is about 1 200 px tall at
-1280×800 — at most one scroll — shows four checkboxes, and the Issue button is
-in view; the Playwright spec asserts all three.
+With three connections and their presets the page stays compact at 1280×800.
+The Playwright spec asserts it: no per-risk detail open, a page at most two
+viewports tall (one scroll), at most six visible checkboxes, and the Issue
+button in view.
 
 After a 201 the **reveal-once dialog** shows the bootstrap kit with the secret;
 "I copied the token" goes to `/missions/<id>`, which only ever shows
@@ -371,7 +382,10 @@ After a 201 the **reveal-once dialog** shows the bootstrap kit with the secret;
 '<public_url>/mcp', headers: { Authorization: 'Bearer
 ${VAUBAAN_MISSION_TOKEN}' } } } }`: the variable by reference, never the
    secret;
-3. `agent_instructions` — a Markdown block: connections and resource refs (with
+3. `agent_instructions` — a Markdown block: how an agent labels itself for
+   the audit (`X-Vaubaan-Agent: <label>` header or `_meta.agent` on one call,
+   `AGENT_LABEL_HEADER` / `AGENT_LABEL_META_KEY`; handbook
+   [execution-door](execution-door.md)), connections and resource refs (with
    env labels), accepted risks with quota per period, rate limit and gate,
    reload and expiry, "the budget is shared, not multiplied", then one line per
    refusal code from `REFUSAL_GUIDANCE` (a `Record<RefusalCode, string>`, so a
@@ -379,10 +393,13 @@ ${VAUBAAN_MISSION_TOKEN}' } } } }`: the variable by reference, never the
    refusal… give that URL to the human as is";
 4. `verify` — `curl -sS '<endpoint>' … -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'`.
 
+The kit also carries `endpoint` (`<public_url>/mcp`) and `reveals_secret`.
+
 `instanceUrl` is `InstanceConfig.publicUrl`; `EXECUTION_DOOR_PATH` (`/mcp`) is
-the only path written down, next to the route it names. `/agent-bootstrap.md`
-is the generic companion of the kit (no instance URL in it); a test checks it
-documents every refusal code.
+the only path written down, next to the route it names. `GET
+/agent-bootstrap.md` (`app/agent-bootstrap.md/route.ts`, static, public,
+cached five minutes) serves `content.md`, the generic companion of the kit
+(no instance URL in it); a test checks it documents every refusal code.
 
 ## Wiring
 

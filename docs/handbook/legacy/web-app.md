@@ -2,13 +2,9 @@
 title: Next.js web app
 status: legacy
 date: 2026-06-16
-tracks:
-  - apps/gateway/src/app/
-  - apps/gateway/src/lib/auth/
-  - apps/gateway/next.config.ts
 ---
 
-> **Legacy v4 document.** Kept for history; superseded by the v5 spec. Not maintained.
+> **Legacy v4 document.** Kept for history; superseded by the v5 spec and the current handbooks. Not maintained.
 
 # Web app — `@vaubaan/gateway-app`
 
@@ -158,7 +154,7 @@ sont atteintes via les cards de l'Overview (`projects/[project]/page.tsx`)
 ou par lien direct. Le modèle Roles + le modèle Capabilities v1 ont
 été remplacés en bloc par le modèle v4 **risk-based** : l'access token
 porte directement `accepted_risks: RiskId[]` (cf. spec
-[`gateway-risk-model.md`](../spec/gateway-risk-model.md)). La page
+[`gateway-risk-model.md`](../../spec/gateway-risk-model.md)). La page
 `/orgs/[slug]/providers/[provider]/` rend pour chaque provider le
 data-model en mermaid + le risk catalog YAML + la liste des tools MCP,
 en s'appuyant sur `components/providers/` et `lib/risk-catalog/`.
@@ -205,7 +201,7 @@ lectures déchiffrent via `decodeBytea()` → `decryptProviderSecret()`
 > runtime fallback quand un risk manque.
 
 Hot path utilisateur (cf. spec
-[`gateway-risk-model.md`](../spec/gateway-risk-model.md) §9) :
+[`gateway-risk-model.md`](../../spec/gateway-risk-model.md) §9) :
 
 ```
 POST /api/v1/tokens/mint
@@ -234,7 +230,7 @@ capability `(provider, plane, level, action, env?)`. Le catalog
 canonique de chaque provider vit dans
 `plugins/<vendor>/src/risk-catalog.{yaml,ts}` et est chargé
 au boot par `lib/risk-catalog/loader.ts` (cf.
-[`policy-engine.md`](./policy-engine.md) §Wiring côté gateway).
+[`policy-engine.md`](../policy-engine.md) §Wiring côté gateway).
 L'helper `computeMintPreview` (`lib/mint/preview.ts`) wraps le pur
 `computePreview` (`lib/mint/risk-preview.ts`) — pas de DB read
 post-drop-confirm. Les deux sont consommés par le mint endpoint et le

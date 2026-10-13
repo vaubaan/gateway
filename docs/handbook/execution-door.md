@@ -12,8 +12,12 @@ tracks:
   - apps/gateway/tests/manual/seed-demo.ts
   - packages/gateway-core/src/pipeline.ts
   - packages/gateway-core/src/fingerprint.ts
+  - packages/gateway-core/src/errors.ts
+  - packages/gateway-core/tests/unit/pipeline.test.ts
+  - apps/gateway/src/server/missions/bootstrap-kit.ts
   - packages/plugin-sdk/src/plugin.ts
   - plugins/github/src/token-cache.ts
+  - plugins/github/tests/unit/token-cache.test.ts
 ---
 
 # Execution door — `/mcp`, the call pipeline's stages, the catalog
@@ -33,7 +37,7 @@ Built on [gateway-core](gateway-core.md) (pipeline, refusals),
 [connections](connections.md) (`CredentialBroker`), [missions](missions.md)
 (`verifyToken`, bootstrap kit), the [plugin SDK](plugin-sdk.md) and the
 [store](store.md). Replaces the legacy v4 handbook
-[mcp-gateway](mcp-gateway.md).
+[mcp-gateway](legacy/mcp-gateway.md).
 
 ## Layout
 
@@ -48,7 +52,7 @@ apps/gateway/src/server/execution/      host-agnostic, never imports `next`
   upstream-stage.ts   createUpstreamStage()                     → broker, retry ladder, connection-unavailable
   credential-cache.ts ConnectionCredentialCache                 — ExecuteContext.credentialCache
   tools.ts            callableProviders(), callableTools(), buildCatalog()
-  request-meta.ts     agentLabelOf(), clientOriginOf(), trustedProxyList()
+  request-meta.ts     agentLabelOf(), cleanAgentLabel(), clientOriginOf(), trustedProxyList()
   testing.ts          depotPlugin(), executionInstance() — tests only
   execution.test.ts   unit tests of the pure and in-memory parts
 apps/gateway/src/app/mcp/route.ts           GET | POST | DELETE /mcp   → root.execution.handlers.mcp
@@ -126,7 +130,7 @@ to the request's own id.
   `retired/rotated`, `retired/revoked`) and the mission record is the fresh
   one. Rotation and revocation are therefore seen by the next call; only the
   argon2 computation is skipped. A row that is gone or replaced voids the entry.
-- **Miss**: one `rateLimiter.take('mcp-verify:<prefix>', 30, 60 s)`, then
+- **Miss**: one `rateLimiter.take('mcp-verify:<prefix>', VERIFY_ATTEMPTS_PER_WINDOW (30), VERIFY_WINDOW_MS (60 s))`, then
   `MissionService.verifyToken` (argon2id). Only `verified` / `retired` results
   are stored. Concurrent misses of one bearer share one promise (`inFlight`,
   `// single-process only`).
@@ -173,8 +177,9 @@ or `revoked`) come from the pipeline's own pure checks.
    - slices → `citedRefs(slices, knownRefs)`: the `ident` and `list` segments
      that equal a known ref. A cited ref outside `allowed` →
      `resource-not-in-mission`. Otherwise the target resource is the first
-     allowed ref cited, or the mission's single resource on the connection, or
-     `null` (account-level tool).
+     of the mission's resources on the connection whose ref is cited, or the
+     mission's single resource on the connection, or `null` (account-level
+     tool).
    - denied, and the connection knows refs the mission does not hold →
      `plugin.classify(tool, args, known)`; if that resolves to a ref outside
      `allowed` → `resource-not-in-mission` naming it. This is the path of a
@@ -370,6 +375,7 @@ const execution = createExecutionModule({
   rateLimiter,
   logger,
   build,
+  delegations: deps.delegatedTokens, // undefined until the management door (P2.3)
 });
 ```
 

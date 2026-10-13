@@ -2,12 +2,9 @@
 title: GitHub SSO setup
 status: legacy
 date: 2026-05-26
-tracks:
-  - apps/gateway/src/app/(public)/login/page.tsx
-  - apps/gateway/src/app/auth/callback/route.ts
 ---
 
-> **Legacy v4 document.** Kept for history; superseded by the v5 spec. Not maintained.
+> **Legacy v4 document.** Kept for history; superseded by the v5 spec and the current handbooks. Not maintained.
 
 # GitHub SSO setup
 

@@ -2,10 +2,10 @@
 title: SSH provider — bash over SSH on the v5 SDK
 status: current
 date: 2026-10-13
+last_synced: 2026-10-13
 tracks:
   - plugins/ssh/src/
   - plugins/ssh/tests/unit/
-  - plugins/ssh/src/bash/
 ---
 
 # SSH provider — bash over SSH
@@ -17,10 +17,10 @@ Spec: [`vaubaan-gateway.md`](../../spec/vaubaan-gateway.md) §5 (plugins),
 (fields, setup commands, preset table):
 [`plugins/ssh/README.md`](../../../plugins/ssh/README.md).
 
-This handbook replaces the SSH half of [`railway-ssh.md`](./railway-ssh.md)
-§2 and the v4 [`bash-provider.md`](../bash-provider.md) (annotated-script
-dispatcher), both French and now marked legacy. Their decisions that survive
-are listed in §7.
+This handbook replaces the SSH half of [`railway-ssh.md`](../legacy/railway-ssh.md)
+§2 and the v4 [`bash-provider.md`](../legacy/bash-provider.md) (annotated-script
+dispatcher), both French and archived under `docs/handbook/legacy/`. Their
+decisions that survive are listed in §7.
 
 ## 1. What changed from v4
 
@@ -51,7 +51,7 @@ plugins/ssh/src/
   data-model.ts        plane host : host (envScopable) → command → secret-file | destructive | package | service | privilege
   tools.ts             ssh__exec (host?, cmd, timeout_s?)
   policy.ts            isReadAllowed — the read whitelist, unchanged since v4
-  command-classes.ts   splitCommandLine, looksLikeSecretFileRead, isDestructive, isPackageInstall, isServiceControl, profileCommandLine
+  command-classes.ts   splitCommandLine, looksLikeSecretFileRead, stripPrivilegePrefix, isDestructive, isPackageInstall, isServiceControl, profileCommandLine
   classify.ts          classifySsh, resolveExecArgs — pure
   credential.ts        sshCredential (ssh-key spec), sshTarget, fingerprintOf, hostKeyMatches, normalizeFingerprint
   transport.ts         SshTransport, ssh2Transport, SshHostKeyMismatchError, output caps
@@ -93,14 +93,15 @@ when present:
 | `sudo` / `su` / `doas` / `pkexec` on a non-whitelisted command                           | `ssh.host[H].command.privilege.W`   | `exec-sudo`¹             |
 
 ¹ env-scoped: qualified to `ssh[<label>].<risk>` by the runtime. The fallback
-`ssh.uncategorized-write` (`ssh.**.W`) matches every write too and is never in
-a preset.
+`ssh.uncategorized-write` (`ssh.**.W`) is counted only when no dedicated entry
+matched, and is never in a preset.
 
 **Host resolution.** `host` must be a resource of the mission; absent, the
 mission's single SSH host applies; several hosts and no argument, a host the
 mission does not hold, or a ref outside `[a-zA-Z0-9_./~-]+` are `denied`.
-`execute` additionally refuses a host that is not the credential's host (one
-connection = one host).
+An empty `cmd`, one longer than 16 KiB, or a non-positive `timeout_s` is
+`denied` too. `execute` additionally refuses a host that is not the
+credential's host (one connection = one host).
 
 **Reading the whitelist.** `policy.ts` is the v4 list, unchanged: `journalctl`,
 `cat <path>`, `ls`, `tail`/`head` with a file, `grep …`, `pgrep`, `ps`,
@@ -127,8 +128,10 @@ account-scoped (the same read is the same risk on every host).
 | `operator`  | `exec-read`; `exec-read-secret-files` (**approval**); `exec-write`, `exec-destructive`, `exec-package-install`, `exec-service-control`, `exec-sudo` on the three labels — `dev` auto, `staging` approval for the four destructive classes, every `prod` entry approval. |
 
 Values: reads 2 000–10 000 per period at 60–120/min; dev writes 1 000–2 000
-at 30/min; staging writes 500–1 000; prod writes 200 at 10/min; destructive
-classes 10–100 at 2–10/min. The deferred ADR `mission-presets-default-values`
+at 30/min; staging writes 500–1 000; prod writes 200 at 10/min;
+`exec-destructive` and `exec-package-install` 10–100 at 2–10/min;
+`exec-service-control` 20–500 at 5–20/min; `exec-sudo` 20–200 at 2–20/min.
+The deferred ADR `mission-presets-default-values`
 (plan §5.5) may revise the numbers.
 
 ### Environment axis
@@ -201,8 +204,8 @@ exported but no tool uses them: an owner-curated script is per-connection
 configuration the v5 `Connection` does not carry, and an agent-supplied
 script cannot be trusted for its own `action=read` annotation (the
 classifier would have to profile every line of the body). Whether a
-"script library" belongs on the connection is a question for P1.4; until
-then `ssh__exec` is the whole surface.
+"script library" belongs on the connection is an open question, not
+scheduled; until then `ssh__exec` is the whole surface.
 
 ## 7. Decisions carried from v4
 
@@ -226,11 +229,11 @@ then `ssh__exec` is the whole surface.
   a preset entry naming an env outside `[dev, staging, prod]`, or on a
   non-env-scoped risk (`ssh[prod].exec-read` is invalid: reads are not
   scoped).
-- **Every write refused with `risk-not-accepted` and `missing_risks: [ssh.uncategorized-write]`** —
-  the fallback matches every write and the engine keeps it in
-  `risks_touched`; presets never include it by rule. Resolved by the
-  policy-engine change of the P1.2 SDK fix (fallback counts only when no
-  other risk matches).
+- **A write refused with `risk-not-accepted` and `missing_risks: [ssh.uncategorized-write]`** —
+  a `W` slice no dedicated entry covers (the fallback counts only then, ADR
+  [[fallback-risk-only-when-uncategorized]]). Every `ssh__exec` write emits
+  `command.W`, which `exec-write` covers, so this signals a classifier or
+  catalog regression: add the entry, do not accept the fallback.
 - **Write refused on a host that is labelled** — the label is not one of
   `dev | staging | prod`, or the mission's policy was issued before the label
   was set (policies are explicit enumerations; re-issue).
@@ -252,5 +255,5 @@ then `ssh__exec` is the whole surface.
   kit / classifier / credential / transport in `plugin.test.ts`, 24 moved
   bash suites, 42 in `classify.test.ts`, 1 data model).
 - Neighbours: [[plugin-sdk]], [[policy-engine]],
-  [`providers/README.md`](./README.md); legacy [`railway-ssh.md`](./railway-ssh.md) §2,
-  [`bash-provider.md`](../bash-provider.md).
+  [`providers/README.md`](./README.md); legacy [`railway-ssh.md`](../legacy/railway-ssh.md) §2,
+  [`bash-provider.md`](../legacy/bash-provider.md).

@@ -4,6 +4,8 @@ status: accepted
 date: 2026-05-22
 ---
 
+> **Pre-v5 document (French).** Not translated; read with the mapping in [[legacy-status-of-v4-adrs-and-handbooks]].
+
 # API key Bot — format `vbn_live_*` + argon2id hash, visible 1×
 
 ## Contexte

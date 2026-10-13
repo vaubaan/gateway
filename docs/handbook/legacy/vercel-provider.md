@@ -2,15 +2,9 @@
 title: Vercel provider adapter
 status: legacy
 date: 2026-06-15
-tracks:
-  - plugins/vercel/src/
-  - apps/gateway/src/server/connections/
 ---
 
-> **Legacy v4 document.** Kept for history; superseded by the v5 spec. Not maintained.
->
-> Current documents: [`providers/vercel.md`](./providers/vercel.md) and
-> [`connections.md`](./connections.md).
+> **Legacy v4 document.** Kept for history; superseded by the v5 spec and the current handbooks. Not maintained.
 
 # Vercel provider — `@vaubaan/plugin-vercel`
 
@@ -26,7 +20,7 @@ tracks:
 > (credential mint), (4) `list_env_vars decrypt=true` émet un
 > `plaintext.R` mappé au deny-gated `read-env-var-plaintext`. Pour le
 > data-model + risk catalog + tool → slice, lire le handbook v4 dédié :
-> [`docs/handbook/providers/vercel.md`](./providers/vercel.md).
+> [`docs/handbook/providers/vercel.md`](../providers/vercel.md).
 
 Rewrap du MCP remote officiel `mcp.vercel.com` (18 tools) augmenté de 4 tools
 REST custom (`update_project_settings`, `upsert_env_var`, `list_env_vars`,
@@ -147,13 +141,13 @@ Contrairement à Railway (refresh 1h) et GitHub (JIT JWT exchange), Vercel =
 
 22 tools exposés (18 upstream + 4 custom). La liste des tools + leurs
 classifications v4 vit dans
-[`docs/handbook/providers/vercel.md`](./providers/vercel.md) §Mapping
+[`docs/handbook/providers/vercel.md`](../providers/vercel.md) §Mapping
 tool → slice.
 
 ## Tests
 
 `npx vitest run plugins/vercel` — 132 tests (~80ms). Voir
-[`providers/vercel.md`](./providers/vercel.md) §Tests pour le détail.
+[`providers/vercel.md`](../providers/vercel.md) §Tests pour le détail.
 
 ## Refresh procedure (rewrap)
 
@@ -185,8 +179,8 @@ détecter un drift entre `upstream-tools.json` et la version live :
 ## Références
 
 - Handbook v4 (data-model + risk catalog + tool → slice) :
-  [`docs/handbook/providers/vercel.md`](./providers/vercel.md).
-- Spec : [`docs/spec/gateway-risk-model.md`](../spec/gateway-risk-model.md).
+  [`docs/handbook/providers/vercel.md`](../providers/vercel.md).
+- Spec : [`docs/spec/gateway-risk-model.md`](../../spec/gateway-risk-model.md).
 - ADRs : [[rewrap-official-mcps]], [[vercel-augment-with-rest-tools]],
   [[oauth-app-install-per-provider]], [[provider-onboarding-handbook-template]],
   [[use-context7-for-provider-docs]].

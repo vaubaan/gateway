@@ -4,6 +4,8 @@ status: accepted
 date: 2026-05-22
 ---
 
+> **Pre-v5 document (French).** Not translated; read with the mapping in [[legacy-status-of-v4-adrs-and-handbooks]].
+
 # Dispatch upstream — Option A (synthèse REST), pas de sidecar Docker MVP
 
 > **Note 2026-06-15** — L'option A reste valide pour le mécanisme de

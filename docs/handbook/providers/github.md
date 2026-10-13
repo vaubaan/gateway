@@ -2,6 +2,7 @@
 title: GitHub provider plugin
 status: current
 date: 2026-10-13
+last_synced: 2026-10-13
 tracks:
   - plugins/github/src/index.ts
   - plugins/github/src/risk-catalog.yaml
@@ -102,7 +103,7 @@ PAT path.
 | `src/classify.ts`         | `classifyGithub(tool, args, resources)`; core `classifyGithubRefs` over repo refs.                                            |
 | `src/credential.ts`       | `githubCredential` (app-install spec), `installationTokenFor(ctx, scope)`.                                                    |
 | `src/app-install.ts`      | `buildAppJwt`, `mintInstallationToken`, `GITHUB_API_BASE`, `GITHUB_API_HEADERS`.                                              |
-| `src/execute.ts`          | `executeGithub`, `discoverGithubResources`, `MINT_PERMISSIONS`, discovery paging constants.                                   |
+| `src/execute.ts`          | `executeGithub`, `discoverGithubResources`, `MINT_PERMISSIONS`, discovery paging constants (100 per page, 10 pages at most).  |
 | `src/token-cache.ts`      | `installationTokenForCall(ctx, repo)`: per-call token served from `ctx.credentialCache`, 50 min at most, 5 min expiry margin. |
 | `src/octokit-dispatch.ts` | `dispatchGithubTool(octokit, tool, args)`.                                                                                    |
 
@@ -160,6 +161,9 @@ entry matched the write (policy-engine rule settled with P1.2-SDK); no
 preset offers it, the creator adds it for unconventional branch names
 (`plugin.test.ts`checks both: a`wip-x` write falls to the fallback alone,
   and no preset lists it).
+- `create-release` and `delete-release` both match `release[**].W`: each of
+  the two tools touches both risks, so a mission must accept both (the
+  `release-manager` preset does).
 - Two mint risks (`clone` vs `push`): the push token leaves the gateway's
   perimeter with write permissions, hence a separate, approval-gated entry.
 - `merge_pull_request` defaults `base` to `main` when the argument is
@@ -221,9 +225,10 @@ plugins. `branch-protection-write` is in no preset.
 - **`GitHub App token mint failed (404)`** — the installation id is unknown
   to this App (App uninstalled, or the wrong App's key); 401 means the key
   does not match `app_id`.
-- **`repo 'x/y' is not bound to this project`** — the classifier refused a
-  repository that is not a resource of the mission; add it to the mission
-  (or the connection's discovered resources are stale: refresh them).
+- **A repo-scoped call is `denied` by the classifier** — a repository
+  outside the mission's selected resources is refused, and the message names
+  the allowed ones; add the repository to the mission (or the connection's
+  discovered resources are stale: refresh them).
 - **A write is refused with `github.uncategorized-write` missing** — the
   branch matches neither the feature/\* conventions nor a protected name,
   so only the fallback caught it. Rename the branch, or have the creator

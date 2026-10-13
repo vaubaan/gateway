@@ -2,21 +2,14 @@
 title: MCP gateway
 status: legacy
 date: 2026-07-02
-tracks:
-  - packages/gateway-core/src/
-  - apps/gateway/src/app/mcp/route.ts
-  - apps/gateway/src/app/.well-known/oauth-protected-resource/route.ts
 ---
 
-> **Legacy v4 document.** Kept for history; superseded by the v5 spec. Not maintained.
-> The v5 package is documented in [gateway-core](./gateway-core.md) and the v5 door in
-> [execution-door](./execution-door.md); the v4 orchestrator and the `/mcp` route described
-> below were deleted with the v4 application (P1.6).
+> **Legacy v4 document.** Kept for history; superseded by the v5 spec and the current handbooks. Not maintained.
 
 # MCP gateway — `@vaubaan/gateway-core` + `/mcp` route
 
 Le hot-path produit du modèle v4 risk-based (spec
-[`gateway-risk-model.md`](../spec/gateway-risk-model.md) §8). Chaque
+[`gateway-risk-model.md`](../../spec/gateway-risk-model.md) §8). Chaque
 access token porte `accepted_risks: RiskId[]` + `denied_risks: RiskId[]`.
 À chaque `tools/call`, le gateway classifie la requête en **slices**,
 intersecte avec le **risk catalog** du provider, et refuse si un risque
@@ -29,7 +22,7 @@ auth → load context (cached) → parse RPC → route by method →
 ```
 
 Le moteur de décision pure vit dans `@vaubaan/policy-engine` (cf.
-[`policy-engine.md`](./policy-engine.md)) — ce handbook documente
+[`policy-engine.md`](../policy-engine.md)) — ce handbook documente
 l'orchestration côté gateway.
 
 ## Layout
@@ -174,7 +167,7 @@ silencieusement absent.
 Scope-injection s'applique avant retour : si le projet a 1 binding pour
 le provider, `stripInjectedArgs` retire `owner/repo`, `projectId`,
 `project_ref`, `teamId` du `inputSchema` (cf.
-[`policy-engine.md`](./policy-engine.md) §scope-injection). Les adapters
+[`policy-engine.md`](../policy-engine.md) §scope-injection). Les adapters
 `selfContained: true` (bash/ssh) sautent l'injection — credentials
 chargées per-call depuis `ssh_bindings`.
 
@@ -184,7 +177,7 @@ Le wrapper `buildGateway()` (`lib/gateway/build.ts`) consomme
 `getCatalog(provider)` du loader `lib/risk-catalog/loader.ts` qui import
 les catalogues TS de chaque provider et les indexe une fois par runtime.
 Un catalogue absent au call → verdict `no-catalog` → 403 fail-closed.
-Cf. [`policy-engine.md`](./policy-engine.md) §Wiring côté gateway.
+Cf. [`policy-engine.md`](../policy-engine.md) §Wiring côté gateway.
 
 ## Cache
 
@@ -437,7 +430,7 @@ des bearers" et retombe sur le header statique.
 
 ## Références
 
-- Spec : [`docs/spec/gateway-risk-model.md`](../spec/gateway-risk-model.md)
+- Spec : [`docs/spec/gateway-risk-model.md`](../../spec/gateway-risk-model.md)
   §8 (decision flow), §12 (audit shape).
 - Handbooks voisins : [[policy-engine]] (6 modules purs cités ici),
   [[web-app]] (`/mcp` route wrapper + `buildGateway()`),

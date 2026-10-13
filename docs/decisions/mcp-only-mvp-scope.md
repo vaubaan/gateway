@@ -4,6 +4,8 @@ status: accepted
 date: 2026-05-22
 ---
 
+> **Pre-v5 document (French).** Not translated; read with the mapping in [[legacy-status-of-v4-adrs-and-handbooks]].
+
 # MCP-only en MVP — pas de CLI/SDK proxy
 
 ## Contexte

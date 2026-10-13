@@ -8,6 +8,8 @@ extends:
   - unified-tokens-delegation-chain-and-escalation-channel
 ---
 
+> **Pre-v5 document (French).** Not translated; read with the mapping in [[legacy-status-of-v4-adrs-and-handbooks]].
+
 # Drop the 3-gate model — unified accepted/not-accepted + runtime escalation
 
 > **ACCEPTED 2026-06-16** par Renaud. Évolution conceptuelle qui réduit

@@ -2,6 +2,7 @@
 title: Railway provider plugin
 status: current
 date: 2026-10-13
+last_synced: 2026-10-13
 tracks:
   - plugins/railway/src/
   - plugins/railway/tests/
@@ -27,9 +28,12 @@ plugins/railway/
     risk-catalog.yaml    9 risks + fallback, 3 presets — the only catalog artefact
     data-model.ts        plane `runtime`, 9 entities
     tools.ts             railwayTools = upstream-tools.json (10) + custom-tools.ts (4)
+    upstream-tools.json  the 10 frozen upstream declarations
+    custom-tools.ts      the 4 GraphQL variable tools
     classify.ts          classifyRailway(tool, args, resources) — security-critical, pure
     credential.ts        railwayCredentialSpec
-    execute.ts           executeRailway, discoverRailwayResources, callUpstream, callGraphql
+    execute.ts           executeRailway, discoverRailwayResources, executeCall, callUpstream,
+                         callGraphql, parseFirstJsonRpcFrame
   tests/unit/
     plugin.test.ts           kit, classifier on Resource[], credential, execute, discover (27)
     classify.test.ts         per-tool slices of classifyRailway (20)
@@ -58,7 +62,7 @@ below.
 | Tools                                                                 | Slice shape                                                       | Risks                                           |
 | --------------------------------------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------- |
 | `whoami`, `list-projects`                                             | `account[*].R`, `account[*].project[*].R`                         | `read-account`                                  |
-| `create-project`                                                      | `account[*].project.W`                                            | `create-project` (+ fallback)                   |
+| `create-project`                                                      | `account[*].project.W`                                            | `create-project`                                |
 | `list-services`, `list-deployments`, `get-status`                     | `project[P].environment[*].service[…]….R`                         | `read-runtime`                                  |
 | `get-logs`                                                            | `…service[S].deployment[*].logs.R`                                | `read-runtime` + `read-logs`                    |
 | `redeploy`, `accept-deploy`                                           | `project[P].environment[E].service[S].deployment.W`               | `deploy` (env-scoped)                           |
@@ -75,7 +79,9 @@ whose discovered environments contain `args.environmentId` (the only way
 for `accept-deploy`, whose upstream schema has no `projectId`); anything
 else is `denied` ("ambiguous railway target"). Identifiers embedded in a
 slice (`serviceId`, variable names) must match `[a-zA-Z0-9_./~-]+` or the
-call is denied. An unknown tool is denied.
+call is denied. A missing variable name on `upsert-variable` /
+`delete-variable` falls back to the wildcard, which also touches
+`bulk-variables-replace`. An unknown tool is denied.
 
 ## Catalog and presets
 
@@ -90,7 +96,8 @@ adjusts):
 - `developer` — reads, `read-variables`, `deploy` and `upsert-variable` on
   `dev` / `preview` / `staging` with `auto`; `railway[prod].deploy` and
   `railway[prod].upsert-variable` with `approval` and small quotas.
-- `operator` — everything above plus `railway[prod].read-variables`,
+- `operator` — everything above with larger quotas, plus
+  `railway[prod].read-variables` (`auto`, small quota), and
   `bulk-variables-replace` and `create-project` under `approval`.
 
 `agent-action` is in no preset: explicit opt-in only.
@@ -171,4 +178,4 @@ Railway.
 - Spec: [`vaubaan-gateway.md`](../../spec/vaubaan-gateway.md) §0, §3.2, §5;
   [`gateway-risk-model.md`](../../spec/gateway-risk-model.md) §2, §4, §7.
 - Handbooks: [[plugin-sdk]], [[policy-engine]]. Previous modelling notes
-  (v4, French): [`railway-ssh.md`](./railway-ssh.md) §2 now covers SSH only.
+  (v4, French, archived as legacy): [`railway-ssh.md`](../legacy/railway-ssh.md).

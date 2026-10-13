@@ -1,20 +1,16 @@
 ---
 title: Escalation — runtime channel for risk re-mint
 status: legacy
-tracks:
-  - packages/shared/src/risk.ts
-  - docs/decisions/unified-tokens-delegation-chain-and-escalation-channel.md
-  - docs/decisions/unified-gates-drop-confirm.md
 last_synced: 2026-06-16
 ---
 
-> **Legacy v4 document.** Kept for history; superseded by the v5 spec. Not maintained.
+> **Legacy v4 document.** Kept for history; superseded by the v5 spec and the current handbooks. Not maintained.
 
 # Escalation — runtime channel for risk re-mint
 
 > Successeur du handbook `approvals.md` (mint-time approval flow).
 > Le 3-gate `allow/confirm/deny` et le flow `approval_requests` ont été
-> droppés (ADR [unified-gates-drop-confirm](../decisions/unified-gates-drop-confirm.md)).
+> droppés (ADR [unified-gates-drop-confirm](../../decisions/unified-gates-drop-confirm.md)).
 > Ce qui les remplace : un **escalation_channel** porté par le token,
 > consulté **au runtime** quand un child reçoit un 403 `risk-not-accepted`.
 

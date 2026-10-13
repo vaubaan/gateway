@@ -5,6 +5,8 @@ date: 2026-05-27
 superseded-by: programmatic-access-token-minting
 ---
 
+> **Pre-v5 document (French).** Not translated; read with the mapping in [[legacy-status-of-v4-adrs-and-handbooks]].
+
 # Org Management Keys for programmatic AccessToken minting (Runner)
 
 ## Contexte

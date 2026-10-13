@@ -2,6 +2,7 @@
 title: Gmail provider — experimental plugin on the v5 SDK
 status: current
 date: 2026-10-13
+last_synced: 2026-10-13
 tracks:
   - plugins/gmail/src/
   - plugins/gmail/tests/unit/
@@ -23,18 +24,18 @@ git history (`docs/handbook/providers/gmail.md` before 2026-10-13).
 
 ## Shape
 
-| Member              | Where                   | Facts                                                                                                                                 |
-| ------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `id` / `version`    | `src/index.ts`          | `gmail`, `0.1.0` (pre-1.0 while experimental). Default export `gmailPlugin`, typed `ProviderPlugin & { experimental: true }`.         |
-| `experimental`      | `src/index.ts`          | `true`. Extra typed member : the SDK contract has no flag yet (need reported to P1.2-SDK) ; hosts must hide the plugin until it does. |
-| `tools`             | `src/tools.ts`          | **Empty.** `gmailClassifiedToolDeclarations` holds the 10 modelled tools (9 official Gmail MCP + synthetic `gmail__describe_zones`).  |
-| `dataModel`         | `src/data-model.ts`     | 1 plane `mailbox`, 7 Gmail entities + 4 synthetic markers ; `mailbox` is `envScopable`.                                               |
-| `catalog`           | `src/risk-catalog.yaml` | `catalog_version: 2`, 15 risks + `gmail.uncategorized-write`, 2 presets. Loaded by `loadCatalogFile` at import.                       |
-| `credential`        | `src/credential.ts`     | `oauth2` Google : PKCE, `client_secret_post`, scopes `gmail.readonly` + `gmail.compose`, `access_type=offline`, `prompt=consent`.     |
-| `classify`          | `src/classify.ts`       | Pure ; v4 emission rules kept ; keyed on the mission's single mailbox resource and its `metadata`.                                    |
-| `execute`           | `src/execute.ts`        | Returns `{ isError: true, structuredContent: { error: 'not_implemented', experimental: true, tool } }` for every tool ; no call.      |
-| `discoverResources` | `src/execute.ts`        | `GET /gmail/v1/users/me/profile` → one resource, `ref` = lower-cased address ; `UpstreamAuthError` on 401/403.                        |
-| `refresh`           | —                       | None : Google's refresh is the standard `refresh_token` grant the host performs from the spec (`refreshable: true`) ; P1.2-align.     |
+| Member              | Where                   | Facts                                                                                                                                                                        |
+| ------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id` / `version`    | `src/index.ts`          | `gmail`, `0.1.0` (pre-1.0 while experimental). Default export `gmailPlugin`, typed `ProviderPlugin`.                                                                         |
+| `experimental`      | `src/index.ts`          | `true` — `ProviderPlugin.experimental` of the SDK : the host registers the plugin, shows an "experimental" badge and keeps it out of the default connect and issuance flows. |
+| `tools`             | `src/tools.ts`          | **Empty.** `gmailClassifiedToolDeclarations` holds the 10 modelled tools (9 official Gmail MCP + synthetic `gmail__describe_zones`).                                         |
+| `dataModel`         | `src/data-model.ts`     | 1 plane `mailbox`, 7 Gmail entities + 4 synthetic markers ; `mailbox` is `envScopable`.                                                                                      |
+| `catalog`           | `src/risk-catalog.yaml` | `catalog_version: 2`, 15 risks + `gmail.uncategorized-write`, 2 presets. Loaded by `loadCatalogFile` at import.                                                              |
+| `credential`        | `src/credential.ts`     | `oauth2` Google : PKCE, `client_secret_post`, scopes `gmail.readonly` + `gmail.compose`, `access_type=offline`, `prompt=consent`.                                            |
+| `classify`          | `src/classify.ts`       | Pure ; v4 emission rules kept ; keyed on the mission's single mailbox resource and its `metadata`.                                                                           |
+| `execute`           | `src/execute.ts`        | Returns `{ isError: true, structuredContent: { error: 'not_implemented', experimental: true, tool } }` for every tool ; no call.                                             |
+| `discoverResources` | `src/execute.ts`        | `GET /gmail/v1/users/me/profile` → one resource, `ref` = lower-cased address ; `UpstreamAuthError` on 401/403.                                                               |
+| `refresh`           | —                       | None : Google's refresh is the standard `refresh_token` grant the host performs from the spec (`refreshable: true`) ; P1.2-align.                                            |
 
 ## Classification rules
 
@@ -63,7 +64,7 @@ flowchart LR
 - **`get_thread`** is worst-case : `thread[id].message[*].R` +
   `from-zone[unknown].R` (the sender is unknown before the fetch).
 - **Mailbox selection.** Exactly one gmail resource ; two or more are denied
-  as ambiguous (v4 silently took the first binding — kept only in the shim).
+  as ambiguous (v4 silently took the first binding ; that path is deleted).
 - **Metadata defaults.** Missing or ill-typed lists are empty, so an
   unconfigured mailbox classifies every sender `unknown` and every recipient
   `external-unbounded` ; `account_email` falls back to the resource ref.
@@ -78,7 +79,8 @@ flowchart LR
 - **`gmail.draft-to-zone-external-unbounded` lost `acceptable_in_envs: []`** :
   the v5 loader refuses an empty list and the engine has no other "never
   acceptable" marker. The risk stays in the catalog, unscoped, in no preset ;
-  a mission grants it only by explicit enumeration. Flagged to Renaud.
+  a mission grants it only by explicit enumeration. Open point for the catalog
+  review.
 - No risk is env-scoped (Gmail has no environment). Reasons rewritten in
   English ; vectors, caps and infra limits unchanged.
 - Presets : `read-only` (reads incl. `read-from-zone-unknown` at ≤ 20/min,

@@ -28,8 +28,8 @@ tracks:
 
 # Integration tests
 
-Vitest, headless. No browser, no database server, no real GitHub /
-Vercel / Supabase / Railway / SSH. Discovery is centralised in
+Vitest, headless. No browser, no database server, no real provider.
+Discovery is centralised in
 `vitest.config.ts` (`test.include`):
 
 ```
@@ -242,12 +242,13 @@ npm run test:watch                        # file-watcher mode for local dev
 npx vitest run packages/policy-engine     # one package
 ```
 
-## Scenarios — Policy engine (v4 model, v5 runtime)
+## Scenarios — Policy engine
 
 > Covers: `docs/spec/gateway-risk-model.md` §3 (DSL), §4 (catalog), §8
-> (runtime). Handbook [[policy-engine]]. The package is a v5 dependency of
-> gateway-core and the plugin SDK; only the deprecated `bindings` bridge is
-> v4.
+> (runtime). Handbook [[policy-engine]]. The package is a dependency of
+> gateway-core and the plugin SDK.
+
+`packages/policy-engine/tests/unit/`.
 
 - **`slice-dsl.test.ts`** — `parseSlice` happy path and every error branch
   (missing provider/action, invalid action, unterminated bracket, empty
@@ -274,25 +275,22 @@ npx vitest run packages/policy-engine     # one package
   unqualified, every
   denial carries `code: 'risk-not-accepted'`, `evaluateCallSimple` happy
   path.
-- **`scope-injection.test.ts`** — `injectionPlanFor` (github owner/repo,
-  vercel projectId + teamId, supabase project_ref; null with 0 or 2+
-  bindings, null on a malformed resource_ref), `stripInjectedArgs` (removes
-  properties and required, no-op when nothing applies, no mutation),
-  `mergeInjectedArgs` (fills missing, caller override wins, empty string
-  counts as missing).
-- **`qualify.test.ts`** (21) — `isEnvScopedEntry` (true when
+- **`qualify.test.ts`** (26) — `isEnvScopedEntry` (true when
   `acceptable_in_envs` is non-empty), `qualifyRiskId` (injects `[env]`
   before the first `.`, idempotent, no-op when account-scoped, env-scoped
   cases via `test.each`), `unqualifyRiskId` (strip + idempotent), round-trip
   property, `resourceEnvResolver` / `noEnvResolver` (ref match, provider
   mismatch, no env label).
 
-## Scenarios — Plugin SDK (v5)
+## Scenarios — Plugin SDK
 
 > Covers: `docs/spec/vaubaan-gateway.md` §5 (plugins), §3.2 (presets), §10
 > (structural tests: at least one preset per plugin, every preset entry a
 > risk of its own catalog, never a wildcard). ADR
 > [[plugin-contract-and-credential-spec]]. Handbook [[plugin-sdk]].
+
+`packages/plugin-sdk/tests/unit/`. The template plugin's own suite is under
+"Scenarios — Provider plugins".
 
 - **`catalog-loader.test.ts`** — loads the `acme` fixture YAML (provider,
   `catalog_version`, date scalar kept as a string, optional fields,
@@ -342,46 +340,27 @@ npx vitest run packages/policy-engine     # one package
 - **`env-of.test.ts`** — `envFromSliceSegment`: the identifier after the
   named entity, `undefined` on wildcards, lists, absent or terminal
   segment, no confusion with an identifier equal to the entity name.
-- **`plugins/_template/tests/unit/plugin.test.ts`** — the four kit
-  assertions on the template, classifier cases (named workspace, single
-  resource default, ambiguous or malformed workspace, malformed id,
-  unknown tool, slice round-trip), `execute` and `discoverResources`
-  against `mockFetch` (bearer header, PATCH body, 401 →
-  `UpstreamAuthError`).
-- **`plugins/upstash-redis/tests/unit/plugin.test.ts`** (P1.2h, handbook
-  [[providers/upstash-redis]]) — the four kit assertions with one sample
-  per tool (21 tools, every named risk reached; the fallback left out on
-  purpose); presets (`read-only`, `developer` key-level on `development` /
-  `staging` only, `operator` approval gates, no preset carries the
-  fallback); classifier conventions: `databaseId` resolved against the
-  mission's resources (single-database default, ambiguous / missing /
-  foreign / malformed refused, account-level tools need none), `execute`
-  routed on the Redis verb (read, write, FLUSH marker, unknown verb
-  catch-all, empty or non-array command), keys that are not slice idents
-  (`session:1`, braces, globs) and multi-key DEL fall back to `[*]`, slice
-  round-trip; environment resolved from the database resource label via
-  `resourceEnvResolver` (account-rooted slices: single label or null);
-  credential spec (`email` non-secret, `api_key` secret, `upstashAuth`
-  kind / field / pattern checks); `execute` against `mockFetch` (Basic
-  auth on the Management API, REST tokens redacted from answers, data
-  tool reads `rest_url` + `rest_token` then POSTs the command with the
-  Bearer, SET flags, refusals before any network call, 401/403 →
-  `UpstreamAuthError` on both surfaces, 500 and malformed arguments as
-  `isError`); `discoverResources` (one resource per database, metadata
-  without tokens, `env` left to the owner, 200 cap with a logger
-  warning, 403 → `UpstreamAuthError`).
 
-## Scenarios — Shared (v5 additions)
+## Scenarios — Shared
 
-- **`risk-id.test.ts`** — `parseRiskId` both forms, hyphenated provider
+> Covers: `packages/shared/src/` — the risk-id grammar, the MCP tool-name
+> convention and the eight refusal codes (`vaubaan-gateway.md` §4.1, §6),
+> the token format. Suites co-located with the source.
+
+- **`risk-id.test.ts`** (20) — `parseRiskId` both forms, hyphenated provider
   and dotted name, eleven malformed inputs rejected; `formatRiskId`
   round-trip and null/empty env; `baseRiskId`; `isProviderId`;
   `isExplicitRiskId` (wildcards rejected).
-- **`mcp.test.ts`** — `toolPrefixFor` / `splitToolName` (hyphen ↔
+- **`mcp.test.ts`** (10) — `toolPrefixFor` / `splitToolName` (hyphen ↔
   underscore, first separator only, malformed names); the eight refusal
   codes of spec §4.1 and §6; `isRefusalCode`.
+- **`api-key.test.ts`** (6) — `generateApiKey` for `live` and `test`
+  (`vbn_live_<8>_<32>` / `vbn_test_<8>_<32>`, the prefix being part of the
+  key); `parseApiKey` tells the two kinds apart and rejects the retired
+  `vbn_mgmt_` prefix and an unknown prefix; `hashApiKey` / `verifyApiKey`
+  round trip, a key with one more character refused.
 
-## Scenarios — Provider plugins (v5 SDK)
+## Scenarios — Provider plugins
 
 > Covers: the ten handbooks under
 > [`docs/handbook/providers/`](../handbook/providers/README.md) and
@@ -481,12 +460,21 @@ exact irreversible set, only the exfiltration risk env-scoped, no preset on
 the fallback, the two deprecated v4 ids) and slice → risk resolution.
 `classify` (43), `data-model` (6).
 
-**Upstash Redis** (112) — `plugin.test.ts` (24): kit (every named risk
-touched, no fallback hit), database resolution against the mission's
-resources and verb routing of `execute`, environment from the owner label
-of the database resource, `api-key` credential spec (email + Management API
-key), `execute` (REST tokens redacted) and `discoverResources` against
-`mockFetch`. `risk-catalog` (49): YAML validation, pattern parsing, coverage
+**Upstash Redis** (112) — `plugin.test.ts` (24): kit with one sample per
+tool (21 tools, every named risk touched, no fallback hit), presets
+(`read-only`, `developer` key-level on `development` / `staging` only,
+`operator` approval gates), database resolution against the mission's
+resources (single-database default; ambiguous, missing, foreign or
+malformed refused; account-level tools need none), verb routing of
+`execute` (read, write, FLUSH marker, unknown verb, empty or non-array
+command), keys that are not slice identifiers and multi-key `DEL` falling
+back to `[*]`, environment from the owner label of the database resource,
+`api-key` credential spec (`email` non-secret, Management API key secret),
+`execute` (Basic auth on the Management API, REST tokens redacted, the data
+tools read `rest_url` + `rest_token` then POST the command, refusals before
+any network call, 401/403 → `UpstreamAuthError`) and `discoverResources`
+(one resource per database, no token in the metadata, 200 cap with a
+warning) against `mockFetch`. `risk-catalog` (49): YAML validation, pattern parsing, coverage
 lint, saliency checks. `classify` (30), `execute` (8),
 `data-model` (1).
 
@@ -524,7 +512,7 @@ answer of `execute` against `mockFetch`, presets `read-only` / `developer`.
 coverage, `risksTouchedBy` spot checks. `classify` (32),
 `q-parser` (19), `data-model` (5).
 
-## Scenarios — gateway-core (v5)
+## Scenarios — gateway-core
 
 > Covers: handbook [[gateway-core]]. Spec: `vaubaan-gateway.md` §4.1, §6,
 > §8, §10 ("structured refusals", "credential separation");
@@ -542,7 +530,7 @@ coverage, `risksTouchedBy` spot checks. `classify` (32),
   The decision is
   unchanged since v4; its inputs are the v5 `Resource[]` and the plugin's
   `classify` (P0.R).
-- **`errors.test.ts`** (24) — the eight refusal codes: exactly eight in
+- **`errors.test.ts`** (28) — the eight refusal codes: exactly eight in
   `REFUSAL_CODES`, one builder sample per code, every field of every code,
   `hint` non-empty and serializable, `isRefusal` guard, JSON-RPC mapping
   (`-32603`, refusal in `data`, code in the message).
@@ -575,18 +563,18 @@ coverage, `risksTouchedBy` spot checks. `classify` (32),
   before any risk with no code, audit write failure propagates.
 
 The real stages — resource, risk, upstream — and the door are tested in
-"v5 — Execution door (P1.6)" below; the budget stage in "Budget and
-sessions".
+"Scenarios — Execution door" below; the budget stage in "Scenarios — Budget
+and sessions".
 
-## v5 — Instance configuration, crypto, composition root (P0.4)
+## Scenarios — Instance configuration, crypto, composition root
 
 > Covers: spec §4.3 (instance configuration, admin rule), §6 (encryption
 > at rest, no secret in logs), §10 structural "no configuration value is
 > hard-coded". Handbook [[configuration]], ADR
 > [[docker-image-and-config-format]]. Co-located under
-> `apps/gateway/src/server/**` (English, v5).
+> `apps/gateway/src/server/**` unless a path says otherwise.
 
-- **`config/load.test.ts`** (27) — minimal env-only configuration with
+- **`config/load.test.ts`** (34) — minimal env-only configuration with
   defaults; every missing required key named at once with its variable(s);
   `public_url` http refused, non-URL and query string refused, trailing
   slash stripped, sub-path kept; master key length / base64; bootstrap
@@ -610,27 +598,29 @@ sessions".
   version names `encryption.previous_keys`, right version wrong key fails;
   `deriveConnectionKey` deterministic and distinct per id and per master
   key.
-- **`logging/logging.test.ts`** (5) — mission token prefix kept, secret
+- **`logging/logging.test.ts`** (6) — mission token prefix kept, secret
   dropped; configured secrets replaced longest-first and JSON-escaped;
-  JSON line shape with bindings; level threshold and stderr routing.
-- **`compose/compose.test.ts`** (15) — `buildRoot` from configuration
-  alone over the `:memory:` store (schema v1, empty registry); the store
+  empty secrets ignored; JSON line shape with bindings; a field named
+  `time`, `level` or `msg` does not overwrite the line's own; level
+  threshold and stderr routing.
+- **`compose/compose.test.ts`** (14) — `buildRoot` from configuration
+  alone over the `:memory:` store (schema version 4, the shipped registry); the store
   receives the root's encryptor and a `RegistryCatalogIndex` (base ids,
   env-qualified ids within `acceptable_in_envs`, unknown provider,
-  wildcard refused) and is closed with the root; provider apps are a
-  warning while no plugin is registered and a `ConfigError` naming
-  `providers.<id>` and `VAUBAAN_PROVIDER_<ID>_*` (exit 78) once a plugin
-  is; `checkProviderApps` passes on matching or absent apps; no secret in
+  wildcard refused) and is closed with the root; with an injected empty
+  registry, provider apps are a warning; with plugins registered, a
+  provider app for an unknown plugin is a `ConfigError` naming
+  `providers.<id>` and `VAUBAAN_PROVIDER_<ID>_*` (exit 78); `checkProviderApps` passes on matching or absent apps; no secret in
   the boot log; `getRoot` builds once and shares the promise, forgets a
   failed build; `bootOrExit` exits 78 naming the key, 1 on other failures,
-  nothing on success; `MemoryRateLimiter` window and reset, `MemoryCache`
-  TTL and eviction, `MemorySessionStore`.
+  nothing on success; `MemoryRateLimiter` window and reset,
+  `MemorySessionStore` (unknown or expired session).
 - **`http/healthz.test.ts`** (3) — 200 with build stamps and store kind
   (`memory`) and no configuration value, 503 degraded on store ping
   failure, 503 unavailable when the root cannot be built.
 - **`tests/integration/compose/boot.test.ts`** (4) — the production
   wiring against a temporary SQLite file: the database is created, the
-  migrations applied (`schema_version` 1, one `schema_migrations` row),
+  migrations applied (`schema_version` 4, four `schema_migrations` rows),
   the store pings and `/healthz` reports `{ kind: 'sqlite', status: 'ok' }`,
   the boot log carries `store opened`; a store secret is sealed with the
   encryptor built from the configuration (blob not clear text, current
@@ -639,31 +629,37 @@ sessions".
   (`UnknownRiskIdError`); an unreadable `store.path` exits 1 with a
   message naming `store.path` and `VAUBAAN_STORE_PATH`.
 - **`apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`**
-  (one test per scanned file, 199 at P1.6) — no literal URL, Supabase ref, GitHub /
+  (one test per scanned file; the count is in the table above) — no literal URL, Supabase ref, GitHub /
   Stripe / mission token, private key or JWT in the whole application
   (`apps/gateway/src`, `next.config.ts`), `deploy/`, `scripts/`,
   `.github/workflows`; only `telemetry-default.ts` and
-  `deploy/config/*.example*` are exempt. The scan covers everything since
-  P1.6 deleted the v4 UI and `lib/`.
-- **`apps/gateway/tests/integration/standalone-native-addons.test.ts`** (3,
-  P0.6) — reads the build output and is skipped when `.next/standalone` is
+  `deploy/config/*.example*` are exempt.
+- **`apps/gateway/tests/integration/standalone-native-addons.test.ts`** (3)
+  — reads the build output and is skipped when `.next/standalone` is
   absent (CI builds before testing): the `/healthz` route handler trace lists
   the `argon2` and `better-sqlite3` `.node` binaries; a Node process started
   inside the standalone tree resolves both packages from the standalone
   `node_modules` (not the repository's), hashes with argon2 and runs a query
   on an in-memory SQLite database.
+- **`apps/gateway/tests/integration/standalone-plugin-catalogs.test.ts`**
+  (2) — same skip rule: the template's `risk-catalog.yaml` is traced into
+  `.next/standalone` next to its module, and so is every
+  `plugins/<id>/src/risk-catalog.yaml` of the repository (the list is read
+  from the `plugins/` directory; none may be missing). ADR
+  [[plugin-catalog-path-and-standalone-tracing]].
 
 Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
 [`e2e-tests.md`](./e2e-tests.md).
 
-## v5 — Human authentication: OIDC, web session, bootstrap, admin rule (P1.1)
+## Scenarios — Human authentication
 
 > Covers: spec §0 (Operator, User, Group, IdP), §4.2 Administration, §4.3
 > (IdP block, bootstrap token, admin rule), §6 "human authentication"
 > (short sessions bound to the origin, origin check on every mutation), §7.1,
 > §10 integration "simulated IdP" and structural "authority recomputed from
 > current membership". Handbook [[authentication]], ADR
-> [[oidc-relying-party-and-web-session]].
+> [[oidc-relying-party-and-web-session]]. Co-located under
+> `apps/gateway/src/` unless a path says otherwise.
 
 - **`server/auth/claims.test.ts`** (8) — groups claim as array (trimmed,
   de-duplicated, non-strings dropped), as space/comma/semicolon delimited
@@ -737,34 +733,38 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
       → 303 `/login`, row deleted, cookie cleared;
   12. sessions are rows of `web_sessions`.
 
-## Scenarios — Store (v5, embedded SQLite)
+## Scenarios — Store
 
 > Covers: spec [`vaubaan-gateway.md`](../spec/vaubaan-gateway.md) §2, §3.3,
 > §3.5, §6 ("encryption at rest", "authoritative, atomic counting",
 > "immutable audit"), §8, §10 (structural tests). Handbook [[store]]. ADR
 > [[embedded-store-sqlite-and-migrations]]. Every suite runs on an
-> ephemeral `:memory:` store with the real `0001_schema.sql`, a
+> ephemeral `:memory:` store with the real migrations (`0001`-`0004`), a
 > `ManualClock`, a `StubEncryptor` and a five-id `SetCatalogIndex`
 > (`apps/gateway/src/server/store/testing.ts`); the two file-based cases
-> use a temp directory.
+> use a temp directory. Paths are relative to `apps/gateway/tests/`.
 
 - **`unit/server/store/ids.test.ts`** (6) — UUIDv7 canonical form and
   version/variant bits, embedded millisecond timestamp, ordering across
   milliseconds, strict monotonicity of 5k ids within one process (counter
   in `rand_a`), 10k uniqueness, rejection of non-v7 ids.
-- **`unit/server/store/migrate.test.ts`** (8) — `NNNN_name.sql` loading
+- **`unit/server/store/migrate.test.ts`** (9) — `NNNN_name.sql` loading
   and ordering, malformed file name rejected, duplicate version rejected,
   idempotent re-run, incremental apply of a new file, checksum
   immutability of an applied file (boot refused), full rollback of a
-  failing file (nothing recorded, no table left), shipped `0001_schema`.
-- **`integration/store/schema.test.ts`** (6) — the 28 tables of the plan
-  exist; every table is `STRICT`; the store satisfies the composition root's
+  failing file (nothing recorded, no table left), a database carrying a
+  migration this image does not ship is refused, the four shipped
+  migrations `0001`-`0004` in the default directory.
+- **`unit/server/store/db.test.ts`** (2) — `isSqliteVersionAtLeast`
+  against `MIN_SQLITE_VERSION`: major, minor and patch compared in order;
+  a missing or malformed component counts as zero.
+- **`integration/store/schema.test.ts`** (6) — the 29 tables exist; every table is `STRICT`; the store satisfies the composition root's
   `Store` port (`kind`, `ping()`, `close()`); boot against an empty file sets WAL,
   `foreign_keys`, `synchronous=NORMAL` and reopens without re-migrating;
   two writers on one file serialize under `BEGIN IMMEDIATE` (second gets
   `SQLITE_BUSY` while the lock is held, succeeds after commit);
   `VACUUM INTO` backup is a readable single file with no `-wal`.
-- **`integration/store/audit.test.ts`** (12) — gateway-core
+- **`integration/store/audit.test.ts`** (13) — gateway-core
   `CallAuditEntry` round-trips through `audit` + `audit_risks` rows
   (accepted snapshot, touched, remaining budget), a touched-but-not-accepted
   risk is kept, `AdminAuditEntry` round-trips, **`UPDATE` aborts**
@@ -780,7 +780,7 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   reactivation; groups: `getOrCreate` idempotent, atomic membership
   replacement and `groupsOf`, single add/remove, FK rejection of a
   non-user member.
-- **`integration/store/connections-shares.test.ts`** (11) — connection
+- **`integration/store/connections-shares.test.ts`** (13) — connection
   credential sealed with the connection id as associated data and
   unreadable under another id; ciphertext never on the record; group
   ownership, transfer, `unowned`, revocation; reconnection reactivates;
@@ -797,7 +797,7 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   window, duplicates), atomic `replacePolicy`, status and expiry
   transitions, token issuance and rotation (`active` → `rotated`,
   revoke), schema-level single active token and unique prefix.
-- **`integration/store/sessions.test.ts`** (9) — session born on first
+- **`integration/store/sessions.test.ts`** (11) — session born on first
   call and never recreated; **N=50 concurrent `decideAndDecrement` on
   quota 1 → exactly one allow**, 49 refusals, one counter at 1; a call
   touching N risks decrements N counters and a refusal none; new period
@@ -830,7 +830,7 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
 > `apps/gateway/src/server/crypto/`) has its own suite; the store's stub
 > only reproduces the port's associated-data and key-version contract.
 
-## Scenarios — Budget and sessions (v5, P1.3)
+## Scenarios — Budget and sessions
 
 > Covers: spec [`vaubaan-gateway.md`](../spec/vaubaan-gateway.md) §2.3
 > (mission states), §3.2 (unit, quota, rate limit, one budget per
@@ -843,7 +843,8 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
 > `apps/gateway/tests/integration/budget/fixture.ts` (one creator, one
 > connection, a three-risk policy: `code-read` 10/period 5 per 60 s,
 > `write-feature-branch` 1/period, `merge-protected` 2/period 1 per 60 s
-> gated `approval`; daily period anchored 2026-10-13).
+> gated `approval`; daily period anchored 2026-10-13). Paths are relative
+> to `apps/gateway/tests/`.
 
 - **`unit/server/budget/period.test.ts`** (8) — `periodIndex` at the
   anchor, the last millisecond, the boundary (belongs to the next period),
@@ -917,7 +918,7 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   back the credits their events record (`counted + credited == audited`),
   per period.
 
-## v5 — Connections, resources, provider apps (P1.4)
+## Scenarios — Connections, resources, provider apps
 
 > Covers: spec §0 (Connection, Resource), §2.3 connection states, §4.2
 > Connections and Administration, §6 (encryption at rest, anti-replay and
@@ -1037,7 +1038,8 @@ Unit, co-located under `apps/gateway/src/server/connections/` and
 
 Integration:
 
-- **`tests/integration/store/connections-shares.test.ts`** (+2, P1.4) —
+- **`tests/integration/store/connections-shares.test.ts`** (two of its 13
+  cases) —
   `syncDiscoveredResources` at the repository (merge rule, stale, plugin
   label that stops being set, name handed back to discovery) and the
   conditional transitions `refreshCredential` / `markExpired` /
@@ -1075,9 +1077,9 @@ Integration:
 Not covered here: the pages themselves (server components; walked by hand,
 see [`e2e-tests.md`](./e2e-tests.md)), and a real provider.
 `connection-unavailable` for missions on a revoked or expired connection is
-in "v5 — Execution door (P1.6)".
+in "Scenarios — Execution door".
 
-## v5 — Missions: authority, issuance, tokens, bootstrap kit (P1.5)
+## Scenarios — Missions
 
 > Covers: spec [`vaubaan-gateway.md`](../spec/vaubaan-gateway.md) §3.1
 > (monotonicity, enumeration, partition per connection, resource selection),
@@ -1168,89 +1170,11 @@ connections and resources seeded through the repositories (32):
   agent's proposal (provider and refs resolved, nothing written); rotate
   200 / 404 / 409; revoke 404 for someone else's mission.
 
-Not covered here: the browser (Playwright, [`e2e-tests.md`](./e2e-tests.md)),
-which is not covered; calls through the execution door with an issued token
-are in "v5 — Execution door (P1.6)".
+Not covered here: the browser (Playwright, see
+[`e2e-tests.md`](./e2e-tests.md)); calls through the execution door with an
+issued token are in "Scenarios — Execution door".
 
-## v5 — Requests: claims, the request URL, the inbox (P1.7)
-
-> Covers: spec [`vaubaan-gateway.md`](../spec/vaubaan-gateway.md) §2.3
-> (Request states), §3.4 (the claim: creator only, the four answers, the
-> event, "a refused or expired claim does not close the mission"), §4.2
-> "Request inbox", §6 ("requests are granted only in a human session",
-> rate limit on the request page per IP), §7.6. Handbook [[requests]]. ADR
-> [[claim-resolutions-as-counter-credits]]. The claim itself is dropped by
-> `SessionService.recordCall` (budget scenarios above); these start from its
-> refusal.
-
-Unit, beside the code (`apps/gateway/src/server/requests/`, 62):
-
-- **`state.test.ts`** (9) — **state machine**: `open → granted | refused |
-expired`, the three terminal for every transition; an open request past
-  its expiry reads `expired` (boundary instant included) and is not
-  decidable; a decided one keeps its state whatever the clock; the request
-  URL is `<public_url origin>/r/<id>` and an id cannot leave the prefix.
-- **`claim.test.ts`** (37) — the four options, always in the same order,
-  each with a one-line consequence naming what stays exhausted and until
-  when (recurring and one-off); quota extension bounded by what was
-  consumed; the expiry floor; a mission that never expires; revoked /
-  orphaned missions leave only the refusal, an expired one only the expiry
-  and the refusal; a risk that left the policy; nothing consumed after a
-  rollover; `checkClaimDecision` for each resolution and each refusal;
-  `parseClaimDecision` for JSON and form fields, a `datetime-local` value
-  read as UTC, unknown keys and every malformed body refused.
-- **`client-ip.test.ts`** (7) — no trusted proxy: the header is ignored;
-  right-most untrusted hop; a forged left-hand entry is not believed; all
-  hops trusted or malformed hop → `unknown`; IPv6, ports, brackets; invalid
-  `trusted_proxies` entries trust nothing more.
-- **`events.test.ts`** (5) — one line per event kind, total for unknown
-  kinds and missing details.
-- **`sweeper.test.ts`** (4) — ticks on the interval until stopped; a failing
-  pass is logged and the next still runs; passes are not stacked.
-
-Integration:
-
-- **`tests/integration/requests/request-service.test.ts`** (30, `:memory:`
-  store, manual clock) — inbox lists the claim with the URL the refusal
-  carried, empty for anyone else, drops an overdue request before any
-  sweep; **creator-only access**: another user, an unknown id, **a
-  beneficiary of a share on the same connection**, a co-owner through the
-  owner group → `forbidden`, and a refused decision changes nothing; the
-  creator's view (risk line, other risks, period, events, options);
-  after a rollover the risk reads un-exhausted; **reset** zeroes every
-  counter of the period, records the `reset` event with credits, **the
-  replay passes**, admin audit `period-reset`; **extend quota** gives back
-  N on the claimed risk only, does not carry over to the next period,
-  refuses more than was consumed and leaves the request open, and the
-  store never lets a counter go below zero; **extend expiry** moves the
-  date while the risk stays exhausted, refuses an earlier date and a
-  mission without expiry, and brings a stored-`expired` mission back to
-  `active`; **refuse keeps the risk exhausted** until the next period while
-  other risks pass; a revoked mission leaves only the refusal; a decided
-  request cannot be decided again (`not-open`, one audit entry); a failing
-  effect rolls the whole decision back; an overdue request is expired by
-  the decision attempt; **the sweep expires unanswered requests** once,
-  with an event each, leaves decided ones alone, does not close the
-  mission, and erases the sealed arguments of an approval request; an
-  approval request gets a neutral view and `unsupported-kind`.
-- **`tests/integration/requests/request-handlers.test.ts`** (13, real root)
-  — **exhaust → refusal URL → no session: sign-in redirect → non-creator
-  403 with one sentence and no detail → creator 303 to the inbox → grants a
-  reset → the replay passes**; unknown id and someone else's request are
-  the same 403; a co-owner of the connection and the bootstrap operator
-  are refused; **the mission token (and any other bearer) is refused on
-  `/r/*` and `/api/requests/*`, even next to the creator's session
-  cookie**; decide needs the origin check then a session; 422 / 409 / 400
-  mapping; the page's form post is redirected back with `?decided=1` or
-  `?problem=<code>`; `GET /api/requests`; labels from the plugin catalog;
-  **per-IP rate limit on `/r/*`** (429, `Retry-After`) that does not block
-  the decision endpoint; the root runs and stops the sweeper.
-
-Not covered here: the approval decision (P2.1). The claim URL reaching an
-MCP client through the execution door is asserted in "v5 — Execution door
-(P1.6)" (`budget-exhausted`).
-
-## v5 — Execution door (P1.6)
+## Scenarios — Execution door
 
 > Covers: handbook [[execution-door]]. Spec: `vaubaan-gateway.md` §4.1
 > (discovery, call, the eight refusals, catalog), §2.4, §3.1 (resource
@@ -1345,21 +1269,104 @@ calls sent as JSON-RPC to `root.execution.handlers.mcp`.
   expiry; lifetime bounded by what is left; `github__mint_install_token`
   never cached.
 
-## v5 — Audit search, mission session, retention (P1.8)
+## Scenarios — Requests
 
-Handbook [audit](../handbook/audit.md). Suites under
-`apps/gateway/tests/integration/audit/` run on the real composition root with the
-`:memory:` store and the shipped plugins (`support.ts`). The execution door is not merged
-yet, so calls are seeded the way `CallPipeline` produces them: `SessionService.recordCall`
-(session, counters, events, requests) then the store's audit writer.
+> Covers: spec [`vaubaan-gateway.md`](../spec/vaubaan-gateway.md) §2.3
+> (Request states), §3.4 (the claim: creator only, the four answers, the
+> event, "a refused or expired claim does not close the mission"), §4.2
+> "Request inbox", §6 ("requests are granted only in a human session",
+> rate limit on the request page per IP), §7.6. Handbook [[requests]]. ADR
+> [[claim-resolutions-as-counter-credits]]. The claim itself is dropped by
+> `SessionService.recordCall` (budget scenarios above); these start from its
+> refusal.
 
-- `src/server/audit/filters.test.ts` (18, unit) — **audit filters**: every parameter
+Unit, beside the code (`apps/gateway/src/server/requests/`, 62):
+
+- **`state.test.ts`** (9) — **state machine**: `open → granted | refused |
+expired`, the three terminal for every transition; an open request past
+  its expiry reads `expired` (boundary instant included) and is not
+  decidable; a decided one keeps its state whatever the clock; the request
+  URL is `<public_url origin>/r/<id>` and an id cannot leave the prefix.
+- **`claim.test.ts`** (37) — the four options, always in the same order,
+  each with a one-line consequence naming what stays exhausted and until
+  when (recurring and one-off); quota extension bounded by what was
+  consumed; the expiry floor; a mission that never expires; revoked /
+  orphaned missions leave only the refusal, an expired one only the expiry
+  and the refusal; a risk that left the policy; nothing consumed after a
+  rollover; `checkClaimDecision` for each resolution and each refusal;
+  `parseClaimDecision` for JSON and form fields, a `datetime-local` value
+  read as UTC, unknown keys and every malformed body refused.
+- **`client-ip.test.ts`** (7) — no trusted proxy: the header is ignored;
+  right-most untrusted hop; a forged left-hand entry is not believed; all
+  hops trusted or malformed hop → `unknown`; IPv6, ports, brackets; invalid
+  `trusted_proxies` entries trust nothing more.
+- **`events.test.ts`** (5) — one line per event kind, total for unknown
+  kinds and missing details.
+- **`sweeper.test.ts`** (4) — ticks on the interval until stopped; a failing
+  pass is logged and the next still runs; passes are not stacked.
+
+Integration:
+
+- **`tests/integration/requests/request-service.test.ts`** (30, `:memory:`
+  store, manual clock) — inbox lists the claim with the URL the refusal
+  carried, empty for anyone else, drops an overdue request before any
+  sweep; **creator-only access**: another user, an unknown id, **a
+  beneficiary of a share on the same connection**, a co-owner through the
+  owner group → `forbidden`, and a refused decision changes nothing; the
+  creator's view (risk line, other risks, period, events, options);
+  after a rollover the risk reads un-exhausted; **reset** zeroes every
+  counter of the period, records the `reset` event with credits, **the
+  replay passes**, admin audit `period-reset`; **extend quota** gives back
+  N on the claimed risk only, does not carry over to the next period,
+  refuses more than was consumed and leaves the request open, and the
+  store never lets a counter go below zero; **extend expiry** moves the
+  date while the risk stays exhausted, refuses an earlier date and a
+  mission without expiry, and brings a stored-`expired` mission back to
+  `active`; **refuse keeps the risk exhausted** until the next period while
+  other risks pass; a revoked mission leaves only the refusal; a decided
+  request cannot be decided again (`not-open`, one audit entry); a failing
+  effect rolls the whole decision back; an overdue request is expired by
+  the decision attempt; **the sweep expires unanswered requests** once,
+  with an event each, leaves decided ones alone, does not close the
+  mission, and erases the sealed arguments of an approval request; an
+  approval request gets a neutral view and `unsupported-kind`.
+- **`tests/integration/requests/request-handlers.test.ts`** (13, real root)
+  — **exhaust → refusal URL → no session: sign-in redirect → non-creator
+  403 with one sentence and no detail → creator 303 to the inbox → grants a
+  reset → the replay passes**; unknown id and someone else's request are
+  the same 403; a co-owner of the connection and the bootstrap operator
+  are refused; **the mission token (and any other bearer) is refused on
+  `/r/*` and `/api/requests/*`, even next to the creator's session
+  cookie**; decide needs the origin check then a session; 422 / 409 / 400
+  mapping; the page's form post is redirected back with `?decided=1` or
+  `?problem=<code>`; `GET /api/requests`; labels from the plugin catalog;
+  **per-IP rate limit on `/r/*`** (429, `Retry-After`) that does not block
+  the decision endpoint; the root runs and stops the sweeper.
+
+Not covered here: the approval decision (P2.1). The claim URL reaching an
+MCP client through the execution door is asserted in "Scenarios — Execution
+door" (`budget-exhausted`).
+
+## Scenarios — Audit search, mission session, retention
+
+> Covers: spec [`vaubaan-gateway.md`](../spec/vaubaan-gateway.md) §3.3 (the
+> session), §4.2 ("Mission session", "Audit"), §6 ("immutable audit", "no
+> secret in logs"), §8 (one entry per call and per administrative act,
+> fields, retention). Handbook [[audit]].
+
+Suites under `apps/gateway/tests/integration/audit/` run on the real composition root with the
+`:memory:` store and the shipped plugins (`support.ts`). They seed calls the way `CallPipeline`
+produces them — `SessionService.recordCall` (session, counters, events, requests) then the
+store's audit writer — rather than through the execution door; entries written by the door
+itself are asserted in "Scenarios — Execution door".
+
+- **`apps/gateway/src/server/audit/filters.test.ts`** (18, unit) — **audit filters**: every parameter
   read and trimmed; first value of a repeated parameter; decision and kind outside their
   closed sets dropped and reported; unreadable or impossible dates dropped; a reversed
   period ignored; a single day is `[00:00, next 00:00)` UTC; oversized value refused;
   cursor round trip and every malformed cursor refused; `auditQueryString`; `scopeOf` for
   a user, an operator and the bootstrap operator; `withoutArguments`.
-- `audit-query.test.ts` (21) — **visibility**: a creator sees the calls and acts of their
+- **`audit-query.test.ts`** (21) — **visibility**: a creator sees the calls and acts of their
   missions, another user none; a connection's owner sees the calls made through it by a
   mission they did not create; a member of the owning group sees it, a non-member does
   not; an operator sees every administrative entry and still not other people's calls;
@@ -1370,7 +1377,7 @@ yet, so calls are seeded the way `CallPipeline` produces them: `SessionService.r
   equal timestamps, no further page announced on an exact fit, a write during paging does
   not shift the next page. **No raw arguments**: the argument marker reaches no viewer's
   page; arguments wrongly put in an administrative entry are replaced by `[not shown]`.
-- `mission-session.test.ts` (14) — creator only (another user, an operator and an unknown
+- **`mission-session.test.ts`** (14) — creator only (another user, an operator and an unknown
   id get `null`); before the first call (no session, full budget, gate per risk, catalog
   labels); counted / left / exhausted per risk; past periods kept apart and yesterday's
   exhaustion gone; one-off mission; **open requests by link only** (kind, risk, dates,
@@ -1380,7 +1387,7 @@ yet, so calls are seeded the way `CallPipeline` produces them: `SessionService.r
   the credits, the decisions are in the mission's audit); agent labels with counts; timeline newest first with tool,
   risks, what is left, refusal code and request; timeline paging; revoked mission keeps
   its history; `eventView` ignores every detail it does not name.
-- `retention.test.ts` (10) — **the purge removes the entries older than N days and
+- **`retention.test.ts`** (10) — **the purge removes the entries older than N days and
   nothing else**: older call and act gone with their risk rows, the entry exactly N days
   old and the recent ones intact, seven other tables unchanged; **the triggers still
   forbid `UPDATE` and `DELETE`** on `audit` and `audit_risks` afterwards and the purge
@@ -1388,7 +1395,7 @@ yet, so calls are seeded the way `CallPipeline` produces them: `SessionService.r
   interval, stop; a failing purge is logged and retried; concurrent sweeps share one
   purge; the composition root starts the sweeper with `retention_days` and `close()`
   stops it; default 90 days.
-- `admin-mutations.test.ts` (20) — **structural: every administrative mutation writes an
+- **`admin-mutations.test.ts`** (20) — **structural: every administrative mutation writes an
   admin audit entry.** The public methods of every class under
   `server/{connections,provider-apps,missions,auth,requests}` are enumerated from the source with
   the TypeScript parser; each must be classified (read, mutation, exempt with a reason),
@@ -1402,8 +1409,6 @@ yet, so calls are seeded the way `CallPipeline` produces them: `SessionService.r
   `decideClaim` resetting the period — the entries P1.7 writes; none is added here). Plus: a resource edit records `before` / `after` and a save
   that changes nothing records none; a failed discovery is recorded with its reason.
 
-Not covered here: call entries written by the real execution door (P1.6).
-
 ## Out of scope for these tests
 
 - **E2E** (Playwright, container smoke) → [`e2e-tests.md`](./e2e-tests.md).
@@ -1412,7 +1417,8 @@ Not covered here: call entries written by the real execution door (P1.6).
   `decide()` accepts `opened_gates`, but no code records or reads the event
   yet (P2.1), so only the unit test exercises it.
 - **Accounting rules** (period arithmetic, quota/rate comparison, gates) —
-  feature P1.3 tests them against the store's `decideAndDecrement`.
+  "Scenarios — Budget and sessions" tests them against the store's
+  `decideAndDecrement`.
 - **A real identity provider** (Google, Entra ID, Keycloak) — never in the
   automated suite; the manual check is in [`e2e-tests.md`](./e2e-tests.md).
 
@@ -1437,11 +1443,11 @@ Not covered here: call entries written by the real execution door (P1.6).
 - Spec: [`../spec/vaubaan-gateway.md`](../spec/vaubaan-gateway.md) (v5),
   [`../spec/gateway-risk-model.md`](../spec/gateway-risk-model.md) (risk
   model).
-- Handbooks: [[policy-engine]], [[plugin-sdk]], [[gateway-core]], [[store]],
-  [[budget-and-sessions]], [[configuration]], [[authentication]],
-  [[execution-door]]; legacy [[mcp-gateway]], [[github-provider]],
-  [[vercel-provider]], [[railway-provider]], [[bash-provider]],
-  [[escalation]], [[web-app]].
+- Handbooks: [[policy-engine]], [[plugin-sdk]], [[gateway-core]],
+  [[configuration]], [[store]], [[authentication]], [[budget-and-sessions]],
+  [[connections]], [[missions]], [[execution-door]], [[requests]], [[audit]],
+  and the provider handbooks under
+  [`../handbook/providers/`](../handbook/providers/README.md).
 - CI workflow: [`../workflow/coding-workflow.md`](../workflow/coding-workflow.md)
   — `npm run ci` runs type-check + lint + format:check + build + test (this
   suite).

@@ -12,6 +12,8 @@ tracks:
   - apps/gateway/src/app/api/auth/
   - apps/gateway/src/app/api/admin/identity-provider/route.ts
   - apps/gateway/src/app/(public)/login/page.tsx
+  - apps/gateway/src/app/page.tsx
+  - apps/gateway/src/app/(public)/layout.tsx
   - apps/gateway/src/app/admin/
   - apps/gateway/src/components/auth/
   - apps/gateway/migrations/0003_web_sessions.sql
@@ -43,7 +45,7 @@ apps/gateway/src/server/auth/            host-agnostic, never imports `next`
   cookies.ts          vbn_session / vbn_login: HttpOnly, Secure, SameSite=Lax
   origin.ts           isSameOrigin(headers, publicUrl) for every mutation
   login.ts            completeLogin(): users upsert, IdP group sync, bootstrap revocation; currentAuthority()
-  authenticator.ts    Authenticator.authenticate(headers) → Principal; authorizeAdmin()
+  authenticator.ts    Authenticator.authenticate(headers) → Principal; authorizeAdmin(); auditActorId()
   handlers.ts         Request → Response handlers of the five endpoints
   errors.ts           LoginError (closed codes + UI sentences), IdpSettingsError
 apps/gateway/src/server/session/
@@ -51,7 +53,9 @@ apps/gateway/src/server/session/
 apps/gateway/migrations/0003_web_sessions.sql
 apps/gateway/src/lib/auth/session.ts     Next glue: currentPrincipal(), adminDecision() (headers())
 apps/gateway/src/app/
-  (public)/login/page.tsx                /login — default entry: IdP button, account view, error codes
+  page.tsx                               /  — redirect: /missions with a session, /login without
+  (public)/layout.tsx                    centred container of the pages reachable without a session
+  (public)/login/page.tsx                /login — IdP button, account view, error codes
   auth/login/route.ts                    GET  /auth/login?return_to=
   auth/callback/route.ts                 GET  /auth/callback
   logout/route.ts                        POST /logout
@@ -115,8 +119,13 @@ is already stored (the form never echoes it; blank keeps it), three non-empty
 claim names, domains without `@`. The redirect URI to register at the IdP is
 `<public_url>/auth/callback` (`relyingParties.redirectUri`, shown on the
 page). The save is audited: `AdminAuditEntry` `config-changed` on
-`instance-config` / `idp`, `user_id` = the operator's user id or the literal
-`bootstrap`, `before`/`after` carry issuer and client id, never the secret.
+`instance-config` / `idp`, `user_id` = `auditActorId(principal)`
+(`authenticator.ts`): the operator's user id, or `BOOTSTRAP_ACTOR_ID`
+(`bootstrap`, `packages/gateway-core/src/audit.ts`) for the bootstrap
+operator, whom the audit view then names `BOOTSTRAP_ACTOR_LABEL`
+("Bootstrap operator") in `actor.label`. `before` carries issuer and client
+id (`null` on the first save), `after` carries issuer, client id and the
+claim mapping — never the secret.
 
 ## Sign-in flow
 
@@ -166,9 +175,12 @@ GET /auth/callback?code&state           (Lax cookie travels on this top-level GE
   claimed name that already exists as a **local** group is skipped with a
   warning, never granted. Emptied IdP groups keep their row (they may own
   connections).
-- **Errors** reach the browser as closed codes in `/login?error=<code>`
-  (`LOGIN_ERROR_CODES`, sentences in `LOGIN_ERROR_MESSAGES`); the detail
-  (IdP error, failing claim name) is logged with `warn`. State or nonce
+- **Errors** reach the browser as closed codes (`LOGIN_ERROR_CODES`,
+  sentences in `LOGIN_ERROR_MESSAGES`): `/login?error=<code>` for the OIDC
+  flow, `/admin/bootstrap?error=bootstrap-refused|bootstrap-unavailable` for
+  the token form. The detail (IdP error, failing claim name) is logged with
+  `warn`; an unexpected failure is logged with `error` and shown as
+  `idp-error`. State or nonce
   check failures from `openid-client` (`OAUTH_INVALID_RESPONSE`,
   `OAUTH_JWT_CLAIM_COMPARISON_FAILED` naming `"state"`/`"nonce"`, found
   through the `cause` chain) map to `state-mismatch`; an `error=` on the
@@ -237,18 +249,21 @@ admin rule; the JSON handlers answer 401/403 bodies.
 
 ## Pages
 
-- **`/login`** (default entry; the v4 Supabase page is replaced) — one
+- **`/login`** (where `/` sends a visitor with no session; a signed-in one
+  goes to `/missions` — `app/page.tsx`) — one
   button per configured IdP ("Continue with `<issuer host>`" → `GET
 /auth/login`), or "No identity provider is configured yet" with a link to
   the bootstrap page while the token is active. Signed in, it shows the
   `PrincipalCard`: email, groups, the **operator marker** (`OperatorBadge`:
-  `Operator` / `User` / `Bootstrap operator`), the Connections link for a
+  `Operator` / `User` / `BOOTSTRAP_ACTOR_LABEL`, "Bootstrap operator"), the Connections link for a
   signed-in user, the Administration link for operators, and the sign-out
-  form. The pages under `app/(app)/` get the v5 bar (`AppShell`) from the
+  form. The pages under `app/(app)/` get the application bar (`AppShell`) from the
   same principal (handbook [connections](connections.md), "Pages").
 - **`/admin/bootstrap`** — the token form (`POST /api/auth/bootstrap`,
   field `token`), only while the state is `active`; otherwise says when it
-  was revoked (or that none exists) and points to `/login`.
+  was revoked (or that none exists) and points to `/login`. A refused token
+  comes back as `?error=bootstrap-refused`; a visitor who already holds a
+  bootstrap session is redirected to `/admin`.
 - **`/admin`** — issuer, source (file or Admin page), admin rule, bootstrap
   state, build. The Administration bar links Identity provider and
   Provider apps (`/admin/provider-apps`, handbook

@@ -2,6 +2,7 @@
 title: Upstash Redis provider — plugin on the v5 SDK
 status: current
 date: 2026-10-13
+last_synced: 2026-10-13
 tracks:
   - plugins/upstash-redis/src/index.ts
   - plugins/upstash-redis/src/classify.ts
@@ -10,7 +11,7 @@ tracks:
   - plugins/upstash-redis/src/execute.ts
   - plugins/upstash-redis/src/risk-catalog.yaml
   - plugins/upstash-redis/src/tools.ts
-  - plugins/upstash-redis/tests/unit/plugin.test.ts
+  - plugins/upstash-redis/tests/unit/
 ---
 
 # Upstash Redis provider — plugin and risk model
@@ -139,8 +140,8 @@ refresh.
 SDK kit with one sample per tool, presets, v5 classifier conventions, env
 resolution through `resourceEnvResolver`, credential spec, execute and
 discovery against `mockFetch`), `classify.test.ts` (30: the security suite
-of `classifyUpstashRedis`), `risk-catalog.test.ts` (49, v4 lint on the
-YAML), `execute.test.ts` (8: request shapes of the management tools and the
+of `classifyUpstashRedis`), `risk-catalog.test.ts` (49: schema, pattern and
+per-tool coverage lint of the loaded catalog), `execute.test.ts` (8: request shapes of the management tools and the
 Redis commands of the data tools), `data-model.test.ts` (1).
 
 ## 7. How to debug

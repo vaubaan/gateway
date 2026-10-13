@@ -4,6 +4,8 @@ status: accepted
 date: 2026-05-29
 ---
 
+> **Pre-v5 document (French).** Not translated; read with the mapping in [[legacy-status-of-v4-adrs-and-handbooks]].
+
 # Railway — rewrap du MCP remote via OAuth audience-binding
 
 ## Contexte

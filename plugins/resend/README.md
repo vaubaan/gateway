@@ -98,7 +98,7 @@ segments and the broadcasts of those segments.
 
 ## Catalog
 
-`src/risk-catalog.yaml`, version 2: 16 live risks, the
+`src/risk-catalog.yaml`, version 2: 15 live risks, the
 `resend.uncategorized-write` fallback, and two deprecated v4 ids
 (`read-audiences` → `read-segments`, `audience-write` → `segment-write`)
 kept so they stay resolvable.

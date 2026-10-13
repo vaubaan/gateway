@@ -155,10 +155,15 @@ origin-checked, requires `authorizeAdmin` (the bootstrap operator may use
 it), and writes an `AdminAuditEntry` `config-changed` on `instance-config` /
 `provider-app:<id>` whose `before`/`after` carry the non-secret values, the
 names of the secrets set and, for an installed app, `install_verification`.
+Its `user_id` is `auditActorId(principal)`: the operator's user id, or
+`BOOTSTRAP_ACTOR_ID` for the bootstrap operator (shown as
+`BOOTSTRAP_ACTOR_LABEL` in the audit view's `actor.label`; handbook
+[authentication](authentication.md)).
 
 An installed app also shows how its installations are bound to the
 connecting user: the badge `installations verified`, or — for a plugin
-without `userVerification` — a warning banner with its own form (outside
+without `userVerification` — the badge `installations refused:
+unverifiable` and a warning banner with its own form (outside
 the fields' fieldset, so it works for a file-sourced provider too) whose
 button posts `action=accept-unverified` / `action=refuse-unverified` to the
 same endpoint. Accepting is audited (`config-changed`), logged at `warn`
@@ -190,6 +195,7 @@ oauth2       start    oauthClient() from hostAppConfig ──none──▶ app-n
 app-install  start    no userVerification and not accepted ──▶ installation-unverifiable
                       installUrl(hostAppConfig) + ?state=<state>
              complete take(state); query[installationIdParam] must match ^[A-Za-z0-9_-]{1,64}$
+                      ──absent / malformed──▶ provider-denied
                       bindInstallation(): see "Installation binding"
                       ──refused──▶ installation-not-verified / token-exchange-failed (audited)
                       ──5xx / network──▶ provider-unreachable
@@ -300,13 +306,13 @@ logged or put in an error message, and the plugin never receives it (nor
 the client secret). The connection's metadata records
 `installation_verification: 'user-authorization'`.
 
-| Outcome                                                            | `ConnectError`              | Audited (`reason`)            |
-| ------------------------------------------------------------------ | --------------------------- | ----------------------------- |
-| no code in the callback (or `?error=` from the provider)           | `installation-not-verified` | `no-authorization-code`       |
-| token endpoint refuses the code (4xx, or an `error` under 200)     | `token-exchange-failed`     | `authorization-code-rejected` |
-| installations endpoint answers 401 / 403                           | `installation-not-verified` | `installations-list-rejected` |
-| the id is not in the list                                          | `installation-not-verified` | `installation-not-listed`     |
-| 5xx, network, timeout (15 s), a body that is not the declared list | `provider-unreachable`      | no — the user retries         |
+| Outcome                                                                          | `ConnectError`              | Audited (`reason`)            |
+| -------------------------------------------------------------------------------- | --------------------------- | ----------------------------- |
+| no code in the callback (or `?error=` from the provider)                         | `installation-not-verified` | `no-authorization-code`       |
+| token endpoint refuses the code (4xx, or an `error` under 200)                   | `token-exchange-failed`     | `authorization-code-rejected` |
+| installations endpoint answers 401 / 403                                         | `installation-not-verified` | `installations-list-rejected` |
+| the id is not in the list                                                        | `installation-not-verified` | `installation-not-listed`     |
+| any other non-2xx, network, timeout (15 s), a body that is not the declared list | `provider-unreachable`      | no — the user retries         |
 
 A refusal stores nothing, writes an `AdminAuditEntry` `connection-refused`
 (object `connection` / the reconnect target, or `not-created:<provider>`;
@@ -352,14 +358,15 @@ late callback racing a revocation never brings a revoked connection back.
 `ConnectionService.revoke` is idempotent and audited (`connection-revoked`).
 It does not withdraw the grant at the provider; the notice says so.
 Missions on a non-active connection are refused by the execution door
-(P1.6), which reads the status through `store.connections` /
-`CredentialBroker.resolve`.
+(`connection-unavailable`; handbook [execution-door](execution-door.md)),
+which reads the status through `CredentialBroker.resolve`
+(`execution/upstream-stage.ts`).
 
 ## Credentials and refresh — `CredentialBroker`
 
 `root.connections.credentials`. The one place a stored credential becomes
 a `CredentialSecret`, and the refresh persistence hook for every caller
-(discovery here, the execution door in P1.6):
+(discovery here, the upstream stage of the execution door):
 
 ```ts
 const resolved = await root.connections.credentials.resolve(connectionId);
@@ -405,9 +412,10 @@ table) and on the owner's "Refresh discovery"
 discovery is retried; a second rejection leaves the connection `expired`
 and the provider's message in the outcome. The owner's refresh is audited
 (`resources-discovered` on the connection: `ok`, `count`, `error`), whether
-it succeeded or not. A failed refresh never throws:
+it succeeded or not. A failed discovery never throws:
 it is recorded in `metadata.discovery` and shown; the known resources stay
-as they were. Resources of another provider or without a ref are ignored
+as they were. Only a connection that is `revoked` (`connection-revoked`) or
+not the actor's (`not-found`) is refused before the plugin is called. Resources of another provider or without a ref are ignored
 with a warning; a plugin `env` that is not a valid label
 (`ENV_LABEL_PATTERN`) is dropped.
 
@@ -452,8 +460,10 @@ nothing; handbook [audit](audit.md)):
   Scalar metadata stays read-only.
 
 `hidden` and `stale_since` are flags on the record; `listResources`
-returns every row. Consumers decide: mission issuance (P1.5) is expected
-to leave hidden resources out of its default selection.
+returns every row. Consumers decide: mission issuance leaves hidden and
+stale resources out of "all resources", lets a creator pick a hidden one
+explicitly and refuses a stale one (handbook [missions](missions.md),
+"Hidden and stale resources").
 
 ## Pages
 
@@ -477,11 +487,11 @@ to leave hidden resources out of its default selection.
 plugin` badge, hidden checkbox, Save — inputs reach their per-row form
   through the `form` attribute); "Refresh discovery", "Reconnect", and
   "Revoke" (`RevokeConnection`: type the connection name, then a form POST).
-- **Shell.** `app/(app)/layout.tsx` renders `AppShell` for a v5 web session
-  (`currentPrincipal()`), and falls through to the v4 Supabase layout only
-  when no v5 principal exists and the v4 variables are set; otherwise it
-  redirects to `/login`. `APP_NAV` in `AppShell.tsx` is the list of pages
-  in the bar.
+- **Shell.** `app/(app)/layout.tsx` renders `AppShell` for a web session
+  (`currentPrincipal()`, a user or the bootstrap operator) and redirects
+  anyone else to `/login`. `APP_NAV` in `AppShell.tsx` is the list of pages
+  in the bar (Connections, Missions, Requests, Audit); operators also get the
+  Administration link.
 - **Notices.** A handler never puts a message in a URL: it stores a
   `Notice { tone, title, lines }` in the `NoticeStore` (`notice:<id>`,
   5 min, readable once, only by the web session it was written for) and

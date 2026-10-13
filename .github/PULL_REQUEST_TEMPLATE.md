@@ -12,7 +12,7 @@
 - [ ] **Tests**: unit tests next to the code; new integration or e2e scenarios listed in `docs/tests/`.
 - [ ] **English**: every new or modified file, comment and message is in English.
 - [ ] **No hard-coded configuration**: no URL, project ref, secret or environment-specific value outside `deploy/config/*.example*`.
-- [ ] **Local gate**: `npm run ci` is green (type-check, lint, format, tests, build).
+- [ ] **Local gate**: `npm run ci` is green (type-check, lint, format check, build, tests).
 - [ ] **CHANGELOG**: an entry under `## [Unreleased]` when the change is user-visible.
 
 ## Notes for the reviewer

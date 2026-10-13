@@ -2,7 +2,7 @@
 title: Stripe provider — modelling and runtime (v5 plugin)
 status: current
 date: 2026-10-13
-last_reviewed: 2026-10-13
+last_synced: 2026-10-13
 tracks:
   - plugins/stripe/src/index.ts
   - plugins/stripe/src/resources.ts
@@ -49,7 +49,7 @@ plugins/stripe/src/
   tools.ts            27 McpToolDeclaration (+ `account` arg)
   classify.ts         classifyStripe — pure, (tool, args, resources) → slices | denied
   execute.ts          executeStripe, discoverStripeResources, STRIPE_API_BASE
-  data-model.ts       plane `billing`, 23 entities, `mode` envScopable
+  data-model.ts       plane `billing`, 22 entities, `mode` envScopable
   risk-catalog.yaml   16 risks + fallback, 3 presets, catalog_version 3
   index.ts            definePlugin(...) → stripePlugin (default export)
 ```
@@ -70,7 +70,7 @@ flowchart LR
 ```
 
 - `modeOf(resource)` reads, in order : the ref suffix (`/test`, `/live`),
-  `metadata.mode`, then the `env` label (the only source a v4 binding has).
+  `metadata.mode`, then the owner's `env` label on the resource.
   `execute` refuses a resource whose mode cannot be determined ; the
   classifier emits `mode[*]` for it (harmless : patterns use `mode[**]`,
   env resolution comes from the ref).
@@ -133,13 +133,13 @@ argument is stripped before the call. Unknown tool → `isError` result.
 
 ## How to debug
 
-- **`account: argument missing and the mission touches 2 Stripe resources`**
+- **`account: argument missing and the mission touches 2 Stripe resources — name one`**
   — the mission holds test and live ; the agent must pass `account`.
 - **`this connection has no live-mode key`** — the mission selected the live
   resource of a connection whose credential has only `test_key` ; that
   resource should not exist (discovery creates one per key) : re-run
   discovery.
-- **`test_key must be a test-mode key`** — the owner pasted a live key in
+- **`stripe: test_key must be a test-mode key (sk_test_… or rk_test_…)`** — the owner pasted a live key in
   the test field.
 - **A write is refused with `stripe[test].uncategorized-write` missing** —
   the tool classifies to a slice no dedicated entry covers : add the catalog

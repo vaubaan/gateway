@@ -2,15 +2,10 @@
 title: Bash provider — annotated-script dispatcher over SSH (legacy v4)
 status: legacy
 date: 2026-06-15
-superseded_by: providers/ssh
+superseded_by: ../providers/ssh.md
 ---
 
-> **Legacy v4 document (French).** Superseded on 2026-10-13 by
-> [`providers/ssh.md`](./providers/ssh.md) (P1.2i): the plugin is on the v5
-> SDK, the parser and runner described below moved to `plugins/ssh/src/bash/`
-> and `apps/gateway/src/lib/bash/{parse,args,exec}.ts` are re-export shims.
-> Only the v4 `bash-bindings` routes and pages, deleted in P1.6, still follow
-> this text.
+> **Legacy v4 document.** Kept for history; superseded by the v5 spec and the current handbooks. Not maintained.
 
 # Bash provider — adapter setup & invocation
 
@@ -21,7 +16,7 @@ superseded_by: providers/ssh
 > `ssh.host[X].command.R|W`), `risk-catalog.{yaml,ts}` (5 risks +
 > fallback) et `data-model.ts`. Pour le data-model + risk catalog +
 > tool → slice, lire le handbook v4 dédié :
-> [`docs/handbook/providers/railway-ssh.md`](./providers/railway-ssh.md)
+> [`docs/handbook/legacy/railway-ssh.md`](./railway-ssh.md)
 > §2.
 
 Le provider `bash` expose un dispatcher générique : chaque _binding_ porte un
@@ -44,7 +39,7 @@ Trois choix d'architecture déterminent la forme actuelle :
    triplet `provider/service/binding`. Le slug du binding est l'identité.
    Au runtime, `classifySshV4` émet des slices de forme
    `ssh.host[<host_slug>].command.R|W` (cf. spec
-   [`gateway-risk-model.md`](../spec/gateway-risk-model.md) §3).
+   [`gateway-risk-model.md`](../../spec/gateway-risk-model.md) §3).
 2. **Les hôtes sont des envs.** N rows `ssh_bindings` peuvent pointer vers un
    même `bash_binding_id` via FK (migration `0021`). Chaque `host_slug` devient
    un env dans la slice — i.e. même contrat, plusieurs cibles.
@@ -181,7 +176,7 @@ risk classifier v4 :
 - `classifySshV4(tool, args, bindings)` (`risk-classifier.ts`) émet des
   slices `ssh.host[X].command.R|W` consommées par
   `@vaubaan/policy-engine`. Voir
-  [`providers/railway-ssh.md`](./providers/railway-ssh.md) §2 pour le
+  [`providers/railway-ssh.md`](./railway-ssh.md) §2 pour le
   data-model + risk catalog + mapping tool → slice.
 
 ### API REST — `/api/v1/bash-bindings/...`
@@ -285,7 +280,7 @@ Tools MCP générés (attachés à 1+ host_slug — disons `prod-1`) :
 
 Au call, `classifySshV4` émet une slice par invocation (forme
 `ssh.host[prod-1].command.R|W`) et le runtime intersecte avec le risk
-catalog SSH (cf. [`providers/railway-ssh.md`](./providers/railway-ssh.md) §2).
+catalog SSH (cf. [`providers/railway-ssh.md`](./railway-ssh.md) §2).
 
 ### Créer un binding + host via API
 
@@ -401,12 +396,12 @@ Pour ajouter `boolean` ou `enum`, étendre :
 ## Références
 
 - Handbook v4 (data-model + risk catalog + tool → slice) :
-  [`docs/handbook/providers/railway-ssh.md`](./providers/railway-ssh.md) §2.
-- Spec : [`docs/spec/gateway-risk-model.md`](../spec/gateway-risk-model.md)
+  [`docs/handbook/legacy/railway-ssh.md`](./railway-ssh.md) §2.
+- Spec : [`docs/spec/gateway-risk-model.md`](../../spec/gateway-risk-model.md)
   §3 (DSL), §4 (catalog), §7 (plugin).
 - Migrations : `supabase/migrations/0011_add_vps_ssh.sql` (init),
   `0012_rename_vps_ssh_to_ssh.sql`, `0020_bash_provider.sql` (pivot),
   `0021_bash_bindings.sql` (split).
-- ADR template providers : [`docs/decisions/provider-onboarding-handbook-template.md`](../decisions/provider-onboarding-handbook-template.md).
+- ADR template providers : [`docs/decisions/provider-onboarding-handbook-template.md`](../../decisions/provider-onboarding-handbook-template.md).
 - Tests : `apps/gateway/src/lib/bash/{parse,exec,args,exec-host}.test.ts`
   - `plugins/ssh/tests/unit/risk-{catalog,classifier}.test.ts`.

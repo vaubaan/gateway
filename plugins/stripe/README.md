@@ -84,31 +84,31 @@ Writes (17): `create_product`, `update_product`, `create_price`,
 
 ## Catalog
 
-`src/risk-catalog.yaml`, version 2: 16 named risks and the
+`src/risk-catalog.yaml`, version 3: 16 named risks and the
 `stripe.uncategorized-write` fallback. Every risk is env-scoped on the mode
 (`acceptable_in_envs: [test, live]`), so the runtime qualifies
 `stripe[live].refund-create` vs `stripe[test].refund-create` from the
 resource the call targets.
 
-| Risk                            | Action | Notes                                                               |
-| ------------------------------- | ------ | ------------------------------------------------------------------- |
-| `stripe.read-catalog`           | R      | Products, prices, coupons, promotion codes.                         |
-| `stripe.read-billing-history`   | R      | Customers (business payload), subscriptions, invoices, PI, charges. |
-| `stripe.read-customer-pii`      | R      | Co-emitted with every customer read.                                |
-| `stripe.read-balance`           | R      | Balance, ledger, events.                                            |
-| `stripe.catalog-write`          | W      | Reversible.                                                         |
-| `stripe.subscription-create`    | W      | Co-emits `payment-intent.W` (immediate proration).                  |
-| `stripe.subscription-update`    | W      | Also `pause_subscription`.                                          |
-| `stripe.subscription-cancel`    | W      | Irreversible.                                                       |
-| `stripe.invoice-create-draft`   | W      | Reversible.                                                         |
-| `stripe.invoice-finalize`       | W      | Notifies the customer, attempts collection.                         |
-| `stripe.invoice-void`           | W      | Irreversible.                                                       |
-| `stripe.refund-create`          | W      | Irreversible, `cost: unbounded`; caps 1/call, 3/min, 20/session.    |
-| `stripe.payout-create`          | W      | Irreversible, `cost: unbounded`; caps 1/call, 2/min, 5/session.     |
-| `stripe.customer-delete`        | W      | Irreversible, cancels subscriptions, erases PII.                    |
-| `stripe.webhook-endpoint-write` | W      | Posture shift.                                                      |
-| `stripe.mint-webhook-secret`    | W      | Co-emitted with `create_webhook_endpoint`.                          |
-| `stripe.uncategorized-write`    | W      | Fallback; matches every write and is never dropped by the engine.   |
+| Risk                            | Action | Notes                                                                |
+| ------------------------------- | ------ | -------------------------------------------------------------------- |
+| `stripe.read-catalog`           | R      | Products, prices, coupons, promotion codes.                          |
+| `stripe.read-billing-history`   | R      | Customers (business payload), subscriptions, invoices, PI, charges.  |
+| `stripe.read-customer-pii`      | R      | Co-emitted with every customer read.                                 |
+| `stripe.read-balance`           | R      | Balance, ledger, events.                                             |
+| `stripe.catalog-write`          | W      | Reversible.                                                          |
+| `stripe.subscription-create`    | W      | Co-emits `payment-intent.W` (immediate proration).                   |
+| `stripe.subscription-update`    | W      | Also `pause_subscription`.                                           |
+| `stripe.subscription-cancel`    | W      | Irreversible.                                                        |
+| `stripe.invoice-create-draft`   | W      | Reversible.                                                          |
+| `stripe.invoice-finalize`       | W      | Notifies the customer, attempts collection.                          |
+| `stripe.invoice-void`           | W      | Irreversible.                                                        |
+| `stripe.refund-create`          | W      | Irreversible, `cost: unbounded`; caps 1/call, 3/min, 20/session.     |
+| `stripe.payout-create`          | W      | Irreversible, `cost: unbounded`; caps 1/call, 2/min, 5/session.      |
+| `stripe.customer-delete`        | W      | Irreversible, cancels subscriptions, erases PII.                     |
+| `stripe.webhook-endpoint-write` | W      | Posture shift.                                                       |
+| `stripe.mint-webhook-secret`    | W      | Co-emitted with `create_webhook_endpoint`.                           |
+| `stripe.uncategorized-write`    | W      | Fallback; counts only when no dedicated entry matched. In no preset. |
 
 ## Presets
 
@@ -119,8 +119,8 @@ resource the call targets.
 | `finance-operator`    | Live reads including PII, subscriptions and invoices `auto`; refund, payout, customer deletion, cancel, void `approval`. |
 
 Presets are UI sugar: the persisted policy is the explicit enumeration.
-Because the engine keeps the fallback in `risks_touched` for every write,
-the two write presets also carry `stripe[<mode>].uncategorized-write`.
+No preset carries the fallback: the engine counts it only when no dedicated
+entry matched a write.
 
 ## Tests
 

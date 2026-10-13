@@ -3,7 +3,7 @@
 #
 #   cp deploy/config/.env.example deploy/config/.env         # then edit
 #   cp deploy/config/gateway.example.yaml deploy/config/gateway.yaml
-#   docker compose -f deploy/compose.yaml up -d
+#   docker compose -f deploy/compose.yaml up -d --build
 #
 # Every value comes from deploy/config/.env or deploy/config/gateway.yaml;
 # nothing in this file is specific to one company.

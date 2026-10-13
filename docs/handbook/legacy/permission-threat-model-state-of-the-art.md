@@ -1,33 +1,11 @@
 ---
 title: Permission & threat model — state of the art (synthèse OWASP / NIST / MITRE / Five Eyes / industry)
-status: current
+status: legacy
 date: 2026-06-14
 context: source de référence du pivot v4 risk-based (cf. [[gateway-risk-model]])
 ---
 
-> **v4 document.** English rewrite scheduled by the v5 plan; `tracks` paths updated for the new layout.
-
----
-
-title: Permission & Threat Model — State of the Art
-status: research
-date: 2026-06-14
-context: |
-Vaubaan Gateway interpose un agent IA entre un LLM autonome et plusieurs
-providers cloud (GitHub, Vercel, Supabase, Railway…). On veut remplacer
-le découpage actuel "rings concentriques" (4 niveaux par pile :
-content/structure/governance/access, 15–20 capabilities par provider)
-par un système qui répond à : "Quel risque pour moi si je donne ces
-pouvoirs à cet agent ? Quel risque est acceptable ? Quel risque demande
-une validation humaine ?"
-scope:
-
-- axis-1: Threat modeling pour agents IA
-- axis-2: Simplification de permissions (macro-buckets)
-- axis-3: Human-in-the-loop / step-up authorization
-- axis-4: Long-polling / blocking-wait côté client
-
----
+> **Legacy v4 document.** Kept for history; superseded by the v5 spec and the current handbooks. Not maintained.
 
 # Synthèse exécutive
 

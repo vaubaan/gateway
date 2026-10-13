@@ -2,7 +2,7 @@
 title: Resend provider — modelling and runtime (v5 plugin)
 status: current
 date: 2026-10-13
-last_reviewed: 2026-10-13
+last_synced: 2026-10-13
 tracks:
   - plugins/resend/src/index.ts
   - plugins/resend/src/resources.ts
@@ -55,7 +55,7 @@ plugins/resend/src/
   classify.ts         classifyResend — pure, (tool, args, resources) → slices | denied
   execute.ts          executeResend, discoverResendResources, RESEND_API_BASE, paging constants
   data-model.ts       plane `email`, 9 entities, `domain` and `segment` envScopable
-  risk-catalog.yaml   16 risks + fallback + 2 deprecated v4 ids, 4 presets, catalog_version 2
+  risk-catalog.yaml   15 live risks + fallback + 2 deprecated v4 ids (18 entries), 4 presets, catalog_version 2
   index.ts            definePlugin(...) → resendPlugin (default export)
 ```
 
@@ -94,6 +94,7 @@ flowchart LR
 | ------------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | `send_email`                                            | `domain[D].to-zone[Z].W` **and** `domain[D].recipient-count[single\|multi].W`       |
 | `send_batch_emails`                                     | per from-domain : `domain[D].to-zone[Z].W` and `domain[D].recipient-count[batch].W` |
+| `get_email`                                             | `email[E].R`                                                                        |
 | `get_domain`                                            | `domain[D].R` and `domain[D].dns-record[*].R`                                       |
 | `list_domains`, `describe_zones`                        | `domain[*].R`                                                                       |
 | `create_domain` / `update_domain`, `delete_domain`      | `domain.W` / `domain[D].W`                                                          |
@@ -112,11 +113,12 @@ Refusals (`denied`, audited, never executed) : `from` outside the mission or
 malformed ; malformed or absent recipients ; `attachments`, `scheduled_at`
 (spec §10 : out of scope) ; `send` on a broadcast create or update (would
 bypass `broadcast-send`) ; `domain` / `segment_id` outside the mission ;
-malformed identifiers (`SAFE_IDENT`) ; unknown tool.
+malformed identifiers (`SAFE_IDENT`) ; a create without its `name` / `email` /
+`from` ; `scheduled_at` on a broadcast send ; unknown tool.
 
 ## Catalog and presets
 
-16 live risks, `resend.uncategorized-write`, and the deprecated
+15 live named risks, the fallback `resend.uncategorized-write`, and the deprecated
 `read-audiences` / `audience-write` with `replaced_by`. Patterns use `[*]`
 (one identifier) and verb leaves so every write slice touches exactly one
 named risk — `risk-catalog.test.ts` asserts it. `send-batch` and

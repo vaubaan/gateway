@@ -9,7 +9,7 @@ ships at least one **preset**.
 
 Current plugins: `cloudflare-dns`, `github`, `gmail` (experimental),
 `railway`, `resend`, `ssh`, `stripe`, `supabase`, `upstash-redis`, `vercel`
-— all ten on the SDK, on one surface ; the v4 adapters and `classifyXxxV4`
+— all ten on the SDK, on one surface; the v4 adapters and `classifyXxxV4`
 wrappers are gone. `_template` is the
 scaffold. The per-provider index is
 [`docs/handbook/providers/README.md`](../docs/handbook/providers/README.md).
@@ -73,7 +73,8 @@ only — never the gateway application.
    [`fallback-risk-only-when-uncategorized`](../docs/decisions/fallback-risk-only-when-uncategorized.md)).
    The fallback entry carries `fallback: true`; an entry recognised by its
    pattern or id alone only warns at boot (third-party catalogs) but fails
-   `assertPluginWellFormed`.
+   `assertPluginWellFormed`. Optional per risk: `vector_overrides.<env>`,
+   and `deprecated: true` with `replaced_by`.
 
 5. **Tools** — `src/tools.ts`: `McpToolDeclaration[]`, names
    `<prefix>__<verb>_<noun>`, JSON input schemas. Take the resource ref as an
@@ -96,7 +97,7 @@ only — never the gateway application.
    flow; you declare it. Set `experimental: true` on a plugin the gateway
    should register but keep out of the default connect and issuance flows.
 9. **Environment** — if the environment lives in the call rather than on
-   the resource (Vercel's `env[prod]` segment, GitHub's branch), declare
+   the resource (Vercel's `env[prod]` segment), declare
    `envOf` in `src/index.ts`: `envOf: envFromSliceSegment('env')` for a
    segment, a custom pure function otherwise. Leave it out when the owner's
    label on the resource is the environment.
@@ -132,7 +133,8 @@ assertCatalogCoverage(plugin, { '<prefix>__list_x': [{ args: {…} }], … }, { 
   an unmatched request fails the test. **No test ever calls a real
   provider.**
 
-`npm run ci` (type-check, lint, format, tests, build) must be green.
+Run one plugin with `npx vitest run plugins/<provider>`. `npm run ci`
+(type-check, lint, format, build, tests) must be green.
 
 ## Shipping a plugin
 

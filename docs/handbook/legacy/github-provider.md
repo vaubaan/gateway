@@ -2,15 +2,9 @@
 title: GitHub provider adapter
 status: legacy
 date: 2026-06-15
-tracks:
-  - plugins/github/src/
-  - apps/gateway/src/server/connections/
 ---
 
-> **Legacy v4 document.** Kept for history; superseded by the v5 spec. Not maintained.
->
-> Current documents: [`providers/github.md`](./providers/github.md) and
-> [`connections.md`](./connections.md).
+> **Legacy v4 document.** Kept for history; superseded by the v5 spec and the current handbooks. Not maintained.
 
 # GitHub provider — `@vaubaan/plugin-github`
 
@@ -22,7 +16,7 @@ tracks:
 > Le présent handbook ne couvre QUE la couche **adapter & integration
 > setup** (auth flow, mint upstream, executeCall). Pour le data-model,
 > le risk catalog et le mapping tool → slice, lire le handbook v4
-> dédié : [`docs/handbook/providers/github.md`](./providers/github.md).
+> dédié : [`docs/handbook/providers/github.md`](../providers/github.md).
 
 App install + JIT installation token + tools MCP synthétisés via Octokit
 
@@ -135,14 +129,14 @@ visibles depuis le project.
 
 `npx vitest run plugins/github` — 102 tests (~150ms) répartis
 sur les 4 suites listées en §Layout. Voir
-[`providers/github.md`](./providers/github.md) §Tests pour le détail des
+[`providers/github.md`](../providers/github.md) §Tests pour le détail des
 scénarios catalog/classifier.
 
 ## Références
 
 - Handbook v4 (data-model + risk catalog + tool → slice) :
-  [`docs/handbook/providers/github.md`](./providers/github.md).
-- Spec : [`docs/spec/gateway-risk-model.md`](../spec/gateway-risk-model.md)
+  [`docs/handbook/providers/github.md`](../providers/github.md).
+- Spec : [`docs/spec/gateway-risk-model.md`](../../spec/gateway-risk-model.md)
   §3 (DSL), §4 (catalog).
 - ADRs : [[mint-install-token-credential]], [[oauth-app-install-per-provider]].
 - Handbooks voisins : [[web-app]] (OAuth flow côté Next.js),

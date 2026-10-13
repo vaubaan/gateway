@@ -86,9 +86,10 @@ docker run -d --name vaubaan -p 127.0.0.1:3000:3000 \
 
 Put your own reverse proxy in front (the gateway speaks plain HTTP on
 `PORT`, default 3000). Requirements for the proxy: terminate TLS for the
-host of `public_url`, forward `X-Forwarded-Host` / `X-Forwarded-Proto`, do
-not buffer responses (the MCP doors stream), and list its address in
-`trusted_proxies` so client IPs are read from `X-Forwarded-For`.
+host of `public_url`, do not buffer responses (the MCP door streams),
+append the client address to `X-Forwarded-For`, and list the proxy's
+address in `trusted_proxies` so that header is believed. The gateway builds
+every URL from `public_url`, never from forwarded host or scheme headers.
 
 ## Operations
 
@@ -111,7 +112,8 @@ not buffer responses (the MCP doors stream), and list its address in
 - **Smoke test an image**: `npm run docker:build && npm run docker:smoke`
   (`deploy/docker/smoke.sh vaubaan-gateway:local`; needs Docker and curl)
   checks the fail-fast exit, the https rule,
-  `/healthz`, secret redaction, native addons and the non-root user.
+  `/healthz`, secret redaction, native addons, the non-root user and that
+  no env file is shipped.
 
 ## What the image contains
 

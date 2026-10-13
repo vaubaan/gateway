@@ -2,6 +2,7 @@
 title: Supabase provider — plugin on the v5 SDK
 status: current
 date: 2026-10-13
+last_synced: 2026-10-13
 tracks:
   - plugins/supabase/src/
   - plugins/supabase/tests/unit/
@@ -19,17 +20,17 @@ modelling rationale (research, edge cases) is preserved in git history
 
 ## Shape
 
-| Member              | Where                   | Facts                                                                                                              |
-| ------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `id` / `version`    | `src/index.ts`          | `supabase`, `1.0.0`. Default export `supabasePlugin`.                                                              |
-| `tools`             | `src/tools.ts`          | 44, prefix `supabase__`. The three v4 `*_to_venv` tools are gone (plan §8-Q5).                                     |
-| `dataModel`         | `src/data-model.ts`     | 4 planes (`db`, `storage`, `auth`, `functions`) rooted on `project` (`envScopable`).                               |
-| `catalog`           | `src/risk-catalog.yaml` | `catalog_version: 1`, 24 risks + `supabase.uncategorized-write`, 3 presets. Loaded by `loadCatalogFile` at import. |
-| `credential`        | `src/credential.ts`     | `oauth2`, PKCE, `client_secret_basic`, scope `all`, `refreshable: true`.                                           |
-| `classify`          | `src/classify.ts`       | Pure ; v4 emission rules kept, identifiers validated, missing identifiers denied.                                  |
-| `execute`           | `src/execute.ts`        | Management API + per-project data plane ; `UpstreamAuthError` on 401/403 ; `fetch` and `signal` from the context.  |
-| `discoverResources` | `src/execute.ts`        | One `Resource` per project of every organization, capped at 200.                                                   |
-| `refresh`           | —                       | None : the standard `refresh_token` grant (Basic client auth) is performed by the host from the spec (P1.2-align). |
+| Member              | Where                   | Facts                                                                                                                                                    |
+| ------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id` / `version`    | `src/index.ts`          | `supabase`, `1.0.0`. Default export `supabasePlugin`.                                                                                                    |
+| `tools`             | `src/tools.ts`          | 44, prefix `supabase__`. The three v4 `*_to_venv` tools are gone (plan §8-Q5).                                                                           |
+| `dataModel`         | `src/data-model.ts`     | 4 planes (`db`, `storage`, `auth`, `functions` : 14 / 6 / 8 / 6 entities, 34 in all) rooted on `project` (`envScopable`).                                |
+| `catalog`           | `src/risk-catalog.yaml` | `catalog_version: 1` (the only shipped catalog still at 1), 24 risks + `supabase.uncategorized-write`, 3 presets. Loaded by `loadCatalogFile` at import. |
+| `credential`        | `src/credential.ts`     | `oauth2`, PKCE, `client_secret_basic`, scope `all`, `refreshable: true`.                                                                                 |
+| `classify`          | `src/classify.ts`       | Pure ; v4 emission rules kept, identifiers validated, missing identifiers denied.                                                                        |
+| `execute`           | `src/execute.ts`        | Management API + per-project data plane ; `UpstreamAuthError` on 401/403 ; `fetch` and `signal` from the context.                                        |
+| `discoverResources` | `src/execute.ts`        | One `Resource` per project of every organization, capped at 200.                                                                                         |
+| `refresh`           | —                       | None : the standard `refresh_token` grant (Basic client auth) is performed by the host from the spec (P1.2-align).                                       |
 
 ## Classification rules
 
@@ -72,10 +73,17 @@ flowchart LR
 - The fallback `supabase.uncategorized-write` is env-scoped and **counts only
   when no specific entry matched** the write (policy-engine rule, P1.2-SDK) ;
   no preset carries it.
-- Presets : `read-only-analyst` (read-data, object-read), `staging-developer`
-  (reads everywhere, every write on `[staging]`, `auto`), `migration-operator`
-  (`[staging]` migrations auto ; `[prod]` migration-write and policy-write
-  on `approval`). Values provisional until ADR
+- Presets : `read-only-analyst` (`read-data`, `storage.object-read`) ;
+  `staging-developer` (`read-data`, `storage.object-read`, `functions.read`,
+  and on `[staging]`, all `auto` : `auth.read-users`, `bulk-row-write`,
+  `migration-write`, `policy-write`, `bucket-write`,
+  `storage.object-write-one`, `storage.bulk-object-write`,
+  `auth.user-write-one`, `auth.generate-link`, `functions.body-write`,
+  `functions.deploy`, `function-secret-write` — no role, extension,
+  storage-config, auth-config, SSO, third-party-auth or bulk-user write) ;
+  `migration-operator` (`read-data` ; `[staging]` `migration-write`,
+  `bulk-row-write`, `policy-write` on `auto` ; `[prod]` `migration-write` and
+  `policy-write` on `approval`). Values provisional until ADR
   `mission-presets-default-values`.
 
 ## Execution

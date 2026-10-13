@@ -13,6 +13,9 @@ tracks:
   - apps/gateway/src/server/budget/consistency.ts
   - apps/gateway/tests/integration/requests/
   - apps/gateway/tests/e2e/v5/exhaust-and-claim.spec.ts
+  - apps/gateway/src/server/store/repositories/sessions.ts
+  - apps/gateway/src/components/shell/AppShell.tsx
+  - apps/gateway/src/server/compose/root.ts
 ---
 
 # Requests — claims, the request URL, the creator's decision, the inbox
@@ -36,7 +39,7 @@ row.
 
 ```
 apps/gateway/src/server/requests/        host-agnostic, never imports `next`
-  url.ts              REQUEST_PATH_PREFIX (/r), INBOX_PATH (/requests), requestUrl(), requestUrlBuilder()
+  url.ts              REQUEST_PATH_PREFIX (/r), INBOX_PATH (/requests), requestPath(), inboxRequestPath(), requestUrl(), requestUrlBuilder()
   state.ts            nextState(), effectiveState(), isDecidable(), isTerminal()                    (pure)
   claim.ts            ClaimDecision, ClaimSituation, claimOptions(), checkClaimDecision(),
                       parseClaimDecision(), formatUtc()                                             (pure, browser-safe)
@@ -68,9 +71,10 @@ composition root exposes it as `root.requests.requestUrl`, which is the
 come from the same constant (`REQUEST_PATH_PREFIX`). The id is
 `encodeURIComponent`-ed.
 
-Whoever composes `SessionService` (the execution door) passes
-`requestUrl: root.requests.requestUrl` and
-`requestExpirySeconds: config.requests.expirySeconds`.
+The composition root builds the `SessionService` (`compose/root.ts`) with
+`requestUrl: requests.requestUrl` and
+`requestExpirySeconds: config.requests.expirySeconds`, and hands it to the
+execution door as `budget`.
 
 ## Access rule
 
@@ -90,7 +94,7 @@ is refused before the service is asked.
 | ---- | ------------------------------------------------- | ------------------------------------------------------------------------- |
 | 1    | per-IP rate limit                                 | 429 page, `Retry-After`                                                   |
 | 2    | an `Authorization` header is present              | 403 JSON `wrong-credential-kind` (`presented`, `expected: human-session`) |
-| 3    | no web session                                    | 303 `/auth/login?return_to=/r/<id>` (sign-in, then back here)             |
+| 3    | no web session                                    | 303 `/auth/login?return_to=%2Fr%2F<id>` (sign-in, then back here)         |
 | 4    | bootstrap session, or the user is not the creator | 403 page: "This request is addressed to its creator." and nothing else    |
 | 5    | the creator                                       | 303 `/requests/<id>`                                                      |
 
@@ -225,8 +229,10 @@ events of the period (`CREDIT_EVENT_KINDS`). Each report line is
 
 `decide` checks, in order: bearer, origin (`isSameOrigin`), user session,
 then the service. A JSON body gets JSON; a form post (the page's forms,
-`application/x-www-form-urlencoded`) gets a 303 back to `/requests/<id>` with
-`?decided=1` or `?problem=<code>` (`DecideProblemCode`). All answers are
+`application/x-www-form-urlencoded` or `multipart/form-data`) gets a 303 back
+to `/requests/<id>` with `?decided=1` or `?problem=<code>`
+(`DecideProblemCode`), except `forbidden`, which gets the same 403 page as
+`/r/<id>`. All answers are
 `Cache-Control: no-store`.
 
 ## Pages

@@ -10,6 +10,10 @@ tracks:
   - apps/gateway/tests/integration/store/
   - apps/gateway/src/server/compose/store.ts
   - apps/gateway/src/server/compose/registry.ts
+  - apps/gateway/src/server/compose/testing.ts
+  - apps/gateway/src/server/compose/shipped-plugins.ts
+  - apps/gateway/src/server/compose/ports.ts
+  - apps/gateway/tests/integration/compose/boot.test.ts
 ---
 
 # Store — embedded SQLite, schema and migrations, repositories
@@ -31,8 +35,10 @@ apps/gateway/migrations/
                                   renamed / hidden / stale flags (schema version 4, P1.4)
 apps/gateway/src/server/store/
   index.ts                        openStore() / openMemoryStore(), Store type, re-exports
-  db.ts                           better-sqlite3 handle, pragmas, withImmediateTransaction, backupTo
+  db.ts                           openDb() — better-sqlite3 handle, pragmas, MIN_SQLITE_VERSION,
+                                  withImmediateTransaction, backupTo, journalMode
   migrate.ts                      loadMigrations(), runMigrations(), schema_migrations bootstrap
+                                  (ensureMigrationsTable, listApplied), checksumOf, DEFAULT_MIGRATIONS_DIR
   ids.ts                          newId() — UUIDv7 as text
   clock.ts                        Clock, systemClock, ManualClock (tests)
   encryptor.ts                    re-exports the crypto module's Encryptor port + sealText/openText helpers
@@ -53,8 +59,8 @@ The composition root does it at boot: `openEmbeddedStore(ctx)` in
 `apps/gateway/src/server/compose/store.ts` wraps `openStore()` and is injected
 through `RootDeps.openStore` (handbook [configuration](configuration.md)); a
 failure becomes a boot error naming `store.path` and its variable, a success
-logs `store opened` with `kind` and `schema_version`. Root tests swap in
-`openMemoryStore` through `memoryStoreDeps()` (`compose/testing.ts`).
+logs `store opened` with `kind`, `path` and `schema_version`. Root tests swap in
+`openMemoryStore` through `memoryStoreDeps` (`compose/testing.ts`).
 Illustrative call:
 
 ```ts
@@ -68,7 +74,7 @@ const store = openStore({
 // store.users, store.groups, store.connections, store.shares, store.missions,
 // store.sessions, store.requests, store.approvals, store.delegations, store.audit,
 // store.config, store.auditWriter, store.schemaVersion, store.backupTo(),
-// store.kind ('sqlite' | 'memory'), store.ping(), store.close()  <- compose/ports.ts Store port
+// store.kind ('sqlite' | 'memory'), store.ping(), store.close()  <- compose/ports.ts StoreLiveness port
 // store.db: raw handle — structural tests, diagnostics, and the SQLite-backed
 //           ports the root builds over the same connection (SqliteSessionStore)
 ```
@@ -216,9 +222,7 @@ principals, optionally every administrative entry) applied before the filters
 newest first (`ts DESC, id DESC`), paged by keyset (`before: { ts, id }`, `limit`).
 `agentLabels(missionId)` lists the distinct agent labels of a mission's calls with
 their count and last timestamp. The sessions repository gained the matching
-`listRecentEvents(sessionId, { before?, limit })` (newest first, same keyset;
-`listEvents` with `order: 'desc'` returns the same first page but cannot resume after a
-position).
+`listRecentEvents(sessionId, { before?, limit })` (newest first, same keyset).
 
 Immutability is enforced by triggers: every `UPDATE` on `audit`/`audit_risks` aborts;
 a `DELETE` on `audit` or on `audit_risks` aborts unless `audit_purge_guard` holds a
@@ -248,7 +252,7 @@ const result = await store.sessions.decideAndDecrement(
     // ctx.createRequest({ kind, riskId, tool?, fingerprint?, prepared?, expiresAt })
     //   prepared = await store.requests.prepareArguments(args), sealed BEFORE the call
     // ctx.recordEvent({ kind, riskId?, actorUserId?, details? })
-    return { allow, event: { kind: allow ? 'allowed-call' : 'refused-call' } };
+    return { allow, event: { kind: allow ? 'call-allowed' : 'call-refused' } };
   },
 );
 // result.outcome (what decide returned), result.session, result.counters (after)
@@ -318,7 +322,9 @@ capture both files atomically are also fine.
   counters-vs-audit structural check, argument erasure on decision and expiry,
   the `listEvents` kind filter and descending order. `decideClaim` and
   `sweepExpired` are exercised by `tests/integration/requests/request-service.test.ts`
-  (handbook [requests](requests.md)).
+  (handbook [requests](requests.md)). `search`, `agentLabels` and `listRecentEvents`
+  are exercised by `tests/integration/audit/{audit-query,mission-session}.test.ts`
+  (handbook [audit](audit.md)).
 - `tests/integration/compose/boot.test.ts` (handbook [configuration](configuration.md)) — the
   composition root opening this store on a temporary file with the real encryptor
   and the registry-backed catalog index.

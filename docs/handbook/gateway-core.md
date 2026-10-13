@@ -27,7 +27,7 @@ Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §4.1 (structured
 refusals), §6 (three credentials), §8 (audit);
 [gateway-risk-model](../spec/gateway-risk-model.md) §8 (strict-fail
 decision), §12 (audit shape of the risk fields). Replaces the legacy v4
-handbook [mcp-gateway](./mcp-gateway.md).
+handbook [mcp-gateway](./legacy/mcp-gateway.md).
 
 ## Layout
 
@@ -38,10 +38,12 @@ packages/gateway-core/
                      MissionPolicyEntry ...) and adds Door, BearerKind, MissionContext and
                      its projections (MissionConnection, MissionResource, MissionSummary)
     errors.ts        Refusal union, `refuse.*` builders, JSON-RPC mapping, AuthError
-    audit.ts         CallAuditEntry / AdminAuditEntry, AuditWriter, MemoryAuditWriter
+    audit.ts         CallAuditEntry / AdminAuditEntry, AuditWriter, MemoryAuditWriter,
+                     BOOTSTRAP_ACTOR_ID / BOOTSTRAP_ACTOR_LABEL
     fingerprint.ts   canonicalJson, fingerprintArguments — the one argument hash (audit, approvals)
     cache.ts         CacheClient interface, bounded MemoryCacheClient (single-process only)
-    risk-gateway.ts  decision core: evaluateCallForToken (classify → intersect → allow/deny)
+    risk-gateway.ts  decision core: evaluateCallForToken (classify → intersect → allow/deny),
+                     Classifier, CallVerdict, AcceptedRisksSnapshot
     pipeline.ts      door check, DoorAuthenticator, CallPipeline and its stage interfaces
     index.ts         barrel
   tests/unit/        errors, audit, fingerprint, cache, authenticate, pipeline, risk-gateway
@@ -49,8 +51,9 @@ packages/gateway-core/
 
 Dependencies: `@vaubaan/shared` (the domain types, `RiskId`, `Slice`,
 JSON-RPC primitives), `@vaubaan/policy-engine` (`evaluateCall`,
-`resourceEnvResolver`, `IndexedRiskCatalog`) and `@vaubaan/plugin-sdk`
-(the `classify` half of `ProviderPlugin`, `ClassifyOutcome`). Nothing
+`envResolverFor`, `EnvResolver`, `IndexedRiskCatalog`) and
+`@vaubaan/plugin-sdk` (the `classify` and `envOf` members of
+`ProviderPlugin`, `ClassifyOutcome`). Nothing
 else: the v4 Supabase and Upstash dependencies are gone, along with the
 Redis cache client, the environment-reading cache factory and the
 project-scoped `venv` secret store.
@@ -157,6 +160,14 @@ delegation | instance-config`),
 `before`, `after`, `delegated_client_id` (set when the act came through
 the management door).
 
+`user_id` is the human behind the act: a user id (a delegated client acts
+on behalf of one), or the exported constant `BOOTSTRAP_ACTOR_ID`
+(`'bootstrap'`) for entries written by the bootstrap operator — the holder
+of the one-time bootstrap token, who has no user row yet.
+`BOOTSTRAP_ACTOR_LABEL` (`'Bootstrap operator'`) is its display name
+wherever an actor is shown. One pair of constants serves every writer
+(auth, connections) and every reader (audit).
+
 **`AuditWriter { write(entry: AuditEntry): Promise<void> }`** is the
 contract with the store's SQLite writer (`SqliteAuditWriter`, P0.3). Name
 and signature are stable. A writer must not swallow failures: the pipeline
@@ -192,7 +203,7 @@ maps its rows to it without translation:
 - `resources[]` — `MissionResource = ConnectionResource` (`id`,
   `connection_id`, `provider`, `ref`, `env?`, `displayName`,
   `discovered_at`, `metadata?`): the selection, all connections together.
-  It feeds `resourceEnvResolver` and the plugin's `classify` as-is.
+  It feeds `envResolverFor` and the plugin's `classify` as-is.
 - `policy` — `MissionPolicy = readonly MissionPolicyEntry[]`, each entry
   `{ risk_id, quota, rate_limit: { max, window_seconds }, gate }`. The
   `risk_id`s **are** the accepted risks; `acceptedRisksOf(ctx)` derives
@@ -261,7 +272,8 @@ decision core (`risks_touched ⊆ accepted_risks`); every path writes
 exactly one audit entry; an audit write failure propagates.
 
 `CallRequest` carries `tool`, `args`, the optional `agent_label` and the
-`client` origin (ip, user agent). `CallTarget` is the resolved
+`client` origin (`ClientOrigin { ip, user_agent }`). `CallTarget` is the
+resolved
 `{ connection, resource | null }`.
 
 ### Stage contracts (hook points)
@@ -283,16 +295,19 @@ envResolver? })` classifies through the plugin, intersects with the
 'risk-not-accepted'`, missing risks, risks touched, slices, hint),
 `classify-denied` (plugin reason), `no-catalog` (fail closed). The decision itself is unchanged by the pivot; its inputs are v5:
 
-- `adapter: Classifier = Pick<ProviderPlugin, 'classify'>` — a registered
-  plugin satisfies it as-is; tests pass a stub. `classify(tool, args,
-resources)` returns the SDK's `ClassifyOutcome` (`{ slices }` or
-  `{ denied }`), re-exported here.
+- `adapter: Classifier = Pick<ProviderPlugin, 'classify' | 'envOf'>` — a
+  registered plugin satisfies it as-is; tests pass a stub.
+  `classify(tool, args, resources)` returns the SDK's `ClassifyOutcome`
+  (`{ slices }` or `{ denied }`), re-exported here; the optional
+  `envOf(slice, resources)` is the plugin's own environment derivation.
 - `resources: Resource[]` — the mission's resources on the target
   connection, handed to the classifier and, by default, to
-  `resourceEnvResolver(resources)` so a mission that accepted
+  `envResolverFor(resources, adapter.envOf)`: the plugin's own derivation
+  first (Vercel's `env[prod]` segment), the owner's label on the matching
+  resource next, unqualified last. So a mission that accepted
   `supabase[staging].bulk-row-write` matches an executed
   `supabase.bulk-row-write` on the staging resource. A host may pass its
-  own `envResolver` (a plugin deriving the environment from a branch).
+  own `envResolver`.
 - `token: AcceptedRisksSnapshot` — `{ id, accepted_risks, denied_risks }`;
   v5 missions carry no explicit denies, pass `[]`.
 
@@ -368,8 +383,8 @@ pivot D1; the Upstash ADR is superseded).
 - `risk-gateway.test.ts` (7) — the decision core: allow, deny with
   `code: 'risk-not-accepted'`, classifier denial, missing catalog,
   explicit denies, the classifier receives `(tool, args, resources)`,
-  environment qualification from the resources by default and an explicit
-  `envResolver` overriding it.
+  environment qualification: the adapter's `envOf` first, the resource
+  label when it abstains, and an explicit `envResolver` overriding both.
 
 ## References
 
@@ -385,5 +400,5 @@ pivot D1; the Upstash ADR is superseded).
   engine this core calls), [plugin-sdk](./plugin-sdk.md) (the shared
   vocabulary and the plugin contract), [store](./store.md) (the
   `AuditWriter` implementation), [execution-door](./execution-door.md)
-  (the door and the stages), [mcp-gateway](./mcp-gateway.md) (legacy v4
+  (the door and the stages), [mcp-gateway](./legacy/mcp-gateway.md) (legacy v4
   orchestration, historical).

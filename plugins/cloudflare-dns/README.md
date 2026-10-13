@@ -114,7 +114,7 @@ persisted policy is the explicit enumeration.
 
 ## Tests
 
-`npx vitest run plugins/cloudflare-dns` — 95 tests: the SDK kit
+`npx vitest run plugins/cloudflare-dns` — 94 tests: the SDK kit
 (`assertPluginWellFormed`, `assertCatalogCoverage`, `assertNoWildcard`,
 `assertPresetsValid`), the classifier (`plugin.test.ts` and the per-tool
 suite `classify.test.ts`), `execute` and `discoverResources` against

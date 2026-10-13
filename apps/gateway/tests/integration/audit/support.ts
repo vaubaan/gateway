@@ -1,8 +1,8 @@
 /**
  * Shared rig of the audit suites: the real composition root on the `:memory:`
  * store (shipped plugins, seeded connections), a mission issued through the
- * real `MissionService`, and calls seeded the way the execution door will
- * produce them (P1.6 is not merged): `SessionService.recordCall` for the
+ * real `MissionService`, and calls seeded the way the execution door
+ * produces them: `SessionService.recordCall` for the
  * session, counters and events, then the store's audit writer for the entry —
  * the two halves `CallPipeline` runs for every call.
  */

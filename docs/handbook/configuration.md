@@ -14,11 +14,14 @@ tracks:
   - apps/gateway/src/app/healthz/route.ts
   - apps/gateway/next.config.ts
   - apps/gateway/tsconfig.json
+  - apps/gateway/package.json
   - apps/gateway/tests/integration/standalone-native-addons.test.ts
   - apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts
   - deploy/config/gateway.example.yaml
   - deploy/config/.env.example
   - scripts/gen-master-key.mjs
+  - package.json
+  - deploy/docker/smoke.sh
 ---
 
 # Instance configuration, crypto and composition root
@@ -55,8 +58,8 @@ apps/gateway/src/
       registry.ts               buildEmptyRegistry(), RegistryCatalogIndex, checkProviderApps()
       shipped-plugins.ts        SHIPPED_PLUGINS, buildShippedRegistry(): the plugins the image ships
       store.ts                  openEmbeddedStore(): the SQLite store from store.path
-      root.ts                   buildRoot(), getRoot() (globalThis), resetRoot(); wires session/, auth/,
-                                missions/, provider-apps/, connections/, budget/ and execution/
+      root.ts                   buildRoot(), getRoot() (globalThis), resetRoot(); wires session/, auth/, missions/,
+                                rate-limit/, provider-apps/, connections/, requests/, audit/, budget/ and execution/
       boot.ts                   bootOrExit(): exit 78 on ConfigError, 1 otherwise
       testing.ts                memoryStoreDeps, fakePlugin() — tests only
     http/
@@ -68,6 +71,9 @@ apps/gateway/src/
     missions/, authority/       issuance, tokens, bootstrap kit (handbook missions)
     budget/, rate-limit/        session service, sliding windows (handbook budget-and-sessions)
     execution/                  the execution MCP door (handbook execution-door)
+    requests/                   inbox, claim decisions, expiry sweeper (handbook requests)
+    audit/                      audit search, mission session view, retention sweeper (handbook audit)
+    store/                      the embedded SQLite store (handbook store)
 scripts/gen-master-key.mjs      prints 32 random bytes, base64
 deploy/config/                  gateway.example.yaml, .env.example (every key documented)
 ```
@@ -109,8 +115,8 @@ deploy/config/                  gateway.example.yaml, .env.example (every key do
      `VAUBAAN_STORE_PATH` (exit 1);
    - the web `SessionStore`: `SqliteSessionStore` over the store's connection
      (table `web_sessions`) unless `RootDeps.sessions` injects another one,
-     then `createAuthModule()` → `root.auth` (relying party, sessions,
-     bootstrap, authenticator, handlers; handbook
+     then `createAuthModule()` → `root.auth` (`sessions`, `idp`,
+     `bootstrap`, `relyingParties`, `authenticator`, `handlers`; handbook
      [authentication](authentication.md)), with `RootDeps.oidc` for the
      relying party's outbound `fetch` and the test-only insecure issuer;
    - `createMissionsModule()` → `root.missions` (`authority`, `service`,
@@ -175,19 +181,31 @@ build).
   default external list, `ssh2` is added. `outputFileTracingIncludes` lists
   the `argon2` prebuilds (nft does not follow `node-gyp-build`) and the
   runtime files of `better-sqlite3` (`package.json`, `lib/`, the `.node`
-  binary, `bindings`, `file-uri-to-path`) and `./migrations/*.sql`, which
-  the store reads from disk at boot. Since P0.R the `/healthz` route graph
+  binary, `bindings`, `file-uri-to-path`), `./migrations/*.sql`, which
+  the store reads from disk at boot, and `../../plugins/*/src/**/*.yaml`,
+  the risk catalogs the plugins read at import time (handbook
+  [plugin-sdk](plugin-sdk.md)). Since P0.R the `/healthz` route graph
   reaches `better-sqlite3` through the root, so nft traces the package on
   its own; the explicit globs remain as the guarantee for the prebuilt
   binary and the SQL files.
+- `output: 'standalone'` with `outputFileTracingRoot` set to the repository
+  root: one image, one process, and the trace follows the workspace's
+  hoisted `node_modules`.
+- `generateBuildId: () => commitSha`: every replica of one image serves the
+  same build id.
+- `compress: false`: the TLS terminator compresses; Next's gzip stays off so
+  streamed MCP responses are not buffered.
+- `env.NEXT_PUBLIC_BUILD_TIME` stamps the build time into the bundle, next
+  to `NEXT_PUBLIC_GATEWAY_VERSION` and `NEXT_PUBLIC_COMMIT_SHA`.
 - `instrumentation.ts`, the `globalThis` root and `/healthz` behave the same
   in `next dev` and in the standalone `server.js` (checked by hand and by
   the container smoke test); `register()` still runs on the Node runtime
   only and is skipped during `next build`.
 - `agentRules: false`: Next 16's `next dev` writes an `AGENTS.md` next to the
   app unless told otherwise; the harness owns that file in this repository.
-- `experimental.serverActions.allowedOrigins` is still the documented place
-  for the option in 16.x.
+- No `experimental.serverActions.allowedOrigins` is set: behind the reverse
+  proxy Next compares `Origin` with `X-Forwarded-Host`, and a build-time
+  list would not follow the instance configuration.
 - `tsconfig.json` includes `.next/dev/types/**/*.ts` as well as
   `.next/types/**/*.ts`: development now writes to `.next/dev`, and
   `next-env.d.ts` (gitignored, generated) points at whichever ran last.
@@ -203,44 +221,45 @@ Both sources map to the same tree; the **file wins over the environment**
 key by key. The table below is `KEYS` in `sources.ts`; `(secret)` keys also
 accept `<VAR>_FILE`.
 
-| YAML path                       | Environment variable                   | Rule                                                                                                           |
-| ------------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `public_url`                    | `VAUBAAN_PUBLIC_URL`                   | **required**, https, no query; trailing slash stripped                                                         |
-| `trusted_proxies`               | `VAUBAAN_TRUSTED_PROXIES`              | list of IPs / CIDR blocks; default none                                                                        |
-| `store.path`                    | `VAUBAAN_STORE_PATH`                   | **required**                                                                                                   |
-| `encryption.master_key`         | `VAUBAAN_MASTER_KEY` (secret)          | **required**, 32 bytes base64                                                                                  |
-| `encryption.key_version`        | `VAUBAAN_MASTER_KEY_VERSION`           | integer >= 1, default 1                                                                                        |
-| `encryption.previous_keys`      | `VAUBAAN_MASTER_KEY_PREVIOUS`          | `{version: key}` / `1=<b64>,2=<b64>`; not the current one                                                      |
-| `idp.issuer`                    | `VAUBAAN_IDP_ISSUER`                   | https; block optional, all-or-nothing                                                                          |
-| `idp.client_id`                 | `VAUBAAN_IDP_CLIENT_ID`                |                                                                                                                |
-| `idp.client_secret`             | `VAUBAAN_IDP_CLIENT_SECRET` (secret)   |                                                                                                                |
-| `idp.claims.{sub,email,groups}` | `VAUBAAN_IDP_CLAIM_{SUB,EMAIL,GROUPS}` | defaults `sub`, `email`, `groups`                                                                              |
-| `idp.allowed_email_domains`     | `VAUBAAN_IDP_ALLOWED_EMAIL_DOMAINS`    | list, lower-cased; default any                                                                                 |
-| `admin.group`                   | `VAUBAAN_ADMIN_GROUP`                  | **admin rule**: group and/or emails required                                                                   |
-| `admin.emails`                  | `VAUBAAN_ADMIN_EMAILS`                 | list, lower-cased, must contain `@`                                                                            |
-| `providers.<id>.<field>`        | `VAUBAAN_PROVIDER_<ID>_<FIELD>`        | fields `client_id`, `client_secret`_, `app_id`, `app_slug`, `private_key`_ (\* secret); `-` in id ↔ `_` in env |
-| `bootstrap_token`               | `VAUBAAN_BOOTSTRAP_TOKEN` (secret)     | **required while `idp` is absent**, >= 32 chars; refused once `bootstrap.revoked_at` is set in the store       |
-| `telemetry.enabled`             | `VAUBAAN_TELEMETRY_ENABLED`            | default false                                                                                                  |
-| `telemetry.collector_url`       | `VAUBAAN_TELEMETRY_COLLECTOR_URL`      | https; default `DEFAULT_TELEMETRY_COLLECTOR_URL`                                                               |
-| `retention_days`                | `VAUBAAN_RETENTION_DAYS`               | integer >= 1, default 90                                                                                       |
-| `requests.expiry`               | `VAUBAAN_REQUEST_EXPIRY`               | duration, default `24h`                                                                                        |
-| `approvals.expiry`              | `VAUBAAN_APPROVAL_EXPIRY`              | duration, default `10m`                                                                                        |
-| `mcp.rate_limit_per_minute`     | `VAUBAAN_MCP_RATE_LIMIT_PER_MINUTE`    | integer >= 1, default 600: requests per minute on the execution door, per mission (spec §6)                    |
-| `log.level`                     | `VAUBAAN_LOG_LEVEL`                    | `debug` `info` `warn` `error`, default `info`                                                                  |
+| YAML path                       | Environment variable                   | Rule                                                                                                               |
+| ------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `public_url`                    | `VAUBAAN_PUBLIC_URL`                   | **required**, https, no query or fragment; trailing slash stripped                                                 |
+| `trusted_proxies`               | `VAUBAAN_TRUSTED_PROXIES`              | list of IPs / CIDR blocks; default none                                                                            |
+| `store.path`                    | `VAUBAAN_STORE_PATH`                   | **required**                                                                                                       |
+| `encryption.master_key`         | `VAUBAAN_MASTER_KEY` (secret)          | **required**, 32 bytes base64                                                                                      |
+| `encryption.key_version`        | `VAUBAAN_MASTER_KEY_VERSION`           | integer >= 1, default 1                                                                                            |
+| `encryption.previous_keys`      | `VAUBAAN_MASTER_KEY_PREVIOUS` (secret) | `{version: key}` / `1=<b64>,2=<b64>`; not the current one                                                          |
+| `idp.issuer`                    | `VAUBAAN_IDP_ISSUER`                   | https; block optional, all-or-nothing                                                                              |
+| `idp.client_id`                 | `VAUBAAN_IDP_CLIENT_ID`                |                                                                                                                    |
+| `idp.client_secret`             | `VAUBAAN_IDP_CLIENT_SECRET` (secret)   |                                                                                                                    |
+| `idp.claims.{sub,email,groups}` | `VAUBAAN_IDP_CLAIM_{SUB,EMAIL,GROUPS}` | defaults `sub`, `email`, `groups`                                                                                  |
+| `idp.allowed_email_domains`     | `VAUBAAN_IDP_ALLOWED_EMAIL_DOMAINS`    | list, lower-cased; default any                                                                                     |
+| `admin.group`                   | `VAUBAAN_ADMIN_GROUP`                  | **admin rule**: group and/or emails required                                                                       |
+| `admin.emails`                  | `VAUBAAN_ADMIN_EMAILS`                 | list, lower-cased, must contain `@`                                                                                |
+| `providers.<id>.<field>`        | `VAUBAAN_PROVIDER_<ID>_<FIELD>`        | fields `client_id`, `client_secret` (secret), `app_id`, `app_slug`, `private_key` (secret); `-` in id ↔ `_` in env |
+| `bootstrap_token`               | `VAUBAAN_BOOTSTRAP_TOKEN` (secret)     | **required while `idp` is absent**, >= 32 chars; refused once `bootstrap.revoked_at` is set in the store           |
+| `telemetry.enabled`             | `VAUBAAN_TELEMETRY_ENABLED`            | default false                                                                                                      |
+| `telemetry.collector_url`       | `VAUBAAN_TELEMETRY_COLLECTOR_URL`      | https; default `DEFAULT_TELEMETRY_COLLECTOR_URL`                                                                   |
+| `retention_days`                | `VAUBAAN_RETENTION_DAYS`               | integer >= 1, default 90                                                                                           |
+| `requests.expiry`               | `VAUBAAN_REQUEST_EXPIRY`               | duration, default `24h`                                                                                            |
+| `approvals.expiry`              | `VAUBAAN_APPROVAL_EXPIRY`              | duration, default `10m`                                                                                            |
+| `mcp.rate_limit_per_minute`     | `VAUBAAN_MCP_RATE_LIMIT_PER_MINUTE`    | integer >= 1, default 600: requests per minute on the execution door, per mission (spec §6)                        |
+| `log.level`                     | `VAUBAAN_LOG_LEVEL`                    | `debug` `info` `warn` `error`, default `info`                                                                      |
 
 Not in the tree: `VAUBAAN_CONFIG_FILE` (path of the YAML; unset means
 environment only; set but unreadable is an error), and the listener
 variables `PORT` / `HOSTNAME` read by Next's standalone `server.js`.
 
 Booleans accept `true`/`false`, `1`/`0`, `yes`/`no`, `on`/`off`. A secret
-given both directly and through its `*_FILE` variable is an error ("set
-either X or X*FILE, not both"). `VAUBAAN_MASTER_KEY_PREVIOUS` entries must
+given both directly and through its `*_FILE` variable is an error
+(`set either X or X_FILE, not both`). `VAUBAAN_MASTER_KEY_PREVIOUS` entries must
 be `<integer>=<key>`; a malformed entry is reported by position and its
 content is never echoed (a bare key pasted there carries `=` padding). A
 YAML scalar that still contains `${...}` after resolution (for example the
 Compose syntax `${VAR:-default}`) is an error naming the key, so an
 unsupported reference never becomes a literal secret. `parseProviderEnvName`
-is the pure parser of `VAUBAAN_PROVIDER*<ID>\_<FIELD>`names;`PROVIDER_APP_FIELD_PROPERTY`maps each field to its`ProviderAppConfig`
+is the pure parser of `VAUBAAN_PROVIDER_<ID>_<FIELD>` names;
+`PROVIDER_APP_FIELD_PROPERTY` maps each field to its `ProviderAppConfig`
 property exhaustively.
 
 Secret references in YAML: `${NAME}` is replaced by the environment
@@ -271,7 +290,8 @@ lacks a required field does not fail the boot — the provider is shown
 
 - `encrypt(connectionId, plaintext)` → `{ keyVersion, blob }`, with
   `blob = 0x01 || nonce(24) || XChaCha20-Poly1305(plaintext)`;
-- `decrypt(connectionId, { keyVersion, blob })` → plaintext.
+- `decrypt(connectionId, { keyVersion, blob })` → plaintext;
+- `currentKeyVersion` — the version stamped on new blobs.
 
 The per-connection key is `BLAKE2b-256(key = master key of that version,
 message = "vaubaan/connection-key/v1:" + connectionId)`; the connection id
@@ -340,8 +360,9 @@ exit codes, in-memory ports; http: `/healthz` states), the integration
 test `apps/gateway/tests/integration/compose/boot.test.ts` (the production
 wiring against a temporary SQLite file: database created, migrations
 applied, ping, `/healthz` reports `sqlite`, secrets sealed with the
-configured master key and reopened without re-migrating, unknown risk ids
-refused by the empty registry, unreadable `store.path` named in the exit
+configured master key and reopened without re-migrating, a risk id of a
+provider the shipped registry does not hold refused (`UnknownRiskIdError`),
+unreadable `store.path` named in the exit
 message) plus
 the structural test `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`
 (no literal URL, secret or project ref in the v5 perimeter except

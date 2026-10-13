@@ -2,6 +2,7 @@
 title: Vercel provider — plugin and risk model
 status: current
 date: 2026-10-13
+last_synced: 2026-10-13
 tracks:
   - plugins/vercel/src/index.ts
   - plugins/vercel/src/classify.ts
@@ -11,7 +12,8 @@ tracks:
   - plugins/vercel/src/execute.ts
   - plugins/vercel/src/risk-catalog.yaml
   - plugins/vercel/src/tools.ts
-  - plugins/vercel/tests/unit/plugin.test.ts
+  - plugins/vercel/src/upstream-tools.json
+  - plugins/vercel/tests/unit/
 ---
 
 # Vercel provider — plugin and risk model
@@ -115,8 +117,9 @@ patterns match any ident there, so only audit precision is lost.
 
 `assertCatalogCoverage` (kit) runs one sample per tool in
 `tests/unit/plugin.test.ts`: every tool is covered by a dedicated risk; the
-fallback `vercel.uncategorized-write` matches every write too and stays
-mandatory for tools added later.
+fallback `vercel.uncategorized-write` is counted only when no dedicated entry
+matched (ADR [[fallback-risk-only-when-uncategorized]]) and stays mandatory
+for tools added later.
 
 ## 3. Catalog
 
@@ -137,9 +140,12 @@ settings, domains and firewall affect every environment at once;
 | `developer` | The reads above (larger quotas) + `vercel[preview].deploy`, `vercel[development].deploy`, `vercel[preview].env-var-write`, `vercel[development].env-var-write`, toolbar-write, mint-bypass-token — all `auto`. No production configuration of any kind.                  |
 | `operator`  | Developer + `vercel[prod].deploy`, `vercel[prod].env-var-write`, env-var-fan-out, project-settings-write, domain-write, firewall-read, firewall-write, firewall-rule-write, ip-rule-write, read-env-var-plaintext. Every production-affecting entry is gated `approval`. |
 
-Values: reads 2 000–5 000 per period at 120/min; preview writes 200 per
-period at 10–20/min; production and posture writes 20–50 per period at
-5/min. The deferred ADR `mission-presets-default-values` (plan §5.5) may
+Values: account and deployment reads 2 000–5 000 per period at 120/min, the
+other reads (env vars, URL fetch, firewall) 200–1 000 at 30–60/min; preview
+and development writes 200 per period at 10–20/min; `toolbar-write` 500 at
+30/min and `mint-bypass-token` 50–100 at 5–10/min; production and posture
+writes 20–50 per period at 5/min, except `firewall-rule-write` (50 at
+10/min) and `ip-rule-write` (100 at 20/min). The deferred ADR `mission-presets-default-values` (plan §5.5) may
 revise the numbers; the shape is fixed by [[plugin-contract-and-credential-spec]] D5.
 
 ### Environment axis — what the host must do
@@ -152,7 +158,8 @@ labelled `prod` would qualify a preview deploy as `vercel[prod].deploy`, and
 an unlabelled project would never qualify anything, so the env-qualified
 preset entries above would not match `risks_touched`. The plugin therefore
 declares `envOf` (`vercelEnvOf(slice)`: reads the `env[<label>]` segment;
-`null` when env-less), which the host's default resolver
+`null` when env-less, wired as
+`envOf: (slice) => vercelEnvOf(slice) ?? undefined`), which the host's default resolver
 (`envResolverFor(resources, plugin.envOf)`) asks before the resource label
 ([[plugin-sdk]], "Environment resolution"). `discoverResources` notes the
 axis in `metadata.environments`.
@@ -199,7 +206,7 @@ forwarded it).
 - **Boot fails with `Invalid risk catalog '…/plugins/vercel/src/risk-catalog.yaml'`** —
   read every bullet; a preset entry naming an env on a non-env-scoped risk,
   or an env outside `acceptable_in_envs`, is the usual cause.
-- **`projectId: argument missing and the mission touches N Vercel projects`** —
+- **`projectId: argument missing and the mission touches N Vercel projects — name one`** —
   the mission selects several projects; the agent must name one.
 - **`teamId '…' is not the team of this connection`** — the agent copied a
   team id from elsewhere; omit it, the connection's team applies.
@@ -209,8 +216,9 @@ forwarded it).
 - **`next build` fails with `The "path" argument must be of type string or an instance of URL. Received an instance of URL`** —
   a plugin imported by `apps/gateway` used `new URL('./risk-catalog.yaml', import.meta.url)`;
   Turbopack rewrites that pattern into an asset URL of another realm. The
-  plugin builds the path as a string instead (`VERCEL_CATALOG_PATH` in
-  `src/index.ts`); keep it that way.
+  plugin builds the path as a string instead, through the SDK's
+  `catalogPathNextTo` (`VERCEL_CATALOG_PATH` in `src/index.ts`); keep it that
+  way.
 - **`mockFetch: unexpected GET …`** in tests — the plugin called a URL no
   route covers; the message names it.
 

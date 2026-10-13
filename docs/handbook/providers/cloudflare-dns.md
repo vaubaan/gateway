@@ -2,7 +2,7 @@
 title: Cloudflare DNS provider — modelling and runtime (v5 plugin)
 status: current
 date: 2026-10-13
-last_reviewed: 2026-10-13
+last_synced: 2026-10-13
 tracks:
   - plugins/cloudflare-dns/src/index.ts
   - plugins/cloudflare-dns/src/resources.ts
@@ -12,6 +12,7 @@ tracks:
   - plugins/cloudflare-dns/src/data-model.ts
   - plugins/cloudflare-dns/src/risk-catalog.yaml
   - plugins/cloudflare-dns/tests/unit/
+  - plugins/cloudflare-dns/README.md
 ---
 
 # Cloudflare DNS provider — modelling and runtime
@@ -147,7 +148,7 @@ Discovery : `GET /zones` paginated, 50 per page, stops at
 
 ## How to debug
 
-- **`zone_id: argument missing and the mission touches 2 Cloudflare DNS zones`**
+- **`zone_id: argument missing and the mission touches 2 Cloudflare DNS zones — name one`**
   — the agent must pass `zone_id`.
 - **`zone_id: 'z9' is not a Cloudflare DNS zone of this mission`** — the
   zone exists upstream but was not selected for the mission ; the owner

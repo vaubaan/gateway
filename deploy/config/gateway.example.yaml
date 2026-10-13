@@ -44,8 +44,9 @@ encryption:
   #   1: ${file:/run/secrets/vaubaan_master_key_v1}
 
 # OpenID Connect provider (spec D2). Optional at first boot: until it is set,
-# the operator signs in with bootstrap_token. Once present, all four keys of
-# the block are validated and bootstrap_token becomes optional.
+# the operator signs in with bootstrap_token. Once present, issuer (https),
+# client_id and client_secret are required and bootstrap_token becomes
+# optional; claims and allowed_email_domains keep their defaults.
 # idp:
 #   # env: VAUBAAN_IDP_ISSUER
 #   issuer: https://login.example.com/realms/acme
@@ -73,11 +74,15 @@ admin:
   emails:
     - ops@example.com
 
-# Apps your company registered at each provider, keyed by plugin id. Which
-# fields a provider needs is declared by its plugin (plugins/<id>/README.md);
-# allowed fields: client_id, client_secret, app_id, app_slug, private_key.
+# Apps your company registered at each provider, keyed by plugin id. Only
+# providers connected through an app need one: an App installation (github)
+# or an OAuth client (supabase, railway, gmail). Providers connected with an
+# API key or an SSH key have no block here. Which fields a provider needs is
+# declared by its plugin (plugins/<id>/README.md); allowed fields: client_id,
+# client_secret, app_id, app_slug, private_key.
 # env: VAUBAAN_PROVIDER_<ID>_<FIELD>, e.g. VAUBAAN_PROVIDER_GITHUB_APP_ID,
-#      VAUBAAN_PROVIDER_CLOUDFLARE_DNS_CLIENT_SECRET_FILE
+#      VAUBAAN_PROVIDER_GITHUB_PRIVATE_KEY_FILE (a hyphen in the plugin id
+#      becomes an underscore)
 # providers:
 #   github:
 #     app_id: '12345'
@@ -91,9 +96,13 @@ admin:
 #     #      VAUBAAN_PROVIDER_GITHUB_CLIENT_SECRET[_FILE]
 #     client_id: Iv1.0123456789abcdef
 #     client_secret: ${file:/run/secrets/github_app_client_secret}
-#   vercel:
-#     client_id: ${VERCEL_CLIENT_ID}
-#     client_secret: ${VERCEL_CLIENT_SECRET}
+#   # OAuth providers take the client id and secret of your OAuth app.
+#   supabase:
+#     client_id: ${SUPABASE_CLIENT_ID}
+#     client_secret: ${SUPABASE_CLIENT_SECRET}
+#   railway:
+#     client_id: ${RAILWAY_CLIENT_ID}
+#     client_secret: ${RAILWAY_CLIENT_SECRET}
 
 # REQUIRED while idp is not configured. At least 32 characters; lets the
 # operator sign in at /admin/bootstrap and configure the IdP from the Admin

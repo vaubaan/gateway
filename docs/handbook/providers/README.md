@@ -2,6 +2,10 @@
 title: Provider plugin handbooks — index
 status: current
 date: 2026-10-13
+last_synced: 2026-10-13
+tracks:
+  - plugins/*/src/risk-catalog.yaml
+  - plugins/*/src/index.ts
 ---
 
 # Provider plugin handbooks
@@ -29,25 +33,27 @@ lets the drift detector compare the two.
 
 ## Index
 
-| Plugin         | Handbook                                   | Plane(s)                             | Risks                     | Presets                                                        | Credential    | Notes                                               |
-| -------------- | ------------------------------------------ | ------------------------------------ | ------------------------- | -------------------------------------------------------------- | ------------- | --------------------------------------------------- |
-| Cloudflare DNS | [`cloudflare-dns.md`](./cloudflare-dns.md) | `dns`                                | 11 + fallback             | `read-only`, `dns-operator`, `zone-admin`                      | `api-key`     | Zone-scoped token; record-write overlays.           |
-| GitHub         | [`github.md`](./github.md)                 | `repo`                               | 14 + fallback             | `read-only`, `developer`, `release-manager`                    | `app-install` | Per-call installation token. No env-scoped risk.    |
-| Gmail          | [`gmail.md`](./gmail.md)                   | `mailbox`                            | 15 + fallback             | `read-only`, `developer`                                       | `oauth2`      | **Experimental**: classifier-only, no tool exposed. |
-| Railway        | [`railway.md`](./railway.md)               | `runtime`                            | 9 + fallback              | `read-only`, `developer`, `operator`                           | `oauth2`      | Resource indicator on every token request.          |
-| Resend         | [`resend.md`](./resend.md)                 | `email`                              | 17 + fallback (2 deprec.) | `read-only`, `developer`, `marketing-operator`, `domain-admin` | `api-key`     | Recipient zones from the domain resource metadata.  |
-| SSH            | [`ssh.md`](./ssh.md)                       | `host`                               | 7 + fallback              | `read-only`, `developer`, `operator`                           | `ssh-key`     | Pinned host key; command classes.                   |
-| Stripe         | [`stripe.md`](./stripe.md)                 | `billing`                            | 16 + fallback             | `read-only`, `test-mode-developer`, `finance-operator`         | `api-key`     | One resource per mode (test / live); catalog v3.    |
-| Supabase       | [`supabase.md`](./supabase.md)             | `db`, `storage`, `auth`, `functions` | 24 + fallback             | `read-only-analyst`, `staging-developer`, `migration-operator` | `oauth2`      | Management API; `execute_sql` read-only.            |
-| Upstash Redis  | [`upstash-redis.md`](./upstash-redis.md)   | `cache`                              | 10 + fallback             | `read-only`, `developer`, `operator`                           | `api-key`     | Env from the owner's database label.                |
-| Vercel         | [`vercel.md`](./vercel.md)                 | `runtime`                            | 16 + fallback             | `read-only`, `developer`, `operator`                           | `api-key`     | Declares `envOf` (the `env[<label>]` segment).      |
+| Plugin         | Handbook                                   | Plane(s)                             | Risks                              | Presets                                                        | Credential    | Notes                                               |
+| -------------- | ------------------------------------------ | ------------------------------------ | ---------------------------------- | -------------------------------------------------------------- | ------------- | --------------------------------------------------- |
+| Cloudflare DNS | [`cloudflare-dns.md`](./cloudflare-dns.md) | `dns`                                | 11 + fallback                      | `read-only`, `dns-operator`, `zone-admin`                      | `api-key`     | Zone-scoped token; record-write overlays.           |
+| GitHub         | [`github.md`](./github.md)                 | `repo`                               | 14 + fallback                      | `read-only`, `developer`, `release-manager`                    | `app-install` | Per-call installation token. No env-scoped risk.    |
+| Gmail          | [`gmail.md`](./gmail.md)                   | `mailbox`                            | 15 + fallback                      | `read-only`, `developer`                                       | `oauth2`      | **Experimental**: classifier-only, no tool exposed. |
+| Railway        | [`railway.md`](./railway.md)               | `runtime`                            | 9 + fallback                       | `read-only`, `developer`, `operator`                           | `oauth2`      | Resource indicator on every token request.          |
+| Resend         | [`resend.md`](./resend.md)                 | `email`                              | 15 + fallback (+ 2 deprecated ids) | `read-only`, `developer`, `marketing-operator`, `domain-admin` | `api-key`     | Recipient zones from the domain resource metadata.  |
+| SSH            | [`ssh.md`](./ssh.md)                       | `host`                               | 7 + fallback                       | `read-only`, `developer`, `operator`                           | `ssh-key`     | Pinned host key; command classes.                   |
+| Stripe         | [`stripe.md`](./stripe.md)                 | `billing`                            | 16 + fallback                      | `read-only`, `test-mode-developer`, `finance-operator`         | `api-key`     | One resource per mode (test / live); catalog v3.    |
+| Supabase       | [`supabase.md`](./supabase.md)             | `db`, `storage`, `auth`, `functions` | 24 + fallback                      | `read-only-analyst`, `staging-developer`, `migration-operator` | `oauth2`      | Management API; `execute_sql` read-only.            |
+| Upstash Redis  | [`upstash-redis.md`](./upstash-redis.md)   | `cache`                              | 10 + fallback                      | `read-only`, `developer`, `operator`                           | `api-key`     | Env from the owner's database label.                |
+| Vercel         | [`vercel.md`](./vercel.md)                 | `runtime`                            | 16 + fallback                      | `read-only`, `developer`, `operator`                           | `api-key`     | Declares `envOf` (the `env[<label>]` segment).      |
 
-Risk counts are the named entries of each `risk-catalog.yaml`; every catalog
-adds exactly one `<id>.uncategorized-write` fallback. Preset values are a
+Risk counts are the live named entries of each `risk-catalog.yaml`; every
+catalog adds exactly one `<id>.uncategorized-write` fallback. Deprecated ids
+are counted apart. Preset values are a
 starting point — ADR `mission-presets-default-values` is deferred.
 
-[`railway-ssh.md`](./railway-ssh.md) keeps the v4 modelling notes of Railway
-and SSH (French, legacy); both plugins have their own handbook above.
+The v4 modelling notes of Railway and SSH (French) are archived as legacy in
+[`railway-ssh.md`](../legacy/railway-ssh.md); both plugins have their own
+handbook above.
 
 ## Updating
 

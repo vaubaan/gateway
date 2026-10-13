@@ -13,6 +13,9 @@ tracks:
   - apps/gateway/tests/unit/server/rate-limit/
   - apps/gateway/tests/integration/budget/
   - packages/gateway-core/src/pipeline.ts
+  - packages/gateway-core/src/fingerprint.ts
+  - packages/gateway-core/tests/unit/fingerprint.test.ts
+  - apps/gateway/src/server/compose/root.ts
 ---
 
 # Budget and sessions — decision core, session service, rate windows
@@ -40,7 +43,7 @@ apps/gateway/src/server/budget/
   mapping.ts          BudgetMission, budgetMissionOf(record), policyEntryOf(), sessionCounterOf()
   session-service.ts  SessionService.recordCall() / stateOf()  — runs decide() in the store transaction
   budget-stage.ts     createBudgetStage({ service, missions }) — gateway-core's BudgetStage
-  consistency.ts      countersAgreeWithAudit()  — SUM(session_counters) == COUNT(audit allowed)
+  consistency.ts      countersAgreeWithAudit(), CREDIT_EVENT_KINDS  — SUM(session_counters) + credits == COUNT(audit allowed)
 apps/gateway/src/server/rate-limit/
   index.ts
   sliding-window.ts   SlidingWindowRateLimiter (SlidingWindows peek/push + RateLimiter take), rateWindowKey()
@@ -195,7 +198,7 @@ computed from the counters whose `period_start` equals the current period's `sta
 ## The pipeline stage (`budget-stage.ts`)
 
 `createBudgetStage({ service, missions })` implements gateway-core's `BudgetStage`:
-`decide(ctx, call, { risks_touched, now })` builds the `BudgetMission` from the cached
+`decide(ctx, call, { risks_touched, now })` builds the `BudgetMission` from the request's
 `MissionContext` — `ctx.policy` is the enumeration the risk stage just checked, so both
 stages of one call agree — and `periodSpecOf(ctx.mission.period, anchor)`, reading the
 mission row (`missions.getById`) only for a one-off mission whose shared `Period` has no
@@ -225,8 +228,9 @@ their last window. `rateWindowKey(missionId, riskId)` = `mission:<id>:risk:<risk
 (`ZREMRANGEBYSCORE`, `ZCARD`, `ZADD`, `PEXPIRE` in a Lua script); the budget would probe
 before its SQLite transaction and record after commit (ADR). The composition root builds one
 `SlidingWindowRateLimiter`: it is the budget's `rateWindows` and, unless a test injects
-another `RateLimiter`, the surface limiter of the execution door and of the connect flows
-(disjoint keys). The root also builds the `SessionService` (`root.budget`) and hands it to
+another `RateLimiter`, the surface limiter of the execution door (`mcp:mission:<id>`,
+`mcp-verify:<prefix>`), of the connect flows (`connect:<user>`) and of the request page
+(`request-page:ip:<ip>`), on disjoint keys. The root also builds the `SessionService` (`root.budget`) and hands it to
 the execution door, which wraps it with `createBudgetStage`
 ([execution-door](execution-door.md)).
 
