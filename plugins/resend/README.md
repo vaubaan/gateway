@@ -10,7 +10,7 @@ approval.
 
 Contract: [`plugin-contract-and-credential-spec`](../../docs/decisions/plugin-contract-and-credential-spec.md).
 Modelling handbook: [`docs/handbook/providers/resend.md`](../../docs/handbook/providers/resend.md).
-v4 provider spec (domain, zones, catalog rationale): [`docs/spec/resend.md`](../../docs/spec/resend.md).
+Provider spec (domain, zones, catalog rationale): [`docs/spec/resend.md`](../../docs/spec/resend.md).
 Contributor guide: [`plugins/README.md`](../README.md).
 
 ## Data model
@@ -112,7 +112,7 @@ decide how it is classified.
 
 ## Catalog
 
-`src/risk-catalog.yaml`, version 2, 18 entries: 15 live named risks, the
+`src/risk-catalog.yaml`, version 3, 18 entries: 15 live named risks, the
 `resend.uncategorized-write` fallback, and two deprecated ids
 (`read-audiences` → `read-segments`, `audience-write` → `segment-write`)
 kept so they stay resolvable.

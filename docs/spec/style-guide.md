@@ -1,329 +1,335 @@
-# Style Guide — spec
+---
+title: Style guide — tokens and interface primitives
+status: current
+date: 2026-10-13
+---
 
-> **Statut :** spec greenfield draft. Aucun style guide n'existait avant
-> ce document. La codebase frontend (`apps/gateway`) accumule des
-> conventions Tailwind locales contradictoires — cards blanches sur fond
-> noir, palette `neutral-100..950` utilisée en vrac, accents `red-400` /
-> `yellow-900` / `green-100` ad-hoc — que cette spec vise à remplacer
-> par un vocabulaire visuel cardinal et borné.
+# Style guide — spec
+
+> **Status:** current. Describes the visual vocabulary of the web
+> interface ([vaubaan-gateway](./vaubaan-gateway.md) §4.2) and the rules
+> a screen must follow. English rewrite of the draft of June 2026,
+> checked against the tokens and primitives the interface actually uses;
+> where the interface does not yet meet a rule, §8 says so.
 >
-> **Filiation.** Style calqué sur **Geist**, le design system
-> open-source de Vercel ([vercel.com/design](https://vercel.com/design),
-> [github.com/vercel/geist-font](https://github.com/vercel/geist-font)).
-> Pas une copie pixel-perfect — une adoption de ses tenets (noir-et-blanc
-> d'abord, hairline borders, espace généreux, typographie sobre,
-> micro-motion).
+> **Lineage.** The style follows the tenets of Geist, Vercel's open
+> design system: black and white first, hairline borders, generous
+> space, restrained typography, very little motion. It is an adoption of
+> those tenets, not a copy.
 
-## 0. Vocabulaire
+## 0. Vocabulary
 
-7 mots, distincts et non-interchangeables :
+Seven terms, distinct and not interchangeable.
 
-- **Token** — variable nommée porteuse d'une décision visuelle (ex.
-  `surface-base`, `border-subtle`, `text-muted`). Les tokens sont la
-  seule source de vérité ; aucun composant ne référence une valeur
-  brute (`oklch(…)`, `#…`, `12px`).
-- **Primitive token** — l'étage le plus bas : une couleur, une taille,
-  une durée. Ex. `gray-0` à `gray-1000`, `space-1` à `space-12`,
-  `radius-sm`. Anonyme sémantiquement (`gray-200` ne dit pas *à quoi
-  ça sert*).
-- **Semantic token** — l'étage qui *prescrit l'usage* : `surface-base`,
-  `surface-raised`, `text-foreground`, `text-muted`, `border-subtle`,
-  `accent-info`, `accent-success`, `accent-warning`, `accent-danger`.
-  Pointe vers un primitive token qui change selon le thème (dark/light).
-- **Component primitive** — composant UI atomique partagé : Button,
-  Input, Card, Badge, Table, Dialog, Banner. Construit uniquement à
-  partir de semantic tokens. Aucun écran ne re-implémente un bouton.
-- **Surface** — un plan visuel (fond + bord). Trois niveaux cardinaux :
-  *base* (la page elle-même), *raised* (cards, panneaux), *overlay*
-  (dialogs, popovers — au-dessus du flow).
-- **Hairline** — un bord de 1px qui se distingue *uniquement* par sa
-  luminance. Préféré aux ombres portées comme séparateur visuel.
-- **Density** — degré de compacité d'un layout. Trois presets :
-  *comfortable* (formulaires, onboarding), *default* (la majorité des
-  écrans), *compact* (tables, listes denses).
+- **Token** — a named variable that carries one visual decision. Tokens
+  are the only source of visual values.
+- **Primitive token** — the lowest layer: a colour step, a size, a
+  duration (`gray-200`, `space-4`, `radius-sm`). It says nothing about
+  what it is for.
+- **Semantic token** — the layer that prescribes a use (`surface-base`,
+  `text-muted`, `border-subtle`). It points to a primitive token, and
+  which one depends on the theme.
+- **Interface primitive** — a shared, atomic component (button, input,
+  card, badge, table, banner). Built from semantic tokens only. No screen
+  rebuilds one.
+- **Surface** — a visual plane, background plus border. Four exist: base
+  (the page), raised (cards, panels), overlay (what floats above the
+  flow), sunken (inset areas such as code).
+- **Hairline** — a one-pixel border told apart only by its luminance.
+  The preferred separator.
+- **Theme** — one mapping of every semantic token to primitive tokens.
+  Two exist: light and dark.
 
 ## 1. Vision
 
-Le **Style Guide** est le sous-système non-fonctionnel qui :
+The style guide is the non-functional subsystem that:
 
-1. **Définit** un vocabulaire visuel cardinal (couleurs, typographie,
-   espacement, rayons, motion, ombres) sous forme de tokens nommés.
-2. **Garantit** une cohérence visuelle entre tous les écrans du produit,
-   en interdisant aux composants de référencer des valeurs brutes.
-3. **Supporte nativement** deux modes : *dark* (défaut produit) et
-   *light* (parité visuelle stricte, même hiérarchie typo, mêmes
-   composants, mêmes states).
-4. **Fournit** un set borné de component primitives partagés (Button,
-   Input, Card, Badge, Table, Dialog, Banner) qu'aucun écran ne
-   re-implémente localement.
-5. **S'inspire** de Geist (Vercel) dans ses tenets : noir-et-blanc
-   d'abord, accents sémantiques sparse, hairline borders au lieu
-   d'ombres marquées, typographie Geist Sans + Geist Mono, motion
-   ≤ 200ms ease-out.
+1. **defines** a bounded visual vocabulary (colour, type, space, radius,
+   motion, shadow) as named tokens;
+2. **keeps every screen consistent**, by forbidding raw values in
+   screens and components;
+3. **supports two themes**, light and dark, with the same hierarchy,
+   components and states in both;
+4. **provides a bounded set of interface primitives** that no screen
+   re-implements.
 
-### 1.1 Hors-scope explicite
+### 1.1 Explicitly out of scope
 
-- **Aucune** customisation de thème par utilisateur ou par organization
-  (pas de "brand color picker"). Le style est uniforme produit-wide.
-- **Aucun** preset de density globale ("compact mode" / "comfortable
-  mode" toggle user). La density est choisie *par composant*, pas par
-  préférence user.
-- **Aucun** système d'illustrations ou de mascots. Les icônes sont des
-  glyphes neutres (set unique à ADRifier).
-- **Aucune** bibliothèque de motion / animations chorégraphiées. Le
-  motion se limite à des transitions atomiques (hover, focus, expand)
-  de durée ≤ 250ms.
-- **Aucune** synchronisation avec un outil de design (Figma, Sketch).
-  La source de vérité est le code, pas un fichier `.fig`.
-- **Aucune** redéfinition libre de tokens par composant. Si un besoin
-  visuel n'a pas de token, on en ajoute un — on ne dévie pas localement.
-- **Aucun** thème "high contrast" séparé en v1 (les ratios AA suffisent).
+- **No theme customisation** per user or per instance: no brand colour
+  picker.
+- **No global density preference.** Density is a property of a
+  component, not a user setting.
+- **No illustrations or mascots.**
+- **No choreographed animation.** Motion is limited to atomic
+  transitions of 250 ms at most.
+- **No design-tool source of truth.** The tokens in the code are the
+  reference.
+- **No local redefinition of a token.** If a need has no token, a token
+  is added.
+- **No separate high-contrast theme.** The AA ratios of §5 are the bar.
 
-## 2. Domaine
+## 2. Domain
 
-### 2.1 Hiérarchie des tokens
+### 2.1 Layers
 
 ```
-Primitive tokens         (anonymes, sans usage prescrit)
-   │
-   ├── color/gray         (gray-0 .. gray-1000, 12 paliers OKLCH)
-   ├── color/blue         (info)
-   ├── color/green        (success)
-   ├── color/amber        (warning)
-   ├── color/red          (danger)
-   ├── space              (space-0 .. space-24, base 4px)
-   ├── radius             (none | xs | sm | md | lg | full)
-   ├── font-size          (text-xs .. text-3xl)
-   ├── font-weight        (regular | medium | semibold | bold)
-   ├── duration           (fast=100ms | base=150ms | slow=250ms)
-   └── shadow             (none | sm | md)
+Primitive tokens          anonymous, no prescribed use
+  gray                    14 steps, gray-0 (near white) to gray-1000 (near black)
+  blue, green, amber, red 4 steps each: 50, 200, 600, 900
+  space                   base 4 px
+  radius                  none, xs, sm, md, lg, full
+  font size, font weight
+  duration, easing
+  shadow                  none, sm, md
         │
         ▼
-Semantic tokens          (prescrivent l'usage, varient dark/light)
-   │
-   ├── surface-base       (le fond de page)
-   ├── surface-raised     (cards, panneaux)
-   ├── surface-overlay    (dialogs, popovers)
-   ├── surface-sunken     (zones inset : code blocks, preformatted)
-   ├── text-foreground    (texte principal)
-   ├── text-muted         (texte secondaire)
-   ├── text-subtle        (placeholders, labels désactivés)
-   ├── text-inverse       (texte sur fond inverse : bouton primaire)
-   ├── border-subtle      (hairline défaut)
-   ├── border-strong      (hairline marqué : focus, hover sur input)
-   ├── accent-info        (informationnel — bleu)
-   ├── accent-success     (vert)
-   ├── accent-warning     (amber)
-   ├── accent-danger      (rouge)
-   └── focus-ring         (anneau focus accessible, distinct des accents)
+Semantic tokens           prescribe a use; mapped per theme
+  surface-base, surface-raised, surface-overlay, surface-sunken
+  text-foreground, text-muted, text-subtle, text-inverse
+  border-subtle, border-strong
+  accent-{info,success,warning,danger}-{bg,fg}
+  primary-bg, primary-fg, primary-bg-hover
+  focus-ring
         │
         ▼
-Component primitives     (Button, Input, Card, …)
-   └── ne consomment QUE des semantic tokens
+Interface primitives      consume semantic tokens only
 ```
 
-### 2.2 Palette
+### 2.2 Colour
 
-**Neutre — gray scale OKLCH.** 12 paliers de `gray-0` (presque blanc) à
-`gray-1000` (presque noir), espacés perceptuellement (OKLCH lightness).
-Le mode *dark* mappe `surface-base → gray-980`, *light* mappe
-`surface-base → gray-20`. Les valeurs exactes vivent dans le handbook.
+**Neutral scale.** Fourteen grays in a perceptually uniform colour space
+(OKLCH), with no chroma: `gray-0`, `20`, `50`, `100` to `900` by
+hundreds, `980`, `1000`. The extra steps at both ends give the surfaces
+of each theme their small differences in lightness.
 
-**Accents.** Quatre familles, chacune en 4 paliers (`-50` / `-200` /
-`-600` / `-900`). Usage cardinal :
+**Accents.** Four families, one per status, four steps each:
 
-| Famille | Usage | Dark : fond / texte | Light : fond / texte |
-|---|---|---|---|
-| `blue` (info) | banner informationnel, lien actif | `blue-900` / `blue-200` | `blue-50` / `blue-900` |
-| `green` (success) | resource healthy, opération réussie | `green-900` / `green-200` | `green-50` / `green-900` |
-| `amber` (warning) | reseal requis, statut dégradé | `amber-900` / `amber-200` | `amber-50` / `amber-900` |
-| `red` (danger) | erreur 4xx/5xx, action destructive | `red-900` / `red-200` | `red-50` / `red-900` |
+| Family  | Status  | Used for                                         |
+| ------- | ------- | ------------------------------------------------ |
+| `blue`  | info    | information, a neutral notice                    |
+| `green` | success | a healthy state, a completed operation           |
+| `amber` | warning | a degraded state, an action that needs attention |
+| `red`   | danger  | an error, a destructive action                   |
 
-Aucun composant ne référence directement `blue-600` ; il référence
-`accent-info` qui *résout* vers le bon palier selon mode et contexte.
+A status is always used as a **pair** of semantic tokens, background and
+foreground: `accent-warning-bg` with `accent-warning-fg`. In the light
+theme the pair is step 50 under step 900; in the dark theme, step 900
+under step 200. Step 600 is defined and not used by any semantic token.
+No component references a family step directly.
 
-### 2.3 Typographie
+**Primary action.** The primary button is the inverse of the page, not
+an accent: near black on a light page, near white on a dark one
+(`primary-bg`, `primary-fg`, `primary-bg-hover`).
 
-| Token | Famille | Usage |
-|---|---|---|
-| `font-sans` | **Geist Sans** | tout le texte UI (paragraphes, labels, boutons, headings) |
-| `font-mono` | **Geist Mono** | identifiants techniques (provider_ref, slugs, JSON, code) |
+### 2.3 The two themes
 
-Échelle : `text-xs` (11px) · `text-sm` (13px) · `text-base` (14px) ·
-`text-md` (15px) · `text-lg` (17px) · `text-xl` (20px) · `text-2xl`
-(24px) · `text-3xl` (32px). Aucun composant n'utilise une taille hors
-échelle.
+| Semantic token    | Light       | Dark        |
+| ----------------- | ----------- | ----------- |
+| `surface-base`    | `gray-0`    | `gray-1000` |
+| `surface-raised`  | `gray-20`   | `gray-980`  |
+| `surface-overlay` | `gray-0`    | `gray-900`  |
+| `surface-sunken`  | `gray-50`   | `gray-1000` |
+| `text-foreground` | `gray-1000` | `gray-0`    |
+| `text-muted`      | `gray-600`  | `gray-300`  |
+| `text-subtle`     | `gray-400`  | `gray-500`  |
+| `text-inverse`    | `gray-0`    | `gray-1000` |
+| `border-subtle`   | `gray-100`  | `gray-800`  |
+| `border-strong`   | `gray-300`  | `gray-600`  |
 
-**Pas plus de 3 tailles distinctes par écran.** Hiérarchie typique :
-title (`text-xl` semibold) → body (`text-sm` regular) → meta (`text-xs`
-muted). Le contraste vient du *weight* et de la *couleur*, pas
-uniquement de la taille.
+The theme is selected by one attribute on the root of the document. No
+component declares its own colours per theme. **The interface is served
+in the light theme**; the dark mapping is defined and complete, and is
+what applies when the attribute is absent. There is no switch (§7.2).
 
-### 2.4 Espacement
+### 2.4 Typography
 
-Échelle multiplicative sur base 4px : `space-1` (4) · `space-2` (8) ·
-`space-3` (12) · `space-4` (16) · `space-6` (24) · `space-8` (32) ·
-`space-12` (48) · `space-16` (64) · `space-24` (96).
+| Family     | Use                                                          |
+| ---------- | ------------------------------------------------------------ |
+| Geist Sans | all interface text                                           |
+| Geist Mono | technical identifiers: refs, `RiskId`s, slices, tokens, code |
 
-Densités cardinales :
+The two families are not tokens of the root style sheet: they are made
+available by the font package as two variables, which the global styles
+and the components reference.
 
-| Density | Padding card | Gap form-fields | Cas d'usage |
-|---|---|---|---|
-| *comfortable* | `space-6` | `space-4` | onboarding, dialogs, single-form |
-| *default* | `space-4` | `space-3` | la majorité des écrans applicatifs |
-| *compact* | `space-2` | `space-1` | tables, listes denses, sidebar items |
+Both families are bundled with the application; the system fonts are the
+fallback.
 
-### 2.5 Rayons et bords
+Scale, relative to the root size:
 
-| Token | Valeur | Usage |
-|---|---|---|
-| `radius-none` | 0 | tables pleine largeur, sections inset |
-| `radius-xs` | 2px | inputs inline, badges étroits |
-| `radius-sm` | 4px | boutons, inputs, badges |
-| `radius-md` | 6px | cards, panneaux raised |
-| `radius-lg` | 8px | dialogs, modales |
-| `radius-full` | 999px | pills (status badges arrondis), avatars |
+| Token       | Size   | Token      | Size  |
+| ----------- | ------ | ---------- | ----- |
+| `text-xs`   | 0.75   | `text-lg`  | 1.125 |
+| `text-sm`   | 0.8125 | `text-xl`  | 1.5   |
+| `text-base` | 0.875  | `text-2xl` | 2     |
+| `text-md`   | 1      | `text-3xl` | 2.5   |
 
-**Bords > ombres.** Un hairline 1px en `border-subtle` est *toujours*
-préféré à `shadow-sm`. Les ombres ne sont autorisées que sur les
-surfaces *overlay* (dialogs flottants, popovers détachés du flow).
+The root size is 125 % of the browser default, so the whole scale renders
+a quarter larger than its nominal values. Body text is `text-base`.
+Weights: regular 400, medium 500, semibold 600, bold 700.
 
-### 2.6 Motion
+**At most three sizes on one screen.** The usual hierarchy is a title, a
+body and a meta line. Contrast comes from weight and colour before size.
 
-3 durées seulement : `duration-fast` (100ms), `duration-base` (150ms),
-`duration-slow` (250ms). Easing par défaut : `ease-out`. Pas de bounce,
-pas de spring. Les transitions ciblent uniquement : `background-color`,
-`border-color`, `color`, `opacity`, `transform`. **Jamais** de
-transition sur `height` ou `width` (préférer `max-height` ou un swap
-d'état discret).
+### 2.5 Space
 
-### 2.7 État de focus
+A scale on a 4 px base: `space-0` (0), `1` (4), `2` (8), `3` (12), `4`
+(16), `5` (20), `6` (24), `8` (32), `10` (40), `12` (48), `16` (64),
+`24` (96).
 
-`focus-ring` est un anneau **distinct** des accents sémantiques —
-typiquement `blue-500` à 2px d'offset, visible sur tous les fonds. Le
-focus n'est jamais supprimé visuellement, seulement remplacé (jamais
-`outline: none` sans alternative).
+Three densities, chosen per component:
+
+| Density       | Inner padding | Gap between fields | Where                           |
+| ------------- | ------------- | ------------------ | ------------------------------- |
+| _comfortable_ | `space-6`     | `space-4`          | first-run screens, single forms |
+| _default_     | `space-4`     | `space-3`          | most screens                    |
+| _compact_     | `space-2`     | `space-1`          | tables, dense lists             |
+
+### 2.6 Radius and borders
+
+| Token         | Value  | Use                               |
+| ------------- | ------ | --------------------------------- |
+| `radius-none` | 0      | full-width tables, inset sections |
+| `radius-xs`   | 2 px   | narrow inline elements            |
+| `radius-sm`   | 4 px   | badges                            |
+| `radius-md`   | 6 px   | buttons, inputs, banners          |
+| `radius-lg`   | 10 px  | cards, dialogs                    |
+| `radius-full` | 999 px | pills, avatars                    |
+
+**Borders before shadows.** A hairline in `border-subtle` separates;
+`border-strong` marks hover and emphasis. Shadows (`shadow-sm`,
+`shadow-md`) are allowed only on overlay surfaces.
+
+### 2.7 Motion
+
+Three durations: `duration-fast` (100 ms), `duration-base` (150 ms),
+`duration-slow` (250 ms). One easing, ease-out, with no bounce and no
+spring. Transitions apply to colour, background, border colour, opacity
+and transform only, never to width or height.
+
+### 2.8 Focus
+
+`focus-ring` is a double ring: a gap in the colour of the page, then a
+neutral ring that contrasts with it in each theme. It is neutral on
+purpose, so that it is never mistaken for a status. Focus is never
+removed, only replaced by the ring; it shows on keyboard focus for
+buttons, links, inputs, selects and text areas.
 
 ## 3. Format / Layout
 
-### 3.1 Où vivent les tokens
+### 3.1 Where tokens live
 
-Les tokens vivent dans **une seule feuille de style racine** chargée
-par l'application. Ils sont exposés comme custom properties CSS
-résolues par le runtime (pas de pré-compilation par composant). Le
-toggle dark/light bascule un *attribut sur la racine du document* —
-aucun composant ne re-déclare ses couleurs en fonction du thème.
+Tokens live in **one root style sheet**, exposed as custom properties
+resolved at run time. Components are styled in files scoped to the
+component, which reference tokens and nothing else.
 
-### 3.2 Component primitives — v1
+### 3.2 Page frame
 
-Set minimal partagé par tous les écrans, dans l'ordre de priorité :
+Every page sits in one container, centred, with a fixed maximum width
+and the same outer padding. Headings have three levels, set once
+globally.
 
-1. **Button** — variants : `primary`, `secondary`, `ghost`, `danger`,
-   `link`. Tailles : `sm`, `md`. États : default, hover, active,
-   focus, disabled, loading.
-2. **Input** — `text`, `password`, `textarea`. États : default, focus,
-   error, disabled. Pas de "success state" (l'absence d'erreur suffit).
-3. **Card** — wrapper surface-raised + hairline. Optionnel : header,
-   footer.
-4. **Badge** — `neutral`, `info`, `success`, `warning`, `danger`.
-   Tailles : `sm`, `md`. Forme : pill (`radius-full`) ou rectangle
-   (`radius-sm`).
-5. **Table** — header sticky optionnel, hairline entre rangées,
-   density configurable, sort affordances cohérentes.
-6. **Dialog** — overlay sombre + surface-overlay centrée, focus trap,
-   ESC pour fermer, motion `duration-base`.
-7. **Banner** — `info`, `warning`, `danger`. Pleine largeur (typiquement
-   en haut d'un layout), dismissible optionnel.
+### 3.3 Interface primitives
 
-### 3.3 Hors v1 (deferred)
+| Primitive               | Variants and parts                                                                                            |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------- |
+| **Button**              | `primary`, `secondary` (default), `ghost`, `danger`; sizes `sm`, `md`; states hover, focus, disabled, loading |
+| **Input**               | text input, text area, select, and a **field** wrapper that carries the label, a hint and the error           |
+| **Card**                | raised surface with a hairline; optional header with a title, and a body                                      |
+| **Badge**               | tones `neutral`, `info`, `success`, `warning`, `danger`; an optional monospace form for identifiers           |
+| **Banner**              | same five tones; optional title; in the flow of the page, not dismissible                                     |
+| **Table**               | head on a sunken surface, hairline between rows                                                               |
+| **Code**                | inline technical text in the monospace family                                                                 |
+| **Layout**              | the page container, and a vertical stack with a gap taken from the space scale                                |
+| **Danger confirmation** | a modal for terminal actions: the user types a given phrase before the action is enabled; Escape cancels      |
 
-- **Tooltip** (utile mais non bloquant — v1.1).
-- **DropdownMenu** (la nav actuelle utilise des links, suffisant pour v1).
-- **Tabs** (aucun écran v1 ne nécessite des onglets).
-- **Toast / Snackbar** (les erreurs sont affichées inline pour l'instant).
+There is no link-styled button: a link is a link. An input has no
+success state: the absence of an error is enough.
+
+### 3.4 Not provided
+
+Generic dialog, tooltip, dropdown menu, tabs, toast. Errors and results
+are shown inline, in a banner or beside the field.
 
 ## 4. Composition
 
-### 4.1 Avec les features
+A feature screen uses **only** semantic tokens and interface primitives.
+When a screen needs something neither provides, the order is:
 
-Chaque feature module consomme **uniquement** :
-- les semantic tokens (jamais primitive directement),
-- les component primitives (jamais une re-implémentation locale).
+1. state the need;
+2. extend this guide (a token, a variant, a primitive);
+3. then build the screen.
 
-Si un écran a besoin d'un visuel non couvert, la séquence est :
-1. mention dans la doc,
-2. enrichissement du style guide (cette spec + handbook),
-3. *puis* implémentation de l'écran.
+Not "hard-code it now and factor it later".
 
-Pas de "je passe en dur cette fois, on factorisera plus tard". Le
-style guide est greenfield — c'est le moment de poser la règle.
+## 5. Accessibility
 
-### 4.2 Avec les ADRs
-
-Décisions techniques liées à ce style guide qui méritent leur propre
-ADR (`docs/decisions/<slug>.md`) :
-
-- *Choix du moteur de tokens* — implicite aujourd'hui, mérite ADR
-  explicite.
-- *Choix de la bibliothèque d'icônes* (lucide / phosphor / SF / custom).
-- *Choix de l'embarquement Geist* (self-hosted woff2 / package npm
-  Vercel / Google Fonts).
-- *Choix d'une lib de component primitives* (headless + recipe maison /
-  copy-paste / from-scratch).
-- *Stratégie de bascule dark/light* (auto via `prefers-color-scheme` /
-  toggle user persisté / combinaison).
-
-## 5. Accessibilité
-
-Contraintes cardinales :
-
-- **Contraste AA minimum** entre `text-foreground` et `surface-base`,
-  les deux modes (dark + light). Pour `text-muted`, contraste AA-large
-  acceptable mais pas en-dessous.
-- **Focus toujours visible.** `focus-ring` ne peut être supprimé que
-  remplacé.
-- **Pas de couleur seule** pour véhiculer un statut. Toujours
-  couleur + icône + label texte. Un badge "success" porte son label.
-- **Motion respecte `prefers-reduced-motion`.** Si activé, les
-  transitions tombent à 0ms (mais l'état final reste identique).
-- **Targets tactiles ≥ 32px** pour tout élément cliquable, même en
-  density compact.
+- **AA contrast at least** between `text-foreground` and `surface-base`
+  in both themes. `text-muted` may fall to AA for large text, not below.
+- **Focus always visible** (§2.8).
+- **Never colour alone** for a status: a badge or a banner carries its
+  text.
+- **Reduced motion is respected**: when the user asks for it,
+  transitions take no time and the end state is the same.
+- **Click targets of 32 px at least**, in every density.
+- **Modals** take focus when they open, are labelled, and close on
+  Escape.
 
 ## 6. Tests
 
-Le style guide se teste à **deux niveaux** :
+Tokens are the specification; tests check what emerges from them, not
+"this button is black":
 
-- **Visual regression** sur un *page gallery* qui rend chaque
-  component primitive dans chaque variant × état × thème. Toute
-  modification de token devient visible sur les diffs.
-- **Contrast probe** automatisée : un test parcourt les paires
-  `text-*` × `surface-*` et vérifie le ratio AA dans les deux modes.
-  Échoue si une combinaison documentée tombe sous le seuil.
+- a **contrast probe** over the documented text and surface pairs, in
+  both themes;
+- a **gallery** rendering each primitive in each variant, state and
+  theme, compared visually on change.
 
-Pas de test "ce bouton est bleu" — les tokens sont la spec, le test
-vérifie les *propriétés émergentes* (contraste, présence du focus
-ring, respect du `prefers-reduced-motion`).
+Neither exists yet (§8).
 
-## 7. Décisions v1 & open questions
+## 7. Decisions and open questions
 
-### 7.1 Décisions actées
+### 7.1 Settled
 
-- **Dual theme dark + light** dès la v1, parité stricte.
-- **Geist Sans + Geist Mono bundled** (pas de fallback system-only).
-- **4 statuts sémantiques** : info / success / warning / danger.
-- **OKLCH** comme color model primaire (déjà en place dans
-  `globals.css`).
-- **Hairline > shadow** comme convention de séparation.
+- Two themes, light and dark, defined with strict parity.
+- Geist Sans and Geist Mono, bundled.
+- Four statuses: info, success, warning, danger; plus neutral.
+- OKLCH as the colour space of the primitive scales.
+- Hairline before shadow.
+- A neutral focus ring.
+- Primitives written for this interface, styled per component, with no
+  component library.
 
-### 7.2 Open questions (à ADRifier)
+### 7.2 Open
 
-- **Self-hosted Geist vs package npm Vercel vs Google Fonts** — coût
-  bundle vs simplicité de maj.
-- **Icon set** — lucide est le candidat naturel (mêmes choix
-  esthétiques que Geist), mais pas tranché.
-- **Stratégie de base de component primitives** — headless +
-  styles maison ? copy-paste ? from-scratch ?
-- **Bascule dark/light** — automatique (`prefers-color-scheme`) ou
-  toggle user persisté ?
-- **Composantes deferred (Tooltip, Dropdown, Tabs, Toast)** — date /
-  trigger de v1.1 ?
+- **Theme selection.** Follow the system preference, offer a switch that
+  is remembered, or both. Today the light theme is fixed.
+- **Icons.** None is used. If a set is introduced it must be a single,
+  neutral one.
+- **The primitives of §3.4.** When, and triggered by which screen.
+
+## 8. Known gaps between this guide and the interface
+
+Stated so that nobody takes a rule for a fact:
+
+- **Reduced motion** (§5) is not handled.
+- **The small button** is 26 px high, under the 32 px target (§5).
+- **Raw values remain.** Paddings, heights and a few font sizes are
+  written in pixels rather than with tokens in the styles of buttons,
+  badges, inputs, banners, code and table cells, and in the style sheets
+  of the missions, audit and connections screens. Modal backdrops are a
+  raw translucent black. Text selection uses primitive grays directly.
+- **A second modal exists inside a screen**: the dialog that reveals a
+  mission token is built by the missions screen, not from a primitive. It
+  does not take focus when it opens and does not close on Escape (§5).
+- **The danger confirmation** takes focus and closes on Escape, but does
+  not trap focus inside itself; it is styled inline and builds its own
+  text input instead of using the input primitive. The vertical stack is
+  styled inline too (§3.1).
+- **The overlay surface and the shadows are not used**: both modals sit on
+  the raised surface (§2.6).
+- **Table rows do not highlight on hover**: the rule is written and never
+  applies.
+- **No contrast probe and no gallery** (§6).
+- **The dark theme** is defined but not reachable from the interface
+  (§2.3).
