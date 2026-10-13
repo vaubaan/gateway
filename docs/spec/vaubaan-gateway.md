@@ -367,9 +367,14 @@ the company:
   provider token, because the work cannot go through the gateway (a
   repository-scoped installation token for `git clone` and `git push`).
   Such a tool is a risk of its own in the catalog, never accepted by
-  default, gated by approval in the presets that carry it, counted
-  against the budget and audited like any call; the long-lived
-  credential still never leaves the instance.
+  default, counted against the budget and audited like any call; the
+  long-lived credential still never leaves the instance. **In a preset, a
+  token-handing risk that grants write is gated by approval; a read-only
+  one may be automatic** (a clone token reads what the mission already
+  reads through the gateway; a push token writes where no risk decision
+  follows it). A plugin declares which of its token-handing risks are
+  read-only; one it does not declare is treated as write, and a preset
+  that leaves it automatic is refused when the plugin is loaded.
 - An exfiltrated mission token grants the mission's rights, within its
   budget, until revocation. Nothing more. Because each token has one
   holder, the audit says whose token it was, and revoking it leaves the

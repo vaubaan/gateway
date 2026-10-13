@@ -120,7 +120,11 @@ describe('definePlugin', () => {
     const [risk] = acmePlugin.catalog.risks;
     const withHandout = (tokenHandouts: unknown): ProviderPlugin =>
       ({ ...acmePlugin, tokenHandouts }) as ProviderPlugin;
-    expect(pluginIssues(withHandout([{ tool: tool!.name, riskIds: [risk!.id] }]))).toEqual([]);
+    expect(
+      pluginIssues(
+        withHandout([{ tool: tool!.name, riskIds: [risk!.id], readOnlyRiskIds: [risk!.id] }]),
+      ),
+    ).toEqual([]);
     expect(pluginIssues(withHandout('yes'))).toEqual([
       'tokenHandouts: expected a list when present',
     ]);
@@ -132,6 +136,48 @@ describe('definePlugin', () => {
     expect(pluginIssues(withHandout([{ tool: tool!.name, riskIds: ['acme.unknown'] }]))).toEqual([
       "tokenHandouts[0].riskIds: 'acme.unknown' is not a risk of the catalog",
     ]);
+  });
+
+  // Spec §2.4: in a preset, a token-handing risk that grants write is gated by
+  // approval; a read-only one may be automatic. Undeclared means write.
+  describe('a preset and the token-handing risks', () => {
+    const [tool] = acmePlugin.tools;
+    const handing = (riskIds: string[], readOnlyRiskIds?: unknown): ProviderPlugin =>
+      ({
+        ...acmePlugin,
+        tokenHandouts: [{ tool: tool!.name, riskIds, readOnlyRiskIds }],
+      }) as ProviderPlugin;
+
+    test('a write token left on auto is refused, where it is left on auto', () => {
+      // `acme.thing-write` is on auto in staging and on approval in prod.
+      expect(pluginIssues(handing(['acme.thing-write']))).toEqual([
+        expect.stringMatching(
+          /^catalog: preset 'developer': 'acme\[staging\]\.thing-write' hands the agent a token that can write ; its gate must be 'approval'/,
+        ),
+      ]);
+    });
+
+    test('a risk that is not declared read-only is taken as write', () => {
+      const issues = pluginIssues(handing(['acme.read-things']));
+      expect(issues).toHaveLength(2);
+      expect(issues[0]).toContain("preset 'reader': 'acme.read-things'");
+      expect(issues[1]).toContain("preset 'developer': 'acme.read-things'");
+    });
+
+    test('a declared read-only token may stay on auto', () => {
+      expect(pluginIssues(handing(['acme.read-things'], ['acme.read-things']))).toEqual([]);
+    });
+
+    test('read-only is declared among the risks of the handout, as a list', () => {
+      expect(pluginIssues(handing(['acme.read-things'], ['acme.thing-write']))).toEqual(
+        expect.arrayContaining([
+          "tokenHandouts[0].readOnlyRiskIds: 'acme.thing-write' is not one of its riskIds",
+        ]),
+      );
+      expect(pluginIssues(handing(['acme.read-things'], 'all'))).toEqual(
+        expect.arrayContaining(['tokenHandouts[0].readOnlyRiskIds: expected a list when present']),
+      );
+    });
   });
 
   test('catalog rules apply (presets, fallback) through the definition', () => {

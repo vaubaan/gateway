@@ -260,6 +260,15 @@ describe('the reference of the shipped plugins', () => {
       .filter((entry) => entry.hands_token)
       .map((entry) => entry.base_id);
     expect(handed).toEqual(['github.mint-install-token-clone', 'github.mint-install-token-push']);
+    // What the token can do, as the plugin declares it: a preset gates the write one.
+    const access = Object.fromEntries(
+      github.risk_groups
+        .flatMap((group) => group.entries)
+        .map((entry) => [entry.base_id, entry.token_access]),
+    );
+    expect(access['github.mint-install-token-clone']).toBe('read-only');
+    expect(access['github.mint-install-token-push']).toBe('write');
+    expect(access['github.read-code']).toBeNull();
     // No other tool states its risks: they depend on the arguments.
     expect(github.tools.filter((t) => t.declared_risks !== null)).toHaveLength(1);
     for (const reference of references.filter((r) => r.id !== 'github')) {

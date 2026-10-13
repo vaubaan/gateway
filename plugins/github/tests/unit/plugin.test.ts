@@ -7,7 +7,7 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import type { Resource } from '@vaubaan/plugin-sdk';
+import { pluginIssues, writeHandoutRiskIds, type Resource } from '@vaubaan/plugin-sdk';
 import {
   assertCatalogCoverage,
   assertNoWildcard,
@@ -200,6 +200,37 @@ describe('github catalog — presets', () => {
     expect(entry('developer', 'github.workflow-write-via-file')?.gate).toBe('approval');
     expect(entry('developer', 'github.mint-install-token-push')?.gate).toBe('approval');
     expect(entry('developer', 'github.mint-install-token-clone')?.gate).toBe('auto');
+  });
+
+  // Spec §2.4: a token that can write is handed after approval; the clone token is
+  // read-only (`contents:read`) and is the only one a preset may leave on auto.
+  test('the push token is gated in every preset that carries it; only the clone token is declared read-only', () => {
+    expect(githubPlugin.tokenHandouts).toEqual([
+      {
+        tool: 'github__mint_install_token',
+        riskIds: ['github.mint-install-token-clone', 'github.mint-install-token-push'],
+        readOnlyRiskIds: ['github.mint-install-token-clone'],
+      },
+    ]);
+    for (const preset of presets) {
+      const push = preset.entries.find((e) => e.risk_id === 'github.mint-install-token-push');
+      if (push) expect(push.gate, preset.id).toBe('approval');
+    }
+    expect([...writeHandoutRiskIds(githubPlugin)]).toEqual(['github.mint-install-token-push']);
+    expect(pluginIssues(githubPlugin)).toEqual([]);
+    // Without the declaration the clone token is taken as write, and the preset is refused.
+    const undeclared = {
+      ...githubPlugin,
+      tokenHandouts: (githubPlugin.tokenHandouts ?? []).map(({ tool, riskIds }) => ({
+        tool,
+        riskIds,
+      })),
+    };
+    expect(pluginIssues(undeclared)).toEqual([
+      expect.stringContaining(
+        "preset 'developer': 'github.mint-install-token-clone' hands the agent a token that can write",
+      ),
+    ]);
   });
 
   test('release-manager gates merge-protected, create-release and delete-release on approval', () => {

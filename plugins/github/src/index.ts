@@ -37,11 +37,14 @@ export const githubPlugin = definePlugin({
   docsUrl:
     'https://github.com/sbw-vaubaan/vaubaan-gateway/blob/main/docs/handbook/providers/github.md',
   // The one tool that hands the agent a provider token (spec §2.4) : a short-lived
-  // installation token scoped to the mission's repositories, for git itself.
+  // installation token scoped to the mission's repositories, for git itself. The
+  // clone token carries `contents:read` only ; the push token writes, so a preset
+  // may leave the first on `auto` and must gate the second by approval.
   tokenHandouts: [
     {
       tool: 'github__mint_install_token',
       riskIds: ['github.mint-install-token-clone', 'github.mint-install-token-push'],
+      readOnlyRiskIds: ['github.mint-install-token-clone'],
     },
   ],
   tools: githubTools,

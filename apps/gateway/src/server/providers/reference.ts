@@ -275,6 +275,12 @@ export interface RiskReference extends RiskFamily {
   readonly rate_ceiling_per_minute: number | null;
   /** Touched by a tool that hands the agent a provider token (`ProviderPlugin.tokenHandouts`). */
   readonly hands_token: boolean;
+  /**
+   * What the handed token can do at the provider: `read-only` when the plugin declares
+   * it so (`readOnlyRiskIds`), `write` otherwise; `null` when the risk hands no token.
+   * A preset gates a `write` one by approval (spec §2.4).
+   */
+  readonly token_access: TokenAccess | null;
   /** The tools the plugin declares as touching this risk (`tokenHandouts`); usually none. */
   readonly declared_tools: readonly string[];
   /** The planes of the data model its patterns reach (`planes.ts`); `['other']` when none. */
@@ -314,11 +320,13 @@ function riskReferenceOf(
   family: RiskFamily,
   context: CatalogContext,
 ): RiskReference {
-  const tools = context.handouts
-    .filter((handout) => handout.riskIds.includes(entry.id))
-    .map((handout) => handout.tool);
+  const handing = context.handouts.filter((handout) => handout.riskIds.includes(entry.id));
+  const tools = handing.map((handout) => handout.tool);
+  // Write as soon as one tool that touches it does not declare it read-only.
+  const readOnly = handing.every((handout) => handout.readOnlyRiskIds?.includes(entry.id));
   return {
     hands_token: tools.length > 0,
+    token_access: tools.length === 0 ? null : readOnly ? 'read-only' : 'write',
     declared_tools: tools,
     planes: planesOfPatterns(context.model, patternsOf(entry)),
     presets: context.presets
@@ -462,7 +470,16 @@ export const TOOL_RISKS_NOTE =
 
 /** What the mark "hands a token to the agent" means (spec §2.4). */
 export const TOKEN_HANDOUT_NOTE =
-  'Hands a token to the agent: the one deliberate exception to "the agent never sees a provider credential". The tool returns a short-lived, narrowly scoped provider token, because the work cannot go through the gateway (git clone, git push). What the agent then does with that token is outside the gateway: it is not classified, not counted and not audited. The call that obtains the token is: it is a risk of its own, never accepted by default, counted against the budget and audited; the long-lived credential never leaves the instance.';
+  'Hands a token to the agent: the one deliberate exception to "the agent never sees a provider credential". The tool returns a short-lived, narrowly scoped provider token, because the work cannot go through the gateway (git clone, git push). What the agent then does with that token is outside the gateway: it is not classified, not counted and not audited. The call that obtains the token is: it is a risk of its own, never accepted by default, counted against the budget and audited. In a preset, a token that can write is handed only after the creator approves the call; a read-only token may be handed without asking. The long-lived credential never leaves the instance.';
+
+/** What a handed token can do at the provider. */
+export type TokenAccess = 'read-only' | 'write';
+
+/** The badge of a risk that hands a token: what the token can do, in three words. */
+export const TOKEN_ACCESS_BADGE: Readonly<Record<TokenAccess, string>> = {
+  'read-only': 'hands a read-only token',
+  write: 'hands a write token',
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The whole page

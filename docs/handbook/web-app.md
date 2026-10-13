@@ -573,9 +573,15 @@ The four sections, one file each beside the page:
    in `tokenHandouts` ([plugin-sdk](plugin-sdk.md)): its row lists the
    declared risks under a **"hands a token to the agent"** badge, a callout
    above the table states `TOKEN_HANDOUT_NOTE` (spec §2.4), and each of those
-   risks carries the badge and, unfolded, the callout and the tool. Today that
-   is `github__mint_install_token` and the two `github.mint-install-token-*`
-   risks.
+   risks carries a badge that says what the token can do —
+   **"hands a read-only token"** (warning tone) or **"hands a write token"**
+   (danger tone), from `RiskReference.token_access`, which follows the
+   plugin's `readOnlyRiskIds` — and, unfolded, the callout and the tool. The
+   note says the preset rule: a token that can write is handed only after the
+   creator approves the call, a read-only one may be handed without asking.
+   Today that is `github__mint_install_token`, `github.mint-install-token-clone`
+   (read-only, `auto` in the Developer preset) and
+   `github.mint-install-token-push` (write, `approval`).
 
 **Fragments.** `ProviderView` reads the fragment when the page opens and on
 every `hashchange` (`destinationOf`): a section id selects its tab;

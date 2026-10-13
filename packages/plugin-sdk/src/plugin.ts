@@ -101,6 +101,15 @@ export interface TokenHandout {
   readonly tool: string;
   /** Unqualified ids of this plugin's catalog ; at least one. */
   readonly riskIds: readonly string[];
+  /**
+   * The risks among `riskIds` whose token cannot write at the provider
+   * (`contents:read` for a clone). Spec §2.4 : in a preset, a token-handing
+   * risk that grants write is gated by approval ; a read-only one may be
+   * automatic. A risk that is not listed here is taken as write — absent,
+   * every handout risk of the tool is — and `definePlugin` refuses a preset
+   * that leaves it on `auto`.
+   */
+  readonly readOnlyRiskIds?: readonly string[];
 }
 
 export interface ProviderPlugin {

@@ -16,6 +16,7 @@ import {
   toolPrefixFor,
   validateDataModel,
 } from '@vaubaan/shared';
+import { baseRiskId, isRiskId } from '@vaubaan/shared/risk-id';
 
 import { semanticIssues } from './catalog-loader.ts';
 import {
@@ -82,7 +83,59 @@ function tokenHandoutIssues(plugin: ProviderPlugin): string[] {
         );
       }
     }
+    const readOnly: unknown = handout.readOnlyRiskIds;
+    if (readOnly === undefined) return;
+    if (!isList(readOnly)) {
+      issues.push(`tokenHandouts[${i}].readOnlyRiskIds: expected a list when present`);
+      return;
+    }
+    for (const riskId of readOnly) {
+      if (typeof riskId !== 'string' || !handout.riskIds.includes(riskId)) {
+        issues.push(
+          `tokenHandouts[${i}].readOnlyRiskIds: '${String(riskId)}' is not one of its riskIds`,
+        );
+      }
+    }
   });
+  return [...issues, ...handoutGateIssues(plugin)];
+}
+
+/**
+ * The risks whose call hands the agent a token that can write at the provider :
+ * every handout risk the plugin did not declare read-only. Unqualified ids.
+ */
+export function writeHandoutRiskIds(plugin: Pick<ProviderPlugin, 'tokenHandouts'>): Set<string> {
+  const write = new Set<string>();
+  const handouts: unknown = plugin.tokenHandouts;
+  if (!isList(handouts)) return write;
+  for (const handout of handouts) {
+    if (!isRecord(handout) || !isList(handout.riskIds)) continue;
+    const readOnly = new Set(isList(handout.readOnlyRiskIds) ? handout.readOnlyRiskIds : []);
+    for (const riskId of handout.riskIds) {
+      if (typeof riskId === 'string' && !readOnly.has(riskId)) write.add(riskId);
+    }
+  }
+  return write;
+}
+
+/**
+ * Spec §2.4 : a preset that carries a token-handing risk which grants write gates
+ * it by approval. A preset is what a creator accepts in one click ; a token that
+ * writes outside the gateway is not handed on a click.
+ */
+function handoutGateIssues(plugin: ProviderPlugin): string[] {
+  const write = writeHandoutRiskIds(plugin);
+  if (write.size === 0) return [];
+  const issues: string[] = [];
+  for (const preset of plugin.catalog?.presets ?? []) {
+    for (const entry of preset.entries ?? []) {
+      if (typeof entry?.risk_id !== 'string' || !isRiskId(entry.risk_id)) continue;
+      if (!write.has(baseRiskId(entry.risk_id)) || entry.gate === 'approval') continue;
+      issues.push(
+        `catalog: preset '${preset.id}': '${entry.risk_id}' hands the agent a token that can write ; its gate must be 'approval' (declare it in tokenHandouts.readOnlyRiskIds if the token is read-only)`,
+      );
+    }
+  }
   return issues;
 }
 

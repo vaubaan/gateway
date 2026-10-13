@@ -80,6 +80,12 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
   period, the gates opened in it and the credits granted in it are never purged. **The
   first start of this image deletes that history on an existing instance**: raise
   `retention_days` before you upgrade if you want to keep more than 90 days of it.
+- **A preset never hands a write token without approval.** A plugin now declares which
+  of its token-handing risks are read-only (`TokenHandout.readOnlyRiskIds`); every
+  other one is treated as write, and a plugin whose preset leaves a write one on `auto`
+  is refused at load. GitHub is unchanged: the Developer preset still hands the clone
+  token (read-only) automatically and the push token after approval. The provider
+  reference says "hands a read-only token" or "hands a write token".
 - **The Share dialog lists the orphaned missions a share would bring back.** Sharing
   again to someone whose missions were orphaned restores those missions at once, with
   the token their agent still holds. The dialog now names them, with who issued each,

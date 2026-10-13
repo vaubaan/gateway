@@ -495,7 +495,7 @@ npx vitest run packages/policy-engine     # one package
   `toolDeclarations`, `labels` (with `experimental`, and `summary` when the plugin has one), `idEnum` (non-empty tuple, throws when
   empty), `catalogOf` indexed, `presetsOf`; conflicts: same id twice, tool
   outside the plugin prefix, ill-formed plugin reported with its id.
-- **`define-plugin.test.ts`** (26) — fixture well-formed and frozen; `summary` optional, a non-empty paragraph of at most 600 characters when present; a `tokenHandouts` entry names a declared tool and risks of the catalog; every issue
+- **`define-plugin.test.ts`** (26) — fixture well-formed and frozen; `summary` optional, a non-empty paragraph of at most 600 characters when present; a `tokenHandouts` entry names a declared tool and risks of the catalog; **a preset that leaves a token-handing risk on `auto` is refused unless the plugin declares that risk read-only** (`readOnlyRiskIds`, a list of the handout's own risks; undeclared means write; refused where it is on `auto`, per preset and environment); every issue
   collected (id grammar, semver, tool prefix and duplicates, data-model
   and catalog provider mismatch); catalog rules through the definition;
   data-model referential integrity; credential spec rules per kind
