@@ -1,47 +1,34 @@
 /**
- * Catalog lint — parses the YAML, validates the static schema, parses every
- * `matches` slice pattern, walks every Gmail MCP tool the classifier
- * supports, and asserts that AT LEAST ONE non-fallback risk matches each
- * tool's emitted slices.
+ * Catalog lint — the YAML catalog as loaded by the SDK (`loadCatalogFile`),
+ * every `matches` slice pattern parsed, every Gmail tool the classifier
+ * supports walked, and AT LEAST ONE non-fallback risk matching each tool's
+ * emitted slices.
  *
  * Spec     : docs/spec/gateway-risk-model.md §4, §14.
- * Research : .vaubaan/research/providers/gmail.md §4.
+ * Handbook : docs/handbook/providers/gmail.md.
  *
  * The lint fails the build (CI gate) on :
- *   - malformed YAML
- *   - duplicate RiskId
- *   - RiskId that breaks the wire-format regex (cf. shared/src/risk.ts)
+ *   - a catalog the SDK loader refuses (malformed YAML, unknown keys, bad
+ *     ids, patterns of another provider, missing fallback, invalid presets)
  *   - a `matches` pattern that does not parse via `parseSlice`
- *   - missing fallback risk (`gmail.uncategorized-*`)
  *   - any tool whose emitted slices are only covered by the fallback risk
  *     (signals a hole in the catalog).
  */
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
-
 import { describe, expect, test } from 'vitest';
-import yaml from 'js-yaml';
-import type { ProviderBinding, RiskCatalog, RiskEntry, Slice } from '@vaubaan/shared';
+import type { Resource, RiskEntry, Slice } from '@vaubaan/plugin-sdk';
 import { matches, parseSlice, prepareCatalog, risksTouchedBy } from '@vaubaan/policy-engine';
 
-import { classifyGmailV4 } from '../../src/risk-classifier.ts';
-import { gmailRiskCatalog } from '../../src/risk-catalog.ts';
+import { classifyGmail } from '../../src/classify.ts';
+import { gmailCatalog } from '../../src/index.ts';
 
-// ─── Load + parse the YAML catalog ──────────────────────────────────────────
+// The catalog as the gateway loads it at boot : the loader already enforced
+// the structure, the slice grammar and the presets.
+const parsedCatalog = gmailCatalog.catalog;
 
-const here = dirname(fileURLToPath(import.meta.url));
-const yamlPath = resolve(here, '../../src/risk-catalog.yaml');
-const rawYaml = readFileSync(yamlPath, 'utf8');
-const parsedCatalog = yaml.load(rawYaml) as RiskCatalog;
-
-const binding: ProviderBinding = {
-  id: 'b1',
-  project_id: 'p1',
+const mailbox: Resource = {
   provider: 'gmail',
-  resource_ref: 'me@myorg.com',
-  display_name: null,
-  environment: null,
+  ref: 'me@myorg.com',
+  displayName: 'me@myorg.com',
   metadata: {
     internal_domains: ['myorg.com'],
     allowlist_addresses: ['partner@vendor.com'],
@@ -49,7 +36,6 @@ const binding: ProviderBinding = {
     sensitive_labels: ['LEGAL', 'HR'],
     account_email: 'me@myorg.com',
   },
-  created_at: '2026-01-01',
 };
 
 // Mirror the regex from shared/src/risk.ts so we can lint catalog ids
@@ -57,12 +43,12 @@ const binding: ProviderBinding = {
 const RISK_ID_REGEX =
   /^[a-z][a-z0-9]*(-[a-z][a-z0-9]*)*(\[[a-z][a-z0-9-]*\])?(\.[a-z][a-z0-9-]+)+$/;
 
-describe('gmail risk-catalog — YAML structural validation', () => {
-  test('YAML parses into a valid RiskCatalog shape', () => {
+describe('gmail risk-catalog — structural validation of the loaded catalog', () => {
+  test('the loaded catalog has the expected shape', () => {
     expect(parsedCatalog.provider).toBe('gmail');
     expect(Array.isArray(parsedCatalog.risks)).toBe(true);
-    // Expect 14 named risks + 1 fallback = 15.
-    expect(parsedCatalog.risks.length).toBe(15);
+    // Expect 15 named risks + 1 fallback = 16.
+    expect(parsedCatalog.risks.length).toBe(16);
   });
 
   test('every entry declares the required fields', () => {
@@ -70,7 +56,7 @@ describe('gmail risk-catalog — YAML structural validation', () => {
       expect(typeof entry.id).toBe('string');
       expect(typeof entry.label).toBe('string');
       expect(typeof entry.reason).toBe('string');
-      expect(typeof entry.matches).toBe('string');
+      expect(typeof entry.matches === 'string' || Array.isArray(entry.matches)).toBe(true);
       expect(entry.vector).toBeDefined();
     }
   });
@@ -115,12 +101,18 @@ describe('gmail risk-catalog — YAML structural validation', () => {
     expect(hasFallback, 'catalog must declare a gmail.uncategorized-* fallback').toBe(true);
   });
 
-  test('gmail.draft-to-zone-external-unbounded has acceptable_in_envs: [] (research Q6)', () => {
+  test('gmail.draft-to-zone-external-unbounded is kept in the catalog, unscoped, and offered by no preset', () => {
+    // v4 marked it `acceptable_in_envs: []` ("never acceptable") ; the v5
+    // loader refuses an empty list, so the guarantee now rests on the
+    // presets (and on the issuance UI) rather than on the catalog.
     const entry = parsedCatalog.risks.find(
       (r) => r.id === 'gmail.draft-to-zone-external-unbounded',
     );
     expect(entry).toBeDefined();
-    expect(entry!.acceptable_in_envs).toEqual([]);
+    expect(entry!.acceptable_in_envs).toBeUndefined();
+    for (const preset of parsedCatalog.presets ?? []) {
+      expect(preset.entries.map((e) => e.risk_id)).not.toContain(entry!.id);
+    }
   });
 
   test('gmail.bulk-read carries caps + infra_limits (research §3 + ADR scope-caps)', () => {
@@ -154,23 +146,26 @@ describe('gmail risk-catalog — every `matches` pattern parses via parseSlice',
 });
 
 describe('gmail risk-catalog — prepareCatalog roundtrips OK', () => {
-  test('prepareCatalog accepts the TS catalog', () => {
-    const indexed = prepareCatalog(gmailRiskCatalog);
+  test('prepareCatalog accepts the loaded catalog and the SDK indexed it identically', () => {
+    const indexed = prepareCatalog(parsedCatalog);
     expect(indexed.provider).toBe('gmail');
     expect(indexed.entries.length).toBe(parsedCatalog.risks.length);
+    expect(gmailCatalog.indexed.entries.length).toBe(indexed.entries.length);
   });
 });
 
 // ─── Build the parsed-pattern index once for lint usage ─────────────────────
 
-const indexed = parsedCatalog.risks.map((entry) => ({
-  entry,
-  pattern: parseSlice(typeof entry.matches === 'string' ? entry.matches : entry.matches[0]!),
-}));
+const indexed = parsedCatalog.risks.flatMap((entry) =>
+  (typeof entry.matches === 'string' ? [entry.matches] : entry.matches).map((raw) => ({
+    entry,
+    pattern: parseSlice(raw),
+  })),
+);
 
 const FALLBACK_ID = 'gmail.uncategorized-write';
 
-/** The 10 tools the Gmail classifier knows (9 MCP officiel + synthetic). */
+/** The 10 tools the Gmail classifier knows (9 official MCP tools + 1 synthetic). */
 const GMAIL_TOOLS = [
   'gmail__search_threads',
   'gmail__get_thread',
@@ -229,7 +224,7 @@ function syntheticArgsForTool(tool: string): Array<Record<string, unknown>> {
 function slicesForTool(tool: string): Slice[] {
   const out: Slice[] = [];
   for (const args of syntheticArgsForTool(tool)) {
-    const result = classifyGmailV4(tool, args, [binding]);
+    const result = classifyGmail(tool, args, [mailbox]);
     if ('slices' in result) out.push(...result.slices);
   }
   return out;
@@ -261,7 +256,7 @@ describe('gmail risk-catalog — coverage lint (every tool matched by ≥1 non-f
 });
 
 describe('gmail risk-catalog — risksTouchedBy sanity checks', () => {
-  const idx = prepareCatalog(gmailRiskCatalog);
+  const idx = gmailCatalog.indexed;
 
   test('a from-zone[automated].R slice touches gmail.read-from-zone-automated', () => {
     const sl = parseSlice('gmail.mailbox.from-zone[automated].R');
