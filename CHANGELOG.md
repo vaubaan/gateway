@@ -74,6 +74,10 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
   refusal carries `risk_ids` next to `risk_id`. Schema migration `0013` (forward-only).
   Requests that are open when you upgrade keep the one risk they named: granting one
   approves that risk, and a call that needs more gets a new request covering it.
+- **The Share dialog lists the orphaned missions a share would bring back.** Sharing
+  again to someone whose missions were orphaned restores those missions at once, with
+  the token their agent still holds. The dialog now names them, with who issued each,
+  and makes the share only once you have confirmed that list.
 - **"Reset the period" on a claim resets the claimed risk only.** It used to put every
   counter of the mission back to zero, so answering a claim on one risk silently
   reopened any other exhausted risk. Each exhausted risk has its own claim. The quota

@@ -2446,6 +2446,20 @@ Unit, beside the code (102):
   dialog's context (catalog, groups,
   active shares, labelling, stale resources ignored); `received` flags a risk
   the catalog dropped and that risk leaves the authority.
+- **`tests/integration/authority/share-restores.test.ts`** (11) — **a share
+  that would bring orphaned missions back names them first** (spec §2.3,
+  §7.3): the forecast names exactly the missions the share then restores,
+  with who issued them, and none for a share that covers nothing they
+  accepted; **it reads only** (no share, no entry, no state); it counts the
+  union with the shares the creator still receives; it supposes the share
+  **in place of** the one its target holds; a group target reaches its
+  current members only; missions the store holds as revoked are left out; it
+  refuses what a share refuses. Over HTTP: **the first post stores nothing**
+  and answers a `303` to the dialog with an opaque `confirm` id (readable by
+  that session only, as often as the page loads); the post that carries
+  every mission shares and restores; one that misses a mission, or names
+  something else, comes back again; a share that restores nothing is made
+  at once.
 - **`src/server/shares/errors.test.ts`** (4) — a `ShareError` / `ConnectError`
   recognised by name and code when thrown by another copy of the class (what
   a page catches); a sentence and a 4xx status for every code.

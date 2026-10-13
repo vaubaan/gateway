@@ -22,7 +22,10 @@
  *   - a share that is revoked or narrowed leaves the missions it grounded
  *     `orphaned`, at once; a share made again brings them back. The state
  *     is derived (`MissionGrounds`): this service only watches the missions
- *     of the connection around its act, so that each change is audited.
+ *     of the connection around its act, so that each change is audited;
+ *   - a share that would bring orphaned missions back names them first
+ *     (`forecast`): the dialog lists them and the owner confirms that list
+ *     (spec §2.3; `handlers.ts` holds the confirmation).
  */
 import type { AuditWriter } from '@vaubaan/gateway-core';
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
@@ -112,6 +115,23 @@ export interface ShareOutcome {
   readonly restored: number;
 }
 
+/** One orphaned mission a share would ground again. */
+export interface RestoredMission {
+  readonly id: string;
+  readonly name: string;
+  /** Who issued it: the person whose agents would be served again. */
+  readonly creatorLabel: string;
+}
+
+/** What a share would do, before it is made. */
+export interface ShareForecast {
+  readonly targetLabel: string;
+  /** The restriction as it would be stored: catalog order, each id once. */
+  readonly restriction: readonly RiskId[];
+  /** Orphaned missions the share would ground again, oldest first. */
+  readonly restores: readonly RestoredMission[];
+}
+
 export interface RevokeOutcome {
   readonly share: ShareRecord;
   readonly targetLabel: string;
@@ -143,7 +163,7 @@ export interface ShareServiceDeps {
   readonly connections: Pick<ConnectionService, 'get'>;
   /** The one definition of "owns the connection now" (`basis: 'owner'`). */
   readonly authority: Pick<AuthorityService, 'authorityOf'>;
-  readonly grounds: Pick<MissionGrounds, 'watchConnection'>;
+  readonly grounds: Pick<MissionGrounds, 'watchConnection' | 'forecastShare'>;
   readonly audit: AuditWriter;
   readonly clock: Clock;
   readonly logger: Logger;
@@ -168,6 +188,40 @@ export class ShareService {
       labelling: labellingOf(detail.resources, typeof registered?.plugin.envOf === 'function'),
       shares: await Promise.all(shares.map((share) => this.view(share))),
       unshareable: unshareableReason(connection),
+    };
+  }
+
+  /**
+   * What `share` would do with the same input, without doing it: the same refusals,
+   * then the orphaned missions the share would bring back (spec §2.3: they serve calls
+   * again with the token their agent holds, so the owner reads their names first).
+   */
+  async forecast(actor: Actor, connectionId: string, input: ShareInput): Promise<ShareForecast> {
+    const { connection } = await this.owned(actor, connectionId);
+    const unshareable = unshareableReason(connection);
+    if (unshareable) throw new ShareError(unshareable);
+    const restriction = this.restrictionOf(connection, input.riskIds);
+    const target = await this.targetOf(connection, input.target);
+    const restored = await this.deps.grounds.forecastShare({
+      connectionId: connection.id,
+      target,
+      restriction,
+    });
+    const restores: RestoredMission[] = [];
+    for (const mission of restored) {
+      restores.push({
+        id: mission.id,
+        name: mission.name,
+        creatorLabel: await principalLabel(this.deps.store, {
+          kind: 'user',
+          id: mission.creatorUserId,
+        }),
+      });
+    }
+    return {
+      targetLabel: await principalLabel(this.deps.store, target),
+      restriction,
+      restores,
     };
   }
 

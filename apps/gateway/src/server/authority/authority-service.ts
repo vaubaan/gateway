@@ -78,11 +78,27 @@ export interface AuthorityGaps {
 }
 
 /**
+ * A share that is not stored: "what would this user hold if it were made?". It stands
+ * in place of the active share its target already holds on that connection, the way
+ * `SharesRepo.replaceForTarget` would store it. Only a forecast passes one; the
+ * execution door never does.
+ */
+export interface SupposedShare {
+  readonly connectionId: string;
+  readonly target: Principal;
+  readonly restriction: readonly RiskId[];
+}
+
+/**
  * The re-check of an authority that was already granted (the execution door
  * asks it on every request, for the creator of the presented mission).
  */
 export interface AuthorityRecheck {
-  gapsOf(user: AuthoritySubject, questions: readonly AuthorityQuestion[]): Promise<AuthorityGaps>;
+  gapsOf(
+    user: AuthoritySubject,
+    questions: readonly AuthorityQuestion[],
+    supposing?: SupposedShare,
+  ): Promise<AuthorityGaps>;
 }
 
 export interface ConnectionAuthorityDeps {
@@ -145,6 +161,7 @@ export class ConnectionAuthorityService implements AuthorityService, AuthorityRe
   async gapsOf(
     user: AuthoritySubject,
     questions: readonly AuthorityQuestion[],
+    supposing?: SupposedShare,
   ): Promise<AuthorityGaps> {
     if (!(await this.isActive(user))) {
       return {
@@ -161,7 +178,7 @@ export class ConnectionAuthorityService implements AuthorityService, AuthorityRe
     for (const { connection, riskIds } of questions) {
       if (riskIds.length === 0) continue;
       if (await this.owns(connection, user, principals)) continue;
-      const shared = await this.sharedOn(connection, principals);
+      const shared = await this.sharedOn(connection, principals, supposing);
       const uncovered = shared === null ? riskIds : uncoveredRisks({ riskIds: shared }, riskIds);
       if (uncovered.length === 0) continue;
       gaps.push({
@@ -201,13 +218,33 @@ export class ConnectionAuthorityService implements AuthorityService, AuthorityRe
     return (await principals()).some((p) => p.kind === 'group' && p.id === ownerGroupId);
   }
 
-  /** The union of the active shares of the connection to the user, or `null` without any. */
+  /**
+   * The union of the active shares of the connection to the user, or `null` without any.
+   * With `supposing` on this connection: the stored share of the same target is left
+   * out (it would be replaced) and the supposed one counts when it reaches the user.
+   */
   private async sharedOn(
     connection: ConnectionRecord,
     principals: Principals,
+    supposing?: SupposedShare,
   ): Promise<RiskId[] | null> {
-    const shares = await this.deps.shares.listActiveForTargets(await principals(), connection.id);
-    if (shares.length === 0) return null;
-    return shares.flatMap((share) => share.restriction);
+    const reached = await principals();
+    const stored = await this.deps.shares.listActiveForTargets(reached, connection.id);
+    if (!supposing || supposing.connectionId !== connection.id) {
+      if (stored.length === 0) return null;
+      return stored.flatMap((share) => share.restriction);
+    }
+    const restrictions: (readonly RiskId[])[] = stored
+      .filter((share) => !samePrincipal(share.target, supposing.target))
+      .map((share) => share.restriction);
+    if (reached.some((principal) => samePrincipal(principal, supposing.target))) {
+      restrictions.push(supposing.restriction);
+    }
+    if (restrictions.length === 0) return null;
+    return restrictions.flat();
   }
+}
+
+function samePrincipal(a: Principal, b: Principal): boolean {
+  return a.kind === b.kind && a.id === b.id;
 }

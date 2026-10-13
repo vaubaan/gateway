@@ -331,6 +331,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     authority: authority.service,
     grounds: authority.grounds,
     authenticator: auth.authenticator,
+    sessions,
     logger,
   });
   const groups = createGroupsModule({

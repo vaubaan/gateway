@@ -341,6 +341,8 @@ revoke the missions the target already issued; it turns them `orphaned`
   stored as a verdict**: if the authority comes back (the share is made
   again, the creator is back in the owner group at the next sign-in),
   the mission serves calls again, with its session and counters intact.
+  A share that would bring orphaned missions back names them to the owner
+  before it is made (§7.3).
   A revoked connection never comes back, so its missions stay orphaned.
   The creator, or an owner of the connection, may close it.
 - `revoked` — by the creator, terminal.
@@ -664,7 +666,8 @@ pages:
   environment labels (edit, refresh discovery), their shares. A "Connect
   a provider" button that starts the provider's authorization flow with
   the apps registered by the operator. A "Share" button that opens the
-  checklist of catalog `RiskId` with "select all".
+  checklist of catalog `RiskId` with "select all"; before confirming, the
+  dialog lists the orphaned missions the share would bring back.
 - **Shares received** — what others entrusted to me, and the exact
   restriction.
 - **Missions** — the missions I created and those shared with me as a
@@ -857,6 +860,11 @@ members who join the group later.
 The owner picks a target (user or group), ticks the risks, confirms. The
 target sees the share under "Shares received" and may issue missions
 within that bound.
+
+When the share would ground orphaned missions again — they would serve
+calls at once, with the token their agent still holds — the dialog lists
+those missions, each with the person who issued it, and the share is made
+only once the owner has confirmed that list.
 
 ### 7.4 Issue a mission
 

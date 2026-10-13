@@ -496,6 +496,8 @@ const RULES: Readonly<Record<string, Rule>> = {
   'PendingConnectStore.take': exempt(SESSION_STATE),
   'NoticeStore.put': exempt(SESSION_STATE),
   'NoticeStore.take': exempt(SESSION_STATE),
+  'PendingShareStore.put': exempt(SESSION_STATE),
+  'PendingShareStore.read': exempt(SESSION_STATE),
 
   // ── provider apps (the entry is written by the Administration handler) ────
   'ProviderAppsService.isReadOnly': READ,
@@ -704,6 +706,8 @@ const RULES: Readonly<Record<string, Rule>> = {
   // direction. Only a watch around a human act writes, and it names that human.
   'MissionGrounds.inspect': READ,
   'MissionGrounds.derive': READ,
+  // What a share would restore, asked before it is made: nothing is written.
+  'MissionGrounds.forecastShare': READ,
   'MissionGrounds.watchConnection': {
     kind: 'mutation',
     target: (root) => root.authority.grounds,
@@ -750,6 +754,7 @@ const RULES: Readonly<Record<string, Rule>> = {
   // ── shares ────────────────────────────────────────────────────────────────
   'ShareService.contextFor': READ,
   'ShareService.received': READ,
+  'ShareService.forecast': READ,
   'ShareService.share': {
     kind: 'mutation',
     target: (root) => root.shares.service,

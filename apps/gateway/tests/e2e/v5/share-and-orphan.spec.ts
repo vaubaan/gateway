@@ -208,6 +208,14 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await ines.getByLabel('Email').fill(E2E_SHARE_TARGET.email);
   await ines.getByLabel(`Share risk ${READ_CODE}`).check();
   await ines.getByRole('button', { name: 'Share', exact: true }).click();
+  // Nothing is shared yet: the dialog names the mission the share would bring back.
+  await expect(ines.getByText('This share brings 1 orphaned mission back')).toBeVisible();
+  await expect(ines.getByTestId('share-restores')).toContainText('Read ines-org');
+  await expect(ines.getByTestId('share-restores')).toContainText(E2E_SHARE_TARGET.email);
+  await expect(ines.getByLabel(`Share risk ${READ_CODE}`)).toBeChecked();
+  expect(await read()).toMatchObject({ outcome: 'refused' });
+  await snap(ines, 'share-dialog-restores');
+  await ines.getByRole('button', { name: 'Share and bring this mission back' }).click();
   await expect(ines.getByText('Shared', { exact: true })).toBeVisible();
   await expect(
     ines.getByText(

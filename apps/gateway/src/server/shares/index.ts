@@ -8,12 +8,14 @@ import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import type { Authenticator } from '../auth/authenticator';
 import type { AuthorityService, MissionGrounds } from '../authority';
+import type { SessionStore } from '../compose/ports';
 import type { InstanceConfig } from '../config/types';
 import type { ConnectionsModule } from '../connections';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
 import { systemClock, type Clock } from '../store/clock';
 import { createShareHandlers, type ShareHandlers } from './handlers';
+import { PendingShareStore } from './pending';
 import { ShareService } from './service';
 
 export interface SharesModuleDeps {
@@ -22,8 +24,10 @@ export interface SharesModuleDeps {
   readonly registry: PluginRegistry;
   readonly connections: Pick<ConnectionsModule, 'service' | 'notices'>;
   readonly authority: Pick<AuthorityService, 'authorityOf'>;
-  readonly grounds: Pick<MissionGrounds, 'watchConnection'>;
+  readonly grounds: Pick<MissionGrounds, 'watchConnection' | 'forecastShare'>;
   readonly authenticator: Authenticator;
+  /** Where a share that waits for its confirmation is kept (next to the web sessions). */
+  readonly sessions: SessionStore;
   readonly logger: Logger;
   readonly clock?: Clock;
 }
@@ -31,6 +35,7 @@ export interface SharesModuleDeps {
 export interface SharesModule {
   readonly service: ShareService;
   readonly handlers: ShareHandlers;
+  readonly pending: PendingShareStore;
 }
 
 export function createSharesModule(deps: SharesModuleDeps): SharesModule {
@@ -45,14 +50,16 @@ export function createSharesModule(deps: SharesModuleDeps): SharesModule {
     clock: deps.clock ?? systemClock,
     logger,
   });
+  const pending = new PendingShareStore(deps.sessions);
   const handlers = createShareHandlers({
     publicUrl: deps.config.publicUrl,
     authenticator: deps.authenticator,
     shares: service,
     notices: deps.connections.notices,
+    pending,
     logger,
   });
-  return { service, handlers };
+  return { service, handlers, pending };
 }
 
 export {
@@ -63,6 +70,12 @@ export {
   type ShareErrorCode,
 } from './errors';
 export { createShareHandlers, SHARE_FIELDS, sharePath, type ShareHandlers } from './handlers';
+export {
+  PendingShareStore,
+  SHARE_CONFIRM_PARAM,
+  SHARE_CONFIRM_TTL_MS,
+  type PendingShare,
+} from './pending';
 export {
   envNotes,
   groupBySeverity,
@@ -78,8 +91,10 @@ export {
   unshareableReason,
   type ReceivedRisk,
   type ReceivedShare,
+  type RestoredMission,
   type RevokeOutcome,
   type ShareContext,
+  type ShareForecast,
   type ShareInput,
   type ShareOutcome,
   type ShareServiceDeps,

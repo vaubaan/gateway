@@ -10,6 +10,12 @@
  * The form carries the restriction as one `risk` value per ticked risk: the
  * browser resolves "select all" to that list, the server never receives
  * "all".
+ *
+ * A share that would bring orphaned missions back is not made on the first
+ * post (spec §2.3): the dialog comes back with their names, and the share is
+ * made by the post that carries one `restore` value per mission it listed. A
+ * mission that became restorable in between was not read: the dialog comes
+ * back once more, with the list of that instant.
  */
 import { guardMutation, refusalResponse, type Authenticator, type RefusalWording } from '../auth';
 import { notAFormResponse, readForm } from '../auth/handlers';
@@ -23,7 +29,8 @@ import {
 } from '../connections';
 import type { Logger } from '../logging';
 import { SHARE_ERROR_MESSAGES, ShareError } from './errors';
-import type { ShareService, ShareTargetInput } from './service';
+import { SHARE_CONFIRM_PARAM, type PendingShareStore } from './pending';
+import type { ShareInput, ShareService, ShareTargetInput } from './service';
 
 /** Form field names of the Share dialog. */
 export const SHARE_FIELDS = {
@@ -31,7 +38,11 @@ export const SHARE_FIELDS = {
   email: 'target_email',
   group: 'target_group',
   risk: 'risk',
+  /** One value per orphaned mission the owner was shown and agrees to bring back. */
+  restore: 'restore',
 } as const;
+
+const SEE_OTHER = 303;
 
 const USER_REFUSALS: RefusalWording = {
   field: 'reason',
@@ -44,6 +55,7 @@ export interface ShareHandlerDeps {
   readonly authenticator: Authenticator;
   readonly shares: ShareService;
   readonly notices: NoticeStore;
+  readonly pending: PendingShareStore;
   readonly logger: Logger;
 }
 
@@ -83,11 +95,20 @@ export function createShareHandlers(deps: ShareHandlerDeps): ShareHandlers {
       const { principal } = guard;
       const form = await readForm(request);
       if (!form) return notAFormResponse();
+      const input: ShareInput = {
+        target: targetOf(form),
+        riskIds: values(form, SHARE_FIELDS.risk),
+      };
       try {
-        const outcome = await deps.shares.share(actorOf(principal), connectionId, {
-          target: targetOf(form),
-          riskIds: form.getAll(SHARE_FIELDS.risk).filter((v): v is string => typeof v === 'string'),
-        });
+        const actor = actorOf(principal);
+        // The same refusals as the share itself, then what it would bring back.
+        const forecast = await deps.shares.forecast(actor, connectionId, input);
+        const read = new Set(values(form, SHARE_FIELDS.restore));
+        if (forecast.restores.some((mission) => !read.has(mission.id))) {
+          const id = await deps.pending.put(principal.sessionId, { connectionId, input });
+          return confirmationRedirect(connectionId, id);
+        }
+        const outcome = await deps.shares.share(actor, connectionId, input);
         const count = outcome.share.restriction.length;
         const lines = [
           `${outcome.targetLabel} may now accept ${count} ${count === 1 ? 'risk' : 'risks'} of this connection in their missions, and nothing else.`,
@@ -137,6 +158,22 @@ export function createShareHandlers(deps: ShareHandlerDeps): ShareHandlers {
       }
     },
   };
+}
+
+/** Back to the dialog, which lists what the share would bring back. Nothing was stored. */
+function confirmationRedirect(connectionId: string, pendingId: string): Response {
+  const query = new URLSearchParams({ [SHARE_CONFIRM_PARAM]: pendingId });
+  return new Response(null, {
+    status: SEE_OTHER,
+    headers: {
+      Location: `${sharePath(connectionId)}?${query.toString()}`,
+      'Cache-Control': 'no-store',
+    },
+  });
+}
+
+function values(form: FormData, name: string): string[] {
+  return form.getAll(name).filter((value): value is string => typeof value === 'string');
 }
 
 function orphanedLine(count: number): string {

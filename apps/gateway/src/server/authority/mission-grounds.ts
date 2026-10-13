@@ -29,6 +29,9 @@
  *                        and request services ask on every load. Nothing is
  *                        written, and no administrative entry either: no
  *                        human is behind a read.
+ *   forecastShare(…)     before a share is made: the missions it would bring
+ *                        back, so that the owner reads them before confirming.
+ *                        Reads only.
  *   watch*(…)            the services, around a human act that may remove or
  *                        return an authority (a share made, replaced or
  *                        revoked, a connection revoked, transferred or
@@ -51,7 +54,7 @@ import type { ConnectionsRepo } from '../store/repositories/connections';
 import type { MissionsRepo } from '../store/repositories/missions';
 import { toIso, type Clock } from '../store/clock';
 import type { MissionRecord } from '../store/types';
-import type { AuthorityQuestion, AuthorityRecheck } from './authority-service';
+import type { AuthorityQuestion, AuthorityRecheck, SupposedShare } from './authority-service';
 
 export const ORPHAN_CAUSES = [
   'creator-removed',
@@ -126,8 +129,12 @@ export function partitionOf(mission: Pick<MissionRecord, 'policy'>, provider: st
 export class MissionGrounds {
   constructor(private readonly deps: MissionGroundsDeps) {}
 
-  /** The verdict right now. Reads only; nothing is remembered between two calls. */
-  async check(mission: MissionRecord): Promise<GroundsVerdict> {
+  /**
+   * The verdict right now. Reads only; nothing is remembered between two calls.
+   * `supposing` asks for the verdict as it would be once that share is made: only
+   * `forecastShare` passes it, and no reader of a mission's state does.
+   */
+  async check(mission: MissionRecord, supposing?: SupposedShare): Promise<GroundsVerdict> {
     const questions: AuthorityQuestion[] = [];
     for (const selection of mission.connections) {
       const connection = await this.deps.connections.getById(selection.connectionId);
@@ -140,6 +147,7 @@ export class MissionGrounds {
     const { subjectRemoved, gaps } = await this.deps.authority.gapsOf(
       { id: mission.creatorUserId },
       questions,
+      supposing,
     );
     if (subjectRemoved) return ungrounded('creator-removed', null);
     const [first] = gaps;
@@ -170,6 +178,22 @@ export class MissionGrounds {
   /** `inspect` without the reason. */
   async derive(mission: MissionRecord): Promise<MissionRecord> {
     return (await this.inspect(mission)).mission;
+  }
+
+  /**
+   * The missions of the connection that are orphaned now and would be grounded once
+   * `share` is made: they would serve calls again, with the token their agent still
+   * holds. Nothing is written. What `settle` records after the act is the truth of the
+   * act; this is what the owner is shown before it.
+   */
+  async forecastShare(share: SupposedShare): Promise<MissionRecord[]> {
+    const restored: MissionRecord[] = [];
+    for (const mission of await this.deps.missions.listForConnection(share.connectionId)) {
+      if (mission.status !== 'active') continue;
+      if ((await this.check(mission)).grounded) continue;
+      if ((await this.check(mission, share)).grounded) restored.push(mission);
+    }
+    return restored;
   }
 
   /** Before an act on one connection (its shares, its owner, its revocation). */
