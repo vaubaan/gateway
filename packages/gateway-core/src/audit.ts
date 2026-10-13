@@ -122,8 +122,10 @@ export type AdminAct =
   | 'request-refused'
   | 'delegation-granted'
   /** A delegation ended: by its user, by its client, by an operator disabling
-   *  the client, or by the instance on a replayed refresh token or
-   *  authorization code (`after.reason` says which). */
+   *  the client or deactivating the user, or by the instance on a replayed
+   *  refresh token or authorization code (`after.reason` says which; after a
+   *  replay `after.missions_to_review` names the missions it issued that still
+   *  run). */
   | 'delegation-revoked'
   /** Local groups, kept by the operator (spec §0 "Group", §11.2). Object: the group. */
   | 'group-created'
@@ -134,6 +136,12 @@ export type AdminAct =
   | 'oauth-client-approved'
   /** An operator barred an OAuth client; its delegations are revoked with it. */
   | 'oauth-client-disabled'
+  /** An operator deactivated a user: no sign-in, no session, no authority; their
+   *  delegations are revoked and their group memberships removed (`after` lists
+   *  both). Their missions get their own `mission-orphaned` entries. Object: the user. */
+  | 'user-deactivated'
+  /** An operator let a deactivated user sign in again. Object: the user. */
+  | 'user-reactivated'
   | 'config-changed';
 
 export type AdminObjectType =
@@ -144,6 +152,7 @@ export type AdminObjectType =
   | 'delegation'
   | 'group'
   | 'oauth-client'
+  | 'user'
   | 'instance-config';
 
 /**

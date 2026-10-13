@@ -43,6 +43,7 @@ const REVOKE_REASON: Readonly<Record<DelegationRevokeReason, string>> = {
   user: 'revoked by you',
   client: 'ended by the application (it signed out)',
   operator: 'revoked by an operator, who disabled the application',
+  'user-deactivated': 'revoked by an operator, who deactivated your account',
   'refresh-token-replay':
     'revoked by the gateway: a refresh token that had already been used was presented again, which means two parties held it',
   'authorization-code-replay':

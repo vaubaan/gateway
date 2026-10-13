@@ -24,7 +24,8 @@ export interface DelegationEnding {
   readonly reason: DelegationRevokeReason;
   /**
    * In whose name the entry is written: the delegating user (their own act, their
-   * client signing out, a detected replay) or the operator (`auditActorId`).
+   * client signing out, a detected replay) or the operator (`auditActorId`: they
+   * disabled the client, or deactivated the user).
    */
   readonly actorId: string;
   /**
@@ -268,5 +269,21 @@ export class DelegationService {
     });
     if (!revoked) return { outcome: 'already-revoked', delegation };
     return { outcome: 'revoked', delegation: revoked };
+  }
+
+  /**
+   * Ends every active delegation of one user, each with its tokens and its own
+   * entry (`endDelegation`). For an act that removes the user's standing as a
+   * whole — an operator deactivating them — never for a user's own choice among
+   * their delegations. Returns the delegations this call ended.
+   */
+  async revokeAllOf(userId: string, by: DelegationEnding): Promise<DelegationRecord[]> {
+    const ended: DelegationRecord[] = [];
+    for (const delegation of await this.deps.repo.listForUser(userId)) {
+      if (delegation.status !== 'active') continue;
+      const revoked = await endDelegation(this.deps, delegation.id, by);
+      if (revoked) ended.push(revoked);
+    }
+    return ended;
   }
 }

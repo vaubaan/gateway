@@ -57,6 +57,11 @@ export interface UserRecord {
   readonly createdAt: Iso;
   readonly lastLoginAt: Iso | null;
   readonly removedAt: Iso | null;
+  /**
+   * When the user was last deactivated; kept after a reactivation. A web session
+   * created at or before it is refused (`Authenticator`).
+   */
+  readonly sessionsEndedAt: Iso | null;
 }
 
 export interface GroupRecord {
@@ -326,14 +331,16 @@ export const DELEGATION_STATUSES = ['active', 'revoked'] as const;
 export type DelegationStatus = (typeof DELEGATION_STATUSES)[number];
 
 /**
- * Who ended a delegation. `refresh-token-replay` and `authorization-code-replay` are
- * the instance itself: a single-use credential came back, so the whole family goes
- * (RFC 9700).
+ * Who ended a delegation. `operator`: an operator disabled the client.
+ * `user-deactivated`: an operator deactivated the user who gave it.
+ * `refresh-token-replay` and `authorization-code-replay` are the instance itself: a
+ * single-use credential came back, so the whole family goes (RFC 9700).
  */
 export const DELEGATION_REVOKE_REASONS = [
   'user',
   'client',
   'operator',
+  'user-deactivated',
   'refresh-token-replay',
   'authorization-code-replay',
 ] as const;

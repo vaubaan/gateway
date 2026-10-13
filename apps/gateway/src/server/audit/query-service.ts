@@ -380,6 +380,8 @@ async function objectLabel(
       return names.group(object.id);
     case 'oauth-client':
       return names.client(object.id);
+    case 'user':
+      return names.email(object.id);
     case 'request':
       return names.request(object.id);
     case 'delegation':

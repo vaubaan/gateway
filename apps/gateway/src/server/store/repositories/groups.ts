@@ -28,6 +28,12 @@ export interface GroupsRepo {
   /** Idempotent. `true` when the membership was added, `false` when it already existed. */
   addMember(groupId: string, userId: string): Promise<boolean>;
   removeMember(groupId: string, userId: string): Promise<boolean>;
+  /**
+   * Removes the user from every group, local and IdP-sourced, in one transaction, and
+   * returns the groups they were in. The deactivation of a user: a group must not keep
+   * counting as owned by somebody who holds nothing any more.
+   */
+  removeAllMemberships(userId: string): Promise<GroupRecord[]>;
   listMembers(groupId: string): Promise<UserRecord[]>;
   memberCount(groupId: string): Promise<number>;
   /** Groups the user currently belongs to — authority is recomputed from this, never cached. */
@@ -156,6 +162,13 @@ export function createGroupsRepo(ctx: RepoContext): GroupsRepo {
     },
     async removeMember(groupId, userId) {
       return removeMemberStmt.run(groupId, userId).changes > 0;
+    },
+    async removeAllMemberships(userId) {
+      return withImmediateTransaction(db, () => {
+        const left = ofUser.all(userId).map(toRecord);
+        db.prepare<[string]>('DELETE FROM group_members WHERE user_id = ?').run(userId);
+        return left;
+      });
     },
     async listMembers(groupId) {
       return members.all(groupId).map(userRowToRecord);

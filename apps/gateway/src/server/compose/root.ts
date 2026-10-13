@@ -42,6 +42,7 @@ import { createOAuthAsModule, type ClientDocumentFetcher, type OAuthAsModule } f
 import { createRequestsModule, type RequestsModule } from '../requests';
 import { SlidingWindowRateLimiter } from '../rate-limit';
 import { createSharesModule, type SharesModule } from '../shares';
+import { createUsersModule, type UsersModule } from '../users';
 import { createTelemetryModule, type TelemetryModule } from '../telemetry';
 import type { Store } from '../store';
 import type { CacheClient, RateLimiter, SessionStore } from './ports';
@@ -89,6 +90,8 @@ export interface GatewayRoot {
   readonly telemetry: TelemetryModule;
   /** Authorization server of the management door: clients, consent, delegated tokens (P2.3). */
   readonly oauth: OAuthAsModule;
+  /** Administration → Users: the operator's deactivation and reactivation of a user. */
+  readonly users: UsersModule;
   /** `/mcp/manage`: its admission gate and, behind it, the door with its seven tools (P2.4). */
   readonly management: ManagementDoorModule;
   readonly build: BuildInfo;
@@ -229,6 +232,7 @@ type RootModules = Pick<
   | 'execution'
   | 'telemetry'
   | 'oauth'
+  | 'users'
   | 'management'
 >;
 
@@ -366,6 +370,16 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     logger,
     fetchClientDocument: deps.clientDocumentFetch,
   });
+  // After the authorization server: deactivating a user revokes their delegations.
+  const users = createUsersModule({
+    config,
+    store,
+    membership: authority.membership,
+    delegations: oauth.delegations,
+    connections,
+    authenticator: auth.authenticator,
+    logger,
+  });
   const execution = createExecutionModule({
     config,
     store,
@@ -410,6 +424,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     execution,
     telemetry,
     oauth,
+    users,
     management,
   };
 }

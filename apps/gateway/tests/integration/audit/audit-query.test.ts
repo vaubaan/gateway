@@ -228,12 +228,14 @@ describe('audit search: visibility, filters, paging', () => {
       ['request-refused', 'request', claim.result.request_id ?? ''],
       ['approval-granted', 'request', approval.result.request_id ?? ''],
       ['config-changed', 'instance-config', 'telemetry'],
+      ['user-deactivated', 'user', rig.seeded.bob.id],
       // Objects that are gone, or were never created: the id, no label.
       ['share-revoked', 'share', 'no-such-share'],
       ['group-created', 'group', 'no-such-group'],
       ['oauth-client-disabled', 'oauth-client', 'no-such-client'],
       ['delegation-revoked', 'delegation', 'no-such-delegation'],
       ['request-refused', 'request', 'no-such-request'],
+      ['user-reactivated', 'user', 'no-such-user'],
       ['connection-revoked', 'connection', 'not-created:github'],
     ];
     const base = Date.now() + 1000;
@@ -267,11 +269,13 @@ describe('audit search: visibility, filters, paging', () => {
       ['request', 'claim on Ship the billing page'],
       ['request', 'approval request on Ship the billing page'],
       ['instance-config', null],
+      ['user', 'bob@example.com'],
       ['share', null],
       ['group', null],
       ['oauth-client', null],
       ['delegation', null],
       ['request', null],
+      ['user', null],
       ['connection', null],
     ]);
     // Every object type has a row above: a type added to the union must be added here.
@@ -284,6 +288,7 @@ describe('audit search: visibility, filters, paging', () => {
       delegation: true,
       group: true,
       'oauth-client': true,
+      user: true,
       'instance-config': true,
     };
     expect([...covered].sort()).toEqual(Object.keys(every).sort());

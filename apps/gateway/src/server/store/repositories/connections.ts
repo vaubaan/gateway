@@ -72,15 +72,16 @@ export interface ConnectionsRepo {
    */
   assignOwnerlessTo(id: string, owner: Principal): Promise<AssignOwnerlessResult>;
   /**
-   * `active` → `unowned` for every connection whose owner group has no member left
-   * (spec §2.3), in one statement. Returns the connections that changed. Called after
-   * every membership removal; a connection that is `expired` stays so.
+   * `active` → `unowned` for every connection nobody owns any more (spec §2.3): its
+   * owner group has no member left, or its owner user was deactivated. Returns the
+   * connections that changed. Called after every membership removal and every
+   * deactivation; a connection that is `expired` stays so.
    */
   markOwnerlessUnowned(): Promise<ConnectionRecord[]>;
   /**
    * The connections nobody owns any more: `unowned`, or not revoked with an owner group
-   * that has no member (an `expired` one cannot be `unowned` at the same time). What the
-   * operator may reassign.
+   * that has no member or an owner user who is not active (an `expired` one cannot be
+   * `unowned` at the same time). What the operator may reassign.
    */
   listOwnerless(): Promise<ConnectionRecord[]>;
   setMetadata(id: string, metadata: Record<string, unknown> | null): Promise<ConnectionRecord>;
@@ -294,8 +295,12 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
        status = CASE WHEN status = 'unowned' THEN 'active' ELSE status END, updated_at = ?
      WHERE id = ?`,
   );
-  const NO_MEMBER = `owner_kind = 'group' AND NOT EXISTS (
-       SELECT 1 FROM group_members gm WHERE gm.group_id = connections.owner_group_id)`;
+  // Nobody owns it: its owner group has no member, or its owner user is not active
+  // (deactivated by an operator: they hold nothing, so they cannot share or reconnect).
+  const NO_MEMBER = `((owner_kind = 'group' AND NOT EXISTS (
+       SELECT 1 FROM group_members gm WHERE gm.group_id = connections.owner_group_id))
+     OR (owner_kind = 'user' AND NOT EXISTS (
+       SELECT 1 FROM users u WHERE u.id = connections.owner_user_id AND u.status = 'active')))`;
   const ownerlessActive = db.prepare<[], ConnectionRow>(
     `SELECT ${COLUMNS} FROM connections WHERE status = 'active' AND ${NO_MEMBER} ORDER BY created_at`,
   );
