@@ -9,6 +9,10 @@
  * external resource, never framed, never cached, no referrer outside the
  * instance.
  *
+ * The document itself — the tokens of the interface in both themes, the brand,
+ * the column — is `http/document.ts`; this module owns what the pages say and
+ * the headers they are sent with.
+ *
  * **Everything a client says of itself is shown as a claim.** The name comes
  * from the registration; what the screen states as fact is where the
  * authorization code will be sent.
@@ -16,6 +20,7 @@
 import { randomBytes } from 'node:crypto';
 
 import type { BuildInfo } from '../config/build-info';
+import { escapeHtml, htmlDocument, messageDocument, type DocumentTheme } from '../http/document';
 import type { OAuthClientRecord } from '../store/types';
 import { MANAGEMENT_SCOPE } from './endpoints';
 import type { RedirectKind } from './redirect-uri';
@@ -25,35 +30,7 @@ const NONCE_BYTES = 16;
 export const CONSENT_FIELD = 'consent';
 export const DECISION_FIELD = 'decision';
 
-export function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-const STYLE = `
-:root { color-scheme: light dark; }
-body { font-family: system-ui, sans-serif; margin: 0; min-height: 100vh; display: grid; place-items: center; line-height: 1.5; }
-main { width: 100%; max-width: 36rem; padding: 2rem 1.5rem; box-sizing: border-box; }
-h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 0.75rem; }
-h2 { font-size: 0.875rem; font-weight: 600; margin: 1.25rem 0 0.25rem; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.7; }
-p { margin: 0 0 0.75rem; }
-ul { margin: 0 0 0.75rem; padding-left: 1.25rem; }
-dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 1rem; }
-dt { opacity: 0.7; }
-dd { margin: 0; overflow-wrap: anywhere; }
-code { font-family: ui-monospace, monospace; font-size: 0.875em; }
-.box { border: 1px solid color-mix(in srgb, currentColor 25%, transparent); border-radius: 0.5rem; padding: 1rem; margin: 1rem 0; }
-.warn { border-color: #b45309; }
-.note { font-size: 0.875rem; opacity: 0.8; }
-.actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.5rem; }
-button { font: inherit; padding: 0.5rem 1.25rem; border-radius: 0.375rem; border: 1px solid color-mix(in srgb, currentColor 35%, transparent); background: transparent; color: inherit; cursor: pointer; }
-button.primary { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
-footer { margin-top: 2rem; font-size: 0.75rem; opacity: 0.7; text-align: center; }
-`;
+export { escapeHtml };
 
 /**
  * The build footer of the application's pages (`components/shell/BuildFooter`),
@@ -64,21 +41,13 @@ function buildFooter(build: BuildInfo | undefined): string {
   return `<footer data-testid="build-footer">Vaubaan Gateway <span data-testid="gateway-version">${escapeHtml(build.version)}</span> · <span data-testid="gateway-commit">${escapeHtml(build.commit)}</span></footer>`;
 }
 
-function document(status: number, title: string, body: string, build?: BuildInfo): Response {
+/**
+ * The response around a document: never framed, never cached, nothing loaded
+ * but the one style element the nonce names.
+ */
+function respond(status: number, html: (nonce: string) => string): Response {
   const nonce = randomBytes(NONCE_BYTES).toString('base64');
-  const html = `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex">
-<title>${escapeHtml(title)}</title>
-<style nonce="${nonce}">${STYLE}</style>
-</head>
-<body><main>${body}${buildFooter(build)}</main></body>
-</html>
-`;
-  return new Response(html, {
+  return new Response(html(nonce), {
     status,
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
@@ -94,18 +63,29 @@ function document(status: number, title: string, body: string, build?: BuildInfo
   });
 }
 
+/** How a document of this module is drawn: the running build, and the theme of the request. */
+export interface PageLook {
+  /** The running build, for the footer; absent, the page has none. */
+  readonly build?: BuildInfo;
+  /** The theme the person chose in the application (`documentThemeOf`); absent: the system's. */
+  readonly theme?: DocumentTheme | null;
+}
+
+function lookOf(look: PageLook | BuildInfo | undefined): PageLook {
+  if (!look) return {};
+  return 'version' in look ? { build: look } : look;
+}
+
 /** A page with one title and one sentence: the request stops here. */
 export function messagePage(
   status: number,
   title: string,
   message: string,
-  build?: BuildInfo,
+  look?: PageLook | BuildInfo,
 ): Response {
-  return document(
-    status,
-    title,
-    `<h1>${escapeHtml(title)}</h1><p>${escapeHtml(message)}</p>`,
-    build,
+  const { build, theme } = lookOf(look);
+  return respond(status, (nonce) =>
+    messageDocument({ title, message, footer: buildFooter(build), theme, nonce }),
   );
 }
 
@@ -120,6 +100,8 @@ export interface ConsentView {
   readonly action: string;
   /** The running build, for the footer; absent, the page has none. */
   readonly build?: BuildInfo;
+  /** The theme the person chose in the application; absent: the system's. */
+  readonly theme?: DocumentTheme | null;
 }
 
 const DESTINATION_SENTENCE: Readonly<Record<RedirectKind, string>> = {
@@ -139,16 +121,18 @@ function registrationLine(client: OAuthClientRecord): string {
 
 /**
  * The consent screen (spec §4.1 bis): who asks, for whom, the one scope and
- * what it covers and never covers, and where the code goes.
+ * what it covers and never covers, and where the code goes. The words are the
+ * interface's (accounts, keys, limits); what is granted is the scope's, and
+ * the scope is printed as the protocol spells it.
  */
 export function consentPage(view: ConsentView): Response {
   const { client, destination } = view;
   const name = escapeHtml(client.name);
   const body = `
 <h1>Let ${name} manage your missions?</h1>
-<p>An application that calls itself <strong>${name}</strong> asks to act on your behalf on this gateway, as <strong>${escapeHtml(view.userEmail)}</strong>.</p>
+<p class="lede">An application that calls itself <strong>${name}</strong> asks to act on your behalf on this gateway, as <strong>${escapeHtml(view.userEmail)}</strong>.</p>
 
-<div class="box">
+<div class="facts">
 <dl>
 <dt>Application</dt><dd>${name}<div class="note">This name is what the application says of itself. It is not verified.</div></dd>
 <dt>Client id</dt><dd><code>${escapeHtml(client.clientId)}</code><div class="note">${registrationLine(client)}</div></dd>
@@ -156,7 +140,7 @@ export function consentPage(view: ConsentView): Response {
 </dl>
 </div>
 
-<div class="box warn">
+<div class="box">
 <dl>
 <dt>Access goes to</dt><dd><code>${escapeHtml(destination.label)}</code><div class="note">${escapeHtml(DESTINATION_SENTENCE[destination.kind])}</div></dd>
 </dl>
@@ -164,19 +148,19 @@ export function consentPage(view: ConsentView): Response {
 
 <h2>It will be able to</h2>
 <ul>
-<li>read your connections, what was shared with you, and your missions with their budgets;</li>
-<li>preview and <strong>issue missions in your name</strong>, within what you yourself may do;</li>
-<li>rotate the token of the missions it issued, and revoke any of your missions.</li>
+<li>read your accounts, what was shared with you, and your missions with their limits;</li>
+<li>preview and <strong>create missions in your name</strong>, within what you yourself may do;</li>
+<li>replace the key of the missions it created, and stop any of your missions.</li>
 </ul>
 
 <h2>It will never be able to</h2>
 <ul>
-<li>answer a request: grant a claim, approve an action, extend a budget or open a gate;</li>
-<li>connect, share, transfer or revoke a provider connection;</li>
-<li>call a provider tool itself.</li>
+<li>answer what waits for you: approve an action, give more room after a limit, extend a mission or let a permission run freely;</li>
+<li>connect an account, give access to it, transfer it or disconnect it;</li>
+<li>call a tool of a service itself.</li>
 </ul>
 
-<p class="note">Every mission it issues is recorded under your name with the name of this application. You can end this delegation at any time on the Delegations page.</p>
+<p class="note">Every mission it creates is recorded under your name with the name of this application. You can end this at any time under Settings, Connected apps.</p>
 
 <form method="post" action="${escapeHtml(view.action)}">
 <input type="hidden" name="${CONSENT_FIELD}" value="${escapeHtml(view.consentId)}">
@@ -185,5 +169,13 @@ export function consentPage(view: ConsentView): Response {
 <button type="submit" name="${DECISION_FIELD}" value="approve" class="primary">Authorize</button>
 </div>
 </form>`;
-  return document(200, `Authorize ${client.name}`, body, view.build);
+  return respond(200, (nonce) =>
+    htmlDocument({
+      title: `Authorize ${client.name}`,
+      body,
+      footer: buildFooter(view.build),
+      theme: view.theme,
+      nonce,
+    }),
+  );
 }

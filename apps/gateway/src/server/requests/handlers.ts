@@ -30,6 +30,7 @@ import {
   type UserPrincipal,
 } from '../auth';
 import type { RateLimiter } from '../compose/ports';
+import { documentThemeOf, messageDocument } from '../http/document';
 import { prefixOfBearer } from '../missions/token';
 import { isAccessTokenShaped } from '../oauth-as/secrets';
 import type { ApprovalProblemCode } from './approval';
@@ -92,34 +93,27 @@ function seeOther(location: string): Response {
   return new Response(null, { status: 303, headers: { Location: location, ...NO_STORE } });
 }
 
-/** A self-contained page: the route answers before any application shell exists. */
-function page(status: number, title: string, sentence: string, headers = {}): Response {
-  const body = `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex">
-<meta name="color-scheme" content="light dark">
-<title>${title}</title>
-<style>
-body { font-family: system-ui, sans-serif; margin: 0; min-height: 100vh; display: grid; place-items: center; }
-main { max-width: 32rem; padding: 2rem; text-align: center; line-height: 1.5; }
-h1 { font-size: 1.125rem; font-weight: 600; margin: 0 0 0.5rem; }
-p { margin: 0; }
-</style>
-</head>
-<body><main><h1>${title}</h1><p>${sentence}</p></main></body>
-</html>
-`;
+/**
+ * A self-contained page: the route answers before any application shell exists. The
+ * document is the shared one (`http/document.ts`): the tokens of the interface, in the
+ * theme the person chose in the application when the request carries its cookie.
+ */
+function page(
+  request: Request,
+  status: number,
+  title: string,
+  message: string,
+  headers: Record<string, string> = {},
+): Response {
+  const body = messageDocument({ title, message, theme: documentThemeOf(request.headers) });
   return new Response(body, {
     status,
     headers: { 'Content-Type': 'text/html; charset=utf-8', ...NO_STORE, ...headers },
   });
 }
 
-function forbiddenPage(): Response {
-  return page(403, 'Not for you', ADDRESSED_TO_CREATOR);
+function forbiddenPage(request: Request): Response {
+  return page(request, 403, 'Not yours to answer', ADDRESSED_TO_CREATOR);
 }
 
 function wantsForm(request: Request): boolean {
@@ -158,7 +152,7 @@ export function createRequestHandlers(deps: RequestHandlerDeps): RequestHandlers
     );
     if (limit.allowed) return null;
     const retryAfter = String(Math.max(1, Math.ceil(limit.retryAfterMs / MS_PER_SECOND)));
-    return page(429, 'Too many requests', `Try again in ${retryAfter} seconds.`, {
+    return page(request, 429, 'Too many requests', `Try again in ${retryAfter} seconds.`, {
       'Retry-After': retryAfter,
     });
   }
@@ -184,7 +178,12 @@ export function createRequestHandlers(deps: RequestHandlerDeps): RequestHandlers
     return guard.ok ? guard.principal : refusalResponse(guard, REFUSALS);
   }
 
-  function decided(result: DecideResult, requestId: string, form: boolean): Response {
+  function decided(
+    request: Request,
+    result: DecideResult,
+    requestId: string,
+    form: boolean,
+  ): Response {
     const back = inboxRequestPath(requestId);
     if (result.ok) {
       return form ? seeOther(`${back}?decided=1`) : json(200, { request: result.request });
@@ -194,7 +193,7 @@ export function createRequestHandlers(deps: RequestHandlerDeps): RequestHandlers
     switch (result.reason) {
       case 'forbidden':
         return form
-          ? forbiddenPage()
+          ? forbiddenPage(request)
           : json(403, { error: 'forbidden', message: ADDRESSED_TO_CREATOR });
       case 'not-open':
         return problem('request-not-open', 409, {
@@ -217,11 +216,11 @@ export function createRequestHandlers(deps: RequestHandlerDeps): RequestHandlers
       const guard = await guardSession(request, deps, 'user');
       if (!guard.ok) {
         // The bootstrap operator is nobody's creator.
-        if (guard.reason !== 'no-session') return forbiddenPage();
+        if (guard.reason !== 'no-session') return forbiddenPage(request);
         return seeOther(`${LOGIN_ROUTE}?return_to=${encodeURIComponent(requestPath(requestId))}`);
       }
       const result = await deps.service.view(guard.principal.user, requestId);
-      if (result.outcome !== 'ok') return forbiddenPage();
+      if (result.outcome !== 'ok') return forbiddenPage(request);
       return seeOther(inboxRequestPath(requestId));
     },
 
@@ -246,7 +245,12 @@ export function createRequestHandlers(deps: RequestHandlerDeps): RequestHandlers
       } catch {
         return json(400, { error: 'invalid-decision', message: 'The body is not a decision.' });
       }
-      return decided(await deps.service.decide(principal.user, requestId, raw), requestId, form);
+      return decided(
+        request,
+        await deps.service.decide(principal.user, requestId, raw),
+        requestId,
+        form,
+      );
     },
   };
 }

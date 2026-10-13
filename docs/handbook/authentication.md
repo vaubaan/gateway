@@ -74,7 +74,7 @@ apps/gateway/migrations/0009_user_sessions_ended_at.sql    users.sessions_ended_
 apps/gateway/migrations/0011_users_keyed_by_issuer_and_subject.sql    users.issuer, users.subject, users.identity_key (unique)
 apps/gateway/src/lib/auth/session.ts     Next glue: currentPrincipal(), requirePrincipal(), currentUser(), adminDecision(), requireOperator()
 apps/gateway/src/app/
-  page.tsx                               /  — redirect: /missions with a session, /login without
+  (app)/page.tsx                         /  — the home ("Now"); a visitor with no session is sent to /login
   (public)/layout.tsx                    centred container of the pages reachable without a session
   (public)/login/page.tsx                /login — IdP button, account view, error codes
   auth/login/route.ts                    GET  /auth/login?return_to=
@@ -89,7 +89,7 @@ apps/gateway/src/app/
   admin/(guarded)/users/page.tsx         /admin/users
   admin/(guarded)/users/[id]/deactivate/route.ts   POST /admin/users/<id>/deactivate
   admin/(guarded)/users/[id]/reactivate/route.ts   POST /admin/users/<id>/reactivate
-apps/gateway/src/components/auth/        PrincipalCard.tsx (PrincipalCard, OperatorBadge, SignOutButton), principal.ts (isOperatorPrincipal), NeedsUser.tsx, auth.module.css
+apps/gateway/src/components/auth/        AuthPage.tsx (AuthPage, AuthHeading: the frame of a page outside the shell), principal.ts (isOperatorPrincipal), NeedsUser.tsx, auth.module.css
 ```
 
 The route handlers are one-line adapters over `root.auth.handlers` (and
@@ -583,19 +583,28 @@ millisecond of a deactivation is refused.
 ## Pages
 
 - **`/login`** (where `/` sends a visitor with no session; a signed-in one
-  stays on `/`, the home — `app/(app)/page.tsx`) — one
-  button per configured IdP ("Continue with `<issuer host>`" → `GET
-/auth/login`), or "No identity provider is configured yet" with a link to
-  the bootstrap page while the token is active. Signed in, it shows the
-  `PrincipalCard`: email, groups, the **operator marker** (`OperatorBadge`:
-  `Operator` / `User` / `BOOTSTRAP_ACTOR_LABEL`, "Bootstrap operator"), an "Open the gateway" link to the home (`/`) for a
-  signed-in user, the Administration link for operators, and the sign-out
-  form. The pages under `app/(app)/` get the shell and its side navigation (`AppShell`) from the
-  same principal (handbook [connections](connections.md), "Pages").
-- **`/admin/bootstrap`** — the token form (`POST /api/auth/bootstrap`,
-  field `token`), only while the state is `active`; otherwise says when it
-  was revoked (or that none exists) and points to `/login`. A refused token
-  comes back as `?error=bootstrap-refused`; a visitor who already holds a
+  stays on `/`, the home — `app/(app)/page.tsx`) — inside `AuthPage`
+  ([web-app](web-app.md), "Pages outside the shell"): the title "Sign in to
+  `<host>`", one sentence, and one button per configured IdP ("Continue with
+  `<issuer host>`" → `GET /auth/login`). With no IdP it says "Sign-in is not
+  set up yet" (`login-not-configured`), with the way to the bootstrap page
+  while the token is active. A failed attempt shows the sentence of its code
+  (`login-error`, `LOGIN_ERROR_MESSAGES`); an unknown code shows nothing.
+  Signed in, the title is "You are signed in" and the page shows who
+  (`signed-in-as`): the display name or the email, the teams, and what the
+  person is here when it is more than a person — "administrator", or
+  "installing this gateway" for the bootstrap operator —, then "Open the
+  gateway" (the home) for a user or "Set up sign-in" (`/admin`) for the
+  bootstrap operator, a link to Settings for an administrator, and the
+  sign-out form. The page checks nothing itself: the session is the
+  authenticator's.
+- **`/admin/bootstrap`** — "Set up this gateway", inside `AuthPage`: the
+  token form (`POST /api/auth/bootstrap`, field `token`; the label says the
+  expected shape, the hint where the value comes from), only while the state
+  is `active`; otherwise a note (`bootstrap-closed`) says when the token was
+  revoked (or that none exists) and points to `/login`. A refused token
+  comes back as `?error=bootstrap-refused` (`bootstrap-error`); a visitor who
+  already holds a
   bootstrap session is redirected to `/admin`. The page sits outside every
   layout and renders the build footer itself.
 - **`/admin`** — issuer, source (file or Admin page), admin rule, bootstrap

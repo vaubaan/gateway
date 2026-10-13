@@ -18,6 +18,7 @@ import {
   PageFrameSections,
   TokenSections,
 } from './sections-foundation';
+import { WaitingSections } from './sections-waiting';
 
 /** The sections, as the local navigation lists them. Each `id` is a section anchor. */
 export const GALLERY_SECTIONS: readonly {
@@ -73,6 +74,14 @@ export const GALLERY_SECTIONS: readonly {
       { id: 'legacy', label: 'Kept for older pages' },
     ],
   },
+  {
+    group: 'Now and Waiting for you',
+    items: [
+      { id: 'running', label: 'Running list' },
+      { id: 'inbox', label: 'Inbox' },
+      { id: 'request', label: 'Open request' },
+    ],
+  },
 ];
 
 export function Gallery() {
@@ -112,6 +121,7 @@ export function Gallery() {
         <OverlaySections />
         <FormSections />
         <LegacySections />
+        <WaitingSections />
       </SubNavFrame>
     </>
   );

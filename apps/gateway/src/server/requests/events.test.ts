@@ -167,6 +167,7 @@ describe('describeEvent', () => {
       kind: 'reset',
       risk_id: 'github.code-read',
       summary: describeEvent(event('reset')),
+      details: null,
     });
   });
 });

@@ -27,6 +27,7 @@ import {
   type Gate,
   type Iso8601,
   type MissionPolicyEntry,
+  type MissionTokenKind,
   type RequestKind,
   type RequestStatus,
   type RiskId,
@@ -78,6 +79,7 @@ import {
   type ClaimProblem,
   type ClaimSituation,
 } from './claim';
+import { askedBy, REFUSED_CALL_KIND } from './asker';
 import { eventLineOf, type SessionEventLine } from './events';
 import { effectiveState } from './state';
 import { requestUrl } from './url';
@@ -95,7 +97,7 @@ const MS_PER_SECOND = 1000;
 export interface RequestServiceDeps {
   readonly store: Pick<
     Store,
-    'requests' | 'missions' | 'sessions' | 'approvals' | 'audit' | 'auditWriter'
+    'requests' | 'missions' | 'sessions' | 'approvals' | 'audit' | 'auditWriter' | 'users'
   >;
   /** Derives `orphaned` on every mission read (handbook authority). */
   readonly grounds: Pick<MissionGrounds, 'derive'>;
@@ -149,15 +151,60 @@ export interface RiskBudgetLine {
   readonly remaining: number;
 }
 
+/**
+ * Who asked (spec §8): the holder of the token the refused call presented —
+ * authenticated — and the label the agent gave itself — a claim. Read from the
+ * session's `call-refused` events (`asker.ts`); the holder is named for a page.
+ */
+export interface RequestAsker {
+  /** `null` on a call recorded before tokens had a holder. */
+  readonly token_kind: MissionTokenKind | null;
+  /** The member's user id; `null` for a named token, and when the holder is unknown. */
+  readonly user_id: string | null;
+  /**
+   * A member's display name, else their email, else their id; a named token's
+   * name; `null` when the event names no holder.
+   */
+  readonly holder: string | null;
+  readonly agent_label: string | null;
+  /** The tool of the refused call (a claim's row does not keep it). */
+  readonly tool: string | null;
+  /** Calls refused with this request in their refusal, the first one included. */
+  readonly refused_calls: number;
+}
+
+/** The mission of a request, as its creator's view names it. */
+export interface RequestMissionView {
+  readonly id: string;
+  readonly name: string;
+  readonly state: MissionState['kind'];
+  readonly expires_at: Iso8601 | null;
+  /** Length of a period of the mission's limits, in seconds; `null` for a one-off mission. */
+  readonly period_seconds: number | null;
+}
+
+/**
+ * One line of "Waiting for you" (the home and the inbox): the request, who asked,
+ * and what is left of each permission it is about in the mission's current period.
+ * Never the arguments of the call: those are read on the request's own page.
+ */
+export interface WaitingItem {
+  readonly request: RequestSummary;
+  /** `null` when no event of the session points to the request any more. */
+  readonly asker: RequestAsker | null;
+  /** One line per risk of the request still in the mission's policy, in the request's order. */
+  readonly budget: readonly RiskBudgetLine[];
+  readonly period: CurrentPeriod;
+  /** `null` for a one-off mission: its limits do not reset. */
+  readonly period_seconds: number | null;
+}
+
 export interface ClaimView {
   readonly kind: 'claim';
   readonly request: RequestSummary;
-  readonly mission: {
-    readonly id: string;
-    readonly name: string;
-    readonly state: MissionState['kind'];
-    readonly expires_at: Iso8601 | null;
-  };
+  readonly mission: RequestMissionView;
+  /** Who asked; `null` when the session holds no trace of the refused call. */
+  readonly asker: RequestAsker | null;
   readonly period: CurrentPeriod;
   /** The claimed risk; `null` when it left the policy since. */
   readonly risk: RiskBudgetLine | null;
@@ -211,12 +258,9 @@ export interface GrantedApproval {
 export interface ApprovalView {
   readonly kind: 'approval';
   readonly request: RequestSummary;
-  readonly mission: {
-    readonly id: string;
-    readonly name: string;
-    readonly state: MissionState['kind'];
-    readonly expires_at: Iso8601 | null;
-  };
+  readonly mission: RequestMissionView;
+  /** Who asked; `null` when the session holds no trace of the refused call. */
+  readonly asker: RequestAsker | null;
   readonly period: CurrentPeriod;
   readonly call: ApprovalCall;
   /** The gate of the request's first risk now: the policy's, and whether it is open for the period. */
@@ -225,6 +269,8 @@ export interface ApprovalView {
   readonly gates: readonly ApprovalGateLine[];
   /** Set once the request was granted with an approval. */
   readonly approval: GrantedApproval | null;
+  /** How long a yes stays usable (`approvals.expiry`), in seconds. */
+  readonly approval_valid_seconds: number;
   /** Last events of the mission's session, most recent first. */
   readonly events: readonly SessionEventLine[];
   /** The three actions with their consequence; empty once the request is not open. */
@@ -323,6 +369,59 @@ export class RequestService {
     return open.filter((request) => effectiveState(request, now) === 'open').length;
   }
 
+  /**
+   * "Waiting for you": the inbox, each request with who asked and what is left of
+   * the permissions it is about (spec §4.2). Oldest first, like `inbox`. Read-only:
+   * the same access rule — the creator's open requests and nothing else.
+   */
+  async waiting(user: RequestActor): Promise<WaitingItem[]> {
+    const now = this.deps.clock.now();
+    const open = await this.deps.store.requests.listOpenForCreator(user.id);
+    const missions = new Map<string, MissionRecord | null>();
+    const items: WaitingItem[] = [];
+    for (const request of open) {
+      if (effectiveState(request, now) !== 'open') continue;
+      let mission = missions.get(request.missionId);
+      if (mission === undefined) {
+        mission = await this.deps.store.missions.getById(request.missionId);
+        missions.set(request.missionId, mission);
+      }
+      if (!mission) continue;
+      const budget = budgetMissionOf(mission);
+      const { period, consumed } = await this.budget.usageOf(budget, now);
+      items.push({
+        request: this.summaryOf(request, mission, now),
+        asker: await this.askerOf(request),
+        budget: request.riskIds.flatMap((riskId) => {
+          const entry = budget.policy.find((candidate) => candidate.risk_id === riskId);
+          return entry ? [this.lineOf(entry, consumed)] : [];
+        }),
+        period,
+        period_seconds: mission.periodSeconds,
+      });
+    }
+    return items;
+  }
+
+  /**
+   * The requests of this creator's missions that are no longer open and were
+   * answered — or expired — at or after `since`, most recent first. What "Answered
+   * today" counts.
+   */
+  async answered(user: RequestActor, since: Date): Promise<RequestSummary[]> {
+    const now = this.deps.clock.now();
+    const from = since.getTime();
+    const summaries: RequestSummary[] = [];
+    for (const mission of await this.deps.store.missions.listForCreator(user.id)) {
+      for (const request of await this.deps.store.requests.listForMission(mission.id)) {
+        const summary = this.summaryOf(request, mission, now);
+        if (summary.state === 'open') continue;
+        if (Date.parse(closedAt(summary)) >= from) summaries.push(summary);
+      }
+    }
+    return summaries.sort((a, b) => closedAt(b).localeCompare(closedAt(a)));
+  }
+
   /** The creator's view of one request. */
   async view(user: RequestActor, requestId: string): Promise<ViewResult> {
     const owned = await this.own(user, requestId);
@@ -350,7 +449,9 @@ export class RequestService {
           name: mission.name,
           state: state.kind,
           expires_at: mission.expiresAt,
+          period_seconds: mission.periodSeconds,
         },
+        asker: await this.askerOf(request),
         period,
         risk,
         other_risks: lines.filter((line) => line.risk_id !== request.riskId),
@@ -628,7 +729,9 @@ export class RequestService {
         name: mission.name,
         state: state.kind,
         expires_at: mission.expiresAt,
+        period_seconds: mission.periodSeconds,
       },
+      asker: await this.askerOf(request),
       period,
       call: {
         tool,
@@ -654,6 +757,7 @@ export class RequestService {
                 : 'usable',
           }
         : null,
+      approval_valid_seconds: this.deps.approvalValiditySeconds,
       events: events.map(eventLineOf),
       options: open
         ? approvalOptions(
@@ -676,6 +780,31 @@ export class RequestService {
       order: 'desc',
       limit: SESSION_EVENTS_SHOWN,
     });
+  }
+
+  /**
+   * Who asked: the first refused call of the session that pointed to this request,
+   * its holder named. Reads the refused calls recorded since the request was dropped
+   * (a replay is refused again and points to the same request).
+   */
+  private async askerOf(request: RequestRecord): Promise<RequestAsker | null> {
+    if (!request.sessionId) return null;
+    const events = await this.deps.store.sessions.listEvents(request.sessionId, {
+      kinds: [REFUSED_CALL_KIND],
+      since: request.createdAt,
+    });
+    const asked = askedBy(events, request.id);
+    if (!asked) return null;
+    const member = asked.token_kind === 'member' && asked.holder !== null;
+    const user = member && asked.holder ? await this.deps.store.users.getById(asked.holder) : null;
+    return {
+      token_kind: asked.token_kind,
+      user_id: member ? asked.holder : null,
+      holder: user ? (user.displayName ?? user.email) : asked.holder,
+      agent_label: asked.agent_label,
+      tool: asked.tool,
+      refused_calls: asked.refused_calls,
+    };
   }
 
   /** The request and its mission when `user` is the mission's creator; otherwise `null`. */
@@ -738,6 +867,11 @@ export class RequestService {
     }
     return labels.get(riskId) ?? riskId;
   }
+}
+
+/** When a request stopped being open: its decision, or its expiry when nobody answered. */
+function closedAt(summary: RequestSummary): Iso8601 {
+  return summary.decided_at ?? summary.expires_at;
 }
 
 function providerOf(riskId: RiskId): string | null {

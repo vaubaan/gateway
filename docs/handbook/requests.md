@@ -8,6 +8,9 @@ tracks:
   - apps/gateway/src/app/r/
   - apps/gateway/src/app/api/requests/
   - apps/gateway/src/app/(app)/waiting/
+  - apps/gateway/src/server/http/document.ts
+  - apps/gateway/tests/unit/app/now-and-waiting.test.tsx
+  - apps/gateway/tests/integration/now/
   - apps/gateway/src/components/shell/OpenRequestCount.tsx
   - apps/gateway/src/server/store/repositories/requests.ts
   - apps/gateway/src/server/store/repositories/approvals.ts
@@ -57,9 +60,10 @@ apps/gateway/src/server/requests/        host-agnostic, never imports `next`
                       parseClaimDecision(), formatUtc(), orphanedProblem()                          (pure, browser-safe)
   approval.ts         ApprovalDecision, ApprovalSituation, approvalOptions(), checkApprovalDecision(),
                       parseApprovalDecision(), formatDelay()                                        (pure, browser-safe)
-  events.ts           describeEvent(), eventLineOf() — one line per session event                   (pure)
+  events.ts           describeEvent(), eventLineOf() — one line per session event, with its stored details (pure)
+  asker.ts            askedBy() — who asked, read from the refused calls of the session             (pure)
   client-ip.ts        clientIpResolver(trustedProxies) — the key of the per-IP limit
-  request-service.ts  RequestService: inbox / openCount / view / decide / decideClaim / decideApproval / sweep
+  request-service.ts  RequestService: inbox / openCount / waiting / answered / view / decide / decideClaim / decideApproval / sweep
   handlers.ts         Request → Response handlers: open (GET /r/:id), inbox, decide
   sweeper.ts          startRequestSweeper() — the in-process expiry timer
   index.ts            createRequestsModule(deps) → root.requests; server-only barrel
@@ -67,8 +71,14 @@ apps/gateway/src/app/
   r/[id]/route.ts                        GET  /r/<id>            → handlers.open
   api/requests/route.ts                  GET  /api/requests      → handlers.inbox
   api/requests/[id]/decide/route.ts      POST /api/requests/<id>/decide → handlers.decide
-  (app)/waiting/page.tsx                /waiting       — the inbox
-  (app)/waiting/[id]/page.tsx           /waiting/<id>  — the creator's view and its actions (four for a claim, three for an approval request)
+  (app)/waiting/page.tsx                /waiting       — the inbox: the list, the oldest request open beside it
+  (app)/waiting/[id]/page.tsx           /waiting/<id>  — one request, the list beside it
+  (app)/waiting/frame.tsx               loadInbox(), levelsOf(), WaitingFrame, NothingWaits — what the two pages share
+  (app)/waiting/parts.tsx               whoOf(), titleOf(), WaitingDescription, WaitingList — also used by the home
+  (app)/waiting/request-view.tsx        RequestView: the body of an approval and of a limit that was reached, in every state
+  (app)/waiting/limit-answer.tsx        LimitAnswer (client): the answers to a limit, one choice and one button
+  (app)/waiting/event-words.ts          eventWords() — a session event in the words of the interface (pure)
+  (app)/waiting/local-time.tsx          LocalTime (client): the time of an event, in the reader's zone
   (app)/waiting/waiting.module.css
 apps/gateway/src/components/shell/OpenRequestCount.tsx   the count of "Waiting for you" in the side navigation
 ```
@@ -117,10 +127,15 @@ refused before the service is asked.
 | 4    | bootstrap session, or the user is not the creator | 403 page: "This request is addressed to its creator." and nothing else    |
 | 5    | the creator                                       | 303 `/waiting/<id>`                                                       |
 
-The 403 and 429 pages are self-contained HTML built in `handlers.ts` (`page()`):
-the route answers with a real status code before any application shell
-exists, `noindex`, `no-store`. The sentence is `ADDRESSED_TO_CREATOR`; the
-page `/waiting/<id>` shows the same one to a non-creator who types its
+The 403 and 429 pages are self-contained HTML (`page()` in `handlers.ts`,
+over `messageDocument` of `server/http/document.ts`): the route answers with a
+real status code before any application shell exists, `noindex`, `no-store`.
+The document carries the tokens of the interface in both themes and no script:
+light by default, dark when the system asks for it, and the theme the person
+chose in the application when the request carries its cookie
+(`documentThemeOf`; [web-app](web-app.md), "Self-contained documents"). The
+403 is titled "Not yours to answer" and its sentence is `ADDRESSED_TO_CREATOR`;
+the page `/waiting/<id>` shows the same one to a non-creator who types its
 address.
 
 **Rate limit.** `RateLimiter.take('request-page:ip:<ip>',
@@ -162,6 +177,8 @@ const requests = new RequestService({
 
 await requests.inbox(user); // RequestSummary[] — open, unexpired, oldest first
 await requests.openCount(user); // the badge
+await requests.waiting(user); // WaitingItem[] — the inbox, each request with who asked and what is left
+await requests.answered(user, since); // RequestSummary[] — no longer open, closed at or after `since`
 await requests.view(user, id); // { outcome: 'ok', view } | { outcome: 'forbidden' }
 await requests.decide(user, id, raw); // untrusted body; dispatches on the request's kind
 await requests.decideClaim(user, id, decision);
@@ -184,6 +201,42 @@ the policy), `other_risks`, `events` (the last `SESSION_EVENTS_SHOWN` = 20
 session events, most recent first, each with a one-line `summary` from
 `describeEvent`) and `options` (empty once the request is not open). For an
 approval request it returns an `ApprovalView` ([Approvals](#approvals)).
+
+### Who asked, and what waits (`asker.ts`, `waiting()`, `answered()`)
+
+A request row names its mission, never the caller. The call that was refused
+is a `call-refused` event of the mission's session, and that event carries the
+`request_id` its refusal pointed to, the holder of the token (authenticated)
+and the label the agent gave itself (a claim). `askedBy(events, requestId)`
+(pure) reads them: the earliest such event is who asked, and the number of
+them is how many calls were stopped since (a replay while the request is open
+is refused again and points to the same request). `RequestService.askerOf`
+lists the `call-refused` events of the session since the request was dropped
+and names the holder: a member's display name, else their email, else their
+id; a named token's name. The result is a `RequestAsker` (`token_kind`,
+`user_id`, `holder`, `agent_label`, `tool`, `refused_calls`), `null` when no
+event points to the request any more (its session is gone, or retention purged
+the events). Both views carry it as `asker`; for a claim it is also where the
+tool comes from, since a claim's row keeps none.
+
+`waiting(user)` is the inbox for a page: per open request a `WaitingItem` —
+the summary, the `asker`, `budget` (one `RiskBudgetLine` per risk of the
+request still in the mission's policy, in the mission's current period), the
+`period` and `period_seconds` (`null` for a one-off mission). Same access rule
+as `inbox` (`listOpenForCreator`), oldest first, and never the arguments of a
+call. `answered(user, since)` lists the requests of the creator's missions
+that are no longer open and were decided — or expired — at or after `since`,
+most recent first: what the inbox counts as answered in the last 24 hours. It
+reads `listForCreator` then `listForMission`: no new query.
+
+Both views also carry `mission.period_seconds`, and an `ApprovalView` carries
+`approval_valid_seconds` (`approvals.expiry`): a page says "today" or "this
+week", and how long a yes is worth, from the view alone.
+
+A `SessionEventLine` keeps the stored `details` of its event beside the
+one-line `summary`: the pages word an event from them
+(`eventWords`, [Pages](#pages)); the details hold a tool name and a
+fingerprint, never arguments.
 
 ### State machine (`state.ts`)
 
@@ -386,24 +439,87 @@ to `/waiting/<id>` with `?decided=1` or `?problem=<code>`
 
 ## Pages
 
-- **`/waiting`** — the inbox: one row per open request addressed to me
-  (kind — with the tool for an approval request —, mission, risk label and
-  id, asked, expires). Reachable from the
-  side navigation without any forwarded URL: the entry "Waiting for you"
-  (`NAV.waiting` in `lib/vocabulary.ts`, `/waiting`) carries `OpenRequestCount`
-  (`COUNTS` in `components/shell/AppShell.tsx`); an entry's count is a server
-  component rendered at the end of the entry
-  (`AppShell`), here a badge with `openCount()`, nothing at zero.
-- **`/waiting/<id>`** — the creator's view, top to bottom: _What is asked_
-  (mission and its state, risk, `quota · consumed · left` this period, period
-  end, mission expiry, asked, expiry or outcome), _Your decision_ (one row per
-  option: a plain `method="post"` form to `/api/requests/<id>/decide` with a
-  hidden `resolution`, the consequence line, the amount field for
-  `extend-quota` pre-filled with the maximum, the `datetime-local` field for
-  `extend-expiry`, the reason when unavailable), _Other risks this period_,
-  _Last session events_. Once decided or expired the actions are gone and the
-  outcome is shown. No client component, no script. For an approval request
-  the same page shows another body ([Approvals](#approvals), "The page").
+Both pages are server components that call `currentUser()` first, and share
+`frame.tsx`: `loadInbox(root, user)` (`waiting()` and `answered()` over the
+last 24 hours), `WaitingFrame` (the page header, the list, one request beside
+it) and `NothingWaits`. The words are `lib/vocabulary.ts`'s (`REQUEST_WORDS`,
+`ANSWERS`, `periodNow`, `until`, `asker`…); a tool, a risk id and a refusal
+code are printed as the protocol spells them, with `Mono`.
+
+- **`/waiting`** — the inbox. With nothing open: one sentence
+  (`data-testid="waiting-empty"`), what was answered in the last 24 hours,
+  and where to go. Otherwise the list (`WaitingList`,
+  `data-testid="waiting-list"`: one link per open request — the mark of who
+  asks, the permission or "Daily limit reached on …", the mission and who,
+  how long ago and when it ends by itself) and the **oldest request open
+  beside it**, rendered by the same `RequestView` as its own address. The
+  entry "Waiting for you" of the side navigation carries `OpenRequestCount`
+  (`COUNTS` in `components/shell/AppShell.tsx`), a badge with `openCount()`,
+  nothing at zero.
+- **`/waiting/<id>`** — one request, the list beside it. A non-creator and an
+  unknown id read the header and one note (`data-testid="request-forbidden"`,
+  `ADDRESSED_TO_CREATOR`), nothing about the request.
+
+`RequestView` (`request-view.tsx`) draws a request in the order a person needs
+it, for both kinds:
+
+1. **who asks, on which mission** — `RequestStatement`'s verb line: the
+   agent's label, "using Carol's key" / "your key" / "the machine key
+   nightly" (`whoOf`, `keyOf`), the mission as a link;
+2. **the statement** (`data-testid="request-statement"`) — the permission(s)
+   an approval needs, or the permission and `used of limit` for a limit
+   (`claim-budget`); beside it the state of a request that is not open any
+   more (`request-state`: approved, refused, expired; a limit reads
+   "answered" or "left as it is");
+3. **exactly what will run** — an approval: `CallBox` "Exactly what it sent"
+   with the tool (`approval-tool`) and each argument by its name
+   (`approval-arguments`; `approval-arguments-erased` once closed), then the
+   permission it needs with its gate now (`approval-gate`), its severity
+   (from the catalog, `levelsOf`) and its id linked to the reference, and the
+   room left of every permission the call counts against
+   (`approval-room-<risk id>`: after this call while the request is open, as
+   it is afterwards; a limit already reached is said in red). The
+   fingerprint and the slices are behind a disclosure remembered per browser
+   (`waiting:call`). A limit: "Stopped on" (the permission id, since when,
+   how many calls were refused), then the limit with its reset and the end
+   of the mission;
+4. **what an answer changes** — an approval: one line per answer
+   (`consequence-<resolution>`), in the order yes, no, then the quieter
+   alternative; an answer that is not possible now says why, by the code of
+   its problem and in the page's own words;
+5. **the answers** — an approval: one plain `method="post"` form per answer
+   (`action-<resolution>`) to `/api/requests/<id>/decide` with a hidden
+   `resolution`: "Approve this call" (`grant`, the page's primary action),
+   "Refuse", "Let it run freely until the reset" (`open-gate`). A limit:
+   `LimitAnswer` (client), one choice among the answers
+   (`answer-<resolution>`: "Reset the count", "Give back some calls" with
+   its number, "Extend the mission" with its date, "Leave it until the
+   reset" for `refuse`) and one button named after the choice. Only the
+   fields of the chosen answer are posted — the radios sit outside the form,
+   the endpoint refuses any field it does not expect — and a date is sent as
+   the instant the person meant in their own time zone. "Extend the mission"
+   is not offered on a mission that has no end date (`no-expiry`).
+
+Then context, never a condition to answer: "What led here" (`request-events`:
+the last six session events worded by `eventWords`, a link to the mission's
+activity) and, while the request waits, "What the agent sees meanwhile"
+(`agent-sees`: the code, the risk id and the URL of the refusal it holds).
+
+States. `?decided=1` on a closed request shows "Answer recorded"
+(`request-decided`); `?problem=<code>` shows "Nothing was changed" with the
+sentence of the code (`request-problem`, `PROBLEM_SENTENCES`). A closed
+request shows what became of it (`approval-outcome`, `claim-outcome`) and no
+form. An open request on a mission that cannot run (revoked, orphaned,
+expired) says so (`request-mission-closed`) and leaves the answer that still
+applies. The server's `label`, `consequence` and `unavailable.message` of an
+option are not printed: the page words an option from its `resolution` and
+the code of its problem.
+
+The home shows the same open requests ([web-app](web-app.md), "The home"):
+a row per request, with "Review" (an approval) or "Answer" (a limit) leading
+here. A refusal may be given from the home; a yes is given on this page only,
+where the arguments are shown (ADR
+[now-and-waiting-pages](../decisions/now-and-waiting-pages.md)).
 
 ## Expiry sweeper
 
@@ -524,7 +640,7 @@ that delay. A replay before the decision gets the same request back.
 | Field      | Content                                                                                                                                                                                                                                                                                                                                                         |
 | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `request`  | the summary (with `tool`)                                                                                                                                                                                                                                                                                                                                       |
-| `mission`  | `{ id, name, state, expires_at }`                                                                                                                                                                                                                                                                                                                               |
+| `mission`  | `{ id, name, state, expires_at, period_seconds }`; `asker` beside it: who asked (`RequestAsker`), or `null`; `approval_valid_seconds`: how long a yes stays usable                                                                                                                                                                                              |
 | `period`   | the current period                                                                                                                                                                                                                                                                                                                                              |
 | `call`     | `tool`, `fingerprint`, `arguments` (**in clear**, while the request is open; `null` + `arguments_erased: true` afterwards), `slices` (wire form, `serializeSlice`), `risks` (every risk the call touches: label, quota, consumed, remaining, and `gate` as it applies now: `effectiveGate` of `budget/gates.ts`, the function the budget decides the call with) |
 | `gate`     | `{ policy, open_until }`: the risk's gate in the mission's policy (`null` when the risk left it) and the end of the period it is open for                                                                                                                                                                                                                       |
@@ -657,15 +773,14 @@ show `open until <period end>` from the same derivation.
 
 ### The page
 
-For an approval request `/waiting/<id>` shows, top to bottom: _What is
-asked_ (mission and its state, tool, **arguments** as pretty-printed JSON —
-or "erased when the request was decided; only their fingerprint remains",
-"closed" in place of "decided" for an expired request —,
-fingerprint, slices touched, gated risk, gate, period end, asked, expiry or
-outcome with what became of the approval), _Your decision_ (one plain
-`method="post"` form per option with its consequence line), _What this call
-counts against, this period_ (one row per touched risk: gate, quota,
-consumed, left), _Last session events_. No client component, no script.
+`/waiting/<id>` for an approval request is `RequestView` with the approval
+body ([Pages](#pages)): who asks and the mission, the permission(s) as the
+statement, the tool and the arguments each by its name — a string as it was
+sent, anything else as JSON; "Erased when the request was closed; only their
+fingerprint remains." once it is not open —, the permission it needs with its
+gate now and its severity, the room left, what each answer does, the three
+answers. When the call needs several gated permissions the page says "one
+answer for the N" and "One yes covers the N permissions this call needs."
 
 A form post answers 303 to `/waiting/<id>?decided=1` or `?problem=<code>`.
 The document the browser then loads is a fresh one: the arguments are not in
@@ -719,7 +834,7 @@ it once the request is decided.
   parser, `formatDelay`),
   `client-ip.test.ts` (2: the page uses the shared client-address rule,
   itself tested in `src/server/http/client-ip.test.ts`, 11), `events.test.ts`
-  (7), `sweeper.test.ts` (4). The gate openings are
+  (7), `asker.test.ts` (4), `sweeper.test.ts` (4). The gate openings are
   `tests/unit/server/budget/gates.test.ts` (9).
 - Integration, `tests/integration/requests/`: `request-service.test.ts`
   (34, `:memory:` store with a manual clock; the mission checked as the store
@@ -745,8 +860,19 @@ it once the request is decided.
   approval request: orphaned, past `requests.expiry`, swept, `expired`, the
   sealed arguments erased, the authority back, `not-open`, and the replay
   opens a new request that is granted.
-- Browser, `tests/e2e/v5/exhaust-and-claim.spec.ts` (1) and
-  `approve-action.spec.ts` (1).
+- The read models of the pages, on the real root:
+  `tests/integration/now/now.test.ts` (11: `waiting` names the holder and
+  the agent, lists what is left, is the creator's alone and never carries
+  arguments; `answered`; the `asker` of a view; then the home's `readNow`).
+- The pages rendered to static markup, `tests/unit/app/now-and-waiting.test.tsx`
+  (28): the order a request is read in, the answers offered in each state
+  (open, answered, expired, refused, a mission that cannot run, a problem
+  code), the fields a limit's answer posts, the words of an event.
+- The self-contained 403 and 429: `src/server/http/document.test.ts` (6) and
+  the themed 403 in `request-handlers.test.ts`.
+- Browser, `tests/e2e/v5/exhaust-and-claim.spec.ts` (1),
+  `approve-action.spec.ts` (2) and `now-and-entry.spec.ts` (4: the empty
+  inbox, the refusal of the forwarded URL in both themes).
 
 Scenarios in [integration-tests](../tests/integration-tests.md) and
 [e2e-tests](../tests/e2e-tests.md).
