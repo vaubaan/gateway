@@ -1,5 +1,11 @@
 /**
- * CloudflareDnsAdapter -- paste-token mode, all custom REST tools.
+ * LEGACY v4 adapter — paste-token mode, one raw secret per `provider_admins` row.
+ *
+ * Kept so `apps/gateway/src/lib/gateway/build.ts` compiles until P1.6
+ * rewrites the execution door on `cloudflareDnsPlugin`. Nothing here is
+ * reached by the v5 gateway.
+ *
+ * @deprecated legacy v4, deleted in P1.6 — use `cloudflareDnsPlugin` from `./index.ts`.
  *
  * Auth model : the user pastes a Cloudflare API Token (or Global API Key
  * in `email|key` format). This is stored encrypted in
@@ -26,6 +32,7 @@ export interface ValidateResult {
   error?: string;
 }
 
+/** @deprecated legacy v4, deleted in P1.6 — use `cloudflareDnsPlugin`. */
 export class CloudflareDnsAdapter {
   readonly provider = 'cloudflare-dns' as const;
   readonly availableTools: ReadonlyArray<McpToolDeclaration> = availableTools;
