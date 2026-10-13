@@ -153,13 +153,14 @@ upstream_error IS NOT NULL`.
   `refusal_reason = <text>`.
 
 **Administrative entry**: `ts`, `user_id`, `act` (`AdminAct` union:
-connection created/reconnected/refused/transferred/revoked, resources
+connection created/reconnected/refused/transferred/reassigned/revoked, resources
 discovered, resource edited, share created/revoked,
-mission issued/rotated/revoked/closed, budget extended, period reset,
-expiry extended, gate opened, approval granted, request refused,
-delegation granted/revoked, OAuth client approved/disabled, config changed),
+mission issued/rotated/revoked/closed/orphaned/restored, budget extended, period reset,
+expiry extended, gate opened, gate changed, approval granted, request refused,
+delegation granted/revoked, group created, group member added/removed,
+OAuth client approved/disabled, config changed),
 `object {type, id}` with `type: AdminObjectType` (`connection | share |
-mission | request | delegation | oauth-client | instance-config`),
+mission | request | delegation | group | oauth-client | instance-config`),
 `before`, `after`, `delegated_client_id` (set when the act came through
 the management door).
 
@@ -427,7 +428,7 @@ pivot D1; the Upstash ADR is superseded).
 - `authenticate.test.ts` (11) — door table, pure `checkDoor` on every
   mismatch, `parseBearer`, `DoorAuthenticator` for mission token vs
   delegated token vs session at each door, unknown bearer → `AuthError`.
-- `pipeline.test.ts` (23) — `checkMissionActive` (status, passed, future
+- `pipeline.test.ts` (27) — `checkMissionActive` (status, passed, future
   and unreadable `expires_at`, the wording of an expired status without a
   stored expiry), `checkConnectionAvailable` (`unowned` passes,
   `expired` and `revoked` refuse), then the pipeline over

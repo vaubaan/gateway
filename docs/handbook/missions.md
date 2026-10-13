@@ -46,10 +46,12 @@ apps/gateway/src/server/missions/
                          envNotices()                                                              (pure)
   summary.ts             summarize() — the three lines; period / expiry phrases                    (pure)
   bootstrap-kit.ts       buildBootstrapKit(), REFUSAL_GUIDANCE, MISSION_TOKEN_ENV, AGENT_LABEL_*   (pure)
-  draft-schema.ts        parseMissionDraft() — zod shape check of a JSON draft
+  draft-schema.ts        missionDraftSchema, parseMissionDraft() — zod shape check of a JSON draft; the schema is
+                         also the input of the management door's `preview_policy` and `issue_mission`
   token.ts               mintMissionToken(), prefixOfBearer(), bearerMatches(), maskedToken()
   mission-service.ts     MissionService: issuanceContext / preview / issue / draftFrom / duplicate /
-                         rotate / revoke / verifyToken / list / get
+                         rotate / revoke / setGate / verifyToken / list / get
+  orphan-reason.ts       explainOrphan() — the sentences of the orphaned banner on /missions/<id>          (pure)
   handlers.ts            Request → Response handlers of /api/missions/**
   index.ts               createMissionsModule(deps) → root.missions; server-only barrel
   testing.ts             ACME_CATALOG, acmeConnection(), seedConnection(), catalogEnvs() — tests only
@@ -64,11 +66,12 @@ apps/gateway/src/app/(app)/missions/
   [id]/page.tsx          /missions/<id> — detail (links to its session page)
   [id]/session/page.tsx  /missions/<id>/session — counters, requests, timeline (handbook audit)
   [id]/mission-actions.tsx  Duplicate / Rotate / Revoke (client)
+  [id]/gate-control.tsx  one button per policy row: Require approval / Set to auto (client)
   bootstrap-kit-view.tsx BootstrapKitView, RevealDialog (client)
   state-badge.tsx        StateBadge — the derived mission state (list and detail)
   new/labels.ts          GATE_LABELS
   missions.module.css    styles of the Missions pages
-apps/gateway/src/app/api/missions/   route.ts, preview/route.ts, [id]/rotate, [id]/revoke — one-line adapters
+apps/gateway/src/app/api/missions/   route.ts, preview/route.ts, [id]/rotate, [id]/revoke, [id]/gate — one-line adapters
 ```
 
 `model`, `catalog-view`, `preview` and `summary` are **browser-safe** (values
@@ -365,7 +368,11 @@ that `delegationId`, and the `mission-issued`, `mission-rotated` and
 actor and the creator. `MissionOverview.issuedVia` (`MissionIssuer`:
 `delegation_id`, `client_id`, `client_name`) names the client behind a
 delegated mission, read at every listing through `store.missions.issuersOf`;
-it is `null` for a mission issued in the interface. `duplicate` also takes `overrides` for `name`,
+it is `null` for a mission issued in the interface. `/missions` marks such a
+mission with a `delegated` badge and the client's name; `/missions/<id>` adds
+an "Issued by" line with the client id, a link to `/delegations#<delegation_id>`
+and the reminder that the name is the one the application gave itself.
+`duplicate` also takes `overrides` for `name`,
 `period` and `expires_at`, and answers `not-found` for a mission that is not
 the creator's.
 
@@ -590,10 +597,12 @@ ${VAUBAAN_MISSION_TOKEN}' } } } }`: the variable by reference, never the
 The kit also carries `endpoint` (`<public_url>/mcp`) and `reveals_secret`.
 
 `instanceUrl` is `InstanceConfig.publicUrl`; `EXECUTION_DOOR_PATH` (`/mcp`) is
-the only path written down, next to the route it names. `GET
+the only path this file writes down; the management endpoint is built from
+`MANAGEMENT_DOOR_PATH` (`/mcp/manage`, `oauth-as/endpoints.ts`). `GET
 /agent-bootstrap.md` (`app/agent-bootstrap.md/route.ts`, static, public,
 cached five minutes) serves `content.md`, the generic companion of the kit
-(no instance URL in it); a test checks it documents every refusal code.
+(no instance URL in it); four tests check that it documents every refusal
+code, the management door, sub-agents and the agent label, and names no instance.
 
 ## Wiring
 
@@ -613,10 +622,10 @@ and resources are read through the store repositories only
 
 ## Tests
 
-Unit, beside the code (109): `authority/authority-service.test.ts` (7),
+Unit, beside the code (130): `authority/authority-service.test.ts` (20),
 `missions/preview.test.ts` (44), `catalog-view.test.ts` (11), `summary.test.ts`
-(8), `bootstrap-kit.test.ts` (13), `token.test.ts` (8, with the draft schema),
-`app/(app)/missions/new/form-state.test.ts` (22).
+(8), `bootstrap-kit.test.ts` (13), `orphan-reason.test.ts` (4), `token.test.ts`
+(8, with the draft schema), `app/(app)/missions/new/form-state.test.ts` (22).
 
 Integration, `tests/integration/missions/` (53) on the real root over
 `:memory:`: `mission-lifecycle.test.ts` (28), `mission-handlers.test.ts` (8) and
