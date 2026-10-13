@@ -13,7 +13,9 @@
   top: var(--space-6);
   display: flex;
   min-width: 0;
-  max-height: calc(100vh - var(--space-12));
+  /* Shorter than the window by what stands above the form (the header of the page), so that
+     the foot of the rail — the action — is in view before any scrolling too. */
+  max-height: calc(100vh - 168px);
 }
 /* The box of the rail: its head and its foot (the action) stay, what is between scrolls. */
 .rail > * {

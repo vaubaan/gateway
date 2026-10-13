@@ -172,9 +172,12 @@ test('create a three-account mission on one page, then replace its key and stop 
   await expect(editor.getByText('The canonical branch')).toBeHidden();
   await merge.getByRole('button', { name: 'why?' }).click();
   await expect(editor.getByText('The canonical branch')).toBeVisible();
-  await expect(editor.getByText('Undo', { exact: true }).first()).toBeVisible();
-  await expect(editor.getByText('Blast radius', { exact: true }).first()).toBeVisible();
-  const reference = editor.getByRole('link', { name: /Full entry in the reference/ }).first();
+  await expect(editor.getByText('Undo', { exact: true }).filter({ visible: true })).toHaveCount(1);
+  await expect(
+    editor.getByText('Blast radius', { exact: true }).filter({ visible: true }),
+  ).toHaveCount(1);
+  // One "why?" is open: its link is the only one a person can reach.
+  const reference = editor.getByRole('link', { name: /Full entry in the reference/ });
   await expect(reference).toHaveAttribute('href', '/reference/github#risk-github.merge-protected');
   await expect(reference).toHaveAttribute('target', '_blank');
   await merge.getByRole('button', { name: 'hide' }).click();
@@ -192,7 +195,8 @@ test('create a three-account mission on one page, then replace its key and stop 
   await expect(digest).toContainText('7 run freely');
   await expect(digest).toContainText('3 ask you first');
   // Another preset would drop those edits: the screen asks first, and states the consequence.
-  await pickPreset(page, 'GitHub acme-org', 'Read-only');
+  // (a click, not a check: the choice does not move until the person confirms)
+  await presetChoice(page, 'GitHub acme-org', 'Read-only').click();
   const discard = page.getByTestId('discard-dialog');
   await expect(discard).toContainText('Discard what you changed?');
   await expect(discard).toContainText('Another preset replaces');
