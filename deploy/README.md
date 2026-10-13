@@ -207,9 +207,15 @@ environment.
   (`deploy/docker/smoke.sh vaubaan-gateway:local`; needs Docker and curl)
   checks the fail-fast exit (within 60 seconds), the https rule,
   `/healthz`, secret redaction, native addons, the non-root user and that
-  no env file is shipped. `SMOKE_EXPECT_VERSION`, `SMOKE_EXPECT_COMMIT` and
+  no env file and no test, fixture or demo file of the repository is
+  shipped. `SMOKE_EXPECT_VERSION`, `SMOKE_EXPECT_COMMIT` and
   `SMOKE_EXPECT_ARCH` (`x64`, `arm64`) make it also check what `/healthz`
   answers and the architecture of the image, as the release pipeline does.
+- **Declare your reverse proxy** (`trusted_proxies`). Without it the instance
+  believes no client address: the per-address limits become one window shared
+  by all callers, and the audit records no address. It says so in one warning
+  at boot. The reference Compose file sets it to Docker's address pool; narrow
+  it to your proxy.
 - **Management door**: the instance is also the OAuth authorization server of
   `/mcp/manage` (handbook
   [management-door](../docs/handbook/management-door.md)). Defaults: access

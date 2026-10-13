@@ -133,7 +133,7 @@ export default async function IdentityProviderPage({ searchParams }: Props) {
                   htmlFor="idp-client-secret"
                   hint={
                     stored?.hasClientSecret
-                      ? 'A secret is stored; leave blank to keep it.'
+                      ? 'A secret is stored; leave blank to keep it. It is asked again when the issuer changes.'
                       : 'Stored encrypted with the master key.'
                   }
                 >

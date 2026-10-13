@@ -124,4 +124,6 @@ How each of these is implemented is described in the handbooks under
 [connections](docs/handbook/connections.md),
 [execution-door](docs/handbook/execution-door.md),
 [management-door](docs/handbook/management-door.md) and
-[audit](docs/handbook/audit.md).
+[audit](docs/handbook/audit.md). Who can attempt what on each surface, the
+control that answers it, the test that proves it and the risks that are
+accepted are in the [threat model](docs/handbook/threat-model.md).
