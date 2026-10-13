@@ -3,16 +3,19 @@
 /**
  * The Share dialog (spec §4.2, §7.3): a target — a user by email, or a group —
  * then the risks. The checklist is the catalog as explicit ids, grouped by
- * severity and folded behind a one-line summary. "Select all" ticks the boxes
- * one by one: the form posts one `risk` value per ticked risk, so what is
- * stored is the list resolved at the time of the click (spec §3.1
- * "Enumeration"), never "everything".
+ * severity under a one-line summary; each risk is explained the way every
+ * page explains it (label, reason, vector, id linked to the provider
+ * reference). "Select all" ticks the boxes one by one: the form posts one
+ * `risk` value per ticked risk, so what is stored is the list resolved at the
+ * time of the click (spec §3.1 "Enumeration"), never "everything".
  */
 import { useMemo, useState } from 'react';
 
 import { SeverityBadge } from '@/components/risk/RiskBadges';
-import { Badge, Banner, Button, Field, Input, Select } from '@/components/ui';
+import { RiskExplain } from '@/components/risk/RiskExplain';
+import { Banner, Button, Field, Input, Select } from '@/components/ui';
 import type { CatalogRisk } from '@/server/missions/model';
+import { providerPath, REFERENCE_SECTIONS } from '@/server/providers/links';
 import {
   envNotes,
   groupBySeverity,
@@ -39,9 +42,12 @@ export function ShareForm({
   groups,
   labelling,
   initial,
+  provider,
 }: {
   action: string;
   cancelHref: string;
+  /** The connection's plugin: where "what these risks mean" points. */
+  provider: { readonly id: string; readonly label: string };
   risks: readonly CatalogRisk[];
   groups: readonly { id: string; name: string }[];
   labelling: EnvLabelling;
@@ -115,7 +121,7 @@ export function ShareForm({
         <p className={styles.summary} data-testid="restriction-summary" aria-live="polite">
           {summary}
         </p>
-        <details className={styles.fold}>
+        <details className={styles.fold} open>
           <summary>Risks ({risks.length})</summary>
           <div className={styles.tools}>
             <button
@@ -135,7 +141,16 @@ export function ShareForm({
             <span className={styles.muted}>
               “Select all” ticks each risk of today&apos;s catalog, one by one; it leaves out
               deprecated entries and the uncategorized-write fallback. A risk added to the catalog
-              later is not shared.
+              later is not shared. Each id links to its entry in the{' '}
+              <a
+                href={`${providerPath(provider.id)}#${REFERENCE_SECTIONS.risks}`}
+                target="_blank"
+                rel="noreferrer"
+                className={styles.refLink}
+              >
+                {provider.label} reference
+              </a>{' '}
+              (new tab), where the badges are explained.
             </span>
           </div>
           {bySeverity.map((group) => (
@@ -150,8 +165,9 @@ export function ShareForm({
               <ul className={styles.risks}>
                 {group.risks.map((risk) => (
                   <li key={risk.risk_id}>
-                    <label className={styles.risk} title={risk.reason}>
+                    <div className={styles.risk}>
                       <input
+                        id={`share-risk-${risk.risk_id}`}
                         type="checkbox"
                         name="risk"
                         value={risk.risk_id}
@@ -159,14 +175,8 @@ export function ShareForm({
                         onChange={() => toggle(risk.risk_id)}
                         aria-label={`Share risk ${risk.risk_id}`}
                       />
-                      <span>
-                        {risk.label}
-                        {risk.env && <Badge mono>{risk.env}</Badge>}
-                        {risk.fallback && <Badge tone="warning">fallback</Badge>}
-                        {risk.deprecated && <Badge tone="warning">deprecated</Badge>}
-                        <span className={styles.riskId}>{risk.risk_id}</span>
-                      </span>
-                    </label>
+                      <RiskExplain risk={risk} newTab labelFor={`share-risk-${risk.risk_id}`} />
+                    </div>
                   </li>
                 ))}
               </ul>

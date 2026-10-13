@@ -2,19 +2,20 @@
 
 /**
  * The one-page mission creation screen (spec §4.2, §7.4), in this order:
- * name → connections and, within each, resources (all by default, folded) →
- * one preset per connection (or duplicate a mission, or paste an agent's
- * proposal) → a three-line summary → per-risk detail folded by default →
- * period and expiry → issue. The decision shown here is `previewDraft`, the
- * function the server runs again at issuance; the browser's copy only saves
- * a round trip.
+ * name (or duplicate a mission, or paste an agent's proposal) → connections
+ * and, within each, resources (all by default, folded) and the policy, built
+ * in one of two modes: **Preset** — an explicit choice among the plugin's
+ * presets, with what the chosen one allows, gates and leaves out always
+ * visible — or **Custom** — the granular editor, every risk with its budget
+ * and gate → a three-line summary → period and expiry → issue. The decision
+ * shown here is `previewDraft`, the function the server runs again at
+ * issuance; the browser's copy only saves a round trip.
  */
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 
 import { Badge, Banner, Button, Input, Select, Textarea } from '@/components/ui';
 import type { BootstrapKit } from '@/server/missions/bootstrap-kit';
-import { describePresetWidth, presetWidth } from '@/server/missions/catalog-view';
 import type {
   DraftPeriod,
   IssuanceConnection,
@@ -28,26 +29,30 @@ import { defaultResources, previewDraft } from '@/server/missions/preview';
 import { RevealDialog } from '../bootstrap-kit-view';
 import { messageOf } from '../message-of';
 import styles from '../missions.module.css';
+import { CustomEditor } from './custom-editor';
 import {
   applyPreset,
-  availableCount,
-  describeSkipped,
+  backToPreset,
+  discardsEdits,
   draftOf,
+  enterCustom,
   EXPIRY_CHOICES,
   initialFormState,
   loadResolved,
   PERIOD_CHOICES,
   periodChoiceOf,
   periodOf,
-  presetSkipped,
   setIncluded,
   setResources,
+  startFromPreset,
   type ConnectionState,
   type ExpiryChoice,
   type FormState,
   type PeriodChoice,
+  type PolicyMode,
 } from './form-state';
-import { RiskDetail } from './risk-detail';
+import { linesOfState, PolicyLines } from './policy-lines';
+import { PresetPanel } from './preset-panel';
 
 export interface InitialDraft {
   readonly name: string;
@@ -89,8 +94,22 @@ function startState(
   };
 }
 
+/**
+ * An edit the screen holds back until the creator confirms it, because it
+ * would throw away what they typed in the Custom editor.
+ */
+type PendingDiscard =
+  | { readonly kind: 'back-to-preset' }
+  | { readonly kind: 'start-from'; readonly presetId: string };
+
+const MODES: readonly { id: PolicyMode; label: string }[] = [
+  { id: 'preset', label: 'Preset' },
+  { id: 'custom', label: 'Custom' },
+];
+
 const EMPTY: ConnectionState = {
   included: false,
+  mode: 'preset',
   resourceIds: [],
   presetId: '',
   entries: {},
@@ -109,6 +128,14 @@ export function MissionForm({
   const router = useRouter();
   const [state, setState] = useState<FormState>(() => startState(context, initial));
   const [openResources, setOpenResources] = useState<ReadonlySet<string>>(new Set());
+  // A policy loaded from a mission or a proposal is read first, edited on demand.
+  const [readOnly, setReadOnly] = useState<ReadonlySet<string>>(
+    () => new Set(initial?.resolved.map((line) => line.connection_id) ?? []),
+  );
+  const [pending, setPending] = useState<Readonly<Record<string, PendingDiscard>>>({});
+  // Connections whose preset reading is spread out. Picking a preset spreads its own
+  // reading out and counts the others; the creator may spread out as many as they like.
+  const [spread, setSpread] = useState<ReadonlySet<string>>(new Set());
   const [now] = useState(() => new Date());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -120,7 +147,6 @@ export function MissionForm({
 
   const hasExperimental = context.some((c) => c.experimental);
   const visible = context.filter((c) => state.showExperimental || !c.experimental);
-  const included = visible.filter((c) => state.connections[c.id]?.included);
   const preview = useMemo(
     () => previewDraft({ connections: context, now }, draftOf(context, state, now)),
     [context, state, now],
@@ -134,6 +160,53 @@ export function MissionForm({
   function patchConnection(id: string, next: ConnectionState) {
     setServerIssues([]);
     setState((s) => ({ ...s, connections: { ...s.connections, [id]: next } }));
+  }
+  function forget(id: string) {
+    setPending((current) =>
+      Object.fromEntries(Object.entries(current).filter(([key]) => key !== id)),
+    );
+  }
+  function openEditor(id: string, open: boolean) {
+    setReadOnly((current) => {
+      const next = new Set(current);
+      if (open) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  /** Preset | Custom. Leaving Custom with edits asks first; nothing is dropped silently. */
+  function switchMode(connection: IssuanceConnection, cs: ConnectionState, mode: PolicyMode) {
+    if (mode === cs.mode) return;
+    if (mode === 'custom') {
+      forget(connection.id);
+      openEditor(connection.id, true);
+      patchConnection(connection.id, enterCustom(cs));
+    } else if (discardsEdits(cs)) {
+      setPending((current) => ({ ...current, [connection.id]: { kind: 'back-to-preset' } }));
+    } else {
+      patchConnection(connection.id, backToPreset(connection, cs));
+    }
+  }
+  function startFrom(connection: IssuanceConnection, cs: ConnectionState, presetId: string) {
+    if (discardsEdits(cs)) {
+      setPending((current) => ({
+        ...current,
+        [connection.id]: { kind: 'start-from', presetId },
+      }));
+    } else {
+      patchConnection(connection.id, startFromPreset(connection, cs, presetId));
+    }
+  }
+  function confirmDiscard(connection: IssuanceConnection, cs: ConnectionState) {
+    const wanted = pending[connection.id];
+    if (!wanted) return;
+    forget(connection.id);
+    patchConnection(
+      connection.id,
+      wanted.kind === 'back-to-preset'
+        ? backToPreset(connection, cs)
+        : startFromPreset(connection, cs, wanted.presetId),
+    );
   }
   function toggleResources(id: string) {
     setOpenResources((open) => {
@@ -209,6 +282,8 @@ export function MissionForm({
         });
         setServerIssues([]);
         setProposalReport(body.preview);
+        setPending({});
+        setReadOnly(new Set(body.preview.resolved.map((line) => line.connection_id)));
       } else {
         setError(problemsOf(body) ?? messageOf(body, res.status));
       }
@@ -328,7 +403,7 @@ export function MissionForm({
 
         <section>
           <h2 className={styles.step}>
-            <span>2 · Connections, resources, preset</span>
+            <span>2 · Connections, resources, policy</span>
             {hasExperimental && (
               <label className={styles.stepTools}>
                 <input
@@ -344,9 +419,6 @@ export function MissionForm({
             {visible.map((connection) => {
               const cs = state.connections[connection.id] ?? EMPTY;
               const name = `${connection.provider_label} ${connection.display_name}`;
-              const preset = connection.presets.find((p) => p.id === cs.presetId);
-              const skipped = describeSkipped(presetSkipped(connection, cs));
-              const accepted = Object.keys(cs.entries).length;
               // "N of M": M is "all resources" (neither hidden nor stale) plus
               // the hidden ones the creator ticked on purpose.
               const total =
@@ -354,6 +426,9 @@ export function MissionForm({
                 connection.resources.filter((r) => r.hidden && cs.resourceIds.includes(r.id))
                   .length;
               const listed = connection.resources.length;
+              const wanted = pending[connection.id];
+              const reading = cs.mode === 'custom' && readOnly.has(connection.id);
+              const custom = linesOfState(connection.risks, cs);
               return (
                 <div
                   key={connection.id}
@@ -389,23 +464,27 @@ export function MissionForm({
                             ? 'No resource'
                             : `${cs.resourceIds.length} of ${total} ${total === 1 ? 'resource' : 'resources'}`}
                         </button>
-                        <Select
-                          value={cs.presetId}
-                          aria-label={`Preset for ${name}`}
-                          onChange={(e) =>
-                            patchConnection(
-                              connection.id,
-                              applyPreset(connection, cs, e.target.value),
-                            )
-                          }
-                        >
-                          <option value="">Pick a preset…</option>
-                          {connection.presets.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.label}
-                            </option>
+                        <fieldset className={styles.modes}>
+                          <legend className={styles.visuallyHidden}>Policy for {name}</legend>
+                          {MODES.map((mode) => (
+                            <label
+                              key={mode.id}
+                              className={[
+                                styles.mode,
+                                cs.mode === mode.id ? styles.modeOn : '',
+                              ].join(' ')}
+                            >
+                              <input
+                                type="radio"
+                                name={`mode-${connection.id}`}
+                                value={mode.id}
+                                checked={cs.mode === mode.id}
+                                onChange={() => switchMode(connection, cs, mode.id)}
+                              />
+                              {mode.label}
+                            </label>
                           ))}
-                        </Select>
+                        </fieldset>
                       </>
                     ) : (
                       <>
@@ -414,25 +493,6 @@ export function MissionForm({
                       </>
                     )}
                   </div>
-                  {cs.included && (preset || accepted > 0) && (
-                    <div className={styles.connMeta}>
-                      {preset && (
-                        <div className={styles.oneLine} title={preset.description}>
-                          {describePresetWidth(presetWidth(preset, connection.risks))}
-                          {' — '}
-                          {preset.description}
-                        </div>
-                      )}
-                      {cs.edited && (
-                        <div>
-                          <Badge tone="info">
-                            {preset ? 'adjusted' : 'custom'}: {accepted} accepted
-                          </Badge>
-                        </div>
-                      )}
-                      {skipped && !cs.edited && <div>{skipped}</div>}
-                    </div>
-                  )}
                   {cs.included && openResources.has(connection.id) && listed > 0 && (
                     <div className={styles.resources}>
                       {connection.resources.map((r) => (
@@ -464,6 +524,88 @@ export function MissionForm({
                       ))}
                     </div>
                   )}
+                  {cs.included && wanted && (
+                    <div
+                      className={styles.discard}
+                      role="alert"
+                      data-testid={`discard-${connection.provider}`}
+                    >
+                      <span>
+                        {wanted.kind === 'back-to-preset'
+                          ? 'Going back to Preset discards what you changed in the editor on this connection.'
+                          : 'Starting from another preset replaces what you changed in the editor on this connection.'}
+                      </span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="danger"
+                        onClick={() => confirmDiscard(connection, cs)}
+                      >
+                        Discard my changes
+                      </Button>
+                      <Button type="button" size="sm" onClick={() => forget(connection.id)}>
+                        Keep editing
+                      </Button>
+                    </div>
+                  )}
+                  {cs.included && cs.mode === 'preset' && (
+                    <PresetPanel
+                      connection={connection}
+                      state={cs}
+                      expanded={spread.has(connection.id)}
+                      onPick={(presetId) => {
+                        setSpread(new Set([connection.id]));
+                        patchConnection(connection.id, applyPreset(connection, cs, presetId));
+                      }}
+                      onExpand={(expanded) =>
+                        setSpread((current) => {
+                          const next = new Set(current);
+                          if (expanded) next.add(connection.id);
+                          else next.delete(connection.id);
+                          return next;
+                        })
+                      }
+                    />
+                  )}
+                  {cs.included && reading && (
+                    <div
+                      className={styles.policyBody}
+                      data-testid={`custom-${connection.provider}`}
+                    >
+                      <div className={styles.presetDetail}>
+                        <p className={styles.presetDescription}>
+                          Custom policy, as loaded. Nothing below comes from a preset reference: it
+                          is the explicit list this mission would carry.{' '}
+                          <button
+                            type="button"
+                            className={styles.linkButton}
+                            aria-expanded={false}
+                            onClick={() => openEditor(connection.id, true)}
+                          >
+                            Edit risk by risk
+                          </button>
+                        </p>
+                        <PolicyLines
+                          title="Allowed without asking"
+                          lines={custom.auto}
+                          empty="Nothing."
+                        />
+                        <PolicyLines
+                          title="Needs your approval, action by action"
+                          lines={custom.approval}
+                          empty="Nothing: the agent never has to ask you."
+                        />
+                      </div>
+                    </div>
+                  )}
+                  {cs.included && cs.mode === 'custom' && !reading && (
+                    <CustomEditor
+                      connection={connection}
+                      state={cs}
+                      onChange={(next) => patchConnection(connection.id, next)}
+                      onStartFrom={(presetId) => startFrom(connection, cs, presetId)}
+                    />
+                  )}
                 </div>
               );
             })}
@@ -488,43 +630,9 @@ export function MissionForm({
           </dl>
         </section>
 
-        <section>
-          <h2 className={styles.step}>4 · Per-risk detail — unfold only to adjust</h2>
-          {included.length === 0 ? (
-            <p className={styles.muted}>Include a connection to see its risks.</p>
-          ) : (
-            <div className={styles.panel}>
-              {included.map((connection) => {
-                const cs = state.connections[connection.id] ?? EMPTY;
-                return (
-                  <details
-                    key={connection.id}
-                    className={styles.fold}
-                    data-testid={`risks-${connection.provider}`}
-                  >
-                    <summary>
-                      <strong>{connection.provider_label}</strong>
-                      <span>{connection.display_name}</span>
-                      <span className={styles.muted}>
-                        {Object.keys(cs.entries).length} of {availableCount(connection, cs)} risks
-                        accepted — quota, rate limit, gate
-                      </span>
-                    </summary>
-                    <RiskDetail
-                      connection={connection}
-                      state={cs}
-                      onChange={(next) => patchConnection(connection.id, next)}
-                    />
-                  </details>
-                );
-              })}
-            </div>
-          )}
-        </section>
-
         <footer className={styles.footer}>
           <div className={styles.footerRow}>
-            <h2 className={styles.step}>5 · Period and expiry</h2>
+            <h2 className={styles.step}>4 · Period and expiry</h2>
             <div className={styles.asideControls}>
               <Select
                 value={state.period}

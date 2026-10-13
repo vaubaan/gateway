@@ -1,7 +1,9 @@
 /**
  * `/missions/<id>` — one mission: state, connections and resources, policy
- * per risk with what is left this period and its gate — which the creator
- * edits here after issuance (spec §3.5) —, token prefix with Rotate, the
+ * per risk — each explained (label, reason, vector) and linked to its entry
+ * in the provider reference — with what is left this period and its gate,
+ * which the creator edits here after issuance (spec §3.5), token prefix with
+ * Rotate, the
  * bootstrap kit with the secret masked (spec §4.2, §4.4), and the link to the
  * mission's session page.
  */
@@ -27,10 +29,14 @@ import {
   Tr,
 } from '@/components/ui';
 import { GateBadge } from '@/components/risk/RiskBadges';
+import { RiskExplain, RiskIdLink } from '@/components/risk/RiskExplain';
 import { currentUser } from '@/lib/auth/session';
 import { maskedToken } from '@/server/missions';
 import { explainOrphan } from '@/server/missions/orphan-reason';
+import { formatRate } from '@/server/missions/catalog-view';
 import { reloadPhrase } from '@/server/missions/summary';
+import { providerPath } from '@/server/providers/links';
+import { riskExplainer } from '@/server/providers/reference';
 
 import { BootstrapKitView } from '../bootstrap-kit-view';
 import styles from '../missions.module.css';
@@ -54,6 +60,8 @@ export default async function MissionPage({ params }: Props) {
   // The service's own rule (`gateEditBlockedBy`): the control shows when `setGate` would act.
   const gatesEditable = detail.gates_editable;
   const orphanExplanation = orphan && explainOrphan(orphan, detail.connections);
+  // The catalog row behind each persisted id: what the risk means, not only what it is called.
+  const explain = riskExplainer(session.root.registry);
 
   return (
     <Stack gap="var(--space-5)">
@@ -141,7 +149,10 @@ export default async function MissionPage({ params }: Props) {
             {detail.connections.map((c) => (
               <div key={c.id} style={{ display: 'contents' }}>
                 <dt>
-                  {c.provider_label} “{c.display_name}”{' '}
+                  <Link href={providerPath(c.provider)} className={styles.refLink}>
+                    {c.provider_label}
+                  </Link>{' '}
+                  “{c.display_name}”{' '}
                   {c.status !== 'active' && <Badge tone="danger">{c.status}</Badge>}
                 </dt>
                 <dd>
@@ -162,6 +173,10 @@ export default async function MissionPage({ params }: Props) {
       <Card>
         <CardHeader>
           <CardTitle>Policy — {detail.policy.length} accepted risks</CardTitle>
+          <span className={styles.muted}>
+            The explicit list this mission carries. Each id opens its entry in the provider
+            reference.
+          </span>
         </CardHeader>
         <Table>
           <Thead>
@@ -174,36 +189,45 @@ export default async function MissionPage({ params }: Props) {
             </Tr>
           </Thead>
           <Tbody>
-            {detail.policy.map((entry) => (
-              <Tr key={entry.risk_id}>
-                <Td>
-                  {entry.label}
-                  <div className={styles.mono}>{entry.risk_id}</div>
-                </Td>
-                <Td>{entry.quota}</Td>
-                <Td>{entry.remaining ?? '—'}</Td>
-                <Td>
-                  {entry.rate_limit.max} per {entry.rate_limit.window_seconds}s
-                </Td>
-                <Td>
-                  <div className={styles.gateCell} data-testid={`gate-${entry.risk_id}`}>
-                    <GateBadge gate={entry.gate} />
-                    {entry.gate_open_until && (
-                      <span className={styles.muted}>
-                        open until <LocalDate ts={entry.gate_open_until} />
-                      </span>
+            {detail.policy.map((entry) => {
+              const risk = explain(entry.risk_id);
+              return (
+                <Tr key={entry.risk_id} data-testid={`policy-${entry.risk_id}`}>
+                  <Td className={styles.policyRisk}>
+                    {risk ? (
+                      <RiskExplain risk={risk} />
+                    ) : (
+                      <>
+                        {entry.label}
+                        <div>
+                          <RiskIdLink riskId={entry.risk_id} />
+                        </div>
+                      </>
                     )}
-                    {gatesEditable && (
-                      <GateControl
-                        missionId={mission.id}
-                        riskId={entry.risk_id}
-                        gate={entry.gate}
-                      />
-                    )}
-                  </div>
-                </Td>
-              </Tr>
-            ))}
+                  </Td>
+                  <Td>{entry.quota}</Td>
+                  <Td>{entry.remaining ?? '—'}</Td>
+                  <Td className={styles.nowrap}>{formatRate(entry.rate_limit)}</Td>
+                  <Td>
+                    <div className={styles.gateCell} data-testid={`gate-${entry.risk_id}`}>
+                      <GateBadge gate={entry.gate} />
+                      {entry.gate_open_until && (
+                        <span className={styles.muted}>
+                          open until <LocalDate ts={entry.gate_open_until} />
+                        </span>
+                      )}
+                      {gatesEditable && (
+                        <GateControl
+                          missionId={mission.id}
+                          riskId={entry.risk_id}
+                          gate={entry.gate}
+                        />
+                      )}
+                    </div>
+                  </Td>
+                </Tr>
+              );
+            })}
           </Tbody>
         </Table>
       </Card>

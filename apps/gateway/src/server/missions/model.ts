@@ -8,7 +8,14 @@
  * (spec §4.1 bis, plan P2.4). Types only: this file is safe to import from a
  * client component.
  */
-import type { Gate, MissionPolicyEntry, Preset, RateLimit, RiskId } from '@vaubaan/shared';
+import type {
+  Gate,
+  MissionPolicyEntry,
+  Preset,
+  RateLimit,
+  RiskId,
+  RiskVector,
+} from '@vaubaan/shared';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Draft
@@ -84,6 +91,15 @@ export interface MissionDraft {
 export const SEVERITY_LEVELS = ['low', 'medium', 'high', 'critical'] as const;
 export type SeverityLevel = (typeof SEVERITY_LEVELS)[number];
 
+/**
+ * What an entry does, in three words a creator sorts by: it only reads, it
+ * writes, or it writes something that cannot be undone. Derived from the
+ * entry's patterns (all end in `.R`) and from the `reversibility` axis of its
+ * vector; a way to group a long catalog, never a decision.
+ */
+export const RISK_KINDS = ['read', 'write', 'destructive'] as const;
+export type RiskKind = (typeof RISK_KINDS)[number];
+
 /** One explicit `RiskId` of a provider's catalog, with what the interface shows. */
 export interface CatalogRisk {
   readonly risk_id: RiskId;
@@ -92,6 +108,9 @@ export interface CatalogRisk {
   readonly env: string | null;
   readonly label: string;
   readonly reason: string;
+  /** The six-axis profile, resolved for `env` (risk model §4.2): it explains, it decides nothing. */
+  readonly vector: RiskVector;
+  readonly kind: RiskKind;
   /** Ordering signal derived from the 6-D vector; never a gate (risk model §3). */
   readonly severity: number;
   readonly level: SeverityLevel;

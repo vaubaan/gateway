@@ -5,6 +5,7 @@
  */
 import { NeedsUser } from '@/components/auth/NeedsUser';
 import { currentUser } from '@/lib/auth/session';
+import { PROVIDERS_PATH } from '@/server/providers/links';
 
 import styles from '../missions.module.css';
 import { MissionForm, type InitialDraft } from './mission-form';
@@ -47,8 +48,13 @@ export default async function NewMissionPage({ searchParams }: Props) {
         <div>
           <h1>New mission</h1>
           <p className={styles.muted}>
-            Name it, pick the connections and a preset for each, read the summary, issue. The token
-            is shown once.
+            Name it, pick the connections, then for each a preset — or Custom, to accept risks one
+            by one —, read the summary, issue. The token is shown once. What each provider&apos;s
+            risks and presets mean is in the{' '}
+            <a href={PROVIDERS_PATH} target="_blank" rel="noreferrer" className={styles.refLink}>
+              provider reference
+            </a>{' '}
+            (new tab).
           </p>
         </div>
       </div>

@@ -174,3 +174,28 @@
   text-align: center;
   color: var(--text-muted);
 }
+
+/* A link into the provider reference: underlined, so it reads as a link at rest. */
+.refLink {
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 3px;
+}
+/* Under a provider card of the picker: its reference, one click away. */
+.providerRef {
+  display: inline-block;
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 3px;
+}
+.providerList > li {
+  display: flex;
+  flex-direction: column;
+}
+.providerList > li > .providerCard {
+  height: auto;
+  flex: 1;
+}

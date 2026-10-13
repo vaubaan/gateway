@@ -472,18 +472,18 @@ group overage) never reaches the sync: the sign-in is refused with
 
 ### Pages and routes
 
-| Path                                                                            | What                                                                                     | Guard    |
-| ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | -------- |
-| `/connections/<id>`                                                             | "Shares" card (target, restriction on demand, Edit, Revoke), "Ownership" card (transfer) | owner    |
-| `/connections/<id>/share[?share=<id>]`                                          | the Share dialog (`share-form.tsx`, client)                                              | owner    |
-| `POST /connections/<id>/shares`                                                 | `shares.handlers.share`                                                                  | user     |
-| `POST /connections/<id>/shares/<shareId>/revoke`                                | `shares.handlers.revoke`                                                                 | user     |
-| `POST /connections/<id>/transfer`                                               | `connections.handlers.transfer` (`group_id`)                                             | user     |
-| `/shares`                                                                       | Shares received                                                                          | user     |
-| `/admin/groups`                                                                 | groups, members                                                                          | operator |
-| `POST /admin/groups/create`, `…/<id>/members`, `…/<id>/members/<userId>/remove` | `groups.handlers.*`                                                                      | operator |
-| `/admin/connections`                                                            | connections without owner                                                                | operator |
-| `POST /admin/connections/<id>/reassign`                                         | `connections.handlers.reassign` (`owner_kind`, `owner_email` / `owner_group`)            | operator |
+| Path                                                                            | What                                                                                                                                         | Guard    |
+| ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| `/connections/<id>`                                                             | "Shares" card (target, restriction on demand, Edit, Revoke), "Ownership" card (transfer)                                                     | owner    |
+| `/connections/<id>/share[?share=<id>]`                                          | the Share dialog (`share-form.tsx`, client): the checklist open under its summary, each risk through `RiskExplain` ([missions](missions.md)) | owner    |
+| `POST /connections/<id>/shares`                                                 | `shares.handlers.share`                                                                                                                      | user     |
+| `POST /connections/<id>/shares/<shareId>/revoke`                                | `shares.handlers.revoke`                                                                                                                     | user     |
+| `POST /connections/<id>/transfer`                                               | `connections.handlers.transfer` (`group_id`)                                                                                                 | user     |
+| `/shares`                                                                       | Shares received                                                                                                                              | user     |
+| `/admin/groups`                                                                 | groups, members                                                                                                                              | operator |
+| `POST /admin/groups/create`, `…/<id>/members`, `…/<id>/members/<userId>/remove` | `groups.handlers.*`                                                                                                                          | operator |
+| `/admin/connections`                                                            | connections without owner                                                                                                                    | operator |
+| `POST /admin/connections/<id>/reassign`                                         | `connections.handlers.reassign` (`owner_kind`, `owner_email` / `owner_group`)                                                                | operator |
 
 Every POST is a form post answered by a `303` to a page with `?notice=<id>`
 (`createNoticeRedirect`, the connections' `NoticeStore`).

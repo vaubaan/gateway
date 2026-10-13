@@ -5,9 +5,9 @@
  * draft sent to the server is always explicit) are unit-tested without a
  * browser. The decision itself is `previewDraft`, shared with the server.
  */
-import type { Gate, PresetEntry, RiskId } from '@vaubaan/shared';
+import type { Gate, Preset, PresetEntry, RateLimit, RiskId } from '@vaubaan/shared';
 
-import { isResolvable } from '@/server/missions/catalog-view';
+import { groupVariants, isResolvable, type RiskFamily } from '@/server/missions/catalog-view';
 import type {
   CatalogRisk,
   DraftConnection,
@@ -28,8 +28,18 @@ export interface EntryState {
   readonly gate: Gate;
 }
 
+/**
+ * How the policy of one connection is built (spec §4.2): `preset` — pick one
+ * of the plugin's presets and read what it yields; `custom` — the full
+ * editor, every risk the creator holds with its own budget and gate. The
+ * persisted policy is the explicit list either way: the mode is a property of
+ * the screen, never of the mission.
+ */
+export type PolicyMode = 'preset' | 'custom';
+
 export interface ConnectionState {
   readonly included: boolean;
+  readonly mode: PolicyMode;
   /** Selected resource ids; by default every resource that is neither hidden nor stale. */
   readonly resourceIds: readonly string[];
   /** Preset the policy was filled from; '' when none. */
@@ -76,6 +86,7 @@ const MS_PER_DAY = 86_400_000;
 export function initialConnectionState(connection: IssuanceConnection): ConnectionState {
   return {
     included: false,
+    mode: 'preset',
     resourceIds: defaultResources(connection).map((r) => r.id),
     presetId: '',
     entries: {},
@@ -170,6 +181,232 @@ export function describeSkipped(skipped: readonly SkippedPresetEntry[]): string 
   }
   return `${skipped.length} preset ${skipped.length === 1 ? 'entry' : 'entries'} left out: ${parts.join('; ')}.`;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Preset or Custom, per connection
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Opens the full editor on what is there: the preset's values are the
+ * starting point, nothing is lost and nothing counts as edited yet.
+ */
+export function enterCustom(state: ConnectionState): ConnectionState {
+  return { ...state, mode: 'custom' };
+}
+
+/**
+ * True when going back to Preset mode would throw away something the creator
+ * typed: the screen asks before it calls `backToPreset`.
+ */
+export function discardsEdits(state: ConnectionState): boolean {
+  return state.mode === 'custom' && state.edited;
+}
+
+/** Back to the preset as it is: the policy is the preset's again, edits are dropped. */
+export function backToPreset(
+  connection: IssuanceConnection,
+  state: ConnectionState,
+): ConnectionState {
+  return applyPreset(connection, { ...state, mode: 'preset' }, state.presetId);
+}
+
+/** "Start from preset…" in Custom mode: pre-fills the editor, which stays open. */
+export function startFromPreset(
+  connection: IssuanceConnection,
+  state: ConnectionState,
+  presetId: string,
+): ConnectionState {
+  return applyPreset(connection, { ...state, mode: 'custom' }, presetId);
+}
+
+/** One risk a preset yields on this connection, with the values the mission would get. */
+export interface ExplainedLine {
+  readonly risk: CatalogRisk;
+  readonly quota: number;
+  readonly rate_limit: RateLimit;
+  readonly gate: Gate;
+}
+
+/** A catalog entry the preset names and this mission cannot get, with why. */
+export interface SkippedFamily extends RiskFamily {
+  readonly why: string;
+}
+
+/**
+ * What picking a preset means on this connection, with this selection and
+ * this authority — the content of the card the creator reads before issuing.
+ */
+export interface PresetExplanation {
+  readonly preset: Preset;
+  /** Passes without asking. */
+  readonly auto: readonly ExplainedLine[];
+  /** Each action waits for the creator's approval. */
+  readonly approval: readonly ExplainedLine[];
+  /** Risks the creator could accept here and the preset does not include. */
+  readonly leftOut: readonly RiskFamily[];
+  /** Entries of the preset that cannot apply: outside the authority, or no resource carries the environment. */
+  readonly skipped: readonly SkippedFamily[];
+}
+
+function skippedWhy(skipped: SkippedPresetEntry, envs: readonly string[]): string {
+  if (skipped.reason === 'outside-authority') return 'outside your authority';
+  const named = skipped.env ? [skipped.env] : envs;
+  return named.length > 0
+    ? `needs a selected resource labelled ${named.map((env) => `"${env}"`).join(' or ')}`
+    : 'needs a selected resource with an environment label';
+}
+
+/**
+ * Expands a preset of the connection's plugin against the selected resources
+ * and the creator's authority — the same computation as `applyPreset`, read
+ * instead of applied, so the card and the policy cannot disagree. `null` for
+ * an id that is not a preset of this plugin.
+ */
+export function explainPreset(
+  connection: IssuanceConnection,
+  state: Pick<ConnectionState, 'resourceIds'>,
+  presetId: string,
+): PresetExplanation | null {
+  const preset = connection.presets.find((p) => p.id === presetId);
+  if (!preset) return null;
+  const { preview } = previewConnection(connection, {
+    connection_id: connection.id,
+    preset: presetId,
+    resources: { scope: 'selected', resource_ids: state.resourceIds },
+  });
+  const byId = new Map(preview.passes.map((entry) => [entry.risk_id, entry]));
+  const lines = connection.risks.flatMap((risk): ExplainedLine[] => {
+    const entry = byId.get(risk.risk_id);
+    return entry
+      ? [{ risk, quota: entry.quota, rate_limit: entry.rate_limit, gate: entry.gate }]
+      : [];
+  });
+  const held = new Set(connection.authority);
+  const resources = selectedResources(connection, state);
+  const skippedIds = new Set(preview.skipped_from_preset.map((s) => s.risk_id));
+  const leftOut = connection.risks.filter(
+    (risk) =>
+      !byId.has(risk.risk_id) &&
+      !skippedIds.has(risk.risk_id) &&
+      !skippedIds.has(risk.base_id) &&
+      unavailableReason(connection, risk, resources, held) === null,
+  );
+  const skipped = preview.skipped_from_preset.flatMap((entry): SkippedFamily[] => {
+    // A skipped entry names an explicit id, or the base id of an env-scoped risk.
+    const variants = connection.risks.filter(
+      (risk) => risk.risk_id === entry.risk_id || risk.base_id === entry.risk_id,
+    );
+    const exact = variants.filter((risk) => risk.risk_id === entry.risk_id);
+    const [family] = groupVariants(exact.length > 0 ? exact : variants);
+    if (!family) return [];
+    const envs = family.variants.flatMap((risk) => (risk.env === null ? [] : [risk.env]));
+    return [{ ...family, why: skippedWhy(entry, envs) }];
+  });
+  return {
+    preset,
+    auto: lines.filter((line) => line.gate === 'auto'),
+    approval: lines.filter((line) => line.gate === 'approval'),
+    leftOut: groupVariants(leftOut),
+    skipped,
+  };
+}
+
+/** A preset in a few words, for the choice itself: `10 risks · 2 need approval`. */
+export function presetChoiceLabel(explanation: PresetExplanation): string {
+  const total = explanation.auto.length + explanation.approval.length;
+  const parts = [`${total} ${total === 1 ? 'risk' : 'risks'}`];
+  if (explanation.approval.length > 0) {
+    parts.push(
+      `${explanation.approval.length} ${explanation.approval.length === 1 ? 'needs' : 'need'} approval`,
+    );
+  }
+  return parts.join(' · ');
+}
+
+function counted(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
+/**
+ * The counts of a preset's reading, in one sentence — what stays on screen
+ * when its lists are not spread out. Every part of the reading is counted,
+ * including what the preset could not apply here, so nothing disappears.
+ */
+export function presetDigest(explanation: PresetExplanation): string {
+  const parts = [
+    `${explanation.auto.length} allowed without asking`,
+    `${counted(explanation.approval.length, 'needs', 'need')} your approval`,
+    `${explanation.leftOut.length} not included`,
+  ];
+  if (explanation.skipped.length > 0) {
+    parts.push(
+      `${counted(explanation.skipped.length, 'entry', 'entries')} of the preset left out here`,
+    );
+  }
+  return parts.join(' · ');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The Custom editor: every risk, searchable
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Which rows the editor shows. */
+export const RISK_FILTERS = [
+  { id: 'all', label: 'All risks' },
+  { id: 'accepted', label: 'Accepted' },
+  { id: 'available', label: 'Not accepted yet' },
+  { id: 'unavailable', label: 'Unavailable to you' },
+] as const;
+export type RiskFilter = (typeof RISK_FILTERS)[number]['id'];
+
+/** One explicit id as the editor shows it. */
+export interface EditorRow {
+  readonly risk: CatalogRisk;
+  readonly accepted: boolean;
+  /** Why the row cannot be ticked, or `null`. A ticked row with a reason is refused at issuance. */
+  readonly unavailable: string | null;
+}
+
+/** Every explicit id of the catalog, catalog order: nothing is hidden, what cannot be ticked says why. */
+export function editorRows(connection: IssuanceConnection, state: ConnectionState): EditorRow[] {
+  const held = new Set(connection.authority);
+  const resources = selectedResources(connection, state);
+  return connection.risks.map((risk) => ({
+    risk,
+    accepted: state.entries[risk.risk_id] !== undefined,
+    unavailable: unavailableReason(connection, risk, resources, held),
+  }));
+}
+
+function matchesQuery(risk: CatalogRisk, query: string): boolean {
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return true;
+  const text = [risk.label, risk.risk_id, risk.reason, risk.env ?? '', risk.kind, risk.level]
+    .join(' ')
+    .toLowerCase();
+  return terms.every((term) => text.includes(term));
+}
+
+/**
+ * The rows left by the search box and the filter. Every word typed must
+ * appear in the label, the id, the reason, the environment, the kind or the
+ * severity level.
+ */
+export function filterRows(
+  rows: readonly EditorRow[],
+  query: string,
+  filter: RiskFilter,
+): EditorRow[] {
+  return rows.filter((row) => {
+    if (filter === 'accepted' && !row.accepted) return false;
+    if (filter === 'available' && (row.accepted || row.unavailable !== null)) return false;
+    if (filter === 'unavailable' && row.unavailable === null) return false;
+    return matchesQuery(row.risk, query);
+  });
+}
+
+/** A catalog long enough that the editor offers its search box (Supabase: 25 entries). */
+export const SEARCH_THRESHOLD = 8;
 
 /** Includes or leaves out a connection; including it never ticks a risk by itself. */
 export function setIncluded(state: ConnectionState, included: boolean): ConnectionState {
@@ -402,6 +639,8 @@ export function loadResolved(
     if (connection.experimental) showExperimental = true;
     connections[connection.id] = {
       included: true,
+      // Explicit lines are a custom policy: the editor is the honest view of them.
+      mode: 'custom',
       resourceIds: line.resources.resource_ids,
       presetId: line.preset ?? '',
       entries: Object.fromEntries(line.policy.map((e) => [e.risk_id, entryOf(e)])),

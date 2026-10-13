@@ -10,6 +10,7 @@ import styles from '@/components/auth/auth.module.css';
 import { isOperatorPrincipal } from '@/components/auth/principal';
 import { Container } from '@/components/ui';
 import type { Principal } from '@/server/auth';
+import { PROVIDERS_PATH } from '@/server/providers/links';
 
 import { BuildFooter } from './BuildFooter';
 import { OpenRequestCount } from './OpenRequestCount';
@@ -28,6 +29,8 @@ export const APP_NAV: readonly AppNavEntry[] = [
   { href: '/requests', label: 'Requests', Count: OpenRequestCount },
   { href: '/audit', label: 'Audit' },
   { href: '/delegations', label: 'Delegations' },
+  // The reference of the shipped plugins: documentation, so it comes last.
+  { href: PROVIDERS_PATH, label: 'Providers' },
 ];
 
 export function AppShell({

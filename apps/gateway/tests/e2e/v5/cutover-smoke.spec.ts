@@ -87,7 +87,10 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   await page.goto('/missions/new');
   await page.getByLabel('Mission name').fill(MISSION);
   await page.getByLabel(`Include GitHub ${CONNECTION}`).check();
-  await page.getByLabel(`Preset for GitHub ${CONNECTION}`).selectOption({ label: 'Developer' });
+  await page
+    .getByRole('group', { name: `Preset for GitHub ${CONNECTION}` })
+    .getByRole('radio', { name: /^Developer\b/ })
+    .check();
   await expect(page.getByTestId('summary-can')).toContainText(`GitHub "${CONNECTION}"`);
   // One code project, one repository: the other one is left out of the mission.
   await page.getByRole('button', { name: '2 of 2 resources' }).click();
@@ -95,7 +98,11 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   await expect(page.getByTestId('summary-can')).toContainText('on 1 of 2 resources');
   await expect(page.getByTestId('summary-quantities')).toContainText('never expires');
   // The one adjustment: a quota small enough to run out in this test.
-  await page.getByTestId('risks-github').locator(':scope > summary').click();
+  // Custom mode opens the editor on the preset's values.
+  await page
+    .getByRole('group', { name: `Policy for GitHub ${CONNECTION}` })
+    .getByRole('radio', { name: 'Custom' })
+    .check();
   await page.getByLabel(`Quota for ${READ_CODE}`).fill(String(QUOTA));
   await page.getByRole('button', { name: 'Issue mission' }).click();
 

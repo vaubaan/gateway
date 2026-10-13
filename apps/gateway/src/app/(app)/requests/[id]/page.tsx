@@ -38,6 +38,7 @@ import {
   type BadgeTone,
 } from '@/components/ui';
 import { GateBadge } from '@/components/risk/RiskBadges';
+import { RiskIdLink } from '@/components/risk/RiskExplain';
 import { currentUser } from '@/lib/auth/session';
 import {
   ADDRESSED_TO_CREATOR,
@@ -182,7 +183,9 @@ function ApprovalBody({ view }: { view: ApprovalView }) {
             <dt>Gated risk</dt>
             <dd>
               {request.risk_label}
-              <div className={styles.mono}>{request.risk_id}</div>
+              <div>
+                <RiskIdLink riskId={request.risk_id} />
+              </div>
             </dd>
             <dt>Gate</dt>
             <dd data-testid="approval-gate">
@@ -253,7 +256,9 @@ function ApprovalBody({ view }: { view: ApprovalView }) {
               <Tr key={line.risk_id} data-testid={`approval-risk-${line.risk_id}`}>
                 <Td>
                   {line.label}
-                  <div className={styles.mono}>{line.risk_id}</div>
+                  <div>
+                    <RiskIdLink riskId={line.risk_id} />
+                  </div>
                 </Td>
                 <Td>
                   <GateBadge gate={line.gate} />
@@ -365,7 +370,9 @@ function ClaimBody({ view }: { view: ClaimView }) {
             <dt>Risk</dt>
             <dd>
               {request.risk_label}
-              <div className={styles.mono}>{request.risk_id}</div>
+              <div>
+                <RiskIdLink riskId={request.risk_id} />
+              </div>
             </dd>
             <dt>This period</dt>
             <dd data-testid="claim-budget">
@@ -442,7 +449,9 @@ function RiskRow({ line }: { line: RiskBudgetLine }) {
     <Tr>
       <Td>
         {line.label}
-        <div className={styles.mono}>{line.risk_id}</div>
+        <div>
+          <RiskIdLink riskId={line.risk_id} />
+        </div>
       </Td>
       <Td>{line.quota}</Td>
       <Td>{line.consumed}</Td>

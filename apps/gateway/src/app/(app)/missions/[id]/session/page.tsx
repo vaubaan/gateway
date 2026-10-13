@@ -31,6 +31,7 @@ import {
   Tr,
 } from '@/components/ui';
 import { GateBadge } from '@/components/risk/RiskBadges';
+import { RiskIdLink } from '@/components/risk/RiskExplain';
 import { currentUser } from '@/lib/auth/session';
 import type { SessionEventKind } from '@vaubaan/shared';
 import {
@@ -177,7 +178,9 @@ export default async function MissionSessionPage({ params, searchParams }: Props
               <Tr key={risk.risk_id}>
                 <Td>
                   {risk.label}
-                  <div className={styles.mono}>{risk.risk_id}</div>
+                  <div>
+                    <RiskIdLink riskId={risk.risk_id} />
+                  </div>
                 </Td>
                 <Td>{risk.quota}</Td>
                 <Td>{risk.consumed ?? '—'}</Td>

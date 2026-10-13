@@ -21,6 +21,8 @@ tracks:
   - apps/gateway/src/components/auth/principal.ts
   - apps/gateway/src/components/connections/
   - apps/gateway/src/components/risk/
+  - apps/gateway/src/server/providers/
+  - apps/gateway/src/app/(app)/providers/
   - apps/gateway/src/components/telemetry/ValidationBadge.tsx
   - apps/gateway/src/app/(app)/missions/message-of.ts
   - apps/gateway/src/app/(app)/missions/state-badge.tsx
@@ -53,7 +55,7 @@ endpoints behind them, and the agent-facing MCP door from the same process.
   are all `dynamic = 'force-dynamic'`, and render HTML. No page loads its data
   from the browser.
 - **Client components are the exception** (`'use client'`): the mission
-  creation form and its per-risk table, the mission actions, the gate control
+  creation form with its preset panel and its Custom editor, the mission actions, the gate control
   of the mission page (`GateControl`), the bootstrap kit view, the share form
   (`ShareForm`), `RevokeConnection`, `DangerConfirm` and `LocalDate`. The only
   `fetch` calls from the browser are the mission form (`POST /api/missions`,
@@ -97,6 +99,7 @@ endpoints behind them, and the agent-facing MCP door from the same process.
 | `GET /agent-bootstrap.md`                                                                                                   | `agent-bootstrap.md/route.ts`                                                                                 | [missions](missions.md)               |
 | `/missions/<id>/session`                                                                                                    | `(app)/missions/[id]/session/page.tsx`                                                                        | [audit](audit.md)                     |
 | `/audit`                                                                                                                    | `(app)/audit/page.tsx`                                                                                        | [audit](audit.md)                     |
+| `/providers`, `/providers/<id>`                                                                                             | `(app)/providers/page.tsx`, `(app)/providers/[id]/page.tsx`                                                   | [audit](audit.md)                     |
 | `/requests`, `/requests/<id>`                                                                                               | `(app)/requests/**/page.tsx`                                                                                  | [requests](requests.md)               |
 | `GET /r/<id>`                                                                                                               | `r/[id]/route.ts`                                                                                             | [requests](requests.md)               |
 | `GET /api/requests`, `POST /api/requests/<id>/decide`                                                                       | `api/requests/**/route.ts`                                                                                    | [requests](requests.md)               |
@@ -158,7 +161,7 @@ authority is recomputed on every request.
 | Helper               | For                                                               | No session                    | Bootstrap operator                        | Signed-in user                              |
 | -------------------- | ----------------------------------------------------------------- | ----------------------------- | ----------------------------------------- | ------------------------------------------- |
 | `currentPrincipal()` | pages open to anyone (`/`, `/login`, `/admin/bootstrap`), layouts | `principal: null`             | the principal                             | the principal                               |
-| `requirePrincipal()` | an `(app)` page open to every session (`/audit`)                  | `redirect('/login')`          | the principal                             | the principal                               |
+| `requirePrincipal()` | an `(app)` page open to every session (`/audit`, `/providers/**`) | `redirect('/login')`          | the principal                             | the principal                               |
 | `currentUser()`      | an `(app)` page that needs an identified user                     | `redirect('/login')`          | `null` → the page renders `<NeedsUser />` | `{ root, principal, user }`                 |
 | `requireOperator()`  | every page under `admin/(guarded)`                                | redirect to the admin sign-in | the principal while the token is active   | the principal if operator, else "not found" |
 
@@ -191,7 +194,7 @@ the page in a `Container`, then the build footer:
 
 - the brand link (to `/connections`) and one link per entry of `APP_NAV`:
   **Connections**, **Shares received**, **Missions**, **Requests**, **Audit**,
-  **Delegations**. Every principal sees these links;
+  **Delegations**, **Providers**. Every principal sees these links;
 - **Administration** (`/admin`), only when `isOperatorPrincipal(principal)`
   (`components/auth/principal.ts`): the bootstrap operator or a user with
   `isOperator`. `PrincipalCard` (the account card of `/login` for a visitor
@@ -285,7 +288,15 @@ renders one list per provider. Controls outside a `Field` are either wrapped in
 their `<label>` (Audit filters, the request decision form, checkboxes) or carry
 an `aria-label` (the mission form, the inline resource cells).
 
-Three display helpers are shared by the pages that used to carry a copy each:
+Display helpers shared by the pages that used to carry a copy each:
+
+- `components/risk/RiskExplain.tsx`: how a risk is explained everywhere —
+  `RiskExplain` (label, reason, vector badges, linked id), `VectorBadges`,
+  `VectorLegend`, `RiskIdLink`, `RiskMarkers` (handbook
+  [missions](missions.md), "How a risk is explained"). The Custom editor of
+  mission creation, the Share dialog, the mission page and the provider
+  reference render a risk through it; the Requests pages, the session page,
+  Shares received and the connection page link each risk id with `RiskIdLink`;
 
 - `components/risk/RiskBadges.tsx`: `SeverityBadge({ level })`, the catalog
   severity with its tone (Shares received, the Share dialog, the mission form),
@@ -325,6 +336,75 @@ handbook:
 - `components/auth/PrincipalCard.tsx`: `PrincipalCard`, `OperatorBadge` and
   `SignOutButton` (a plain `POST /logout` form)
   ([authentication](authentication.md)).
+
+## The provider reference — `/providers`
+
+Documentation of the instance inside the instance (spec §4.2 "Providers"): what
+each shipped plugin connects to and what a mission can accept on it. Both pages
+call `requirePrincipal()`: any session reads them, the bootstrap operator
+included; they show no connection, no mission and no credential. The
+structural test of the surface (`tests/unit/app/app-guard.test.ts`) lists them
+with `/audit` among the pages open to any session.
+
+Everything is generated from the plugin registry by
+`src/server/providers/reference.ts` (pure, no IO); no provider has a
+hand-written page, and a plugin added to the registry has its page.
+
+| Function                           | Gives                                                                                                                                                |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `providerCards(registry)`          | the index: name, one-line description, credential kind, counts (risks, presets, tools), experimental ones last                                       |
+| `providerReference(registry, id)`  | the whole page of one plugin, or `null` (the page answers "not found")                                                                               |
+| `dataModelTrees(model)`            | each plane as a containment tree: entity, cardinalities, "carries the environment"                                                                   |
+| `describePattern(pattern)`         | a slice pattern read as words: `Write: repo (any) › branch (main, master) › file (any)`; the fallback pattern reads "Write anything in `<provider>`" |
+| `presetReferenceOf(preset, risks)` | a preset against the whole catalog: lines without asking, lines under approval, entries not included                                                 |
+| `riskExplainer(registry)`          | `(riskId) → CatalogRisk \| null`, for the pages that list a persisted policy                                                                         |
+
+`/providers/<id>` reads top to bottom:
+
+1. **Header** — name, `experimental`, the community validation badge
+   (`root.telemetry.stats.statusFor`, absent when telemetry gives none), plugin
+   and catalog versions; the plugin's `summary` (plain words: what a connection
+   is, what a resource is, where the environment comes from —
+   [plugin-sdk](plugin-sdk.md)); credential kind, size, the maintainer handbook
+   link (`docsUrl`).
+2. **How to read a risk** (`#legend`) — quota, rate limit and gate in one
+   paragraph, the legend of the six axes, account-scoped against
+   environment-scoped, what `fallback` and `deprecated` mean.
+3. **Data model** (`#data-model`) — where the environment of a call comes from
+   (`EnvironmentReference.source`: `call` when the plugin declares `envOf`,
+   `resource-label` when the catalog has env-scoped entries, `none`
+   otherwise), the environments the catalog knows, then each plane as a tree.
+4. **Risk catalog** (`#risks`) — reads, writes, irreversible writes; one card
+   per entry, `id="risk-<id>"`: label, id, reason, markers explained, scope
+   (the explicit id per environment), the vector (per environment when an
+   override changes it), each pattern in words with the pattern itself under
+   it, the plugin's rate ceiling when it has one. An entry is listed once,
+   under the kind of its most severe variant, so its anchor is unique.
+5. **Presets** (`#presets`) — one card per preset, `id="preset-<id>"`: every
+   line with environment, quota, rate limit and gate, then "Not included".
+6. **Tools** (`#tools`) — name, description, required and optional arguments.
+   The "Risks" column reads "depends on the arguments": a plugin classifies a
+   call from its arguments and declares no table of the risks of each tool, so
+   the page says so (`TOOL_RISKS_NOTE`) and points to the catalog instead of
+   guessing. The same note says what spec §4.1 says of discovery: `tools/list`
+   is filtered per provider, a listed tool can still be refused at call time,
+   and the catalog endpoint of the execution door is the precise source of
+   what a mission can call. The one exception is a tool the plugin declares
+   in `tokenHandouts` ([plugin-sdk](plugin-sdk.md)): its row lists the
+   declared risks, linked, under a **"hands a token to the agent"** badge; the
+   same badge and the sentence behind it (`TOKEN_HANDOUT_NOTE`, spec §2.4)
+   are on each of those risks in the catalog section. Today that is
+   `github__mint_install_token` and the two `github.mint-install-token-*`
+   risks.
+
+`src/server/providers/links.ts` (browser-safe) is the only place that builds
+those URLs and anchors: `providerPath`, `riskReferencePath`,
+`presetReferencePath`, `sectionPath`, `riskAnchor`, `presetAnchor`. The
+reference is linked from the connection page ("Provider" row), the "Connect a
+provider" picker (under each card) and the connect form, the Share dialog,
+mission creation (page lead, each preset, the Custom toolbar, each risk id),
+the mission page (each provider name, each risk id), the Requests pages, the
+session page and Shares received.
 
 ## What the standalone output carries
 
@@ -423,7 +503,7 @@ The other primitives and the rest of the shell have no unit test of their own. T
 exercised by the Playwright suite `apps/gateway/tests/e2e/v5/` (`npm run test:e2e:v5`,
 seven specs): navigation through the bar (`navigation` named "Main"), the open
 request count (`data-testid="open-request-count"`), forms, tables and dialogs of
-the Missions, Requests, Audit, Connections (shares) and Delegations pages. The
+the Missions, Requests, Audit, Connections (shares), Delegations and Providers pages. The
 suite runs the standalone server of the build, the one the image starts
 ([e2e tests](../tests/e2e-tests.md)). What a page decides is tested without
 Next, in the unit and integration suites of its `src/server/**` module (`npm

@@ -7,6 +7,7 @@ import Link from 'next/link';
 
 import { LocalDate } from '@/components/LocalDate';
 import { NeedsUser } from '@/components/auth/NeedsUser';
+import { RiskIdLink } from '@/components/risk/RiskExplain';
 import { Badge, Card, Table, Tbody, Td, Th, Thead, Tr } from '@/components/ui';
 import { currentUser } from '@/lib/auth/session';
 import { inboxRequestPath } from '@/server/requests/url';
@@ -60,7 +61,9 @@ export default async function RequestsPage() {
                   </Td>
                   <Td>
                     {request.risk_label}
-                    <div className={styles.mono}>{request.risk_id}</div>
+                    <div>
+                      <RiskIdLink riskId={request.risk_id} />
+                    </div>
                   </Td>
                   <Td>
                     <LocalDate ts={request.created_at} />

@@ -26,6 +26,7 @@ import {
   Input,
   Stack,
 } from '@/components/ui';
+import { providerPath } from '@/server/providers/links';
 import {
   currentActor,
   firstParam,
@@ -88,6 +89,11 @@ export default async function ConnectOneProviderPage({
           {provider.experimental && <ExperimentalBadge />}
         </h1>
         {provider.description && <p className={styles.muted}>{provider.description}</p>}
+        <p className={styles.muted}>
+          <Link href={providerPath(provider.id)} className={styles.refLink}>
+            What a mission can do with {provider.displayName}: data model, risks, presets
+          </Link>
+        </p>
       </div>
 
       <NoticeBanner notice={notice} />

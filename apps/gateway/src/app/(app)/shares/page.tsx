@@ -10,6 +10,7 @@ import { NeedsUser } from '@/components/auth/NeedsUser';
 import styles from '@/components/connections/connections.module.css';
 import { StateBadge } from '@/components/connections/parts';
 import { SeverityBadge } from '@/components/risk/RiskBadges';
+import { RiskIdLink } from '@/components/risk/RiskExplain';
 import { Card, Stack, Table, Tbody, Td, Th, Thead, Tr } from '@/components/ui';
 import { currentActor } from '@/lib/connections/session';
 import type { ReceivedShare } from '@/server/shares';
@@ -90,7 +91,7 @@ function ReceivedRow({ item }: { item: ReceivedShare }) {
               <span key={risk.risk_id} className={styles.badges}>
                 {risk.known ? risk.label : 'No longer in the catalog'}
                 {risk.level && <SeverityBadge level={risk.level} />}
-                <code className={styles.mono}>{risk.risk_id}</code>
+                <RiskIdLink riskId={risk.risk_id} />
               </span>
             ))}
           </div>

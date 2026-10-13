@@ -91,7 +91,7 @@ this table says where each requirement lives, and what is not written yet.
 | Suite                                                                                                         |    Tests |
 | ------------------------------------------------------------------------------------------------------------- | -------: |
 | `apps/gateway/src/app/(app)/missions/message-of.test.ts`                                                      |        2 |
-| `apps/gateway/src/app/(app)/missions/new/form-state.test.ts`                                                  |       22 |
+| `apps/gateway/src/app/(app)/missions/new/form-state.test.ts`                                                  |       36 |
 | `apps/gateway/src/components/auth/principal.test.ts`                                                          |        2 |
 | `apps/gateway/src/server/audit/filters.test.ts`                                                               |       18 |
 | `apps/gateway/src/server/audit/session-event-detail.test.ts`                                                  |        8 |
@@ -129,7 +129,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/management/output-schemas.test.ts`                                                   |       10 |
 | `apps/gateway/src/server/management/tools.test.ts`                                                            |       31 |
 | `apps/gateway/src/server/missions/bootstrap-kit.test.ts`                                                      |       13 |
-| `apps/gateway/src/server/missions/catalog-view.test.ts`                                                       |       12 |
+| `apps/gateway/src/server/missions/catalog-view.test.ts`                                                       |       19 |
 | `apps/gateway/src/server/missions/orphan-reason.test.ts`                                                      |        4 |
 | `apps/gateway/src/server/missions/preview.test.ts`                                                            |       44 |
 | `apps/gateway/src/server/missions/summary.test.ts`                                                            |        8 |
@@ -145,6 +145,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/oauth-as/secrets.test.ts`                                                            |        6 |
 | `apps/gateway/src/server/oauth-as/token-service.test.ts`                                                      |       58 |
 | `apps/gateway/src/server/provider-apps/service.test.ts`                                                       |       15 |
+| `apps/gateway/src/server/providers/reference.test.ts`                                                         |       18 |
 | `apps/gateway/src/server/requests/approval.test.ts`                                                           |       28 |
 | `apps/gateway/src/server/requests/claim.test.ts`                                                              |       38 |
 | `apps/gateway/src/server/requests/client-ip.test.ts`                                                          |        2 |
@@ -216,7 +217,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/store/web-sessions.test.ts`                                                   |        8 |
 | `apps/gateway/tests/integration/telemetry/telemetry.test.ts`                                                  |       18 |
 | `apps/gateway/tests/unit/app/admin-guard.test.ts`                                                             |       63 |
-| `apps/gateway/tests/unit/app/app-guard.test.ts`                                                               |      111 |
+| `apps/gateway/tests/unit/app/app-guard.test.ts`                                                               |      121 |
 | `apps/gateway/tests/unit/app/build-footer.test.tsx`                                                           |        3 |
 | `apps/gateway/tests/unit/app/field.test.tsx`                                                                  |        6 |
 | `apps/gateway/tests/unit/server/auth/mutation-guard.test.ts`                                                  |      242 |
@@ -251,9 +252,9 @@ this table says where each requirement lives, and what is not written yet.
 | `packages/gateway-core/tests/unit/risk-gateway.test.ts`                                                       |        9 |
 | `packages/plugin-sdk/tests/unit/catalog-loader.test.ts`                                                       |       31 |
 | `packages/plugin-sdk/tests/unit/catalog-path.test.ts`                                                         |        4 |
-| `packages/plugin-sdk/tests/unit/define-plugin.test.ts`                                                        |       24 |
+| `packages/plugin-sdk/tests/unit/define-plugin.test.ts`                                                        |       26 |
 | `packages/plugin-sdk/tests/unit/env-of.test.ts`                                                               |        3 |
-| `packages/plugin-sdk/tests/unit/registry.test.ts`                                                             |       10 |
+| `packages/plugin-sdk/tests/unit/registry.test.ts`                                                             |       11 |
 | `packages/plugin-sdk/tests/unit/streaming.test.ts`                                                            |        9 |
 | `packages/plugin-sdk/tests/unit/testing-kit.test.ts`                                                          |       14 |
 | `packages/policy-engine/tests/unit/budget.test.ts`                                                            |       25 |
@@ -341,12 +342,12 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/vercel/tests/unit/team-pin.test.ts`                                                                  |       99 |
 | `scripts/audit-gate.test.mjs`                                                                                 |       28 |
 | `scripts/release-lib.test.mjs`                                                                                |       50 |
-| **TOTAL** (`npx vitest run --reporter=json`, 2026-10-13, without a build; 251 files; 8764 passed, 26 skipped) | **8790** |
+| **TOTAL** (`npx vitest run --reporter=json`, 2026-10-13, without a build; 252 files; 8834 passed, 26 skipped) | **8860** |
 
 The table is generated from the JSON report of one run of the whole suite
 (`npx vitest run --reporter=json`). A count is the number of tests the file
 declares, `it.each` expanded, **skipped tests included**: the TOTAL is the
-report's number of tests, of which 8764 passed and 26 were skipped in that
+report's number of tests, of which 8834 passed and 26 were skipped in that
 run, made without a build. One of them is skipped whatever the build: the
 latency measurement of the authority
 re-check (`door-latency.bench.test.ts`, run with `VAUBAAN_BENCH=1`). The other 25 need `.next/standalone`: the six
@@ -456,12 +457,12 @@ npx vitest run packages/policy-engine     # one package
   entry on the fallback is an error; an entry recognised by convention
   without `fallback: true` loads with a warning through `warn` and is
   still indexed as the fallback).
-- **`registry.test.ts`** (10) — ids in registration order, `has/get/require`,
+- **`registry.test.ts`** (11) — ids in registration order, `has/get/require`,
   `providerForTool` (exact name, prefix rule for unlisted tools, null),
-  `toolDeclarations`, `labels` (with `experimental`), `idEnum` (non-empty tuple, throws when
+  `toolDeclarations`, `labels` (with `experimental`, and `summary` when the plugin has one), `idEnum` (non-empty tuple, throws when
   empty), `catalogOf` indexed, `presetsOf`; conflicts: same id twice, tool
   outside the plugin prefix, ill-formed plugin reported with its id.
-- **`define-plugin.test.ts`** (24) — fixture well-formed and frozen; every issue
+- **`define-plugin.test.ts`** (26) — fixture well-formed and frozen; `summary` optional, a non-empty paragraph of at most 600 characters when present; a `tokenHandouts` entry names a declared tool and risks of the catalog; every issue
   collected (id grammar, semver, tool prefix and duplicates, data-model
   and catalog provider mismatch); catalog rules through the definition;
   data-model referential integrity; credential spec rules per kind
@@ -1073,7 +1074,7 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   nothing**. The three protocol endpoints of the authorization server
   (`token`, `revoke`, `register`) are held to reading no session.
 - **`tests/unit/app/admin-guard.test.ts`** (63) and
-  **`tests/unit/app/app-guard.test.ts`** (111) — **structural: every page and
+  **`tests/unit/app/app-guard.test.ts`** (121) — **structural: every page and
   route authenticates itself; the layout is not the boundary.** The pages
   and routes of `/admin` and of the `(app)` surface are discovered from the
   file tree. Each admin page calls `requireOperator()` and renders nothing
@@ -1660,11 +1661,35 @@ Unit, co-located (129 with the authority suite):
   nothing is said when every resource is labelled, when the plugin derives
   the environment or when the catalog has no env-scoped risk; a draft with a
   notice and no issue is issuable.
-- **`catalog-view.test.ts`** (12) — explicit enumeration equal to the owner
+- **`catalog-view.test.ts`** (19) — explicit enumeration equal to the owner
   authority, and built on it (an entry the authority cannot enumerate has no
   row); base id, env, fallback, deprecated, rate ceiling; per-env vector;
   `SEVERITY_RANKS` equal to `RISK_VECTOR_AXES`; score bounds and levels;
-  `isResolvable`; `presetWidth` and its one-liner.
+  `isResolvable`; `presetWidth` and its one-liner; **explaining a risk**: the
+  vector resolved per environment on each row, `VECTOR_AXES` in the order of
+  the shared vocabulary, `vectorBadges` (text and weight per axis),
+  `riskKindOf` (read by the patterns, destructive by the vector),
+  `groupVariants` (one variant per environment), `groupByKind` (reads, writes,
+  irreversible writes; every row in one group), `formatRate`.
+- **`src/server/providers/reference.test.ts`** (18) — the provider reference.
+  Links: a risk id, qualified or not, points at its catalog entry; provider,
+  preset and section paths. `describePattern`: action and path in words, the
+  catch-all write named, an unparseable pattern left as written.
+  `dataModelTrees`: nesting, the carrier of the environment.
+  `presetReferenceOf`: lines split by gate with their budget, base id expanded
+  to every environment, what is left out. **Over the ten shipped plugins**: one
+  card per plugin of the registry, experimental ones last; every plugin has a
+  `summary`; every catalog entry listed exactly once under a unique anchor,
+  with a label, a reason and patterns that read as words, exactly one fallback;
+  reads first, and a read has only read patterns; every preset expands to
+  explicit catalog ids with a budget, never the fallback, and `lines + not
+included` equals the catalog; where the environment comes from (Vercel: the
+  call; Supabase: the resource label; GitHub and Cloudflare DNS: none); a
+  tool's required and optional arguments; **the tool and the two risks that
+  hand a token to the agent are marked on GitHub, from the plugin's
+  declaration, and nowhere else**; `null` for an unknown provider.
+  `riskExplainer`: the row of an explicit id, `null` for an id no catalog
+  declares.
 - **`summary.test.ts`** (8) — the three lines (can / cannot / quantities) for a
   recurring and a one-off mission, the empty form, label truncation, period and
   expiry phrases.
@@ -1683,7 +1708,7 @@ Unit, co-located (129 with the authority suite):
 - **`token.test.ts`** (8) — `vbn_live_<8>_<32>`, argon2id hash, clear prefix;
   verification; uniqueness; prefix of a live token only; the draft schema
   (unknown keys refused, every malformed field named).
-- **`src/app/(app)/missions/new/form-state.test.ts`** (22) — initial state
+- **`src/app/(app)/missions/new/form-state.test.ts`** (36) — initial state
   (nothing included, hidden and stale resources unticked, daily period, no
   expiry); a preset fills the policy and the draft sent is the explicit
   enumeration; the untouched preset follows the resource selection and says
@@ -1691,7 +1716,18 @@ Unit, co-located (129 with the authority suite):
   per-risk override; the default budget of a hand-ticked risk (chosen preset,
   another preset, none → issuance blocked); **"select all" → an enumerated list**
   inside the authority and the selection, without the fallback and deprecated
-  entries; period and expiry mapping; loading a resolved draft.
+  entries; period and expiry mapping; loading a resolved draft. **A preset
+  explains itself** (`explainPreset`): what passes, what waits for an approval
+  and what is left out with each budget; equal to the entries `applyPreset`
+  fills, for every preset; entries a selection cannot resolve named with the
+  label a resource would need; entries outside the authority; `presetDigest`
+  and `presetChoiceLabel`. **Preset or Custom**: `enterCustom` keeps the
+  preset's values and loses nothing; `discardsEdits` only after an edit, and
+  `backToPreset` restores the preset; `startFromPreset`; **the draft sent is the
+  same in both modes and names neither the preset nor the mode**; a loaded
+  draft is a custom policy. **The Custom editor**: `editorRows` lists every
+  explicit id with why one cannot be ticked; `filterRows` by words and by
+  status.
 - **`src/app/(app)/missions/message-of.test.ts`** (2) — `messageOf`, what
   the client components of the mission pages show when the mission API
   refuses: the message of a JSON refusal, and a sentence naming the status

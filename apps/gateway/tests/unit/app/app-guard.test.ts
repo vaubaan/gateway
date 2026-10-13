@@ -32,7 +32,12 @@ const ROUTES = surfaceFiles(APP_DIR, 'route.ts');
 /** The session helpers a page of the surface may use as its guard. */
 const PAGE_GUARD = /await (currentUser|currentActor|requirePrincipal)\(\)/;
 /** The one page that renders for the bootstrap operator too. */
-const PAGES_FOR_ANY_SESSION: readonly string[] = ['audit/page.tsx'];
+const PAGES_FOR_ANY_SESSION: readonly string[] = [
+  'audit/page.tsx',
+  // The provider reference documents the instance: it shows no connection and no mission.
+  'providers/page.tsx',
+  'providers/[id]/page.tsx',
+];
 
 /**
  * The handlers a route of the surface may delegate to. Each was read in
@@ -180,7 +185,8 @@ describe('the human surface authenticates in every page and route', () => {
       async () => {
         await signInBootstrap();
         const outcome = await renderPage(path, PARAMS);
-        expect(outcome.kind).toBe('returned');
+        // A page for any session that is addressed by id answers "not found" for an unknown one.
+        expect(forAnySession ? ['returned', 'not-found'] : ['returned']).toContain(outcome.kind);
         expect(isNeedsUser(outcome)).toBe(!forAnySession);
       },
     );

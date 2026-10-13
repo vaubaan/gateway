@@ -1,7 +1,7 @@
 /**
  * `/connections/<id>/share` — the Share dialog of one connection (spec §4.2
- * "Connections", §7.3): a target, the folded checklist of the catalog's
- * risks, a one-line summary. Owner only: anyone else reads "not found". With
+ * "Connections", §7.3): a target, a one-line summary, and the checklist of
+ * the catalog's risks, each explained. Owner only: anyone else reads "not found". With
  * `?share=<id>` the dialog opens on the restriction that target already
  * holds; submitting replaces it.
  */
@@ -81,6 +81,7 @@ export default async function SharePage({
               risks={context.risks}
               groups={context.groups.map((group) => ({ id: group.id, name: group.name }))}
               labelling={context.labelling}
+              provider={{ id: connection.provider, label: context.providerLabel }}
               initial={initialOf(editing, context)}
             />
           </CardBody>
