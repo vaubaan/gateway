@@ -605,7 +605,7 @@ Unit, co-located (`src/server/connections/*.test.ts`,
   (12, the generated key is parsed and used by `ssh2`),
   `shipped-providers.test.ts` (5, the real plugins through the driver; no
   shipped `app-install` plugin is unverifiable),
-  `provider-apps/service.test.ts` (13).
+  `provider-apps/service.test.ts` (15).
 
 Integration: `tests/integration/store/connections-shares.test.ts` (+2: the
 merge rule and the credential state transitions at the repository) and
@@ -636,7 +636,8 @@ connection has its refreshed credential persisted, is not reconnected and
 can still be revoked.
 
 Not automated: a browser run against real providers
-([e2e-tests](../tests/e2e-tests.md), "Manual — connect a provider").
+([e2e-tests](../tests/e2e-tests.md#connect-a-provider-p14), "Manual checks
+by feature" → "Connect a provider (P1.4)").
 
 ## How to debug
 

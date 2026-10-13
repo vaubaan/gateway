@@ -122,7 +122,10 @@ also recognises the terminal action) and `skipSeparator`.
   is matched by `a`.
 - `intersects(a, b)` — symmetric; true iff some concrete slice matches
   both. Used by `risksTouchedBy` because a classifier may itself emit a
-  wildcard (`service-var[*].W`).
+  wildcard: Railway's replace-all writes `service-var[*].W`. That wildcard
+  touches `railway.upsert-variable` only; the destructive
+  `railway.bulk-variables-replace` is carried by the marker slice the
+  classifier emits next to it, `service-var-replace.W`.
 
 Segment-by-segment matching; `[**]` consumes zero or more segments with
 backtracking; the in-bracket glob `*` expands over `BRACKET_IDENT_CHAR_CLASS`

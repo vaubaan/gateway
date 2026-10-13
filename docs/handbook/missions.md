@@ -11,7 +11,10 @@ tracks:
   - apps/gateway/src/app/agent-bootstrap.md/
   - apps/gateway/src/components/shell/AppShell.tsx
   - apps/gateway/tests/integration/missions/
-  - apps/gateway/tests/e2e/v5/
+  - apps/gateway/tests/e2e/v5/issue-mission.spec.ts
+  - apps/gateway/tests/e2e/v5/browser.ts
+  - apps/gateway/tests/e2e/v5/instance.ts
+  - apps/gateway/tests/e2e/v5/ephemeral-instance.ts
 ---
 
 # Missions — authority, issuance, presets, resources, tokens, bootstrap kit

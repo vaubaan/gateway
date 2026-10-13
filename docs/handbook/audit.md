@@ -244,12 +244,12 @@ const removed = await root.audit.retention.sweep(); // number, or null when the 
   closed sets, unreadable dates, reversed period, single day, oversized value, cursor
   round trip and refusals, `auditQueryString`, `scopeOf` for the three viewers,
   `withoutArguments`.
-- `tests/integration/audit/audit-query.test.ts` (21) — visibility (creator, connection
+- `tests/integration/audit/audit-query.test.ts` (22) — visibility (creator, connection
   owner, owning group, operator, bootstrap operator, requests of a mission), "a filter
   never widens the scope", each filter and their combination, remaining budget per call,
   keyset paging (page sizes, no repeat, equal timestamps, concurrent write), no raw
   argument for any viewer, filter options.
-- `tests/integration/audit/mission-session.test.ts` (14) — creator only, before the
+- `tests/integration/audit/mission-session.test.ts` (15) — creator only, before the
   first call, counters / remaining / exhausted, past periods, one-off mission, open
   requests by link only, decided request, agent labels, timeline content and paging,
   revoked mission, `eventView`.
@@ -259,9 +259,11 @@ const removed = await root.audit.retention.sweep(); // number, or null when the 
   stop, failure logged, shared sweep), wiring in the composition root.
 - `tests/integration/audit/admin-mutations.test.ts` (20) — the structural test above,
   plus `before` / `after` of a resource edit and a failed discovery.
-- `tests/e2e/v5/audit-session.spec.ts` (2, Playwright on the ephemeral instance) — a day
-  of calls on the session page and on the audit page, filters in one row, 404 for a
-  mission that is not the user's.
+- `tests/e2e/v5/audit-session.spec.ts` (3, Playwright on the ephemeral instance) — a day
+  of calls on the session page and on the audit page, filters in one row; every column
+  of the audit table on screen at 1280 px with no sideways scroll (the fingerprint cell
+  wraps; the check is a plain test, no longer an expected failure); 404 for a mission
+  that is not the user's.
 
 ## References
 

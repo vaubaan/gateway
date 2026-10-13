@@ -147,14 +147,9 @@ test('a day of calls: session page, then the audit of the mission', async ({ pag
 });
 
 test('the audit table shows every column at 1280 px', async ({ page, request }) => {
-  // KNOWN REGRESSION, kept visible: the argument fingerprint grew from 16 to 64
-  // hex characters (P1.6 made it the canonical sha256) and the last column is
-  // now cut off at this width — `.mono` in `audit.module.css` does not let the
-  // fingerprint wrap inside its cell. The page is outside the perimeter of the
-  // feature that found it (P1.9), so the check is isolated here and marked as
-  // an expected failure: when the page is fixed this test reports "expected to
-  // fail, but passed" and this annotation is to be removed.
-  test.fail(true, 'audit table scrolls sideways since the 64-hex argument fingerprint');
+  // The argument fingerprint is 64 hex characters with no break opportunity;
+  // its cell wraps it (`.hash` in `audit.module.css`) so the last column stays
+  // on screen at this width.
   const day = await seedDay(request);
   await signIn(page);
   await page.goto(`/audit?mission=${day.mission_id}`);

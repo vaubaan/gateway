@@ -13,6 +13,7 @@ tracks:
   - apps/gateway/src/server/budget/consistency.ts
   - apps/gateway/tests/integration/requests/
   - apps/gateway/tests/e2e/v5/exhaust-and-claim.spec.ts
+  - apps/gateway/tests/e2e/v5/agent.ts
   - apps/gateway/src/server/store/repositories/sessions.ts
   - apps/gateway/src/components/shell/AppShell.tsx
   - apps/gateway/src/server/compose/root.ts
@@ -332,9 +333,10 @@ Approval requests (`kind: 'approval'`, spec §3.5) are decided in feature
 
 ## Tests
 
-- Unit, beside the code (62): `state.test.ts` (9, with the URL builder),
-  `claim.test.ts` (37), `client-ip.test.ts` (7), `events.test.ts` (5),
-  `sweeper.test.ts` (4).
+- Unit, beside the code (58): `state.test.ts` (9, with the URL builder),
+  `claim.test.ts` (37), `client-ip.test.ts` (2: the page uses the shared
+  client-address rule, itself tested in `src/server/http/client-ip.test.ts`,
+  11), `events.test.ts` (6), `sweeper.test.ts` (4).
 - Integration, `tests/integration/requests/` (43): `request-service.test.ts`
   (30, `:memory:` store with a manual clock) and `request-handlers.test.ts`
   (13, the real root). One more scenario in
