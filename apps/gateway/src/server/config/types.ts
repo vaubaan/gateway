@@ -124,6 +124,12 @@ export interface OAuthConfig {
   readonly accessTokenTtlSeconds: number;
   /** Lifetime of a refresh token; each rotation starts it again. */
   readonly refreshTokenTtlSeconds: number;
+  /**
+   * For how long the refresh token that was just rotated may be presented once
+   * more without ending the delegation (two processes sharing one stored token
+   * and renewing together). 0 disables the window; at most 60.
+   */
+  readonly refreshReuseWindowSeconds: number;
   readonly clientRegistration: {
     readonly policy: ClientRegistrationPolicy;
     /** Under `operator-approved`: loopback-only clients need no approval. */

@@ -63,6 +63,11 @@ export const KEYS: readonly KeySpec[] = [
   { path: 'oauth.access_token_ttl', env: 'VAUBAAN_OAUTH_ACCESS_TOKEN_TTL', kind: 'string' },
   { path: 'oauth.refresh_token_ttl', env: 'VAUBAAN_OAUTH_REFRESH_TOKEN_TTL', kind: 'string' },
   {
+    path: 'oauth.refresh_reuse_window_seconds',
+    env: 'VAUBAAN_OAUTH_REFRESH_REUSE_WINDOW_SECONDS',
+    kind: 'int',
+  },
+  {
     path: 'oauth.client_registration.policy',
     env: 'VAUBAAN_OAUTH_CLIENT_REGISTRATION_POLICY',
     kind: 'string',

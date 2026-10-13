@@ -16,6 +16,13 @@ extends:
 > screen says. Implemented by feature P2.3. Handbook:
 > [management-door](../handbook/management-door.md).
 
+> **Amendment of 2026-10-13 — refresh-token reuse window (feature P2.4).**
+> D4 said "there is no grace window". The orchestrator reversed that point:
+> two Claude Code sessions on one machine share one stored refresh token, and
+> with no window their simultaneous renewals revoke the delegation every time.
+> See [Amendment — refresh-token reuse window](#amendment-2026-10-13--refresh-token-reuse-window)
+> below; the rest of D4 stands.
+
 ## Context
 
 Spec §4.1 bis adds a second MCP door, `/mcp/manage`, for agents acting on
@@ -240,7 +247,8 @@ replaces the placeholder.
   lives, so that its replay is still recognised.
 - A client that renews one refresh token from two processes at once loses its
   delegation (D4). This is the price of treating replay as theft without a
-  grace window.
+  grace window. _(Amended on 2026-10-13: two renewals within
+  `oauth.refresh_reuse_window_seconds` of each other both succeed.)_
 - The instance must be reachable by the client at `public_url` for the token
   endpoint, and the RFC 8414 document lives at the origin's
   `/.well-known/oauth-authorization-server`: a `public_url` with a sub-path
@@ -251,6 +259,61 @@ replaces the placeholder.
   `oauth-client-disabled`) and one audit object type (`oauth-client`).
 - Migration `0006` adds the client's registration kind, authentication
   method and operator decision, and the reason a delegation ended.
+
+## Amendment (2026-10-13) — refresh-token reuse window
+
+**What changes.** A refresh token presented after its rotation is no longer
+always a replay. `oauth.refresh_reuse_window_seconds` (default **30**, at most
+**60**, `0` restores the behaviour of D4) opens one narrow exception:
+
+- the presented token is the one that was rotated **last** — its successor is
+  still the live head of the family (not rotated, not revoked, not expired);
+- it was rotated **at most that many seconds ago** (the instant its successor
+  was issued, which the row already keeps as `revoked_at`);
+- it is presented by **the client the delegation was given to**, the
+  delegation is still active and its user still is one of the instance.
+
+Then the head is rotated once more and the caller receives the new pair: the
+family stays one chain with one live head, exactly as after an ordinary
+renewal. The check and the rotation are one transaction
+(`DelegationsRepo.rotateSuccessorOf`).
+
+**Everything else still ends the delegation**, with the `delegation-revoked`
+entry and the reason `refresh-token-replay`: a token rotated before the
+window, an older generation (its successor was itself rotated), a second
+reuse of the same token (the head moved on at the first), the same token
+under another client id.
+
+**Why.** An MCP client keeps one refresh token per server in a store its
+processes share. Two sessions that start together both find the access token
+expired and both renew with the same refresh token, a few milliseconds
+apart. Under D4 the second one was a replay and the user had to consent
+again, every time: an honest client was punished for being started twice.
+
+**What it costs.** For the length of the window, someone who stole the
+current refresh token and replays it right after the client renewed is
+answered instead of being detected at once. Detection is postponed, not
+lost: the reuse rotated the head, so the token the honest client holds is no
+longer the head, and its next renewal — fifteen minutes later with the
+default lifetimes, far outside the window — is a replay that revokes the
+family. The same holds for the honest pair: after a reuse the two sessions
+must share the newest token, which they do when they read their common store
+before renewing; a session that keeps renewing with the token it received
+first ends the delegation, as two independent holders should.
+
+**Bounded on purpose.** The loader refuses more than 60 seconds: the window
+exists for renewals that are simultaneous, and every second of it is a second
+a stolen token replays unnoticed. A reuse writes no audit entry (nothing is
+granted that the delegation did not already grant) and is logged at `info`
+with `reuse_window: true`.
+
+**Rejected for the window.** _Issuing a sibling_ (answer the reuse with a
+second head, leaving the first renewal's token valid): both sessions keep
+working whatever they share, and so does a thief — the family forks and the
+replay of the stolen token is never detected. _Answering the reuse with the
+same pair as the first renewal_ (idempotent renewal): refresh tokens are
+stored as digests, so the first pair cannot be read back, and keeping it in
+memory for the window would be state a second replica does not have.
 
 ## Rejected alternatives
 
@@ -282,6 +345,9 @@ replaces the placeholder.
 - **A grace window on refresh rotation** (accept the previous token for a few
   seconds). It tolerates concurrent renewals, and it is exactly the window a
   thief needs. The orchestrator decided replay revokes the family.
+  _Reversed on 2026-10-13: see the amendment above. What stays rejected is a
+  window longer than a minute, or one that covers more than the token
+  rotated last._
 - **`open` as the default policy.** Simplest for everyone, and one phishing
   link away from a user's authority for any client that redirects off the
   machine.

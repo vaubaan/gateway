@@ -33,6 +33,7 @@ export const WEB_REDIRECT = 'https://agent.example.net/oauth/callback';
 export const DEFAULT_TEST_OAUTH: OAuthConfig = {
   accessTokenTtlSeconds: 900,
   refreshTokenTtlSeconds: 30 * 86_400,
+  refreshReuseWindowSeconds: 30,
   clientRegistration: {
     policy: 'operator-approved',
     autoApproveLoopback: true,
@@ -42,7 +43,12 @@ export const DEFAULT_TEST_OAUTH: OAuthConfig = {
 
 export interface OAuthRigOptions {
   readonly registration?: Partial<OAuthConfig['clientRegistration']>;
-  readonly ttl?: Partial<Pick<OAuthConfig, 'accessTokenTtlSeconds' | 'refreshTokenTtlSeconds'>>;
+  readonly ttl?: Partial<
+    Pick<
+      OAuthConfig,
+      'accessTokenTtlSeconds' | 'refreshTokenTtlSeconds' | 'refreshReuseWindowSeconds'
+    >
+  >;
   readonly fetchDocument?: ClientDocumentFetcher;
 }
 

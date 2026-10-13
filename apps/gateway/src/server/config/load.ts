@@ -53,6 +53,7 @@ const DEFAULTS = {
   mcpRateLimitPerMinute: 600,
   oauthAccessTokenTtl: '15m',
   oauthRefreshTokenTtl: '30d',
+  oauthRefreshReuseWindowSeconds: 30,
   oauthClientRegistrationPolicy: 'operator-approved',
   oauthAutoApproveLoopback: true,
   oauthMetadataDocuments: false,
@@ -294,6 +295,13 @@ function readBootstrapToken(r: Reader, idp: IdpConfig | null): string | null {
 export const MAX_OAUTH_ACCESS_TOKEN_TTL_SECONDS = 3_600;
 
 /**
+ * Longest reuse window of a rotated refresh token: the window tolerates two
+ * honest processes renewing together, and is exactly what a thief has to
+ * replay a stolen token unnoticed, so it stays a matter of seconds.
+ */
+export const MAX_OAUTH_REFRESH_REUSE_WINDOW_SECONDS = 60;
+
+/**
  * The authorization server of the management door. The access token is capped
  * (a longer one is not "short-lived"), and a refresh token that expired before
  * the access token it renews would be useless.
@@ -318,9 +326,22 @@ function readOAuth(r: Reader): OAuthConfig {
       envNamesFor('oauth.refresh_token_ttl'),
     );
   }
+  const refreshReuseWindowSeconds = r.int(
+    'oauth.refresh_reuse_window_seconds',
+    DEFAULTS.oauthRefreshReuseWindowSeconds,
+    0,
+  );
+  if (refreshReuseWindowSeconds > MAX_OAUTH_REFRESH_REUSE_WINDOW_SECONDS) {
+    r.issues.add(
+      'oauth.refresh_reuse_window_seconds',
+      `must be at most ${MAX_OAUTH_REFRESH_REUSE_WINDOW_SECONDS}: beyond that a replayed refresh token is treated as stolen`,
+      envNamesFor('oauth.refresh_reuse_window_seconds'),
+    );
+  }
   return {
     accessTokenTtlSeconds,
     refreshTokenTtlSeconds,
+    refreshReuseWindowSeconds,
     clientRegistration: {
       policy: readClientRegistrationPolicy(r),
       autoApproveLoopback: r.bool(
