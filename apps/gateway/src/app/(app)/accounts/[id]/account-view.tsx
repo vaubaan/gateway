@@ -496,6 +496,8 @@ export function AccountView({
     {
       id: 'resource',
       header: capitalize(TERMS.resource.one),
+      // Takes what the other columns leave: they keep the width of what they hold.
+      width: '99%',
       cell: (resource) => (
         <span className={shared.namedText}>
           <span>
@@ -674,7 +676,9 @@ export function AccountView({
                 value: (
                   <>
                     {detail.providerLabel} ·{' '}
-                    <Link href={providerPath(connection.provider)}>what an agent can do on it</Link>{' '}
+                    <Link href={providerPath(connection.provider)} className={shared.reveal}>
+                      what an agent can do on it
+                    </Link>{' '}
                     {detail.experimental && <Tag>{ACCOUNT_WORDS.experimental}</Tag>}{' '}
                     <ValidationBadge status={data.validation} />
                   </>

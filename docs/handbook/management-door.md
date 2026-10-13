@@ -899,7 +899,7 @@ a real selection of resources is the same function on the whole catalog.
 
 `/missions` shows "delegated — issued by <client name>" under the name,
 `/missions/<id>` an "Issued by" row linking to the delegation, and each card
-of `/delegations` the missions issued under it.
+of Connected apps the missions issued under it.
 
 ### Rate limits
 

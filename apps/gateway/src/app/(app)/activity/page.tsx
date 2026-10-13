@@ -300,7 +300,10 @@ function CallDetail({ entry, explain }: { entry: AuditCallView; explain: Explain
           term: ACTIVITY_WORDS.mission,
           value: entry.mission.name ? (
             <>
-              <Link href={`${ROUTES.missions}/${encodeURIComponent(entry.mission.id)}`}>
+              <Link
+                href={`${ROUTES.missions}/${encodeURIComponent(entry.mission.id)}`}
+                className={styles.detailLink}
+              >
                 {entry.mission.name}
               </Link>
               {entry.mission.creator_email && ` · created by ${entry.mission.creator_email}`}
