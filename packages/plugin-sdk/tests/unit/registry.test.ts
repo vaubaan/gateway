@@ -1,0 +1,122 @@
+import { describe, expect, test } from 'vitest';
+
+import { PluginRegistry, PluginRegistryError, createRegistry } from '../../src/registry.ts';
+import type { ProviderPlugin } from '../../src/plugin.ts';
+import { acmePlugin, acmeTools } from '../fixtures/acme/acme-plugin.ts';
+
+/** A second valid plugin, derived from acme with another id. */
+function cloneAs(id: string, overrides: Partial<ProviderPlugin> = {}): ProviderPlugin {
+  const prefix = `${id.replaceAll('-', '_')}__`;
+  const rename = (s: string) =>
+    s.replace(/^acme/, id).replaceAll('acme.', `${id}.`).replaceAll('acme[', `${id}[`);
+  return {
+    ...acmePlugin,
+    id,
+    displayName: id.toUpperCase(),
+    tools: acmeTools.map((t) => ({ ...t, name: t.name.replace('acme__', prefix) })),
+    dataModel: { ...acmePlugin.dataModel, provider: id },
+    catalog: {
+      ...acmePlugin.catalog,
+      provider: id,
+      risks: acmePlugin.catalog.risks.map((r) => ({
+        ...r,
+        id: rename(r.id),
+        matches: typeof r.matches === 'string' ? rename(r.matches) : r.matches.map(rename),
+        ...(r.replaced_by ? { replaced_by: rename(r.replaced_by) } : {}),
+      })),
+      presets: (acmePlugin.catalog.presets ?? []).map((p) => ({
+        ...p,
+        entries: p.entries.map((e) => ({ ...e, risk_id: rename(e.risk_id) })),
+      })),
+    },
+    ...overrides,
+  };
+}
+
+const beta = cloneAs('beta-cloud');
+
+describe('PluginRegistry — derivations', () => {
+  const registry = createRegistry([acmePlugin, beta]);
+
+  test('ids in registration order, size, has/get/require', () => {
+    expect(registry.ids).toEqual(['acme', 'beta-cloud']);
+    expect(registry.size).toBe(2);
+    expect(registry.has('acme')).toBe(true);
+    expect(registry.get('nope')).toBeUndefined();
+    expect(registry.require('beta-cloud').plugin.displayName).toBe('BETA-CLOUD');
+    expect(() => registry.require('nope')).toThrow(
+      /Unknown provider 'nope' \(known: acme, beta-cloud\)/,
+    );
+  });
+
+  test('providerForTool: exact name, prefix rule for unlisted tools, null otherwise', () => {
+    expect(registry.providerForTool('acme__list_things')?.plugin.id).toBe('acme');
+    expect(registry.providerForTool('beta_cloud__update_thing')?.plugin.id).toBe('beta-cloud');
+    expect(registry.providerForTool('beta_cloud__not_declared')?.plugin.id).toBe('beta-cloud');
+    expect(registry.providerForTool('gamma__x')).toBeNull();
+    expect(registry.providerForTool('no_separator')).toBeNull();
+  });
+
+  test('toolDeclarations concatenates every plugin', () => {
+    expect(registry.toolDeclarations().map((t) => t.name)).toEqual([
+      'acme__list_things',
+      'acme__update_thing',
+      'beta_cloud__list_things',
+      'beta_cloud__update_thing',
+    ]);
+  });
+
+  test('labels for the UI', () => {
+    expect(registry.labels()).toEqual([
+      { id: 'acme', displayName: 'Acme', version: '1.2.3', description: 'Fixture provider.' },
+      {
+        id: 'beta-cloud',
+        displayName: 'BETA-CLOUD',
+        version: '1.2.3',
+        description: 'Fixture provider.',
+      },
+    ]);
+  });
+
+  test('idEnum is a non-empty tuple', () => {
+    expect(registry.idEnum()).toEqual(['acme', 'beta-cloud']);
+    expect(() => new PluginRegistry([]).idEnum()).toThrow(/empty/);
+  });
+
+  test('catalogOf is indexed, presetsOf lists the plugin presets', () => {
+    expect(registry.catalogOf('acme').entries).toHaveLength(4);
+    expect(registry.presetsOf('beta-cloud').map((p) => p.id)).toEqual(['reader', 'developer']);
+    expect(registry.presetsOf('beta-cloud')[1]!.entries[1]!.risk_id).toBe(
+      'beta-cloud[staging].thing-write',
+    );
+  });
+
+  test('registered plugin exposes its prefix and tool names', () => {
+    const r = registry.require('beta-cloud');
+    expect(r.toolPrefix).toBe('beta_cloud__');
+    expect([...r.toolNames]).toEqual(['beta_cloud__list_things', 'beta_cloud__update_thing']);
+  });
+});
+
+describe('PluginRegistry — conflicts', () => {
+  test('the same id twice', () => {
+    expect(() => createRegistry([acmePlugin, acmePlugin])).toThrow(PluginRegistryError);
+    expect(() => createRegistry([acmePlugin, acmePlugin])).toThrow(/registered twice/);
+  });
+
+  test('a tool outside the plugin prefix is rejected before any cross-plugin check', () => {
+    const legal = cloneAs('thief');
+    const stolen: ProviderPlugin = {
+      ...legal,
+      tools: [...legal.tools, { ...acmeTools[0]!, name: 'acme__list_things' }],
+    };
+    expect(() => createRegistry([acmePlugin, stolen])).toThrow(
+      /plugin 'thief': tools\[2\]\.name 'acme__list_things' must start with 'thief__'/,
+    );
+  });
+
+  test('an ill-formed plugin is reported with its id', () => {
+    const broken = cloneAs('broken', { version: 'latest' });
+    expect(() => createRegistry([broken])).toThrow(/plugin 'broken': version: expected semver/);
+  });
+});

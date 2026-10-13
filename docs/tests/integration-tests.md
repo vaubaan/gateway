@@ -1,10 +1,12 @@
 ---
 title: Integration tests
 status: current
-date: 2026-06-16
+date: 2026-10-13
 tracks:
   - vitest.config.ts
   - packages/policy-engine/tests/
+  - packages/plugin-sdk/tests/
+  - plugins/_template/tests/
   - plugins/github/tests/
   - plugins/vercel/tests/
   - plugins/supabase/tests/
@@ -37,59 +39,66 @@ en absence des creds env vars.
 
 ## Coverage
 
-| Suite                                                             |               Tests |
-| ----------------------------------------------------------------- | ------------------: |
-| `packages/policy-engine/tests/unit/slice-dsl.test.ts`             |                  23 |
-| `packages/policy-engine/tests/unit/slice-matcher.test.ts`         |                  26 |
-| `packages/policy-engine/tests/unit/risk-evaluator.test.ts`        |                  11 |
-| `packages/policy-engine/tests/unit/risk-policy.test.ts`           |                   7 |
-| `packages/policy-engine/tests/unit/risk-runtime.test.ts`          |                  12 |
-| `packages/policy-engine/tests/unit/scope-injection.test.ts`       |                  12 |
-| `packages/policy-engine/tests/unit/qualify.test.ts`               |                  15 |
-| `plugins/github/tests/unit/adapter.test.ts`                       |                  18 |
-| `plugins/github/tests/unit/data-model.test.ts`                    |                   1 |
-| `plugins/github/tests/unit/risk-catalog.test.ts`                  |                  35 |
-| `plugins/github/tests/unit/risk-classifier.test.ts`               |                  31 |
-| `plugins/github/tests/unit/risk-catalog-sync.test.ts`             |                  18 |
-| `plugins/vercel/tests/unit/adapter.test.ts`                       |                  23 |
-| `plugins/vercel/tests/unit/data-model.test.ts`                    |                   1 |
-| `plugins/vercel/tests/unit/risk-catalog.test.ts`                  |                  57 |
-| `plugins/vercel/tests/unit/risk-classifier.test.ts`               |                  32 |
-| `plugins/vercel/tests/unit/risk-catalog-sync.test.ts`             |                  19 |
-| `plugins/supabase/tests/unit/adapter.test.ts`                     |                  30 |
-| `plugins/supabase/tests/unit/data-model.test.ts`                  |                   1 |
-| `plugins/supabase/tests/unit/risk-catalog.test.ts`                |                  32 |
-| `plugins/supabase/tests/unit/risk-classifier.test.ts`             |                  30 |
-| `plugins/supabase/tests/unit/risk-catalog-sync.test.ts`           |                  28 |
-| `plugins/railway/tests/unit/adapter.test.ts`                      |                  15 |
-| `plugins/railway/tests/unit/data-model.test.ts`                   |                   1 |
-| `plugins/railway/tests/unit/risk-catalog.test.ts`                 |                  15 |
-| `plugins/railway/tests/unit/risk-classifier.test.ts`              |                  20 |
-| `plugins/ssh/tests/unit/data-model.test.ts`                       |                   1 |
-| `plugins/ssh/tests/unit/risk-catalog.test.ts`                     |                  10 |
-| `plugins/ssh/tests/unit/risk-classifier.test.ts`                  |                  39 |
-| `packages/gateway-core/tests/unit/errors.test.ts`                 |                  24 |
-| `packages/gateway-core/tests/unit/audit.test.ts`                  |                   6 |
-| `packages/gateway-core/tests/unit/cache.test.ts`                  |                   6 |
-| `packages/gateway-core/tests/unit/authenticate.test.ts`           |                  11 |
-| `packages/gateway-core/tests/unit/pipeline.test.ts`               |                  15 |
-| `apps/gateway/tests/unit/lib/gateway/legacy-v4-gateway.test.ts`   |                   4 |
-| `packages/gateway-core/tests/unit/risk-gateway.test.ts`           |                   6 |
-| `apps/gateway/tests/unit/api/members-post.test.ts`                |       5 (1 skipped) |
-| `apps/gateway/tests/unit/api/tokens-preview.test.ts`              |                  12 |
-| `apps/gateway/tests/unit/api/tokens-rotate.test.ts`               |         2 (skipped) |
-| `apps/gateway/tests/unit/lib/mint/preview.test.ts`                |                   4 |
-| `apps/gateway/tests/unit/lib/risk-catalog/loader.test.ts`         |                  12 |
-| `apps/gateway/tests/unit/providers/data-model-to-mermaid.test.ts` |                   8 |
-| `apps/gateway/tests/unit/providers/plane-filters.test.ts`         |                   5 |
-| `apps/gateway/src/lib/bash/parse.test.ts`                         |                  11 |
-| `apps/gateway/src/lib/bash/exec.test.ts`                          |                   4 |
-| `apps/gateway/src/lib/bash/args.test.ts`                          |                   9 |
-| `apps/gateway/src/lib/bash/exec-host.test.ts`                     |                   7 |
-| `apps/gateway/src/server/**/*.test.ts` (v5, P0.4)                 |                  61 |
-| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`  |                  32 |
-| `packages/shared/src/api-key.test.ts`                             |                   6 |
-| **TOTAL**                                                         | **664 (3 skipped)** |
+| Suite                                                             |                Tests |
+| ----------------------------------------------------------------- | -------------------: |
+| `packages/policy-engine/tests/unit/slice-dsl.test.ts`             |                   23 |
+| `packages/policy-engine/tests/unit/slice-matcher.test.ts`         |                   26 |
+| `packages/policy-engine/tests/unit/risk-evaluator.test.ts`        |                   11 |
+| `packages/policy-engine/tests/unit/risk-policy.test.ts`           |                    8 |
+| `packages/policy-engine/tests/unit/risk-runtime.test.ts`          |                   16 |
+| `packages/policy-engine/tests/unit/scope-injection.test.ts`       |                   13 |
+| `packages/policy-engine/tests/unit/qualify.test.ts`               |                   21 |
+| `packages/plugin-sdk/tests/unit/catalog-loader.test.ts`           |                   19 |
+| `packages/plugin-sdk/tests/unit/registry.test.ts`                 |                   10 |
+| `packages/plugin-sdk/tests/unit/define-plugin.test.ts`            |                   11 |
+| `packages/plugin-sdk/tests/unit/testing-kit.test.ts`              |                   13 |
+| `plugins/_template/tests/unit/plugin.test.ts`                     |                   11 |
+| `plugins/github/tests/unit/adapter.test.ts`                       |                   18 |
+| `plugins/github/tests/unit/data-model.test.ts`                    |                    1 |
+| `plugins/github/tests/unit/risk-catalog.test.ts`                  |                   35 |
+| `plugins/github/tests/unit/risk-classifier.test.ts`               |                   31 |
+| `plugins/github/tests/unit/risk-catalog-sync.test.ts`             |                   18 |
+| `plugins/vercel/tests/unit/adapter.test.ts`                       |                   23 |
+| `plugins/vercel/tests/unit/data-model.test.ts`                    |                    1 |
+| `plugins/vercel/tests/unit/risk-catalog.test.ts`                  |                   57 |
+| `plugins/vercel/tests/unit/risk-classifier.test.ts`               |                   32 |
+| `plugins/vercel/tests/unit/risk-catalog-sync.test.ts`             |                   19 |
+| `plugins/supabase/tests/unit/adapter.test.ts`                     |                   30 |
+| `plugins/supabase/tests/unit/data-model.test.ts`                  |                    1 |
+| `plugins/supabase/tests/unit/risk-catalog.test.ts`                |                   32 |
+| `plugins/supabase/tests/unit/risk-classifier.test.ts`             |                   30 |
+| `plugins/supabase/tests/unit/risk-catalog-sync.test.ts`           |                   28 |
+| `plugins/railway/tests/unit/adapter.test.ts`                      |                   15 |
+| `plugins/railway/tests/unit/data-model.test.ts`                   |                    1 |
+| `plugins/railway/tests/unit/risk-catalog.test.ts`                 |                   15 |
+| `plugins/railway/tests/unit/risk-classifier.test.ts`              |                   20 |
+| `plugins/ssh/tests/unit/data-model.test.ts`                       |                    1 |
+| `plugins/ssh/tests/unit/risk-catalog.test.ts`                     |                   10 |
+| `plugins/ssh/tests/unit/risk-classifier.test.ts`                  |                   39 |
+| `packages/gateway-core/tests/unit/errors.test.ts`                 |                   24 |
+| `packages/gateway-core/tests/unit/audit.test.ts`                  |                    6 |
+| `packages/gateway-core/tests/unit/cache.test.ts`                  |                    6 |
+| `packages/gateway-core/tests/unit/authenticate.test.ts`           |                   11 |
+| `packages/gateway-core/tests/unit/pipeline.test.ts`               |                   15 |
+| `apps/gateway/tests/unit/lib/gateway/legacy-v4-gateway.test.ts`   |                    4 |
+| `packages/gateway-core/tests/unit/risk-gateway.test.ts`           |                    6 |
+| `apps/gateway/tests/unit/api/members-post.test.ts`                |        5 (1 skipped) |
+| `apps/gateway/tests/unit/api/tokens-preview.test.ts`              |                   12 |
+| `apps/gateway/tests/unit/api/tokens-rotate.test.ts`               |          2 (skipped) |
+| `apps/gateway/tests/unit/lib/mint/preview.test.ts`                |                    4 |
+| `apps/gateway/tests/unit/lib/risk-catalog/loader.test.ts`         |                   12 |
+| `apps/gateway/tests/unit/providers/data-model-to-mermaid.test.ts` |                    8 |
+| `apps/gateway/tests/unit/providers/plane-filters.test.ts`         |                    5 |
+| `apps/gateway/src/lib/bash/parse.test.ts`                         |                   11 |
+| `apps/gateway/src/lib/bash/exec.test.ts`                          |                    4 |
+| `apps/gateway/src/lib/bash/args.test.ts`                          |                    9 |
+| `apps/gateway/src/lib/bash/exec-host.test.ts`                     |                    7 |
+| `apps/gateway/src/server/**/*.test.ts` (v5, P0.4)                 |                   61 |
+| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`  |                   32 |
+| `packages/shared/src/api-key.test.ts`                             |                    6 |
+| `packages/shared/src/risk-id.test.ts`                             |                   20 |
+| `packages/shared/src/mcp.test.ts`                                 |                   10 |
+| **TOTAL (full suite, `npm run test`, 2026-10-13)**                | **1547 (3 skipped)** |
 
 ## Run
 
@@ -118,10 +127,13 @@ npx vitest run packages/policy-engine     # one package
   `findRiskEntry`.
 - **`risk-policy.test.ts`** — `checkAcceptableInEnv` (no-env,
   env-not-in-list, ok) + `prepareCatalog` (dup-id, regex fail, fallback
-  warn). Post drop-confirm, plus de `seedDefaultGate`.
+  warning through the injectable `warn`, `hasFallbackRisk`).
 - **`risk-runtime.test.ts`** — `evaluateCall` allow (feature-branch +
   fallback, read code), deny (missing risk, explicit deny, empty slices,
   no catalog match), multi-slice (all risks covered, missing one fails),
+  env qualification through `resourceEnvResolver` (staging vs prod
+  resource, `acceptable_in_envs` runtime filter), no resolver → unqualified,
+  deprecated `bindings` input through the legacy bridge,
   `evaluateCallSimple` happy.
 - **`scope-injection.test.ts`** — `injectionPlanFor` (github owner/repo,
   vercel projectId+teamId, supabase project_ref ; null si 0/2+ bindings,
@@ -133,6 +145,63 @@ npx vitest run packages/policy-engine     # one package
   le premier `.`, idempotent, no-op si account-scoped, env-scoped
   cases via `test.each`), `unqualifyRiskId` (strip + idempotent),
   round-trip property.
+
+## Scenarios — Plugin SDK (v5)
+
+> Covers: `docs/spec/vaubaan-gateway.md` §5 (plugins), §3.2 (presets), §10
+> (structural tests: at least one preset per plugin, every preset entry a
+> risk of its own catalog, never a wildcard). ADR
+> [[plugin-contract-and-credential-spec]]. Handbook [[plugin-sdk]].
+
+- **`catalog-loader.test.ts`** — loads the `acme` fixture YAML (provider,
+  `catalog_version`, date scalar kept as a string, optional fields,
+  presets with default gate); collected, path-qualified errors: duplicate
+  id, malformed id, id of another provider, malformed slice pattern,
+  missing fallback (error, or accepted with `requireFallback: false`),
+  zero presets (error, or accepted with `requirePresets: false`), preset
+  entry referencing a foreign or unknown risk, env-qualified entry on a
+  non-env-scoped risk or outside `acceptable_in_envs`, wildcard or
+  sentinel in a preset entry, non-integer budget or unknown gate,
+  deprecated risk in a preset, unknown keys and bad enum values, provider
+  slug, YAML syntax error naming the source.
+- **`registry.test.ts`** — ids in registration order, `has/get/require`,
+  `providerForTool` (exact name, prefix rule for unlisted tools, null),
+  `toolDeclarations`, `labels`, `idEnum` (non-empty tuple, throws when
+  empty), `catalogOf` indexed, `presetsOf`; conflicts: same id twice, tool
+  outside the plugin prefix, ill-formed plugin reported with its id.
+- **`define-plugin.test.ts`** — fixture well-formed and frozen; every issue
+  collected (id grammar, semver, tool prefix and duplicates, data-model
+  and catalog provider mismatch); catalog rules through the definition;
+  data-model referential integrity; credential spec rules per kind
+  (api-key secret field, oauth2 https + PKCE for public clients +
+  `refreshable` needs `refresh()`, app-install, ssh-key, unknown kind);
+  missing functions; `expectCredentialKind`; `normalizeArgsIfEnabled`
+  (off by default, on with the flag, no hook no change).
+- **`testing-kit.test.ts`** — `assertCatalogCoverage` passes on the
+  fixture and reports touched/untouched risks; fails on a tool without
+  sample, a sample for an undeclared tool, an unexpected or missing
+  classifier denial, a slice no risk matches; `PluginAssertionError`
+  carries every finding. `assertNoWildcard` on id lists (`*`, `all`),
+  catalogs and plugins; `assertPresetsValid`; `assertPluginWellFormed`.
+  `mockFetch`: routing by method and URL, recorded calls and JSON bodies,
+  unmatched request rejects, status codes driving `UpstreamAuthError`,
+  `times` and `pending()`, `Request` objects and `Headers`.
+- **`plugins/_template/tests/unit/plugin.test.ts`** — the four kit
+  assertions on the template, classifier cases (named workspace, single
+  resource default, ambiguous or malformed workspace, malformed id,
+  unknown tool, slice round-trip), `execute` and `discoverResources`
+  against `mockFetch` (bearer header, PATCH body, 401 →
+  `UpstreamAuthError`).
+
+## Scenarios — Shared (v5 additions)
+
+- **`risk-id.test.ts`** — `parseRiskId` both forms, hyphenated provider
+  and dotted name, eleven malformed inputs rejected; `formatRiskId`
+  round-trip and null/empty env; `baseRiskId`; `isProviderId`;
+  `isExplicitRiskId` (wildcards rejected).
+- **`mcp.test.ts`** — `toolPrefixFor` / `splitToolName` (hyphen ↔
+  underscore, first separator only, malformed names); the eight refusal
+  codes of spec §4.1 and §6; `isRefusalCode`.
 
 ## Scénarios — Provider adapters + risk catalogs
 

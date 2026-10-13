@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'vitest';
-import type { ProviderBinding, RiskCatalog } from '@vaubaan/shared';
+import type { ProviderBinding, Resource, RiskCatalog } from '@vaubaan/shared';
 
 import { indexCatalog } from '../../src/risk-evaluator.ts';
 import { evaluateCall, evaluateCallSimple } from '../../src/risk-runtime.ts';
+import { resourceEnvResolver } from '../../src/qualify.ts';
 import { parseSlice } from '../../src/slice-dsl.ts';
 
 const catalog: RiskCatalog = {
@@ -104,7 +105,7 @@ describe('evaluateCall — denied paths', () => {
     if (d.outcome === 'denied') {
       expect(d.missing_risks).toContain('github.merge-protected');
       expect(d.missing_risks).toContain('github.uncategorized-write');
-      expect(d.hint).toContain('not granted');
+      expect(d.hint).toContain('does not accept');
     }
   });
 
@@ -215,23 +216,17 @@ describe('evaluateCall — env-qualified subset check', () => {
   };
   const supabaseIdx = indexCatalog(supabaseCatalog);
 
-  const stagingBinding: ProviderBinding = {
-    id: 'b1',
-    project_id: 'p1',
+  const stagingResource: Resource = {
     provider: 'supabase',
-    resource_ref: 'staging-ref',
-    display_name: null,
-    environment: 'staging',
-    created_at: '2026-01-01',
+    ref: 'staging-ref',
+    env: 'staging',
+    displayName: 'staging-ref',
   };
-  const prodBinding: ProviderBinding = {
-    id: 'b2',
-    project_id: 'p1',
+  const prodResource: Resource = {
     provider: 'supabase',
-    resource_ref: 'prod-ref',
-    display_name: null,
-    environment: 'prod',
-    created_at: '2026-01-01',
+    ref: 'prod-ref',
+    env: 'prod',
+    displayName: 'prod-ref',
   };
 
   const stagingBulkSlice = parseSlice(
@@ -239,12 +234,12 @@ describe('evaluateCall — env-qualified subset check', () => {
   );
   const prodBulkSlice = parseSlice('supabase.project[prod-ref].schema[any].table[any].row[bulk].W');
 
-  test('token accepted `supabase[staging].bulk-row-write` allows staging binding call', () => {
+  test('token accepted `supabase[staging].bulk-row-write` allows a call on the staging resource', () => {
     const d = evaluateCall({
       executed_slices: [stagingBulkSlice],
       token_accepted_risks: new Set(['supabase[staging].bulk-row-write']),
       catalog: supabaseIdx,
-      bindings: [stagingBinding, prodBinding],
+      envResolver: resourceEnvResolver([stagingResource, prodResource]),
     });
     expect(d.outcome).toBe('allowed');
     if (d.outcome === 'allowed') {
@@ -252,12 +247,12 @@ describe('evaluateCall — env-qualified subset check', () => {
     }
   });
 
-  test('token accepted `supabase[staging].bulk-row-write` denies prod binding call', () => {
+  test('token accepted `supabase[staging].bulk-row-write` denies a call on the prod resource', () => {
     const d = evaluateCall({
       executed_slices: [prodBulkSlice],
       token_accepted_risks: new Set(['supabase[staging].bulk-row-write']),
       catalog: supabaseIdx,
-      bindings: [stagingBinding, prodBinding],
+      envResolver: resourceEnvResolver([stagingResource, prodResource]),
     });
     expect(d.outcome).toBe('denied');
     if (d.outcome === 'denied') {
@@ -266,13 +261,32 @@ describe('evaluateCall — env-qualified subset check', () => {
     }
   });
 
-  test('no bindings provided → risks_touched returned non-qualified (legacy/test mode)', () => {
+  test('no resolver provided → risks_touched returned non-qualified (test mode)', () => {
     const d = evaluateCall({
       executed_slices: [stagingBulkSlice],
-      // The token would have to use the non-qualified id when bindings are
-      // absent (this is the legacy/test entrypoint).
+      // The mission would have to use the non-qualified id when no resolver
+      // is given (this is the test entrypoint).
       token_accepted_risks: new Set(['supabase.bulk-row-write']),
       catalog: supabaseIdx,
+    });
+    expect(d.outcome).toBe('allowed');
+  });
+
+  test('deprecated `bindings` input still qualifies through the legacy bridge', () => {
+    const stagingBinding: ProviderBinding = {
+      id: 'b1',
+      project_id: 'p1',
+      provider: 'supabase',
+      resource_ref: 'staging-ref',
+      display_name: null,
+      environment: 'staging',
+      created_at: '2026-01-01',
+    };
+    const d = evaluateCall({
+      executed_slices: [stagingBulkSlice],
+      token_accepted_risks: new Set(['supabase[staging].bulk-row-write']),
+      catalog: supabaseIdx,
+      bindings: [stagingBinding],
     });
     expect(d.outcome).toBe('allowed');
   });
@@ -321,24 +335,18 @@ describe('evaluateCall — acceptable_in_envs runtime filter', () => {
   };
   const railwayIdx = indexCatalog(railwayCatalog);
 
-  const prodBinding: ProviderBinding = {
-    id: 'b1',
-    project_id: 'p1',
+  const prodResource: Resource = {
     provider: 'railway',
-    resource_ref: 'pid-123',
-    display_name: null,
-    environment: 'prod',
-    created_at: '2026-01-01',
+    ref: 'pid-123',
+    env: 'prod',
+    displayName: 'pid-123',
   };
 
-  const stagingBinding: ProviderBinding = {
-    id: 'b2',
-    project_id: 'p1',
+  const stagingResource: Resource = {
     provider: 'railway',
-    resource_ref: 'pid-456',
-    display_name: null,
-    environment: 'staging',
-    created_at: '2026-01-01',
+    ref: 'pid-456',
+    env: 'staging',
+    displayName: 'pid-456',
   };
 
   const prodSlice = parseSlice('railway.project[pid-123].environment[prod].service-var[MY_VAR].W');
@@ -346,7 +354,7 @@ describe('evaluateCall — acceptable_in_envs runtime filter', () => {
     'railway.project[pid-456].environment[staging].service-var[MY_VAR].W',
   );
 
-  test('prod binding: upsert-variable fires with env-qualified id', () => {
+  test('prod resource: upsert-variable fires with env-qualified id', () => {
     const d = evaluateCall({
       executed_slices: [prodSlice],
       token_accepted_risks: new Set([
@@ -354,7 +362,7 @@ describe('evaluateCall — acceptable_in_envs runtime filter', () => {
         'railway.uncategorized-write',
       ]),
       catalog: railwayIdx,
-      bindings: [prodBinding],
+      envResolver: resourceEnvResolver([prodResource]),
     });
     expect(d.outcome).toBe('allowed');
     if (d.outcome === 'allowed') {
@@ -363,7 +371,7 @@ describe('evaluateCall — acceptable_in_envs runtime filter', () => {
     }
   });
 
-  test('staging binding: upsert-variable fires with staging-qualified id', () => {
+  test('staging resource: upsert-variable fires with staging-qualified id', () => {
     const d = evaluateCall({
       executed_slices: [stagingSlice],
       token_accepted_risks: new Set([
@@ -371,7 +379,7 @@ describe('evaluateCall — acceptable_in_envs runtime filter', () => {
         'railway.uncategorized-write',
       ]),
       catalog: railwayIdx,
-      bindings: [stagingBinding],
+      envResolver: resourceEnvResolver([stagingResource]),
     });
     expect(d.outcome).toBe('allowed');
     if (d.outcome === 'allowed') {
@@ -380,12 +388,12 @@ describe('evaluateCall — acceptable_in_envs runtime filter', () => {
     }
   });
 
-  test('prod binding without upsert-variable accepted → deny', () => {
+  test('prod resource without upsert-variable accepted → deny', () => {
     const d = evaluateCall({
       executed_slices: [prodSlice],
       token_accepted_risks: new Set(['railway.uncategorized-write']),
       catalog: railwayIdx,
-      bindings: [prodBinding],
+      envResolver: resourceEnvResolver([prodResource]),
     });
     expect(d.outcome).toBe('denied');
     if (d.outcome === 'denied') {

@@ -11,9 +11,16 @@
  * silently break.
  */
 import { describe, expect, test } from 'vitest';
-import type { RiskEntry, RiskId } from '@vaubaan/shared';
+import type { Resource, RiskEntry, RiskId } from '@vaubaan/shared';
+import { parseSlice } from '../../src/slice-dsl.ts';
 
-import { isEnvScopedEntry, qualifyRiskId, unqualifyRiskId } from '../../src/qualify.ts';
+import {
+  isEnvScopedEntry,
+  noEnvResolver,
+  qualifyRiskId,
+  resourceEnvResolver,
+  unqualifyRiskId,
+} from '../../src/qualify.ts';
 
 const envScopedEntry: RiskEntry = {
   id: 'supabase.bulk-row-write',
@@ -131,5 +138,54 @@ describe('qualify / unqualify round-trip', () => {
     const qualified = qualifyRiskId(base, 'prod', accountScopedEntry);
     expect(qualified).toBe(base);
     expect(unqualifyRiskId(qualified)).toBe(base);
+  });
+});
+
+describe('resourceEnvResolver', () => {
+  const staging: Resource = {
+    provider: 'supabase',
+    ref: 'stg-ref',
+    env: 'staging',
+    displayName: 'Staging',
+  };
+  const prod: Resource = { provider: 'supabase', ref: 'prd-ref', env: 'prod', displayName: 'Prod' };
+  const unlabelled: Resource = { provider: 'github', ref: 'acme/app', displayName: 'acme/app' };
+
+  test('matches the first ident segment equal to a resource ref', () => {
+    const r = resourceEnvResolver([staging, prod]);
+    expect(
+      r.resolveEnv(parseSlice('supabase.project[prd-ref].schema[public].table[t].row[*].W')),
+    ).toBe('prod');
+    expect(
+      r.resolveEnv(parseSlice('supabase.project[stg-ref].schema[public].table[t].row[*].W')),
+    ).toBe('staging');
+  });
+
+  test('null when the slice provider has no resource', () => {
+    expect(
+      resourceEnvResolver([staging]).resolveEnv(parseSlice('vercel.project[x].deployment[*].W')),
+    ).toBeNull();
+  });
+
+  test('falls back to the single resource env when the path carries no ref', () => {
+    expect(resourceEnvResolver([prod]).resolveEnv(parseSlice('supabase.account.R'))).toBe('prod');
+  });
+
+  test('ambiguous (several resources, no ref in path) → null', () => {
+    expect(
+      resourceEnvResolver([staging, prod]).resolveEnv(parseSlice('supabase.account.R')),
+    ).toBeNull();
+  });
+
+  test('unlabelled resource resolves to null even when matched', () => {
+    expect(
+      resourceEnvResolver([unlabelled]).resolveEnv(
+        parseSlice('github.repo[acme/app].branch[main].W'),
+      ),
+    ).toBeNull();
+  });
+
+  test('noEnvResolver never qualifies', () => {
+    expect(noEnvResolver.resolveEnv(parseSlice('supabase.project[prd-ref].R'))).toBeNull();
   });
 });

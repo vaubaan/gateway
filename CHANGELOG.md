@@ -26,6 +26,17 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   with a Caddy TLS proxy, documented `deploy/config/gateway.example.yaml`
   and `.env.example`, and a CI job that builds the image and runs the
   container smoke test. ADR `docker-image-and-config-format`.
+- **Plugin SDK (P0.2).** `@vaubaan/plugin-sdk`: the `ProviderPlugin`
+  contract and `definePlugin()`, the `CredentialSpec` union (api-key,
+  oauth2, app-install, ssh-key), the YAML catalog loader with presets
+  (at least one per plugin, every entry an explicit risk of the same
+  catalog), the `PluginRegistry` every provider list derives from, and the
+  test kit (`mockFetch`, `assertCatalogCoverage`, `assertNoWildcard`,
+  `assertPresetsValid`). `plugins/_template` is the scaffold. ADR
+  `plugin-contract-and-credential-spec`.
+- `@vaubaan/shared`: v5 domain types (connections, resources, shares,
+  missions, sessions, requests, approvals, delegations), the eight
+  `RefusalCode` values, `parseRiskId` / `formatRiskId`.
 
 ### Changed
 
@@ -57,6 +68,10 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   handbooks in place, wholesale-replaced specs and handbooks moved to
   `docs/**/legacy/`).
 
+- `@vaubaan/policy-engine` resolves environments through an `EnvResolver`
+  over v5 resources; v4 scope injection is quarantined behind a flag that
+  defaults to off.
+
 ### Removed
 
 - From `@vaubaan/gateway-core`: `RedisCacheClient` (Upstash),
@@ -65,6 +80,11 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   dependencies. The v4 `McpGateway` orchestrator moved to
   `apps/gateway/src/lib/gateway/legacy-v4-gateway.ts` (venv tools removed)
   until P1.6 replaces `/mcp`.
+- From `@vaubaan/shared`: the escalation channel and token-context payload
+  types, the deprecated token aliases, the unused `zod` dependency and the
+  broken `./capability` export. v4 row types are kept, deprecated, in
+  `legacy-v4.ts` until the plugins migrate.
+
 - Supabase migrations and configuration (`supabase/`), the Supabase
   migrations workflow, `vercel.json`, the v4 operator `.env.example`, and
   the Supabase/Vercel-only scripts under `scripts/`. v5 ships as a single

@@ -31,8 +31,10 @@ test or run the gateway.
 apps/gateway/            the deployable (server + Next.js UI)   @vaubaan/gateway-app
 packages/shared/         shared types and helpers              @vaubaan/shared
 packages/policy-engine/  slice DSL, matcher, evaluator         @vaubaan/policy-engine
+packages/plugin-sdk/     plugin contract, registry, test kit   @vaubaan/plugin-sdk
 packages/gateway-core/   pipeline, decisions, refusals, audit  @vaubaan/gateway-core
 plugins/<provider>/      one provider plugin per folder        @vaubaan/plugin-<provider>
+plugins/_template/       scaffold for a new plugin             @vaubaan/plugin-template
 docs/                    spec, decisions, handbook, tests, workflow
 ```
 

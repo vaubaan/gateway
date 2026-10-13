@@ -1,20 +1,18 @@
 /**
- * API key generation / hashing.
+ * API key generation / hashing — the mission token format.
  *
  * Two flavours share the same shape `vbn_<kind>_<8-char prefix>_<32-char base62 secret>`:
- *   - `live` : Token (issued via /api/v1/tokens/mint, consumed at the MCP
- *              gateway when scope='project').
- *   - `test` : Test token (same role, separate prefix for safety in
- *              fixtures).
+ *   - `live` : mission token, revealed once at issuance, presented as the
+ *              Bearer on the execution surface (spec §0 "Mission token").
+ *   - `test` : same role, separate prefix for safety in fixtures.
  *
  * Hash : argon2id with OWASP-2023 recommended params (19 MiB, 2 iters).
+ * The prefix is stored in clear next to the hash so the gateway can look a
+ * token up before verifying it.
  *
- * Spec : docs/spec/vaubaan-gateway.md §3.1, §6.2.
- * ADRs :
- *   - docs/decisions/api-key-format-vbn-live-argon2id.md
- *   - docs/decisions/unified-tokens-delegation-chain-and-escalation-channel.md
- *     (drops `vbn_mgmt_*` — every token is `vbn_live_*`, scope lives on the
- *     DB row).
+ * Spec : docs/spec/vaubaan-gateway.md §4.1, §6.
+ * ADR  : docs/decisions/api-key-format-vbn-live-argon2id.md (format and
+ *        hash survive the v5 pivot unchanged).
  */
 
 import { randomBytes } from 'node:crypto';
