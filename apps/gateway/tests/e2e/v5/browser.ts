@@ -57,7 +57,9 @@ async function fulfillRedirect(route: Route, location: string, setCookies: strin
  * and is rethrown.
  */
 function ignoreClosedTarget(err: unknown): void {
-  if (err instanceof Error && /has been (closed|disposed)/.test(err.message)) return;
+  // "Test ended" is the same situation seen from the route: a prefetch still in flight when
+  // the test returns. Nothing was asserted on that request.
+  if (err instanceof Error && /has been (closed|disposed)|Test ended/.test(err.message)) return;
   throw err;
 }
 
