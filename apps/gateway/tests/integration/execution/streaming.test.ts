@@ -466,3 +466,130 @@ describe('streaming on the execution door', () => {
     expect(await consumed()).toBe(1);
   });
 });
+
+describe('streaming and community telemetry (spec §9)', () => {
+  const COLLECTOR_URL = 'https://collector.example.net/rest/v1/plugin_reports?apikey=pk_public';
+  let instance: ExecutionInstance;
+  let mission: IssuedMission;
+  let batches: string[];
+
+  beforeEach(async () => {
+    batches = [];
+    instance = await executionInstance({
+      env: { VAUBAAN_TELEMETRY_ENABLED: 'true', VAUBAAN_TELEMETRY_COLLECTOR_URL: COLLECTOR_URL },
+      deps: {
+        telemetryFetch: async (_input: string | URL | Request, init?: RequestInit) => {
+          if (typeof init?.body === 'string') batches.push(init.body);
+          return new Response(null, { status: 201 });
+        },
+      },
+    });
+    mission = await instance.issue({ policy: [line(READ, 5)] });
+  });
+  afterEach(async () => {
+    await instance.close();
+  });
+
+  /** Everything the collector received, once the queue is empty. */
+  const reports = async (): Promise<Record<string, unknown>[]> => {
+    for (let guard = 0; guard < 50; guard += 1) {
+      await instance.root.telemetry.flush();
+      if ((await instance.root.telemetry.overview()).queue.queued === 0) break;
+    }
+    return batches.flatMap((body) => JSON.parse(body) as Record<string, unknown>[]);
+  };
+  const auditEntry = async () => {
+    for (let i = 0; i < 100; i++) {
+      const [entry] = await instance.root.store.audit.list({ missionId: mission.mission.id });
+      if (entry) return entry;
+      await pause(10);
+    }
+    throw new Error('no audit entry was written');
+  };
+
+  it('reports nothing for a call its caller abandoned; the audit entry still says what happened', async () => {
+    const upstream = gate();
+    let emitted = 0;
+    instance.depot.script((ctx) =>
+      streamToolResult(
+        ctx,
+        (async function* () {
+          for (;;) {
+            emitted += 1;
+            yield text(`tick ${emitted}\n`);
+            await upstream.opened;
+            if (emitted > 50) return;
+          }
+        })(),
+      ),
+    );
+    const caller = new AbortController();
+    const response = await progressCall(instance, mission, { signal: caller.signal });
+    const messages = sseMessages(response);
+    expect((await messages.next()).value).toMatchObject({ params: { progress: 1 } });
+
+    caller.abort();
+    await response.body?.cancel().catch(() => undefined);
+    upstream.open();
+
+    expect(await auditEntry()).toMatchObject({
+      decision: 'allowed',
+      upstream_error: 'depot stream stopped after 1 part: the caller was gone',
+    });
+    // A disconnect is not an outcome of the plugin: nothing was queued, nothing left.
+    expect((await instance.root.telemetry.overview()).queue.queued).toBe(0);
+    expect(await reports()).toEqual([]);
+
+    // The sink is still wired: the next call, served to a caller that stays, is reported.
+    instance.depot.script(async () => ({ content: [text('ok')] }));
+    await instance.call(mission, TOOL, ARGS);
+    expect((await reports()).map((report) => report.outcome)).toEqual(['success']);
+  });
+
+  it('reports nothing either when the plugin fails after the caller left (not a timeout of the provider)', async () => {
+    const started = gate();
+    const upstream = gate();
+    instance.depot.script(async () => {
+      started.open();
+      await upstream.opened;
+      // What an aborted `fetch` throws; the classifier alone would call it a timeout.
+      throw new DOMException('This operation was aborted', 'AbortError');
+    });
+    const caller = new AbortController();
+    const pending = progressCall(instance, mission, { signal: caller.signal }).catch(
+      () => undefined,
+    );
+    await started.opened;
+    caller.abort();
+    upstream.open();
+    await pending;
+
+    expect(await auditEntry()).toMatchObject({ decision: 'allowed' });
+    expect(await reports()).toEqual([]);
+  });
+
+  it('reports once, as an upstream error, when the provider breaks the stream of a caller that is still there', async () => {
+    instance.depot.script((ctx) =>
+      streamToolResult(
+        ctx,
+        (async function* () {
+          yield text('row 1\n');
+          throw new Error('connection reset by the provider near row 2');
+        })(),
+      ),
+    );
+    const messages: Record<string, unknown>[] = [];
+    for await (const message of sseMessages(await progressCall(instance, mission))) {
+      messages.push(message);
+    }
+    expect(messages).toHaveLength(2);
+
+    expect(await auditEntry()).toMatchObject({
+      decision: 'allowed',
+      upstream_error: 'depot stream failed after 1 part (Error)',
+    });
+    expect((await reports()).map((report) => [report.outcome, report.error_class])).toEqual([
+      ['upstream-error', 'unspecified'],
+    ]);
+  });
+});

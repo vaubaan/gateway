@@ -25,7 +25,7 @@ tracks:
   - plugins/github/tests/unit/token-cache.test.ts
 ---
 
-# Execution door — `/mcp`, the call pipeline's stages, the catalog
+# Execution door — `/mcp`, the call pipeline's stages, the agent label, streaming, the catalog
 
 How an agent holding a mission token lists and calls tools: the HTTP surface,
 the bearer dispatch, the stages that fill gateway-core's `CallPipeline`, the two
@@ -49,12 +49,13 @@ Built on [gateway-core](gateway-core.md) (pipeline, refusals),
 
 ```
 apps/gateway/src/server/execution/      host-agnostic, never imports `next`
-  index.ts            createExecutionModule(deps) → root.execution { pipeline, credentialCache, door, handlers }
+  index.ts            createExecutionModule(deps) → root.execution { pipeline, credentialCache, tokens, door, handlers }
   door.ts             ExecutionDoor: handleMcp(), handleCatalog(); admission, MCP serving
   token-verifier.ts   TokenVerifier — verified-token cache (sliding), throttle per prefix and client address, single flight
   mission-context.ts  loadMissionContext(), missionResourceOf(), periodOf()
   resource-stage.ts   createResourceStage(), citedRefs()        → resource-not-in-mission
   risk-stage.ts       createRiskStage()                         → risk-not-accepted
+  scope-caps.ts       ENFORCED_INFRA_LIMIT_KEYS, ENFORCED_CAP_KEYS, unenforcedLimitsOf() — no cap stage; what the catalogs may declare
   upstream-stage.ts   createUpstreamStage()                     → broker, retry ladder, connection-unavailable
   telemetry-sink.ts   TelemetrySink port, NOOP_TELEMETRY_SINK   → the one hook of community telemetry
   credential-cache.ts ConnectionCredentialCache                 — ExecuteContext.credentialCache
@@ -64,8 +65,9 @@ apps/gateway/src/server/execution/      host-agnostic, never imports `next`
   execution.test.ts   unit tests of the pure and in-memory parts
 apps/gateway/src/app/mcp/route.ts           GET | POST | DELETE /mcp   → root.execution.handlers.mcp
 apps/gateway/src/app/mcp/catalog/route.ts   GET /mcp/catalog           → root.execution.handlers.catalog
+apps/gateway/src/app/mcp/manage/route.ts    /mcp/manage — the management door's adapter (handbook management-door), not this door
 apps/gateway/src/app/.well-known/oauth-protected-resource/route.ts   RFC 9728: static bearer, no authorization server
-apps/gateway/tests/integration/execution/   pipeline, door over HTTP, counters vs audit
+apps/gateway/tests/integration/execution/   pipeline, door over HTTP, agent label, approvals, streaming, counters vs audit
 apps/gateway/tests/manual/seed-demo.ts      seeds a local instance for the manual check
 apps/gateway/tests/manual/streaming-check.ts   streaming through the standalone server: `serve`, `probe`
 packages/plugin-sdk/src/streaming.ts        ToolResultPartSink, streamToolResult(), textParts(), appendPart()
@@ -216,13 +218,13 @@ that mission stays orphaned.
 
 `createExecutionModule` builds one `CallPipeline` (gateway-core) with:
 
-| Stage     | Implementation                                                  | Refuses                                                 |
-| --------- | --------------------------------------------------------------- | ------------------------------------------------------- |
-| resources | `createResourceStage({ registry, connections })`                | `resource-not-in-mission`; rejects a call no one owns   |
-| risks     | `createRiskStage({ registry })`                                 | `risk-not-accepted`; rejects a classifier denial        |
-| budget    | `createBudgetStage({ service: root.budget, missions })` (P1.3)  | `budget-exhausted`, `rate-limited`, `approval-required` |
-| upstream  | `createUpstreamStage({ credentials, credentialCache, logger })` | `connection-unavailable` (after the allow)              |
-| audit     | `store.auditWriter` (`SqliteAuditWriter`)                       | —                                                       |
+| Stage     | Implementation                                                             | Refuses                                                 |
+| --------- | -------------------------------------------------------------------------- | ------------------------------------------------------- |
+| resources | `createResourceStage({ registry, connections })`                           | `resource-not-in-mission`; rejects a call no one owns   |
+| risks     | `createRiskStage({ registry })`                                            | `risk-not-accepted`; rejects a classifier denial        |
+| budget    | `createBudgetStage({ service: root.budget, missions })` (P1.3)             | `budget-exhausted`, `rate-limited`, `approval-required` |
+| upstream  | `createUpstreamStage({ credentials, credentialCache, logger, telemetry })` | `connection-unavailable` (after the allow)              |
+| audit     | `store.auditWriter` (`SqliteAuditWriter`)                                  | —                                                       |
 
 `mission-inactive` and `connection-unavailable` (a connection already `expired`
 or `revoked`) come from the pipeline's own pure checks.
@@ -303,7 +305,8 @@ plugin.execute({ ...credentials.contextOf(resolved),
     credentialCache.drop(connection) > 0  → execute again with the same credential
     still 401 (or nothing was cached)     → credentials.refresh(connectionId) → execute once more
        refresh rejected (connection now `expired`) → connection-unavailable
-  UpstreamAuthError 403, any other error  → UpstreamFailureError { summary, detail, status }
+  UpstreamAuthError 403, UpstreamHttpError, any other error
+                                          → UpstreamFailureError { summary, detail, status }
   any error after a part was emitted      → UpstreamFailureError, never retried (see Streaming)
 ```
 
@@ -315,9 +318,10 @@ gateway-core's `UpstreamFailureError`, which separates two readers:
   only (the `failed` outcome, then the tool result).
 - `summary` is what the audit stores in `upstream_error`. The stage builds it
   from the provider id, the HTTP status when the error carries one
-  (`UpstreamAuthError.upstreamStatus`, or a numeric `status` between 100 and
-  599 on the error) and the error's class name:
-  `github answered HTTP 403 (UpstreamAuthError)`, `stripe call failed (Error)`;
+  (`UpstreamAuthError.upstreamStatus`, `UpstreamHttpError.status`, or a
+  numeric `status` between 100 and 599 on any error) and the error's class
+  name: `github answered HTTP 403 (UpstreamAuthError)`,
+  `vercel answered HTTP 500 (UpstreamHttpError)`, `stripe call failed (Error)`;
   for a streamed result, `<provider> stream failed after N parts (…)` or
   `<provider> stream stopped after N parts: the caller was gone`
   ([Streaming](#streaming)).
@@ -331,13 +335,27 @@ consumed, and the pipeline's `failed` outcome carries the refusal. A
 `ProviderUnreachableError` from the broker, a 403 and any provider failure
 are plain `failed` outcomes, audited by their summary.
 
+The stage only sees a provider failure the plugin **throws**. The plugin
+contract says so ([plugin-sdk](plugin-sdk.md), "Errors of `execute`"): 401/403
+as `UpstreamAuthError`, another failed status as `UpstreamHttpError`, a
+network failure as it comes. A result with `isError: true` is the executor
+declining the call itself (an unknown tool, an argument it cannot read, a
+target outside the mission): it is an `allowed` outcome with no
+`upstream_error`, handed to the agent untouched. All ten shipped plugins
+follow the rule since the Phase 2 cycle-end (`vercel` and `upstash-redis`
+used to return provider failures as results; `cloudflare-dns` used to throw
+its own refusals).
+
 **Telemetry hook.** `UpstreamStageDeps.telemetry` is a `TelemetrySink`
 (`telemetry-sink.ts`; default `NOOP_TELEMETRY_SINK`). `forward()` notes, in a
 `WeakMap` keyed by the `CallRequest`, the plugin the call reached;
 `execute()` then calls `report(call, outcome)` exactly once — with the result,
-or with the error it is about to wrap — after the retry ladder. A call the
-broker stopped before `plugin.execute` ran is not reported, and a sink that
-throws is caught. The event holds the plugin (`id`, `version`, `tools`), the
+or with the error it is about to wrap — after the retry ladder. Two calls are
+not reported: one the broker stopped before `plugin.execute` ran, and one
+whose caller went away (the error is `CallerGoneError`, or the call's signal
+is aborted when the plugin fails) — a disconnect is not an outcome of the
+plugin, and the audit entry still records it. A sink that throws is caught.
+The event holds the plugin (`id`, `version`, `tools`), the
 tool and the outcome: no mission, no connection, no resource, no argument.
 What becomes of it: handbook [telemetry](telemetry.md).
 
@@ -554,7 +572,9 @@ interrupted after N parts: <the plugin's sentence>`. The credit stays
   `'<provider> stream stopped after N parts: the caller was gone'`. A call
   that does not stream is not affected by a disconnect: it completes and is
   audited as it always was.
-- **Telemetry** receives the outcome once, when the stream has ended.
+- **Telemetry** receives the outcome once, when the stream has ended — a
+  stream the provider broke included (`upstream-error`). A stream stopped
+  because the caller went away is not reported at all.
 
 ### On the wire
 
@@ -668,6 +688,7 @@ const budget = new SessionService({
   rateWindows: windows,
   requestUrl: requests.requestUrl, // `<public_url>/r/<id>`, the requests module's builder
   requestExpirySeconds: config.requests.expirySeconds,
+  approvalValiditySeconds: config.approvals.expirySeconds, // `approval_valid_seconds` of the refusal
 });
 const execution = createExecutionModule({
   config,
@@ -676,6 +697,7 @@ const execution = createExecutionModule({
   auth,
   missions,
   connections,
+  grounds: authority.grounds, // re-checks the creator's authority on every request
   budget,
   cache,
   rateLimiter,
@@ -865,11 +887,14 @@ plugin streams), and a run behind a proxy other than Caddy.
   throttle, sliding proof, throttle per address), upstream credential cache.
 - `src/server/http/client-ip.test.ts` (11) — the client-address rule and
   `isTrustedProxyEntry`.
-- `tests/integration/execution/pipeline.test.ts` (20) — allowed call
+- `tests/integration/execution/pipeline.test.ts` (23) — allowed call
   (decrement, audit entry, credential to the plugin only, env-qualified risk,
-  agent label), each refusal with its fields, stale / hidden / never-hydrated
-  resources, structural rejections, upstream failure, 401 → refresh → retry,
-  rejected refresh → `expired`, 403, credential cache.
+  agent label), each refusal with its fields (among them `mission-inactive`
+  for a mission orphaned by a revoked connection), stale / hidden /
+  never-hydrated resources, structural rejections, upstream failure (the
+  host-built summary in the audit, the detail to the agent, the HTTP status
+  of a client error), 401 → refresh → retry, rejected refresh → `expired`,
+  403, credential cache.
 - `tests/integration/execution/door-http.test.ts` (19) — the official MCP
   client in both eras against the real GitHub plugin on a mocked upstream,
   refusal `data` as the client sees it, plain JSON for `curl`, 405, tool filter,
@@ -882,13 +907,25 @@ plugin streams), and a run behind a proxy other than Caddy.
   that claims an identity; a value that is not a label dropped, logged
   without its value, the call served; `_meta.agent` over the header and the
   fallback; the official MCP client in both eras.
-- `tests/integration/execution/streaming.test.ts` (10) — a part delivered
+- `tests/integration/execution/approval-door.test.ts` (7) — the GitHub
+  `developer` preset as shipped: the workflow write is the gated risk;
+  refusal → grant → the identical replay passes → a second identical replay
+  is refused; one byte changed asks again and leaves the other approval
+  intact; a write outside `.github/workflows` never meets the gate; the gate
+  opened for the period, still counted; the gate set to `auto` on the
+  mission; the arguments in the sealed request only, not in the audit, the
+  events or the logs.
+- `tests/integration/execution/streaming.test.ts` (13) — a part delivered
   while the plugin is still blocked, with the credit already counted and no
   audit entry yet; the official MCP client in both eras (`onprogress`, then
   the complete result); a provider body forwarded chunk by chunk; one JSON
   body without a progress token; a refused call answered by its error alone;
   a stream that breaks midway (entry, latency, credit, no replay); no retry
-  after a part even on a 401, retry before; the caller going away.
+  after a part even on a 401, retry before; the caller going away. With
+  telemetry on: no report for a call its caller abandoned (a stream stopped,
+  or a plugin failing after the abort) while the audit entry is written; one
+  `upstream-error` report when the provider breaks the stream of a caller
+  that stayed.
 - `packages/plugin-sdk/tests/unit/streaming.test.ts` (9) — `appendPart`,
   `streamToolResult` (order, failure, the sink rejecting), `textParts`
   (UTF-8 across chunks, early exit cancels the body, a body that errors).
@@ -896,7 +933,7 @@ plugin streams), and a run behind a proxy other than Caddy.
   calls per seed (three seeds) through the door, then
   `countersAgreeWithAudit` with no mismatch; a concurrent burst on a small
   quota.
-- `packages/gateway-core/tests/unit/pipeline.test.ts` — `UpstreamRefusalError`,
+- `packages/gateway-core/tests/unit/pipeline.test.ts` (27) — `UpstreamRefusalError`,
   `UpstreamFailureError` (summary to the audit, detail to the outcome, the
   bound), the structural rejection of the resource stage;
   `plugins/github/tests/unit/token-cache.test.ts` (5).

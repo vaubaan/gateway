@@ -88,6 +88,39 @@ describe('TelemetryClient: the gates before the network', () => {
     expect(isPlaceholderCollector(COLLECTOR, PLACEHOLDER)).toBe(false);
   });
 
+  it.each([
+    ['a public key appended', '?apikey=pk_public'],
+    ['another query', '?select=*'],
+    ['a trailing slash', '/'],
+    ['a trailing slash and a key', '/?apikey=pk_public'],
+    ['several trailing slashes', '///'],
+    ['a fragment', '#reports'],
+  ])('the placeholder with %s is still the placeholder: nothing leaves', async (_name, suffix) => {
+    const collectorUrl = new URL(`${PLACEHOLDER.href}${suffix}`);
+    expect(isPlaceholderCollector(collectorUrl, PLACEHOLDER)).toBe(true);
+
+    const { client, fetchMock, logger } = rig({ enabled: true, collectorUrl });
+    for (let n = 0; n < 120; n += 1) client.record(report());
+    await client.flush();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(client.state).toBe('placeholder-collector');
+    expect(client.stats.queued).toBe(0);
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('another path, another host or another scheme is not the placeholder', () => {
+    for (const other of [
+      `${PLACEHOLDER.href}/v2`,
+      `${PLACEHOLDER.origin}/`,
+      PLACEHOLDER.href.replace('https://', 'http://'),
+      `https://collector.${PLACEHOLDER.host}${PLACEHOLDER.pathname}`,
+      `${PLACEHOLDER.origin}:8443${PLACEHOLDER.pathname}`,
+    ]) {
+      expect(isPlaceholderCollector(new URL(other), PLACEHOLDER), other).toBe(false);
+    }
+  });
+
   it('a report queued while enabled never leaves once telemetry is switched off', async () => {
     let enabled = true;
     const { client, fetchMock } = rig({ enabled: () => enabled });
