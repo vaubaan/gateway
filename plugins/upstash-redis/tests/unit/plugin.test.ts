@@ -483,14 +483,38 @@ describe('executeUpstashRedis with mockFetch', () => {
     ).rejects.toMatchObject({ name: 'UpstreamAuthError', upstreamStatus: 403 });
   });
 
-  test('other upstream failures and malformed arguments come back as isError results', async () => {
+  test('a provider failure is thrown with its status, on both surfaces (never an isError result)', async () => {
     const http = mockFetch([{ url: /\/redis\/stats\//, status: 500, body: 'boom' }]);
-    const r1 = await upstashRedisPlugin.execute(ctx(http), 'upstash_redis__get_database_stats', {
-      databaseId: 'db-abc-123',
-    });
-    expect(r1.isError).toBe(true);
-    expect((r1.content[0] as { text: string }).text).toMatch(/500/);
+    await expect(
+      upstashRedisPlugin.execute(ctx(http), 'upstash_redis__get_database_stats', {
+        databaseId: 'db-abc-123',
+      }),
+    ).rejects.toMatchObject({ name: 'UpstreamHttpError', status: 500 });
 
+    const data = mockFetch([
+      databaseRoute,
+      { method: 'POST', url: REST_URL, status: 429, body: 'slow down' },
+    ]);
+    await expect(
+      upstashRedisPlugin.execute(ctx(data), 'upstash_redis__get', { key: 'k' }),
+    ).rejects.toMatchObject({ name: 'UpstreamHttpError', status: 429 });
+  });
+
+  test('a network failure is thrown as it is, not turned into a result', async () => {
+    const down = mockFetch([
+      {
+        url: /\/redis\/databases$/,
+        respond: () => {
+          throw new TypeError('fetch failed');
+        },
+      },
+    ]);
+    await expect(
+      upstashRedisPlugin.execute(ctx(down), 'upstash_redis__list_databases', {}),
+    ).rejects.toBeInstanceOf(TypeError);
+  });
+
+  test('malformed arguments come back as isError results, before any network call', async () => {
     const none = mockFetch([]);
     const r2 = await upstashRedisPlugin.execute(ctx(none), 'upstash_redis__del', { keys: [] });
     expect(r2.isError).toBe(true);

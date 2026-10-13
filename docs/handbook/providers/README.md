@@ -37,11 +37,11 @@ lets the drift detector compare the two.
 | -------------- | ------------------------------------------ | ------------------------------------ | ---------------------------------- | -------------------------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Cloudflare DNS | [`cloudflare-dns.md`](./cloudflare-dns.md) | `dns`                                | 11 + fallback                      | `read-only`, `dns-operator`, `zone-admin`                      | `api-key`     | Zone-scoped token; record-write overlays.                                                                                                                                       |
 | GitHub         | [`github.md`](./github.md)                 | `repo`                               | 14 + fallback                      | `read-only`, `developer`, `release-manager`                    | `app-install` | Per-call installation token. No env-scoped risk.                                                                                                                                |
-| Gmail          | [`gmail.md`](./gmail.md)                   | `mailbox`                            | 15 + fallback                      | `read-only`, `developer`                                       | `oauth2`      | **Experimental**: classifier-only, no tool exposed.                                                                                                                             |
+| Gmail          | [`gmail.md`](./gmail.md)                   | `mailbox`                            | 14 + fallback (+ 1 deprecated id)  | `read-only`, `developer`                                       | `oauth2`      | **Experimental**: classifier-only, no tool exposed.                                                                                                                             |
 | Railway        | [`railway.md`](./railway.md)               | `runtime`                            | 9 + fallback                       | `read-only`, `developer`, `operator`                           | `oauth2`      | Resource indicator on every token request.                                                                                                                                      |
 | Resend         | [`resend.md`](./resend.md)                 | `email`                              | 15 + fallback (+ 2 deprecated ids) | `read-only`, `developer`, `marketing-operator`, `domain-admin` | `api-key`     | Recipient zones from the domain resource metadata.                                                                                                                              |
 | SSH            | [`ssh.md`](./ssh.md)                       | `host`                               | 7 + fallback                       | `read-only`, `developer`, `operator`                           | `ssh-key`     | Pinned host key; command classes.                                                                                                                                               |
-| Stripe         | [`stripe.md`](./stripe.md)                 | `billing`                            | 16 + fallback                      | `read-only`, `test-mode-developer`, `finance-operator`         | `api-key`     | One resource per mode (test / live); catalog v3. `read-only` covers catalog, subscriptions and balance: invoices, charges, payment intents and events need `read-customer-pii`. |
+| Stripe         | [`stripe.md`](./stripe.md)                 | `billing`                            | 16 + fallback                      | `read-only`, `test-mode-developer`, `finance-operator`         | `api-key`     | One resource per mode (test / live); catalog v4. `read-only` covers catalog, subscriptions and balance: invoices, charges, payment intents and events need `read-customer-pii`. |
 | Supabase       | [`supabase.md`](./supabase.md)             | `db`, `storage`, `auth`, `functions` | 24 + fallback                      | `read-only-analyst`, `staging-developer`, `migration-operator` | `oauth2`      | Management API; `execute_sql` read-only. Prod migrations are limited to plain DDL and RLS.                                                                                      |
 | Upstash Redis  | [`upstash-redis.md`](./upstash-redis.md)   | `cache`                              | 10 + fallback                      | `read-only`, `developer`, `operator`                           | `api-key`     | Env from the owner's database label.                                                                                                                                            |
 | Vercel         | [`vercel.md`](./vercel.md)                 | `runtime`                            | 16 + fallback                      | `read-only`, `developer`, `operator`                           | `api-key`     | Declares `envOf` (the `env[<label>]` segment).                                                                                                                                  |
@@ -67,8 +67,18 @@ handbook above.
 When a `risk-catalog.yaml`, a classifier or a preset changes, update the
 corresponding handbook in the same pull request and bump `catalog_version`
 (and the plugin `version` per the semver rule of ADR
-[[plugin-contract-and-credential-spec]] D9). The `tracks:` frontmatter lists
-the files to watch.
+[[plugin-contract-and-credential-spec]] D9, spelled out for `0.x` plugins in
+[`plugins/README.md`](../../../plugins/README.md), "Shipping a plugin"). The
+`tracks:` frontmatter lists the files to watch.
+
+Versions shipped today (`version` in `src/index.ts`, equal to the plugin's
+`package.json`; what telemetry reports as `plugin_version`): `2.0.0` for
+cloudflare-dns, github, railway, ssh, supabase, upstash-redis and vercel;
+`0.3.0` for stripe; `0.2.0` for gmail and resend. Each is one breaking step
+above the Phase 1 value: the classifiers that fail closed (root
+`CHANGELOG.md`, "Plugin classifiers fail closed") refuse calls the previous
+version allowed, and `execute` now throws every provider failure
+([plugin-sdk](../plugin-sdk.md), "Errors of `execute`").
 
 To draft a new provider, start from
 [`plugins/README.md`](../../../plugins/README.md) and copy the structure of an

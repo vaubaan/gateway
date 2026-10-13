@@ -428,23 +428,54 @@ describe('executeVercel with mockFetch', () => {
     ).rejects.toMatchObject({ name: 'UpstreamAuthError', upstreamStatus: 403 });
   });
 
-  test('other upstream failures come back as isError results the agent can read', async () => {
+  test('a provider failure is thrown, with its status when it has one (never an isError result)', async () => {
     const rpc = mockFetch([
       { url: VERCEL_MCP_URL, respond: (c) => sseError(c, -32602, 'invalid args') },
     ]);
-    const r1 = await vercelPlugin.execute(ctx(rpc), 'vercel__get_project', {
-      projectId: 'prj_abc',
-    });
-    expect(r1.isError).toBe(true);
-    expect((r1.content[0] as { text: string }).text).toMatch(/invalid args/);
+    await expect(
+      vercelPlugin.execute(ctx(rpc), 'vercel__get_project', { projectId: 'prj_abc' }),
+    ).rejects.toThrow(/invalid args/);
 
     const http = mockFetch([{ url: /\/v9\/projects\/prj_abc\?/, status: 500, body: 'boom' }]);
-    const r2 = await vercelPlugin.execute(ctx(http), 'vercel__update_project_settings', {
+    await expect(
+      vercelPlugin.execute(ctx(http), 'vercel__update_project_settings', {
+        projectId: 'prj_abc',
+        framework: 'nextjs',
+      }),
+    ).rejects.toMatchObject({ name: 'UpstreamHttpError', status: 500 });
+
+    const mcp = mockFetch([{ url: VERCEL_MCP_URL, status: 502, body: 'bad gateway' }]);
+    await expect(
+      vercelPlugin.execute(ctx(mcp), 'vercel__get_project', { projectId: 'prj_abc' }),
+    ).rejects.toMatchObject({ name: 'UpstreamHttpError', status: 502 });
+  });
+
+  test('a network failure is thrown as it is, not turned into a result', async () => {
+    const down = mockFetch([
+      {
+        url: /\/v9\/projects\/prj_abc\?/,
+        respond: () => {
+          throw new TypeError('fetch failed');
+        },
+      },
+    ]);
+    await expect(
+      vercelPlugin.execute(ctx(down), 'vercel__update_project_settings', {
+        projectId: 'prj_abc',
+        framework: 'nextjs',
+      }),
+    ).rejects.toBeInstanceOf(TypeError);
+  });
+
+  test('what the executor declines itself stays an isError result, with no network call', async () => {
+    const none = mockFetch([]);
+    const result = await vercelPlugin.execute(ctx(none), 'vercel__toggle_firewall', {
       projectId: 'prj_abc',
-      framework: 'nextjs',
+      enabled: 'yes',
     });
-    expect(r2.isError).toBe(true);
-    expect((r2.content[0] as { text: string }).text).toMatch(/500/);
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as { text: string }).text).toMatch(/enabled \(boolean\) is required/);
+    expect(none.calls).toHaveLength(0);
   });
 });
 

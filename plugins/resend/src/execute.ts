@@ -21,6 +21,7 @@
 
 import {
   UpstreamAuthError,
+  UpstreamHttpError,
   expectCredentialKind,
   type ConnectionContext,
   type ExecuteContext,
@@ -410,7 +411,7 @@ async function request(
     if (res.status === 401 || (res.status === 403 && errorNameOf(raw) !== 'validation_error')) {
       throw new UpstreamAuthError(message, res.status);
     }
-    throw new Error(message);
+    throw new UpstreamHttpError(message, res.status);
   }
   if (!raw) return {};
   try {

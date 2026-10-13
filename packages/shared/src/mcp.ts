@@ -78,7 +78,7 @@ export interface McpToolResult {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Upstream auth error (thrown by plugins on 401/403 from the provider)
+// Upstream errors (thrown by plugins: 401/403 from the provider, any other failed status)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export class UpstreamAuthError extends Error {
@@ -87,6 +87,21 @@ export class UpstreamAuthError extends Error {
     super(message);
     this.name = 'UpstreamAuthError';
     this.upstreamStatus = status;
+  }
+}
+
+/**
+ * Thrown by a plugin when the provider answered with an HTTP status that is
+ * not a credential problem (a 4xx other than 401/403, a 5xx). The host reads
+ * `status` for the audit summary and for the telemetry error class; the
+ * message is for the agent only.
+ */
+export class UpstreamHttpError extends Error {
+  readonly status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'UpstreamHttpError';
+    this.status = status;
   }
 }
 

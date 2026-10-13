@@ -209,7 +209,7 @@ describe('executeTemplate with mockFetch', () => {
     expect(fetch.calls[0]!.json).toEqual({ name: 'New' });
   });
 
-  test('401 becomes UpstreamAuthError', async () => {
+  test('a provider failure is thrown : 401 as UpstreamAuthError, another status as UpstreamHttpError', async () => {
     const fetch = mockFetch([{ url: /widgets$/, status: 401, body: { error: 'nope' } }]);
     await expect(
       templatePlugin.execute(ctx(fetch), TOOL.listWidgets, { workspace: 'ws-stg' }),
@@ -217,6 +217,10 @@ describe('executeTemplate with mockFetch', () => {
       name: 'UpstreamAuthError',
       upstreamStatus: 401,
     });
+    const broken = mockFetch([{ url: /widgets$/, status: 503, body: { error: 'down' } }]);
+    await expect(
+      templatePlugin.execute(ctx(broken), TOOL.listWidgets, { workspace: 'ws-stg' }),
+    ).rejects.toMatchObject({ name: 'UpstreamHttpError', status: 503 });
   });
 
   test('discoverResources maps workspaces to resources', async () => {
@@ -239,12 +243,21 @@ describe('executeTemplate with mockFetch', () => {
 
   test('execute resolves the workspace like classify : outside the mission, nothing is sent', async () => {
     const fetch = mockFetch([]);
-    await expect(
-      templatePlugin.execute(ctx(fetch), TOOL.listWidgets, { workspace: 'ws-prd' }),
-    ).rejects.toThrow("workspace 'ws-prd' is not selected in this mission");
-    await expect(
-      templatePlugin.execute(ctx(fetch, [staging, prod]), TOOL.listWidgets, {}),
-    ).rejects.toThrow(/the mission touches 2 workspaces/);
+    // Declined by the executor : an `isError` result, never a throw (a throw is a provider failure).
+    const foreign = await templatePlugin.execute(ctx(fetch), TOOL.listWidgets, {
+      workspace: 'ws-prd',
+    });
+    expect(foreign.isError).toBe(true);
+    expect(foreign.content).toEqual([
+      { type: 'text', text: "workspace 'ws-prd' is not selected in this mission" },
+    ]);
+    const ambiguous = await templatePlugin.execute(
+      ctx(fetch, [staging, prod]),
+      TOOL.listWidgets,
+      {},
+    );
+    expect(ambiguous.isError).toBe(true);
+    expect(JSON.stringify(ambiguous.content)).toMatch(/the mission touches 2 workspaces/);
     expect(fetch.calls).toHaveLength(0);
   });
 

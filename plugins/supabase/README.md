@@ -100,7 +100,7 @@ surfaced.
 
 ## Catalog
 
-`src/risk-catalog.yaml`, `catalog_version: 1`, 24 named risks + the fallback
+`src/risk-catalog.yaml`, `catalog_version: 2`, 24 named risks + the fallback
 `supabase.uncategorized-write` (`supabase.**.W`). A risk is never renamed or
 deleted, only deprecated.
 

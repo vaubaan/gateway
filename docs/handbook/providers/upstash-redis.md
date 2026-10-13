@@ -191,9 +191,14 @@ staging, prod]`) except `create-database`, which is account-rooted (the
   `read_only_rest_token`, `password`) before reaching the agent.
 - A `databaseId` that is not a mission resource, or a data tool on a mission
   holding several databases without `databaseId`, is an `isError` result
-  before any network call. 401/403 on either surface throw
-  `UpstreamAuthError` (the host treats a 401 as a rejected credential, a 403
-  as a failed call); other failures are `isError` results.
+  before any network call, like every malformed argument (`ExecutorRefusal`
+  in `src/execute.ts`). A provider failure is **thrown**: 401/403 on either
+  surface → `UpstreamAuthError` (the host treats a 401 as a rejected
+  credential, a 403 as a failed call), any other failed status →
+  `UpstreamHttpError` with the status, a database whose answer exposes no
+  REST endpoint or token → a plain `Error`, a network failure → as it comes.
+  The host records it as `upstream_error` in the audit and tells the agent
+  `Upstream error: …`; none of them is an `isError` result.
 - `discoverResources`: `GET /v2/redis/databases` (unpaged upstream, capped
   at `MAX_DISCOVERED_DATABASES` = 200 with a logger warning) → one resource
   per database with `metadata: { region, primary_region?, read_regions?,
@@ -207,7 +212,7 @@ refresh.
 
 ## 6. Tests
 
-`npx vitest run plugins/upstash-redis` — 227 tests: `plugin.test.ts` (24:
+`npx vitest run plugins/upstash-redis` — 229 tests: `plugin.test.ts` (26:
 SDK kit with samples for every tool, presets, classifier conventions, env
 resolution through `resourceEnvResolver`, credential spec, execute and
 discovery against `mockFetch`), `classify.test.ts` (30: the expected slice

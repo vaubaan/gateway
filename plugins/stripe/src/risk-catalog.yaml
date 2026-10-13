@@ -29,7 +29,7 @@
 # point `replaced_by` at its successor.
 
 provider: stripe
-catalog_version: 3
+catalog_version: 4
 catalog_date: 2026-10-13
 
 risks:

@@ -25,6 +25,7 @@
 
 import {
   UpstreamAuthError,
+  UpstreamHttpError,
   expectCredentialKind,
   type ConnectionContext,
   type ExecuteContext,
@@ -133,7 +134,7 @@ export async function callUpstream(
     const errText = await res.text();
     const msg = `Railway MCP upstream ${res.status}: ${errText.slice(0, 300)}`;
     if (res.status === 401 || res.status === 403) throw new UpstreamAuthError(msg, res.status);
-    throw new Error(msg);
+    throw new UpstreamHttpError(msg, res.status);
   }
   const frame = parseFirstJsonRpcFrame(await res.text(), id);
   if ('error' in frame) {
@@ -187,7 +188,7 @@ export async function callGraphql<T>(
     const errText = await res.text();
     const msg = `Railway GraphQL ${res.status}: ${errText.slice(0, 300)}`;
     if (res.status === 401 || res.status === 403) throw new UpstreamAuthError(msg, res.status);
-    throw new Error(msg);
+    throw new UpstreamHttpError(msg, res.status);
   }
   const body = (await res.json()) as { data?: T; errors?: Array<{ message: string }> };
   if (body.errors && body.errors.length > 0) {

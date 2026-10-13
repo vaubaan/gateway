@@ -185,7 +185,7 @@ describe('executeUpstashRedis — data tools build the Redis command', () => {
     }
   });
 
-  test('a database answer without a usable REST endpoint or token is an error, not a request', async () => {
+  test('a database answer without a usable REST endpoint or token is an upstream failure, not a request', async () => {
     for (const body of [
       { database_id: DATABASE_ID, rest_url: 42, rest_token: 'tok' },
       { database_id: DATABASE_ID, rest_url: REST_URL, rest_token: { nested: true } },
@@ -199,11 +199,10 @@ describe('executeUpstashRedis — data tools build the Redis command', () => {
           times: 1,
         },
       ]);
-      const result = await upstashRedisPlugin.execute(ctx(fetch), 'upstash_redis__get', {
-        key: 'k',
-      });
-      expect(result.isError).toBe(true);
-      expect((result.content[0] as { text: string }).text).toMatch(/REST endpoint\/token/);
+      // The provider's answer is unusable: an upstream failure, thrown for the host to record.
+      await expect(
+        upstashRedisPlugin.execute(ctx(fetch), 'upstash_redis__get', { key: 'k' }),
+      ).rejects.toThrow(/REST endpoint\/token/);
       expect(fetch.calls).toHaveLength(1);
     }
   });

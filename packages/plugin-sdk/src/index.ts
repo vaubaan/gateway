@@ -44,5 +44,10 @@ export type {
   SliceAction,
   SliceSegment,
 } from '@vaubaan/shared';
-export { UpstreamAuthError, toolPrefixFor, validateDataModel } from '@vaubaan/shared';
+export {
+  UpstreamAuthError,
+  UpstreamHttpError,
+  toolPrefixFor,
+  validateDataModel,
+} from '@vaubaan/shared';
 export { parseSlice, serializeSlice } from '@vaubaan/policy-engine';

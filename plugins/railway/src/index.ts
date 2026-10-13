@@ -39,7 +39,7 @@ export const railwayCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url)
 export const railwayPlugin = definePlugin({
   id: 'railway',
   displayName: 'Railway',
-  version: '1.0.0',
+  version: '2.0.0',
   description:
     'Deploy, redeploy, read logs and manage variables of Railway projects through the official Railway MCP server and GraphQL API.',
   docsUrl:

@@ -55,7 +55,7 @@ plugins/resend/src/
   classify.ts         classifyResend — pure, (tool, args, resources) → slices | denied
   execute.ts          executeResend, discoverResendResources, RESEND_API_BASE, paging constants
   data-model.ts       plane `email`, 9 entities, `domain` and `segment` envScopable
-  risk-catalog.yaml   15 live named risks + 1 fallback + 2 deprecated ids (18 entries), 4 presets, catalog_version 2
+  risk-catalog.yaml   15 live named risks + 1 fallback + 2 deprecated ids (18 entries), 4 presets, catalog_version 3
   index.ts            definePlugin(...) → resendPlugin (default export)
 ```
 

@@ -57,7 +57,7 @@ export function createSshPlugin(options: SshRuntimeOptions = {}): ProviderPlugin
   return definePlugin({
     id: PROVIDER,
     displayName: 'SSH (bash)',
-    version: '1.0.0',
+    version: '2.0.0',
     description:
       'Shell commands on a host over SSH — inspection on a read allow-list, writes priced by class (destructive, package, service, sudo), lines that cannot be classified priced as all of them.',
     docsUrl:

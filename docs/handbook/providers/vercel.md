@@ -195,8 +195,9 @@ axis in `metadata.environments`.
 v4 did — a personal access token scoped to a team, team auto-detected through
 `/v2/teams` — becomes a declarative form: the user pastes the token and the
 team id, the host stores them encrypted, the plugin narrows them with
-`vercelAuth()`. No refresh: the token expires on the date chosen at creation;
-`UpstreamAuthError` on 401/403 lets the host mark the connection `expired`.
+`vercelAuth()`. No refresh: the token expires on the date chosen at creation.
+`UpstreamAuthError` is thrown on 401 and 403; the host marks the connection
+`expired` on a 401 only (a 403 is a failed call).
 **The team is pinned to the credential.** No call reaches Vercel on behalf of
 another team, and a team id never comes from the tool arguments:
 
@@ -241,9 +242,12 @@ the list against the schemas, so a tool added later is covered or fails.
   `get_access_to_vercel_url`, `web_fetch_vercel_url`) is forwarded only after
   `GET /v13/deployments/{id or hostname}?teamId=<pinned>` answered with a
   `projectId` equal to the resolved project (and an `ownerId`, when present,
-  equal to the pinned team). Anything else is a refusal the agent reads: a 404
-  or 403 on the lookup, an answer without `projectId` (the reduced view of a
-  deployment the team does not own), another project. `idOrUrl` and
+  equal to the pinned team). Anything else is a refusal the agent reads (an
+  `isError` result): a 404 or 403 on the lookup, an answer without
+  `projectId` (the reduced view of a deployment the team does not own),
+  another project. A lookup the provider fails otherwise (401, 5xx, the
+  network) is not a refusal: it is thrown as an upstream failure, and
+  nothing is forwarded either. `idOrUrl` and
   `deploymentId` are replaced by the verified deployment id; `url` must be a
   plain `http(s)` URL without credentials and is forwarded re-serialised, so
   the host that was verified is the host the upstream tool receives. A
@@ -252,8 +256,16 @@ the list against the schemas, so a tool added later is covered or fails.
   change. Cost: one REST call per deployment-addressed call. A custom domain
   or alias the lookup does not resolve is refused (fail closed). A 403 on
   the lookup does not expire the connection; a 401 does.
-- Errors: 401/403 → `UpstreamAuthError` (thrown); any other upstream failure
-  (HTTP error, JSON-RPC error frame) → `isError: true` result the agent reads.
+- Errors: a provider failure is **thrown** — 401/403 → `UpstreamAuthError`,
+  any other failed status → `UpstreamHttpError` (with the status), a JSON-RPC
+  error frame or a missing frame of the MCP server → a plain `Error`, a
+  network failure → as it comes. The host records it as `upstream_error` in
+  the audit (`vercel answered HTTP 500 (UpstreamHttpError)`) and tells the
+  agent `Upstream error: …`. An `isError: true` result is returned only for
+  what the executor declines itself (`ExecutorRefusal` in `src/execute.ts`):
+  `pinArgs` refusals, an unreadable or unbound deployment argument, a missing
+  or malformed argument of a custom tool. A rewrapped tool whose upstream
+  answers an `isError` result is passed through as it is.
 - `discoverResources`: `GET /v2/teams/{team_id}` then `GET /v10/projects`
   paged by `pagination.next` → `until`, 100 per page, 10 pages at most.
 
@@ -305,8 +317,8 @@ the list against the schemas, so a tool added later is covered or fails.
 
 ## References
 
-- Code: `plugins/vercel/src/`, tests `plugins/vercel/tests/unit/` (290 tests:
-  33 `plugin.test.ts`, 42 `classify.test.ts`, 55 `risk-catalog.test.ts`,
-  99 `team-pin.test.ts`, 49 `binding.test.ts`, 11 `firewall.test.ts`,
+- Code: `plugins/vercel/src/`, tests `plugins/vercel/tests/unit/` (293 tests:
+  35 `plugin.test.ts`, 42 `classify.test.ts`, 55 `risk-catalog.test.ts`,
+  99 `team-pin.test.ts`, 50 `binding.test.ts`, 11 `firewall.test.ts`,
   1 `data-model.test.ts`; shared fixtures in `fixtures.ts`).
 - Neighbours: [[plugin-sdk]], [[policy-engine]], [`providers/README.md`](./README.md).

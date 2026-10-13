@@ -100,10 +100,18 @@ only — never the gateway application.
    (`resolveWorkspace` in the template). This is the security-critical file;
    test every branch.
 7. **Execute and discover** — `src/execute.ts`: use `ctx.fetch` (never the
-   global), the secret from `expectCredentialKind(...)`, throw
-   `UpstreamAuthError` on 401/403, return an `McpToolResult`. Resolve the
-   target resource with the same function as the classifier
-   (`resolveWorkspace`), so the call runs on the resource the slice named.
+   global), the secret from `expectCredentialKind(...)`, return an
+   `McpToolResult`. Resolve the target resource with the same function as
+   the classifier (`resolveWorkspace`), so the call runs on the resource the
+   slice named. **A provider failure is thrown, never returned**:
+   `UpstreamAuthError` on 401/403, `UpstreamHttpError(message, status)` on
+   any other failed status, and a network error is left to propagate — the
+   gateway records it as `upstream_error` in the audit and still tells the
+   agent. Never catch a provider failure into an `isError` result: the audit
+   would say the call went through. `isError: true` is for what your
+   executor declines itself (an unknown tool, an argument it cannot read, a
+   target outside the mission); it changes nothing upstream and is not a
+   provider failure (handbook `plugin-sdk`, "Errors of `execute`").
    `discoverResources` lists the refs the owner will label; check the
    provider's answer with a type guard, never a cast.
 8. **Credential** — in `src/index.ts`, the `credential: CredentialSpec`:
@@ -156,11 +164,23 @@ Run one plugin with `npx vitest run plugins/<provider>`. `npm run ci`
 
 ## Shipping a plugin
 
-- Bump `version` in `src/index.ts` (semver: patch = fix without risk/tool/
-  preset change; minor = new tool, risk, preset or widened pattern; major =
-  removed tool or stricter classification) and `catalog_version` in the
-  YAML on every reviewed catalog change.
-- Add a `CHANGELOG.md` entry under `[Unreleased]`.
+- Bump `version` in `src/index.ts` **and** in the plugin's `package.json`
+  (they always agree; then `npm install --package-lock-only`). Semver:
+  patch = fix without risk/tool/preset change; minor = new tool, risk,
+  preset or widened pattern; major = removed tool, stricter classification
+  (calls that used to be allowed are refused), or a change of what `execute`
+  throws and returns. Before `1.0.0` the same three levels shift down one
+  place, as semver allows for `0.x`: what would be a major is the next
+  minor (`0.2.0` → `0.3.0`), everything else is a patch. The version is
+  what telemetry reports (`plugin_version`), so one version must never
+  designate two different classifiers.
+- Bump `catalog_version` in the YAML on every reviewed change of the
+  catalog's content (an entry, a pattern, a limit, a preset, a label, a
+  reason or a description — not a YAML comment), independently of
+  `version`, and set `catalog_date`.
+- Add an entry to the root [`CHANGELOG.md`](../CHANGELOG.md) under
+  `[Unreleased]`, naming the plugin and its new version. Plugins carry no
+  changelog of their own while they are workspace-internal.
 - Write or update the provider handbook under `docs/handbook/providers/`.
 - Open the pull request with the template checklist. Packages stay
   workspace-internal until a third-party plugin exists (layout ADR).

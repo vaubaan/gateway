@@ -368,6 +368,11 @@ describe('executeCloudflareDns with mockFetch', () => {
     resources: readonly Resource[] = [exampleCom],
   ): ExecuteContext => ({ credential, appConfig: {}, fetch, resources });
   const text = (r: { content: readonly unknown[] }) => (r.content[0] as { text: string }).text;
+  /** The message of a call the executor declined : an `isError` result, never a throw. */
+  const refusalOf = (r: { content: readonly unknown[]; isError?: boolean }): string => {
+    expect(r.isError).toBe(true);
+    return text(r);
+  };
 
   test('GET with the bearer ; zone from the resource ; zone_id consumed, filters forwarded', async () => {
     const fetch = mockFetch([
@@ -412,16 +417,22 @@ describe('executeCloudflareDns with mockFetch', () => {
 
   test('refuses to run without a resolvable zone or with a foreign zone id', async () => {
     const fetch = mockFetch([]);
-    await expect(
-      cloudflareDnsPlugin.execute(
-        ctx(fetch, [exampleCom, exampleOrg]),
-        'cloudflare_dns__get_zone',
-        {},
+    expect(
+      refusalOf(
+        await cloudflareDnsPlugin.execute(
+          ctx(fetch, [exampleCom, exampleOrg]),
+          'cloudflare_dns__get_zone',
+          {},
+        ),
       ),
-    ).rejects.toThrow(/touches 2 Cloudflare DNS zones/);
-    await expect(
-      cloudflareDnsPlugin.execute(ctx(fetch), 'cloudflare_dns__get_zone', { zone_id: 'z9' }),
-    ).rejects.toThrow(/not a Cloudflare DNS zone of this mission/);
+    ).toMatch(/touches 2 Cloudflare DNS zones/);
+    expect(
+      refusalOf(
+        await cloudflareDnsPlugin.execute(ctx(fetch), 'cloudflare_dns__get_zone', {
+          zone_id: 'z9',
+        }),
+      ),
+    ).toMatch(/not a Cloudflare DNS zone of this mission/);
     expect(fetch.calls).toHaveLength(0);
   });
 
@@ -461,15 +472,17 @@ describe('executeCloudflareDns with mockFetch', () => {
         'cloudflare_dns__update_record',
         'cloudflare_dns__delete_record',
       ]) {
-        await expect(
-          cloudflareDnsPlugin.execute(ctx(fetch), tool, {
-            zone_id: 'z1',
-            record_id,
-            type: 'MX',
-            name: 'example.com',
-          }),
+        expect(
+          refusalOf(
+            await cloudflareDnsPlugin.execute(ctx(fetch), tool, {
+              zone_id: 'z1',
+              record_id,
+              type: 'MX',
+              name: 'example.com',
+            }),
+          ),
           `${tool} ${String(record_id)}`,
-        ).rejects.toThrow(/record_id: missing or malformed identifier/);
+        ).toMatch(/record_id: missing or malformed identifier/);
       }
     }
     expect(fetch.calls).toHaveLength(0);
@@ -478,15 +491,19 @@ describe('executeCloudflareDns with mockFetch', () => {
   test('a path-unsafe zone never reaches the API, as an argument or as the mission zone', async () => {
     const fetch = mockFetch([]);
     for (const zone_id of ['.', '..', 'z1/..', 'z1/dns_records', '*']) {
-      await expect(
-        cloudflareDnsPlugin.execute(ctx(fetch), 'cloudflare_dns__delete_zone', { zone_id }),
+      expect(
+        refusalOf(
+          await cloudflareDnsPlugin.execute(ctx(fetch), 'cloudflare_dns__delete_zone', { zone_id }),
+        ),
         zone_id,
-      ).rejects.toThrow(/zone_id: malformed zone id/);
+      ).toMatch(/zone_id: malformed zone id/);
     }
     const unsafe: Resource = { ...exampleCom, ref: '..' };
-    await expect(
-      cloudflareDnsPlugin.execute(ctx(fetch, [unsafe]), 'cloudflare_dns__delete_zone', {}),
-    ).rejects.toThrow(/zone_id: malformed zone id/);
+    expect(
+      refusalOf(
+        await cloudflareDnsPlugin.execute(ctx(fetch, [unsafe]), 'cloudflare_dns__delete_zone', {}),
+      ),
+    ).toMatch(/zone_id: malformed zone id/);
     expect(fetch.calls).toHaveLength(0);
   });
 
@@ -531,15 +548,17 @@ describe('executeCloudflareDns with mockFetch', () => {
           body: { result: { id: 'r1', ...actual } },
         },
       ]);
-      await expect(
-        cloudflareDnsPlugin.execute(ctx(fetch), 'cloudflare_dns__delete_record', {
-          zone_id: 'z1',
-          record_id: 'r1',
-          type: 'A',
-          name: 'www.example.com',
-        }),
+      expect(
+        refusalOf(
+          await cloudflareDnsPlugin.execute(ctx(fetch), 'cloudflare_dns__delete_record', {
+            zone_id: 'z1',
+            record_id: 'r1',
+            type: 'A',
+            name: 'www.example.com',
+          }),
+        ),
         `${actual.type} ${actual.name}`,
-      ).rejects.toThrow(/the record is a critical record/);
+      ).toMatch(/the record is a critical record/);
       expect(fetch.calls.map((c) => c.method)).toEqual(['GET']);
     }
   });
@@ -561,15 +580,17 @@ describe('executeCloudflareDns with mockFetch', () => {
     for (const tool of ['cloudflare_dns__update_record', 'cloudflare_dns__delete_record']) {
       for (const body of [{ success: true }, { result: null }, { result: { id: 'r1' } }, 'gone']) {
         const fetch = mockFetch([{ method: 'GET', url: `${BASE}/zones/z1/dns_records/r1`, body }]);
-        await expect(
-          cloudflareDnsPlugin.execute(ctx(fetch), tool, {
-            zone_id: 'z1',
-            record_id: 'r1',
-            type: 'A',
-            name: 'www.example.com',
-          }),
+        expect(
+          refusalOf(
+            await cloudflareDnsPlugin.execute(ctx(fetch), tool, {
+              zone_id: 'z1',
+              record_id: 'r1',
+              type: 'A',
+              name: 'www.example.com',
+            }),
+          ),
           `${tool} ${JSON.stringify(body)}`,
-        ).rejects.toThrow(/the record is a critical record/);
+        ).toMatch(/the record is a critical record/);
         expect(fetch.calls.map((c) => c.method)).toEqual(['GET']);
       }
     }
@@ -614,15 +635,17 @@ describe('executeCloudflareDns with mockFetch', () => {
         body: { result: { id: 'r1', type: 'A', name: 'example.com' } },
       },
     ]);
-    await expect(
-      cloudflareDnsPlugin.execute(ctx(fetch), 'cloudflare_dns__update_record', {
-        zone_id: 'z1',
-        record_id: 'r1',
-        type: 'A',
-        name: 'www.example.com',
-        content: '192.0.2.2',
-      }),
-    ).rejects.toThrow(/critical record \(A example.com\)/);
+    expect(
+      refusalOf(
+        await cloudflareDnsPlugin.execute(ctx(fetch), 'cloudflare_dns__update_record', {
+          zone_id: 'z1',
+          record_id: 'r1',
+          type: 'A',
+          name: 'www.example.com',
+          content: '192.0.2.2',
+        }),
+      ),
+    ).toMatch(/critical record \(A example.com\)/);
     expect(fetch.calls.map((c) => c.method)).toEqual(['GET']);
   });
 
@@ -695,7 +718,7 @@ describe('executeCloudflareDns with mockFetch', () => {
     expect(fetch.calls[3]!.body).toBeNull();
   });
 
-  test('401 and 403 become UpstreamAuthError ; other errors are plain', async () => {
+  test('401 and 403 become UpstreamAuthError ; another failed status is an UpstreamHttpError', async () => {
     const fetch = mockFetch([
       { url: /\/zones\/z1$/, status: 403, body: { success: false, errors: [{ code: 9109 }] } },
       { url: /\/dns_records$/, status: 429, body: { success: false } },
@@ -705,7 +728,7 @@ describe('executeCloudflareDns with mockFetch', () => {
     ).rejects.toMatchObject({ name: 'UpstreamAuthError', upstreamStatus: 403 });
     await expect(
       cloudflareDnsPlugin.execute(ctx(fetch), 'cloudflare_dns__list_records', { zone_id: 'z1' }),
-    ).rejects.toThrow(/429/);
+    ).rejects.toMatchObject({ name: 'UpstreamHttpError', status: 429 });
   });
 
   test('unknown tool is an error result, not a call ; a secret of another kind is refused', async () => {

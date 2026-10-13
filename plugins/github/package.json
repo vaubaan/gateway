@@ -1,6 +1,6 @@
 {
   "name": "@vaubaan/plugin-github",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "description": "Vaubaan Gateway provider plugin for GitHub — repositories of a GitHub App installation, risk catalog and presets",

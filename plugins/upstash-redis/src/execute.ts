@@ -15,9 +15,15 @@
  *
  * Rules :
  *   - `fetch` comes from the context, never from the global ;
- *   - 401 / 403 from either surface → `UpstreamAuthError` ; the host treats
- *     a 401 as a rejected credential (the connection ends up `expired`) and
- *     a 403 as a failed call ;
+ *   - a provider failure is **thrown**, never returned : 401 / 403 from
+ *     either surface → `UpstreamAuthError` (the host treats a 401 as a
+ *     rejected credential — the connection ends up `expired` — and a 403 as
+ *     a failed call), any other failed status → `UpstreamHttpError`, a
+ *     network failure → the error itself. The host records it as
+ *     `upstream_error` in the audit ;
+ *   - what this executor declines itself (a malformed argument, a database
+ *     outside the mission, a tool that is not wired) is an `ExecutorRefusal`,
+ *     returned as an `isError` result ;
  *   - `execute` sends the command the classifier read (`redisCommandOf`) :
  *     one flat command of strings and finite numbers. A pipeline-shaped
  *     `command` is refused here — no pipeline endpoint is wired — whatever
@@ -32,6 +38,7 @@
 
 import {
   UpstreamAuthError,
+  UpstreamHttpError,
   type ConnectionContext,
   type ExecuteContext,
   type McpToolResult,
@@ -54,6 +61,18 @@ export const REDACTED_DATABASE_FIELDS: readonly string[] = [
   'read_only_rest_token',
   'password',
 ];
+
+/**
+ * A call this executor declines itself : nothing failed at the provider. The
+ * only error `executeUpstashRedis` turns into an `isError` result ; everything
+ * else it lets through, so the host records a provider failure as one.
+ */
+class ExecutorRefusal extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ExecutorRefusal';
+  }
+}
 
 /** What one upstream call needs, built from the context. */
 interface UpstashCall {
@@ -104,8 +123,8 @@ export async function executeUpstashRedis(
     }
     return toToolResult(await executeDataTool(call, databaseId, tool, args));
   } catch (e) {
-    if (e instanceof UpstreamAuthError) throw e;
-    return errorResult(e instanceof Error ? e.message : String(e));
+    if (e instanceof ExecutorRefusal) return errorResult(e.message);
+    throw e;
   }
 }
 
@@ -194,7 +213,7 @@ async function callManagementApi(
   if (!res.ok) {
     const msg = `Upstash Management API ${method} ${path} ${res.status}: ${text.slice(0, 300)}`;
     if (res.status === 401 || res.status === 403) throw new UpstreamAuthError(msg, res.status);
-    throw new Error(msg);
+    throw new UpstreamHttpError(msg, res.status);
   }
   if (!text) return {};
   try {
@@ -235,13 +254,14 @@ async function executeManagementTool(
     case 'upstash_redis__get_database_stats':
       return callManagementApi(call, 'GET', `/redis/stats/${databasePath(args)}`);
     default:
-      throw new Error(`Upstash Redis management tool not implemented: ${tool}`);
+      throw new ExecutorRefusal(`Upstash Redis management tool not implemented: ${tool}`);
   }
 }
 
 function databasePath(args: Readonly<Record<string, unknown>>): string {
   const id = args.databaseId ?? args.database_id;
-  if (typeof id !== 'string' || id.length === 0) throw new Error('databaseId is required.');
+  if (typeof id !== 'string' || id.length === 0)
+    throw new ExecutorRefusal('databaseId is required.');
   return encodeURIComponent(id);
 }
 
@@ -304,7 +324,7 @@ async function executeDataTool(
   if (!res.ok) {
     const msg = `Upstash Data API ${res.status}: ${text.slice(0, 300)}`;
     if (res.status === 401 || res.status === 403) throw new UpstreamAuthError(msg, res.status);
-    throw new Error(msg);
+    throw new UpstreamHttpError(msg, res.status);
   }
   try {
     return JSON.parse(text);
@@ -320,7 +340,7 @@ export function buildCommand(tool: string, args: Readonly<Record<string, unknown
       // The same reading as the classifier : what was classified is what is sent.
       const command = redisCommandOf(args.command);
       if (command === null) {
-        throw new Error(
+        throw new ExecutorRefusal(
           'command must be one Redis command: a non-empty array of strings (or finite numbers) starting with the command name. Pipelines and nested arrays are not supported.',
         );
       }
@@ -354,7 +374,7 @@ export function buildCommand(tool: string, args: Readonly<Record<string, unknown
       const cmd = ['HSET', str(args.key, 'key')];
       const fields = args.fields;
       if (typeof fields !== 'object' || fields === null || Array.isArray(fields)) {
-        throw new Error('fields must be an object of field-value pairs.');
+        throw new ExecutorRefusal('fields must be an object of field-value pairs.');
       }
       for (const [field, value] of Object.entries(fields as Record<string, unknown>)) {
         cmd.push(field, String(value));
@@ -374,18 +394,18 @@ export function buildCommand(tool: string, args: Readonly<Record<string, unknown
     case 'upstash_redis__dbsize':
       return ['DBSIZE'];
     default:
-      throw new Error(`Upstash Redis data tool not implemented: ${tool}`);
+      throw new ExecutorRefusal(`Upstash Redis data tool not implemented: ${tool}`);
   }
 }
 
 function str(value: unknown, arg: string): string {
-  if (typeof value !== 'string') throw new Error(`${arg} must be a string.`);
+  if (typeof value !== 'string') throw new ExecutorRefusal(`${arg} must be a string.`);
   return value;
 }
 
 function stringList(value: unknown, arg: string): string[] {
   if (!Array.isArray(value) || value.length === 0) {
-    throw new Error(`${arg} must be a non-empty array of strings.`);
+    throw new ExecutorRefusal(`${arg} must be a non-empty array of strings.`);
   }
   return value.map((v) => String(v));
 }

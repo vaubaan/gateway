@@ -172,21 +172,25 @@ deferred.
 `ROUTES` in `execute.ts` maps each tool to method + path + payload kind
 (query string, JSON body, multipart `file`, none). The zone in the URL is
 the resolved resource's ref ; `zone_id` and `record_id` are removed from
-the forwarded arguments. Bearer auth only. 401/403 → `UpstreamAuthError`.
-Unknown tool → `isError` result.
+the forwarded arguments. Bearer auth only. A provider failure is thrown:
+401/403 → `UpstreamAuthError`, any other failed status → `UpstreamHttpError`.
+What the executor declines itself — an unknown tool, a zone that is not
+resolved, a malformed identifier, the record guard below — is an `isError`
+result (`ExecutorRefusal` in `src/execute.ts`): nothing failed at
+Cloudflare, so the audit entry carries no `upstream_error`.
 
 Three guards beyond routing :
 
 - `list_zones` : the upstream `result` is filtered to the mission's refs.
 - `update_record` and `delete_record` declared ordinary (`type` + `name`
   of a subdomain record) : `GET` the record first ; if it is critical
-  today, or if the answer carries no type and name to compare, throw before
-  the `PATCH` / `DELETE`. A call classified critical (declared so, or
+  today, or if the answer carries no type and name to compare, refuse (an
+  `isError` result) before the `PATCH` / `DELETE`. A call classified critical (declared so, or
   undeclared) skips the read : it already needed `critical-record-write`.
   `type` and `name` are not forwarded on a deletion (no body).
 - Path identifiers : a `record_id` or a zone ref that fails `pathIdent`
-  throws before any call (`record_id: missing or malformed identifier`,
-  `zone_id: malformed zone id`).
+  is refused before any call, as an `isError` result (`record_id: missing or
+malformed identifier`, `zone_id: malformed zone id`).
 
 Discovery : `GET /zones` paginated, 50 per page, stops at
 `result_info.total_pages` or at `MAX_DISCOVERED_ZONES` (500). An answer
