@@ -20,8 +20,10 @@ replaces an earlier hosted product and shares no data with it.
 
 What exists today: sign-in through your identity provider, connections with
 resources, shares and groups, missions with a budget and a gate per risk,
-both MCP doors, requests and approvals, the audit, ten provider plugins, a
-Docker image, and a demo that runs on a laptop.
+both MCP doors, requests and approvals, the audit, a plugin per provider
+(named in the diagram below), a Docker image built from source, a release
+pipeline that has not yet produced a release, and a demo that runs on a
+laptop.
 
 ## Who it is for
 
@@ -79,8 +81,11 @@ secrets above. Anything missing stops the container with a message naming
 the key. Then open `https://<your domain>/login`, follow the bootstrap link,
 and configure your identity provider.
 
-- Every step, running the image without Compose, operations, upgrades:
-  [`deploy/README.md`](deploy/README.md).
+- Every step, running the image without Compose, operations, upgrades,
+  and, once a release exists, pulling a published image by tag and
+  verifying its provenance: [`deploy/README.md`](deploy/README.md).
+- Which version runs: the footer of every page and `GET /healthz` show the
+  version and the commit.
 - Every configuration key:
   [configuration handbook](docs/handbook/configuration.md).
 - Registering your identity provider and provider apps, issuing the first
@@ -189,7 +194,8 @@ docs/                    spec, decisions, handbook, tests, workflow
 ```
 
 For development: `npm ci`, then `npm run ci` (type-check, lint, format
-check, build, tests).
+check, build, tests). Contributions target the `v5` branch until the first
+release; the process is in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Licence
 
