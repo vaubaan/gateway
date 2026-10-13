@@ -21,7 +21,7 @@ const via = (id, name, severity, extra = {}) => ({
   name,
   dependency: name,
   title: `${name} does something bad`,
-  url: `https://github.com/advisories/${id}`,
+  url: `https://advisories.example.org/${id}`,
   severity,
   range: '<1.0.0',
   ...extra,
