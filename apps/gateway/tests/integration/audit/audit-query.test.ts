@@ -287,6 +287,32 @@ describe('audit search: visibility, filters, paging', () => {
       expect(await search(ada(), { tool: 'github__create' })).toEqual([]);
     });
 
+    it('by agent label, exact: the calls that declared it, and nothing administrative', async () => {
+      await seedCall(rig, other, {
+        now: day(12),
+        tool: 'supabase__list_tables',
+        risks: [other.policy[0]!.riskId],
+        resourceRef: 'stgprojectref',
+        agentLabel: 'planner',
+      });
+      const planner = await search(ada(), { agentLabel: 'planner' });
+      expect(calls(planner).map((c) => [c.tool, c.agent_label])).toEqual([
+        ['supabase__list_tables', 'planner'],
+        ['github__get_file', 'planner'],
+      ]);
+      expect(acts(planner)).toEqual([]);
+      // Exact, case-sensitive; a prefix is not a label.
+      expect(await search(ada(), { agentLabel: 'plan' })).toEqual([]);
+      expect(await search(ada(), { agentLabel: 'Planner' })).toEqual([]);
+      // Narrowed by the other filters like any other.
+      expect(
+        calls(await search(ada(), { agentLabel: 'planner', missionId: mission.id })),
+      ).toHaveLength(1);
+      // A label is not a way into someone else's audit: the scope comes first.
+      expect(await search(userViewer(rig.seeded.bob), { agentLabel: 'planner' })).toEqual([]);
+      expect(parseAuditQuery({ agent: 'planner' }).filters.agentLabel).toBe('planner');
+    });
+
     it('by decision', async () => {
       const refused = calls(await search(ada(), { decision: 'refused' }));
       expect(refused).toHaveLength(1);

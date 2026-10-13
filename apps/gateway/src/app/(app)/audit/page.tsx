@@ -1,6 +1,6 @@
 /**
- * `/audit` — search the audit by mission, user, connection, tool, decision
- * and period (spec §4.2, §8). A user sees the entries about their missions
+ * `/audit` — search the audit by mission, user, connection, tool, decision,
+ * agent label and period (spec §4.2, §7.9, §8). A user sees the entries about their missions
  * and their connections; an operator sees the administrative entries too.
  * Arguments are never shown: an entry only holds their hash.
  */
@@ -73,7 +73,7 @@ export default async function AuditPage({ searchParams }: Props) {
         </ul>
       )}
 
-      <form method="get" action="/audit" className={styles.filters}>
+      <form method="get" action="/audit" className={`${styles.filters} ${styles.wide}`}>
         <label className={styles.filter}>
           <span>Mission</span>
           <Select name={AUDIT_PARAMS.mission} defaultValue={raw.mission ?? ''}>
@@ -127,6 +127,17 @@ export default async function AuditPage({ searchParams }: Props) {
               </option>
             ))}
           </Select>
+        </label>
+        <label className={styles.filter}>
+          <span title="What the caller declared about itself; not verified, not an identity">
+            Agent label
+          </span>
+          <Input
+            name={AUDIT_PARAMS.agent}
+            defaultValue={raw.agent ?? ''}
+            placeholder="exact label"
+            autoComplete="off"
+          />
         </label>
         <label className={styles.filter}>
           <span>Kind</span>

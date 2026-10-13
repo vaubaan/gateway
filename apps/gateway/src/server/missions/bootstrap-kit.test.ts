@@ -5,6 +5,8 @@ import { REFUSAL_CODES } from '@vaubaan/shared';
 import { describe, expect, it } from 'vitest';
 
 import {
+  AGENT_LABEL_MAX_LENGTH,
+  AGENT_LABEL_PUNCTUATION,
   buildBootstrapKit,
   MISSION_TOKEN_ENV,
   REFUSAL_GUIDANCE,
@@ -86,9 +88,23 @@ describe('buildBootstrapKit', () => {
     );
     expect(text).toContain('quotas reload every day; the mission never expires');
     expect(text).toContain('the budget below is shared, it is not multiplied');
-    // Both carriers of the agent label the execution door reads.
+  });
+
+  it('3 — tells an orchestrator how to hand the mission to sub-agents and how each labels itself', () => {
+    const text = kit.agent_instructions;
+    expect(text).toContain('### Sub-agents and agent labels');
+    // The same configuration and the same token, never one per agent.
+    expect(text).toContain('hands its sub-agents this MCP configuration as is');
+    expect(text).toContain('There is no token per agent');
+    // Both carriers of the agent label the execution door reads, and which one wins.
     expect(text).toContain('`X-Vaubaan-Agent: <label>`');
-    expect(text).toContain('`_meta.agent`');
+    expect(text).toContain('`_meta.agent` wins');
+    // The shape the door enforces, from the same constants.
+    expect(text).toContain(`1 to ${AGENT_LABEL_MAX_LENGTH} characters`);
+    for (const character of AGENT_LABEL_PUNCTUATION) expect(text).toContain(`\`${character}\``);
+    expect(text).toContain('the call is served, unlabelled');
+    expect(text).toContain('attribution only');
+    expect(text).toContain('not an identity');
   });
 
   it('3 — says what to do on each structured refusal, and never to work around one', () => {
@@ -164,6 +180,16 @@ describe('/agent-bootstrap.md', () => {
     }
     expect(page).toContain('never by a mission token');
     expect(page).toContain('**never** answer a request');
+  });
+
+  it('explains sub-agents and the agent label as the door applies them', () => {
+    expect(page).toContain('same endpoint, same\n`VAUBAAN_MISSION_TOKEN`');
+    expect(page).toContain('"X-Vaubaan-Agent": "sub-agent-2"');
+    expect(page).toContain('`_meta.agent` wins');
+    expect(page).toContain(`1 to ${AGENT_LABEL_MAX_LENGTH} characters`);
+    for (const character of AGENT_LABEL_PUNCTUATION) expect(page).toContain(`\`${character}\``);
+    expect(page).toContain('attribution only');
+    expect(page).toContain('reserves no share of the budget');
   });
 
   it('refers to the token by its variable and names no instance', () => {

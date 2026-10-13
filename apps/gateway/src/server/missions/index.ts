@@ -77,7 +77,9 @@ export function createMissionsModule(deps: MissionsModuleDeps): MissionsModule {
 
 export {
   AGENT_LABEL_HEADER,
+  AGENT_LABEL_MAX_LENGTH,
   AGENT_LABEL_META_KEY,
+  AGENT_LABEL_PUNCTUATION,
   buildBootstrapKit,
   EXECUTION_DOOR_PATH,
   MCP_SERVER_NAME,

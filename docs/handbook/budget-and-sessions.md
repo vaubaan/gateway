@@ -259,9 +259,25 @@ missions repository in the transaction that edits the gate). A `null` event is s
 with its kind and no detail, and gives back no credit; nothing throws. Stored keys are
 part of the data: renaming one needs a migration of the `events` rows.
 
+**One budget per mission, however many agents** (spec §3.2, §7.9). The session is the
+mission's and the counters are keyed by session, risk and period: nothing in a decision
+reads who the caller says it is. `agent_label` enters `recordCall` for one purpose, the
+`call-allowed` / `call-refused` event it is copied into, and is neither a key nor an input
+of `decide`. An orchestrator and its sub-agents, with different labels or with none, draw
+from the same counters and the same rate windows; a label cannot reserve, split or widen
+a quota, and a label the door rejected is simply `null` here
+([execution-door](execution-door.md), "Agent label"). The Mission session page shows the
+calls of the current period per label next to the counters, as counts of audit entries
+and explicitly not as a budget ([audit](audit.md), "Mission session view").
+
 **Not refunded.** The counter increment commits before the upstream call. An upstream
 failure leaves `decision: allowed` + `upstream_error` in the audit and the credit
-consumed; the creator gives credit back through a claim (ADR). What happens to the
+consumed; the creator gives credit back through a claim (ADR). A **streamed** result
+changes none of this: the decision and its increment commit before the plugin runs, so
+before the first part leaves the gateway; a stream that breaks midway, or whose caller
+goes away, is an allowed call with `upstream_error` and its credit stays consumed — the
+agent already holds the parts that were sent, and the provider-side effect is as unknown
+as for any failed call ([execution-door](execution-door.md), "Streaming"). What happens to the
 request after this refusal — who may open its URL, the creator's four answers, their
 events, the expiry sweep — is [requests](requests.md).
 

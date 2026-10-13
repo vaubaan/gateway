@@ -18,8 +18,9 @@ import { ConnectionCredentialCache, MAX_UPSTREAM_CREDENTIAL_TTL_SECONDS } from '
 import {
   AGENT_LABEL_MAX_LENGTH,
   agentLabelOf,
-  cleanAgentLabel,
   clientOriginOf,
+  parseAgentLabel,
+  readAgentLabel,
   trustedProxyList,
 } from './request-meta';
 import { citedRefs } from './resource-stage';
@@ -41,12 +42,76 @@ describe('agent label', () => {
     expect(agentLabelOf(new Headers(), {})).toBeNull();
   });
 
-  it('is a bounded single line of printable text, or nothing', () => {
-    expect(cleanAgentLabel('  build\n\tagent  ')).toBe('build  agent');
-    expect(cleanAgentLabel('\u0000\u0007')).toBeNull();
-    expect(cleanAgentLabel('')).toBeNull();
-    expect(cleanAgentLabel({ agent: 'x' })).toBeNull();
-    expect(cleanAgentLabel('x'.repeat(500))).toHaveLength(AGENT_LABEL_MAX_LENGTH);
+  it('accepts letters, digits and . _ - : / @ + up to the maximum length, trimmed', () => {
+    for (const label of ['reviewer', 'sub-agent_2', 'team/planner:v1.2', 'a@b+c', '7']) {
+      expect(parseAgentLabel(label)).toEqual({ kind: 'label', label });
+    }
+    expect(parseAgentLabel('  coder \t')).toEqual({ kind: 'label', label: 'coder' });
+    const longest = 'x'.repeat(AGENT_LABEL_MAX_LENGTH);
+    expect(parseAgentLabel(longest)).toEqual({ kind: 'label', label: longest });
+  });
+
+  it('holds nothing when the carrier is absent, empty or blank', () => {
+    for (const raw of [undefined, null, '', '   ', '\t']) {
+      expect(parseAgentLabel(raw)).toEqual({ kind: 'absent' });
+    }
+  });
+
+  it('rejects, with the reason and never a repaired value', () => {
+    expect(parseAgentLabel('x'.repeat(AGENT_LABEL_MAX_LENGTH + 1))).toEqual({
+      kind: 'rejected',
+      reason: 'too-long',
+      length: AGENT_LABEL_MAX_LENGTH + 1,
+    });
+    for (const raw of [
+      'build agent',
+      'line\nbreak',
+      'nul\u0000',
+      'émile',
+      '-leading',
+      '<b>',
+      'a,b',
+    ]) {
+      expect(parseAgentLabel(raw)).toMatchObject({ kind: 'rejected', reason: 'invalid-character' });
+    }
+    for (const raw of [42, true, { agent: 'x' }, ['x']]) {
+      expect(parseAgentLabel(raw)).toEqual({
+        kind: 'rejected',
+        reason: 'not-a-string',
+        length: null,
+      });
+    }
+  });
+
+  it('names the carrier it read, and what it dropped on the way', () => {
+    const headers = new Headers({ 'x-vaubaan-agent': 'reviewer' });
+    expect(readAgentLabel(headers, { agent: 'planner' })).toEqual({
+      label: 'planner',
+      carrier: 'meta',
+      dropped: [],
+    });
+    // A rejected per-call value leaves the place to the header.
+    expect(readAgentLabel(headers, { agent: 'not a label' })).toEqual({
+      label: 'reviewer',
+      carrier: 'header',
+      dropped: [{ carrier: 'meta', reason: 'invalid-character', length: 11 }],
+    });
+    // The header is not examined once the per-call value gave the label.
+    const badHeader = new Headers({ 'x-vaubaan-agent': 'x'.repeat(200) });
+    expect(readAgentLabel(badHeader, { agent: 'planner' }).dropped).toEqual([]);
+    expect(readAgentLabel(badHeader, { agent: 7 })).toEqual({
+      label: null,
+      carrier: null,
+      dropped: [
+        { carrier: 'meta', reason: 'not-a-string', length: null },
+        { carrier: 'header', reason: 'too-long', length: 200 },
+      ],
+    });
+    expect(readAgentLabel(new Headers(), 'not an object')).toEqual({
+      label: null,
+      carrier: null,
+      dropped: [],
+    });
   });
 });
 

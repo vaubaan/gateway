@@ -31,14 +31,26 @@
  * provider's text goes to the caller only, on the `failed` outcome. An
  * audit write that fails propagates: no call completes without its entry.
  *
+ * Streaming (spec §4.1 "the decision is made before the stream starts"): a
+ * call may carry `onPart`; the upstream stage hands it each part of a result
+ * the provider delivers progressively. The order above is unchanged — the
+ * stage runs last — and so is the audit: one entry, written when the forward
+ * ends, whose `upstream_latency_ms` therefore covers the whole stream and
+ * whose `upstream_error` records a stream that broke midway.
+ *
  * What is deliberately NOT here: JSON-RPC routing, `tools/list` filtering,
- * the catalog endpoint, streaming — that is the door
+ * the catalog endpoint, the event stream — that is the door
  * (`apps/gateway/src/server/execution`), which calls `authenticate` then
  * `CallPipeline.execute` and serializes a refusal as the JSON-RPC error
  * `refusalToRpcError` describes (code, message, the whole refusal as `data`).
  */
 
-import { acceptedRisksOf, type MissionStatus, type RiskId } from '@vaubaan/shared';
+import {
+  acceptedRisksOf,
+  type McpToolContent,
+  type MissionStatus,
+  type RiskId,
+} from '@vaubaan/shared';
 import type { AuditWriter, CallAuditEntry } from './audit.ts';
 import {
   AuthError,
@@ -209,6 +221,19 @@ export interface CallRequest {
   /** Optional free-form attribution (spec §0 "Mission token"). */
   readonly agent_label: string | null;
   readonly client: ClientOrigin;
+  /**
+   * Streaming (spec §4.1): receives each part of the result as the provider
+   * delivers it. Only the upstream stage calls it, so it runs after the
+   * decision — mission state, resources, risks, budget decrement — and never
+   * for a refused call. Absent: the caller reads the complete result alone.
+   */
+  readonly onPart?: (part: McpToolContent) => Promise<void>;
+  /**
+   * Aborted when the caller is gone (disconnect, MCP cancellation). The
+   * upstream stage reads it between two parts of a streamed result; it
+   * never interrupts a provider call in flight.
+   */
+  readonly signal?: AbortSignal;
 }
 
 /** The connection and resource a call targets. */

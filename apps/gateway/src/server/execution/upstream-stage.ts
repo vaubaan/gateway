@@ -35,6 +35,17 @@
  * keeps is the `summary` built here from the provider id, the HTTP status
  * when the error carries one, and the error's class name.
  *
+ * Streaming (spec §4.1): the plugin receives `emitPart`. Each part it emits
+ * is counted and handed to the call's `onPart` (the door turns it into a
+ * progress notification) while `execute` keeps reading the provider; the
+ * stage still resolves with the complete result, so the pipeline writes the
+ * audit entry when the stream has ended. After a first part the retry ladder
+ * is closed, and a failure is summarised as `<provider> stream failed after
+ * N parts (…)`. `emitPart` rejects with `CallerGoneError` once the call's
+ * signal is aborted: the plugin stops, the entry records `stream stopped
+ * after N parts: the caller was gone`. The credit stays consumed in every
+ * case (ADR atomic-budget-accounting).
+ *
  * Telemetry (spec §9): the final outcome of a call that reached
  * `plugin.execute` is handed, once, to the injected `TelemetrySink`
  * (`telemetry-sink.ts`; a no-op unless the composition root wires the
@@ -53,6 +64,7 @@ import {
   type MissionContext,
   type UpstreamStage,
 } from '@vaubaan/gateway-core';
+import type { ToolResultPartSink } from '@vaubaan/plugin-sdk';
 import { UpstreamAuthError } from '@vaubaan/shared';
 
 import {
@@ -102,17 +114,76 @@ function httpStatusOf(err: unknown): number | null {
   return isHttpStatus(err.status) ? err.status : null;
 }
 
+/**
+ * The caller of a streamed call went away (disconnect, MCP cancellation):
+ * what `emitPart` rejects with, so the plugin stops reading its provider.
+ */
+export class CallerGoneError extends Error {
+  constructor() {
+    super('the caller is gone; the stream was stopped.');
+    this.name = 'CallerGoneError';
+  }
+}
+
+/**
+ * The parts of one call's result, relayed to the caller as the plugin emits
+ * them (`ExecuteContext.emitPart`), and counted: the count is what tells a
+ * stream that broke midway from a call that failed before delivering
+ * anything.
+ */
+interface PartRelay {
+  /** Parts emitted so far. */
+  count: number;
+  readonly emit: ToolResultPartSink;
+}
+
+function partRelayOf(call: CallRequest): PartRelay {
+  const relay: PartRelay = {
+    count: 0,
+    async emit(part) {
+      // Read between two parts only: a provider call in flight is never interrupted.
+      if (call.signal?.aborted) throw new CallerGoneError();
+      relay.count += 1;
+      await call.onPart?.(part);
+    },
+  };
+  return relay;
+}
+
+function partsPhrase(count: number): string {
+  return `${count} ${count === 1 ? 'part' : 'parts'}`;
+}
+
 /** A provider failure, split into what the audit stores and what the agent reads. */
-function asUpstreamFailure(err: unknown, provider: string): UpstreamFailureError {
+function asUpstreamFailure(err: unknown, provider: string, parts: number): UpstreamFailureError {
   if (err instanceof UpstreamFailureError) return err;
   const status = httpStatusOf(err);
   const className = upstreamErrorClassName(err);
+  const detail = err instanceof Error ? err.message : String(err);
+  if (err instanceof CallerGoneError) {
+    return new UpstreamFailureError({
+      summary: `${provider} stream stopped after ${partsPhrase(parts)}: the caller was gone`,
+      detail,
+      status: null,
+      cause: err,
+    });
+  }
+  if (parts > 0) {
+    // The caller already holds what was sent; the audit says where it stopped.
+    const answered = status === null ? '' : `, HTTP ${status}`;
+    return new UpstreamFailureError({
+      summary: `${provider} stream failed after ${partsPhrase(parts)}${answered} (${className})`,
+      detail: `the stream was interrupted after ${partsPhrase(parts)}: ${detail}`,
+      status,
+      cause: err,
+    });
+  }
   return new UpstreamFailureError({
     summary:
       status === null
         ? `${provider} call failed (${className})`
         : `${provider} answered HTTP ${status} (${className})`,
-    detail: err instanceof Error ? err.message : String(err),
+    detail,
     status,
     cause: err,
   });
@@ -139,6 +210,7 @@ export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
     ctx: MissionContext,
     call: CallRequest,
     target: CallTarget,
+    relay: PartRelay,
   ) {
     reached.set(call, resolved.plugin);
     return resolved.plugin.execute(
@@ -147,6 +219,7 @@ export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
         resources: ctx.resources.filter((r) => r.connection_id === target.connection.id),
         agentLabel: call.agent_label,
         credentialCache: deps.credentialCache.scopeFor(resolved.connection),
+        emitPart: relay.emit,
       },
       call.tool,
       call.args,
@@ -179,6 +252,7 @@ export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
     ctx: MissionContext,
     call: CallRequest,
     target: CallTarget,
+    relay: PartRelay,
   ): Promise<unknown> {
     const connectionId = target.connection.id;
     let resolved: ResolvedCredential;
@@ -187,11 +261,14 @@ export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
     } catch (err) {
       throw await asUnavailable(err, target);
     }
+    // Once a part has left for the caller the call is never replayed: a retry
+    // would deliver the beginning of the result twice.
+    const retriable = (err: unknown): boolean => credentialRejected(err) && relay.count === 0;
 
     try {
-      return await forward(resolved, ctx, call, target);
+      return await forward(resolved, ctx, call, target, relay);
     } catch (err) {
-      if (!credentialRejected(err)) throw err;
+      if (!retriable(err)) throw err;
       deps.logger.warn('upstream rejected the credential', {
         connection_id: connectionId,
         provider: target.connection.provider,
@@ -201,9 +278,9 @@ export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
 
     if ((await deps.credentialCache.drop(connectionId)) > 0) {
       try {
-        return await forward(resolved, ctx, call, target);
+        return await forward(resolved, ctx, call, target, relay);
       } catch (err) {
-        if (!credentialRejected(err)) throw err;
+        if (!retriable(err)) throw err;
       }
     }
 
@@ -215,19 +292,20 @@ export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
     }
     // A second rejection right after a successful refresh is final for this call;
     // the next call starts over and the broker decides the connection's fate.
-    return forward(refreshed, ctx, call, target);
+    return forward(refreshed, ctx, call, target, relay);
   }
 
   return {
     async execute(ctx, call, target): Promise<unknown> {
+      const relay = partRelayOf(call);
       try {
-        const result = await attempt(ctx, call, target);
+        const result = await attempt(ctx, call, target, relay);
         report(call, { ok: true, result });
         return result;
       } catch (err) {
         report(call, { ok: false, error: err });
         if (err instanceof UpstreamRefusalError) throw err;
-        throw asUpstreamFailure(err, target.connection.provider);
+        throw asUpstreamFailure(err, target.connection.provider, relay.count);
       }
     },
   };

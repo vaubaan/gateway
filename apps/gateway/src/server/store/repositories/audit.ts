@@ -102,6 +102,8 @@ export interface AuditSearch {
   readonly tool?: string;
   /** Call entries only. */
   readonly decision?: AuditDecision;
+  /** Exact agent label (call entries only). Attribution, as declared by the caller. */
+  readonly agentLabel?: string;
   readonly kind?: 'call' | 'admin';
   /** `ts >= since`. */
   readonly since?: Iso;
@@ -116,6 +118,19 @@ export interface AuditSearch {
 export interface AgentLabelSeen {
   readonly label: string;
   readonly calls: number;
+  readonly lastSeenAt: Iso;
+}
+
+/**
+ * A mission's calls under one agent label over a span of time — or, for
+ * `label: null`, the calls that carried none. Counts of audit entries: who
+ * the callers said they were, never a budget (the counters are per risk and
+ * shared by every agent, spec §3.2).
+ */
+export interface AgentLabelActivity {
+  readonly label: string | null;
+  readonly allowed: number;
+  readonly refused: number;
   readonly lastSeenAt: Iso;
 }
 
@@ -136,6 +151,15 @@ export interface AuditRepo {
   latestCall(query: CallLookup): Promise<AuditCallRecord | null>;
   /** Distinct agent labels of a mission's call entries, most recently seen first. */
   agentLabels(missionId: string): Promise<AgentLabelSeen[]>;
+  /**
+   * A mission's call entries in `[since, until)` (`until: null`: no upper bound), counted
+   * per agent label and per decision, the unlabelled calls as `label: null`. Busiest
+   * first, then by label.
+   */
+  agentLabelActivity(
+    missionId: string,
+    span: { readonly since: Iso; readonly until: Iso | null },
+  ): Promise<AgentLabelActivity[]>;
   /**
    * Allowed call entries touching `riskId` in `[since, until)` — the audit side of the
    * structural check "session counters agree with the audit" (spec §10).
@@ -380,6 +404,7 @@ function searchStatement(query: AuditSearch): { sql: string; params: (string | n
   }
   if (query.tool) add('tool = ?', query.tool);
   if (query.decision) add('decision = ?', query.decision);
+  if (query.agentLabel) add("kind = 'call' AND agent_label = ?", query.agentLabel);
   if (query.kind) add('kind = ?', query.kind);
   if (query.since) add('ts >= ?', query.since);
   if (query.until) add('ts < ?', query.until);
@@ -425,6 +450,21 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
     `SELECT agent_label AS label, COUNT(*) AS calls, MAX(ts) AS last_seen FROM audit
      WHERE kind = 'call' AND mission_id = ? AND agent_label IS NOT NULL
      GROUP BY agent_label ORDER BY last_seen DESC, agent_label`,
+  );
+
+  // Plain aggregates and CASE: the same statement on Postgres. `until` is bound twice so
+  // one statement serves a bounded span and an open one.
+  const labelActivityOf = db.prepare<
+    [string, string, string | null, string | null],
+    { label: string | null; allowed: number; refused: number; last_seen: string }
+  >(
+    `SELECT agent_label AS label,
+            SUM(CASE WHEN decision = 'allowed' THEN 1 ELSE 0 END) AS allowed,
+            SUM(CASE WHEN decision = 'refused' THEN 1 ELSE 0 END) AS refused,
+            MAX(ts) AS last_seen
+     FROM audit
+     WHERE kind = 'call' AND mission_id = ? AND ts >= ? AND (? IS NULL OR ts < ?)
+     GROUP BY agent_label`,
   );
 
   const latestCallOf = db.prepare<[string, string, string], AuditRow>(
@@ -588,6 +628,21 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
       return labelsOf
         .all(missionId)
         .map((r) => ({ label: r.label, calls: r.calls, lastSeenAt: r.last_seen }));
+    },
+    async agentLabelActivity(missionId, span) {
+      return labelActivityOf
+        .all(missionId, span.since, span.until, span.until)
+        .map((r) => ({
+          label: r.label,
+          allowed: r.allowed,
+          refused: r.refused,
+          lastSeenAt: r.last_seen,
+        }))
+        .sort(
+          (a, b) =>
+            b.allowed + b.refused - (a.allowed + a.refused) ||
+            (a.label ?? '').localeCompare(b.label ?? ''),
+        );
     },
     async countAllowedTouches(missionId, riskId, since, until) {
       return countTouches.get(missionId, riskId, since, until)?.n ?? 0;

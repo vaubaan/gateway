@@ -84,11 +84,36 @@ they are the only refs the mission knows.
 
 Sub-agents use the **same** MCP configuration and the **same** token. Every
 allowed call decrements the same counters: multiplying agents does not
-multiply the budget. A refused call consumes nothing. If you run several
-agents, each may set a free-form agent label so the audit tells them apart:
-the HTTP header `X-Vaubaan-Agent: <label>` in its MCP configuration, or
-`_meta.agent` on a single `tools/call` (the per-call value wins). The label
-changes nothing about what is allowed.
+multiply the budget. A refused call consumes nothing.
+
+**Handing the mission to sub-agents.** An orchestrator gives each sub-agent
+the MCP configuration of §2 as is: same endpoint, same
+`VAUBAAN_MISSION_TOKEN`. There is no token per agent and nothing to request
+for a new one.
+
+**Agent labels.** So that the mission's session and the audit tell who did
+what, each agent names itself:
+
+- a sub-agent started with its own copy of the configuration adds one header
+  next to `Authorization`:
+
+  ```json
+  "headers": {
+    "Authorization": "Bearer ${VAUBAAN_MISSION_TOKEN}",
+    "X-Vaubaan-Agent": "sub-agent-2"
+  }
+  ```
+
+- an orchestrator that sends the calls itself on behalf of several agents
+  sets `_meta.agent` on each `tools/call` instead:
+  `"params": { "name": "…", "arguments": { … }, "_meta": { "agent": "planner" } }`.
+  On a call that carries both, `_meta.agent` wins.
+
+A label is 1 to 64 characters: letters, digits and `.` `_` `-` `:` `/` `@`
+`+`, starting with a letter or a digit. Anything else is ignored: the call is
+served, unlabelled. A label is attribution only: it changes nothing about
+what is allowed or counted, it reserves no share of the budget, and it is not
+an identity — never put a secret in it.
 
 `GET <instance URL>/mcp/catalog`, with the same `Authorization` header,
 returns the tools of the instance and which ones your mission can call, the
