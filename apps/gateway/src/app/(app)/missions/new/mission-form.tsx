@@ -41,6 +41,7 @@ import {
   FormStep,
   FormWithRail,
   Input,
+  Mono,
   PageHeader,
   Row,
   Rows,
@@ -670,7 +671,9 @@ export function MissionForm({
                           data-testid="notices"
                         >
                           <summary>{noticeHeadline(n, connection)}</summary>
-                          {n.message}
+                          The mission can be created as it is. To let those permissions through
+                          there, give the resource its environment label on the page of the account,
+                          or leave the resource out. <Mono quiet>{n.risk_ids.join(', ')}</Mono>
                         </details>
                       ))}
                     {cs.included && editorOpen && (
