@@ -150,8 +150,9 @@ argument is stripped before the call. Unknown tool → `isError` result.
 
 ## Tests
 
-`npx vitest run plugins/stripe` — 118 : `plugin.test.ts` (kit, v5
+`npx vitest run plugins/stripe` — 119 : `plugin.test.ts` (28 : kit, v5
 classifier, execute, discovery, credential, presets), `risk-catalog.test.ts`
-(invariants), `data-model.test.ts`, and the unchanged v4 suites
+(17 : invariants, catalog v3, no preset on the fallback), `data-model.test.ts`
+(8), and the unchanged v4 suites
 `risk-classifier.test.ts` (39), `execute.test.ts` (16), `adapter.test.ts`
 (11) on the legacy exports.

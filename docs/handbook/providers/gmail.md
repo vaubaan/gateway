@@ -108,10 +108,10 @@ and `sensitive_labels` on the resource (`GMAIL_METADATA_KEYS`).
 
 ## Tests
 
-`npx vitest run plugins/gmail` — 124 tests : `plugin.test.ts` (26 : SDK kit,
+`npx vitest run plugins/gmail` — 124 tests : `plugin.test.ts` (25 : SDK kit,
 experimental shape, coverage through a tool-exposing variant, mailbox
 selection, credential spec, absence of a plugin refresh, discovery and execute
-against `mockFetch`, presets), `risk-catalog.test.ts` (42 : loaded catalog
+against `mockFetch`, presets), `risk-catalog.test.ts` (43 : loaded catalog
 lint, pattern parsing, per-tool coverage, `risksTouchedBy` spot checks),
 `risk-classifier.test.ts` (32, v4 suite unchanged through the shim),
 `q-parser.test.ts` (19, unchanged), `data-model.test.ts` (5, unchanged).

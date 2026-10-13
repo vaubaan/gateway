@@ -107,7 +107,7 @@ organization_name, region, status } }` ; the owner labels `env`.
 
 ## Tests
 
-`npx vitest run plugins/supabase` — 120 tests : `plugin.test.ts` (26 : SDK
+`npx vitest run plugins/supabase` — 116 tests : `plugin.test.ts` (22 : SDK
 kit with one sample per tool, presets, credential spec, execute and
 discovery against `mockFetch`), `risk-catalog.test.ts`
 (33 : loaded catalog lint, coverage, cardinality exclusion, spot checks),

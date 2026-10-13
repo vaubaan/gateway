@@ -19,6 +19,21 @@ amends:
 > resolved when the provider carries it in the call rather than on the
 > resource. Implemented in `@vaubaan/policy-engine` (`risk-evaluator.ts`,
 > `qualify.ts`) and `@vaubaan/plugin-sdk` (loader, `ProviderPlugin.envOf`).
+>
+> **Amended on 2026-10-13 by P1.2-align.** D2 — `fallback: true` is
+> required on first-party catalogs: the ten plugin YAMLs carry it, the
+> loader keeps the pattern / id detection for third-party catalogs but
+> **warns** on it (`fallbackFlagIssues` → `catalogWarnings`), and the test
+> kit's `assertPluginWellFormed` fails on an unflagged fallback. D3 — a
+> preset entry on the fallback is now a loader **error**, no longer a
+> warning: no plugin needs it (stripe's presets dropped it; the kit's
+> `fallbackHits` then exposed the `payment-intent.W` slice of
+> `create_subscription` as uncovered, and `stripe.subscription-create`
+> matches it since stripe catalog v3). D4 — wired: `gateway-core`
+> defaults to `envResolverFor(resources, adapter.envOf)` with `Classifier =
+Pick<ProviderPlugin, 'classify' | 'envOf'>`; vercel declares `envOf`;
+> github declares none because its catalog has no env-scoped risk. The kit's
+> `risksUntouched` leaves the fallback out (reachable by design only).
 
 ## Context
 

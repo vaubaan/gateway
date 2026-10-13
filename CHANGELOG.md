@@ -171,6 +171,32 @@ resources)` lets a plugin derive the environment carried by the call
 
 ### Changed
 
+- **P1.2-align: the ten plugins, the SDK and `v5` on one consistent surface.**
+  The `ssh` (P1.2i) and `resend` (P1.2f) branches are merged; the five tests
+  written under the old fallback co-fire rule are rewritten, and the kit's
+  `assertCatalogCoverage` leaves the fallback out of `risksUntouched` (it is
+  reachable by design only through uncategorized writes; `fallbackHits`
+  still reports when it fires). SDK: `definePlugin` no longer requires
+  `refresh()` for `refreshable: true` — the host performs the standard
+  `refresh_token` grant from `tokenUrl`, `clientAuthMethod` and
+  `resourceIndicator`, `refresh?` stays as an override for non-standard
+  flows; gmail's rejecting placeholder and the pure standard refreshes of
+  supabase and railway are deleted. `ProviderPlugin.experimental?: boolean`
+  (gmail sets it; `labels()` carries it). All ten plugins load their catalog
+  with `catalogPathNextTo(import.meta.url)`. `gateway-core` widens its
+  `Classifier` to `Pick<ProviderPlugin, 'classify' | 'envOf'>` and defaults
+  the resolver to `envResolverFor(resources, adapter.envOf)`; vercel declares
+  `envOf`. Every `risk-catalog.yaml` flags its catch-all `fallback: true`;
+  the loader warns when an entry is recognised by convention only and the
+  kit fails on it; a preset entry on the fallback is now a loader error.
+  Stripe's presets drop `stripe[<mode>].uncategorized-write`, which exposed
+  the `payment-intent.W` slice of `create_subscription` reaching only the
+  fallback: `stripe.subscription-create` matches it since catalog v3
+  (`@vaubaan/plugin-stripe` 0.2.0). Docs: `integration-tests.md` plugin
+  section rewritten from the test files (1783 tests), English index of the
+  ten plugins under `docs/handbook/providers/README.md`, handbook
+  `plugin-sdk`, ADRs `plugin-contract-and-credential-spec` and
+  `fallback-risk-only-when-uncategorized` amended with dated notes.
 - **The fallback risk no longer co-fires with a categorized write.**
   `risksTouchedBy` includes `<provider>.uncategorized-write` only when no
   other catalog entry matches the slice; a write covered by a dedicated

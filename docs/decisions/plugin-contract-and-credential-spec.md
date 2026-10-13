@@ -30,6 +30,17 @@ amended-by:
 > `new URL(…, import.meta.url)`) and [[fallback-risk-only-when-uncategorized]]
 > (D1 : optional `envOf` hook ; D4 : one flagged fallback per catalog, touched
 > only when no other entry matches).
+>
+> **Amended on 2026-10-13 by P1.2-align.** D1 : `ProviderPlugin` gains
+> `experimental?: boolean` (a plugin the host registers but keeps out of the
+> default connect and issuance flows ; gmail) and `labels()` carries it. D2 :
+> a `refreshable: true` `oauth2` spec **no longer requires** a `refresh()`
+> — the host performs the standard RFC 6749 `refresh_token` grant itself
+> from `tokenUrl`, `clientAuthMethod` and `resourceIndicator` (sent on every
+> token request) ; `refresh?` remains as an override for a non-standard flow
+> (a re-minted installation token). Gmail's rejecting placeholder and the
+> pure standard refreshes of supabase and railway were deleted. D5 : a
+> preset entry on the fallback is a loader error (see the fallback ADR).
 
 ## Context
 
@@ -125,8 +136,10 @@ sees the OAuth client secret ; it receives the result as a
 installation id, `ssh-key` private key and connection fields) plus
 `metadata` (non-secret facts such as `team_id`), and the company's
 `ProviderAppConfig` (client id, app id…) at call time. A public OAuth client
-(`clientAuthMethod: 'none'`) must use PKCE ; a `refreshable` spec must come
-with a `refresh()` implementation ; `expectCredentialKind(pluginId, secret,
+(`clientAuthMethod: 'none'`) must use PKCE ; a `refreshable` spec needs no
+`refresh()` — the host performs the standard grant and `refresh` overrides
+it for a non-standard flow only (amended 2026-10-13, P1.2-align ; the
+original text required one) ; `expectCredentialKind(pluginId, secret,
 kind)` is how a plugin narrows the secret it receives instead of casting.
 
 The stored form (`Credential` in `@vaubaan/shared`) is an opaque

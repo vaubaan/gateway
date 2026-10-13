@@ -7,13 +7,12 @@ the credential the gateway hands it, declares how that credential is
 obtained and refreshed, discovers the resources a connection can reach, and
 ships at least one **preset**.
 
-Current plugins: `cloudflare-dns`, `github`, `gmail`, `railway`, `resend`,
-`ssh`, `stripe`, `supabase`, `upstash-redis`, `vercel`. Feature P1.2
-migrates them to the SDK one by one: `github`, `railway`, `stripe`,
-`supabase`, `upstash-redis` and `vercel` are on it (their v4 exports stay
-`@deprecated` until P1.6); `cloudflare-dns`, `gmail`, `resend` and `ssh`
-still use the v4 adapter shape. `_template` is the scaffold, already on the
-SDK.
+Current plugins: `cloudflare-dns`, `github`, `gmail` (experimental),
+`railway`, `resend`, `ssh`, `stripe`, `supabase`, `upstash-redis`, `vercel`
+— all ten on the SDK since P1.2 and aligned on one surface by P1.2-align
+(their v4 exports stay `@deprecated` until P1.6). `_template` is the
+scaffold. The per-provider index is
+[`docs/handbook/providers/README.md`](../docs/handbook/providers/README.md).
 
 The contract is `@vaubaan/plugin-sdk` (`packages/plugin-sdk`), fixed by the
 ADR [`plugin-contract-and-credential-spec`](../docs/decisions/plugin-contract-and-credential-spec.md)

@@ -164,7 +164,7 @@ a refusal surfaces as `UpstreamAuthError` with the upstream message.
 
 ## Tests
 
-`npx vitest run plugins/railway` — 88 tests (v4: 58). `plugin.test.ts`
+`npx vitest run plugins/railway` — 83 tests (v4: 58). `plugin.test.ts` (25)
 runs the kit (`assertPluginWellFormed`, `assertPresetsValid`,
 `assertNoWildcard`, `assertCatalogCoverage` with every risk touched),
 classifier branches on `Resource[]`, the credential spec, `execute` and
