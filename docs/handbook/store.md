@@ -33,6 +33,8 @@ apps/gateway/migrations/
   0003_web_sessions.sql           web_sessions: the human web-session rows (schema version 3, P1.1)
   0004_connection_resource_curation.sql  connection_resources: metadata, owner metadata, env source,
                                   renamed / hidden / stale flags (schema version 4, P1.4)
+  0005_approval_bound_to_tool.sql approvals: the tool joins the key and the lookup index
+                                  (schema version 5, P2.1)
 apps/gateway/src/server/store/
   index.ts                        openStore() / openMemoryStore(), Store type, re-exports
   db.ts                           openDb() — better-sqlite3 handle, pragmas, MIN_SQLITE_VERSION,
@@ -170,11 +172,13 @@ five-id catalog).
   with no resource…), driver errors (`SqliteError` with `code`) for constraint
   violations the schema catches (`UNIQUE`, `FOREIGN KEY`, `CHECK`).
 
-## Schema (`0001_schema.sql` … `0004_connection_resource_curation.sql`)
+## Schema (`0001_schema.sql` … `0005_approval_bound_to_tool.sql`)
 
-Schema version 4. `0001` creates every table and trigger; `0002` only replaces the
+Schema version 5. `0001` creates every table and trigger; `0002` only replaces the
 `audit_risks` delete trigger (see Audit); `0003` adds `web_sessions`; `0004` adds the
-owner-curation columns of `connection_resources` (plain `ADD COLUMN`s).
+owner-curation columns of `connection_resources` (plain `ADD COLUMN`s); `0005` adds
+`approvals.tool` (`NOT NULL DEFAULT ''`: a row written before it matches no call) and
+recreates `approvals_lookup` on `(mission_id, risk_id, tool, fingerprint)`.
 
 | Area        | Tables                                                                                                                     | Notes                                                                                                                                                                                                                                                                                                                                                                     |
 | ----------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -186,7 +190,7 @@ owner-curation columns of `connection_resources` (plain `ADD COLUMN`s).
 | Shares      | `shares`, `share_restrictions`                                                                                             | target principal like owner; one `risk_id` row per restriction entry                                                                                                                                                                                                                                                                                                      |
 | Missions    | `missions`, `mission_connections`, `mission_resources`, `mission_policy`, `mission_tokens`                                 | status `active\|expired\|orphaned\|revoked` (`exhausted` is per risk, computed); `period_anchor` + nullable `period_seconds`; `resource_scope all\|selected`; policy row = `(quota, rate_limit, rate_window_seconds, gate)`; partial unique index = one `active` token per mission                                                                                        |
 | Sessions    | `sessions`, `session_counters`, `events`                                                                                   | one session per mission (`mission_id` unique); counters keyed `(session_id, risk_id, period_start)`; events are free-form `kind` + JSON details                                                                                                                                                                                                                           |
-| Requests    | `requests`, `approvals`                                                                                                    | `kind claim\|approval`, `state open\|granted\|refused\|expired`; approval requests carry `tool`, `fingerprint`, encrypted `args_blob`; one approval per request, consumed via `consumed_at`                                                                                                                                                                               |
+| Requests    | `requests`, `approvals`                                                                                                    | `kind claim\|approval`, `state open\|granted\|refused\|expired`; approval requests carry `tool`, `fingerprint`, encrypted `args_blob` (NULL on decision and on expiry); one approval per request, keyed `(mission, risk, tool, fingerprint)`, consumed via `consumed_at`                                                                                                  |
 | Audit       | `audit`, `audit_risks`, `audit_purge_guard`                                                                                | see below                                                                                                                                                                                                                                                                                                                                                                 |
 
 SQLite-only constructs are marked `-- sqlite:` in the file (`STRICT`, `RAISE(ABORT)`);
@@ -283,9 +287,10 @@ const result = await store.sessions.decideAndDecrement(
   { missionId, riskIds: risksTouched, periodStart },
   (ctx) => {
     // ctx.session, ctx.counters (consumed per risk this period), ctx.now
-    // ctx.findApproval(riskId, fingerprint)    -> ApprovalRecord | null   (non-consuming)
-    // ctx.consumeApproval(riskId, fingerprint) -> ApprovalRecord | null   (single use)
-    // ctx.findOpenRequest({ kind, riskId, fingerprint? }) -> RequestRecord | null  (reuse on replay)
+    // ctx.findApproval({ riskId, tool, fingerprint })    -> ApprovalRecord | null   (non-consuming)
+    // ctx.consumeApproval({ riskId, tool, fingerprint }) -> ApprovalRecord | null   (single use)
+    // ctx.findOpenRequest({ kind, riskId, tool?, fingerprint? }) -> RequestRecord | null  (reuse on replay)
+    // ctx.riskEvents({ kinds, riskIds, since }) -> EventRecord[]   (oldest first; gate openings)
     // ctx.createRequest({ kind, riskId, tool?, fingerprint?, prepared?, expiresAt })
     //   prepared = await store.requests.prepareArguments(args), sealed BEFORE the call
     // ctx.recordEvent({ kind, riskId?, actorUserId?, details? })
@@ -307,6 +312,27 @@ rate comparison, gate) are the `SessionService` callback of
 atomicity. `findApproval` / `findOpenRequest` are non-consuming lookups so that callback
 can decide on every risk before it consumes an approval or drops a request. Rate-limit
 sliding windows are not stored here (in-memory, same handbook).
+
+## The approval decision primitive and what came with it
+
+Additive, for the approval gate (handbook [requests](requests.md), "Approvals"):
+
+- `store.requests.decideApproval(id, decidedByUserId, apply)` — the creator's answer to
+  an approval request in one `BEGIN IMMEDIATE` transaction, the sibling of `decideClaim`
+  (they share `decideOpenSync`): open and unexpired check (an overdue request is expired
+  there), `apply(ctx)` with `createApproval(expiresAt)`, `riskEvents(query)` and
+  `recordEvent(event)`, then the conditional update that stores the decision and sets
+  `args_blob` / `key_version` to NULL. A thrown `apply` writes nothing.
+- `store.requests.getArguments(id)` — `null` unless the request is `open` and unexpired.
+- `store.approvals` — `ApprovalKey { riskId, tool, fingerprint }` for `create`, `consume`
+  and the in-transaction lookups; `getByRequest(requestId)`; an approval with an empty
+  tool is never written and never matched.
+- `store.missions.setGate(id, riskId, gate, actorUserId)` — one risk's gate, and the
+  `gate-changed` session event in the same transaction when the mission has a session;
+  `{ mission, previous }`, or `null` when the risk is not in the policy; the gate the risk
+  already has writes nothing.
+- `store.audit.latestCall({ missionId, tool, argumentsHash, refusalCode? })` — the most
+  recent call entry for a tool and a fingerprint, with its slices and risks.
 
 ## The claim decision primitive
 
@@ -371,7 +397,12 @@ capture both files atomically are also fine.
   counters-vs-audit structural check, argument erasure on decision and expiry,
   the `listEvents` kind filter and descending order. `decideClaim` and
   `sweepExpired` are exercised by `tests/integration/requests/request-service.test.ts`
-  (handbook [requests](requests.md)). `search`, `agentLabels` and `listRecentEvents`
+  (handbook [requests](requests.md)).
+- `tests/integration/store/approval-decisions.test.ts` (16) — migration 0005 (column and
+  index), `decideApproval` (decision, erasure and approval in one transaction; a thrown
+  apply writes nothing; already decided; overdue; a claim; unknown), `getArguments` on an
+  overdue request, the open request of a call by tool and fingerprint, `riskEvents`,
+  `setGate`, `latestCall`. `search`, `agentLabels` and `listRecentEvents`
   are exercised by `tests/integration/audit/{audit-query,mission-session}.test.ts`
   (handbook [audit](audit.md)).
 - `tests/integration/store/corrupt-rows.test.ts` — a value outside the closed set of an

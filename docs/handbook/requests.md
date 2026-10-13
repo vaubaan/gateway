@@ -1,5 +1,5 @@
 ---
-title: Requests — claims, the request URL, the creator's decision, the inbox
+title: Requests — claims and approval requests, the request URL, the creator's decision, the inbox
 status: current
 date: 2026-10-13
 last_synced: 2026-10-13
@@ -10,31 +10,41 @@ tracks:
   - apps/gateway/src/app/(app)/requests/
   - apps/gateway/src/components/shell/OpenRequestCount.tsx
   - apps/gateway/src/server/store/repositories/requests.ts
+  - apps/gateway/src/server/store/repositories/approvals.ts
+  - apps/gateway/migrations/0005_approval_bound_to_tool.sql
   - apps/gateway/src/server/budget/consistency.ts
+  - apps/gateway/src/server/budget/gates.ts
   - apps/gateway/tests/integration/requests/
+  - apps/gateway/tests/integration/execution/approval-door.test.ts
+  - apps/gateway/tests/integration/store/approval-decisions.test.ts
   - apps/gateway/tests/e2e/v5/exhaust-and-claim.spec.ts
+  - apps/gateway/tests/e2e/v5/approve-action.spec.ts
   - apps/gateway/tests/e2e/v5/agent.ts
   - apps/gateway/src/server/store/repositories/sessions.ts
   - apps/gateway/src/components/shell/AppShell.tsx
   - apps/gateway/src/server/compose/root.ts
 ---
 
-# Requests — claims, the request URL, the creator's decision, the inbox
+# Requests — claims and approval requests, the request URL, the creator's decision, the inbox
 
 What happens to a request once a refusal dropped it into the creator's inbox:
 the URL the refusal carries, who may open it, what the creator sees and
-decides, the events, the expiry. Spec:
-[vaubaan-gateway](../spec/vaubaan-gateway.md) §0 (Request, Claim), §2.3
-(Request states), §3.4, §4.2 "Request inbox", §6 ("requests are granted only
-in a human session", "surface rate limits … on the request page per IP"),
-§7.6. Decision:
-[claim-resolutions-as-counter-credits](../decisions/claim-resolutions-as-counter-credits.md).
+decides, the events, the expiry. Two kinds share everything but their
+decision: a **claim** (a quota at zero, §3.4) and an **approval request** (a
+risk gated `approval`, §3.5; section [Approvals](#approvals)). Spec:
+[vaubaan-gateway](../spec/vaubaan-gateway.md) §0 (Request, Claim, Approval
+request, Approval), §2.3 (Request states), §3.4, §3.5, §4.2 "Request inbox",
+§6 ("requests are granted only in a human session", "surface rate limits … on
+the request page per IP"), §7.6, §7.7. Decisions:
+[claim-resolutions-as-counter-credits](../decisions/claim-resolutions-as-counter-credits.md),
+[atomic-budget-accounting](../decisions/atomic-budget-accounting.md) (amendment
+"The approval gate").
 
 The request row itself is **not** created here: the budget's
-`SessionService.recordCall` inserts the `claim` inside the refusal
-transaction and reuses the open one on a replay
-([budget-and-sessions](budget-and-sessions.md)). This module starts from that
-row.
+`SessionService.recordCall` inserts it inside the refusal transaction — an
+approval request with the call's arguments sealed — and reuses the open one
+on a replay ([budget-and-sessions](budget-and-sessions.md)). This module
+starts from that row.
 
 ## Layout
 
@@ -44,9 +54,11 @@ apps/gateway/src/server/requests/        host-agnostic, never imports `next`
   state.ts            nextState(), effectiveState(), isDecidable(), isTerminal()                    (pure)
   claim.ts            ClaimDecision, ClaimSituation, claimOptions(), checkClaimDecision(),
                       parseClaimDecision(), formatUtc()                                             (pure, browser-safe)
+  approval.ts         ApprovalDecision, ApprovalSituation, approvalOptions(), checkApprovalDecision(),
+                      parseApprovalDecision(), formatDelay()                                        (pure, browser-safe)
   events.ts           describeEvent(), eventLineOf() — one line per session event                   (pure)
   client-ip.ts        clientIpResolver(trustedProxies) — the key of the per-IP limit
-  request-service.ts  RequestService: inbox / openCount / view / decide / decideClaim / sweep
+  request-service.ts  RequestService: inbox / openCount / view / decide / decideClaim / decideApproval / sweep
   handlers.ts         Request → Response handlers: open (GET /r/:id), inbox, decide
   sweeper.ts          startRequestSweeper() — the in-process expiry timer
   index.ts            createRequestsModule(deps) → root.requests; server-only barrel
@@ -55,7 +67,7 @@ apps/gateway/src/app/
   api/requests/route.ts                  GET  /api/requests      → handlers.inbox
   api/requests/[id]/decide/route.ts      POST /api/requests/<id>/decide → handlers.decide
   (app)/requests/page.tsx                /requests       — the inbox
-  (app)/requests/[id]/page.tsx           /requests/<id>  — the creator's view and the four actions
+  (app)/requests/[id]/page.tsx           /requests/<id>  — the creator's view and its actions (four for a claim, three for an approval request)
   (app)/requests/requests.module.css
 apps/gateway/src/components/shell/OpenRequestCount.tsx   the count next to "Requests" in APP_NAV
 ```
@@ -125,19 +137,28 @@ nothing is verified or looked up.
 ## The service
 
 ```ts
-const requests = new RequestService({ store, registry, publicUrl, clock, logger });
+const requests = new RequestService({
+  store,
+  registry,
+  publicUrl,
+  approvalValiditySeconds, // config.approvals.expirySeconds
+  clock,
+  logger,
+});
 
 await requests.inbox(user); // RequestSummary[] — open, unexpired, oldest first
 await requests.openCount(user); // the badge
 await requests.view(user, id); // { outcome: 'ok', view } | { outcome: 'forbidden' }
 await requests.decide(user, id, raw); // untrusted body; dispatches on the request's kind
 await requests.decideClaim(user, id, decision);
+await requests.decideApproval(user, id, decision);
 await requests.sweep(); // expires overdue open requests; returns how many
 ```
 
 `RequestSummary` = `{ id, kind, state, risk_id, risk_label, created_at,
-expires_at, decided_at, decision, url, mission: { id, name } }`. `state` is
-always `effectiveState(request, now)`. `risk_label` comes from the plugin's
+expires_at, decided_at, decision, url, mission: { id, name }, tool }`. `tool`
+is the tool of an approval request's call (`null` for a claim); the summary
+never carries arguments. `state` is always `effectiveState(request, now)`. `risk_label` comes from the plugin's
 catalog through the registry (`enumerateCatalog`), the id itself when the
 plugin or the entry is gone.
 
@@ -147,7 +168,7 @@ state, expires_at }` (`deriveMissionState`), the current `period`, `risk`
 the policy), `other_risks`, `events` (the last `SESSION_EVENTS_SHOWN` = 20
 session events, most recent first, each with a one-line `summary` from
 `describeEvent`) and `options` (empty once the request is not open). For an
-approval request it returns `{ kind: 'approval', request }` and nothing else.
+approval request it returns an `ApprovalView` ([Approvals](#approvals)).
 
 ### State machine (`state.ts`)
 
@@ -216,6 +237,10 @@ or expired, the next refused call drops a new one (budget handbook).
 
 `DecideResult`: `{ ok: true, request }` or `{ ok: false, reason: 'forbidden' |
 'not-open' (+ state) | 'unsupported-kind' (+ kind) | 'invalid' (+ problem) }`.
+`decide()` parses the body with the parser of the request's kind, so a claim
+resolution posted to an approval request (or the reverse) is `invalid` /
+`invalid-decision`; `unsupported-kind` is what `decideClaim` answers for an
+approval request and `decideApproval` for a claim.
 
 ### Credits and the counters-vs-audit check
 
@@ -229,11 +254,11 @@ events of the period (`CREDIT_EVENT_KINDS`). Each report line is
 
 ## HTTP surface
 
-| Route                           | Handler  | Answers                                                                                                                                                                                       |
-| ------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /r/:id`                    | `open`   | see the gate above                                                                                                                                                                            |
-| `GET /api/requests`             | `inbox`  | 200 `{ requests }` · 401 · 403 (bearer, bootstrap)                                                                                                                                            |
-| `POST /api/requests/:id/decide` | `decide` | 200 `{ request }` · 400 not a body · 401 · 403 `origin-mismatch` / `forbidden` / `wrong-credential-kind` · 409 `request-not-open` (+ `state`) / `unsupported-kind` · 422 `<ClaimProblemCode>` |
+| Route                           | Handler  | Answers                                                                                                                                                                                                              |
+| ------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /r/:id`                    | `open`   | see the gate above                                                                                                                                                                                                   |
+| `GET /api/requests`             | `inbox`  | 200 `{ requests }` · 401 · 403 (bearer, bootstrap)                                                                                                                                                                   |
+| `POST /api/requests/:id/decide` | `decide` | 200 `{ request }` · 400 not a body · 401 · 403 `origin-mismatch` / `forbidden` / `wrong-credential-kind` · 409 `request-not-open` (+ `state`) / `unsupported-kind` · 422 `<ClaimProblemCode \| ApprovalProblemCode>` |
 
 `decide` checks, in order: bearer, then `guardMutation(request, deps, 'user')`
 (origin, user session; handbook [authentication](authentication.md)), then
@@ -248,7 +273,8 @@ to `/requests/<id>` with `?decided=1` or `?problem=<code>`
 ## Pages
 
 - **`/requests`** — the inbox: one row per open request addressed to me
-  (kind, mission, risk label and id, asked, expires). Reachable from the
+  (kind — with the tool for an approval request —, mission, risk label and
+  id, asked, expires). Reachable from the
   application bar without any forwarded URL. `APP_NAV` has the entry
   `{ href: '/requests', label: 'Requests', Count: OpenRequestCount }`; an
   entry's optional `Count` is a server component rendered after the label
@@ -261,7 +287,8 @@ to `/requests/<id>` with `?decided=1` or `?problem=<code>`
   `extend-quota` pre-filled with the maximum, the `datetime-local` field for
   `extend-expiry`, the reason when unavailable), _Other risks this period_,
   _Last session events_. Once decided or expired the actions are gone and the
-  outcome is shown. No client component, no script.
+  outcome is shown. No client component, no script. For an approval request
+  the same page shows another body ([Approvals](#approvals), "The page").
 
 ## Expiry sweeper
 
@@ -276,7 +303,10 @@ diagnostics.
 `sweep()` → `store.requests.sweepExpired()`: every `open` request with
 `expires_at <= now` becomes `expired`, its sealed arguments are erased, and a
 `request` event `{ request_id, request_kind, state: 'expired' }` is recorded
-on its mission's session, all in one transaction. The delay is the
+on its mission's session, all in one transaction. For an approval request
+that is the erasure "on expiry": between the expiry instant and the pass
+(at most one interval) the blob is still in the row, and nothing opens it
+(`getArguments` and `view()` both check the expiry). The delay is the
 configuration's `requests.expiry` (`VAUBAAN_REQUEST_EXPIRY`, default `24h`),
 stamped as `expires_at` by the budget when it drops the request. The flip is
 idempotent, so several replicas may each run their own sweeper against a
@@ -295,23 +325,173 @@ amount)` (one conditional `UPDATE … WHERE consumed >= amount`; `false` and
   nothing written otherwise — a counter never goes below zero),
   `setMissionExpiry(iso)`, `recordEvent(event)`. Not a claim →
   `InvariantError`; unknown id → `NotFoundError`.
+- `RequestsRepo.decideApproval(id, decidedByUserId, apply)` → the same result
+  shape. `apply(ctx)` gets an `ApprovalDecisionContext`: `request`, `session`,
+  `now`, `createApproval(expiresAt)` (bound to the request's own mission,
+  risk, tool and fingerprint), `riskEvents(query)`, `recordEvent(event)`. Not
+  an approval request → `InvariantError`. Both primitives share one frame
+  (`decideOpenSync`): open and unexpired check, `apply`, conditional update
+  that erases the blob.
+- `RequestsRepo.getArguments(id)` answers `null` unless the request is open
+  and unexpired.
+- `OpenRequestLookup.tool`: an approval request is looked up by risk, tool
+  and fingerprint (both mandatory for that kind, `InvariantError` otherwise).
+- `ApprovalsRepo`: the key is `ApprovalKey { riskId, tool, fingerprint }`
+  (`create`, `consume`, `DecideContext.findApproval` / `consumeApproval`);
+  `getByRequest(requestId)`. Migration `0005_approval_bound_to_tool.sql` adds
+  `approvals.tool` (`NOT NULL DEFAULT ''`: a row older than the migration
+  matches no call) and recreates `approvals_lookup` on `(mission_id, risk_id,
+tool, fingerprint)`.
+- `DecideContext.riskEvents({ kinds, riskIds, since })` and the same method on
+  `SessionPrimitives`: the session's events about some risks, oldest first.
+- `AuditRepo.latestCall({ missionId, tool, argumentsHash, refusalCode? })`.
 - `RequestsRepo.sweepExpired()` → the expired `RequestRecord[]` (the older
   `expireOpen()` still returns a bare count and records no event).
 - `SessionsRepo.listEvents(sessionId, { kinds?, order?: 'asc' | 'desc', since?, limit? })`.
 
 ## Approvals
 
-Approval requests (`kind: 'approval'`, spec §3.5) are decided in feature
-**P2.1**. Until then:
+A call touching a risk gated `approval` is refused `approval-required`, whole,
+and an **approval request** is dropped (spec §3.5, §7.7). The gateway executes
+nothing and holds nothing: the creator answers, the executor replays.
 
-- they appear in the inbox and through `GET /api/requests` like any request;
-- `view()` returns `{ kind: 'approval', request }` and the page shows a
-  neutral notice ("Approval requests are handled in a later version"), never
-  the arguments;
-- `RequestService.decide()` answers `unsupported-kind` (409) — the `switch` on
-  the request's kind is where `decideApproval` plugs in, one decide entry
-  point per kind;
-- the sweeper already expires them and erases their sealed arguments.
+### What is bound to what
+
+| Thing                | Bound to                                                              | Lives                                                                   |
+| -------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| the approval request | mission, risk, **tool**, fingerprint of the arguments                 | `requests.expiry` (default 24 h), then `expired`                        |
+| the sealed arguments | the request id (associated data `request:<id>` of the AEAD blob)      | while the request is open; `args_blob` is `NULL` on decision or expiry  |
+| the approval         | mission, risk, **tool**, fingerprint (`ApprovalKey`, migration 0005)  | `approvals.expiry` (`VAUBAAN_APPROVAL_EXPIRY`, default `10m`), one use  |
+| a gate opening       | the risk and the period current at the decision (`gate-opened` event) | until that period ends, or until the gate is edited on the mission page |
+
+The fingerprint is `fingerprintArguments(args)`, the canonical SHA-256 also
+stored as the audit's `arguments_hash` (budget handbook). The tool is part of
+both keys: the same arguments on another tool that touches the same risk are
+another call — another request, and an approval they do not consume. That
+closes the Phase 1 security finding (approvals were keyed without the tool).
+
+A call touching several risks of which one is gated is refused as a whole; the
+one approval lets the whole call through, and every risk it touches is then
+counted (quota and rate). A call touching **two** gated risks asks for each in
+its turn (one request per gated risk, the first refusal naming the first one);
+the approvals are looked up without being consumed, so the first is still
+there when the second is granted, and the replay consumes both.
+
+### The refusal (`refuse.approvalRequired`, gateway-core)
+
+`{ code: 'approval-required', risk_id, fingerprint, approval_url, expires_at,
+approval_valid_seconds, hint }`: `approval_url` is `<public_url>/r/<id>`,
+`expires_at` is the request's expiry, `approval_valid_seconds` is how long a
+granted approval stays usable, and the hint tells the agent to hand the URL to
+its human and to replay the same tool with exactly the same arguments within
+that delay. A replay before the decision gets the same request back.
+
+### The creator's view (`ApprovalView`)
+
+`view()` returns, for the creator only:
+
+| Field      | Content                                                                                                                                                                                                                                                                    |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `request`  | the summary (with `tool`)                                                                                                                                                                                                                                                  |
+| `mission`  | `{ id, name, state, expires_at }`                                                                                                                                                                                                                                          |
+| `period`   | the current period                                                                                                                                                                                                                                                         |
+| `call`     | `tool`, `fingerprint`, `arguments` (**in clear**, while the request is open; `null` + `arguments_erased: true` afterwards), `slices` (wire form, `serializeSlice`), `risks` (every risk the call touches: label, quota, consumed, remaining, and `gate` as it applies now) |
+| `gate`     | `{ policy, open_until }`: the risk's gate in the mission's policy (`null` when the risk left it) and the end of the period it is open for                                                                                                                                  |
+| `approval` | once granted: `{ id, expires_at, consumed_at, state: 'usable' \| 'consumed' \| 'expired' }`                                                                                                                                                                                |
+| `events`   | the last session events                                                                                                                                                                                                                                                    |
+| `options`  | the three actions with their consequence; empty once the request is not open                                                                                                                                                                                               |
+
+The slices and the touched risks come from the audit: the pipeline wrote the
+entry of the refused call, and `AuditRepo.latestCall({ missionId, tool,
+argumentsHash, refusalCode: 'approval-required' })` finds it by the same
+fingerprint. With no entry (purged, or a request created below the pipeline)
+`slices` is `null` — the page says "not recorded" — and `risks` holds the
+gated risk alone.
+
+**Who reads the arguments.** `approvalView()` is the only caller of
+`RequestsRepo.getArguments`, and it runs after `own()`: the creator, nobody
+else — not an operator, not a co-owner of the connection through its owner
+group, not the bootstrap operator (who is not a user), not the executor (a
+bearer is refused by kind on the three routes). The store adds its own guard:
+`getArguments` answers `null` for a request that is not `open`, or that is
+past its expiry even when the sweeper has not erased the blob yet. The
+arguments are in no summary, no event, no audit entry, no log line and no
+`decision_json`; the tool and the fingerprint are.
+
+### The three resolutions (`approval.ts`)
+
+`ApprovalDecision` is `{ resolution: 'grant' | 'open-gate' | 'refuse' }` and
+nothing else (`parseApprovalDecision` refuses any other key: there is no way
+to widen what is granted). `approvalOptions(situation)` returns the three,
+each with a one-line `consequence` and `unavailable`;
+`checkApprovalDecision` applies the same rules to a decision.
+
+| Resolution  | Effect                                                                                                    | Refused when                                                                                                                                                                  |
+| ----------- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `grant`     | one approval for the request's `(mission, risk, tool, fingerprint)`, valid `approvals.expiry`, single-use | mission revoked / orphaned (`mission-closed`), expired (`mission-expired`), risk left the policy (`risk-not-in-policy`)                                                       |
+| `open-gate` | the risk reads `auto` for every call until the current period ends, this call included                    | same, plus the gate is `auto` on the mission or already open (`gate-not-closed`), or the mission has a single period that never ends (`no-period-end`: edit the gate instead) |
+| `refuse`    | nothing; a replay is refused again and drops a new request                                                | never                                                                                                                                                                         |
+
+No resolution edits `mission_policy`, and none bypasses the budget: the
+replay goes through `decide()` again, quota and rate first.
+
+### `decideApproval` — one transaction
+
+1. `own()`; the request must be an approval request (`unsupported-kind`
+   otherwise).
+2. `store.requests.decideApproval(id, userId, apply)` runs in one
+   `BEGIN IMMEDIATE` transaction: the request must still be open and unexpired
+   (an overdue one is flipped to `expired` there, its blob erased, and the
+   answer is `not-open`); `apply` reads the session's gate events **inside**
+   the transaction, re-checks the decision (`ApprovalProblemError` rolls
+   everything back and leaves the arguments sealed), writes the approval or
+   the event; then the conditional `UPDATE … WHERE state = 'open'` stores the
+   state and the decision **and sets `args_blob` and `key_version` to NULL**.
+3. After commit: an admin audit entry (object `{ type: 'request', id }`,
+   `after` with `mission_id`, `risk_id`, `tool`, `fingerprint`) and a log line.
+
+| Resolution  | Request state | Session event                                                           | Audit act          | `decision_json`                                    |
+| ----------- | ------------- | ----------------------------------------------------------------------- | ------------------ | -------------------------------------------------- |
+| `grant`     | `granted`     | `approval` `{ request_id, approval_id, tool, fingerprint, expires_at }` | `approval-granted` | `{ resolution, approval_id, approval_expires_at }` |
+| `open-gate` | `granted`     | `gate-opened` `{ request_id, period_start, period_end }`                | `gate-opened`      | `{ resolution, period_start, period_end }`         |
+| `refuse`    | `refused`     | `request` `{ request_id, request_kind: 'approval', state: 'refused' }`  | `request-refused`  | `{ resolution }`                                   |
+
+### The replay
+
+`SessionService.recordCall` (budget handbook) looks the approval up by
+`ApprovalKey` inside the decision transaction and consumes it only when the
+whole call is allowed: `consumed_at` is set, the counters of every touched
+risk gain one, the rate windows record the action, and the audit entry of the
+call carries `approval_id`. The second identical call finds no approval and
+is refused with a new request. An approval that expired asks again the same
+way.
+
+### The gate opened for the rest of the period
+
+`open-gate` writes no approval. The `gate-opened` event carries the period it
+was granted in; `openedGatesOf` (`budget/gates.ts`) derives, from the
+session's `gate-opened` and `gate-changed` events of the period, the set
+`decide()` receives as `opened_gates`. After the rollover no stored opening
+matches the new period's start: the gate reads `approval` again with nothing
+to run. An edit of the gate on the mission page (`gate-changed`,
+[missions](missions.md) "Editing a gate") ends an opening granted before it —
+on an equal timestamp the edit wins. The request page and the mission page
+show `open until <period end>` from the same derivation.
+
+### The page
+
+For an approval request `/requests/<id>` shows, top to bottom: _What is
+asked_ (mission and its state, tool, **arguments** as pretty-printed JSON —
+or "erased when the request was decided; only their fingerprint remains" —,
+fingerprint, slices touched, gated risk, gate, period end, asked, expiry or
+outcome with what became of the approval), _Your decision_ (one plain
+`method="post"` form per option with its consequence line), _What this call
+counts against, this period_ (one row per touched risk: gate, quota,
+consumed, left), _Last session events_. No client component, no script.
+
+A form post answers 303 to `/requests/<id>?decided=1` or `?problem=<code>`.
+The document the browser then loads is a fresh one: the arguments are not in
+it once the request is decided.
 
 ## How to debug
 
@@ -330,19 +510,46 @@ Approval requests (`kind: 'approval'`, spec §3.5) are decided in feature
   moved, the counters did not.
 - **`countersAgreeWithAudit` reports a mismatch after a grant** — look for the
   `reset` / `extension` event of the period and its `details.credits`.
+- **The replay is still `approval-required` after a grant** — the arguments
+  differ (compare the refusal's `fingerprint` with `approvals.fingerprint`),
+  the tool differs, the approval expired (`approvals.expires_at`, ten minutes
+  by default) or was already consumed (`consumed_at`), or the call touches a
+  second gated risk (the refusal names another `risk_id`).
+- **The page shows "erased" arguments on an open-looking request** — it is
+  past `expires_at`: its state reads `expired` before the sweeper's pass.
+- **A gate reads `approval` but calls pass** — it is open for the period:
+  `events` of kind `gate-opened` with `details.period_start` equal to the
+  current period's start and no later `gate-changed` on that risk.
+- **`no-period-end` on "open the gate"** — a one-off mission: set the gate to
+  `auto` on the mission page.
 
 ## Tests
 
-- Unit, beside the code (58): `state.test.ts` (9, with the URL builder),
-  `claim.test.ts` (37), `client-ip.test.ts` (2: the page uses the shared
-  client-address rule, itself tested in `src/server/http/client-ip.test.ts`,
-  11), `events.test.ts` (6), `sweeper.test.ts` (4).
-- Integration, `tests/integration/requests/` (43): `request-service.test.ts`
-  (30, `:memory:` store with a manual clock) and `request-handlers.test.ts`
-  (13, the real root). One more scenario in
+- Unit, beside the code: `state.test.ts` (9, with the URL builder),
+  `claim.test.ts` (37), `approval.test.ts` (27: the three options, their
+  rules per mission state and gate, the parser, `formatDelay`),
+  `client-ip.test.ts` (2: the page uses the shared client-address rule,
+  itself tested in `src/server/http/client-ip.test.ts`, 11), `events.test.ts`
+  (6), `sweeper.test.ts` (4). The gate openings are
+  `tests/unit/server/budget/gates.test.ts` (9).
+- Integration, `tests/integration/requests/`: `request-service.test.ts`
+  (30, `:memory:` store with a manual clock), `request-handlers.test.ts`
+  (13, the real root), `approval.test.ts` (42, `:memory:` store with a manual
+  clock: refusal → grant → identical replay → second replay refused; one byte
+  or another tool asks again; single use; expiry; whole refusal; erasure read
+  from the row on decision and on expiry; the gate opened and bounded to the
+  period; one audit entry per decision) and `approval-access.test.ts` (29,
+  the real root: an operator, a group co-owner, another user, the bootstrap
+  operator and the executor get nothing of the request). One more scenario in
   `tests/integration/budget/pipeline-consistency.test.ts` (credits vs audit)
   and the `listEvents` options in `tests/integration/store/sessions.test.ts`.
-- Browser, `tests/e2e/v5/exhaust-and-claim.spec.ts` (1).
+- The store primitives: `tests/integration/store/approval-decisions.test.ts`
+  (16) and `requests-approvals.test.ts`.
+- Through the real door: `tests/integration/execution/approval-door.test.ts`
+  (7: the GitHub plugin's `developer` preset as shipped, a workflow file
+  write approved over `/mcp`).
+- Browser, `tests/e2e/v5/exhaust-and-claim.spec.ts` (1) and
+  `approve-action.spec.ts` (1).
 
 Scenarios in [integration-tests](../tests/integration-tests.md) and
 [e2e-tests](../tests/e2e-tests.md).
@@ -350,7 +557,7 @@ Scenarios in [integration-tests](../tests/integration-tests.md) and
 ## References
 
 - Spec [vaubaan-gateway](../spec/vaubaan-gateway.md) §0, §2.3, §3.4, §3.5,
-  §4.2, §6, §7.6.
+  §4.1, §4.2, §6, §7.6, §7.7, §10.
 - ADRs [claim-resolutions-as-counter-credits](../decisions/claim-resolutions-as-counter-credits.md),
   [atomic-budget-accounting](../decisions/atomic-budget-accounting.md).
 - Neighbours: [budget-and-sessions](budget-and-sessions.md), [store](store.md),

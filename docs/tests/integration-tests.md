@@ -59,29 +59,29 @@ server module, each appended to by the feature that built it. Spec
 [vaubaan-gateway](../spec/vaubaan-gateway.md) §10 lists what must be tested;
 this table says where each requirement lives, and what is not written yet.
 
-| Spec §10                                                                 | Section                                                                                                                                                  |
-| ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Unit — each plugin's classifier                                          | [Provider plugins](#scenarios--provider-plugins)                                                                                                         |
-| Unit — authority composition, resource selection, environment resolution | [Policy engine](#scenarios--policy-engine), [Missions](#scenarios--missions), [Execution door](#scenarios--execution-door)                               |
-| Unit — the budget                                                        | [Budget and sessions](#scenarios--budget-and-sessions)                                                                                                   |
-| Unit — the approval                                                      | [Budget and sessions](#scenarios--budget-and-sessions) (fingerprint, lookup, consumption); the creator's decision is not built (P2.1)                    |
-| Unit — structured refusals                                               | [gateway-core](#scenarios--gateway-core), [Execution door](#scenarios--execution-door)                                                                   |
-| Unit — credential separation                                             | [gateway-core](#scenarios--gateway-core), [Execution door](#scenarios--execution-door); the management surface is not built (P2.3)                       |
-| Integration — connection                                                 | [Connections](#scenarios--connections-resources-provider-apps)                                                                                           |
-| Integration — share                                                      | [Store](#scenarios--store) (rows and restrictions only); the flow is not built (P2.2)                                                                    |
-| Integration — issuance                                                   | [Missions](#scenarios--missions)                                                                                                                         |
-| Integration — claim and replay                                           | [Requests](#scenarios--requests), [Execution door](#scenarios--execution-door)                                                                           |
-| Integration — approval and replay                                        | not written (P2.1)                                                                                                                                       |
-| Integration — revocation flows, `orphaned` states                        | [Missions](#scenarios--missions), [Budget and sessions](#scenarios--budget-and-sessions), [Connections](#scenarios--connections-resources-provider-apps) |
-| Integration — OAuth delegation, issuance by an MCP client                | not written (P2.3)                                                                                                                                       |
-| Integration — simulated IdP                                              | [Human authentication](#scenarios--human-authentication)                                                                                                 |
-| Structural — telemetry report without forbidden fields                   | [Community telemetry](#scenarios--community-telemetry)                                                                                                   |
-| Structural — session counters agree with the audit                       | [Execution door](#scenarios--execution-door), [Budget and sessions](#scenarios--budget-and-sessions)                                                     |
-| Structural — no configuration value hard-coded                           | [Instance configuration](#scenarios--instance-configuration-crypto-composition-root)                                                                     |
-| Structural — enumerated lists, never a wildcard or a preset reference    | [Plugin SDK](#scenarios--plugin-sdk), [Store](#scenarios--store), [Missions](#scenarios--missions)                                                       |
-| Structural — every plugin ships a preset of its own catalog              | [Plugin SDK](#scenarios--plugin-sdk), [Provider plugins](#scenarios--provider-plugins)                                                                   |
-| Structural — authority recomputed from current membership                | [Human authentication](#scenarios--human-authentication), [Missions](#scenarios--missions)                                                               |
-| End to end — the cutover acceptance scenario                             | [`e2e-tests.md`](./e2e-tests.md): manual, with an automated browser smoke before it                                                                      |
+| Spec §10                                                                 | Section                                                                                                                                                                 |
+| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit — each plugin's classifier                                          | [Provider plugins](#scenarios--provider-plugins)                                                                                                                        |
+| Unit — authority composition, resource selection, environment resolution | [Policy engine](#scenarios--policy-engine), [Missions](#scenarios--missions), [Execution door](#scenarios--execution-door)                                              |
+| Unit — the budget                                                        | [Budget and sessions](#scenarios--budget-and-sessions)                                                                                                                  |
+| Unit — the approval                                                      | [Budget and sessions](#scenarios--budget-and-sessions) (fingerprint, lookup, consumption), [Approval gate](#scenarios--approval-gate) (decision, gate opening, erasure) |
+| Unit — structured refusals                                               | [gateway-core](#scenarios--gateway-core), [Execution door](#scenarios--execution-door)                                                                                  |
+| Unit — credential separation                                             | [gateway-core](#scenarios--gateway-core), [Execution door](#scenarios--execution-door); the management surface is not built (P2.3)                                      |
+| Integration — connection                                                 | [Connections](#scenarios--connections-resources-provider-apps)                                                                                                          |
+| Integration — share                                                      | [Store](#scenarios--store) (rows and restrictions only); the flow is not built (P2.2)                                                                                   |
+| Integration — issuance                                                   | [Missions](#scenarios--missions)                                                                                                                                        |
+| Integration — claim and replay                                           | [Requests](#scenarios--requests), [Execution door](#scenarios--execution-door)                                                                                          |
+| Integration — approval and replay                                        | [Approval gate](#scenarios--approval-gate)                                                                                                                              |
+| Integration — revocation flows, `orphaned` states                        | [Missions](#scenarios--missions), [Budget and sessions](#scenarios--budget-and-sessions), [Connections](#scenarios--connections-resources-provider-apps)                |
+| Integration — OAuth delegation, issuance by an MCP client                | not written (P2.3)                                                                                                                                                      |
+| Integration — simulated IdP                                              | [Human authentication](#scenarios--human-authentication)                                                                                                                |
+| Structural — telemetry report without forbidden fields                   | [Community telemetry](#scenarios--community-telemetry)                                                                                                                  |
+| Structural — session counters agree with the audit                       | [Execution door](#scenarios--execution-door), [Budget and sessions](#scenarios--budget-and-sessions)                                                                    |
+| Structural — no configuration value hard-coded                           | [Instance configuration](#scenarios--instance-configuration-crypto-composition-root)                                                                                    |
+| Structural — enumerated lists, never a wildcard or a preset reference    | [Plugin SDK](#scenarios--plugin-sdk), [Store](#scenarios--store), [Missions](#scenarios--missions)                                                                      |
+| Structural — every plugin ships a preset of its own catalog              | [Plugin SDK](#scenarios--plugin-sdk), [Provider plugins](#scenarios--provider-plugins)                                                                                  |
+| Structural — authority recomputed from current membership                | [Human authentication](#scenarios--human-authentication), [Missions](#scenarios--missions)                                                                              |
+| End to end — the cutover acceptance scenario                             | [`e2e-tests.md`](./e2e-tests.md): manual, with an automated browser smoke before it                                                                                     |
 
 ## Coverage
 
@@ -1659,9 +1659,147 @@ Integration:
   **per-IP rate limit on `/r/*`** (429, `Retry-After`) that does not block
   the decision endpoint; the root runs and stops the sweeper.
 
-Not covered here: the approval decision (P2.1). The claim URL reaching an
-MCP client through the execution door is asserted in "Scenarios — Execution
-door" (`budget-exhausted`).
+Not covered here: the approval decision ("Scenarios — Approval gate"
+below). The claim URL reaching an MCP client through the execution door is
+asserted in "Scenarios — Execution door" (`budget-exhausted`).
+
+## Scenarios — Approval gate
+
+> Covers: spec [`vaubaan-gateway.md`](../spec/vaubaan-gateway.md) §0 (Gate,
+> Approval request, Approval), §2.3, §3.5, §4.1 `approval-required`, §4.2
+> "Request inbox", §7.7, §8 (the acts), §10 "the approval: binding to the
+> exact argument fingerprint, single use, expiry, whole refusal of a
+> multi-risk call, gate opening bounded to the period, erasure of arguments
+> after decision" and "integration: approval and replay". Handbooks
+> [[requests]] ("Approvals"), [[budget-and-sessions]] ("Gates opened for the
+> period"), [[missions]] ("Editing a gate"). ADR [[atomic-budget-accounting]]
+> (amendment "the approval gate"). Feature P2.1.
+
+Unit:
+
+- **`apps/gateway/tests/unit/server/budget/gates.test.ts`** (9) — **gate
+  opening bounded to the period**: nothing opens without an event; an
+  opening opens the risk it names for the period it carries, another risk
+  stays gated; **the last instant of the period passes, the reload instant
+  does not**; an opening granted in the next period opens that one only; a
+  later edit of the gate on the mission ends it whatever the new value, an
+  edit of another risk does not; **an edit at the very instant of an opening
+  wins**; an opening after an edit opens again, in any order of the list;
+  events it cannot read (no details, no period end, no risk, a bad
+  timestamp, another kind) open nothing; fed to `decide()`: an opened gate
+  consumes no approval, the next period needs one again, the budget still
+  refuses at zero quota.
+- **`apps/gateway/src/server/requests/approval.test.ts`** (27) — the three
+  options, always in the same order, each with a one-line consequence (the
+  tool, "once, within 10 minutes", the quota and the rate limit; the period
+  end in UTC; "approval again from the next period"); a refusal is always
+  possible; a revoked / orphaned / expired mission and a risk that left the
+  policy take neither a grant nor an opening; a gate already `auto` or
+  already open cannot be opened, a grant stays possible; **a mission whose
+  single period never ends has no "rest of the period"**; the parser reads
+  the three resolutions and refuses anything else, a claim's resolution and
+  **any extra key** (nothing can widen what is granted); `formatDelay`.
+- **`packages/shared/src/session-events.test.ts`** — the `approval`,
+  `gate-opened` (a period end is mandatory) and `gate-changed` shapes, valid
+  and malformed. **`packages/gateway-core/tests/unit/errors.test.ts`** — the
+  refusal carries `approval_valid_seconds` and a hint naming the same tool,
+  the same arguments, the delay and "used once".
+
+Integration, `:memory:` store with a manual clock
+(`apps/gateway/tests/integration/requests/approval.test.ts`, 42): the
+executor is `SessionService.recordCall`, the creator is `RequestService`.
+
+- **The refusal** — every field: URL, fingerprint, the request's expiry,
+  the approval's validity, the replay instruction; nothing decremented; the
+  refusal never repeats the arguments; **the arguments are sealed with
+  `request:<id>` as associated data** and do not open under another id; a
+  replay before the decision points to the same request; **one byte changed
+  is a new request with another fingerprint**; the same arguments on another
+  tool are a request of their own; **a multi-risk call with one gated risk
+  is refused whole**, the ungated risk neither counted nor rate-recorded.
+- **The creator's view** — tool, arguments in clear, slices and touched
+  risks from the audit entry of the refused call, quota / consumed / left and
+  the gate of each, the three options, the session events; without an audit
+  entry the slices read "not recorded"; anyone else gets `forbidden` from
+  the view and from the three decisions; the inbox names the tool, never the
+  arguments.
+- **Grant** — **refusal → grant → the identical replay (another key order)
+  passes and consumes the approval → the second identical replay is refused
+  with a new request**; **the approved action decrements the quota and
+  counts in the rate window** (the next one is `rate-limited`); at zero
+  quota the claim comes first; **one approval covers a multi-risk call**
+  (both risks counted, one request); bound to the exact fingerprint, to the
+  tool and to the mission; **expires after the configured delay** (boundary
+  instant), and the delay is the operator's; a second gated risk of the same
+  call asks in its turn and both approvals are consumed together.
+- **Erasure** — on `grant`, `open-gate` and `refuse` **the row's `args_blob`
+  and `key_version` are NULL** (read with SQL), `decision_json` names no
+  argument, the view shows `arguments: null`; **on expiry the sweeper erases
+  the blob, and before it runs nothing opens an overdue request**; a
+  decision after the expiry decides nothing and erases; a decision the rules
+  refuse writes nothing and leaves the arguments sealed; a decided request
+  is not decided again.
+- **Refuse** — no approval; the replay asks again.
+- **Open the gate for the rest of the period** — a `gate-opened` session
+  event, no approval; **`decide()` reads it**: the replay and any other call
+  on the risk pass, **within the rate limit and the quota**; another gated
+  risk still asks; **after the reload the gate asks again**; opened again in
+  the next period it opens that one only; not twice in a period; **an edit
+  of the gate on the mission ends the opening**.
+- **Mission states** — revoked: a refusal only; a risk that left the policy:
+  a refusal only.
+- **Audit and logs** — **every decision writes one admin entry**
+  (`approval-granted`, `gate-opened`, `request-refused`) naming the creator,
+  the request, the tool and the fingerprint; a grant names its approval, an
+  opening its period; **the audit, the session events and the logs never
+  hold the arguments**, and no row holds a blob once every request is
+  closed.
+
+Integration, the real composition root:
+
+- **`tests/integration/requests/approval-access.test.ts`** (29) — **nobody
+  but the creator reads the arguments**: an operator, a co-owner of the
+  connection through its owner group and another user each get no view, one
+  sentence at `/r/<id>` (no argument, tool, mission name, risk or creator),
+  an empty inbox, 403 on the three decisions, and nothing on the mission's
+  pages; **the bootstrap operator** gets 403 on the three routes; **the
+  executor cannot approve its own action** (mission token refused by kind,
+  even next to the creator's cookie); another origin is refused; the creator
+  decides over JSON (the answer is the summary, tool but no argument) and
+  through the page's form (303 `?decided=1`, `?problem=<code>`); after the
+  decision the whole audit and the session events hold no argument.
+- **`tests/integration/execution/approval-door.test.ts`** (7) — **the
+  GitHub plugin's `developer` preset as shipped**, over JSON-RPC on `/mcp`
+  with a mocked upstream: a workflow file write on a feature branch (the
+  gated `github.workflow-write-via-file` and the ungated
+  `github.feature-branch-write`) is refused whole, nothing forwarded; the
+  creator's view shows the two slices and both risks; **grant → the
+  identical replay reaches the provider, counts on both risks, and its audit
+  entry carries `approval_id` → the second replay is refused**; one byte
+  changed and `github__delete_file` with the same arguments ask again; a
+  file outside `.github/workflows` never meets the gate; the gate opened for
+  the period; the gate set to `auto` on the mission; the sealed blob does
+  not read as the arguments, and neither audit, events nor logs hold them.
+- **`tests/integration/missions/gate.test.ts`** (17) — **the gate edited
+  after issuance**: `auto → approval` makes the next call ask and leaves the
+  rest of the policy untouched; `approval → auto` lets calls pass and leaves
+  the open request open; one `gate-changed` entry with before / after and a
+  session event once the session exists; the same gate writes nothing;
+  creator only (`not-found` for an operator and another user); a value that
+  is not a gate, a risk outside the policy, a revoked mission; the detail's
+  `gate_open_until`; `POST /api/missions/:id/gate` 200 / 400 / 404 / 422 /
+  409 / 403 / 401.
+- **`tests/integration/store/approval-decisions.test.ts`** (16) — migration
+  0005 (the `tool` column and the lookup index), `decideApproval` in one
+  transaction and its rollback, `getArguments` on an overdue request, the
+  open request of a call, `riskEvents`, `setGate`, `latestCall`.
+- **`tests/integration/audit/admin-mutations.test.ts`** — **structural**:
+  `MissionService.setGate` and `RequestService.decideApproval` are classified
+  as mutations, and each resolution of an approval request leaves its act,
+  through `decide` and through `decideApproval`.
+
+Not covered: a real provider behind an approved call (never); one request
+for a call touching two gated risks (they ask in turn, by decision).
 
 ## Scenarios — Audit search, mission session, retention
 
@@ -1857,9 +1995,6 @@ tells an explicit `telemetry.enabled` from an unset one.
 - **UI rendering** (React components) — one static-markup suite only
   (`apps/gateway/tests/unit/app/field.test.tsx`, label binding); the pages
   are walked by Playwright.
-- **Gate opened for the period** (spec §3.5 `gate-opened` event): the pure
-  `decide()` accepts `opened_gates`, but no code records or reads the event
-  yet (P2.1), so only the unit test exercises it.
 - **Accounting rules** (period arithmetic, quota/rate comparison, gates) —
   "Scenarios — Budget and sessions" tests them against the store's
   `decideAndDecrement`.

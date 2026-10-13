@@ -414,18 +414,49 @@ store's names are its contract, so consumers alias them (`…Record`).
 
 ## HTTP surface
 
-| Route                           | Handler   | Answers                                                                                 |
-| ------------------------------- | --------- | --------------------------------------------------------------------------------------- |
-| `POST /api/missions/preview`    | `preview` | 200 `{ preview }`                                                                       |
-| `POST /api/missions`            | `issue`   | 201 `{ mission, token: { secret, prefix }, kit }` · 422 `{ error: 'refused', preview }` |
-| `POST /api/missions/:id/rotate` | `rotate`  | 200 `{ mission, token, kit }` · 404 · 409 `mission-inactive`                            |
-| `POST /api/missions/:id/revoke` | `revoke`  | 200 `{ mission: { id, status } }` · 404                                                 |
+| Route                           | Handler   | Answers                                                                                                                        |
+| ------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `POST /api/missions/preview`    | `preview` | 200 `{ preview }`                                                                                                              |
+| `POST /api/missions`            | `issue`   | 201 `{ mission, token: { secret, prefix }, kit }` · 422 `{ error: 'refused', preview }`                                        |
+| `POST /api/missions/:id/rotate` | `rotate`  | 200 `{ mission, token, kit }` · 404 · 409 `mission-inactive`                                                                   |
+| `POST /api/missions/:id/revoke` | `revoke`  | 200 `{ mission: { id, status } }` · 404                                                                                        |
+| `POST /api/missions/:id/gate`   | `setGate` | 200 `{ mission, risk_id, gate, previous }` · 400 `invalid-gate-edit` · 404 · 409 `mission-inactive` · 422 `risk-not-in-policy` |
 
-All four go through `guardMutation(request, deps, 'user')` (handbook
+All five go through `guardMutation(request, deps, 'user')` (handbook
 [authentication](authentication.md)): origin check first (403
 `origin-mismatch`), then a **user** session (401 without, 403 for the
 bootstrap operator — a mission always has an identified human behind it), `Cache-Control: no-store`; a body that is not a
 draft is 400 `invalid-draft` with one problem per field (unknown keys refused).
+
+## Editing a gate after issuance — `MissionService.setGate(user, missionId, riskId, gate)`
+
+"The creator sets the risk's gate to `approval` at issuance, or later" (spec §3.5). On
+the mission page (`/missions/<id>`) each row of the policy table has one button
+(`gate-control.tsx`, a client component): _Require approval_ on an `auto` risk, _Set to
+auto_ on an `approval` one. It posts `{ risk_id, gate }` to `/api/missions/<id>/gate`
+and reloads the page's data.
+
+- **Only the gate moves.** Accepted risks, quotas, rate limits, resources and the token
+  are untouched; the body takes `risk_id` and `gate` and refuses any other key. The risk
+  must already be in the policy (`risk-not-in-policy` otherwise): an edit never adds a
+  risk.
+- **No authority is re-checked.** A gate is not part of what a share restricts (spec
+  §11.2: no quantities or gates in shares) and loosening or tightening it does not change
+  which risks the mission accepts.
+- **Creator only**, like every act on a mission: anyone else gets `not-found`. A revoked
+  or orphaned mission answers `inactive`: every call is refused whatever its gates.
+- **It applies to the next call.** The execution door loads the policy for each call;
+  nothing is cached, nothing is re-issued, the token does not change. Open approval
+  requests are left where they are (the creator answers them, or they expire).
+- **It ends an opening.** `store.missions.setGate` updates the row and, when the mission
+  has a session, records `gate-changed { gate, gate_before }` in the same transaction: an
+  opening "for the rest of the period" granted earlier on that risk stops there
+  ([budget-and-sessions](budget-and-sessions.md), "Gates opened for the period").
+- **One audit entry per change**: act `gate-changed`, object the mission, `before` /
+  `after` `{ risk_id, gate }`. Setting the gate a risk already has writes nothing.
+
+`MissionService.get()` gives each policy line `gate_open_until`: the end of the period the
+creator opened the gate for, or `null`; the page shows it next to the gate.
 
 ## The creation screen (`/missions/new`)
 
@@ -536,16 +567,20 @@ Unit, beside the code (109): `authority/authority-service.test.ts` (7),
 (8), `bootstrap-kit.test.ts` (9), `token.test.ts` (8, with the draft schema),
 `app/(app)/missions/new/form-state.test.ts` (22).
 
-Integration, `tests/integration/missions/` (36) on the real root over
-`:memory:`: `mission-lifecycle.test.ts` (28) and `mission-handlers.test.ts` (8).
+Integration, `tests/integration/missions/` (53) on the real root over
+`:memory:`: `mission-lifecycle.test.ts` (28), `mission-handlers.test.ts` (8) and
+`gate.test.ts` (17: both directions and what the next call answers, the audit entry and
+the session event, a no-op, creator only, the refusals, `gate_open_until`, the route's
+statuses).
 The lifecycle suite builds the pipeline's view with the door's own
 `loadMissionContext`, pins the `mission-issued` payload, and checks that the
 detail and the kit list what the door reaches (no resource at issuance then a
 discovery; every resource hidden; a resource turned stale).
 Scenarios in [integration-tests](../tests/integration-tests.md).
 
-Browser, `tests/e2e/v5/issue-mission.spec.ts` (2), `npm run test:e2e:v5`:
-see [e2e-tests](../tests/e2e-tests.md) for the ephemeral instance.
+Browser, `tests/e2e/v5/issue-mission.spec.ts` (2) and the gate edit at the end of
+`approve-action.spec.ts`, `npm run test:e2e:v5`: see [e2e-tests](../tests/e2e-tests.md)
+for the ephemeral instance.
 
 ## How to debug
 
