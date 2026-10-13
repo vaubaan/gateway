@@ -15,10 +15,12 @@
  * P1.6 with the v4 pipeline.
  */
 
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-import { definePlugin, loadCatalogFile, type RiskCatalog } from '@vaubaan/plugin-sdk';
+import {
+  catalogPathNextTo,
+  definePlugin,
+  loadCatalogFile,
+  type RiskCatalog,
+} from '@vaubaan/plugin-sdk';
 
 import {
   classifyUpstashRedis,
@@ -48,15 +50,9 @@ import {
 } from './execute.ts';
 import { upstashRedisTools } from './tools.ts';
 
-// The YAML sits next to this module. The path is built from `import.meta.url`
-// as a string rather than with `new URL('./risk-catalog.yaml', import.meta.url)` :
-// bundlers (Turbopack in `apps/gateway`) rewrite that exact pattern into an
-// asset URL of another realm, which `node:url`'s `fileURLToPath` rejects.
-// An SDK helper replaces this in a later feature.
-export const UPSTASH_REDIS_CATALOG_PATH = join(
-  dirname(fileURLToPath(import.meta.url)),
-  'risk-catalog.yaml',
-);
+// The YAML sits next to this module ; `catalogPathNextTo` keeps the path a
+// filesystem path the bundler leaves alone (ADR plugin-catalog-path-and-standalone-tracing).
+export const UPSTASH_REDIS_CATALOG_PATH = catalogPathNextTo(import.meta.url);
 
 export const upstashRedisCatalog = loadCatalogFile(UPSTASH_REDIS_CATALOG_PATH);
 

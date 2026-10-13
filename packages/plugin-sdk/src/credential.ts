@@ -65,10 +65,19 @@ export interface OAuth2CredentialSpec {
   readonly scopes: readonly string[];
   /** RFC 7636. Always true for a public client (`clientAuthMethod: 'none'`). */
   readonly pkce: boolean;
-  /** RFC 8707 resource indicator sent with the authorization request, when the provider requires one. */
+  /**
+   * RFC 8707 resource indicator sent with the authorization request and with
+   * every token request (code exchange and refresh), when the provider
+   * requires one.
+   */
   readonly resourceIndicator?: string;
   readonly clientAuthMethod: OAuth2ClientAuthMethod;
-  /** Whether the token endpoint issues refresh tokens the plugin's `refresh` can use. */
+  /**
+   * Whether the token endpoint issues refresh tokens. The host performs the
+   * standard `refresh_token` grant itself from `tokenUrl`, `clientAuthMethod`
+   * and `resourceIndicator` ; `ProviderPlugin.refresh` overrides it for a
+   * non-standard flow only.
+   */
   readonly refreshable: boolean;
   /** Extra static query parameters (`access_type=offline`, `prompt=consent`). */
   readonly extraAuthorizationParams?: Readonly<Record<string, string>>;

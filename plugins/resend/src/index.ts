@@ -12,23 +12,21 @@
  * here, once, at import (that is, at gateway boot).
  */
 
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-import { definePlugin, loadCatalogFile, type RiskCatalog } from '@vaubaan/plugin-sdk';
+import {
+  catalogPathNextTo,
+  definePlugin,
+  loadCatalogFile,
+  type RiskCatalog,
+} from '@vaubaan/plugin-sdk';
 
 import { classifyResend } from './classify.ts';
 import { resendDataModel } from './data-model.ts';
 import { discoverResendResources, executeResend } from './execute.ts';
 import { resendTools } from './tools.ts';
 
-// The path is built from `import.meta.url` with `node:path`, not with
-// `new URL('./risk-catalog.yaml', import.meta.url)` : a bundler (Turbopack in
-// `apps/gateway`) rewrites that literal into a static asset URL and the YAML
-// can no longer be read from disk at boot. An SDK helper replaces this later.
-export const resendCatalog = loadCatalogFile(
-  join(dirname(fileURLToPath(import.meta.url)), 'risk-catalog.yaml'),
-);
+// The YAML sits next to this module ; `catalogPathNextTo` keeps the path a
+// filesystem path the bundler leaves alone (ADR plugin-catalog-path-and-standalone-tracing).
+export const resendCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 export const resendPlugin = definePlugin({
   id: 'resend',

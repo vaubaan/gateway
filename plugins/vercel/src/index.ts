@@ -14,10 +14,12 @@
  * `classifyVercelV4`). They are deleted in P1.6 with the v4 pipeline.
  */
 
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-import { definePlugin, loadCatalogFile, type RiskCatalog } from '@vaubaan/plugin-sdk';
+import {
+  catalogPathNextTo,
+  definePlugin,
+  loadCatalogFile,
+  type RiskCatalog,
+} from '@vaubaan/plugin-sdk';
 
 import {
   classifyVercel,
@@ -43,14 +45,9 @@ import {
 } from './execute.ts';
 import { vercelTools } from './tools.ts';
 
-// The YAML sits next to this module. The path is built from `import.meta.url`
-// as a string rather than with `new URL('./risk-catalog.yaml', import.meta.url)` :
-// bundlers (Turbopack in `apps/gateway`) rewrite that exact pattern into an
-// asset URL of another realm, which `node:url`'s `fileURLToPath` rejects.
-export const VERCEL_CATALOG_PATH = join(
-  dirname(fileURLToPath(import.meta.url)),
-  'risk-catalog.yaml',
-);
+// The YAML sits next to this module ; `catalogPathNextTo` keeps the path a
+// filesystem path the bundler leaves alone (ADR plugin-catalog-path-and-standalone-tracing).
+export const VERCEL_CATALOG_PATH = catalogPathNextTo(import.meta.url);
 
 export const vercelCatalog = loadCatalogFile(VERCEL_CATALOG_PATH);
 
@@ -69,6 +66,9 @@ export const vercelPlugin = definePlugin({
   classify: classifyVercel,
   execute: executeVercel,
   discoverResources: discoverVercelResources,
+  // The environment is the `env[<label>]` segment of the slice, not the
+  // owner's label on the project resource (ADR fallback-risk-only-when-uncategorized D4).
+  envOf: (slice) => vercelEnvOf(slice) ?? undefined,
 });
 
 export default vercelPlugin;

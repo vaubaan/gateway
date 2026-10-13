@@ -15,10 +15,12 @@
  * They are deleted in P1.6 with the v4 pipeline.
  */
 
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-import { definePlugin, loadCatalogFile, type ProviderPlugin } from '@vaubaan/plugin-sdk';
+import {
+  catalogPathNextTo,
+  definePlugin,
+  loadCatalogFile,
+  type ProviderPlugin,
+} from '@vaubaan/plugin-sdk';
 
 import { classifySsh, PROVIDER, resolveExecArgs } from './classify.ts';
 import {
@@ -45,11 +47,9 @@ import {
 } from './transport.ts';
 import type { SshRuntimeOptions } from './execute.ts';
 
-// The YAML sits next to this module. The path is built from `import.meta.url`
-// as a string, never with `new URL('./risk-catalog.yaml', import.meta.url)` :
-// Turbopack (the v4 `apps/gateway` bundler) rewrites that pattern into an
-// asset URL of another realm, which `fileURLToPath` rejects.
-export const SSH_CATALOG_PATH = join(dirname(fileURLToPath(import.meta.url)), 'risk-catalog.yaml');
+// The YAML sits next to this module ; `catalogPathNextTo` keeps the path a
+// filesystem path the bundler leaves alone (ADR plugin-catalog-path-and-standalone-tracing).
+export const SSH_CATALOG_PATH = catalogPathNextTo(import.meta.url);
 
 export const sshCatalog = loadCatalogFile(SSH_CATALOG_PATH);
 

@@ -101,13 +101,16 @@ describe('definePlugin', () => {
         refreshable: true,
       },
     };
-    expect(pluginIssues(oauthNoRefresh)).toEqual(
+    const oauthIssues = pluginIssues(oauthNoRefresh);
+    expect(oauthIssues).toEqual(
       expect.arrayContaining([
         expect.stringMatching(/credential.authorizationUrl: expected an https URL/),
         expect.stringMatching(/public client .* must use PKCE/),
-        expect.stringMatching(/refreshable: true needs a refresh\(\) implementation/),
       ]),
     );
+    // `refreshable: true` without `refresh()` is fine : the host performs the
+    // standard refresh_token grant from the spec (P1.2-align).
+    expect(oauthIssues.filter((m) => /refresh/.test(m))).toEqual([]);
 
     const appInstall: ProviderPlugin = {
       ...acmePlugin,

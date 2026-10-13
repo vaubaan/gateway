@@ -32,6 +32,8 @@ export interface ProviderLabel {
   readonly displayName: string;
   readonly version: string;
   readonly description: string | null;
+  /** `ProviderPlugin.experimental`, normalised to a boolean. */
+  readonly experimental: boolean;
 }
 
 export class PluginRegistryError extends Error {
@@ -147,6 +149,7 @@ export class PluginRegistry {
       displayName: plugin.displayName,
       version: plugin.version,
       description: plugin.description ?? null,
+      experimental: plugin.experimental ?? false,
     }));
   }
 

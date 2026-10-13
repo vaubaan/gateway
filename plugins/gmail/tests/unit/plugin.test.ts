@@ -274,12 +274,8 @@ describe('gmail credential spec', () => {
     }
   });
 
-  test('refresh is a placeholder : rejects naming the host-side generic refresh, no call made', async () => {
-    const fetch = mockFetch([]);
-    await expect(gmailPlugin.refresh!(connCtx(fetch))).rejects.toThrow(
-      /host refreshes a standard oauth2 credential/,
-    );
-    expect(fetch.calls).toHaveLength(0);
+  test('no plugin refresh : the host performs the standard refresh_token grant from the spec', () => {
+    expect(gmailPlugin.refresh).toBeUndefined();
   });
 });
 

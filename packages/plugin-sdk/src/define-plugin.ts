@@ -110,11 +110,9 @@ function credentialSpecIssues(plugin: ProviderPlugin): string[] {
         issues.push('credential.scopes: expected a list (may be empty)');
       if (spec.clientAuthMethod === 'none' && !spec.pkce)
         issues.push('credential.pkce: a public client (clientAuthMethod none) must use PKCE');
-      if (spec.refreshable && typeof plugin.refresh !== 'function') {
-        issues.push(
-          'refresh: an oauth2 spec with refreshable: true needs a refresh() implementation',
-        );
-      }
+      // `refreshable: true` needs no `refresh()` : the host performs the
+      // standard refresh_token grant from the spec (ADR plugin-contract D2 as
+      // amended by P1.2-align) ; `refresh` is an override for non-standard flows.
       break;
     case 'app-install':
       if (!Array.isArray(spec.appConfigFields) || spec.appConfigFields.length === 0) {

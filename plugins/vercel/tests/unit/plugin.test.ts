@@ -13,6 +13,7 @@ import {
   CredentialKindMismatch,
   parseSlice,
   serializeSlice,
+  type EnvOf,
   type ExecuteContext,
   type Resource,
 } from '@vaubaan/plugin-sdk';
@@ -24,6 +25,7 @@ import {
   mockFetch,
   type RecordedCall,
 } from '@vaubaan/plugin-sdk/testing';
+import { envResolverFor } from '@vaubaan/policy-engine';
 
 import {
   classifyVercel,
@@ -255,6 +257,23 @@ describe('vercelEnvOf — the environment a slice touches', () => {
     expect(vercelEnvOf(parseSlice('vercel.project[prj_abc].project-settings.W'))).toBeNull();
     expect(vercelEnvOf(parseSlice('vercel.account.team[*].R'))).toBeNull();
     expect(vercelEnvOf(parseSlice('github.repo[a/b].branch[main].W'))).toBeNull();
+  });
+
+  test('the plugin declares it as envOf ; the host composes it before the resource label', () => {
+    const envOf: EnvOf = vercelPlugin.envOf;
+    expect(envOf(parseSlice('vercel.project[prj_abc].env[prod].env-var[K].W'), [app])).toBe('prod');
+    expect(envOf(parseSlice('vercel.project[prj_abc].domain[x].W'), [app])).toBeUndefined();
+
+    // `envResolverFor` : the slice's own env wins over an owner label that
+    // disagrees ; an env-less slice falls back to that label.
+    const labelledStaging: Resource = { ...app, env: 'staging' };
+    const resolver = envResolverFor([labelledStaging], envOf);
+    expect(resolver.resolveEnv(parseSlice('vercel.project[prj_abc].env[prod].env-var[K].W'))).toBe(
+      'prod',
+    );
+    expect(resolver.resolveEnv(parseSlice('vercel.project[prj_abc].project-settings.W'))).toBe(
+      'staging',
+    );
   });
 });
 

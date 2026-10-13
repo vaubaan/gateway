@@ -28,7 +28,7 @@ plugins/railway/
     data-model.ts        plane `runtime`, 9 entities
     tools.ts             railwayTools = upstream-tools.json (10) + custom-tools.ts (4)
     classify.ts          classifyRailway(tool, args, resources) — security-critical, pure
-    credential.ts        railwayCredentialSpec, railwayNeedsRefresh, refreshRailwayCredential
+    credential.ts        railwayCredentialSpec (+ RAILWAY_REFRESH_THRESHOLD_MS for the legacy adapter)
     execute.ts           executeRailway, discoverRailwayResources, callUpstream, callGraphql
     risk-classifier.ts   legacy bridge classifyRailwayV4(bindings) → classifyRailway
     railway-adapter.ts   legacy v4 RailwayAdapter (apps/gateway build.ts, state.ts)
@@ -114,15 +114,14 @@ the flow with the company's Auth app (`client_id` / `client_secret` from
 the instance configuration) and stores `{ accessToken, refreshToken,
 expiresAt, scopes }`.
 
-Access tokens last one hour, so refresh is on the hot path:
-`railwayNeedsRefresh(secret, now)` is true within 60 s of `expiresAt`
-(`RAILWAY_REFRESH_THRESHOLD_MS`); `refreshRailwayCredential(ctx)` posts
-`grant_type=refresh_token` + `resource=https://mcp.railway.com` with Basic
-client auth read from `ctx.appConfig.client_id` / `client_secret`, and
-returns a new `OAuth2Secret` (old refresh token and scopes kept when the
-response omits them). HTTP 400/401/403 → `UpstreamAuthError` (the host marks
-the connection `expired`); a missing app config key throws naming the key.
-The plugin never persists: the host calls `refresh` and stores the result.
+Access tokens last one hour, so refresh is on the hot path — and it is the
+standard RFC 6749 `refresh_token` grant with Basic client authentication
+plus the same `resource=https://mcp.railway.com` indicator, which the host
+performs from `tokenUrl`, `clientAuthMethod` and `resourceIndicator`. The
+plugin therefore declares `refreshable: true` and implements no `refresh`
+(P1.2-align removed `refreshRailwayCredential` and `railwayNeedsRefresh`);
+`RAILWAY_REFRESH_THRESHOLD_MS` (60 s) survives for the legacy v4 adapter
+only. The plugin never persists: the host refreshes and stores the result.
 
 ## Execution
 
@@ -158,8 +157,8 @@ a refusal surfaces as `UpstreamAuthError` with the upstream message.
   cited a project the mission does not select.
 - **`UpstreamAuthError` on every call** — token expired and the host did
   not refresh, or the token lacks the MCP audience (`resource=` missing on
-  the authorize or token request). Check `railwayNeedsRefresh` on the
-  stored `expiresAt`.
+  the authorize or token request). Check the stored `expiresAt` and that the
+  host sends `resourceIndicator` on the refresh request.
 - **`Railway GraphQL 401`** on variable tools or discovery — backboard
   refused the MCP-audience token; see the empirical caveat above.
 
@@ -168,9 +167,8 @@ a refusal surfaces as `UpstreamAuthError` with the upstream message.
 `npx vitest run plugins/railway` — 88 tests (v4: 58). `plugin.test.ts`
 runs the kit (`assertPluginWellFormed`, `assertPresetsValid`,
 `assertNoWildcard`, `assertCatalogCoverage` with every risk touched),
-classifier branches on `Resource[]`, the refresh threshold and request
-shape, `execute` and `discoverResources` against `mockFetch`. No test
-reaches Railway.
+classifier branches on `Resource[]`, the credential spec, `execute` and
+`discoverResources` against `mockFetch`. No test reaches Railway.
 
 ## Legacy and removal plan
 

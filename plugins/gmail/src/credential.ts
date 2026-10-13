@@ -19,18 +19,13 @@
  * authorization decided by ADR when the execution phase lands. The label
  * tools are therefore classified today but would be refused upstream.
  *
- * The plugin does **not** implement a provider-specific refresh : Google's
- * refresh is the standard RFC 6749 `refresh_token` grant the host performs
- * from `tokenUrl` + `clientAuthMethod`. `refreshGmailCredential` below only
- * exists because the current SDK requires a `refresh` member when
- * `refreshable` is true ; it is deleted with the SDK's generic refresh.
+ * The plugin implements no provider-specific refresh : Google's refresh is
+ * the standard RFC 6749 `refresh_token` grant the host performs from
+ * `tokenUrl` + `clientAuthMethod` (`refreshable: true` is the whole
+ * declaration).
  */
 
-import type {
-  ConnectionContext,
-  CredentialSecret,
-  OAuth2CredentialSpec,
-} from '@vaubaan/plugin-sdk';
+import type { OAuth2CredentialSpec } from '@vaubaan/plugin-sdk';
 
 export const GMAIL_AUTHORIZATION_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 export const GMAIL_TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -64,19 +59,3 @@ export const gmailCredentialSpec: OAuth2CredentialSpec = {
     include_granted_scopes: 'true',
   },
 };
-
-/**
- * Placeholder satisfying the SDK's `refreshable → refresh()` check. Google's
- * refresh is the standard grant the host performs from the spec ; this
- * function never performs it and throws so a host that still delegates to
- * plugins fails loudly instead of silently keeping an expired connection.
- *
- * @deprecated removed when the SDK performs the generic oauth2 refresh (P1.2-SDK).
- */
-export function refreshGmailCredential(_ctx: ConnectionContext): Promise<CredentialSecret> {
-  return Promise.reject(
-    new Error(
-      'gmail: no plugin-specific refresh — the host refreshes a standard oauth2 credential from the spec (tokenUrl, clientAuthMethod).',
-    ),
-  );
-}

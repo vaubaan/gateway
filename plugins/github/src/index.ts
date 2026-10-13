@@ -13,10 +13,7 @@
  * the execution door (P1.6) replaces the v4 gateway ; they are deleted with it.
  */
 
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-import { definePlugin, loadCatalogFile } from '@vaubaan/plugin-sdk';
+import { catalogPathNextTo, definePlugin, loadCatalogFile } from '@vaubaan/plugin-sdk';
 
 import { classifyGithub } from './classify.ts';
 import { githubCredential } from './credential.ts';
@@ -24,16 +21,9 @@ import { githubDataModel } from './data-model.ts';
 import { discoverGithubResources, executeGithub } from './execute.ts';
 import { githubTools } from './tools.ts';
 
-/**
- * The catalog path is a string resolved from `import.meta.url` rather than
- * `new URL('./risk-catalog.yaml', import.meta.url)` : the Next.js bundler of
- * the v4 app treats the latter as an asset import and hands the loader a
- * URL it cannot read (same rule as `apps/gateway/src/server/store/migrate.ts`).
- */
-export const GITHUB_CATALOG_PATH = resolve(
-  dirname(fileURLToPath(import.meta.url)),
-  'risk-catalog.yaml',
-);
+// The YAML sits next to this module ; `catalogPathNextTo` keeps the path a
+// filesystem path the bundler leaves alone (ADR plugin-catalog-path-and-standalone-tracing).
+export const GITHUB_CATALOG_PATH = catalogPathNextTo(import.meta.url);
 
 export const githubCatalog = loadCatalogFile(GITHUB_CATALOG_PATH);
 

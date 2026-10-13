@@ -10,28 +10,17 @@
  * the module is first imported (that is, at gateway boot).
  */
 
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-import { definePlugin, loadCatalogFile } from '@vaubaan/plugin-sdk';
+import { catalogPathNextTo, definePlugin, loadCatalogFile } from '@vaubaan/plugin-sdk';
 
 import { classifySupabase, SUPABASE_CLASSIFIED_TOOLS, SUPABASE_TOOL_PLANES } from './classify.ts';
-import {
-  refreshSupabaseCredential,
-  shouldRefreshSupabaseCredential,
-  supabaseCredential,
-} from './credential.ts';
+import { supabaseCredential } from './credential.ts';
 import { supabaseDataModel } from './data-model.ts';
 import { discoverSupabaseResources, executeSupabase } from './execute.ts';
 import { supabaseTools } from './tools.ts';
 
-// Resolved from the bare `import.meta.url`, not with the
-// `new URL('./risk-catalog.yaml', import.meta.url)` idiom : the v4 Next.js
-// app (Turbopack) rewrites that idiom into a `/_next/static/media/...` asset
-// path, which `readFileSync` cannot open. Removed with the v4 app in P1.6.
-export const supabaseCatalog = loadCatalogFile(
-  join(dirname(fileURLToPath(import.meta.url)), 'risk-catalog.yaml'),
-);
+// The YAML sits next to this module ; `catalogPathNextTo` keeps the path a
+// filesystem path the bundler leaves alone (ADR plugin-catalog-path-and-standalone-tracing).
+export const supabaseCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 export const supabasePlugin = definePlugin({
   id: 'supabase',
@@ -48,7 +37,6 @@ export const supabasePlugin = definePlugin({
   classify: classifySupabase,
   execute: executeSupabase,
   discoverResources: discoverSupabaseResources,
-  refresh: refreshSupabaseCredential,
 });
 
 export default supabasePlugin;
@@ -58,8 +46,6 @@ export {
   supabaseCredential,
   supabaseDataModel,
   supabaseTools,
-  refreshSupabaseCredential,
-  shouldRefreshSupabaseCredential,
   SUPABASE_CLASSIFIED_TOOLS,
   SUPABASE_TOOL_PLANES,
 };

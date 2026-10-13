@@ -1,6 +1,6 @@
 /**
  * Mandatory suite of the `supabase` plugin : the SDK kit, the credential
- * spec and refresh, `execute` and `discoverResources` against `mockFetch`,
+ * spec, `execute` and `discoverResources` against `mockFetch`,
  * and the presets. No network : an unmatched request fails the test.
  */
 import { describe, expect, test } from 'vitest';
@@ -22,11 +22,9 @@ import {
 
 import {
   MAX_DISCOVERED_PROJECTS,
-  REFRESH_THRESHOLD_MS,
   SUPABASE_API_BASE,
   SUPABASE_CLASSIFIED_TOOLS,
   SUPABASE_OAUTH_TOKEN_URL,
-  shouldRefreshSupabaseCredential,
   supabasePlugin,
 } from '../../src/index.ts';
 
@@ -283,7 +281,7 @@ describe('supabase presets', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Credential spec and refresh
+// Credential spec
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('supabase credential', () => {
@@ -297,79 +295,9 @@ describe('supabase credential', () => {
     expect(c.pkce).toBe(true);
     expect(c.clientAuthMethod).toBe('client_secret_basic');
     expect(c.refreshable).toBe(true);
-    expect(typeof supabasePlugin.refresh).toBe('function');
-  });
-
-  test('refresh threshold : within 60 s of expiry, expired, unparsable → refresh ; far away or unknown → no', () => {
-    const now = Date.parse('2026-10-13T12:00:00.000Z');
-    const at = (deltaMs: number) => ({ expiresAt: new Date(now + deltaMs).toISOString() });
-    expect(REFRESH_THRESHOLD_MS).toBe(60_000);
-    expect(shouldRefreshSupabaseCredential(at(REFRESH_THRESHOLD_MS - 1), now)).toBe(true);
-    expect(shouldRefreshSupabaseCredential(at(REFRESH_THRESHOLD_MS + 1), now)).toBe(false);
-    expect(shouldRefreshSupabaseCredential(at(-5_000), now)).toBe(true);
-    expect(shouldRefreshSupabaseCredential(at(3_600_000), now)).toBe(false);
-    expect(shouldRefreshSupabaseCredential({ expiresAt: 'garbage' }, now)).toBe(true);
-    expect(shouldRefreshSupabaseCredential({ expiresAt: null }, now)).toBe(false);
-  });
-
-  test('refresh posts grant_type=refresh_token with Basic client auth and returns a new secret', async () => {
-    const fetch = mockFetch([
-      {
-        method: 'POST',
-        url: SUPABASE_OAUTH_TOKEN_URL,
-        body: { access_token: 'new_access', refresh_token: 'new_refresh', expires_in: 3600 },
-        times: 1,
-      },
-    ]);
-    const before = Date.now();
-    const input = oauthSecret();
-    const out = await supabasePlugin.refresh(connCtx(fetch, { credential: input }));
-    const call = fetch.calls[0]!;
-    expect(call.headers.authorization).toBe(
-      `Basic ${Buffer.from('cid:csecret').toString('base64')}`,
-    );
-    expect(call.headers['content-type']).toBe('application/x-www-form-urlencoded');
-    expect(new URLSearchParams(call.body ?? '').get('grant_type')).toBe('refresh_token');
-    expect(new URLSearchParams(call.body ?? '').get('refresh_token')).toBe('sbp_refresh');
-    expect(call.body).not.toContain('client_secret');
-    expect(out.kind).toBe('oauth2');
-    if (out.kind !== 'oauth2') return;
-    expect(out.accessToken).toBe('new_access');
-    expect(out.refreshToken).toBe('new_refresh');
-    expect(out.scopes).toEqual(['all']);
-    expect(out.metadata).toEqual({ account: 'acme' });
-    const exp = Date.parse(out.expiresAt!);
-    expect(exp).toBeGreaterThanOrEqual(before + 3_600_000 - 1_000);
-    expect(exp).toBeLessThanOrEqual(Date.now() + 3_600_000 + 1_000);
-    // The input secret is not mutated.
-    expect(input.accessToken).toBe('sbp_access');
-    expect(fetch.pending()).toEqual([]);
-  });
-
-  test('refresh keeps the old refresh token when the provider does not rotate it', async () => {
-    const fetch = mockFetch([{ url: SUPABASE_OAUTH_TOKEN_URL, body: { access_token: 'a2' } }]);
-    const out = await supabasePlugin.refresh(connCtx(fetch));
-    if (out.kind !== 'oauth2') throw new Error('kind');
-    expect(out.refreshToken).toBe('sbp_refresh');
-    expect(out.expiresAt).toBeNull();
-  });
-
-  test('refresh : revoked token → UpstreamAuthError ; missing app config → error naming the keys', async () => {
-    const denied = mockFetch([
-      { url: SUPABASE_OAUTH_TOKEN_URL, status: 401, body: { error: 'x' } },
-    ]);
-    await expect(supabasePlugin.refresh(connCtx(denied))).rejects.toMatchObject({
-      name: 'UpstreamAuthError',
-      upstreamStatus: 401,
-    });
-    const never = mockFetch([]);
-    await expect(
-      supabasePlugin.refresh(connCtx(never, { appConfig: { client_id: 'cid' } })),
-    ).rejects.toThrow(/client_secret/);
-    await expect(
-      supabasePlugin.refresh(connCtx(never, { credential: oauthSecret({ refreshToken: null }) })),
-    ).rejects.toMatchObject({ name: 'UpstreamAuthError' });
-    expect(never.calls).toHaveLength(0);
+    // Supabase's refresh is the standard refresh_token grant : no plugin
+    // override, the host performs it from the spec.
+    expect('refresh' in supabasePlugin).toBe(false);
   });
 
   test('a credential of another kind is refused before any call', async () => {

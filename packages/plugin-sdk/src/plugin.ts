@@ -75,6 +75,13 @@ export interface ProviderPlugin {
   readonly description?: string;
   /** URL of the plugin's modelling handbook, when published. */
   readonly docsUrl?: string;
+  /**
+   * An experimental plugin is registered and classifies, but the host keeps
+   * it out of the default connect and issuance flows and lists none of its
+   * tools (gmail today : classifier-only, no executable tool). Absent means
+   * stable.
+   */
+  readonly experimental?: boolean;
 
   /** The MCP tools the plugin exposes, named `<prefix>__<local>`. May be empty for an experimental, classifier-only plugin. */
   readonly tools: readonly McpToolDeclaration[];
@@ -131,9 +138,14 @@ export interface ProviderPlugin {
   envOf?(slice: Slice, resources: readonly Resource[]): string | undefined;
 
   /**
-   * Obtain a fresh credential from an expired one (OAuth refresh token,
-   * re-minted installation token). Absent when the credential kind does not
-   * expire. Must not mutate its input.
+   * Override of the credential refresh for a non-standard flow (a re-minted
+   * installation token, a provider whose refresh is not the RFC 6749
+   * `refresh_token` grant). The host refreshes a standard `oauth2`
+   * credential itself from the spec — `tokenUrl`, `clientAuthMethod`,
+   * `resourceIndicator` — so a plugin whose provider follows the standard
+   * declares `refreshable: true` and nothing else. When present, the host
+   * calls it instead of the generic refresh ; it returns a new
+   * `CredentialSecret` and must not mutate its input.
    */
   refresh?(ctx: ConnectionContext): Promise<CredentialSecret>;
 

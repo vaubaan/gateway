@@ -11,19 +11,23 @@
  * around it; keeping this module pure keeps it trivially unit-testable.
  *
  * Environments are resolved through the policy engine's `EnvResolver`
- * (ADR plugin-contract-and-credential-spec D3): by default
- * `resourceEnvResolver(resources)` over the mission's resources, so a
+ * (ADR plugin-contract-and-credential-spec D3, fallback-risk-only-when-
+ * uncategorized D4): by default `envResolverFor(resources, adapter.envOf)`
+ * — the plugin's own derivation first (Vercel's `env[prod]` segment), the
+ * owner's label on the matching resource next, unqualified last — so a
  * mission that accepted `supabase[staging].bulk-row-write` matches an
- * executed `supabase.bulk-row-write` on the staging resource. A host may
- * pass another resolver (a plugin deriving the env from a branch).
+ * executed `supabase.bulk-row-write` on the staging resource, and one that
+ * accepted `vercel[prod].env-var-write` matches a prod env-var write on a
+ * project the owner labelled otherwise. A host may still pass another
+ * resolver.
  */
 
 import type { RefusalCode, Resource, RiskDecision, RiskId, Slice } from '@vaubaan/shared';
 import type { ClassifyOutcome, ProviderPlugin } from '@vaubaan/plugin-sdk';
 
 import {
+  envResolverFor,
   evaluateCall,
-  resourceEnvResolver,
   type EnvResolver,
   type IndexedRiskCatalog,
 } from '@vaubaan/policy-engine';
@@ -57,9 +61,10 @@ export type CallVerdict =
 
 /**
  * The classification half of the plugin contract: `classify(tool, args,
- * resources)`. A `ProviderPlugin` satisfies it as-is; tests pass a stub.
+ * resources)` plus the optional `envOf` derivation. A `ProviderPlugin`
+ * satisfies it as-is; tests pass a stub.
  */
-export type Classifier = Pick<ProviderPlugin, 'classify'>;
+export type Classifier = Pick<ProviderPlugin, 'classify' | 'envOf'>;
 
 /**
  * Pure: classify a call into slices, intersect with the provider catalog,
@@ -74,13 +79,13 @@ export function evaluateCallForToken(input: {
   tool: string;
   args: Readonly<Record<string, unknown>>;
   /** The mission's resources on the connection the call targets. Handed to
-   *  the classifier and, unless `envResolver` is given, used to qualify the
-   *  touched risks by environment. */
+   *  the classifier and, unless `envResolver` is given, composed with the
+   *  adapter's `envOf` to qualify the touched risks by environment. */
   resources: readonly Resource[];
   token: AcceptedRisksSnapshot;
   adapter: Classifier;
   catalog: IndexedRiskCatalog | undefined;
-  /** Defaults to `resourceEnvResolver(resources)`. */
+  /** Defaults to `envResolverFor(resources, adapter.envOf)`. */
   envResolver?: EnvResolver;
 }): CallVerdict {
   const { tool, args, resources, token, adapter, catalog } = input;
@@ -99,7 +104,7 @@ export function evaluateCallForToken(input: {
     token_accepted_risks: new Set(token.accepted_risks),
     token_denied_risks: new Set(token.denied_risks),
     catalog,
-    envResolver: input.envResolver ?? resourceEnvResolver(resources),
+    envResolver: input.envResolver ?? envResolverFor(resources, adapter.envOf?.bind(adapter)),
   });
 
   if (decision.outcome === 'allowed') {
