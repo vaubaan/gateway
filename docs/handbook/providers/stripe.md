@@ -11,8 +11,6 @@ tracks:
   - plugins/stripe/src/tools.ts
   - plugins/stripe/src/data-model.ts
   - plugins/stripe/src/risk-catalog.yaml
-  - plugins/stripe/src/risk-classifier.ts
-  - plugins/stripe/src/stripe-adapter.ts
   - plugins/stripe/tests/unit/
 ---
 

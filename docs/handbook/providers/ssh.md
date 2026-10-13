@@ -5,7 +5,7 @@ date: 2026-10-13
 tracks:
   - plugins/ssh/src/
   - plugins/ssh/tests/unit/
-  - apps/gateway/src/lib/bash/
+  - plugins/ssh/src/bash/
 ---
 
 # SSH provider — bash over SSH

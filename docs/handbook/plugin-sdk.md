@@ -11,7 +11,6 @@ tracks:
   - packages/shared/src/risk-id.ts
   - packages/shared/src/refusal.ts
   - packages/shared/src/mcp.ts
-  - packages/shared/src/legacy-v4.ts
   - packages/shared/src/data-model.ts
   - plugins/_template/
 ---

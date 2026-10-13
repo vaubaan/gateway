@@ -11,8 +11,6 @@ tracks:
   - plugins/cloudflare-dns/src/tools.ts
   - plugins/cloudflare-dns/src/data-model.ts
   - plugins/cloudflare-dns/src/risk-catalog.yaml
-  - plugins/cloudflare-dns/src/risk-classifier.ts
-  - plugins/cloudflare-dns/src/cloudflare-dns-adapter.ts
   - plugins/cloudflare-dns/tests/unit/
 ---
 

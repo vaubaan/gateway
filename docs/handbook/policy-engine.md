@@ -11,8 +11,6 @@ tracks:
   - packages/policy-engine/src/risk-policy.ts
   - packages/policy-engine/src/risk-runtime.ts
   - packages/policy-engine/src/qualify.ts
-  - packages/policy-engine/src/legacy-bindings.ts
-  - packages/policy-engine/src/scope-injection.ts
   - packages/policy-engine/tests/unit/
 ---
 

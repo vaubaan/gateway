@@ -6,9 +6,6 @@ tracks:
   - packages/gateway-core/src/
   - apps/gateway/src/app/mcp/route.ts
   - apps/gateway/src/app/.well-known/oauth-protected-resource/route.ts
-  - apps/gateway/src/lib/gateway/build.ts
-  - apps/gateway/src/lib/crypto/
-  - packages/shared/src/types.ts
 ---
 
 > **Legacy v4 document.** Kept for history; superseded by the v5 spec. Not maintained.

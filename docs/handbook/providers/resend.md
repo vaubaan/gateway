@@ -12,10 +12,6 @@ tracks:
   - plugins/resend/src/tools.ts
   - plugins/resend/src/data-model.ts
   - plugins/resend/src/risk-catalog.yaml
-  - plugins/resend/src/risk-classifier.ts
-  - plugins/resend/src/legacy-tools.ts
-  - plugins/resend/src/legacy-execute.ts
-  - plugins/resend/src/resend-adapter.ts
   - plugins/resend/tests/unit/
 ---
 

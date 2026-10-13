@@ -4,7 +4,7 @@ status: current
 date: 2026-06-15
 tracks:
   - plugins/github/src/
-  - apps/gateway/src/app/api/integrations/github/
+  - apps/gateway/src/server/connections/
 ---
 
 > **v4 document.** English rewrite scheduled by the v5 plan; `tracks` paths updated for the new layout.

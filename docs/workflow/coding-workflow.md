@@ -8,7 +8,7 @@ tracks:
   - package.json
   - tsconfig.base.json
   - vitest.config.ts
-  - playwright.config.ts
+  - apps/gateway/tests/e2e/v5/playwright.config.ts
   - eslint.config.js
   - .husky/pre-commit
   - CONTRIBUTING.md

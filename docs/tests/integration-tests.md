@@ -20,7 +20,7 @@ tracks:
   - plugins/stripe/tests/
   - packages/gateway-core/tests/
   - apps/gateway/tests/
-  - apps/gateway/src/lib/bash/
+  - plugins/ssh/src/bash/
   - apps/gateway/src/server/
   - apps/gateway/migrations/
   - packages/shared/src/

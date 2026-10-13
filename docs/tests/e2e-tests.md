@@ -4,7 +4,7 @@ status: current
 date: 2026-05-22
 last_synced: 2026-10-13
 tracks:
-  - playwright.config.ts
+  - apps/gateway/tests/e2e/v5/playwright.config.ts
   - apps/gateway/tests/e2e/
   - deploy/docker/smoke.sh
   - .github/workflows/ci.yml

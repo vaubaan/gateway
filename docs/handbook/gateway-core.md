@@ -11,17 +11,17 @@ tracks:
   - packages/shared/src/refusal.ts
   - packages/shared/src/risk.ts
   - packages/shared/src/mcp.ts
-  - apps/gateway/src/lib/gateway/legacy-v4-gateway.ts
 ---
 
 # Gateway core — `@vaubaan/gateway-core`
 
 The v5 decision core: typed refusals, the audit entry shape, the mission
 context, and the skeleton of the call pipeline with the hook points the
-later features fill. No transport, no store, no provider lives here: the
-door (feature P1.6) calls it, the embedded store (P0.3) implements its
-`AuditWriter`, the plugins (P1.2) implement its classifier and upstream
-stages.
+features fill. No transport, no store, no provider lives here: the
+execution door ([execution-door](execution-door.md)) calls it and provides
+the resource, risk and upstream stages, the embedded store implements its
+`AuditWriter`, the budget ([budget-and-sessions](budget-and-sessions.md))
+its `BudgetStage`, the plugins its classifier.
 
 Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §4.1 (structured
 refusals), §6 (three credentials), §8 (audit);
@@ -38,12 +38,13 @@ packages/gateway-core/
                      MissionPolicyEntry ...) and adds Door, BearerKind, MissionContext and
                      its projections (MissionConnection, MissionResource, MissionSummary)
     errors.ts        Refusal union, `refuse.*` builders, JSON-RPC mapping, AuthError
-    audit.ts         CallAuditEntry / AdminAuditEntry, AuditWriter, hashArguments, MemoryAuditWriter
+    audit.ts         CallAuditEntry / AdminAuditEntry, AuditWriter, MemoryAuditWriter
+    fingerprint.ts   canonicalJson, fingerprintArguments — the one argument hash (audit, approvals)
     cache.ts         CacheClient interface, bounded MemoryCacheClient (single-process only)
     risk-gateway.ts  decision core: evaluateCallForToken (classify → intersect → allow/deny)
     pipeline.ts      door check, DoorAuthenticator, CallPipeline and its stage interfaces
     index.ts         barrel
-  tests/unit/        errors, audit, cache, authenticate, pipeline, risk-gateway
+  tests/unit/        errors, audit, fingerprint, cache, authenticate, pipeline, risk-gateway
 ```
 
 Dependencies: `@vaubaan/shared` (the domain types, `RiskId`, `Slice`,
@@ -76,8 +77,7 @@ _connection_ authenticates to its provider (`api-key`, `oauth2`,
 `app-install`, `ssh-key`) and belongs to the plugin contract. The refusal
 code stays `wrong-credential-kind`, the spec's name. **`AuditDecision`**
 says `allowed` or `refused` (spec §8 "one entry per call, allowed or
-refused"); the v4 rows said `denied`, which only `AuditLogRow` in
-`legacy-v4.ts` still carries.
+refused").
 
 ## Refusals (`errors.ts`)
 
@@ -94,7 +94,7 @@ codes, one builder each under `refuse.*`, every refusal carrying its
 | `rate-limited`            | `risk_id`, `limit: RateLimit`, `retry_after_seconds`                               | wait N seconds; quota not consumed                          |
 | `connection-unavailable`  | `connection {id,name}`, `status` (`expired` \| `revoked`), `owner {kind, display}` | who can reconnect                                           |
 | `mission-inactive`        | `status` (expired/orphaned/revoked), `reason`                                      | stop calling, report to the human                           |
-| `wrong-credential-kind`   | `door`, `presented`, `expected` (`BearerKind`)                                     | credentials never cross over                                |
+| `wrong-credential-kind`   | `door`, `presented`, `expected` (`BearerKind`)                                     | where the presented kind IS accepted (`ACCEPTED_AT`)        |
 
 `isRefusal(value)` is the type guard (`isRefusalCode(code)` and a non-empty
 hint); `RefusalOf<C>` narrows a `Refusal` to one code.
@@ -111,9 +111,9 @@ yields `{ code: -32603, message: 'Vaubaan refused the call: <code>', data: <refu
 `REFUSAL_RPC_CODE` exports the constant. `rpcError(id, code, message, data?)`
 and `rpcSuccess(id, result)` are the generic builders the door uses for the
 rest of the envelope. The whole refusal, hint
-included, travels in `data`; the door must forward `data` to the MCP
-client (the v4 `/mcp` route only forwarded `message`, which lost the
-fields — a point for P1.6).
+included, travels in `data`; the execution door throws exactly that error
+through the MCP SDK, so the client receives the code, the fields and the
+hint ([execution-door](execution-door.md), "What the agent receives").
 
 **Not refusals** — `AuthError` (`AUTH_REQUIRED_RPC_CODE` = `-32001`,
 `AUTH_REQUIRED_HTTP_STATUS` = 401) for a missing, malformed, unknown or
@@ -136,12 +136,14 @@ refuse. `GatewayError` is its base.
 Two conventions:
 
 - `decision` is what the gateway decided. An allowed call whose provider
-  then failed stays `allowed` with `upstream_error` set (v4 recorded it as
-  `denied` with an `upstream-error:` prefix). An operator query for
+  then failed stays `allowed` with `upstream_error` set — also when the
+  failure is the connection's credential rejected for good
+  (`UpstreamRefusalError`): `upstream_error` is then `<refusal code>:
+<message>` and `refusal_code` stays null. An operator query for
   "actions with no business effect" is `decision = 'allowed' AND
 upstream_error IS NOT NULL`.
-- A structural rejection without a code (unknown tool, classifier denial,
-  catalog not loaded) is `decision = 'refused'`, `refusal_code = null`,
+- A structural rejection without a code (unknown tool, a provider the
+  mission has no connection for, classifier denial, catalog not loaded) is `decision = 'refused'`, `refusal_code = null`,
   `refusal_reason = <text>`.
 
 **Administrative entry**: `ts`, `user_id`, `act` (`AdminAct` union:
@@ -161,9 +163,13 @@ and signature are stable. A writer must not swallow failures: the pipeline
 lets a rejected `write` propagate, so no call completes without its entry
 (v4 logged and continued).
 
-**`hashArguments(args)`** is unchanged: `sha256(JSON.stringify(args ??
-{}))` truncated to 16 hex characters. It is not canonical (key order
-matters); the canonical fingerprint that binds approvals is P1.3's.
+**`arguments_hash`** is `fingerprintArguments(args)` (`fingerprint.ts`):
+SHA-256 hex (64 characters) of `canonicalJson(args ?? {})` — object keys
+sorted recursively, arrays in order, `undefined` members dropped, `toJSON`
+honoured, BigInt refused. It is the same value that binds approval
+requests, approvals and the `approval-required` refusal, so an audit row
+joins the request it produced. The budget re-exports both functions; v4's
+16-hex `hashArguments` is gone.
 
 `MemoryAuditWriter` keeps entries in memory for tests (`.entries`, `.calls`,
 `.admin`).
@@ -224,11 +230,11 @@ door.
 
 ```
 checkMissionActive(ctx, now)        mission-inactive         (pure, this module)
-resources.resolve(ctx, call)        resource-not-in-mission  (ResourceStage — authority feature)
+resources.resolve(ctx, call)        resource-not-in-mission  (ResourceStage — execution door)
 checkConnectionAvailable(target)    connection-unavailable   (pure, this module)
 risks.evaluate(ctx, call, target)   risk-not-accepted        (RiskStage over evaluateCallForToken)
 budget.decide(ctx, call, risks)     budget-exhausted | rate-limited | approval-required  (BudgetStage — P1.3)
-upstream.execute(ctx, call, target) mint + forward           (UpstreamStage — P1.2 plugins, P1.6 door)
+upstream.execute(ctx, call, target) mint + forward           (UpstreamStage — execution door)
 audit.write(entry)                  always, exactly once     (AuditWriter — P0.3)
 ```
 
@@ -241,10 +247,12 @@ returns a `BudgetDecision`). `CallPipeline.execute(ctx, call)` returns a
 - `refused` — a typed `Refusal` + audit entry (`refusal_code` set,
   `refusal_reason` = the hint; a `risk-not-accepted` entry also records
   the `risks_touched` the decision core computed, covered and missing);
-- `rejected` — structural, no code (classifier denial, catalog missing);
-  fail closed;
+- `rejected` — structural, no code (the resource stage found no target,
+  classifier denial, catalog missing); fail closed;
 - `failed` — allowed, then the provider threw (`decision: 'allowed'`,
-  `upstream_error` set).
+  `upstream_error` set). `refusal` is the typed refusal when the stage threw
+  `UpstreamRefusalError` (`connection-unavailable` after a rejected
+  refresh), `null` otherwise.
 
 Invariants the tests pin: the resource check runs before any risk is
 evaluated; a refusal at any stage never reaches the budget or the
@@ -258,13 +266,13 @@ exactly one audit entry; an audit write failure propagates.
 
 ### Stage contracts (hook points)
 
-| Interface       | Filled by                | Contract                                                                                                                                    |
-| --------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ResourceStage` | authority feature (P1.x) | `resolve(ctx, call)` → target, or `resource-not-in-mission` refusal                                                                         |
-| `RiskStage`     | P1.2 plugin wiring       | `evaluate(ctx, call, target)` → `CallVerdict` (default: `evaluateCallForToken` + the plugin's `classify`)                                   |
-| `BudgetStage`   | P1.3                     | `decide(ctx, call, {risks_touched, now})` → allowed `{session_id, remaining, approval_id}` or refusal; atomic; a refusal decrements nothing |
-| `UpstreamStage` | P1.2 / P1.6              | `execute(ctx, call, target)` → provider result; the executor never sees the credential                                                      |
-| `AuditWriter`   | P0.3                     | `write(entry)`; failures propagate                                                                                                          |
+| Interface       | Filled by      | Contract                                                                                                                                      |
+| --------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ResourceStage` | execution door | `resolve(ctx, call)` → `ResourceResolution`: target, `resource-not-in-mission` refusal, or `{ ok: false, reason }` (structural rejection)     |
+| `RiskStage`     | execution door | `evaluate(ctx, call, target)` → `CallVerdict` (default: `evaluateCallForToken` + the plugin's `classify`)                                     |
+| `BudgetStage`   | P1.3           | `decide(ctx, call, {risks_touched, now})` → allowed `{session_id, remaining, approval_id}` or refusal; atomic; a refusal decrements nothing   |
+| `UpstreamStage` | execution door | `execute(ctx, call, target)` → provider result; throws `UpstreamRefusalError(refusal)` for an unusable connection, anything else is a failure |
+| `AuditWriter`   | P0.3           | `write(entry)`; failures propagate                                                                                                            |
 
 ## Decision core (`risk-gateway.ts`)
 
@@ -290,20 +298,15 @@ resources)` returns the SDK's `ClassifyOutcome` (`{ slices }` or
 
 The policy engine's `RiskDecision` (denied) carries `code:
 'risk-not-accepted'` (the only code the risk step emits) and the hint; the
-verdict forwards both and the pipeline's refusal is built from them (the
-engine owns the wording, gateway-core never composes a fallback).
-`denyResponseBody` (deprecated) formats the v4 body (`error: <code>`,
-missing risks, slices, hint) for the legacy gateway only; the pipeline uses
-`refuse.riskNotAccepted`.
-The v4 `ProviderBinding` input and the `V4*` aliases are gone; the legacy
-app (`apps/gateway/src/lib/gateway/legacy-v4-gateway.ts`) maps its
-bindings to resources with the quarantined `resourceFromBinding` until
-P1.6 deletes it.
+verdict forwards both and the pipeline's refusal is built from them with
+`refuse.riskNotAccepted` (the engine owns the wording, gateway-core never
+composes a fallback).
 
 ## Cache (`cache.ts`)
 
 `CacheClient { get, set(key, value, ttlSeconds), del }` is the interface
-the door uses to keep a verified mission context for a few seconds; it is
+the execution door keeps its verified-token proofs and the plugins'
+derived upstream credentials behind; it is
 the only cache port of the code base (the composition root re-exports it
 and builds `MemoryCacheClient`, see [configuration](configuration.md)).
 `MemoryCacheClient` is bounded (`maxEntries`, default 10 000; the oldest
@@ -319,18 +322,12 @@ pivot D1; the Upstash ADR is superseded).
 ## What left the package
 
 - `gateway.ts` — the v4 `McpGateway` orchestrator (org/project context,
-  bindings, single-use tokens, venv tools). It is **not** v5 and could not
-  become v5 without the store, but the v4 application still compiles
-  against it until P1.6 replaces `/mcp`. It now lives next to its only
-  consumer as `apps/gateway/src/lib/gateway/legacy-v4-gateway.ts`, venv
-  tools removed, with its own `LegacyAuditRow` / `LegacyAuditWriter`;
-  its four tests moved to
-  `apps/gateway/tests/unit/lib/gateway/legacy-v4-gateway.test.ts`. Both
-  files are deleted with the rest of the v4 app code.
+  bindings, single-use tokens, venv tools). It lived on as
+  `apps/gateway/src/lib/gateway/legacy-v4-gateway.ts` until the execution
+  door replaced `/mcp`; it is deleted, with `hashArguments` and
+  `denyResponseBody`, which only it used.
 - `venv-store.ts` — project-scoped secret transfer; no v5 counterpart
-  (plan §8-Q5). The Vercel and Supabase adapters keep their own
-  structural reader interface (`VenvStoreReader` in Vercel, `VenvStoreLike`
-  in Supabase) until P1.2 migrates them.
+  (plan §8-Q5).
 - `SupabaseAuditWriter`, `RedisCacheClient`, `buildCacheClient`, and the
   `@supabase/supabase-js`, `@upstash/redis`, `@vaubaan/plugin-github`
   dependencies (declared, never imported).
@@ -347,15 +344,17 @@ pivot D1; the Upstash ADR is superseded).
   non-empty and serializable; `isRefusal`; `isUnavailableConnectionStatus`;
   `rpcError` / `rpcSuccess`; `AuthError` code and status;
   `refusalToRpcError` (-32603, data = refusal).
-- `audit.test.ts` (6) — `hashArguments` sha256/16 with a known vector,
-  determinism; `MemoryAuditWriter` over both kinds; the call entry carries
-  every §8 field.
+- `audit.test.ts` (2) — `MemoryAuditWriter` over both kinds; the call entry
+  carries every §8 field.
+- `fingerprint.test.ts` (8) — key sorting, `undefined` and array holes,
+  `toJSON`, primitives, BigInt refused, sha256 vector, key order vs value
+  change, no arguments, 64 hex.
 - `cache.test.ts` (6) — TTL, delete, bound eviction order, refresh on
   re-set, sweep before eviction, invalid bound.
 - `authenticate.test.ts` (11) — door table, pure `checkDoor` on every
   mismatch, `parseBearer`, `DoorAuthenticator` for mission token vs
   delegated token vs session at each door, unknown bearer → `AuthError`.
-- `pipeline.test.ts` (16) — `checkMissionActive` (status, passed and
+- `pipeline.test.ts` (19) — `checkMissionActive` (status, passed and
   future `expires_at`), `checkConnectionAvailable` (`unowned` passes,
   `expired` and `revoked` refuse), then the pipeline over
   a shared-shaped context (`ConnectionResource`, policy entries, one-off
@@ -363,13 +362,14 @@ pivot D1; the Upstash ADR is superseded).
   short-circuit, resource refusal before risk, expired connection,
   `risk-not-accepted` through the real decision core and the resources of
   the target connection, structural rejections, budget refusal without
-  upstream, approval id carried, upstream failure after allow, audit
-  failure propagating.
-- `risk-gateway.test.ts` (8) — the decision core: allow, deny with
+  upstream, approval id carried, upstream failure after allow (with and
+  without `UpstreamRefusalError`), a call with no target rejected before
+  any risk, audit failure propagating.
+- `risk-gateway.test.ts` (7) — the decision core: allow, deny with
   `code: 'risk-not-accepted'`, classifier denial, missing catalog,
   explicit denies, the classifier receives `(tool, args, resources)`,
   environment qualification from the resources by default and an explicit
-  `envResolver` overriding it, `denyResponseBody`.
+  `envResolver` overriding it.
 
 ## References
 
@@ -384,5 +384,6 @@ pivot D1; the Upstash ADR is superseded).
 - Neighbouring handbooks: [policy-engine](./policy-engine.md) (the pure
   engine this core calls), [plugin-sdk](./plugin-sdk.md) (the shared
   vocabulary and the plugin contract), [store](./store.md) (the
-  `AuditWriter` implementation), [mcp-gateway](./mcp-gateway.md) (legacy
-  v4 orchestration, historical).
+  `AuditWriter` implementation), [execution-door](./execution-door.md)
+  (the door and the stages), [mcp-gateway](./mcp-gateway.md) (legacy v4
+  orchestration, historical).

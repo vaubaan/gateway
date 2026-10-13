@@ -3,8 +3,8 @@ title: Railway + SSH providers — modélisation v4 risk-based
 status: current
 date: 2026-06-15
 tracks:
-  - plugins/railway/src/risk-classifier.ts
-  - plugins/ssh/src/risk-classifier.ts
+  - plugins/railway/src/classify.ts
+  - plugins/ssh/src/classify.ts
 ---
 
 > **v4 document.** English rewrite scheduled by the v5 plan; `tracks` paths updated for the new layout.
