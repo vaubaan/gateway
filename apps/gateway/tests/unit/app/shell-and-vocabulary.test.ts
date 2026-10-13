@@ -8,6 +8,7 @@ import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { REFUSAL_CODES } from '@vaubaan/shared';
 import { describe, expect, it } from 'vitest';
 
 import { LEGACY_REDIRECTS } from '../../../next.config';
@@ -16,9 +17,19 @@ import { ADMIN_PAGES, settingsNav } from '../../../src/components/shell/settings
 import { nextTheme, parseTheme, themeAttribute, themeCookie } from '../../../src/lib/theme';
 import {
   accessGiven,
+  ACT_WORDS,
+  activityLede,
   ago,
   asksFirst,
+  besidesOwners,
   count,
+  giveAccessLabel,
+  holderWords,
+  ownedBy,
+  presetHolds,
+  REFUSAL_WORDS,
+  shortDate,
+  stepsDone,
   GATE_WORDS,
   gateWordOf,
   keyOf,
@@ -40,6 +51,7 @@ import {
   whyValue,
 } from '../../../src/lib/vocabulary';
 import { CONNECT_CALLBACK_PATH, CONNECTIONS_PATH } from '../../../src/server/connections/service';
+import { DELEGATIONS_PAGE } from '../../../src/server/oauth-as/handlers';
 import { PROVIDERS_PATH } from '../../../src/server/providers/links';
 import { INBOX_PATH } from '../../../src/server/requests/url';
 
@@ -97,6 +109,9 @@ describe('the side navigation', () => {
     for (const path of ['/settings', '/delegations', '/admin', '/admin/users', '/design']) {
       expect(sectionOf(path), path).toBe('settings');
     }
+    // Connected apps are a page of Settings, under its path.
+    expect(sectionOf(ROUTES.connectedApps)).toBe('settings');
+    expect(ROUTES.connectedApps.startsWith(`${ROUTES.settings}/`)).toBe(true);
     expect(sectionOf('/login')).toBeNull();
   });
 
@@ -126,6 +141,7 @@ describe('the routes follow the words', () => {
     expect(CONNECTIONS_PATH).toBe(ROUTES.accounts);
     expect(INBOX_PATH).toBe(ROUTES.waiting);
     expect(PROVIDERS_PATH).toBe(ROUTES.reference);
+    expect(DELEGATIONS_PAGE).toBe(ROUTES.connectedApps);
   });
 
   it('redirects every old page path to a page or a route that exists', () => {
@@ -138,7 +154,9 @@ describe('the routes follow the words', () => {
       const target = destination.replace(/:[a-z]+\*?/g, (param) => concrete[param] ?? 'x');
       // `/accounts/new/github`, `/reference/github`, `/waiting/<id>`…
       const probe = target.startsWith('/waiting/') ? '/waiting/[id]' : target;
-      const path = probe.replace('/reference/github', '/reference/[id]');
+      const path = probe
+        .replace('/reference/github', '/reference/[id]')
+        .replace('/settings/connected-apps/x/revoke', '/settings/connected-apps/[id]/revoke');
       expect(
         served(path.replace('/accounts/new/github', '/accounts/new/[provider]')),
         `${source} → ${destination}`,
@@ -148,6 +166,12 @@ describe('the routes follow the words', () => {
     for (const old of ['/connections', '/requests', '/audit', '/providers']) {
       expect(sources, old).toContain(old);
     }
+    // The two pages that were folded into another: what a colleague gave access to is a
+    // region of Accounts, connected apps are a page of Settings.
+    const byOld = new Map(LEGACY_REDIRECTS.map((rule) => [rule.source, rule.destination]));
+    expect(byOld.get('/shares')).toBe(ROUTES.accounts);
+    expect(byOld.get('/delegations')).toBe(ROUTES.connectedApps);
+    expect(byOld.get('/delegations/:id/revoke')).toBe(`${ROUTES.connectedApps}/:id/revoke`);
   });
 
   it('never redirects the callback a provider was given: it is part of the protocol', () => {
@@ -171,7 +195,7 @@ describe('the routes follow the words', () => {
     }
     // Nothing under /api, /mcp, /r or /oauth is touched.
     for (const { source } of LEGACY_REDIRECTS) {
-      expect(source).toMatch(/^\/(connections|requests|audit|providers)\b/);
+      expect(source).toMatch(/^\/(connections|requests|audit|providers|shares|delegations)\b/);
     }
   });
 });
@@ -281,5 +305,60 @@ describe('the vocabulary', () => {
     expect(ago('2026-10-13T10:00:00Z', now)).toBe('1 h');
     expect(ago('2026-10-12T09:00:00Z', now)).toBe('yesterday');
     expect(ago('2026-10-09T09:00:00Z', now)).toBe('4 d');
+  });
+});
+
+describe('the words of the accounts, reference, activity and settings pages', () => {
+  it('says who owns an account, and who else holds it', () => {
+    expect(ownedBy({ team: false, name: 'Bob', you: true })).toBe('you own it');
+    expect(ownedBy({ team: false, name: 'Bob', you: false })).toBe('owned by Bob');
+    expect(
+      ownedBy({
+        team: true,
+        name: 'Platform',
+        you: true,
+        people: [
+          { name: 'Bob', you: false },
+          { name: 'Alice', you: true },
+        ],
+      }),
+    ).toBe('owned by the Platform team (Bob, you)');
+    expect(ownedBy({ team: true, name: 'Platform', you: false })).toBe(
+      'owned by the Platform team',
+    );
+    expect(besidesOwners(0)).toBe('nobody else');
+    expect(besidesOwners(3)).toBe('3 besides owners');
+    expect(holderWords('group GitHub admins')).toBe('the GitHub admins team');
+    expect(holderWords('bob@example.com')).toBe('bob@example.com');
+  });
+
+  it('names the confirming button of "Give access" after what it gives', () => {
+    expect(giveAccessLabel(10, false)).toBe('Give access · 10 permissions');
+    expect(giveAccessLabel(1, true)).toBe('Update access · 1 permission');
+  });
+
+  it('writes a short date without the year when it is this year', () => {
+    const now = new Date('2026-10-13T12:00:00Z');
+    expect(shortDate('2026-09-14T08:00:00Z', now)).toBe('14 Sep');
+    expect(shortDate('2025-09-02T08:00:00Z', now)).toBe('2 Sep 2025');
+  });
+
+  it('says what a preset holds, the retention of the record and the setup count', () => {
+    expect(presetHolds(10, 2)).toBe('10 · 2 ask');
+    expect(presetHolds(2, 0)).toBe('2 permissions');
+    expect(activityLede(90)).toBe(
+      'Every call an agent made and every change a person made, kept 90 days. This is the audit record.',
+    );
+    expect(activityLede(1)).toContain('kept 1 day.');
+    expect(stepsDone(3, 5)).toBe('3 of 5 done');
+  });
+
+  it('has a word for every refusal code and every administrative act of the protocol', () => {
+    expect(Object.keys(REFUSAL_WORDS).sort()).toEqual([...REFUSAL_CODES].sort());
+    for (const words of Object.values(ACT_WORDS)) expect(words.length).toBeGreaterThan(0);
+    // No protocol word is printed as prose: these are the interface's own.
+    for (const words of [...Object.values(REFUSAL_WORDS), ...Object.values(ACT_WORDS)]) {
+      expect(words).not.toMatch(/\b(connection|share|risk|delegation|operator|token)s?\b/);
+    }
   });
 });

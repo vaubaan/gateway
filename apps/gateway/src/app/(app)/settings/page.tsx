@@ -2,10 +2,10 @@
  * `/settings` — the person's own settings, and the door to the gateway's
  * administration for those who administer it.
  *
- * For now it holds the theme and leads to the pages that exist: connected
- * apps (`/delegations`) and Administration (`/admin/**`), which move under it
- * when the settings pages are redesigned. Open to every session: the
- * bootstrap operator configures the gateway from here too.
+ * It holds the theme and leads to the other pages of Settings: connected apps
+ * (`/settings/connected-apps`) and, for an administrator, the administration
+ * (`/admin/**`). Open to every session: whoever installs the gateway
+ * configures it from here too.
  */
 import { SettingsFrame } from '@/components/shell/AppShell';
 import { ADMIN_PAGES } from '@/components/shell/settings-nav';

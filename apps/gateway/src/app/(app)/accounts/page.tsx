@@ -76,109 +76,6 @@ interface OwnedRow {
   readonly missions: readonly MissionOnConnection[];
 }
 
-async function ownedRow(root: GatewayRoot, actor: Actor, view: ConnectionView): Promise<OwnedRow> {
-  const { connection } = view;
-  const [detail, context, missions] = await Promise.all([
-    root.connections.service.get(actor, connection.id),
-    root.shares.service.contextFor(actor, connection.id),
-    root.missions.service.onConnection(actor.user, connection.id),
-  ]);
-  const team =
-    connection.owner.kind === 'group'
-      ? actor.groups.find((group) => group.id === connection.owner.id)?.name
-      : undefined;
-  // A label matters only where a permission depends on one and the plugin does not read it from the call.
-  const needsLabels =
-    !context.labelling.derivesEnv && context.risks.some((risk) => risk.env !== null);
-  return {
-    view,
-    ownership: ownership({ you: true, team }),
-    resources: detail.resources.filter((resource) => resource.staleSince === null).length,
-    unlabelled: needsLabels ? context.labelling.unlabelledResources : 0,
-    holders: context.shares.length,
-    teamOwned: connection.owner.kind === 'group',
-    missions,
-  };
-}
-
-/** One account shared with the person: every access to it added up. */
-interface SharedRow {
-  readonly connection: ReceivedShare['connection'];
-  readonly providerLabel: string;
-  readonly givenBy: string;
-  /** Through which teams the access reaches the person; empty when it was given to them. */
-  readonly through: readonly string[];
-  readonly since: string;
-  /** The union of the permissions of every access, each id once. */
-  readonly permissions: readonly ReceivedRisk[];
-  /** How many explicit permissions the service has in all. */
-  readonly total: number;
-  /** The person's own missions on this account that still run. */
-  readonly missions: number;
-}
-
-function sharedRows(
-  received: readonly ReceivedShare[],
-  totals: ReadonlyMap<string, number>,
-  missionsOn: (connectionId: string) => number,
-): SharedRow[] {
-  const rows = new Map<string, SharedRow>();
-  for (const item of received) {
-    const known = rows.get(item.connection.id);
-    const through = item.via === 'you' ? [] : [holderWords(item.via)];
-    if (!known) {
-      rows.set(item.connection.id, {
-        connection: item.connection,
-        providerLabel: item.providerLabel,
-        givenBy: holderWords(item.ownerLabel),
-        through,
-        since: item.share.createdAt,
-        permissions: item.risks,
-        total: totals.get(item.connection.provider) ?? item.risks.length,
-        missions: missionsOn(item.connection.id),
-      });
-      continue;
-    }
-    const held = new Set(known.permissions.map((risk) => risk.risk_id));
-    rows.set(item.connection.id, {
-      ...known,
-      through: [...new Set([...known.through, ...through])],
-      since: item.share.createdAt < known.since ? item.share.createdAt : known.since,
-      permissions: [...known.permissions, ...item.risks.filter((risk) => !held.has(risk.risk_id))],
-    });
-  }
-  return [...rows.values()];
-}
-
-function Fact({ value, note }: { value: React.ReactNode; note?: React.ReactNode }) {
-  return (
-    <span className={styles.fact}>
-      {value}
-      {note && <span className={styles.factNote}>{note}</span>}
-    </span>
-  );
-}
-
-function missionsFact(missions: readonly MissionOnConnection[]): React.ReactNode {
-  const running = missions.filter((mission) => mission.state === 'active');
-  const atLimit = running.filter((mission) => mission.exhausted > 0).length;
-  const orphaned = missions.filter((mission) => mission.state === 'orphaned').length;
-  const notes = [
-    atLimit > 0 ? `${formatNumber(atLimit)} at its limit` : null,
-    orphaned > 0 ? `${formatNumber(orphaned)} stopped` : null,
-  ].filter(Boolean);
-  return <Fact value={formatNumber(running.length)} note={notes.join(' · ') || undefined} />;
-}
-
-function lastChecked({ connection, discovery }: ConnectionView, now: Date): React.ReactNode {
-  if (ACCOUNT_STATES[connection.status].tone !== null || connection.status === 'revoked') {
-    return <AccountState status={connection.status} />;
-  }
-  if (!discovery) return <span className={styles.quiet}>{ACCOUNT_WORDS.neverChecked}</span>;
-  if (!discovery.ok) return <StatusMark tone="warn">{ACCOUNT_WORDS.checkFailed}</StatusMark>;
-  return <span className={styles.quiet}>{ago(discovery.at, now)}</span>;
-}
-
 export default async function AccountsPage({ searchParams }: { searchParams: PageSearchParams }) {
   const session = await currentActor();
   if (!session) return <NeedsUser />;
@@ -420,4 +317,107 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pag
       </Section>
     </>
   );
+}
+
+async function ownedRow(root: GatewayRoot, actor: Actor, view: ConnectionView): Promise<OwnedRow> {
+  const { connection } = view;
+  const [detail, context, missions] = await Promise.all([
+    root.connections.service.get(actor, connection.id),
+    root.shares.service.contextFor(actor, connection.id),
+    root.missions.service.onConnection(actor.user, connection.id),
+  ]);
+  const team =
+    connection.owner.kind === 'group'
+      ? actor.groups.find((group) => group.id === connection.owner.id)?.name
+      : undefined;
+  // A label matters only where a permission depends on one and the plugin does not read it from the call.
+  const needsLabels =
+    !context.labelling.derivesEnv && context.risks.some((risk) => risk.env !== null);
+  return {
+    view,
+    ownership: ownership({ you: true, team }),
+    resources: detail.resources.filter((resource) => resource.staleSince === null).length,
+    unlabelled: needsLabels ? context.labelling.unlabelledResources : 0,
+    holders: context.shares.length,
+    teamOwned: connection.owner.kind === 'group',
+    missions,
+  };
+}
+
+/** One account shared with the person: every access to it added up. */
+interface SharedRow {
+  readonly connection: ReceivedShare['connection'];
+  readonly providerLabel: string;
+  readonly givenBy: string;
+  /** Through which teams the access reaches the person; empty when it was given to them. */
+  readonly through: readonly string[];
+  readonly since: string;
+  /** The union of the permissions of every access, each id once. */
+  readonly permissions: readonly ReceivedRisk[];
+  /** How many explicit permissions the service has in all. */
+  readonly total: number;
+  /** The person's own missions on this account that still run. */
+  readonly missions: number;
+}
+
+function sharedRows(
+  received: readonly ReceivedShare[],
+  totals: ReadonlyMap<string, number>,
+  missionsOn: (connectionId: string) => number,
+): SharedRow[] {
+  const rows = new Map<string, SharedRow>();
+  for (const item of received) {
+    const known = rows.get(item.connection.id);
+    const through = item.via === 'you' ? [] : [holderWords(item.via)];
+    if (!known) {
+      rows.set(item.connection.id, {
+        connection: item.connection,
+        providerLabel: item.providerLabel,
+        givenBy: holderWords(item.ownerLabel),
+        through,
+        since: item.share.createdAt,
+        permissions: item.risks,
+        total: totals.get(item.connection.provider) ?? item.risks.length,
+        missions: missionsOn(item.connection.id),
+      });
+      continue;
+    }
+    const held = new Set(known.permissions.map((risk) => risk.risk_id));
+    rows.set(item.connection.id, {
+      ...known,
+      through: [...new Set([...known.through, ...through])],
+      since: item.share.createdAt < known.since ? item.share.createdAt : known.since,
+      permissions: [...known.permissions, ...item.risks.filter((risk) => !held.has(risk.risk_id))],
+    });
+  }
+  return [...rows.values()];
+}
+
+function Fact({ value, note }: { value: React.ReactNode; note?: React.ReactNode }) {
+  return (
+    <span className={styles.fact}>
+      {value}
+      {note && <span className={styles.factNote}>{note}</span>}
+    </span>
+  );
+}
+
+function missionsFact(missions: readonly MissionOnConnection[]): React.ReactNode {
+  const running = missions.filter((mission) => mission.state === 'active');
+  const atLimit = running.filter((mission) => mission.exhausted > 0).length;
+  const orphaned = missions.filter((mission) => mission.state === 'orphaned').length;
+  const notes = [
+    atLimit > 0 ? `${formatNumber(atLimit)} at its limit` : null,
+    orphaned > 0 ? `${formatNumber(orphaned)} stopped` : null,
+  ].filter(Boolean);
+  return <Fact value={formatNumber(running.length)} note={notes.join(' · ') || undefined} />;
+}
+
+function lastChecked({ connection, discovery }: ConnectionView, now: Date): React.ReactNode {
+  if (ACCOUNT_STATES[connection.status].tone !== null || connection.status === 'revoked') {
+    return <AccountState status={connection.status} />;
+  }
+  if (!discovery) return <span className={styles.quiet}>{ACCOUNT_WORDS.neverChecked}</span>;
+  if (!discovery.ok) return <StatusMark tone="warn">{ACCOUNT_WORDS.checkFailed}</StatusMark>;
+  return <span className={styles.quiet}>{ago(discovery.at, now)}</span>;
 }

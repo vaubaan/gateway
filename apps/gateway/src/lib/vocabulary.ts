@@ -28,7 +28,7 @@ export const ROUTES = {
   activity: '/activity',
   reference: '/reference',
   settings: '/settings',
-  connectedApps: '/delegations',
+  connectedApps: '/settings/connected-apps',
   administration: '/admin',
   design: '/design',
 } as const;
@@ -598,4 +598,254 @@ export function shortDate(iso: string, now: Date = new Date()): string {
   const month = SHORT_MONTHS[date.getUTCMonth()] ?? '';
   const year = date.getUTCFullYear();
   return year === now.getUTCFullYear() ? `${day} ${month}` : `${day} ${month} ${year}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Reference (the pages under `/reference`). Protocol names: provider, plugin,
+// risk, preset, tool, plane, slice pattern.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const REFERENCE_WORDS = {
+  services: 'Services',
+  tabs: { permissions: 'Permissions', tools: 'Tools', model: 'How it is modelled' },
+  permission: 'Permission',
+  comparison: 'Permissions, and what each preset includes',
+  comparisonNote:
+    'A preset is a starting point; a mission always stores the explicit list. Figures are calls per period.',
+  notIncluded: 'not included',
+  asksFirst: 'asks first',
+  howToRead: 'How to read this page',
+  hideHowToRead: 'Hide how to read this page',
+  noPreset: 'This service ships no preset: the permissions of a mission are picked one by one.',
+  noMatch: 'Nothing matches.',
+  byArguments: 'by arguments',
+  handsToken: 'hands a token to the agent',
+  anythingElse: 'anything not named',
+  retired: 'being retired',
+} as const;
+
+/** What each group of the catalog is, under its title. Keyed by `RiskKind`. */
+export const PERMISSION_KINDS = {
+  read: { title: 'Reads', hint: 'look without changing anything' },
+  write: { title: 'Writes', hint: 'change something that can be undone, sometimes at a price' },
+  destructive: {
+    title: 'Writes that cannot be undone',
+    hint: 'what the catalog marks as impossible to take back',
+  },
+} as const;
+
+/** Where the environment of a call comes from, in a few words. Keyed by `EnvironmentSource`. */
+export const ENVIRONMENT_WORDS = {
+  call: 'read from each call',
+  'resource-label': 'set by the label of each resource',
+  none: 'none: every permission is held once',
+} as const;
+
+/** "10 · 2 ask" — what a preset holds, under its name. */
+export function presetHolds(included: number, asking: number): string {
+  return asking > 0
+    ? `${formatNumber(included)} · ${formatNumber(asking)} ask`
+    : count(included, TERMS.risk);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Activity (the record at `/activity`). Protocol names: audit entry, call,
+// administrative act, decision, refusal code, token holder, agent label.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const ACTIVITY_WORDS = {
+  time: 'Time',
+  who: 'Who',
+  action: 'Action',
+  on: 'On',
+  permission: 'Permission',
+  decision: 'Decision',
+  mission: 'Mission',
+  detail: 'detail',
+  hideDetail: 'hide detail',
+  earlier: 'Earlier',
+  newest: 'Newest',
+  apply: 'Apply',
+  clear: 'Clear',
+  moreFilters: 'More filters',
+  fewerFilters: 'Fewer filters',
+  nothing: 'Nothing was recorded for these filters.',
+  notAttributed: 'not attributed',
+  machineKey: 'machine key',
+  argumentsNeverStored: 'never stored',
+  fingerprintHidden:
+    'never stored · their fingerprint is shown to the creator of the mission and to the owners of the account only',
+} as const;
+
+/** "kept 90 days" — the lede of the record names its retention. */
+export function activityLede(retentionDays: number): string {
+  return `Every call an agent made and every change a person made, kept ${count(retentionDays, { one: 'day', many: 'days' })}. This is the audit record.`;
+}
+
+/** Who reads what, said once above the record. */
+export const ACTIVITY_SCOPE = {
+  administrator: 'As an administrator you read every call and every change of this gateway.',
+  person:
+    'You read the missions you created, the missions shared with you, and the accounts you own.',
+  installer: 'Until someone signs in, the record holds the changes made while installing.',
+} as const;
+
+/** The periods of the record, as the segments name them. */
+export const ACTIVITY_PERIODS = {
+  today: 'Today',
+  yesterday: 'Yesterday',
+  week: '7 days',
+  all: 'All',
+} as const;
+
+/** Why a call was refused, in a few words. Keyed by the protocol's refusal code. */
+export const REFUSAL_WORDS = {
+  'risk-not-accepted': 'permission not in this mission',
+  'budget-exhausted': 'limit reached',
+  'approval-required': 'asked first',
+  'resource-not-in-mission': 'resource not in this mission',
+  'rate-limited': 'too fast: per-minute limit',
+  'connection-unavailable': 'account needs reconnecting',
+  'mission-inactive': 'mission not running',
+  'wrong-credential-kind': 'wrong kind of key',
+} as const;
+
+/** What a person did, after their name. Keyed by the protocol's administrative act. */
+export const ACT_WORDS = {
+  'connection-created': 'connected an account',
+  'connection-reconnected': 'reconnected an account',
+  'connection-refused': 'was refused an account',
+  'connection-transferred': 'transferred an account to a team',
+  'connection-reassigned': 'named a new owner for an account',
+  'connection-revoked': 'disconnected an account',
+  'resources-discovered': 'refreshed what an account reaches',
+  'resource-edited': 'edited a resource',
+  'share-created': 'gave access',
+  'share-revoked': 'removed an access',
+  'mission-issued': 'created a mission',
+  'mission-rotated': 'replaced a key',
+  'mission-revoked': 'stopped a mission',
+  'mission-member-added': 'added a teammate',
+  'mission-member-removed': 'removed a teammate',
+  'mission-token-issued': 'generated a key',
+  'mission-token-revoked': 'revoked a key',
+  'mission-closed': 'closed a mission',
+  'mission-orphaned': 'left a mission without an owner',
+  'mission-restored': 'brought a mission back',
+  'budget-extended': 'raised a limit',
+  'period-reset': 'reset the limits',
+  'expiry-extended': 'extended a mission',
+  'gate-opened': 'let a permission run freely for the period',
+  'gate-changed': 'changed “ask me first”',
+  'approval-granted': 'approved a call',
+  'request-refused': 'refused a request',
+  'delegation-granted': 'connected an app',
+  'delegation-revoked': 'disconnected an app',
+  'group-created': 'created a team',
+  'group-member-added': 'added someone to a team',
+  'group-member-removed': 'removed someone from a team',
+  'oauth-client-approved': 'approved an app',
+  'oauth-client-disabled': 'disabled an app',
+  'user-deactivated': 'deactivated a person',
+  'user-reactivated': 'reactivated a person',
+  'config-changed': 'changed the configuration',
+} as const;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Settings and administration (`/settings/**`, `/admin/**`). Protocol names:
+// delegation, OAuth client, identity provider, provider app, user, group,
+// operator, bootstrap token, telemetry.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const SETTINGS_PAGES = {
+  connectedApps: {
+    title: 'Connected apps',
+    lede: 'Apps you allowed to prepare missions in your name. They can never execute a call or answer a request.',
+  },
+  setup: {
+    title: 'Setup',
+    lede: 'What this gateway needs before your colleagues use it, and what is left to do.',
+  },
+  signIn: {
+    title: 'Sign-in',
+    lede: 'People sign in through your company’s identity provider; no password is stored here.',
+  },
+  companyApps: {
+    title: 'Company apps',
+    lede: 'What your company registered at each service, so that people connect accounts through the service’s own sign-in.',
+  },
+  people: {
+    title: 'People',
+    lede: 'Everyone who has signed in. Deactivating a person refuses every call of their keys at once.',
+  },
+  teams: {
+    title: 'Teams',
+    lede: 'A team can own an account or receive an access; it never creates a mission.',
+  },
+  ownerless: {
+    title: 'Accounts without owner',
+    lede: 'An account whose owners all left keeps serving its missions, but nobody can reconnect it or give access until you name an owner.',
+  },
+  telemetry: {
+    title: 'Telemetry',
+    lede: 'Anonymous reports that say whether each service’s plugin works; nothing is sent until you turn it on.',
+  },
+  registeredApps: {
+    title: 'Registered apps',
+    lede: 'The apps that may ask people to connect them. Whatever is decided here, each person still consents on a screen that names the app.',
+  },
+} as const;
+
+export const SETTINGS_ACTIONS = {
+  save: 'Save',
+  register: 'Register',
+  edit: 'Edit',
+  remove: 'Remove',
+  deactivate: 'Deactivate',
+  reactivate: 'Reactivate',
+  nameOwner: 'Name an owner',
+  approve: 'Approve',
+  disable: 'Disable',
+  revokeApp: 'Disconnect',
+  turnOn: 'Turn telemetry on',
+  turnOff: 'Turn telemetry off',
+  testSignIn: 'Test the sign-in',
+  addTeam: 'Add a local team',
+  addMember: 'Add',
+} as const;
+
+/** Where a value comes from, when a page shows it and cannot change it. */
+export const CONFIG_WORDS = {
+  file: 'set in the mounted configuration',
+  fileReadOnly: 'Set in the mounted configuration: change it there and restart.',
+} as const;
+
+/** The state of a connected app (a delegation). Keyed by `DelegationState`. */
+export const APP_STATES = {
+  active: { label: 'connected', tone: null },
+  idle: { label: 'must ask you again', tone: null },
+  expired: { label: 'consent ended', tone: null },
+  revoked: { label: 'disconnected', tone: null },
+} as const satisfies Record<string, StateWord>;
+
+/** Why a connected app was disconnected. Keyed by `DelegationRevokeReason`. */
+export const APP_END_WORDS = {
+  user: 'by you',
+  client: 'by the app itself (it signed out)',
+  operator: 'by an administrator, who disabled the app',
+  'user-deactivated': 'by an administrator, who deactivated your account',
+  'refresh-token-replay': 'by the gateway: one of its tokens was presented twice',
+  'authorization-code-replay': 'by the gateway: its authorization code was presented twice',
+} as const;
+
+/** The state of a registered app (an OAuth client). Keyed by `ClientStatus`. */
+export const REGISTERED_APP_STATES = {
+  approved: { label: 'approved', tone: null },
+  pending: { label: 'Waiting for your approval', tone: 'warn' },
+  disabled: { label: 'disabled', tone: null },
+} as const satisfies Record<string, StateWord>;
+
+/** "3 of 5 done" — the setup checklist counts itself. */
+export function stepsDone(done: number, total: number): string {
+  return `${formatNumber(done)} of ${formatNumber(total)} done`;
 }

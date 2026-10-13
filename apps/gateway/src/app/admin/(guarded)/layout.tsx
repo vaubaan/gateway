@@ -1,7 +1,8 @@
 /**
- * Shell of the Administration surface (spec §4.2): the bootstrap operator
- * while the token is active, otherwise a user matching the admin rule. No
- * session → the sign-in that applies; a signed-in non-operator → 403 page.
+ * Shell of the administration (spec §4.2): whoever installs the gateway while
+ * the install token is valid, otherwise a person matching the administrator
+ * rule. No session → the sign-in that applies; a signed-in person who does not
+ * administer → an explanation, with no navigation.
  *
  * This layout is navigation and explanation, NOT the authorization boundary:
  * the App Router can render a page segment without it. Every page below
@@ -12,7 +13,7 @@ import Link from 'next/link';
 
 import { AdminShell } from '@/components/shell/AppShell';
 import { BuildFooter } from '@/components/shell/BuildFooter';
-import { Banner, Container } from '@/components/ui';
+import { Callout, Container } from '@/components/ui';
 import { adminDecision } from '@/lib/auth/session';
 import { adminSignInPage } from '@/server/auth';
 import { redirect } from 'next/navigation';
@@ -27,11 +28,15 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       <>
         <Container>
           <h1>Administration</h1>
-          <Banner tone="warning" title="Not an operator">
-            You are signed in, but you do not match the admin rule of this instance (
+          <Callout
+            tone="warn"
+            title="You do not administer this gateway"
+            testId="not-administrator"
+          >
+            You are signed in, but you do not match its administrator rule (
             {describeRule(root.config.admin.group, root.config.admin.emails.length)}). Ask an
-            operator, or <Link href="/login">return to your account</Link>.
-          </Banner>
+            administrator, or <Link href="/">go back to the application</Link>.
+          </Callout>
         </Container>
         <BuildFooter />
       </>
@@ -46,7 +51,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
 function describeRule(group: string | null, emailCount: number): string {
   const parts: string[] = [];
-  if (group) parts.push(`IdP group "${group}"`);
-  if (emailCount > 0) parts.push(`${emailCount} listed email(s)`);
+  if (group) parts.push(`the identity-provider group "${group}"`);
+  if (emailCount > 0) parts.push(`${emailCount} listed ${emailCount === 1 ? 'email' : 'emails'}`);
   return parts.join(' or ');
 }

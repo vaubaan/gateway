@@ -76,7 +76,8 @@ import {
 import { redirectDestination } from './redirect-uri';
 import { clientCredentialsOf, type TokenService } from './token-service';
 
-export const DELEGATIONS_PAGE = '/delegations';
+/** The page of a person's connected apps ("delegations" in the spec and the store). */
+export const DELEGATIONS_PAGE = '/settings/connected-apps';
 export const OAUTH_CLIENTS_PAGE = '/admin/oauth-clients';
 const LOGIN_ROUTE = '/auth/login';
 

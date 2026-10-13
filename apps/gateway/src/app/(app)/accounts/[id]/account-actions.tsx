@@ -9,7 +9,7 @@
  */
 import { useId, useRef, useState } from 'react';
 
-import { Button, ConfirmDialog, Field, Select } from '@/components/ui';
+import { Button, ConfirmDialog, ConfirmSubmit, Field, Select } from '@/components/ui';
 import { ACCOUNT_ACTIONS, ACTIONS, count, TERMS } from '@/lib/vocabulary';
 
 export function RemoveAccess({
@@ -24,45 +24,27 @@ export function RemoveAccess({
   /** How many of their missions use the account and still run. */
   missions: number;
 }) {
-  const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const form = useRef<HTMLFormElement>(null);
   return (
-    <>
-      <form ref={form} method="post" action={action} hidden />
-      <Button
-        type="button"
-        variant="danger"
-        size="sm"
-        onClick={() => setOpen(true)}
-        aria-label={`Remove the access of ${who}`}
-      >
-        {ACTIONS.removeAccess}
-      </Button>
-      <ConfirmDialog
-        open={open}
-        title={`Remove the access of ${who}?`}
-        consequence={
-          <>
-            {who} can no longer write missions on this account
-            {missions === 0
-              ? '; none of their missions uses it today.'
-              : `, and the ${count(missions, TERMS.mission)} that ${missions === 1 ? 'uses' : 'use'} it ${missions === 1 ? 'stops' : 'stop'} at once: every call is refused, with the reason.`}{' '}
-            Giving access again brings a stopped mission back, with the key its agent holds.
-          </>
-        }
-        confirmLabel="Remove access"
-        tone="danger"
-        busy={busy}
-        hint="Recorded in the activity, like every change."
-        onCancel={() => setOpen(false)}
-        onConfirm={() => {
-          setBusy(true);
-          form.current?.submit();
-        }}
-        testId="remove-access-dialog"
-      />
-    </>
+    <ConfirmSubmit
+      action={action}
+      label={ACTIONS.removeAccess}
+      ariaLabel={`Remove the access of ${who}`}
+      variant="danger"
+      title={`Remove the access of ${who}?`}
+      consequence={
+        <>
+          {who} can no longer write missions on this account
+          {missions === 0
+            ? '; none of their missions uses it today.'
+            : `, and the ${count(missions, TERMS.mission)} that ${missions === 1 ? 'uses' : 'use'} it ${missions === 1 ? 'stops' : 'stop'} at once: every call is refused, with the reason.`}{' '}
+          Giving access again brings a stopped mission back, with the key its agent holds.
+        </>
+      }
+      confirmLabel="Remove access"
+      tone="danger"
+      hint="Recorded in the activity, like every change."
+      testId="remove-access"
+    />
   );
 }
 

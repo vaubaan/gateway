@@ -1,26 +1,35 @@
 /**
- * `/reference/<id>` — the reference of one plugin (spec §4.2 "Providers"): a
- * compact header (what it is, in the plugin's own words, and three facts),
- * then the sections behind tabs (`provider-view.tsx`): presets compared side
- * by side, the risk catalog, the data model, the tools.
+ * `/reference/<id>` — the reference of one service (spec §4.2 "Providers"):
+ * what it is in the plugin's own words, then its permissions compared across
+ * its presets, its tools, and how it is modelled, behind tabs
+ * (`service-view.tsx`).
  *
  * Generated from the plugin registry (`server/providers/reference.ts`): no
- * provider has a hand-written page. Every risk and every preset has an anchor
- * (`#risk-<id>`, `#preset-<id>`) the other pages link to.
+ * service has a hand-written page. Every permission and every preset has an
+ * anchor (`#risk-<id>`, `#preset-<id>`) the other pages link to; the ids are
+ * the protocol's and are printed as it spells them.
  */
-import Link from 'next/link';
-import { PAGES } from '@/lib/vocabulary';
 import { notFound } from 'next/navigation';
 
-import { credentialKindLabel, ExperimentalBadge } from '@/components/connections/parts';
+import { credentialKindLabel } from '@/components/connections/parts';
 import { ValidationBadge } from '@/components/telemetry/ValidationBadge';
-import { Badge, Stack } from '@/components/ui';
+import {
+  Disclosure,
+  EnvTag,
+  KeyValue,
+  Mono,
+  PageHeader,
+  ServiceMark,
+  SummaryLine,
+  Tag,
+} from '@/components/ui';
 import { requirePrincipal } from '@/lib/auth/session';
-import { PROVIDERS_PATH } from '@/server/providers/links';
-import { providerReference, type EnvironmentReference } from '@/server/providers/reference';
+import { ACCOUNT_WORDS, ENVIRONMENT_WORDS } from '@/lib/vocabulary';
+import { providerCards, providerReference } from '@/server/providers/reference';
 
+import { catalogSize, ReferenceFrame } from '../frame';
 import styles from '../reference.module.css';
-import { ProviderView } from './provider-view';
+import { ServiceView } from './service-view';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,14 +37,7 @@ interface Props {
   params: Promise<{ id: string }>;
 }
 
-/** Where the environment of a call comes from, in a few words; the Data model tab says it in full. */
-const ENVIRONMENT_SOURCE_WORDS: Readonly<Record<EnvironmentReference['source'], string>> = {
-  call: 'Read from each call.',
-  'resource-label': 'Set by the label of each resource.',
-  none: 'None: every risk is accepted once.',
-};
-
-export default async function ProviderPage({ params }: Props) {
+export default async function ServiceReferencePage({ params }: Props) {
   const { root } = await requirePrincipal();
   const { id } = await params;
   const reference = providerReference(root.registry, id);
@@ -44,70 +46,77 @@ export default async function ProviderPage({ params }: Props) {
   const { environment } = reference;
 
   return (
-    <Stack gap="var(--space-5)">
-      <header className={styles.head}>
-        <p className={styles.crumbs}>
-          <Link href={PROVIDERS_PATH}>{PAGES.reference.title}</Link> / {reference.name}
-        </p>
-        <div className={styles.titleRow}>
-          <h1>{reference.name}</h1>
-          <span className={styles.badges}>
-            {reference.experimental && <ExperimentalBadge />}
-            <ValidationBadge status={validation} />
+    <ReferenceFrame cards={providerCards(root.registry)}>
+      <PageHeader
+        level={2}
+        mark={<ServiceMark name={reference.name} size="lg" />}
+        title={reference.name}
+        status={reference.experimental ? <Tag>{ACCOUNT_WORDS.experimental}</Tag> : undefined}
+        lede={
+          <span data-testid="provider-summary">
+            {reference.summary ?? reference.description ?? 'This service ships no description.'}
           </span>
-          <span className={styles.versions}>
-            plugin {reference.version}
-            {reference.catalog_version !== null && (
-              <>
-                {' '}
-                · catalog v{reference.catalog_version}
-                {reference.catalog_date ? ` · ${reference.catalog_date}` : ''}
-              </>
-            )}
-            {reference.docs_url && (
-              <>
-                {' · '}
-                <a href={reference.docs_url} className={styles.link} rel="noreferrer">
-                  maintainer notes
-                </a>
-              </>
-            )}
-          </span>
-        </div>
-        <p className={styles.lead} data-testid="provider-summary">
-          {reference.summary ?? reference.description ?? 'This plugin ships no description.'}
-        </p>
-        <dl className={styles.facts}>
-          {reference.summary && reference.description && (
-            <div>
-              <dt>Connects to</dt>
-              <dd>{reference.description}</dd>
-            </div>
-          )}
-          <div>
-            <dt>Credential</dt>
-            <dd>
-              {credentialKindLabel(reference.credential_kind)} — encrypted at rest, never shown
-            </dd>
-          </div>
-          <div>
-            <dt>Environments</dt>
-            <dd>
-              {environment.envs.length > 0 && (
-                <span className={styles.factBadges}>
-                  {environment.envs.map((env) => (
-                    <Badge key={env} mono>
-                      {env}
-                    </Badge>
-                  ))}
-                </span>
-              )}
-              {ENVIRONMENT_SOURCE_WORDS[environment.source]}
-            </dd>
-          </div>
-        </dl>
-      </header>
-      <ProviderView reference={reference} />
-    </Stack>
+        }
+      />
+      <div className={styles.facts}>
+        <SummaryLine
+          items={[
+            { label: catalogSize(reference) },
+            { label: `connects through: ${credentialKindLabel(reference.credential_kind)}` },
+          ]}
+        />
+        <Disclosure
+          id="reference:service-facts"
+          show="About this service"
+          hide="Hide what is said about this service"
+          testId="service-facts"
+        >
+          <KeyValue
+            items={[
+              ...(reference.summary && reference.description
+                ? [{ term: 'Connects to', value: reference.description }]
+                : []),
+              {
+                term: 'Credential',
+                value: `${credentialKindLabel(reference.credential_kind)} · encrypted at rest, never shown`,
+              },
+              {
+                term: 'Environments',
+                value: (
+                  <span className={styles.inline}>
+                    {environment.envs.map((env) => (
+                      <EnvTag key={env} env={env} />
+                    ))}
+                    {ENVIRONMENT_WORDS[environment.source]}
+                  </span>
+                ),
+              },
+              {
+                term: 'Version',
+                value: (
+                  <span className={styles.inline}>
+                    <Mono>{`plugin ${reference.version}`}</Mono>
+                    {reference.catalog_version !== null && (
+                      <Mono>
+                        {`catalog v${reference.catalog_version}${
+                          reference.catalog_date ? ` · ${reference.catalog_date}` : ''
+                        }`}
+                      </Mono>
+                    )}
+                    {reference.docs_url && (
+                      <a href={reference.docs_url} rel="noreferrer">
+                        maintainer notes
+                      </a>
+                    )}
+                    <ValidationBadge status={validation} />
+                  </span>
+                ),
+              },
+            ]}
+          />
+        </Disclosure>
+      </div>
+      <ServiceView reference={reference} />
+    </ReferenceFrame>
   );
 }

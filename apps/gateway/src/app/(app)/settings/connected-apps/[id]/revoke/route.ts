@@ -1,5 +1,6 @@
 /**
- * `POST /delegations/<id>/revoke` — the user ends one of their delegations.
+ * `POST /settings/connected-apps/<id>/revoke` — a person disconnects one of the
+ * apps they connected (ends one of their delegations).
  * One-line adapter over the host-agnostic handler.
  */
 import { getRoot } from '@/server/compose';

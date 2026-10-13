@@ -129,6 +129,7 @@ export { Code, CodeBlock, CodeTone } from './Code.tsx';
 
 // Added with the pages (R2c): accounts, activity, settings
 export { PickGrid, PickCard } from './Pick.tsx';
+export { ConfirmSubmit } from './ConfirmSubmit.tsx';
 
 // Kept for the pages written before the redesign (handbook web-app, "Legacy primitives")
 export { Slug } from './Slug.tsx';
