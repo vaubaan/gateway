@@ -169,10 +169,9 @@ describe('railway plugin — structural kit', () => {
       { resources: [staging] },
     );
     expect(report.toolsChecked).toBe(14);
-    // Whether the fallback co-touches every write is the policy engine's
-    // business (changing in P1.2-SDK) : assert the nine specific risks only.
-    const FALLBACK = 'railway.uncategorized-write';
-    expect(report.risksTouched.filter((r) => r !== FALLBACK)).toEqual([
+    // A categorized write touches its entry alone (ADR
+    // fallback-risk-only-when-uncategorized) : the nine specific risks, no fallback.
+    expect(report.risksTouched).toEqual([
       'railway.read-account',
       'railway.read-runtime',
       'railway.read-logs',
@@ -183,7 +182,8 @@ describe('railway plugin — structural kit', () => {
       'railway.create-project',
       'railway.agent-action',
     ]);
-    expect(report.risksUntouched.filter((r) => r !== FALLBACK)).toEqual([]);
+    expect(report.risksUntouched).toEqual([]);
+    expect(report.fallbackHits).toEqual([]);
   });
 });
 

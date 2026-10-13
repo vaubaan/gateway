@@ -265,10 +265,14 @@ const report = assertCatalogCoverage(plugin, {
 `assertCatalogCoverage` fails when a declared tool has no sample, a sample
 names an undeclared tool, a non-`expectDenied` sample is denied (or an
 `expectDenied` one is not), a sample yields no slice, a slice carries
-another provider, or a slice matches no catalog risk. `fallbackHits` lists
-the samples only the fallback covered — informational, but a realistic
-sample there means the catalog misses an entry. Every assertion throws
-`PluginAssertionError { subject, findings }`.
+another provider, or a slice matches no catalog risk. `risksUntouched`
+leaves the fallback out : it is reachable by design only through writes no
+dedicated entry covers, so a complete catalog never touches it and a plugin
+test asserts `risksUntouched` equal to `[]` (or to the entries it knowingly
+leaves unreached). `fallbackHits` lists the samples only the fallback
+covered — informational, but a realistic sample there means the catalog
+misses an entry. Every assertion throws `PluginAssertionError { subject,
+findings }`.
 
 `mockFetch(routes)` returns a `fetch` with `.calls` (method, url,
 lower-cased headers, body text, parsed JSON) and `.pending()` (routes whose

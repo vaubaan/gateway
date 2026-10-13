@@ -165,14 +165,14 @@ describe('vercel plugin — structural kit', () => {
       { resources: [app, foreign] },
     );
     expect(report.toolsChecked).toBe(31);
-    // Every named risk is reached by at least one tool. The fallback is left
-    // out on purpose : whether it co-fires with a specific write is the
-    // policy engine's rule (P1.2-SDK changes it), not this plugin's.
+    // Every named risk is reached by at least one tool ; no sample lands on
+    // the fallback (ADR fallback-risk-only-when-uncategorized).
     const named = vercelPlugin.catalog.risks
       .map((r) => r.id)
       .filter((id) => id !== 'vercel.uncategorized-write');
-    expect(report.risksTouched).toEqual(expect.arrayContaining(named));
-    expect(report.risksUntouched.filter((id) => id !== 'vercel.uncategorized-write')).toEqual([]);
+    expect(report.risksTouched).toEqual(named);
+    expect(report.risksUntouched).toEqual([]);
+    expect(report.fallbackHits).toEqual([]);
   });
 });
 

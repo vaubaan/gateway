@@ -52,10 +52,10 @@ describe('template plugin — structural kit', () => {
       },
       { resources: [staging] },
     );
-    // A categorized write touches its entry alone ; the fallback stays
-    // untouched in a complete catalog (ADR fallback-risk-only-when-uncategorized).
+    // A categorized write touches its entry alone ; the fallback is reachable
+    // by design and left out of `risksUntouched` (ADR fallback-risk-only-when-uncategorized).
     expect(report.risksTouched).toEqual(['template.read-widgets', 'template.widget-write']);
-    expect(report.risksUntouched).toEqual(['template.uncategorized-write']);
+    expect(report.risksUntouched).toEqual([]);
     expect(report.fallbackHits).toEqual([]);
   });
 

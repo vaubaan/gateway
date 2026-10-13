@@ -31,11 +31,12 @@ describe('assertCatalogCoverage', () => {
     const report = assertCatalogCoverage(acmePlugin, samples, { resources: [staging] });
     expect(report.toolsChecked).toBe(2);
     expect(report.samplesChecked).toBe(3);
-    // The fallback is no longer co-touched by a categorized write (ADR
-    // fallback-risk-only-when-uncategorized) : a complete catalog leaves it
-    // untouched and `fallbackHits` empty.
+    // The fallback is not co-touched by a categorized write (ADR
+    // fallback-risk-only-when-uncategorized) and is reachable by design only
+    // through uncategorized writes : it is left out of `risksUntouched`, and a
+    // complete catalog leaves `fallbackHits` empty.
     expect(report.risksTouched).toEqual(['acme.read-things', 'acme.thing-write']);
-    expect(report.risksUntouched).toEqual(['acme.legacy-export', 'acme.uncategorized-write']);
+    expect(report.risksUntouched).toEqual(['acme.legacy-export']);
     expect(report.fallbackHits).toEqual([]);
   });
 

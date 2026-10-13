@@ -176,14 +176,14 @@ describe('cloudflare-dns risk-catalog — risksTouchedBy sanity checks', () => {
     );
   });
 
-  test('an ordinary record write touches record-write only (plus the fallback)', () => {
+  // A categorized write touches its dedicated entries only ; the fallback
+  // fires when no other entry matched (ADR fallback-risk-only-when-uncategorized).
+  test('an ordinary record write touches record-write only (never the fallback)', () => {
     expect(touched('cloudflare-dns.account[acct_x].zone[zone_x].record.W')).toEqual([
       'cloudflare-dns.record-write',
-      FALLBACK_ID,
     ]);
     expect(touched('cloudflare-dns.account[acct_x].zone[zone_x].record[rec_x].W')).toEqual([
       'cloudflare-dns.record-write',
-      FALLBACK_ID,
     ]);
   });
 
@@ -191,12 +191,10 @@ describe('cloudflare-dns risk-catalog — risksTouchedBy sanity checks', () => {
     expect(touched('cloudflare-dns.account[acct_x].zone[zone_x].record.critical.W')).toEqual([
       'cloudflare-dns.record-write',
       'cloudflare-dns.critical-record-write',
-      FALLBACK_ID,
     ]);
     expect(touched('cloudflare-dns.account[acct_x].zone[zone_x].record[rec_x].delete.W')).toEqual([
       'cloudflare-dns.record-write',
       'cloudflare-dns.record-delete',
-      FALLBACK_ID,
     ]);
   });
 

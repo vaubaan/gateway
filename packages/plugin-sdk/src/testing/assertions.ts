@@ -90,7 +90,13 @@ export interface CoverageReport {
   readonly samplesChecked: number;
   /** Distinct catalog risks touched across all samples, in catalog order. */
   readonly risksTouched: readonly RiskId[];
-  /** Catalog risks no sample touched — informational, not a failure (the fallback stays untouched in a complete catalog). */
+  /**
+   * Catalog risks no sample touched, the fallback excluded — informational,
+   * not a failure. The fallback is reachable by design only through writes
+   * no dedicated entry covers (ADR fallback-risk-only-when-uncategorized),
+   * so a complete catalog never touches it ; it is never "untouched" in the
+   * sense this list carries. `fallbackHits` tells whether it fired.
+   */
   readonly risksUntouched: readonly RiskId[];
   /**
    * Samples whose slice touched the fallback — that is, a write no
@@ -178,7 +184,7 @@ export function assertCatalogCoverage(
     toolsChecked: declared.size,
     samplesChecked,
     risksTouched: all.filter((id) => touched.has(id)),
-    risksUntouched: all.filter((id) => !touched.has(id)),
+    risksUntouched: all.filter((id) => !touched.has(id) && !fallbackIds.has(id)),
     fallbackHits,
   };
 }
