@@ -106,11 +106,12 @@ describe('migration runner', () => {
     );
   });
 
-  it('ships 0001_schema.sql and 0002_audit_risks_purge_guard.sql in the default directory', () => {
+  it('ships 0001_schema.sql, 0002_audit_risks_purge_guard.sql and 0003_web_sessions.sql in the default directory', () => {
     const shipped = loadMigrations(DEFAULT_MIGRATIONS_DIR);
     expect(shipped.map((m) => [m.version, m.name])).toEqual([
       [1, 'schema'],
       [2, 'audit_risks_purge_guard'],
+      [3, 'web_sessions'],
     ]);
   });
 });
