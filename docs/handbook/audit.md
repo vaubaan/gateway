@@ -2,7 +2,7 @@
 title: Audit — search, mission session view, retention, administrative entries
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - apps/gateway/src/server/budget/retention.ts
   - apps/gateway/src/server/audit/
@@ -42,13 +42,14 @@ apps/gateway/src/server/audit/
   session-event-detail.ts  eventDetailLines(), isSessionEventKind()  (pure: the Detail column)
   retention.ts      AuditRetentionSweeper (start / stop / sweep)
 apps/gateway/src/app/(app)/
-  audit/page.tsx                  /activity
-  activity/activity.module.css          shared by both pages
+  activity/page.tsx               /activity   ("Activity": the record)
+  activity/when.tsx               the time of a line (client: the reader's own clock after hydration)
+  activity/activity.module.css
   missions/[id]/session/page.tsx  /missions/<id>/session
 ```
 
-`root.audit` is the module (`compose/root.ts`). The pages are server components with no
-client code: the filters are a plain `GET` form, paging is a link.
+`root.audit` is the module (`compose/root.ts`). The pages are server components: the
+filters are a plain `GET` form, paging and the detail of a line are links.
 
 ## Who sees what (`scopeOf`, `standingOn`, `AuditRepo.search`)
 
@@ -154,6 +155,48 @@ A value that cannot be read (unknown decision, impossible date, `from` after `to
 oversized value, unreadable cursor) is dropped and listed in `problems`, which the page
 shows; it never widens the search. An unknown email matches nothing, exactly like a known
 user with no entry, so the filter does not reveal who has an account.
+
+### The Activity page (`activity/page.tsx`)
+
+The record as a person reads it. The words are the interface's
+(`lib/vocabulary.ts`: `ACTIVITY_WORDS`, `ACT_WORDS` per administrative act,
+`REFUSAL_WORDS` per refusal code, `DECISION_WORDS`); the protocol's names are
+in the detail of a line, in mono.
+
+- **Filters**, one `GET` form. On the first line: the period as four segments
+  (Today, Yesterday, 7 days, All — links that set `from` / `to` as UTC days; a
+  period typed by hand highlights none), the mission, the account, the
+  decision, the exact tool name, "Apply", and "Clear" when a filter is set.
+  Behind "More filters" (a `Disclosure`, remembered, open when one of them is
+  set): person, key holder, agent, kind, from, to.
+- **Counts** of the page shown — calls, refused, asked first, changes — and
+  one sentence saying whose record this is (a person's missions and accounts,
+  or everything for an administrator).
+- **The table** (`DataTable`, `columnBudget={6}`: the documented exception):
+  Time (`When`), Who (the key holder with the label the agent gave itself; a
+  machine key as a dashed square with "machine key"; for a change, who made
+  it and through which app), Action (the tool in mono, or the act in words),
+  On (the resource and its account, or the object of the change), Permission
+  (the label of the first risk touched, "+n" for more), Decision. A seventh
+  column, Mission, is a detail column: "Show details" (`DetailScope`
+  `activity:columns`, remembered).
+- **Decision**: "allowed" in the quiet ink ("· after a yes" when the call
+  consumed an approval); "refused" in red with the reason in words; a call
+  refused `approval-required` is not red: it reads "asked you" (or "asked
+  <creator>") in amber, and its row is tinted amber instead of red; a change
+  reads "change".
+- **The detail of a line** opens under it through its "detail" link, which
+  adds `?open=<entry id>` to the current filters and position — a line has an
+  address. For a call: the mission and its creator, the key and the agent
+  label, the tool, each permission touched with its id and what is left, the
+  arguments ("never stored", then their fingerprint, or the sentence that says
+  who is shown it when `arguments_hash` is `null`: `standingOn`), the refusal
+  code with what the agent was told, and the technical facts (a yes used,
+  latency, the service's error, the client address). For a change: the act
+  and its object as the protocol names them, who made it, and `before` /
+  `after` as stored.
+- **Paging**: "Earlier" follows `page.next`; "Newest" returns to the first
+  page.
 
 ### Token holders
 

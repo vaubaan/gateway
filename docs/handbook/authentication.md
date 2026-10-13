@@ -2,7 +2,7 @@
 title: Authentication — OIDC sign-in, web session, bootstrap token, admin rule
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - apps/gateway/src/server/auth/
   - apps/gateway/src/server/users/
@@ -598,44 +598,61 @@ millisecond of a deactivation is refused.
   comes back as `?error=bootstrap-refused`; a visitor who already holds a
   bootstrap session is redirected to `/admin`. The page sits outside every
   layout and renders the build footer itself.
-- **`/admin`** — issuer, source (file or Admin page), admin rule, bootstrap
-  state, build. Administration is part of Settings: the application's shell
-  and its global navigation, with the local navigation of Settings beside the
-  page (`AdminShell`, `SettingsFrame` and `settingsNav` in `components/shell/`,
+- **`/admin`** — **Setup**: a checklist (`Rows` with a `CheckMark` each) that
+  says what a fresh install needs, what is done and what is left, each line
+  read from the service that owns the fact: sign-in (`auth.idp.current()`),
+  the public address (always done: it is the configuration's), company apps
+  (`providerApps.list()`: "1/4" when some are missing, the missing ones named,
+  and a "Register <service>" button that opens its form), administrators
+  (who matches the rule today), telemetry (`telemetry.overview()`), and — only
+  when they need someone — accounts without owner
+  (`connections.service.listOwnerless()`) and apps waiting for approval
+  (`oauth.clients.list()`). The heading says "n of m done" (`stepsDone`).
+  Under it, **Administrators**: the rule in words with the emails it lists
+  (`config.admin`), who it resolves to today (`isOperator` applied to
+  `UserAdminService.list()`), what an administrator can and cannot do, and
+  the state of the install token; and **This gateway**: the public address,
+  the retention, the build. Both are read-only: the mounted configuration
+  sets them.
+  Administration is part of Settings: the application's shell and its global
+  navigation, with the local navigation of Settings beside the page
+  (`AdminShell`, `SettingsFrame` and `settingsNav` in `components/shell/`,
   handbook [web-app](web-app.md), "The shell"). Under "Administration" it lists
   Setup (`/admin`), Sign-in (`/admin/identity-provider`), Company apps
   (`/admin/provider-apps`, handbook [connections](connections.md)), People
   (`/admin/users`, below), Teams and Accounts without owner (`/admin/groups`,
-  `/admin/connections`: local groups and ownerless connections, handbook
-  [authority](authority.md)), Telemetry (`/admin/telemetry`, handbook
-  [telemetry](telemetry.md)) and Registered apps (`/admin/oauth-clients`,
-  handbook [management-door](management-door.md)). The pages keep their
-  earlier titles until they are redesigned. The "Not an operator" page has no
-  navigation and keeps the build footer.
-- **`/admin/identity-provider`** — the settings form (`POST
+  `/admin/connections`, handbook [authority](authority.md)), Telemetry
+  (`/admin/telemetry`, handbook [telemetry](telemetry.md)) and Registered apps
+  (`/admin/oauth-clients`, handbook [management-door](management-door.md)).
+  A signed-in person who does not match the rule reads "You do not administer
+  this gateway", with no navigation and the build footer.
+- **`/admin/identity-provider`** — **Sign-in**: the settings form (`POST
 /api/admin/identity-provider`: `issuer`, `client_id`, `client_secret`,
-  `claim_sub`, `claim_email`, `claim_groups`, `allowed_email_domains`),
-  disabled when the file sets the IdP; problems come back as
-  `?problem=…` and are listed; `?saved=1` confirms. The **Test login** card
-  runs the real sign-in with `return_to=/admin/identity-provider?tested=1`
-  and the page then shows the claims received (email, groups badges,
-  operator yes/no) from the new session. Note that the tester's session
-  replaces the bootstrap one: a non-operator tester lands on the 403 page
-  and signs out to return to bootstrap.
-- **`/admin/users`** — everyone who has signed in, in sign-up order
-  (`UserAdminService.list()`): email, an `active` / `deactivated` badge, a
-  `you` badge on the operator's own card, display name, last sign-in, current
-  groups, and the date of the deactivation. An active user gets a
-  **Deactivate** form (`POST /admin/users/<id>/deactivate`) — except the
-  operator's own card, which says another operator can; a deactivated one a
-  **Reactivate** form with what does not come back by itself. The notice of
-  the last act is shown once at the top: the delegations revoked, the groups
-  left, the missions orphaned, and — as a warning — the connections left
-  without owner, to reassign under Administration → Connections.
+  `claim_sub`, `claim_email`, `claim_groups`, `allowed_email_domains`), each
+  field saying its shape in its label; disabled when the file sets the IdP,
+  with "set in the mounted configuration" beside the title. Problems come
+  back as `?problem=…` and are listed in a note; `?saved=1` confirms. The
+  redirect address to register at the provider is a copyable block. **Test
+  the sign-in** runs the real sign-in with
+  `return_to=/admin/identity-provider?tested=1` and the page then shows what
+  the provider returned (email, teams, administrator yes/no) from the new
+  session. Note that the tester's session replaces the install one: a tester
+  who does not match the rule lands on the explanation above and signs out to
+  return to the install token.
+- **`/admin/users`** — **People**: everyone who has signed in, in sign-up
+  order (`UserAdminService.list()`), one row each: the name with "· you ·
+  admin" where it applies and the email under it, the teams, the last
+  sign-in, and "deactivated <date>" on a quiet row. Row actions:
+  **Deactivate**, asked first with everything it stops (`ConfirmSubmit`, then
+  `POST /admin/users/<id>/deactivate`) — none on one's own row; **Reactivate**
+  on a deactivated one. The notice of the last act is shown once at the top:
+  the connected apps disconnected, the teams left, the missions stopped, and —
+  as a warning — the accounts left without owner.
 
-Styling uses the style-guide tokens through the UI primitives (`Card`,
-`Button`, `Field`, `Input`, `Badge`, `Banner`, `Stack`) and
-`components/auth/auth.module.css`.
+The pages of the administration are built from the design system
+(`PageHeader`, `Section`, `DataTable`, `Rows`, `KeyValue`, `Callout`,
+`ConfirmSubmit`) and share `components/settings/settings.module.css`; the
+sign-in and bootstrap pages keep `components/auth/auth.module.css`.
 
 ## Tests
 

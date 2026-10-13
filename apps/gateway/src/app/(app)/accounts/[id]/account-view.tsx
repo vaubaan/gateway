@@ -191,10 +191,15 @@ function HolderCell({ row, now }: { row: AccessRow; now: Date }) {
         muted={holder.inactive}
       />
       <span>
-        <span className={styles.holderName}>
+        <span className={styles.holderName} title={holder.email ?? undefined}>
           {holder.kind === 'group' ? `${holder.name} team` : holder.name}
         </span>
         {note && <span className={styles.holderNote}> · {note}</span>}
+        {holder.email && holder.email !== holder.name && (
+          <DetailOnly>
+            <span className={shared.sub}>{holder.email}</span>
+          </DetailOnly>
+        )}
       </span>
     </span>
   );

@@ -671,6 +671,7 @@ export const ACTIVITY_WORDS = {
   fewerFilters: 'Fewer filters',
   nothing: 'Nothing was recorded for these filters.',
   notAttributed: 'not attributed',
+  afterYes: 'after a yes',
   machineKey: 'machine key',
   argumentsNeverStored: 'never stored',
   fingerprintHidden:

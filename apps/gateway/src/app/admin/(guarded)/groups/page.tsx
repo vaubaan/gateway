@@ -50,7 +50,7 @@ function TeamDetail({ view }: { view: GroupView }) {
   const local = group.source === 'local';
   const base = `${GROUPS_PAGE}/${encodeURIComponent(group.id)}/members`;
   return (
-    <div className={styles.detail} data-testid={`team-${group.id}`}>
+    <div className={styles.detail} data-testid={`team-${group.id}`} data-team={group.name}>
       {members.length === 0 ? (
         <p className={styles.quiet}>Nobody is in this team.</p>
       ) : (

@@ -278,15 +278,17 @@ test('a creator adds a member and a named token; each holder is attributed; each
   await ines.goto('/activity');
   // Her audit also holds other missions on her connections: this one only.
   await ines.locator('select[name="mission"]').selectOption({ label: MISSION });
-  await ines.getByLabel('Token holder').fill(CI);
-  await ines.getByRole('button', { name: 'Search' }).click();
+  await ines.getByRole('button', { name: 'More filters' }).click();
+  await ines.getByLabel(/^Key holder/).fill(CI);
+  await ines.getByRole('button', { name: 'Apply' }).click();
   const audit = ines.getByTestId('audit-table');
-  await expect(audit.getByTestId('audit-holder')).toHaveText([/CI runner\s*named token/]);
-  await ines.getByLabel('Token holder').fill(E2E_SHARE_TARGET.email);
-  await ines.getByRole('button', { name: 'Search' }).click();
+  // A machine key is said in words, and drawn as a dashed square, not as a person.
+  await expect(audit.getByTestId('audit-holder')).toHaveText([/CI runner\s*·\s*machine key/]);
+  await ines.getByLabel(/^Key holder/).fill(E2E_SHARE_TARGET.email);
+  await ines.getByRole('button', { name: 'Apply' }).click();
   await expect(audit.getByTestId('audit-holder')).toHaveText([
-    E2E_SHARE_TARGET.email,
-    E2E_SHARE_TARGET.email,
+    new RegExp(E2E_SHARE_TARGET.email.replace('.', '\\.')),
+    new RegExp(E2E_SHARE_TARGET.email.replace('.', '\\.')),
   ]);
   await snap(ines, 'audit-by-holder');
 
@@ -300,9 +302,22 @@ test('a creator adds a member and a named token; each holder is attributed; each
   const memberAudit = joan.getByTestId('audit-table');
   await expect(memberAudit.getByTestId('audit-holder').first()).toBeVisible();
   await expect(memberAudit).toContainText(CI);
-  await expect(memberAudit).toContainText('fingerprint not shown');
+  // The detail of a call says its arguments were never stored, and that their fingerprint
+  // is not hers to read.
+  await memberAudit
+    .locator('tbody tr[data-row]')
+    .filter({ has: joan.getByTestId('audit-holder') })
+    .first()
+    .getByTestId('entry-detail-link')
+    .click();
+  await expect(joan.getByTestId('arguments-hash-hidden')).toContainText(
+    'shown to the creator of the mission and to the owners of the account only',
+  );
+  await expect(joan.getByTestId('arguments-hash')).toHaveCount(0);
   expect(await joan.content()).not.toMatch(/\b[0-9a-f]{64}\b/);
   await snap(joan, 'audit-member');
+  // Opening the detail was a navigation of its own.
+  await joan.goBack();
   await joan.goBack();
   await expect(joan.getByTestId('holder-activity')).toBeVisible();
   await joan.goBack();

@@ -123,75 +123,104 @@ test('a day of calls: session page, then the audit of the mission', async ({ pag
   await page.getByRole('link', { name: 'Audit of this mission' }).click();
   await expect(page.getByRole('heading', { name: 'Activity', level: 1 })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/activity\\?mission=${day.mission_id}$`));
-  const entries = page.locator('table tbody tr');
-  // Six calls and the issuance of the mission.
+  const record = page.getByTestId('audit-table');
+  const entries = record.locator('tbody tr[data-row]');
+  // Six calls and the creation of the mission.
   await expect(entries).toHaveCount(7);
-  await expect(page.getByLabel('Mission')).toHaveValue(day.mission_id);
+  await expect(page.getByLabel('Mission', { exact: true })).toHaveValue(day.mission_id);
   await expect(entries.first()).toContainText('github__merge_pull_request');
-  await expect(entries.first()).toContainText('approval-required');
-  await expect(entries.last()).toContainText('mission-issued');
-  // The remaining budget of each call, and the hash of its arguments.
-  await expect(entries.nth(5)).toContainText('github.read-code → 4');
-  await expect(entries.nth(5).getByTestId('arguments-hash')).toHaveText(/^[0-9a-f]{64}$/);
-  await expect(entries.nth(5)).toContainText('agent planner');
+  // A call that had to ask its creator reads "asked you", in amber, not "refused".
+  await expect(entries.first().locator('[data-decision]')).toHaveAttribute(
+    'data-decision',
+    'asked',
+  );
+  await expect(entries.first()).toContainText('asked you');
+  await expect(entries.last()).toContainText('created a mission');
+  await expect(page.getByText('kept 90 days')).toBeVisible();
+
+  // Six columns by default; the mission is a seventh, behind "Show details", remembered.
+  await expect(record.getByRole('columnheader')).toHaveText([
+    'Time',
+    'Who',
+    'Action',
+    'On',
+    'Permission',
+    'Decision',
+  ]);
+  await page.getByRole('button', { name: 'Show details' }).click();
+  await expect(record.getByRole('columnheader', { name: 'Mission', exact: true })).toBeVisible();
+  await page.reload();
+  await expect(record.getByRole('columnheader', { name: 'Mission', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Hide details' }).click();
+  await expect(record.getByRole('columnheader', { name: 'Mission', exact: true })).toBeHidden();
+
+  // Everything else about a line is in its detail, which has an address of its own:
+  // what is left of each permission touched, and the fingerprint of the arguments.
+  const read = entries.nth(5);
+  await expect(read).toContainText('planner');
+  await expect(page.getByTestId('entry-detail')).toHaveCount(0);
+  await read.getByTestId('entry-detail-link').click();
+  await expect(page).toHaveURL(/[?&]open=[^&]+#entry-/);
+  const detail = page.getByTestId('entry-detail');
+  await expect(detail).toContainText('github.read-code');
+  await expect(detail).toContainText('→ 4 left');
+  await expect(detail).toContainText('agent label “planner”');
+  await expect(detail).toContainText('never stored');
+  await expect(detail.getByTestId('arguments-hash')).toHaveText(/^[0-9a-f]{64}$/);
   await expect(page.locator('body')).not.toContainText(ARGUMENT_MARKER);
   await snap(page, 'audit-mission');
+  await read.getByTestId('entry-detail-link').click();
+  await expect(page.getByTestId('entry-detail')).toHaveCount(0);
 
-  // Ten filters in three named groups — what, who, when — on two rows; refused calls of one tool.
-  const filters = page.locator('form');
-  await expect(filters.getByRole('group', { name: 'What' }).locator('label')).toHaveCount(5);
-  await expect(filters.getByRole('group', { name: 'Who' }).locator('label')).toHaveCount(3);
-  await expect(filters.getByRole('group', { name: 'When' }).locator('label')).toHaveCount(2);
-  const boxes = await filters
-    .locator('label')
-    .evaluateAll((labels) => labels.map((label) => Math.round(label.getBoundingClientRect().top)));
-  expect(boxes).toHaveLength(10);
-  expect(new Set(boxes).size).toBe(2);
-  // A tool name and a risk id wrap between their words, never inside one.
-  const breaks = await page
-    .getByTestId('audit-table')
-    .locator('[data-kind="tool"], [data-kind="risk"]')
-    .evaluateAll((slugs) =>
-      slugs.every((slug) => {
-        const text = slug.querySelector('span');
-        if (!text) return false;
-        // Each word is one text node: a word broken across two lines has two boxes.
-        return [...text.childNodes]
-          .filter((node) => node.nodeType === Node.TEXT_NODE)
-          .every((word) => {
-            const range = document.createRange();
-            range.selectNodeContents(word);
-            return range.getClientRects().length === 1;
-          });
-      }),
+  // The filters: the period as segments and four controls on one line; the others on demand.
+  const filters = page.locator('form[action="/activity"]');
+  await expect(filters.getByRole('group', { name: 'Period' }).getByRole('link')).toHaveText([
+    'Today',
+    'Yesterday',
+    '7 days',
+    'All',
+  ]);
+  const line = await filters
+    .locator('select:visible, input:visible')
+    .evaluateAll((controls) =>
+      controls.map((control) => Math.round(control.getBoundingClientRect().top)),
     );
-  expect(breaks).toBe(true);
-  // And the table shows its last column without scrolling the page sideways.
+  expect(line).toHaveLength(4);
+  expect(new Set(line).size).toBe(1);
+  await expect(page.getByLabel(/^Key holder/)).toBeHidden();
+  await page.getByRole('button', { name: 'More filters' }).click();
+  await expect(page.getByLabel(/^Key holder/)).toBeVisible();
+  // The page does not scroll sideways at this width.
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1280);
 
-  await page.getByLabel('Decision').selectOption('refused');
-  await page.getByRole('button', { name: 'Search' }).click();
+  await page.getByLabel('Decision', { exact: true }).selectOption('refused');
+  await page.getByRole('button', { name: 'Apply' }).click();
   await expect(entries).toHaveCount(2);
-  await page.getByLabel('Tool').fill('github__create_pull_request');
-  await page.getByRole('button', { name: 'Search' }).click();
+  await page.getByLabel('Tool, exact name').fill('github__create_pull_request');
+  await page.getByRole('button', { name: 'Apply' }).click();
   await expect(entries).toHaveCount(1);
-  await expect(entries.first()).toContainText('budget-exhausted');
-  await expect(page.getByLabel('Mission')).toHaveValue(day.mission_id);
+  // Refused, in words; the code of the protocol is in the detail of the line.
+  await expect(entries.first()).toContainText('refused');
+  await expect(entries.first()).toContainText('limit reached');
+  await entries.first().getByTestId('entry-detail-link').click();
+  await expect(page.getByTestId('entry-detail')).toContainText('budget-exhausted');
+  await expect(page.getByTestId('entry-detail')).toContainText('What the agent was told');
+  await expect(page.getByLabel('Mission', { exact: true })).toHaveValue(day.mission_id);
 
-  await page.getByLabel('Tool').fill('');
-  await page.getByLabel('Decision').selectOption('');
+  await page.getByLabel('Tool, exact name').fill('');
+  await page.getByLabel('Decision', { exact: true }).selectOption('');
   // The calls one agent label declared.
-  await page.getByLabel('Agent label').fill('planner');
-  await page.getByRole('button', { name: 'Search' }).click();
+  await page.getByLabel(/^Agent/).fill('planner');
+  await page.getByRole('button', { name: 'Apply' }).click();
   await expect(page).toHaveURL(/[?&]agent=planner(&|$)/);
   await expect(entries).toHaveCount(1);
-  await expect(entries.first()).toContainText('agent planner');
+  await expect(entries.first()).toContainText('planner');
   await expect(entries.first()).toContainText('github__get_file');
-  await page.getByLabel('Agent label').fill('');
-  await page.getByLabel('From (UTC)').fill('2020-01-01');
-  await page.getByLabel('To (UTC)').fill('2020-01-02');
-  await page.getByRole('button', { name: 'Search' }).click();
-  await expect(page.getByText('No entry matches.')).toBeVisible();
+  await page.getByLabel(/^Agent/).fill('');
+  await page.getByLabel(/^From · /).fill('2020-01-01');
+  await page.getByLabel(/^To · /).fill('2020-01-02');
+  await page.getByRole('button', { name: 'Apply' }).click();
+  await expect(page.getByText('Nothing was recorded for these filters.')).toBeVisible();
 
   // The page is in the navigation, and "Clear" brings everything back.
   await page.getByRole('link', { name: 'Clear' }).click();
@@ -210,11 +239,21 @@ test('the audit table shows every column at 1280 px', async ({ page, request }) 
   await signIn(page);
   await page.goto(`/activity?mission=${day.mission_id}`);
   await expect(page.locator('table tbody tr').first()).toBeVisible();
-  // Every column is on screen: the table does not scroll sideways at this width.
+  // Every column is on screen: the table does not scroll sideways at this width, with the
+  // detail of a line open (the fingerprint is 64 characters) and the seventh column shown.
+  await page.locator('tbody tr[data-row]').nth(1).getByTestId('entry-detail-link').click();
+  await expect(page.getByTestId('entry-detail')).toBeVisible();
+  await page.getByRole('button', { name: 'Show details' }).click();
   const table = await page
     .getByTestId('audit-table')
-    .evaluate((el) => ({ content: el.scrollWidth, box: el.clientWidth }));
+    .locator('table')
+    .evaluate((el) => ({
+      content: el.scrollWidth,
+      box: (el.parentElement ?? el).clientWidth,
+    }));
   expect(table.content).toBeLessThanOrEqual(table.box);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1280);
+  await page.getByRole('button', { name: 'Hide details' }).click();
 });
 
 test('the session timeline shows every column at 1280 px', async ({ page, request }) => {

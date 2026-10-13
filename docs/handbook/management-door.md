@@ -2,7 +2,7 @@
 title: Management door — authorization server, delegated tokens, admission, tools
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - apps/gateway/src/server/oauth-as/
   - apps/gateway/src/server/management/
@@ -14,7 +14,7 @@ tracks:
   - apps/gateway/src/app/.well-known/oauth-protected-resource/mcp/manage/route.ts
   - apps/gateway/src/app/.well-known/oauth-protected-resource/route.ts
   - apps/gateway/src/app/mcp/manage/route.ts
-  - apps/gateway/src/app/(app)/delegations/
+  - apps/gateway/src/app/(app)/settings/connected-apps/
   - apps/gateway/src/app/admin/(guarded)/oauth-clients/
   - apps/gateway/tests/integration/oauth-as/
   - apps/gateway/tests/integration/management/
@@ -86,8 +86,8 @@ apps/gateway/src/app/
   oauth/token/route.ts               POST  code and refresh grants
   oauth/revoke/route.ts              POST  RFC 7009
   mcp/manage/route.ts                the management door (gate + tools)
-  (app)/delegations/page.tsx                 /delegations
-  (app)/delegations/[id]/revoke/route.ts     POST  one-click revoke
+  (app)/settings/connected-apps/page.tsx                 /settings/connected-apps   ("Connected apps"; /delegations redirects)
+  (app)/settings/connected-apps/[id]/revoke/route.ts     POST  disconnect one
   admin/(guarded)/oauth-clients/page.tsx     /admin/oauth-clients
   admin/(guarded)/oauth-clients/[id]/route.ts POST  approve / disable
 ```
@@ -1011,41 +1011,52 @@ administrative entries whose object is one of **their** delegations.
 
 ## Pages
 
-- **`/delegations`** ("Connected apps" in the local navigation of Settings; `DelegationService.listFor`; the
-  status shown for each mission is the derived one — the composition root hands
-  the service `derivedMissionReads(store.missions, authority.grounds)`, so an
-  orphaned mission reads `orphaned` here as on its own page, [authority](authority.md)):
-  one card per delegation, most recent first — the client's name (as a
-  claim), its client id, where its access goes, the scope, when it was
-  granted and last renewed, its state, the missions it issued (with their
-  derived status) and a **Revoke** button (`POST /delegations/<id>/revoke`, one click).
-  The introduction says what a delegated application can do: read the user's
-  connections and missions, issue missions in their name, rotate the token of
-  the missions it issued and revoke any of their missions.
-  Each card of a delegation that is not over shows **Consent ends**: the date
-  its absolute lifetime ends, and the sentence "the application will then have
-  to ask you again, however recently it renewed". The introduction says how
-  long a delegation lasts at most (the configured lifetime, in days).
-  States: `active` (a token is live; also shows "Ends if unused", the latest
-  live token), `idle` (the consent stands but no token is left: never
-  redeemed, or unused past the refresh lifetime), `expired` (past its
-  absolute lifetime: the date, and that the application must ask again; the
-  Revoke button stays, to close it for good), `revoked`
-  with the reason in words (one sentence per `DelegationRevokeReason`,
-  `user-deactivated` included). A delegation revoked for a replay
-  (`view.replayed`) carries a banner: `danger`, "Review the mission(s) this
-  delegation issued", while `view.toReview` is not empty — it says the
-  missions below are still running and were **not** revoked, lists each with
-  a link to `/missions/<id>` and its status, and tells the user to revoke
-  those they do not recognise and rotate the token of those they keep;
-  `warning`, "A token of this delegation was held by two parties", once none
-  of the missions it issued is still running. Another user's delegation id
-  answers `?problem=not-found`.
-- **`/admin/oauth-clients`** (operator): every client with its status, who
-  decided (an operator or the policy), its redirect URIs, how it registered;
-  **Approve** and **Disable and revoke its delegations**
-  (`POST /admin/oauth-clients/<id>`, `action=approve|disable`). The policy in
-  force is stated at the top.
+The pages say **connected app** for a delegation and **registered app** for an
+OAuth client; "disconnect" is the revocation of a delegation. Routes, handlers,
+stored states and audit acts keep the protocol's names.
+
+- **`/settings/connected-apps`** ("Connected apps", a page of Settings;
+  `DelegationService.listFor`; `DELEGATIONS_PAGE`. `/delegations` and
+  `POST /delegations/<id>/revoke` answer with a permanent redirect). The
+  status shown for each mission is the derived one — the composition root
+  hands the service `derivedMissionReads(store.missions, authority.grounds)`,
+  so an orphaned mission reads the same here as on its own page,
+  [authority](authority.md).
+  One row per delegation, most recent first: the name the app gave itself
+  with "consent given … · valid N days" under it, its state, when it was last
+  used, how many missions it prepared and the name of the first. The name is
+  a link that unfolds the facts of the app under its row (`?app=<id>`): the
+  client id, where its access goes, what it may do, when it was connected and
+  last renewed, **Ends if unused** (the latest live token, while `active`),
+  **Consent ends** (the absolute lifetime: "the app then asks you again,
+  however recently it renewed"), and the missions it prepared with links.
+  States (`APP_STATES`): `active` → "connected"; `idle` → "must ask you
+  again" (the consent stands but no token is left); `expired` → "consent
+  ended"; `revoked` → "disconnected", with by whom in the detail (one
+  sentence per `DelegationRevokeReason`, `APP_END_WORDS`). Two exceptions are
+  marked in red on the row: an app disabled by an administrator, and a
+  delegation revoked for a replay.
+  **Disconnect** is a row action asked first (`ConfirmSubmit`: "The app loses
+  its access at once… The missions it prepared are yours and keep running"),
+  then `POST /settings/connected-apps/<id>/revoke`.
+  A delegation revoked for a replay (`view.replayed`) also carries a note
+  above the list: red, "Review the mission(s) <app> prepared", while
+  `view.toReview` is not empty — it says the missions below still run and
+  were **not** stopped, lists each with a link and its state, and tells the
+  person to stop those they do not recognise and replace the key of those
+  they keep; amber, "A token of <app> was held by two parties", once none of
+  them still runs. Another person's delegation id answers
+  `?problem=not-found`. With no delegation the page is one sentence and the
+  address of the management door.
+- **`/admin/oauth-clients`** ("Registered apps", administrators): one row per
+  client — its name with when it registered, its state
+  (`REGISTERED_APP_STATES`: "Waiting for your approval" in amber, "approved",
+  "disabled"), who decided (an administrator or the policy). The name unfolds
+  its facts (`?app=<id>`): client id, how it registered, its redirect URIs
+  ("a server" marked), its home page. Row actions: **Approve**
+  (`POST /admin/oauth-clients/<id>`, `action=approve`) and **Disable**, asked
+  first — "everyone who had connected it loses it at once" — then
+  `action=disable`. The policy in force is stated under the list.
 
 ## Configuration
 

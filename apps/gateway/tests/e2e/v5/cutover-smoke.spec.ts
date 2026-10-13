@@ -58,24 +58,40 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   await page.goto('/auth/login?return_to=/accounts');
   await expect(page.getByRole('heading', { name: 'Accounts', level: 1 })).toBeVisible();
   await expect(page.getByText(E2E_CUTOVER_USER.email)).toBeVisible();
-  await expect(page.getByText('No connection yet.')).toBeVisible();
+  // Nothing yet: one sentence, and the services to connect right under it.
+  await expect(page.getByTestId('accounts-empty')).toContainText('No account yet.');
 
   // ── 2. Connect GitHub through the company's App ───────────────────────────
-  await page.getByRole('link', { name: 'Connect a provider' }).first().click();
-  await page.getByRole('link', { name: /^GitHub/ }).click();
-  await expect(page.getByRole('heading', { name: 'GitHub', level: 1 })).toBeVisible();
-  // The field's label is not bound to its input: reach it by its form name.
-  await page.locator('input[name="name"]').fill(CONNECTION);
+  await page.getByRole('link', { name: 'Connect an account' }).click();
+  await expect(page).toHaveURL(/\/accounts#connect$/);
+  // A service that needs a company app nobody registered is listed, and says so.
+  await expect(page.getByTestId('service-railway')).toContainText('needs a company app');
+  await page.getByTestId('service-github').getByRole('link').click();
+  await expect(
+    page.getByRole('heading', { name: 'Connect a GitHub account', level: 1 }),
+  ).toBeVisible();
+  // The how-to is folded until asked for.
+  await expect(page.getByText('you choose the account and what the app may reach')).toBeHidden();
+  await page.getByRole('button', { name: 'What happens at GitHub' }).click();
+  await expect(page.getByText('you choose the account and what the app may reach')).toBeVisible();
+  await page.getByLabel(/^Name/).fill(CONNECTION);
   // To the provider's installation page (mocked), and back with the
   // installation id, the user authorization code and the single-use state.
   await page.getByRole('button', { name: 'Continue to GitHub' }).click();
   await expect(page).toHaveURL(/\/accounts\/[0-9a-f-]{36}(\?.*)?$/);
   await expect(page.getByRole('heading', { name: CONNECTION, level: 1 })).toBeVisible();
-  await expect(page.getByText('active', { exact: true }).first()).toBeVisible();
-  // The repositories of the installation were discovered as resources.
+  await expect(page.getByText('Connected', { exact: true })).toBeVisible();
+  // The normal state is not labelled; the header says whose it is.
+  await expect(page.getByText('you own it').first()).toBeVisible();
+  // The repositories of the installation were found as resources.
   for (const repository of MOCK_GITHUB.repositories) {
-    await expect(page.getByRole('row', { name: new RegExp(repository) })).toBeVisible();
+    await expect(
+      page.getByTestId('account-resources').getByRole('row', { name: new RegExp(repository) }),
+    ).toBeVisible();
   }
+  // No mission uses it yet, and nobody else holds it.
+  await expect(page.getByTestId('account-missions')).toContainText('No mission uses this account');
+  await expect(page.getByTestId('who-has-access').getByRole('row')).toHaveCount(2);
   await snap(page, 'cutover-connection');
   const connected = await upstreamLog(request);
   expect(connected.calls.some((call) => call.url.includes('/user/installations'))).toBe(true);
@@ -213,16 +229,20 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   // ── 8. The calls on the Audit page ────────────────────────────────────────
   await page.goto(`/activity?mission=${missionId}`);
   await expect(page.getByRole('heading', { name: 'Activity', level: 1 })).toBeVisible();
-  const entries = page.locator('table tbody tr');
+  const entries = page.getByTestId('audit-table').locator('tbody tr[data-row]');
   const calls = entries.filter({ hasText: 'github__list_branches' });
-  // Three allowed, one outside the mission, two refused on the budget.
+  // Three allowed, one outside the mission, two refused on the limit.
   await expect(calls).toHaveCount(6);
-  await expect(calls.filter({ hasText: 'budget-exhausted' })).toHaveCount(2);
-  await expect(calls.filter({ hasText: 'resource-not-in-mission' })).toHaveCount(1);
-  await expect(calls.filter({ hasText: `agent ${AGENT_LABEL}` })).toHaveCount(6);
-  await expect(entries.filter({ hasText: PROTECTED_WRITE })).toContainText('risk-not-accepted');
-  await expect(entries.filter({ hasText: 'mission-issued' })).toHaveCount(1);
-  await expect(calls.first().getByTestId('arguments-hash')).toHaveText(/^[0-9a-f]{64}$/);
+  await expect(calls.filter({ hasText: 'limit reached' })).toHaveCount(2);
+  await expect(calls.filter({ hasText: 'resource not in this mission' })).toHaveCount(1);
+  await expect(calls.filter({ hasText: AGENT_LABEL })).toHaveCount(6);
+  await expect(entries.filter({ hasText: PROTECTED_WRITE })).toContainText(
+    'permission not in this mission',
+  );
+  await expect(entries.filter({ hasText: 'created a mission' })).toHaveCount(1);
+  // The fingerprint of the arguments is in the detail of a line, for who answers for the call.
+  await calls.first().getByTestId('entry-detail-link').click();
+  await expect(page.getByTestId('arguments-hash')).toHaveText(/^[0-9a-f]{64}$/);
   // Neither the mission token nor the provider's credential is on the page.
   const auditHtml = await page.content();
   expect(auditHtml).not.toContain(token);

@@ -173,12 +173,13 @@ The list the command prints (`tour.ts`), without the values of the run
    #128 with its arguments (the tour prints the request's URL). Approve it,
    then replay the call with exactly the same arguments (the printed `curl`,
    `$VAUBAAN_APPROVAL_TOKEN`).
-9. **Share to Bob**: Connections → "Acme product repositories" → Share. Bob
-   already holds a share of it; sign out, sign in as Bob: Shares received,
-   and his mission.
-10. **Revoke that share** as Alice; as Bob, his mission now reads `orphaned`
-    and every call with its token is refused. **Share again** as Alice: the
-    same mission comes back, same token, same counters.
+9. **Give access to Bob**: Accounts → "Acme product repositories" → Give
+   access. Bob already holds one ("Who has access"); sign out, sign in as
+   Bob: Accounts → "Shared with you", and his mission.
+10. **Remove that access** as Alice ("Who has access" → Remove, asked first);
+    as Bob, his mission is stopped and every call with its key is refused.
+    **Give access again** as Alice: the dialog names the mission it brings
+    back — same key, same limits.
 11. **Work on a mission as a team.** Alice added Bob as a member of "Ship the
     billing page" and created the named token "CI runner". Sign in as Bob:
     Missions → "Shared with me" → that mission. He reads it and cannot change

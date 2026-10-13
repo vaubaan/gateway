@@ -166,11 +166,21 @@ test('every old path answers with a permanent redirect to the page that replaced
     ['/audit?decision=refused', '/activity?decision=refused'],
     ['/providers', '/reference'],
     ['/providers/github', '/reference/github'],
+    // Two pages were folded into another: what was shared with a person is a region of
+    // Accounts, connected apps are a page of Settings.
+    ['/shares', '/accounts'],
+    ['/delegations', '/settings/connected-apps'],
   ] as const) {
     const response = await request.get(`${localOrigin()}${from}`, { maxRedirects: 0 });
     expect(response.status(), from).toBe(308);
     expect(response.headers().location, from).toBe(to);
   }
+  // A form post to the earlier address of "disconnect an app" keeps its method.
+  const revoke = await request.post(`${localOrigin()}/delegations/some-id/revoke`, {
+    maxRedirects: 0,
+  });
+  expect(revoke.status()).toBe(308);
+  expect(revoke.headers().location).toBe('/settings/connected-apps/some-id/revoke');
   // The callback a provider was given is part of the protocol: it is served, not redirected.
   const callback = await request.get(`${localOrigin()}/connections/callback/github`, {
     maxRedirects: 0,
@@ -184,7 +194,10 @@ test('every old path answers with a permanent redirect to the page that replaced
   await expect(page.getByRole('heading', { name: 'Accounts', level: 1 })).toBeVisible();
   await page.goto('/providers/github#risk-github.read-code');
   await expect(page).toHaveURL(/\/reference\/github/);
-  await expect(page.getByRole('heading', { name: 'GitHub', level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Reference', level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'GitHub', level: 2 })).toBeVisible();
+  await page.goto('/shares');
+  await expect(page).toHaveURL(/\/accounts$/);
   await page.goto('/audit');
   await expect(page).toHaveURL(/\/activity$/);
   await expect(page.getByRole('heading', { name: 'Activity', level: 1 })).toBeVisible();
@@ -201,8 +214,13 @@ test('Settings leads a person to their own pages and an administrator to the gat
   await expect(local.getByRole('link')).toHaveText(['Preferences', 'Connected apps']);
   await expect(page.getByText('Administration')).toHaveCount(0);
   await local.getByRole('link', { name: 'Connected apps' }).click();
-  await expect(page).toHaveURL(/\/delegations$/);
-  await expect(page.getByRole('navigation', { name: 'Settings' })).toBeVisible();
+  await expect(page).toHaveURL(/\/settings\/connected-apps$/);
+  await expect(page.getByRole('heading', { name: 'Connected apps', level: 1 })).toBeVisible();
+  await expect(
+    page
+      .getByRole('navigation', { name: 'Settings' })
+      .getByRole('link', { name: 'Connected apps' }),
+  ).toHaveAttribute('aria-current', 'page');
 
   // An administrator: the same shell, the global navigation stays, Administration is listed.
   await signInAs(request, E2E_OPERATOR);
@@ -234,7 +252,35 @@ test('Settings leads a person to their own pages and an administrator to the gat
   await expect(
     ops.getByRole('navigation', { name: 'Settings' }).getByRole('link', { name: 'People' }),
   ).toHaveAttribute('aria-current', 'page');
+  // People: one line each, the administrator said in words, no button on one's own line.
+  const self = ops.getByTestId('people').getByRole('row').filter({ hasText: E2E_OPERATOR.email });
+  await expect(self).toContainText('you');
+  await expect(self).toContainText('admin');
+  await expect(self.getByRole('button')).toHaveCount(0);
   await snap(ops, 'settings-administration');
+
+  // Setup is a checklist that says what is done and what is left, and who administers.
+  await admin.getByRole('link', { name: 'Setup' }).click();
+  await expect(ops).toHaveURL(/\/admin$/);
+  await expect(ops.getByRole('heading', { name: 'Setup', level: 1 })).toBeVisible();
+  const checklist = ops.getByTestId('setup-checklist');
+  await expect(checklist).toContainText(/\d of \d done/);
+  await expect(checklist.getByTestId('setup-sign-in')).toContainText('Sign-in through');
+  await expect(checklist.getByTestId('setup-sign-in')).toContainText('done');
+  await expect(checklist.getByTestId('setup-address')).toContainText('gateway.e2e.test');
+  // What is left names the service, and its button leads to the form that fixes it.
+  const apps = checklist.getByTestId('setup-company-apps');
+  await expect(apps).toContainText('nobody can connect');
+  await apps.getByRole('link', { name: /^Register / }).click();
+  await expect(ops).toHaveURL(/\/admin\/provider-apps\?app=/);
+  await expect(ops.getByRole('heading', { name: 'Company apps', level: 1 })).toBeVisible();
+  await expect(ops.locator('[data-testid^="app-form-"]')).toBeVisible();
+  await ops.goBack();
+  // The rule is readable by who it names: the listed email, and who it resolves to today.
+  const rule = ops.getByTestId('administrators');
+  await expect(rule).toContainText(E2E_OPERATOR.email);
+  await expect(rule).toContainText('Cannot read a key');
+  await snap(ops, 'settings-setup');
   await context.close();
 });
 

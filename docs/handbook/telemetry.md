@@ -2,7 +2,7 @@
 title: Community telemetry — the report, the queue, the toggle, the validation badge
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - packages/telemetry/src/
   - apps/gateway/src/server/telemetry/
@@ -227,16 +227,19 @@ writes none (a first explicit `false` over the default does: `source` goes
 from `default` to `admin`). Refusals
 redirect to `/admin/telemetry?problem=locked|invalid`.
 
-## Admin → Telemetry
+## Settings → Telemetry
 
-`/admin/telemetry` renders `root.telemetry.overview()`: the state and its
-source, the collector URL in use (without the key; whether a key is set),
-whether reports actually leave (`disabled` / no collector / yes), the
-counters since start, the toggle (absent when locked), and **the exact
-request body of one report** — `serializeReports` applied to a report built
-from the first tool of the first registered plugin, so what the operator
-reads is produced by the code that sends. A warning banner explains the
-"enabled but placeholder collector" case.
+`/admin/telemetry` renders `root.telemetry.overview()`: "on" or "off" beside
+the title, then the state and its source, where reports go (without the key;
+whether a key is set), whether reports actually leave (`disabled` / no
+collector / yes), the counters since start, the button that turns it on or
+off (replaced by "set in the mounted configuration" when locked), and **the
+exact request body of one report** in a code block
+(`data-testid="telemetry-sample"`) — `serializeReports` applied to a report
+built from the first tool of the first registered plugin, so what the
+administrator reads is produced by the code that sends. A note explains the
+"on, but the collector is the placeholder" case. The setup checklist
+(`/admin`) carries a line for it, "Review" while it is off.
 
 ## The validation badge
 

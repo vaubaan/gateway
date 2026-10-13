@@ -112,6 +112,8 @@ function day(date: Date): string {
 }
 
 type Period = keyof typeof ACTIVITY_PERIODS;
+/** A period typed by hand in "More filters": no segment is the current one. */
+const CUSTOM_PERIOD = 'custom' as Period;
 
 /** The four periods as filter values, and which one the query is on (`null`: a custom one). */
 function periods(raw: Raw, now: Date) {
@@ -259,7 +261,10 @@ function Decision({
   if (entry.decision === 'allowed') {
     return (
       <span className={styles.decision} data-decision="allowed">
-        <span className={styles.quiet}>{DECISION_WORDS.allowed.label}</span>
+        <span className={styles.quiet}>
+          {DECISION_WORDS.allowed.label}
+          {entry.approval_id && ` · ${ACTIVITY_WORDS.afterYes}`}
+        </span>
         {link}
       </span>
     );
@@ -552,7 +557,7 @@ export default async function ActivityPage({ searchParams }: Props) {
         <div className={styles.filterRow}>
           <Segmented
             label="Period"
-            value={current ?? 'all'}
+            value={current ?? CUSTOM_PERIOD}
             options={(Object.keys(ACTIVITY_PERIODS) as Period[]).map((key) => ({
               value: key,
               label: ACTIVITY_PERIODS[key],
