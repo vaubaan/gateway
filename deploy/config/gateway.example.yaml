@@ -17,6 +17,9 @@
 # Every key is either required (marked; from this file or from its
 # environment variable) or shown with its default. Values under example.com
 # and `gateway-admins` are examples, not defaults.
+#
+# Booleans are written true / false and integers unquoted (the yes / on / 1
+# spellings are accepted in environment variables only).
 
 # REQUIRED. Public origin of the instance: provider callbacks, request URLs
 # and the bootstrap kit are built from it. Must be https (TLS is terminated
@@ -45,11 +48,12 @@
 #   # With compose.yaml the value comes from deploy/config/.env; with Docker or
 #   # Kubernetes secrets write `${file:/run/secrets/vaubaan_master_key}` instead.
 #   master_key: ${VAUBAAN_MASTER_KEY}
-#   # Version stamped on new blobs. Increase it when you rotate the key.
+#   # Version stamped on new blobs (integer >= 1). Increase it when you rotate the key.
 #   # env: VAUBAAN_MASTER_KEY_VERSION
 #   key_version: 1
 #   # Older keys still needed to open blobs written before a rotation.
-#   # Example only: there is no default; uncomment after a rotation.
+#   # Example only: there is no default; uncomment after a rotation. A version
+#   # listed here is an integer >= 1 and must differ from key_version.
 #   # env: VAUBAAN_MASTER_KEY_PREVIOUS ("1=<base64>,2=<base64>") or _FILE
 #   previous_keys:
 #     1: ${file:/run/secrets/vaubaan_master_key_v1}
@@ -88,9 +92,9 @@
 #     - ops@example.com
 
 # Apps your company registered at each provider, keyed by plugin id. Only
-# providers connected through an app need one: an App installation (github)
-# or an OAuth client (supabase, railway, gmail). Providers connected with an
-# API key or an SSH key have no block here. Which fields a provider needs is
+# providers connected through an app need one (an App installation or an
+# OAuth client); providers connected with an API key or an SSH key have no
+# block here. Which fields a provider needs is
 # declared by its plugin (plugins/<id>/README.md); allowed fields: client_id,
 # client_secret, app_id, app_slug, private_key.
 # env: VAUBAAN_PROVIDER_<ID>_<FIELD>, e.g. VAUBAAN_PROVIDER_GITHUB_APP_ID,
@@ -133,7 +137,7 @@
 #   # Telemetry. Setting it, to true or to false, decides here and makes that
 #   # page read-only; `false` guarantees nothing is ever sent.
 #   enabled: false
-#   # env: VAUBAAN_TELEMETRY_COLLECTOR_URL (example value)
+#   # env: VAUBAAN_TELEMETRY_COLLECTOR_URL (example value; must be https)
 #   # The built-in default is a placeholder: no collector is published yet,
 #   # and the gateway sends nothing while the URL is that default, even when
 #   # telemetry is enabled. A real collector URL is the endpoint that receives
@@ -141,24 +145,27 @@
 #   # (deploy/collector/README.md).
 #   collector_url: https://collector.example.net/rest/v1/plugin_reports?apikey=<public key>
 
-# Audit retention in days: the sweeper deletes audit entries older than this
+# Audit retention in days (integer >= 1): the sweeper deletes audit entries older than this
 # (at boot, then hourly). Only the audit trail is purged; session events,
 # decided requests and approvals are not, and stay for the life of the store.
 # env: VAUBAAN_RETENTION_DAYS
 # retention_days: 90
 
-# How long a claim request stays answerable (spec §3.4). Durations: 30s, 10m, 24h, 7d.
+# How long a request to the creator stays answerable, a claim (spec §3.4) and
+# an approval request (spec §3.5) alike. A duration is a whole number > 0 and
+# one unit: 30s, 10m, 24h, 7d.
 # env: VAUBAAN_REQUEST_EXPIRY
 # requests:
 #   expiry: 24h
 
-# How long an approval request stays answerable (spec §3.5).
+# How long a granted approval stays usable (spec §3.5): the executor has this
+# long to repeat the approved call, once. A duration, as above.
 # env: VAUBAAN_APPROVAL_EXPIRY
 # approvals:
 #   expiry: 10m
 
-# Surface rate limit of the execution MCP door: requests per minute, per
-# mission, all agents of the mission together (spec §6). Separate from the
+# Surface rate limit of the execution MCP door: requests per minute (integer
+# >= 1), per mission, all agents of the mission together (spec §6). Separate from the
 # per-risk rate limits of a mission's budget.
 # env: VAUBAAN_MCP_RATE_LIMIT_PER_MINUTE
 # mcp:
@@ -173,7 +180,7 @@
 #   # env: VAUBAAN_OAUTH_ACCESS_TOKEN_TTL
 #   access_token_ttl: 15m
 #   # Lifetime of a refresh token; every renewal starts it again. A delegation
-#   # left unused for this long ends by itself.
+#   # left unused for this long ends by itself. Must be longer than access_token_ttl.
 #   # env: VAUBAAN_OAUTH_REFRESH_TOKEN_TTL
 #   refresh_token_ttl: 30d
 #   # For how many seconds the refresh token that was just rotated may be

@@ -7,9 +7,11 @@
  * - `readFileSource()` — the YAML file named by `VAUBAAN_CONFIG_FILE`, with
  *   `${NAME}` / `${file:/path}` references resolved.
  *
- * `KEYS` is the single table mapping YAML paths to environment variables; the
- * handbook and the example files are derived from it, never the other way
- * round.
+ * `KEYS` is the single table of configuration keys: YAML path, environment
+ * variable, how the variable is parsed, and the defaults and bounds the loader
+ * applies (`load.ts` reads them from here, it holds no second copy). The
+ * handbook table and the example files are derived from it, never the other
+ * way round; `keys-doc.test.ts` holds the handbook to it.
  */
 import { parse as parseYaml } from 'yaml';
 
@@ -22,68 +24,217 @@ import {
   readEnvSecret,
   resolveRefs,
 } from './secret-refs';
-import { PROVIDER_APP_FIELDS, isProviderAppField, type ProviderAppField } from './types';
+import { DEFAULT_TELEMETRY_COLLECTOR_URL } from './telemetry-default';
+import {
+  CLIENT_REGISTRATION_POLICIES,
+  LOG_LEVELS,
+  PROVIDER_APP_FIELDS,
+  isProviderAppField,
+  type ProviderAppField,
+} from './types';
 
 export type RawTree = Record<string, unknown>;
 
 export type KeyKind = 'string' | 'secret' | 'list' | 'int' | 'bool' | 'secret-map';
 
+/** What a `string` key holds when it is more than free text. */
+export type KeyFormat = 'url' | 'duration' | 'enum';
+
+/**
+ * When a key must be set: always, once the `idp` block exists, or as long as
+ * it does not.
+ */
+export type KeyRequirement = 'always' | 'with-idp' | 'without-idp';
+
 export interface KeySpec {
   readonly path: string;
   readonly env: string;
   readonly kind: KeyKind;
+  readonly format?: KeyFormat;
+  /** Used when neither source sets the key; a duration is written as in the file. */
+  readonly default?: string | number | boolean;
+  readonly required?: KeyRequirement;
+  /** Lowest and highest integer accepted (`int` keys). */
+  readonly min?: number;
+  readonly max?: number;
+  /** Longest duration accepted, in seconds (`duration` keys). */
+  readonly maxSeconds?: number;
+  /** The values an `enum` key accepts. */
+  readonly oneOf?: readonly string[];
+  /** A `url` key that must use https. */
+  readonly https?: boolean;
+  /** Shortest value accepted, in characters. */
+  readonly minLength?: number;
 }
 
 export const CONFIG_FILE_ENV = 'VAUBAAN_CONFIG_FILE';
 export const PROVIDER_ENV_PREFIX = 'VAUBAAN_PROVIDER_';
 
-export const KEYS: readonly KeySpec[] = [
-  { path: 'public_url', env: 'VAUBAAN_PUBLIC_URL', kind: 'string' },
+const KEY_TABLE = [
+  {
+    path: 'public_url',
+    env: 'VAUBAAN_PUBLIC_URL',
+    kind: 'string',
+    format: 'url',
+    required: 'always',
+    https: true,
+  },
   { path: 'trusted_proxies', env: 'VAUBAAN_TRUSTED_PROXIES', kind: 'list' },
-  { path: 'store.path', env: 'VAUBAAN_STORE_PATH', kind: 'string' },
-  { path: 'encryption.master_key', env: 'VAUBAAN_MASTER_KEY', kind: 'secret' },
-  { path: 'encryption.key_version', env: 'VAUBAAN_MASTER_KEY_VERSION', kind: 'int' },
+  { path: 'store.path', env: 'VAUBAAN_STORE_PATH', kind: 'string', required: 'always' },
+  {
+    path: 'encryption.master_key',
+    env: 'VAUBAAN_MASTER_KEY',
+    kind: 'secret',
+    required: 'always',
+  },
+  {
+    path: 'encryption.key_version',
+    env: 'VAUBAAN_MASTER_KEY_VERSION',
+    kind: 'int',
+    default: 1,
+    min: 1,
+  },
   { path: 'encryption.previous_keys', env: 'VAUBAAN_MASTER_KEY_PREVIOUS', kind: 'secret-map' },
-  { path: 'idp.issuer', env: 'VAUBAAN_IDP_ISSUER', kind: 'string' },
-  { path: 'idp.client_id', env: 'VAUBAAN_IDP_CLIENT_ID', kind: 'string' },
-  { path: 'idp.client_secret', env: 'VAUBAAN_IDP_CLIENT_SECRET', kind: 'secret' },
-  { path: 'idp.claims.sub', env: 'VAUBAAN_IDP_CLAIM_SUB', kind: 'string' },
-  { path: 'idp.claims.email', env: 'VAUBAAN_IDP_CLAIM_EMAIL', kind: 'string' },
-  { path: 'idp.claims.groups', env: 'VAUBAAN_IDP_CLAIM_GROUPS', kind: 'string' },
+  {
+    path: 'idp.issuer',
+    env: 'VAUBAAN_IDP_ISSUER',
+    kind: 'string',
+    format: 'url',
+    required: 'with-idp',
+    https: true,
+  },
+  { path: 'idp.client_id', env: 'VAUBAAN_IDP_CLIENT_ID', kind: 'string', required: 'with-idp' },
+  {
+    path: 'idp.client_secret',
+    env: 'VAUBAAN_IDP_CLIENT_SECRET',
+    kind: 'secret',
+    required: 'with-idp',
+  },
+  { path: 'idp.claims.sub', env: 'VAUBAAN_IDP_CLAIM_SUB', kind: 'string', default: 'sub' },
+  { path: 'idp.claims.email', env: 'VAUBAAN_IDP_CLAIM_EMAIL', kind: 'string', default: 'email' },
+  { path: 'idp.claims.groups', env: 'VAUBAAN_IDP_CLAIM_GROUPS', kind: 'string', default: 'groups' },
   { path: 'idp.allowed_email_domains', env: 'VAUBAAN_IDP_ALLOWED_EMAIL_DOMAINS', kind: 'list' },
   { path: 'admin.group', env: 'VAUBAAN_ADMIN_GROUP', kind: 'string' },
   { path: 'admin.emails', env: 'VAUBAAN_ADMIN_EMAILS', kind: 'list' },
-  { path: 'bootstrap_token', env: 'VAUBAAN_BOOTSTRAP_TOKEN', kind: 'secret' },
-  { path: 'telemetry.enabled', env: 'VAUBAAN_TELEMETRY_ENABLED', kind: 'bool' },
-  { path: 'telemetry.collector_url', env: 'VAUBAAN_TELEMETRY_COLLECTOR_URL', kind: 'string' },
-  { path: 'retention_days', env: 'VAUBAAN_RETENTION_DAYS', kind: 'int' },
-  { path: 'requests.expiry', env: 'VAUBAAN_REQUEST_EXPIRY', kind: 'string' },
-  { path: 'approvals.expiry', env: 'VAUBAAN_APPROVAL_EXPIRY', kind: 'string' },
-  { path: 'mcp.rate_limit_per_minute', env: 'VAUBAAN_MCP_RATE_LIMIT_PER_MINUTE', kind: 'int' },
-  { path: 'oauth.access_token_ttl', env: 'VAUBAAN_OAUTH_ACCESS_TOKEN_TTL', kind: 'string' },
-  { path: 'oauth.refresh_token_ttl', env: 'VAUBAAN_OAUTH_REFRESH_TOKEN_TTL', kind: 'string' },
+  {
+    path: 'bootstrap_token',
+    env: 'VAUBAAN_BOOTSTRAP_TOKEN',
+    kind: 'secret',
+    required: 'without-idp',
+    minLength: 32,
+  },
+  { path: 'telemetry.enabled', env: 'VAUBAAN_TELEMETRY_ENABLED', kind: 'bool', default: false },
+  {
+    path: 'telemetry.collector_url',
+    env: 'VAUBAAN_TELEMETRY_COLLECTOR_URL',
+    kind: 'string',
+    format: 'url',
+    default: DEFAULT_TELEMETRY_COLLECTOR_URL,
+    https: true,
+  },
+  { path: 'retention_days', env: 'VAUBAAN_RETENTION_DAYS', kind: 'int', default: 90, min: 1 },
+  {
+    path: 'requests.expiry',
+    env: 'VAUBAAN_REQUEST_EXPIRY',
+    kind: 'string',
+    format: 'duration',
+    default: '24h',
+  },
+  {
+    path: 'approvals.expiry',
+    env: 'VAUBAAN_APPROVAL_EXPIRY',
+    kind: 'string',
+    format: 'duration',
+    default: '10m',
+  },
+  {
+    path: 'mcp.rate_limit_per_minute',
+    env: 'VAUBAAN_MCP_RATE_LIMIT_PER_MINUTE',
+    kind: 'int',
+    default: 600,
+    min: 1,
+  },
+  {
+    path: 'oauth.access_token_ttl',
+    env: 'VAUBAAN_OAUTH_ACCESS_TOKEN_TTL',
+    kind: 'string',
+    format: 'duration',
+    default: '15m',
+    maxSeconds: 3_600,
+  },
+  {
+    path: 'oauth.refresh_token_ttl',
+    env: 'VAUBAAN_OAUTH_REFRESH_TOKEN_TTL',
+    kind: 'string',
+    format: 'duration',
+    default: '30d',
+  },
   {
     path: 'oauth.refresh_reuse_window_seconds',
     env: 'VAUBAAN_OAUTH_REFRESH_REUSE_WINDOW_SECONDS',
     kind: 'int',
+    default: 30,
+    min: 0,
+    max: 60,
   },
   {
     path: 'oauth.client_registration.policy',
     env: 'VAUBAAN_OAUTH_CLIENT_REGISTRATION_POLICY',
     kind: 'string',
+    format: 'enum',
+    default: 'operator-approved',
+    oneOf: CLIENT_REGISTRATION_POLICIES,
   },
   {
     path: 'oauth.client_registration.auto_approve_loopback',
     env: 'VAUBAAN_OAUTH_CLIENT_REGISTRATION_AUTO_APPROVE_LOOPBACK',
     kind: 'bool',
+    default: true,
   },
   {
     path: 'oauth.client_registration.metadata_documents',
     env: 'VAUBAAN_OAUTH_CLIENT_REGISTRATION_METADATA_DOCUMENTS',
     kind: 'bool',
+    default: false,
   },
-  { path: 'log.level', env: 'VAUBAAN_LOG_LEVEL', kind: 'string' },
-];
+  {
+    path: 'log.level',
+    env: 'VAUBAAN_LOG_LEVEL',
+    kind: 'string',
+    format: 'enum',
+    default: 'info',
+    oneOf: LOG_LEVELS,
+  },
+] as const satisfies readonly KeySpec[];
+
+type KeyEntry = (typeof KEY_TABLE)[number];
+export type KeyPath = KeyEntry['path'];
+
+export const KEYS: readonly KeySpec[] = KEY_TABLE;
+
+/** The entry of one key, with its literal default and bounds. */
+export function keySpec<P extends KeyPath>(path: P): Extract<KeyEntry, { readonly path: P }> {
+  const spec = KEY_TABLE.find((k) => k.path === path);
+  if (!spec) throw new Error(`unknown configuration key ${path}`); // unreachable: P is a path of the table
+  return spec as Extract<KeyEntry, { readonly path: P }>;
+}
+
+/**
+ * Whether a key must be set. `idpConfigured` says whether the `idp` block
+ * exists; it only matters to the keys whose requirement depends on it.
+ */
+export function isKeyRequired(spec: KeySpec, idpConfigured?: boolean): boolean {
+  switch (spec.required) {
+    case 'always':
+      return true;
+    case 'with-idp':
+      return idpConfigured === true;
+    case 'without-idp':
+      return idpConfigured === false;
+    case undefined:
+      return false;
+  }
+}
 
 const SECRET_PROVIDER_FIELDS: ReadonlySet<ProviderAppField> = new Set([
   'client_secret',

@@ -14,12 +14,13 @@ import {
   type RawTree,
   envNamesFor,
   getPath,
+  isKeyRequired,
   isPlainObject,
+  keySpec,
   mergeTrees,
   readEnvSource,
   readFileSource,
 } from './sources';
-import { DEFAULT_TELEMETRY_COLLECTOR_URL } from './telemetry-default';
 import {
   type AdminRule,
   CLIENT_REGISTRATION_POLICIES,
@@ -40,24 +41,23 @@ import {
 
 /** The master key is the AEAD key: one size, defined by the crypto module. */
 export const MASTER_KEY_BYTES = KEY_BYTES;
-const MIN_BOOTSTRAP_TOKEN_LENGTH = 32;
-const DEFAULT_LOG_LEVEL: LogLevel = 'info';
-const DEFAULTS = {
-  keyVersion: 1,
-  claimSub: 'sub',
-  claimEmail: 'email',
-  claimGroups: 'groups',
-  retentionDays: 90,
-  requestExpiry: '24h',
-  approvalExpiry: '10m',
-  mcpRateLimitPerMinute: 600,
-  oauthAccessTokenTtl: '15m',
-  oauthRefreshTokenTtl: '30d',
-  oauthRefreshReuseWindowSeconds: 30,
-  oauthClientRegistrationPolicy: 'operator-approved',
-  oauthAutoApproveLoopback: true,
-  oauthMetadataDocuments: false,
-} as const;
+// Defaults and bounds are those of the key table (`KEYS` in `sources.ts`).
+const MIN_BOOTSTRAP_TOKEN_LENGTH = keySpec('bootstrap_token').minLength;
+const DEFAULT_LOG_LEVEL: LogLevel = keySpec('log.level').default;
+
+interface IntKey {
+  readonly path: string;
+  readonly default: number;
+  readonly min: number;
+}
+interface BoolKey {
+  readonly path: string;
+  readonly default: boolean;
+}
+interface TextKey {
+  readonly path: string;
+  readonly default: string;
+}
 
 export interface LoadOptions {
   /** Defaults to `process.env`. */
@@ -118,7 +118,13 @@ class Reader {
     return value;
   }
 
-  int(path: string, fallback: number, min = 1): number {
+  /** A string key with a default: the default stands in for an absent or empty value. */
+  text(key: TextKey): string {
+    return this.string(key.path, { fallback: key.default }) ?? key.default;
+  }
+
+  int(key: IntKey): number {
+    const { path, default: fallback, min } = key;
     const value = getPath(this.raw, path);
     if (value === undefined || value === null) return fallback;
     if (typeof value !== 'number' || !Number.isInteger(value) || value < min) {
@@ -128,7 +134,8 @@ class Reader {
     return value;
   }
 
-  bool(path: string, fallback: boolean): boolean {
+  bool(key: BoolKey): boolean {
+    const { path, default: fallback } = key;
     const value = getPath(this.raw, path);
     if (value === undefined || value === null) return fallback;
     if (typeof value !== 'boolean') {
@@ -152,7 +159,8 @@ class Reader {
     return value.map((v) => v.trim()).filter((v) => v.length > 0);
   }
 
-  duration(path: string, fallback: string): number {
+  duration(key: TextKey): number {
+    const { path, default: fallback } = key;
     const text = this.string(path, { fallback }) ?? fallback;
     const seconds = parseDuration(text);
     if (seconds === null) {
@@ -201,25 +209,26 @@ function validate(raw: RawTree, issues: IssueList): InstanceConfig | null {
 
   const publicUrl = readPublicUrl(r);
   const trustedProxies = readTrustedProxies(r);
-  const storePath = r.string('store.path', { required: true });
+  const storePath = r.string('store.path', { required: isKeyRequired(keySpec('store.path')) });
   const encryption = readEncryption(r);
   const idp = readIdp(r);
   const admin = readAdmin(r);
   const providers = readProviders(r);
   const bootstrapToken = readBootstrapToken(r, idp);
 
-  const telemetryEnabled = r.bool('telemetry.enabled', false);
+  const telemetryEnabled = r.bool(keySpec('telemetry.enabled'));
   // A null or mistyped value is not a decision: only a boolean pins the toggle.
   const telemetrySetByConfig = typeof getPath(raw, 'telemetry.enabled') === 'boolean';
-  const collectorUrl = r.url('telemetry.collector_url', {
-    fallback: DEFAULT_TELEMETRY_COLLECTOR_URL,
-    https: true,
+  const collector = keySpec('telemetry.collector_url');
+  const collectorUrl = r.url(collector.path, {
+    fallback: collector.default,
+    https: collector.https,
   });
 
-  const retentionDays = r.int('retention_days', DEFAULTS.retentionDays);
-  const requestExpiry = r.duration('requests.expiry', DEFAULTS.requestExpiry);
-  const approvalExpiry = r.duration('approvals.expiry', DEFAULTS.approvalExpiry);
-  const mcpRateLimit = r.int('mcp.rate_limit_per_minute', DEFAULTS.mcpRateLimitPerMinute);
+  const retentionDays = r.int(keySpec('retention_days'));
+  const requestExpiry = r.duration(keySpec('requests.expiry'));
+  const approvalExpiry = r.duration(keySpec('approvals.expiry'));
+  const mcpRateLimit = r.int(keySpec('mcp.rate_limit_per_minute'));
   const oauth = readOAuth(r);
   const level = readLogLevel(r);
 
@@ -251,7 +260,8 @@ function validate(raw: RawTree, issues: IssueList): InstanceConfig | null {
 
 /** https, no query or fragment, trailing slash stripped (a sub-path is kept). */
 function readPublicUrl(r: Reader): URL | undefined {
-  const publicUrl = r.url('public_url', { required: true, https: true });
+  const key = keySpec('public_url');
+  const publicUrl = r.url(key.path, { required: isKeyRequired(key), https: key.https });
   if (!publicUrl) return undefined;
   if (publicUrl.search || publicUrl.hash) {
     r.issues.add(
@@ -280,7 +290,8 @@ function readTrustedProxies(r: Reader): string[] {
 
 /** Required while no IdP is configured; long enough to resist guessing. */
 function readBootstrapToken(r: Reader, idp: IdpConfig | null): string | null {
-  const bootstrapToken = r.string('bootstrap_token', { required: idp === null }) ?? null;
+  const required = isKeyRequired(keySpec('bootstrap_token'), idp !== null);
+  const bootstrapToken = r.string('bootstrap_token', { required }) ?? null;
   if (bootstrapToken !== null && bootstrapToken.length < MIN_BOOTSTRAP_TOKEN_LENGTH) {
     r.issues.add(
       'bootstrap_token',
@@ -292,14 +303,16 @@ function readBootstrapToken(r: Reader, idp: IdpConfig | null): string | null {
 }
 
 /** A delegated token is short-lived (spec §6): the access token never outlives this. */
-export const MAX_OAUTH_ACCESS_TOKEN_TTL_SECONDS = 3_600;
+export const MAX_OAUTH_ACCESS_TOKEN_TTL_SECONDS = keySpec('oauth.access_token_ttl').maxSeconds;
 
 /**
  * Longest reuse window of a rotated refresh token: the window tolerates two
  * honest processes renewing together, and is exactly what a thief has to
  * replay a stolen token unnoticed, so it stays a matter of seconds.
  */
-export const MAX_OAUTH_REFRESH_REUSE_WINDOW_SECONDS = 60;
+export const MAX_OAUTH_REFRESH_REUSE_WINDOW_SECONDS = keySpec(
+  'oauth.refresh_reuse_window_seconds',
+).max;
 
 /**
  * The authorization server of the management door. The access token is capped
@@ -307,11 +320,8 @@ export const MAX_OAUTH_REFRESH_REUSE_WINDOW_SECONDS = 60;
  * the access token it renews would be useless.
  */
 function readOAuth(r: Reader): OAuthConfig {
-  const accessTokenTtlSeconds = r.duration('oauth.access_token_ttl', DEFAULTS.oauthAccessTokenTtl);
-  const refreshTokenTtlSeconds = r.duration(
-    'oauth.refresh_token_ttl',
-    DEFAULTS.oauthRefreshTokenTtl,
-  );
+  const accessTokenTtlSeconds = r.duration(keySpec('oauth.access_token_ttl'));
+  const refreshTokenTtlSeconds = r.duration(keySpec('oauth.refresh_token_ttl'));
   if (accessTokenTtlSeconds > MAX_OAUTH_ACCESS_TOKEN_TTL_SECONDS) {
     r.issues.add(
       'oauth.access_token_ttl',
@@ -326,11 +336,7 @@ function readOAuth(r: Reader): OAuthConfig {
       envNamesFor('oauth.refresh_token_ttl'),
     );
   }
-  const refreshReuseWindowSeconds = r.int(
-    'oauth.refresh_reuse_window_seconds',
-    DEFAULTS.oauthRefreshReuseWindowSeconds,
-    0,
-  );
+  const refreshReuseWindowSeconds = r.int(keySpec('oauth.refresh_reuse_window_seconds'));
   if (refreshReuseWindowSeconds > MAX_OAUTH_REFRESH_REUSE_WINDOW_SECONDS) {
     r.issues.add(
       'oauth.refresh_reuse_window_seconds',
@@ -344,21 +350,15 @@ function readOAuth(r: Reader): OAuthConfig {
     refreshReuseWindowSeconds,
     clientRegistration: {
       policy: readClientRegistrationPolicy(r),
-      autoApproveLoopback: r.bool(
-        'oauth.client_registration.auto_approve_loopback',
-        DEFAULTS.oauthAutoApproveLoopback,
-      ),
-      metadataDocuments: r.bool(
-        'oauth.client_registration.metadata_documents',
-        DEFAULTS.oauthMetadataDocuments,
-      ),
+      autoApproveLoopback: r.bool(keySpec('oauth.client_registration.auto_approve_loopback')),
+      metadataDocuments: r.bool(keySpec('oauth.client_registration.metadata_documents')),
     },
   };
 }
 
 function readClientRegistrationPolicy(r: Reader): ClientRegistrationPolicy {
   const path = 'oauth.client_registration.policy';
-  const fallback: ClientRegistrationPolicy = DEFAULTS.oauthClientRegistrationPolicy;
+  const fallback: ClientRegistrationPolicy = keySpec(path).default;
   const policy = r.string(path, { fallback }) ?? fallback;
   if (isClientRegistrationPolicy(policy)) return policy;
   r.issues.add(
@@ -380,9 +380,9 @@ function readLogLevel(r: Reader): LogLevel {
 
 function readEncryption(r: Reader): EncryptionConfig | null {
   const path = 'encryption.master_key';
-  const encoded = r.string(path, { required: true });
+  const encoded = r.string(path, { required: isKeyRequired(keySpec(path)) });
   const masterKey = encoded === undefined ? undefined : decodeKey(encoded, path, r.issues);
-  const keyVersion = r.int('encryption.key_version', DEFAULTS.keyVersion);
+  const keyVersion = r.int(keySpec('encryption.key_version'));
 
   const previousKeys = new Map<number, Uint8Array>();
   const previous = r.tree('encryption.previous_keys');
@@ -440,14 +440,22 @@ function normalizeBase64(text: string): string {
 function readIdp(r: Reader): IdpConfig | null {
   const block = r.tree('idp');
   if (!block || Object.keys(block).length === 0) return null;
-  const issuer = r.url('idp.issuer', { required: true, https: true });
-  const clientId = r.string('idp.client_id', { required: true });
-  const clientSecret = r.string('idp.client_secret', { required: true });
+  // The block exists: its three connection keys are now required.
+  const issuerKey = keySpec('idp.issuer');
+  const issuer = r.url(issuerKey.path, {
+    required: isKeyRequired(issuerKey, true),
+    https: issuerKey.https,
+  });
+  const clientId = r.string('idp.client_id', {
+    required: isKeyRequired(keySpec('idp.client_id'), true),
+  });
+  const clientSecret = r.string('idp.client_secret', {
+    required: isKeyRequired(keySpec('idp.client_secret'), true),
+  });
   const claims = {
-    sub: r.string('idp.claims.sub', { fallback: DEFAULTS.claimSub }) ?? DEFAULTS.claimSub,
-    email: r.string('idp.claims.email', { fallback: DEFAULTS.claimEmail }) ?? DEFAULTS.claimEmail,
-    groups:
-      r.string('idp.claims.groups', { fallback: DEFAULTS.claimGroups }) ?? DEFAULTS.claimGroups,
+    sub: r.text(keySpec('idp.claims.sub')),
+    email: r.text(keySpec('idp.claims.email')),
+    groups: r.text(keySpec('idp.claims.groups')),
   };
   const allowedEmailDomains = r.stringList('idp.allowed_email_domains').map((d) => d.toLowerCase());
   if (!issuer || !clientId || !clientSecret) return null;
