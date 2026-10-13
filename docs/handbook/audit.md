@@ -4,6 +4,7 @@ status: current
 date: 2026-10-13
 last_synced: 2026-10-13
 tracks:
+  - apps/gateway/src/server/budget/retention.ts
   - apps/gateway/src/server/audit/
   - apps/gateway/src/app/(app)/audit/
   - apps/gateway/src/app/(app)/missions/[id]/session/
@@ -362,7 +363,8 @@ the details (`parseEventDetails`); the column only selects the rows.
 ## Retention (`retention.ts`)
 
 `AuditRetentionSweeper` calls `store.audit.purgeByRetention(config.retentionDays)` —
-the store's only delete path, bounded by its cutoff and guarded by the triggers. The
+the audit's only delete path, bounded by its cutoff and guarded by the triggers — and
+then purges the session history of the same age (below). The
 composition root awaits `root.audit.retention.start()` before the instance serves (one
 sweep at boot), a timer repeats it every `RETENTION_SWEEP_INTERVAL_MS` (one hour), and
 `root.close()` stops the timer and waits for a sweep in flight before closing the store.
@@ -374,8 +376,43 @@ the error) and retried at the next interval; it never stops the instance. A purg
 removes something logs `audit retention: entries purged` with the count. The timer is
 `// single-process only`: a hosted deployment runs `sweep()` from one scheduled job.
 
-Only `audit` and `audit_risks` are purged. Session events and counters are not covered by
-`retention_days`.
+### The session history leaves with the audit
+
+The same sweep purges the session history of the same age (spec §6, §8; product
+owner's decision of 2026-10-13): a timeline says what the audit says — the tool, the
+instant, the holder, the agent label —, so `retention_days` is one promise wherever a
+call is written. `SessionHistoryRetention.purge(retentionDays)`
+(`budget/retention.ts`) asks the store for the sessions that hold something older than
+the cutoff (`SessionsRepo.withHistoryBefore`), computes each mission's current period
+(`currentPeriod`, as on every read) and removes, in one transaction per session
+(`SessionsRepo.purgeHistory`):
+
+| What               | Removed when                                                                             | Never removed                                                                                                                         |
+| ------------------ | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `events`           | `ts` older than N days                                                                   | an event of `PERIOD_STATE_EVENT_KINDS` (`gate-opened`, `gate-changed`, `reset`, `extension`) written since the current period started |
+| `session_counters` | the period is over **and** ended more than N days ago (`period_start + length < cutoff`) | the counters of the current period; every counter of a one-off mission (its one period never ends)                                    |
+
+The exception is what a decision reads back from the start of the period: a gate
+opened "until the period ends" (`openedGatesOf`) and the credits of granted claims
+(`countersAgreeWithAudit`). On a period shorter than the retention it never applies;
+on a yearly period with a 90-day retention it keeps those few events until the period
+turns. Once the period is over they are history and leave like the rest.
+
+Consequences to know:
+
+- The **Mission session** page shows the timeline and the past periods that are left:
+  after N days a quiet mission's timeline is empty and its "past periods" table starts
+  at the retention.
+- Requests are not purged: a decided request keeps its row (and never held arguments
+  past its decision).
+- `countersAgreeWithAudit` holds for a period younger than the retention. On a one-off
+  mission older than that, the audit lost entries the counters still count: the check
+  reports a mismatch that is the retention, not a fault.
+
+The two purges fail apart: one that throws is logged (`audit retention: purge failed`
+or `audit retention: session history purge failed`) and the other still runs. What the
+second removed is logged as `audit retention: session history purged` with `events`
+and `counters`. `sweep()` still returns the number of audit entries.
 
 ## Administrative entries: who writes what
 
@@ -531,6 +568,8 @@ const removed = await root.audit.retention.sweep(); // number, or null when the 
   string, not a call, malformed JSON, no details) and its index; the copy made at insert
   (`agentLabelColumn`); `listRecentEvents` filtered on a label and on no label, with the
   keyset.
+- `tests/integration/audit/session-history-retention.test.ts` (11) — the session history leaves with the audit:
+  events, past-period counters, what a current period keeps, one-off missions, the sweeper wiring
 - `tests/integration/audit/retention.test.ts` (10) — purge of entries older than N days
   and of nothing else (other tables untouched, boundary kept), triggers still forbidding
   update and delete, idempotence, configured days, scheduling (boot sweep, interval,

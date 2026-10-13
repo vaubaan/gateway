@@ -74,6 +74,12 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
   refusal carries `risk_ids` next to `risk_id`. Schema migration `0013` (forward-only).
   Requests that are open when you upgrade keep the one risk they named: granting one
   approves that risk, and a call that needs more gets a new request covering it.
+- **`retention_days` also purges the session history.** The events of a mission's
+  timeline older than the retention are deleted with the audit entries of the same age,
+  and so are the counters of periods that ended longer ago. The counters of the current
+  period, the gates opened in it and the credits granted in it are never purged. **The
+  first start of this image deletes that history on an existing instance**: raise
+  `retention_days` before you upgrade if you want to keep more than 90 days of it.
 - **The Share dialog lists the orphaned missions a share would bring back.** Sharing
   again to someone whose missions were orphaned restores those missions at once, with
   the token their agent still holds. The dialog now names them, with who issued each,

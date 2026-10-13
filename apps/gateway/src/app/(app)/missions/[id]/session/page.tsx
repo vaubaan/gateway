@@ -476,6 +476,12 @@ export default async function MissionSessionPage({ params, searchParams }: Props
         <CardHeader>
           <CardTitle>Timeline</CardTitle>
         </CardHeader>
+        <CardBody>
+          <p className={styles.muted} data-testid="timeline-retention">
+            Kept {session.root.config.retentionDays} days, like the audit: older events are deleted,
+            and so are the counters of periods that ended longer ago.
+          </p>
+        </CardBody>
         {filter.kind !== 'all' && (
           <CardBody>
             <p className={styles.muted} data-testid="timeline-filter">

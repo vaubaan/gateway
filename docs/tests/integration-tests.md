@@ -2946,6 +2946,17 @@ itself are asserted in "Scenarios — Execution door".
   risks, what is left, refusal code and request; timeline paging; revoked mission keeps
   its history; `eventView` ignores every detail it does not name and shows an event with
   malformed details without detail.
+- **`session-history-retention.test.ts`** (11) — **`retention_days` also purges the
+  session history**: events older than N days and no other (exactly N days old is kept);
+  **the counters of periods that ended more than N days ago, never the current one**;
+  in a period longer than the retention the call events leave and **the gate and credit
+  events of the period stay — the gate opened 90 days ago still reads open** — with the
+  period's counters; a gate or credit event leaves once its period is over; on a one-off
+  mission the old calls leave, its counters and credits stay; each session by its own
+  mission's period, idempotent; nothing but `events` and `session_counters` is
+  touched; a retention that is not a number of days is refused. The sweeper purges both
+  with the same number of days, logs what it removed, **the two purges fail apart**, and
+  the composition root wires it.
 - **`retention.test.ts`** (10) — **the purge removes the entries older than N days and
   nothing else**: older call and act gone with their risk rows, the entry exactly N days
   old and the recent ones intact, seven other tables unchanged; **the triggers still

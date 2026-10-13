@@ -138,6 +138,31 @@ export interface SessionsRepo {
    * same first page; this one resumes after a position.
    */
   listRecentEvents(sessionId: string, options: RecentEventsOptions): Promise<EventRecord[]>;
+  /**
+   * The sessions that hold an event or a counter older than `cutoff`: what a retention
+   * sweep looks at. A superset of what it removes.
+   */
+  withHistoryBefore(cutoff: Iso): Promise<SessionRecord[]>;
+  /**
+   * Retention of one session's history, in one transaction. The only path that deletes
+   * an event or a counter while its mission exists; the caller computes the bounds from
+   * the mission's period (`budget/retention.ts`).
+   */
+  purgeHistory(sessionId: string, bounds: HistoryPurgeBounds): Promise<HistoryPurged>;
+}
+
+export interface HistoryPurgeBounds {
+  /** Events with `ts < eventsBefore` go… */
+  readonly eventsBefore: Iso;
+  /** …except those of these kinds written at or after `since`, whatever their age. */
+  readonly keep: { readonly kinds: readonly string[]; readonly since: Iso };
+  /** Counters with `period_start < countersBefore` go; `null` removes none. */
+  readonly countersBefore: Iso | null;
+}
+
+export interface HistoryPurged {
+  readonly events: number;
+  readonly counters: number;
 }
 
 export interface RecentEventsOptions {
@@ -452,9 +477,44 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
       : callsOfLabel.all(sessionId, label, limit);
   }
 
+  const withHistory = db.prepare<[string, string], SessionRow>(
+    `SELECT ${SESSION_COLUMNS} FROM sessions
+     WHERE EXISTS (SELECT 1 FROM events e WHERE e.session_id = sessions.id AND e.ts < ?)
+        OR EXISTS (SELECT 1 FROM session_counters c
+                   WHERE c.session_id = sessions.id AND c.period_start < ?)
+     ORDER BY id`,
+  );
+  const purgeEventsBefore = db.prepare<[string, string]>(
+    'DELETE FROM events WHERE session_id = ? AND ts < ?',
+  );
+  const purgeCountersBefore = db.prepare<[string, string]>(
+    'DELETE FROM session_counters WHERE session_id = ? AND period_start < ?',
+  );
+
   return {
     async getByMission(missionId) {
       return primitives.sessionOfMission(missionId);
+    },
+    async withHistoryBefore(cutoff) {
+      return withHistory.all(cutoff, cutoff).map(sessionToRecord);
+    },
+    async purgeHistory(sessionId, bounds) {
+      const { eventsBefore, keep, countersBefore } = bounds;
+      return withImmediateTransaction(db, () => {
+        const events =
+          keep.kinds.length === 0
+            ? purgeEventsBefore.run(sessionId, eventsBefore).changes
+            : db
+                .prepare<string[]>(
+                  `DELETE FROM events
+                   WHERE session_id = ? AND ts < ?
+                     AND NOT (ts >= ? AND kind IN (${placeholders(keep.kinds.length)}))`,
+                )
+                .run(sessionId, eventsBefore, keep.since, ...keep.kinds).changes;
+        const counters =
+          countersBefore === null ? 0 : purgeCountersBefore.run(sessionId, countersBefore).changes;
+        return { events, counters };
+      });
     },
     async getOrCreate(missionId) {
       const now = nowIso(ctx);

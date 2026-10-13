@@ -4,6 +4,7 @@
  * purge.
  * Handbook: docs/handbook/audit.md.
  */
+import { SessionHistoryRetention } from '../budget/retention';
 import type { InstanceConfig } from '../config';
 import type { Logger } from '../logging';
 import type { MissionService } from '../missions';
@@ -30,6 +31,7 @@ export interface AuditModuleDeps {
 }
 
 export function createAuditModule(deps: AuditModuleDeps): AuditModule {
+  const clock = deps.clock ?? systemClock;
   return {
     query: new AuditQueryService({ store: deps.store }),
     sessions: new MissionSessionService({
@@ -39,6 +41,11 @@ export function createAuditModule(deps: AuditModuleDeps): AuditModule {
     }),
     retention: new AuditRetentionSweeper({
       audit: deps.store.audit,
+      sessionHistory: new SessionHistoryRetention({
+        sessions: deps.store.sessions,
+        missions: deps.store.missions,
+        clock,
+      }),
       retentionDays: deps.config.retentionDays,
       logger: deps.logger.child({ component: 'audit' }),
       intervalMs: deps.sweepIntervalMs,

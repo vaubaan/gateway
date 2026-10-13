@@ -63,6 +63,12 @@ export {
 } from './session-service.ts';
 export { createBudgetStage, type BudgetStageDeps } from './budget-stage.ts';
 export {
+  PERIOD_STATE_EVENT_KINDS,
+  SessionHistoryRetention,
+  type SessionHistoryPurge,
+  type SessionHistoryRetentionDeps,
+} from './retention.ts';
+export {
   countersAgreeWithAudit,
   CREDIT_EVENT_KINDS,
   type ConsistencyDeps,

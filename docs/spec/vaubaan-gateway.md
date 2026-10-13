@@ -833,7 +833,9 @@ command.
 - **No secret in logs.** Mission tokens are logged by prefix. Call
   arguments are never logged in clear, only hashed.
 - **Immutable audit.** No update or delete from the application. Purge by
-  operator-configured retention.
+  operator-configured retention. The same retention purges the session
+  history — timeline events and the counters of past periods — and never
+  what the budget of the current period is computed from.
 - **Leak-free telemetry.** See §9: no argument, no resource ref, no
   stable instance identifier.
 
@@ -957,6 +959,14 @@ past ones included.
 
 Retention configured by the operator, 90 days by default. No cold archive
 in v5.
+
+The retention covers the session as well as the audit: an event of a
+session's timeline older than the retention is deleted, and so are the
+counters of a period that ended longer ago than the retention. What the
+current period rests on is kept whatever its age: its counters, the gates
+opened until it ends, and the credits granted claims gave back in it. A
+one-off mission has a single period that never ends, so its counters stay
+for as long as the mission does.
 
 ## 9. Community telemetry
 
