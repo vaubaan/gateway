@@ -39,7 +39,7 @@ import { clientOriginOf, trustedProxyList } from '../execution/request-meta';
 import { UNKNOWN_CLIENT } from '../http/client-ip';
 import type { Logger } from '../logging';
 import { prefixOfBearer } from '../missions/token';
-import { MANAGEMENT_SCOPE, type OAuthEndpoints } from './endpoints';
+import { carriesManagementScope, MANAGEMENT_SCOPE, type OAuthEndpoints } from './endpoints';
 import type { DelegatedTokenVerifier } from './verifier';
 
 const HTTP_FORBIDDEN = 403;
@@ -110,7 +110,7 @@ export class ManagementGate {
 
     const delegation = await this.deps.verifier.resolve(bearer);
     if (delegation) {
-      if (!delegation.scopes.includes(MANAGEMENT_SCOPE)) {
+      if (!carriesManagementScope(delegation.scopes)) {
         return this.challenge('the token does not carry the management scope.');
       }
       return { delegation, client };

@@ -74,6 +74,20 @@ export interface CreateTokenInput {
   readonly expiresAt: Iso;
 }
 
+/** A token to write under a delegation the repository already holds. */
+export type TokenToIssue = Omit<CreateTokenInput, 'delegationId'>;
+
+/** What `redeemCode` did with an authorization code (see the method). */
+export type RedeemCodeResult =
+  | { readonly outcome: 'issued'; readonly delegation: DelegationRecord }
+  | { readonly outcome: 'refused'; readonly reason: string; readonly delegation: DelegationRecord }
+  | { readonly outcome: 'replayed'; readonly delegation: DelegationRecord }
+  | { readonly outcome: 'expired' }
+  | { readonly outcome: 'unknown' };
+
+/** `redeemCode` refuses with this reason when the code's delegation is no longer active. */
+export const REDEEM_DELEGATION_REVOKED = 'delegation-revoked';
+
 /** A token or code row with the delegation it belongs to, whatever their state. */
 export interface WithDelegation<T> {
   readonly token: T;
@@ -94,6 +108,16 @@ export interface DelegationsRepo {
     decision: ClientOperatorDecision,
     decidedBy: string,
   ): Promise<OAuthClientRecord>;
+  /**
+   * The operator disables a client: the decision and the revocation of every active
+   * delegation the client holds, with their refresh and access tokens (reason
+   * `operator`), in one transaction — a disabled client never keeps a live delegation.
+   * `revoked` lists the delegations this call ended, oldest first.
+   */
+  disableClient(
+    id: string,
+    decidedBy: string,
+  ): Promise<{ client: OAuthClientRecord; revoked: DelegationRecord[] }>;
   /**
    * Deletes the clients registered before `createdBefore` that no operator decided
    * about and that never received a delegation. Returns how many went.
@@ -124,14 +148,42 @@ export interface DelegationsRepo {
   findCode(codeHash: string): Promise<WithDelegation<OAuthCodeRecord> | null>;
   /** Single-use: returns the code once, when unexpired and unconsumed, null otherwise. */
   consumeCode(codeHash: string): Promise<OAuthCodeRecord | null>;
+  /**
+   * The authorization-code grant as one transaction: the code is spent, `check` judges
+   * the request against the spent code and its delegation, and the first refresh and
+   * access tokens of the family are written.
+   *
+   * - `issued`: the code was live, `check` returned `null`, the delegation is active;
+   *   both tokens exist.
+   * - `refused`: the code was live and **is now spent**, and nothing was issued —
+   *   `check` returned a reason, or the delegation is revoked (`delegation-revoked`).
+   * - `replayed`: the code had been spent before; nothing changes here (the caller
+   *   revokes the family).
+   * - `expired`, `unknown`: nothing changes.
+   *
+   * `check` is synchronous and pure (it runs inside the transaction). If a write
+   * fails, the whole transaction rolls back — the code is **not** spent, no token
+   * exists — and the error is thrown: the request may be sent again.
+   */
+  redeemCode(
+    codeHash: string,
+    check: (code: OAuthCodeRecord, delegation: DelegationRecord) => string | null,
+    issue: { readonly refresh: TokenToIssue; readonly access: TokenToIssue },
+  ): Promise<RedeemCodeResult>;
 
   createRefreshToken(input: CreateTokenInput): Promise<RefreshTokenRecord>;
   /** The refresh token row whatever its state (rotated, revoked, expired), with its delegation. */
   findRefreshToken(tokenHash: string): Promise<WithDelegation<RefreshTokenRecord> | null>;
-  /** Rotation: the presented token must be live; it is revoked and linked to its successor. */
+  /**
+   * Rotation: the presented token must be live; it is revoked and linked to its
+   * successor. With `access`, the access token of the renewal is written in the same
+   * transaction: a failure of either write leaves the presented token live and
+   * nothing issued.
+   */
   rotateRefreshToken(
     tokenHash: string,
-    next: Omit<CreateTokenInput, 'delegationId'>,
+    next: TokenToIssue,
+    access?: TokenToIssue,
   ): Promise<RefreshTokenRecord | null>;
   /**
    * The reuse window of a rotation (ADR management-door-authorization-server,
@@ -139,14 +191,15 @@ export interface DelegationsRepo {
    * or after `rotatedSince` and whose successor is still the live head of its
    * family. That successor is rotated in turn — revoked and linked to `next` —
    * in one transaction, and `next` is returned. `null` when any of this does not
-   * hold: the presented token is then a plain replay.
+   * hold: the presented token is then a plain replay. With `access`, the access
+   * token of the renewal is written in the same transaction.
    */
   rotateSuccessorOf(
     previousHash: string,
     rotatedSince: Iso,
-    next: Omit<CreateTokenInput, 'delegationId'>,
+    next: TokenToIssue,
+    access?: TokenToIssue,
   ): Promise<RefreshTokenRecord | null>;
-  revokeRefreshToken(id: string): Promise<boolean>;
 
   createAccessToken(input: CreateTokenInput): Promise<AccessTokenRecord>;
   /** A live access token whose delegation is still active, with that delegation. */
@@ -394,9 +447,6 @@ export function createDelegationsRepo(ctx: RepoContext): DelegationsRepo {
   const replaceRefresh = db.prepare<[string, string, string]>(
     'UPDATE oauth_refresh_tokens SET revoked_at = ?, replaced_by_id = ? WHERE id = ?',
   );
-  const revokeRefresh = db.prepare<[string, string]>(
-    'UPDATE oauth_refresh_tokens SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL',
-  );
   const insertAccess = db.prepare<[string, string, string, string, string]>(
     `INSERT INTO oauth_access_tokens (id, delegation_id, token_hash, created_at, expires_at)
      VALUES (?, ?, ?, ?, ?)`,
@@ -480,6 +530,27 @@ export function createDelegationsRepo(ctx: RepoContext): DelegationsRepo {
     return delegation;
   }
 
+  /**
+   * Inside a transaction: `current` (a live refresh token of an active delegation) is
+   * revoked and linked to its successor `next`; the renewal's access token, when
+   * given, is written with it. A throw rolls the caller's transaction back.
+   */
+  function rotateInto(
+    current: Pick<RefreshRow, 'id' | 'delegation_id'>,
+    next: TokenToIssue,
+    access: TokenToIssue | undefined,
+    now: Iso,
+  ): RefreshTokenRecord | null {
+    const id = ctx.newId();
+    insertRefresh.run(id, current.delegation_id, next.tokenHash, now, next.expiresAt);
+    replaceRefresh.run(now, id, current.id);
+    if (access) {
+      insertAccess.run(ctx.newId(), current.delegation_id, access.tokenHash, now, access.expiresAt);
+    }
+    const row = refreshById.get(id);
+    return row ? refreshToRecord(row) : null;
+  }
+
   function requireRedirectUris(uris: readonly string[]): readonly string[] {
     if (uris.length === 0) {
       throw new InvariantError('an OAuth client registers at least one redirect URI');
@@ -532,6 +603,21 @@ export function createDelegationsRepo(ctx: RepoContext): DelegationsRepo {
       requireClient(id);
       decideClientStmt.run(decision, nowIso(ctx), decidedBy, id);
       return requireClient(id);
+    },
+    async disableClient(id, decidedBy) {
+      const now = nowIso(ctx);
+      return withImmediateTransaction(db, () => {
+        requireClient(id);
+        decideClientStmt.run('disabled', now, decidedBy, id);
+        const ended: string[] = [];
+        for (const row of delegationsOfClient.all(id)) {
+          if (revokeDelegation.run(now, 'operator', row.id).changes === 0) continue;
+          revokeRefreshOfDelegation.run(now, row.id);
+          revokeAccessOfDelegation.run(now, row.id);
+          ended.push(row.id);
+        }
+        return { client: requireClient(id), revoked: ended.map(requireDelegation) };
+      });
     },
     async deleteUnusedClients(createdBefore) {
       return deleteUnusedClientsStmt.run(createdBefore).changes;
@@ -603,18 +689,22 @@ export function createDelegationsRepo(ctx: RepoContext): DelegationsRepo {
     },
 
     async createCode(input) {
-      requireActiveDelegation(input.delegationId);
       const id = ctx.newId();
-      insertCode.run(
-        id,
-        input.codeHash,
-        input.delegationId,
-        input.redirectUri,
-        input.codeChallenge,
-        input.codeChallengeMethod,
-        nowIso(ctx),
-        input.expiresAt,
-      );
+      // The check and the insert are one transaction: no code under a delegation
+      // revoked in between, whatever the driver.
+      withImmediateTransaction(db, () => {
+        requireActiveDelegation(input.delegationId);
+        insertCode.run(
+          id,
+          input.codeHash,
+          input.delegationId,
+          input.redirectUri,
+          input.codeChallenge,
+          input.codeChallengeMethod,
+          nowIso(ctx),
+          input.expiresAt,
+        );
+      });
       return codeToRecord(requireRow(codeById.get(id), 'oauth_code', id));
     },
     async findCode(codeHash) {
@@ -632,11 +722,48 @@ export function createDelegationsRepo(ctx: RepoContext): DelegationsRepo {
         return consumed ? codeToRecord(consumed) : null;
       });
     },
+    async redeemCode(codeHash, check, issue) {
+      const now = nowIso(ctx);
+      return withImmediateTransaction(db, (): RedeemCodeResult => {
+        const row = codeByHash.get(codeHash);
+        if (!row) return { outcome: 'unknown' };
+        const delegation = requireDelegation(row.delegation_id);
+        if (row.consumed_at !== null) return { outcome: 'replayed', delegation };
+        if (row.expires_at <= now) return { outcome: 'expired' };
+        if (consumeCodeStmt.run(now, row.id).changes === 0) {
+          return { outcome: 'replayed', delegation };
+        }
+        // From here on the code is spent: a refusal below commits that.
+        const code = codeToRecord({ ...row, consumed_at: now });
+        const reason =
+          check(code, delegation) ??
+          (delegation.status === 'active' ? null : REDEEM_DELEGATION_REVOKED);
+        if (reason !== null) return { outcome: 'refused', reason, delegation };
+        // A failure of either insert throws: the transaction rolls back, code included.
+        insertRefresh.run(
+          ctx.newId(),
+          delegation.id,
+          issue.refresh.tokenHash,
+          now,
+          issue.refresh.expiresAt,
+        );
+        insertAccess.run(
+          ctx.newId(),
+          delegation.id,
+          issue.access.tokenHash,
+          now,
+          issue.access.expiresAt,
+        );
+        return { outcome: 'issued', delegation };
+      });
+    },
 
     async createRefreshToken(input) {
-      requireActiveDelegation(input.delegationId);
       const id = ctx.newId();
-      insertRefresh.run(id, input.delegationId, input.tokenHash, nowIso(ctx), input.expiresAt);
+      withImmediateTransaction(db, () => {
+        requireActiveDelegation(input.delegationId);
+        insertRefresh.run(id, input.delegationId, input.tokenHash, nowIso(ctx), input.expiresAt);
+      });
       return refreshToRecord(requireRow(refreshById.get(id), 'oauth_refresh_token', id));
     },
     async findRefreshToken(tokenHash) {
@@ -644,19 +771,15 @@ export function createDelegationsRepo(ctx: RepoContext): DelegationsRepo {
       if (!row) return null;
       return { token: refreshToRecord(row), delegation: requireDelegation(row.delegation_id) };
     },
-    async rotateRefreshToken(tokenHash, next) {
+    async rotateRefreshToken(tokenHash, next, access) {
       const now = nowIso(ctx);
       return withImmediateTransaction(db, () => {
         const current = liveRefreshByHash.get(tokenHash, now);
         if (!current || current.delegation_status !== 'active') return null;
-        const id = ctx.newId();
-        insertRefresh.run(id, current.delegation_id, next.tokenHash, now, next.expiresAt);
-        replaceRefresh.run(now, id, current.id);
-        const row = refreshById.get(id);
-        return row ? refreshToRecord(row) : null;
+        return rotateInto(current, next, access, now);
       });
     },
-    async rotateSuccessorOf(previousHash, rotatedSince, next) {
+    async rotateSuccessorOf(previousHash, rotatedSince, next, access) {
       const now = nowIso(ctx);
       return withImmediateTransaction(db, () => {
         const previous = refreshByHash.get(previousHash);
@@ -666,21 +789,16 @@ export function createDelegationsRepo(ctx: RepoContext): DelegationsRepo {
         if (previous.revoked_at < rotatedSince) return null;
         const head = liveRefreshById.get(previous.replaced_by_id, now);
         if (!head || head.delegation_status !== 'active') return null;
-        const id = ctx.newId();
-        insertRefresh.run(id, head.delegation_id, next.tokenHash, now, next.expiresAt);
-        replaceRefresh.run(now, id, head.id);
-        const row = refreshById.get(id);
-        return row ? refreshToRecord(row) : null;
+        return rotateInto(head, next, access, now);
       });
-    },
-    async revokeRefreshToken(id) {
-      return revokeRefresh.run(nowIso(ctx), id).changes > 0;
     },
 
     async createAccessToken(input) {
-      requireActiveDelegation(input.delegationId);
       const id = ctx.newId();
-      insertAccess.run(id, input.delegationId, input.tokenHash, nowIso(ctx), input.expiresAt);
+      withImmediateTransaction(db, () => {
+        requireActiveDelegation(input.delegationId);
+        insertAccess.run(id, input.delegationId, input.tokenHash, nowIso(ctx), input.expiresAt);
+      });
       return accessToRecord(requireRow(accessById.get(id), 'oauth_access_token', id));
     },
     async findActiveAccessToken(tokenHash) {

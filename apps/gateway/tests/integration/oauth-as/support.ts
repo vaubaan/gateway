@@ -65,6 +65,12 @@ export const ROUTES: readonly Route[] = [
     handle: (root, request) => root.oauth.handlers.protectedResourceMetadata(request),
   },
   {
+    path: '/.well-known/oauth-protected-resource',
+    file: '.well-known/oauth-protected-resource/route.ts',
+    delegatesTo: 'oauth.discovery.executionResource',
+    handle: (root, request) => root.oauth.discovery.executionResource(request),
+  },
+  {
     path: '/oauth/register',
     file: 'oauth/register/route.ts',
     delegatesTo: 'oauth.handlers.register',

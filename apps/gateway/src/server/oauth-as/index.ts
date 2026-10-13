@@ -24,7 +24,11 @@ import {
 import { ClientRegistry } from './clients';
 import { DelegationService } from './delegations';
 import { oauthEndpoints, type OAuthEndpoints } from './endpoints';
-import { createOAuthHandlers, type OAuthHandlers } from './handlers';
+import {
+  createOAuthHandlers,
+  executionResourceMetadataResponse,
+  type OAuthHandlers,
+} from './handlers';
 import { ManagementGate } from './management-gate';
 import { TokenService } from './token-service';
 import { DelegatedTokenVerifier } from './verifier';
@@ -51,6 +55,14 @@ export interface OAuthAsModule {
   /** What a delegated access token is worth: for the management door, and for the execution door to refuse it by kind. */
   readonly verifier: DelegatedTokenVerifier;
   readonly handlers: OAuthHandlers;
+  /**
+   * Discovery documents this module serves for resources it does not protect:
+   * `GET /.well-known/oauth-protected-resource`, the execution door's RFC 9728
+   * document (no authorization server). Public, reads nothing but the method.
+   */
+  readonly discovery: {
+    readonly executionResource: (request: Request) => Promise<Response>;
+  };
 }
 
 export function createOAuthAsModule(deps: OAuthAsModuleDeps): OAuthAsModule {
@@ -86,6 +98,7 @@ export function createOAuthAsModule(deps: OAuthAsModuleDeps): OAuthAsModule {
     users: store.users,
     clients,
     audit,
+    rateLimiter: deps.rateLimiter,
     endpoints,
     config: config.oauth,
     clock,
@@ -102,6 +115,7 @@ export function createOAuthAsModule(deps: OAuthAsModuleDeps): OAuthAsModule {
   const verifier = new DelegatedTokenVerifier({
     repo: store.delegations,
     users: store.users,
+    clients,
     endpoints,
   });
   const handlers = createOAuthHandlers({
@@ -117,7 +131,11 @@ export function createOAuthAsModule(deps: OAuthAsModuleDeps): OAuthAsModule {
     delegations,
     logger,
   });
-  return { endpoints, clients, authorization, tokens, delegations, verifier, handlers };
+  const discovery = {
+    executionResource: async (request: Request) =>
+      executionResourceMetadataResponse(endpoints, request),
+  };
+  return { endpoints, clients, authorization, tokens, delegations, verifier, handlers, discovery };
 }
 
 export interface ManagementGateModuleDeps {
@@ -180,6 +198,8 @@ export {
 } from './clients';
 export {
   DelegationService,
+  endDelegation,
+  type DelegationEnding,
   type DelegationState,
   type DelegationView,
   type RevokeDelegationResult,
@@ -189,6 +209,7 @@ export {
   AUTHORIZE_PATH,
   authorizationServerMetadata,
   CONSENT_DECISION_PATH,
+  executionResourceMetadata,
   isManagementResource,
   MANAGEMENT_DOOR_PATH,
   MANAGEMENT_SCOPE,
@@ -211,8 +232,11 @@ export {
   DELEGATIONS_PAGE,
   MAX_REQUEST_BYTES,
   OAUTH_CLIENTS_PAGE,
+  REGISTRATION_INSTANCE_WINDOW_MS,
   REGISTRATION_WINDOW_MS,
+  REGISTRATIONS_PER_INSTANCE,
   REGISTRATIONS_PER_WINDOW,
+  TOKEN_REQUESTS_PER_CLIENT,
   TOKEN_REQUESTS_PER_WINDOW,
   TOKEN_WINDOW_MS,
   type OAuthHandlers,
@@ -240,6 +264,8 @@ export {
 } from './secrets';
 export {
   clientCredentialsOf,
+  RENEWAL_WINDOW_MS,
+  RENEWALS_PER_DELEGATION,
   TokenService,
   type ClientCredentials,
   type TokenResponse,

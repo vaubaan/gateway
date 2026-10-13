@@ -23,6 +23,38 @@ extends:
 > See [Amendment — refresh-token reuse window](#amendment-2026-10-13--refresh-token-reuse-window)
 > below; the rest of D4 stands.
 
+> **Amendment of 2026-10-13 — Phase 2 cycle-end pass.** Three points of this
+> record are made exact; none is reversed.
+>
+> - **D4, a write that fails is not a replay.** Each grant is one transaction
+>   of the store: the code is spent and the first pair written together; a
+>   refresh token is rotated and the access token of the renewal written
+>   together. A check that refuses still spends the code. A _write_ that
+>   fails rolls the grant back whole — the code is unspent, the presented
+>   refresh token is still the live head — and the client is answered
+>   `server_error`, never `invalid_grant`. The family stays usable, and the
+>   same request sent again succeeds. Chosen over "revoke the family
+>   cleanly": D4 revokes because two parties hold a token, and after a
+>   rollback nobody holds anything new (the pair never left the server), so
+>   there is nothing to protect by revoking and a user would consent again
+>   for a fault of the instance. Replay detection is untouched: a token is
+>   marked rotated in exactly the transactions whose pair was written.
+> - **D5, "applies at once" includes tokens already issued.** The management
+>   door evaluates the client's status at every request, like the
+>   authorization and token endpoints: an access token of a client the policy
+>   no longer approves, or that an operator disabled, is refused at its next
+>   call rather than at its expiry. A policy change revokes nothing; relaxing
+>   it restores the client. Disabling a client and revoking its delegations
+>   is one transaction.
+> - **Rate limits follow proof of possession.** A `client_id` is public, so a
+>   public client's renewals are counted per delegation, once its refresh
+>   token is recognised, and the per-client budget is kept for confidential
+>   clients, once their secret matched. The per-address limits stand.
+>
+> Handbook [management-door](../handbook/management-door.md), sections
+> "Tokens", "Registration policy and operator decisions" and "Two families of
+> endpoints".
+
 ## Context
 
 Spec §4.1 bis adds a second MCP door, `/mcp/manage`, for agents acting on

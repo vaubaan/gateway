@@ -1,11 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  asksForManagement,
   authorizationServerMetadata,
+  carriesManagementScope,
+  executionResourceMetadata,
+  foreignResource,
   isManagementResource,
   MANAGEMENT_SCOPE,
   oauthEndpoints,
+  ONLY_SCOPE_MESSAGE,
+  onlyResourceMessage,
   protectedResourceMetadata,
+  scopesOf,
+  staysWithinManagement,
 } from './endpoints';
 
 const endpoints = oauthEndpoints(new URL('https://gateway.example.com'));
@@ -101,5 +109,61 @@ describe('RFC 9728 metadata of the management door', () => {
       scopes_supported: [MANAGEMENT_SCOPE],
       bearer_methods_supported: ['header'],
     });
+  });
+
+  it('the execution door’s resource document names no authorization server', () => {
+    expect(executionResourceMetadata(endpoints, '/mcp')).toEqual({
+      resource: 'https://gateway.example.com/mcp',
+      authorization_servers: [],
+      bearer_methods_supported: ['header'],
+    });
+    // The same base-URL rule as every other URL: a sub-path is kept, a trailing slash is not doubled.
+    const nested = oauthEndpoints(new URL('https://intranet.example.com/gateway/'));
+    expect(executionResourceMetadata(nested, '/mcp').resource).toBe(
+      'https://intranet.example.com/gateway/mcp',
+    );
+  });
+});
+
+describe('the one scope and the one resource, stated once', () => {
+  it('splits a scope value on whitespace', () => {
+    expect(scopesOf('')).toEqual([]);
+    expect(scopesOf('  mgmt   other\tthird ')).toEqual(['mgmt', 'other', 'third']);
+  });
+
+  it('an authorization request asks for the management scope: other values next to it are ignored', () => {
+    expect(asksForManagement('mgmt')).toBe(true);
+    expect(asksForManagement('offline_access mgmt')).toBe(true);
+    expect(asksForManagement('offline_access')).toBe(false);
+    expect(asksForManagement('')).toBe(false);
+    expect(asksForManagement('mgmt2')).toBe(false);
+  });
+
+  it('a renewal must not widen: nothing but the management scope may be named', () => {
+    expect(staysWithinManagement('mgmt')).toBe(true);
+    expect(staysWithinManagement('')).toBe(true);
+    expect(staysWithinManagement(' mgmt  mgmt ')).toBe(true);
+    expect(staysWithinManagement('mgmt admin')).toBe(false);
+    expect(staysWithinManagement('admin')).toBe(false);
+  });
+
+  it('a token opens the door when its scopes include the management scope', () => {
+    expect(carriesManagementScope([MANAGEMENT_SCOPE])).toBe(true);
+    expect(carriesManagementScope(['other', MANAGEMENT_SCOPE])).toBe(true);
+    expect(carriesManagementScope([])).toBe(false);
+    expect(carriesManagementScope(['other'])).toBe(false);
+  });
+
+  it('names the first resource that is not the management door', () => {
+    expect(foreignResource(endpoints, [])).toBeNull();
+    expect(foreignResource(endpoints, [endpoints.resource, `${endpoints.resource}/`])).toBeNull();
+    expect(
+      foreignResource(endpoints, [endpoints.resource, 'https://gateway.example.com/mcp']),
+    ).toBe('https://gateway.example.com/mcp');
+  });
+
+  it('words both refusals from the constants', () => {
+    expect(ONLY_SCOPE_MESSAGE).toContain(`"${MANAGEMENT_SCOPE}"`);
+    expect(onlyResourceMessage(endpoints)).toContain(endpoints.resource);
   });
 });

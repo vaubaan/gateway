@@ -37,6 +37,7 @@ import {
   parseClientDocument,
   type ClientDocumentFetcher,
 } from './client-metadata-document';
+import { recordDelegationEnded } from './delegations';
 import { MANAGEMENT_SCOPE, SUPPORTED_GRANT_TYPES, SUPPORTED_RESPONSE_TYPES } from './endpoints';
 import { OAuthProtocolError } from './errors';
 import { checkRedirectUri, isLoopbackOnly } from './redirect-uri';
@@ -292,9 +293,11 @@ export class ClientRegistry {
 
   /**
    * The operator's decision (Administration → OAuth clients). Disabling a
-   * client ends every delegation it holds: each is revoked, with its tokens,
-   * and leaves its own entry so that the user who gave it finds it in their
-   * audit. `actorId` is the operator (`auditActorId`).
+   * client ends every delegation it holds: the decision and the revocations
+   * (with their tokens) are one transaction of the store, so a disabled client
+   * never keeps a live delegation. Each delegation then leaves its own entry
+   * so that the user who gave it finds it in their audit. `actorId` is the
+   * operator (`auditActorId`).
    */
   async decide(
     actorId: string,
@@ -305,19 +308,13 @@ export class ClientRegistry {
     const before = await repo.getClient(id);
     if (!before) return null;
     const previous = this.statusOf(before);
-    const client = await repo.decideClient(id, decision, actorId);
-
-    const revoked: DelegationRecord[] = [];
-    if (decision === 'disabled') {
-      for (const delegation of await repo.listForClient(id)) {
-        const ended = await repo.revokeIfActive(delegation.id, 'operator');
-        if (ended) revoked.push(ended);
-      }
-    }
-    const ts = toIso(clock.now());
+    const { client, revoked } =
+      decision === 'disabled'
+        ? await repo.disableClient(id, actorId)
+        : { client: await repo.decideClient(id, decision, actorId), revoked: [] };
     await audit.write({
       kind: 'admin',
-      ts,
+      ts: toIso(clock.now()),
       user_id: actorId,
       act: decision === 'approved' ? 'oauth-client-approved' : 'oauth-client-disabled',
       object: { type: 'oauth-client', id: client.id },
@@ -332,21 +329,10 @@ export class ClientRegistry {
       delegated_client_id: null,
     });
     for (const delegation of revoked) {
-      await audit.write({
-        kind: 'admin',
-        ts,
-        user_id: actorId,
-        act: 'delegation-revoked',
-        object: { type: 'delegation', id: delegation.id },
-        before: { status: 'active' },
-        after: {
-          status: 'revoked',
-          reason: 'operator',
-          delegating_user_id: delegation.userId,
-          client_id: client.clientId,
-          client_name: client.name,
-        },
-        delegated_client_id: null,
+      await recordDelegationEnded(this.deps, delegation, client, {
+        reason: 'operator',
+        actorId,
+        viaClient: false,
       });
     }
     this.deps.logger.info('oauth client decided', {

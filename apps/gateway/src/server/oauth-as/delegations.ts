@@ -12,11 +12,93 @@ import type { DelegationsRepo } from '../store/repositories/delegations';
 import type { MissionsRepo } from '../store/repositories/missions';
 import type {
   DelegationRecord,
+  DelegationRevokeReason,
   MissionRecord,
   OAuthClientRecord,
   UserRecord,
 } from '../store/types';
 import type { ClientRegistry, ClientStatus } from './clients';
+
+/** Who ended a delegation, and why. */
+export interface DelegationEnding {
+  readonly reason: DelegationRevokeReason;
+  /**
+   * In whose name the entry is written: the delegating user (their own act, their
+   * client signing out, a detected replay) or the operator (`auditActorId`).
+   */
+  readonly actorId: string;
+  /**
+   * True when the act arrived through the client, at a protocol endpoint (sign-out,
+   * replay): the entry then names it as `delegated_client_id`. False for an act of a
+   * human in the interface.
+   */
+  readonly viaClient: boolean;
+}
+
+export interface EndDelegationDeps {
+  readonly repo: Pick<DelegationsRepo, 'revokeIfActive' | 'getClient'>;
+  readonly audit: AuditWriter;
+  readonly clock: Clock;
+  readonly logger: Logger;
+}
+
+/**
+ * The trace of a delegation that was just revoked — **the one place that writes
+ * it**: a `delegation revoked` log line (`warn` for a replay, `info` otherwise)
+ * and the `delegation-revoked` entry. The entry names the client, and the
+ * delegating user when somebody else acted (`after.delegating_user_id`); the
+ * delegating user finds it in their audit either way (the store's scope reads
+ * the delegation's owner).
+ */
+export async function recordDelegationEnded(
+  deps: Pick<EndDelegationDeps, 'audit' | 'clock' | 'logger'>,
+  delegation: DelegationRecord,
+  client: OAuthClientRecord | null,
+  by: DelegationEnding,
+): Promise<void> {
+  const { audit, clock, logger } = deps;
+  const replay = by.reason === 'refresh-token-replay' || by.reason === 'authorization-code-replay';
+  const log = replay ? logger.warn.bind(logger) : logger.info.bind(logger);
+  log('delegation revoked', {
+    delegation_id: delegation.id,
+    user_id: delegation.userId,
+    client_id: client?.clientId ?? null,
+    reason: by.reason,
+  });
+  await audit.write({
+    kind: 'admin',
+    ts: toIso(clock.now()),
+    user_id: by.actorId,
+    act: 'delegation-revoked',
+    object: { type: 'delegation', id: delegation.id },
+    before: { status: 'active' },
+    after: {
+      status: 'revoked',
+      reason: by.reason,
+      ...(by.actorId === delegation.userId ? {} : { delegating_user_id: delegation.userId }),
+      client_id: client?.clientId ?? null,
+      client_name: client?.name ?? null,
+    },
+    delegated_client_id: by.viaClient ? (client?.clientId ?? null) : null,
+  });
+}
+
+/**
+ * Revokes a delegation with every token under it and leaves its trace, once:
+ * the store's `revokeIfActive` answers only to the call that actually revoked,
+ * so two requests that notice the same thing write one entry. `null` when the
+ * delegation was already revoked (or does not exist): nothing was written.
+ */
+export async function endDelegation(
+  deps: EndDelegationDeps,
+  delegationId: string,
+  by: DelegationEnding,
+): Promise<DelegationRecord | null> {
+  const revoked = await deps.repo.revokeIfActive(delegationId, by.reason);
+  if (!revoked) return null;
+  await recordDelegationEnded(deps, revoked, await deps.repo.getClient(revoked.clientId), by);
+  return revoked;
+}
 
 /**
  * `active`: a token of the delegation is live. `idle`: the consent stands but
@@ -34,7 +116,7 @@ export interface DelegationView {
   readonly lastTokenAt: string | null;
   /** Until when it can keep acting without the user (the latest live token). */
   readonly liveUntil: string | null;
-  /** The missions issued through this delegation, in the user's name (empty until P2.4). */
+  /** The missions issued through this delegation, in the user's name. */
   readonly missions: readonly MissionRecord[];
 }
 
@@ -67,8 +149,13 @@ export class DelegationService {
     );
     const now = toIso(clock.now());
     const views: DelegationView[] = [];
+    // One read per client, however many delegations it holds.
+    const clientsById = new Map<string, OAuthClientRecord | null>();
     for (const delegation of delegations) {
-      const client = await repo.getClient(delegation.clientId);
+      if (!clientsById.has(delegation.clientId)) {
+        clientsById.set(delegation.clientId, await repo.getClient(delegation.clientId));
+      }
+      const client = clientsById.get(delegation.clientId);
       if (!client) continue;
       const tokens = activity.get(delegation.id);
       const liveUntil = tokens?.liveUntil ?? null;
@@ -95,33 +182,14 @@ export class DelegationService {
    * working at once. The missions it issued are theirs and stay.
    */
   async revoke(user: UserRecord, delegationId: string): Promise<RevokeDelegationResult> {
-    const { repo, audit, clock, logger } = this.deps;
-    const delegation = await repo.getById(delegationId);
+    const delegation = await this.deps.repo.getById(delegationId);
     if (!delegation || delegation.userId !== user.id) return { outcome: 'not-found' };
-    const revoked = await repo.revokeIfActive(delegation.id, 'user');
-    if (!revoked) return { outcome: 'already-revoked', delegation };
-    const client = await repo.getClient(delegation.clientId);
-    await audit.write({
-      kind: 'admin',
-      ts: toIso(clock.now()),
-      user_id: user.id,
-      act: 'delegation-revoked',
-      object: { type: 'delegation', id: delegation.id },
-      before: { status: 'active' },
-      after: {
-        status: 'revoked',
-        reason: 'user',
-        client_id: client?.clientId ?? null,
-        client_name: client?.name ?? null,
-      },
-      delegated_client_id: null,
-    });
-    logger.info('delegation revoked', {
-      delegation_id: delegation.id,
-      user_id: user.id,
-      client_id: client?.clientId ?? null,
+    const revoked = await endDelegation(this.deps, delegation.id, {
       reason: 'user',
+      actorId: user.id,
+      viaClient: false,
     });
+    if (!revoked) return { outcome: 'already-revoked', delegation };
     return { outcome: 'revoked', delegation: revoked };
   }
 }

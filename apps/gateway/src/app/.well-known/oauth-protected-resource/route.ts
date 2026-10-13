@@ -9,22 +9,17 @@
  * tells them to use the bearer they were given and not to attempt a
  * registration. The management door publishes its own metadata under its own
  * path (`./mcp/manage/route.ts`), where an MCP client looks first.
+ *
+ * The document and its answer (methods, CORS) are built by the authorization
+ * server module, like the two other discovery documents.
  */
 import { getRoot } from '@/server/compose';
-import { EXECUTION_DOOR_PATH } from '@/server/missions';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function GET(): Promise<Response> {
-  const { config } = await getRoot();
-  const base = config.publicUrl.href.replace(/\/+$/, '');
-  return Response.json(
-    {
-      resource: `${base}${EXECUTION_DOOR_PATH}`,
-      authorization_servers: [],
-      bearer_methods_supported: ['header'],
-    },
-    { headers: { 'Cache-Control': 'no-store' } },
-  );
+async function handle(request: Request): Promise<Response> {
+  return (await getRoot()).oauth.discovery.executionResource(request);
 }
+
+export { handle as GET, handle as HEAD, handle as OPTIONS };

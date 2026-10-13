@@ -28,21 +28,39 @@
  * outside the window, by another client, a second time after the head moved
  * on) still revokes the family.
  *
+ * **Every grant is one transaction of the store.** The code is spent and the
+ * first pair written together (`redeemCode`); a refresh token is rotated and
+ * the renewal's access token written together (`rotateRefreshToken`,
+ * `rotateSuccessorOf`). A request refused by a check still spends its code. A
+ * *write* that fails rolls the whole grant back — the code is unspent, the
+ * presented refresh token is still the live head, no token exists that the
+ * client never received — and the client is answered `server_error`, never
+ * `invalid_grant`: it may send the same request again, and nothing about the
+ * failure looks like a replay.
+ *
  * Nothing here logs a token or a code: entries name the delegation and the
  * client.
  */
 import type { AuditWriter } from '@vaubaan/gateway-core';
 
+import type { RateLimiter } from '../compose/ports';
 import type { OAuthConfig } from '../config/types';
 import type { Logger } from '../logging';
 import type { Clock } from '../store/clock';
 import { toIso } from '../store/clock';
-import type { DelegationsRepo } from '../store/repositories/delegations';
+import { REDEEM_DELEGATION_REVOKED, type DelegationsRepo } from '../store/repositories/delegations';
 import type { UsersRepo } from '../store/repositories/users';
 import type { DelegationRecord, DelegationRevokeReason, OAuthClientRecord } from '../store/types';
 import type { ClientRegistry } from './clients';
-import { isManagementResource, MANAGEMENT_SCOPE, type OAuthEndpoints } from './endpoints';
-import { OAuthProtocolError } from './errors';
+import { endDelegation } from './delegations';
+import {
+  foreignResource,
+  ONLY_SCOPE_MESSAGE,
+  onlyResourceMessage,
+  staysWithinManagement,
+  type OAuthEndpoints,
+} from './endpoints';
+import { OAuthProtocolError, slowDown } from './errors';
 import { verifyS256 } from './pkce';
 import {
   digestOf,
@@ -59,6 +77,13 @@ const MS_PER_SECOND = 1000;
 export const PURGE_INTERVAL_MS = 3_600_000;
 /** …once they have been expired for this long (a replayed token is still recognised until then). */
 export const PURGE_GRACE_MS = 86_400_000;
+/**
+ * Renewals one delegation may obtain per window. Counted once the refresh token
+ * presented is recognised as one of this client's — a caller that only knows a
+ * `client_id`, which is public, spends nothing of it.
+ */
+export const RENEWALS_PER_DELEGATION = 120;
+export const RENEWAL_WINDOW_MS = 60_000;
 
 /** RFC 6749 §5.1. */
 export interface TokenResponse {
@@ -82,6 +107,7 @@ export interface TokenServiceDeps {
   readonly users: Pick<UsersRepo, 'getById'>;
   readonly clients: ClientRegistry;
   readonly audit: AuditWriter;
+  readonly rateLimiter: Pick<RateLimiter, 'take'>;
   readonly endpoints: OAuthEndpoints;
   readonly config: Pick<
     OAuthConfig,
@@ -111,12 +137,8 @@ export function clientCredentialsOf(headers: Headers, form: URLSearchParams): Cl
         'client credentials were sent both in the Authorization header and in the body',
       );
     }
-    let decoded: string;
-    try {
-      decoded = Buffer.from(authorization.replace(/^basic\s+/i, ''), 'base64').toString('utf8');
-    } catch {
-      decoded = '';
-    }
+    // Lenient decoding: what is not base64 yields no usable `id:secret` pair.
+    const decoded = Buffer.from(authorization.replace(/^basic\s+/i, ''), 'base64').toString('utf8');
     const colon = decoded.indexOf(':');
     try {
       if (colon > 0) {
@@ -177,52 +199,64 @@ export class TokenService {
     this.checkResource(form);
     if (!isAuthorizationCodeShaped(code)) throw invalidGrant('unknown authorization code');
 
-    const { repo } = this.deps;
+    const { repo, config } = this.deps;
     const hash = digestOf(code);
+    // Read for the one check the transaction cannot make (the user, another repository).
     const found = await repo.findCode(hash);
     if (!found) throw invalidGrant('unknown authorization code');
-    if (found.token.consumedAt !== null) {
-      await this.revokeFamily(found.delegation, 'authorization-code-replay');
-      throw invalidGrant('this authorization code was already used');
-    }
-    const consumed = await repo.consumeCode(hash);
-    if (!consumed) {
-      // Expired — or consumed by a concurrent request since the read above.
-      const again = await repo.findCode(hash);
-      if (again && again.token.consumedAt !== null) {
-        await this.revokeFamily(again.delegation, 'authorization-code-replay');
-        throw invalidGrant('this authorization code was already used');
-      }
-      throw invalidGrant('this authorization code has expired');
-    }
-
-    // From here on the code is spent: a request that fails a check below does
-    // not get a second try with the same code.
-    const { delegation } = found;
-    if (delegation.clientId !== client.id) {
-      throw invalidGrant('this authorization code was issued to another client');
-    }
+    const userProblem = await this.userProblem(found.delegation);
     const redirectUri = form.get('redirect_uri');
-    if (redirectUri !== null && redirectUri !== consumed.redirectUri) {
-      throw invalidGrant('redirect_uri does not match the authorization request');
-    }
-    if (!verifyS256(verifier, consumed.codeChallenge)) {
-      throw invalidGrant('code_verifier does not match the code_challenge');
-    }
-    await this.requireLiveDelegation(delegation);
 
     const refreshToken = mintRefreshToken();
-    await repo.createRefreshToken({
-      delegationId: delegation.id,
-      tokenHash: digestOf(refreshToken),
-      expiresAt: this.expiry(this.deps.config.refreshTokenTtlSeconds),
-    });
-    this.deps.logger.info('delegated tokens issued', {
-      delegation_id: delegation.id,
-      client_id: client.clientId,
-      grant: 'authorization_code',
-    });
-    return this.respond(delegation, refreshToken);
+    const accessToken = mintAccessToken();
+    const redeemed = await repo.redeemCode(
+      hash,
+      // Judged on the spent code: a request that fails here does not get a
+      // second try with the same code. The answer is the refusal's description.
+      (spent, delegation) => {
+        if (delegation.clientId !== client.id) {
+          return 'this authorization code was issued to another client';
+        }
+        if (redirectUri !== null && redirectUri !== spent.redirectUri) {
+          return 'redirect_uri does not match the authorization request';
+        }
+        if (!verifyS256(verifier, spent.codeChallenge)) {
+          return 'code_verifier does not match the code_challenge';
+        }
+        return userProblem;
+      },
+      {
+        refresh: this.refreshRow(refreshToken),
+        access: {
+          tokenHash: digestOf(accessToken),
+          expiresAt: this.expiry(config.accessTokenTtlSeconds),
+        },
+      },
+    );
+    switch (redeemed.outcome) {
+      case 'unknown':
+        throw invalidGrant('unknown authorization code');
+      case 'expired':
+        throw invalidGrant('this authorization code has expired');
+      case 'replayed':
+        // Two parties hold the code — also when they raced: the store answers
+        // `replayed` to whichever came second.
+        await this.revokeFamily(redeemed.delegation, 'authorization-code-replay');
+        throw invalidGrant('this authorization code was already used');
+      case 'refused':
+        throw invalidGrant(
+          redeemed.reason === REDEEM_DELEGATION_REVOKED
+            ? 'this delegation was revoked'
+            : redeemed.reason,
+        );
+      case 'issued':
+        this.deps.logger.info('delegated tokens issued', {
+          delegation_id: redeemed.delegation.id,
+          client_id: client.clientId,
+          grant: 'authorization_code',
+        });
+        return this.respond(redeemed.delegation, accessToken, refreshToken);
+    }
   }
 
   /** `grant_type=refresh_token`: rotation, and the end of the family on a replay. */
@@ -230,11 +264,8 @@ export class TokenService {
     const presented = form.get('refresh_token');
     if (!presented) throw new OAuthProtocolError('invalid_request', 'refresh_token is required');
     const scope = form.get('scope');
-    if (scope !== null && scope.split(/\s+/).some((s) => s !== '' && s !== MANAGEMENT_SCOPE)) {
-      throw new OAuthProtocolError(
-        'invalid_scope',
-        `the only scope of this server is "${MANAGEMENT_SCOPE}"`,
-      );
+    if (scope !== null && !staysWithinManagement(scope)) {
+      throw new OAuthProtocolError('invalid_scope', ONLY_SCOPE_MESSAGE);
     }
     this.checkResource(form);
     if (!isRefreshTokenShaped(presented)) throw invalidGrant('unknown refresh token');
@@ -248,11 +279,20 @@ export class TokenService {
       throw invalidGrant('this refresh token was issued to another client');
     }
     await this.requireLiveDelegation(found.delegation);
+    // The caller holds a refresh token of this client: from here on it spends
+    // the delegation's own budget, and nobody else's.
+    const budget = await this.deps.rateLimiter.take(
+      `oauth:token:delegation:${found.delegation.id}`,
+      RENEWALS_PER_DELEGATION,
+      RENEWAL_WINDOW_MS,
+    );
+    if (!budget.allowed) throw slowDown(budget.retryAfterMs);
 
     const next = mintRefreshToken();
-    const rotated = await repo.rotateRefreshToken(hash, {
-      tokenHash: digestOf(next),
-      expiresAt: this.expiry(this.deps.config.refreshTokenTtlSeconds),
+    const accessToken = mintAccessToken();
+    const rotated = await repo.rotateRefreshToken(hash, this.refreshRow(next), {
+      tokenHash: digestOf(accessToken),
+      expiresAt: this.expiry(this.deps.config.accessTokenTtlSeconds),
     });
     if (!rotated) {
       // Expired or revoked — or rotated by a concurrent request since the read above.
@@ -267,7 +307,7 @@ export class TokenService {
       client_id: client.clientId,
       grant: 'refresh_token',
     });
-    return this.respond(found.delegation, next);
+    return this.respond(found.delegation, accessToken, next);
   }
 
   /**
@@ -275,6 +315,11 @@ export class TokenService {
    * only for the token rotated last, the same client gets a new pair (the head
    * of the family is rotated again). Everything else is a replay: two parties
    * hold this family, whoever presents it, and the delegation ends.
+   *
+   * No rate limit is taken here, on purpose: nothing may stand between a
+   * replay and the revocation it causes, and the path bounds itself — a token
+   * is answered once (the head then moved on, and its next presentation
+   * revokes the family).
    */
   private async replayed(
     client: OAuthClientRecord,
@@ -285,12 +330,14 @@ export class TokenService {
     const windowSeconds = config.refreshReuseWindowSeconds;
     if (windowSeconds > 0 && delegation.clientId === client.id) {
       const next = mintRefreshToken();
+      const accessToken = mintAccessToken();
       const rotatedSince = toIso(new Date(clock.now().getTime() - windowSeconds * MS_PER_SECOND));
-      const reissued = await repo.rotateSuccessorOf(hash, rotatedSince, {
-        tokenHash: digestOf(next),
-        expiresAt: this.expiry(config.refreshTokenTtlSeconds),
+      const reissued = await repo.rotateSuccessorOf(hash, rotatedSince, this.refreshRow(next), {
+        tokenHash: digestOf(accessToken),
+        expiresAt: this.expiry(config.accessTokenTtlSeconds),
       });
       if (reissued) {
+        // A removed user gets nothing: the pair just written is never sent.
         await this.requireLiveDelegation(delegation);
         logger.info('delegated tokens issued', {
           delegation_id: delegation.id,
@@ -298,7 +345,7 @@ export class TokenService {
           grant: 'refresh_token',
           reuse_window: true,
         });
-        return this.respond(delegation, next);
+        return this.respond(delegation, accessToken, next);
       }
     }
     await this.revokeFamily(delegation, 'refresh-token-replay');
@@ -325,57 +372,60 @@ export class TokenService {
     if (isAccessTokenShaped(token)) {
       const found = await repo.findActiveAccessToken(digestOf(token));
       if (found && found.delegation.clientId === client.id) {
-        await repo.revokeAccessToken(found.token.id);
+        if (await repo.revokeAccessToken(found.token.id)) {
+          this.deps.logger.info('access token revoked', {
+            delegation_id: found.delegation.id,
+            client_id: client.clientId,
+          });
+        }
       }
     }
   }
 
   /** RFC 8707: a `resource` parameter, when sent, must name the management door. */
   private checkResource(form: URLSearchParams): void {
-    for (const resource of form.getAll('resource')) {
-      if (!isManagementResource(this.deps.endpoints, resource)) {
-        throw new OAuthProtocolError(
-          'invalid_target',
-          `this server only issues tokens for ${this.deps.endpoints.resource}`,
-        );
-      }
+    if (foreignResource(this.deps.endpoints, form.getAll('resource')) !== null) {
+      throw new OAuthProtocolError('invalid_target', onlyResourceMessage(this.deps.endpoints));
     }
+  }
+
+  /** Why the user behind a delegation cannot be served, or `null` when they are active. */
+  private async userProblem(delegation: DelegationRecord): Promise<string | null> {
+    const user = await this.deps.users.getById(delegation.userId);
+    return !user || user.status !== 'active'
+      ? 'the user behind this delegation is no longer active'
+      : null;
   }
 
   /** The delegation is active and the user who gave it still is one of the instance. */
   private async requireLiveDelegation(delegation: DelegationRecord): Promise<void> {
     if (delegation.status !== 'active') throw invalidGrant('this delegation was revoked');
-    const user = await this.deps.users.getById(delegation.userId);
-    if (!user || user.status !== 'active') {
-      throw invalidGrant('the user behind this delegation is no longer active');
-    }
+    const problem = await this.userProblem(delegation);
+    if (problem !== null) throw invalidGrant(problem);
   }
 
   private expiry(ttlSeconds: number): string {
     return toIso(new Date(this.deps.clock.now().getTime() + ttlSeconds * MS_PER_SECOND));
   }
 
+  private refreshRow(refreshToken: string): { tokenHash: string; expiresAt: string } {
+    return {
+      tokenHash: digestOf(refreshToken),
+      expiresAt: this.expiry(this.deps.config.refreshTokenTtlSeconds),
+    };
+  }
+
+  /** The RFC 6749 §5.1 body of a pair the store already holds. */
   private async respond(
     delegation: DelegationRecord,
+    accessToken: string,
     refreshToken: string,
   ): Promise<TokenResponse> {
-    const { repo, config } = this.deps;
-    const accessToken = mintAccessToken();
-    try {
-      await repo.createAccessToken({
-        delegationId: delegation.id,
-        tokenHash: digestOf(accessToken),
-        expiresAt: this.expiry(config.accessTokenTtlSeconds),
-      });
-    } catch {
-      // The delegation was revoked between the grant's checks and this write.
-      throw invalidGrant('this delegation was revoked');
-    }
     await this.purgeNowAndThen();
     return {
       access_token: accessToken,
       token_type: 'Bearer',
-      expires_in: config.accessTokenTtlSeconds,
+      expires_in: this.deps.config.accessTokenTtlSeconds,
       refresh_token: refreshToken,
       scope: delegation.scope,
     };
@@ -383,38 +433,18 @@ export class TokenService {
 
   /**
    * Revokes the delegation with every token under it, once, and leaves the
-   * entry that says why. The entry is in the name of the user who gave the
-   * delegation and names the client: nobody else is behind the act.
+   * entry that says why (`endDelegation`). The entry is in the name of the user
+   * who gave the delegation and names the client: nobody else is behind the act.
    */
   private async revokeFamily(
     delegation: DelegationRecord,
     reason: DelegationRevokeReason,
   ): Promise<void> {
-    const { repo, audit, clock, logger } = this.deps;
     // Another request may have revoked it first: its entry is the one that stands.
-    if (!(await repo.revokeIfActive(delegation.id, reason))) return;
-    const client = await repo.getClient(delegation.clientId);
-    const log = reason === 'client' ? logger.info.bind(logger) : logger.warn.bind(logger);
-    log('delegation revoked', {
-      delegation_id: delegation.id,
-      user_id: delegation.userId,
-      client_id: client?.clientId ?? null,
+    await endDelegation(this.deps, delegation.id, {
       reason,
-    });
-    await audit.write({
-      kind: 'admin',
-      ts: toIso(clock.now()),
-      user_id: delegation.userId,
-      act: 'delegation-revoked',
-      object: { type: 'delegation', id: delegation.id },
-      before: { status: 'active' },
-      after: {
-        status: 'revoked',
-        reason,
-        client_id: client?.clientId ?? null,
-        client_name: client?.name ?? null,
-      },
-      delegated_client_id: client?.clientId ?? null,
+      actorId: delegation.userId,
+      viaClient: true,
     });
   }
 

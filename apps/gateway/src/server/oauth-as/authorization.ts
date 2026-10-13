@@ -28,7 +28,14 @@ import type { DelegationsRepo } from '../store/repositories/delegations';
 import type { OAuthClientRecord, UserRecord } from '../store/types';
 import { isClientIdUrl } from './client-metadata-document';
 import type { ClientRegistry, ClientView } from './clients';
-import { isManagementResource, MANAGEMENT_SCOPE, type OAuthEndpoints } from './endpoints';
+import {
+  asksForManagement,
+  foreignResource,
+  MANAGEMENT_SCOPE,
+  ONLY_SCOPE_MESSAGE,
+  onlyResourceMessage,
+  type OAuthEndpoints,
+} from './endpoints';
 import { AuthorizationPageError, AuthorizationRedirectError } from './errors';
 import { isCodeChallenge } from './pkce';
 import { matchesRegisteredRedirect } from './redirect-uri';
@@ -229,19 +236,14 @@ export class AuthorizationService {
       );
     }
     const scope = params.get('scope');
-    if (scope !== null && !scope.split(/\s+/).includes(MANAGEMENT_SCOPE)) {
-      throw new AuthorizationRedirectError(
-        'invalid_scope',
-        `the only scope of this server is "${MANAGEMENT_SCOPE}"`,
-      );
+    if (scope !== null && !asksForManagement(scope)) {
+      throw new AuthorizationRedirectError('invalid_scope', ONLY_SCOPE_MESSAGE);
     }
-    for (const resource of params.getAll('resource')) {
-      if (!isManagementResource(this.deps.endpoints, resource)) {
-        throw new AuthorizationRedirectError(
-          'invalid_target',
-          `this server only issues tokens for ${this.deps.endpoints.resource}`,
-        );
-      }
+    if (foreignResource(this.deps.endpoints, params.getAll('resource')) !== null) {
+      throw new AuthorizationRedirectError(
+        'invalid_target',
+        onlyResourceMessage(this.deps.endpoints),
+      );
     }
     return { client, redirectUri, state, codeChallenge };
   }
@@ -278,7 +280,8 @@ export class AuthorizationService {
   /**
    * The user's answer. An approval creates the delegation, writes its
    * `delegation-granted` entry, then mints the single-use code: a delegation
-   * whose entry cannot be written is revoked and no code is issued.
+   * whose entry cannot be written, or whose code cannot be minted, is revoked —
+   * no delegation stays active that no client can ever redeem.
    */
   async decide(
     user: UserRecord,
@@ -316,6 +319,7 @@ export class AuthorizationService {
       clientId: client.id,
       scope: MANAGEMENT_SCOPE,
     });
+    const code = mintAuthorizationCode();
     try {
       await this.deps.audit.write({
         kind: 'admin',
@@ -333,19 +337,20 @@ export class AuthorizationService {
         },
         delegated_client_id: null,
       });
+      await repo.createCode({
+        delegationId: delegation.id,
+        codeHash: digestOf(code),
+        redirectUri: pending.redirectUri,
+        codeChallenge: pending.codeChallenge,
+        codeChallengeMethod: 'S256',
+        expiresAt: toIso(new Date(clock.now().getTime() + AUTHORIZATION_CODE_TTL_MS)),
+      });
     } catch (err) {
+      // Revoked with no reason and no `delegation-revoked` entry: it never had
+      // a code, so it never served anybody. The handler logs the failure.
       await repo.revoke(delegation.id);
       throw err;
     }
-    const code = mintAuthorizationCode();
-    await repo.createCode({
-      delegationId: delegation.id,
-      codeHash: digestOf(code),
-      redirectUri: pending.redirectUri,
-      codeChallenge: pending.codeChallenge,
-      codeChallengeMethod: 'S256',
-      expiresAt: toIso(new Date(clock.now().getTime() + AUTHORIZATION_CODE_TTL_MS)),
-    });
     logger.info('delegation granted', {
       delegation_id: delegation.id,
       user_id: user.id,
