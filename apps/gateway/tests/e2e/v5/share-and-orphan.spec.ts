@@ -82,7 +82,11 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   const readCode = ines.locator('li', { has: ines.getByLabel(`Share risk ${READ_CODE}`) });
   await expect(readCode).toContainText('Read code, branches, commits, files');
   await expect(readCode).toContainText('Reads may leak secrets');
-  await expect(readCode).toContainText('Reversibility: reversible');
+  await expect(readCode.locator('[aria-label="Reversibility: reversible"]')).toBeVisible();
+  // The helper text is one line; the rest is on demand.
+  await expect(ines.getByText('A risk added to the catalog later is not shared.')).toBeHidden();
+  await ines.getByTestId('help-share-risks').getByRole('button', { name: 'More' }).click();
+  await expect(ines.getByText('A risk added to the catalog later is not shared.')).toBeVisible();
   await expect(readCode.getByRole('link', { name: READ_CODE })).toHaveAttribute(
     'href',
     `/providers/github#risk-${READ_CODE}`,

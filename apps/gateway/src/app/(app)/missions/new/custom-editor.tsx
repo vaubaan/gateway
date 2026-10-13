@@ -12,10 +12,11 @@
 import { useMemo, useState } from 'react';
 
 import { RiskExplain, RiskMarkerNotes, RiskMarkers } from '@/components/risk/RiskExplain';
-import { Input, Select } from '@/components/ui';
+import { Help, Input, Select } from '@/components/ui';
 import { groupByKind, type RiskFamily } from '@/server/missions/catalog-view';
 import type { IssuanceConnection } from '@/server/missions/model';
 import { providerPath, REFERENCE_SECTIONS } from '@/server/providers/links';
+import type { RiskPlanes } from '@/server/providers/planes';
 
 import styles from '../missions.module.css';
 import {
@@ -34,6 +35,9 @@ import {
 } from './form-state';
 import { GATE_LABELS } from './labels';
 
+/** Every plane at once: the plane filter when nothing is sliced. */
+const ALL_PLANES = 'all';
+
 function isFilter(raw: string): raw is RiskFilter {
   return RISK_FILTERS.some((f) => f.id === raw);
 }
@@ -41,11 +45,14 @@ function isFilter(raw: string): raw is RiskFilter {
 export function CustomEditor({
   connection,
   state,
+  planes,
   onChange,
   onStartFrom,
 }: {
   connection: IssuanceConnection;
   state: ConnectionState;
+  /** The planes of the provider's data model, when it has several: the editor can be sliced by one. */
+  planes: RiskPlanes | null;
   onChange: (next: ConnectionState) => void;
   /** "Start from preset…": the screen decides whether edits must be confirmed away first. */
   onStartFrom: (presetId: string) => void;
@@ -54,13 +61,19 @@ export function CustomEditor({
   const [filter, setFilter] = useState<RiskFilter>('all');
   const name = `${connection.provider_label} ${connection.display_name}`;
   const rows = useMemo(() => editorRows(connection, state), [connection, state]);
-  const shown = filterRows(rows, query, filter);
+  const [plane, setPlane] = useState(ALL_PLANES);
+  const shown = filterRows(rows, query, filter).filter(
+    (row) =>
+      planes === null ||
+      plane === ALL_PLANES ||
+      (planes.by_risk[row.risk.base_id] ?? []).includes(plane),
+  );
   const byId = new Map(rows.map((row) => [row.risk.risk_id, row]));
   const groups = groupByKind(shown.map((row) => row.risk));
   const accepted = rows.filter((row) => row.accepted).length;
   const available = rows.filter((row) => row.unavailable === null).length;
   const refused = rows.filter((row) => row.accepted && row.unavailable !== null).length;
-  const searchable = rows.length > SEARCH_THRESHOLD;
+  const searchable = rows.length > SEARCH_THRESHOLD || planes !== null;
 
   return (
     <div className={styles.policyBody} data-testid={`risks-${connection.provider}`}>
@@ -106,19 +119,25 @@ export function CustomEditor({
           {accepted} accepted of {available} you can accept here
         </span>
       </div>
-      <p className={styles.toolsNote}>
-        “Select all” ticks each risk you hold, one by one; it leaves out deprecated entries and the
-        uncategorized-write fallback. Each id links to its entry in the{' '}
-        <a
-          href={`${providerPath(connection.provider)}#${REFERENCE_SECTIONS.risks}`}
-          target="_blank"
-          rel="noreferrer"
-          className={styles.refLink}
-        >
-          {connection.provider_label} reference
-        </a>{' '}
-        (new tab), where the six badges are explained.
-      </p>
+      <Help
+        id="custom-editor"
+        line="Tick a risk to accept it, then set its quota, rate limit and gate."
+      >
+        <p>
+          “Select all” ticks each risk you hold, one by one; it leaves out deprecated entries and
+          the uncategorized-write fallback. Each id links to its entry in the{' '}
+          <a
+            href={`${providerPath(connection.provider)}#${REFERENCE_SECTIONS.risks}`}
+            target="_blank"
+            rel="noreferrer"
+            className={styles.refLink}
+          >
+            {connection.provider_label} reference
+          </a>{' '}
+          (new tab), where the six cells of a risk are explained. The line under a risk is why it is
+          one: click it to read it whole.
+        </p>
+      </Help>
 
       {searchable && (
         <div className={styles.riskSearch}>
@@ -142,6 +161,20 @@ export function CustomEditor({
               </option>
             ))}
           </Select>
+          {planes !== null && (
+            <Select
+              value={plane}
+              aria-label={`Plane of the risks of ${name}`}
+              onChange={(e) => setPlane(e.target.value)}
+            >
+              <option value={ALL_PLANES}>All planes</option>
+              {planes.planes.map((slug) => (
+                <option key={slug} value={slug}>
+                  Plane: {slug}
+                </option>
+              ))}
+            </Select>
+          )}
           <span className={styles.muted} aria-live="polite">
             {shown.length} of {rows.length} shown
           </span>
@@ -164,8 +197,13 @@ export function CustomEditor({
               of {group.families.flatMap((f) => f.variants).length} accepted)
             </span>
             <span className={styles.kindHint}>{group.hint}</span>
+            <span className={styles.budgetHead} aria-hidden="true">
+              <span>Quota</span>
+              <span>Rate limit</span>
+              <span>Gate</span>
+            </span>
           </h3>
-          <div className={styles.familyStack}>
+          <div className={styles.familyStack} data-kind="risk">
             {group.families.map((family) => (
               <FamilyRows
                 key={family.base_id}
@@ -265,7 +303,14 @@ function VariantRow({
         onChange={() => onChange(toggleRisk(connection, state, risk))}
       />
       <div className={styles.riskCell}>
-        <RiskExplain risk={risk} newTab labelFor={id} label={standalone} reason={standalone} />
+        <RiskExplain
+          risk={risk}
+          newTab
+          labelFor={id}
+          label={standalone}
+          reason={standalone}
+          kindTag={false}
+        />
         {unavailable !== null && (
           <span id={`${id}:why`} className={entry ? styles.refused : styles.unavailableWhy}>
             {entry ? 'Refused at issuance' : 'Not available'}: {unavailable}
@@ -275,7 +320,7 @@ function VariantRow({
       {entry ? (
         <div className={styles.budget}>
           <label className={styles.budgetField}>
-            <span>Quota</span>
+            <span className={styles.visuallyHidden}>Quota</span>
             <Input
               type="number"
               min={1}
@@ -290,7 +335,7 @@ function VariantRow({
             />
           </label>
           <div className={styles.budgetField}>
-            <span>Rate limit</span>
+            <span className={styles.visuallyHidden}>Rate limit</span>
             <div className={styles.rate}>
               <Input
                 type="number"
@@ -319,7 +364,7 @@ function VariantRow({
             </div>
           </div>
           <label className={styles.budgetField}>
-            <span>Gate</span>
+            <span className={styles.visuallyHidden}>Gate</span>
             <Select
               value={entry.gate}
               aria-label={`Gate for ${risk.risk_id}`}
@@ -337,9 +382,7 @@ function VariantRow({
           </label>
         </div>
       ) : (
-        <div className={styles.budgetOff}>
-          {locked ? '' : 'Tick to accept it and set its quota, rate limit and gate.'}
-        </div>
+        <div className={styles.budgetOff}>{locked ? '' : 'Not accepted'}</div>
       )}
     </div>
   );

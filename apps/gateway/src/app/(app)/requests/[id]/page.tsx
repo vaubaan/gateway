@@ -36,6 +36,7 @@ import {
   Thead,
   Tr,
   type BadgeTone,
+  Slug,
 } from '@/components/ui';
 import { GateBadge } from '@/components/risk/RiskBadges';
 import { RiskIdLink } from '@/components/risk/RiskExplain';
@@ -148,8 +149,8 @@ function ApprovalBody({ view }: { view: ApprovalView }) {
               </Badge>
             </dd>
             <dt>Tool</dt>
-            <dd className={styles.mono} data-testid="approval-tool">
-              {call.tool}
+            <dd data-testid="approval-tool">
+              <Slug kind="tool">{call.tool}</Slug>
             </dd>
             <dt>Arguments</dt>
             <dd>
@@ -340,7 +341,9 @@ function EventsCard({ events }: { events: ClaimView['events'] }) {
                   <LocalDate ts={event.at} />
                 </Td>
                 <Td>{event.summary}</Td>
-                <Td className={styles.mono}>{event.risk_id ?? '—'}</Td>
+                <Td className={styles.mono}>
+                  {event.risk_id ? <RiskIdLink riskId={event.risk_id} /> : '—'}
+                </Td>
               </Tr>
             ))}
           </Tbody>

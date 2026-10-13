@@ -184,7 +184,13 @@ test('issue a three-connection mission on one page, then rotate and revoke', asy
   const merge = editor.locator('[data-risk="github.merge-protected"]');
   await expect(merge).toContainText('Write on main / master / release-*');
   await expect(merge).toContainText('The canonical branch');
-  await expect(merge).toContainText('Reversibility: costly');
+  // The vector is a six-cell strip: each cell writes its value and names its axis in full.
+  await expect(merge.locator('[aria-label="Reversibility: costly"]')).toHaveText(/costly/);
+  // The reason is one line that unfolds in place.
+  const why = merge.locator('details');
+  await expect(why).not.toHaveAttribute('open', '');
+  await why.locator('summary').click();
+  await expect(why).toHaveAttribute('open', '');
   await expect(merge.getByRole('link', { name: 'github.merge-protected' })).toHaveAttribute(
     'href',
     '/providers/github#risk-github.merge-protected',
@@ -222,6 +228,21 @@ test('issue a three-connection mission on one page, then rotate and revoke', asy
     'Not available: no selected resource is labelled "preview"',
   );
   await supabase.getByLabel('Search the risks of Supabase Acme Supabase').fill('');
+  // A provider with several planes can be sliced by one, in the editor too.
+  const plane = supabase.getByLabel('Plane of the risks of Supabase Acme Supabase');
+  await plane.selectOption('storage');
+  const storage = await supabase.locator('[data-risk]').count();
+  expect(storage).toBeGreaterThan(0);
+  expect(storage).toBeLessThan(all);
+  await expect(supabase.locator('[data-risk*="migration-write"]')).toHaveCount(0);
+  await expect(supabase.locator('[data-risk*="storage.object-read"]')).toHaveCount(1);
+  await snap(page, 'creation-custom-plane');
+  await plane.selectOption('all');
+  expect(await supabase.locator('[data-risk]').count()).toBe(all);
+  // GitHub has one plane: no plane filter there.
+  await expect(page.getByLabel('Plane of the risks of GitHub acme-org')).toHaveCount(0);
+  // The helper of the editor is one line; the rest is on demand.
+  await expect(supabase.getByText('it leaves out deprecated entries')).toBeHidden();
   await snap(page, 'creation-custom-mode');
   // Untouched, the Supabase policy is still the preset's: going back asks nothing.
   await switchTo(page, 'Supabase Acme Supabase', 'Preset');
@@ -262,7 +283,14 @@ test('issue a three-connection mission on one page, then rotate and revoke', asy
   // The policy table explains each risk the way the editor did.
   await expect(readCode).toContainText('Read code, branches, commits, files');
   await expect(readCode).toContainText('Reads may leak secrets');
-  await expect(readCode).toContainText('Data: data');
+  await expect(readCode.locator('[aria-label="Data: data"]')).toBeVisible();
+  // Outside the provider reference too, a name carries the colour of its kind.
+  await expect(readCode.getByRole('link', { name: 'github.read-code' })).toHaveAttribute(
+    'data-kind',
+    'risk',
+  );
+  await expect(page.locator('[data-kind="resource"]').first()).toContainText('acme/');
+  await expect(page.locator('[data-kind="token"]').first()).toContainText('vbn_live_');
 
   await snap(page, 'mission-detail');
 
@@ -400,50 +428,172 @@ test('the provider reference explains each plugin: model, risks, presets, tools'
   await expect(page.getByRole('heading', { name: 'Providers', level: 1 })).toBeVisible();
   // One card per shipped plugin, from the registry; the experimental one says so.
   await expect(page.getByTestId('provider-github')).toContainText('App installation');
-  await expect(page.getByTestId('provider-github')).toContainText('15 risks · 3 presets');
+  await expect(page.getByTestId('provider-github')).toContainText('15 risks');
+  await expect(page.getByTestId('provider-github')).toContainText('3 presets');
+  // A card says what tells it apart: the planes of its model, the environments it knows.
+  await expect(page.getByTestId('provider-supabase').locator('[data-kind="plane"]')).toHaveText([
+    /db/,
+    /storage/,
+    /auth/,
+    /functions/,
+  ]);
+  await expect(page.getByTestId('provider-supabase')).toContainText('staging');
+  // The bar holds on one line at 1280 px, and marks the current section.
+  const nav = page.getByRole('navigation', { name: 'Main' });
+  const tops = await nav
+    .getByRole('link')
+    .evaluateAll((links) => links.map((link) => Math.round(link.getBoundingClientRect().top)));
+  expect(new Set(tops).size).toBe(1);
+  expect((await page.locator('header').first().boundingBox())?.height).toBeLessThan(64);
+  await expect(nav.getByRole('link', { name: 'Providers' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+  await expect(nav.getByRole('link', { name: 'Missions' })).not.toHaveAttribute('aria-current');
+  // The account is one compact control; signing out is behind it.
+  await expect(page.getByRole('button', { name: 'Sign out' })).toBeHidden();
+  await page.getByTestId('user-menu').click();
+  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: 'Sign out' })).toBeHidden();
   await expect(page.getByTestId('provider-gmail')).toContainText('experimental');
   await snap(page, 'providers-index');
 
   await page.getByTestId('provider-supabase').click();
   await expect(page.getByRole('heading', { name: 'Supabase', level: 1 })).toBeVisible();
   await expect(page.getByTestId('provider-summary')).toContainText('one resource is one project');
-  // The data model as a tree, with the entity that carries the environment.
+
+  // One section in view at a time, behind tabs; the presets come first.
+  const tabs = page.getByRole('tablist', { name: 'Supabase reference' });
+  await expect(tabs.getByRole('tab')).toHaveText([/Presets/, /Risks/, /Data model/, /Tools/]);
+  await expect(tabs.getByRole('tab', { name: /Presets/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('tabpanel')).toHaveCount(1);
+  // Help is on demand: collapsed by default, and remembered once opened.
+  const help = page.getByTestId('reference-help');
+  await expect(help).toBeHidden();
+  await page.getByRole('button', { name: 'How to read this page' }).click();
+  await expect(help.getByText('Can it be undone, and at what price?')).toBeVisible();
+  await expect(help.getByTestId('kind-legend').locator('[data-kind]')).toHaveCount(8);
+  await page.reload();
+  await expect(help).toBeVisible();
+  await page.getByRole('button', { name: 'How to read this page' }).click();
+  await expect(help).toBeHidden();
+
+  // The presets side by side: one column each against the risks, a cell per budget.
+  const matrix = page.getByTestId('preset-matrix');
+  const preset = page.getByTestId('preset-staging-developer');
+  await expect(preset).toContainText('Staging developer');
+  await expect(preset).toHaveAttribute('data-kind', 'preset');
+  await expect(preset).toContainText(/\d+ risks · \d+ left out/);
+  await expect(matrix.getByRole('columnheader')).toHaveCount(4);
+  const bulkCell = page.getByTestId('cell-staging-developer-supabase.bulk-row-write');
+  await expect(bulkCell).toContainText('staging');
+  await expect(bulkCell).toContainText(/\d+\/min/);
+  await expect(page.getByTestId('cell-read-only-analyst-supabase.bulk-row-write')).toContainText(
+    'not included',
+  );
+  await expect(page.getByTestId('cell-migration-operator-supabase.migration-write')).toContainText(
+    'approval',
+  );
+  await snap(page, 'provider-presets');
+
+  // The planes of the data model slice every section at once.
+  const planes = page.getByTestId('plane-control');
+  await expect(planes.getByRole('radio')).toHaveCount(6);
+  await planes.getByRole('radio', { name: /^storage/ }).check();
+  await expect(matrix.locator('tr[data-risk]')).toHaveCount(6);
+  await expect(matrix).not.toContainText('Apply a migration');
+  await tabs.getByRole('tab', { name: /Tools/ }).click();
+  await expect(page).toHaveURL(/#tools$/);
+  await expect(page.getByTestId('tool-supabase__list_buckets')).toBeVisible();
+  await expect(page.getByTestId('tool-supabase__list_users')).toHaveCount(0);
+  await expect(page.getByTestId('tool-supabase__list_buckets')).toContainText('by arguments');
+  await expect(
+    page.getByTestId('tool-supabase__list_buckets').locator('[data-kind="tool"]'),
+  ).toHaveText(/supabase__list_buckets/);
+  // What no plane can be read for is under "other", not guessed.
+  await planes.getByRole('radio', { name: /^other/ }).check();
+  await expect(page.getByTestId('tool-supabase__execute_sql')).toBeVisible();
+  // The keyboard moves between tabs.
+  await tabs.getByRole('tab', { name: /Tools/ }).press('ArrowLeft');
+  await expect(tabs.getByRole('tab', { name: /Data model/ })).toBeFocused();
+  await expect(tabs.getByRole('tab', { name: /Data model/ })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await planes.getByRole('radio', { name: 'All' }).check();
+  // The data model as an outline, with the entity that carries the environment.
   await expect(page.getByRole('region', { name: 'Plane db' })).toContainText('schema');
   await expect(page.getByTestId('provider-environment')).toContainText(
     'the label the connection owner puts on each resource',
   );
   await expect(page.getByText('carries the environment').first()).toBeVisible();
-  // The legend of the six axes.
-  await expect(page.getByText('Can it be undone, and at what price?')).toBeVisible();
-  // One card per catalog entry: label, id, reason, scope, vector, what it matches.
+  await snap(page, 'provider-data-model');
+
+  // A risk anchor opens the Risks tab on a plane that shows the entry, and unfolds it.
+  await planes.getByRole('radio', { name: /^auth/ }).check();
+  await page.goto('/providers/supabase#risk-supabase.bulk-row-write');
+  await expect(tabs.getByRole('tab', { name: /Risks/ })).toHaveAttribute('aria-selected', 'true');
   const entry = page.getByTestId('risk-supabase.bulk-row-write');
+  await expect(entry).toBeInViewport();
+  await expect(entry.getByRole('button', { name: 'Bulk write on a table' })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  );
   await expect(entry).toContainText('supabase.bulk-row-write');
   await expect(entry).toContainText('Environment-scoped');
   await expect(entry).toContainText('supabase[staging].bulk-row-write');
-  await expect(entry).toContainText('Reversibility:');
+  await expect(entry.locator('[aria-label^="Reversibility:"]').first()).toBeVisible();
   await expect(entry).toContainText('Write: project');
   await expect(entry).toContainText('supabase.project');
-  // The fallback is explained where it is listed.
-  await expect(page.getByTestId('risk-supabase.uncategorized-write')).toContainText(
-    'counts only for a write no other entry of the catalog names',
+  // It names the presets that include it, and each leads to its column.
+  await expect(entry.locator('[data-kind="preset"]')).toHaveText([
+    /Staging developer/,
+    /Migration operator/,
+  ]);
+  // The reader was on `auth`, which does not show this entry: its own plane was opened.
+  await expect(planes.getByRole('radio', { name: /^db/ })).toBeChecked();
+  await expect(page.getByTestId('risk-supabase.auth.generate-link')).toHaveCount(0);
+  await planes.getByRole('radio', { name: 'All' }).check();
+  // A row is compact until asked: collapsed, the patterns are not on the page.
+  const collapsed = page.getByTestId('risk-supabase.read-data');
+  await expect(collapsed.getByRole('button', { name: 'Read data and schema' })).toHaveAttribute(
+    'aria-expanded',
+    'false',
   );
-  // A preset, fully expanded: what it accepts with budget and gate, and what it leaves out.
-  const preset = page.getByTestId('preset-staging-developer');
-  await expect(preset).toContainText('Staging developer');
-  await expect(preset.getByRole('row').nth(1)).toContainText(/\d+\/min/);
-  await expect(preset.getByTestId('preset-not-included')).toContainText('Not included');
-  // Tools: described, and honest about what cannot be derived.
-  await expect(page.getByRole('heading', { name: /^Tools \(\d+\)$/ })).toBeVisible();
-  await expect(page.getByText('depends on the arguments').first()).toBeVisible();
-  await snap(page, 'provider-reference');
+  await expect(collapsed).not.toContainText('Read anything in supabase');
+  await collapsed.getByRole('button', { name: 'Read data and schema' }).click();
+  await expect(collapsed).toContainText('Read anything in supabase');
+  // The fallback is explained where it is listed, in a callout, once unfolded.
+  const fallback = page.getByTestId('risk-supabase.uncategorized-write');
+  await fallback.getByRole('button', { name: /Uncategorized Supabase write/ }).click();
+  await expect(fallback.getByRole('note')).toContainText(
+    'Counts only for a write no other entry of the catalog names',
+  );
+  await snap(page, 'provider-risks');
+  await entry.locator('[data-kind="preset"]', { hasText: 'Migration operator' }).click();
+  await expect(page).toHaveURL(/#preset-migration-operator$/);
+  await expect(page.getByTestId('preset-migration-operator')).toBeInViewport();
 
-  // A preset anchor, as mission creation links to it.
+  // A preset anchor, as mission creation links to it; a single-plane provider has no plane control.
   await page.goto('/providers/github#preset-developer');
   await expect(page.getByTestId('preset-developer')).toBeInViewport();
-  await expect(page.getByTestId('preset-developer')).toContainText(
-    'Modify a GitHub Actions workflow',
+  await expect(page.getByTestId('plane-control')).toHaveCount(0);
+  await expect(page.getByTestId('preset-matrix')).toContainText('Modify a GitHub Actions workflow');
+  await expect(page.getByTestId('cell-developer-github.workflow-write-via-file')).toContainText(
+    'approval',
   );
+  // Fifteen risks, collapsed, read in about one and a half screens.
+  await page.goto('/providers/github#risks');
+  await expect(page.locator('article[data-testid^="risk-github."]')).toHaveCount(15);
+  const first = await page.getByTestId('risk-github.read-code').boundingBox();
+  const last = await page.getByTestId('risk-github.delete-release').boundingBox();
+  const viewport = page.viewportSize();
+  if (!first || !last || !viewport) throw new Error('the risk list is not laid out');
+  expect((last.y + last.height - first.y) / viewport.height).toBeLessThan(1.75);
   // The one tool that hands a provider token to the agent, and its risks, say so.
+  await page.goto('/providers/github#tools');
+  await expect(page.getByRole('tab', { name: /Tools/ })).toHaveAttribute('aria-selected', 'true');
   const mint = page.getByRole('row', { name: /github__mint_install_token/ });
   await expect(mint).toContainText('hands a token to the agent');
   await expect(mint.getByRole('link', { name: 'github.mint-install-token-push' })).toHaveAttribute(
@@ -453,9 +603,11 @@ test('the provider reference explains each plugin: model, risks, presets, tools'
   await expect(page.getByTestId('token-handout-note')).toContainText(
     'What the agent then does with that token is outside the gateway',
   );
-  await expect(page.getByTestId('risk-github.mint-install-token-push')).toContainText(
-    'hands a token to the agent',
-  );
+  await mint.getByRole('link', { name: 'github.mint-install-token-push' }).click();
+  const push = page.getByTestId('risk-github.mint-install-token-push');
+  await expect(push).toBeInViewport();
+  await expect(push).toContainText('hands a token');
+  await expect(push.locator('[data-kind="tool"]')).toHaveText(/github__mint_install_token/);
   await expect(page.getByTestId('risk-github.read-code')).not.toContainText('hands a token');
   // An unknown provider is not found.
   const missing = await page.goto('/providers/no-such-provider');

@@ -1,22 +1,26 @@
 /**
- * Shell of the v5 human surface (spec §4.2): one bar with the cardinal pages
- * and the account, then the page, then the build footer. Server component. A feature adds its page
- * by appending one entry to `APP_NAV`.
+ * Shell of the v5 human surface (spec §4.2): one bar, on one line, with the
+ * cardinal pages — the current one marked — and the account in a compact
+ * menu, then the page, then the build footer. Server component. A feature
+ * adds its page by appending one entry to `APP_NAV`.
  */
 import Link from 'next/link';
 
 import { OperatorBadge, SignOutButton } from '@/components/auth/PrincipalCard';
-import styles from '@/components/auth/auth.module.css';
 import { isOperatorPrincipal } from '@/components/auth/principal';
 import { Container } from '@/components/ui';
 import type { Principal } from '@/server/auth';
 import { PROVIDERS_PATH } from '@/server/providers/links';
 
 import { BuildFooter } from './BuildFooter';
+import { NavLinks, type NavItem } from './NavLinks';
 import { OpenRequestCount } from './OpenRequestCount';
+import { UserMenu } from './UserMenu';
+import styles from './shell.module.css';
 
 export interface AppNavEntry {
   readonly href: string;
+  /** One short word: the bar holds on one line at 1280 px with one more entry to come. */
   readonly label: string;
   /** A count shown after the label (a server component; renders nothing at zero). */
   readonly Count?: (props: { principal: Principal }) => React.ReactNode | Promise<React.ReactNode>;
@@ -24,7 +28,8 @@ export interface AppNavEntry {
 
 export const APP_NAV: readonly AppNavEntry[] = [
   { href: '/connections', label: 'Connections' },
-  { href: '/shares', label: 'Shares received' },
+  // The page is "Shares received"; the bar says it in one word.
+  { href: '/shares', label: 'Shares' },
   { href: '/missions', label: 'Missions' },
   { href: '/requests', label: 'Requests', Count: OpenRequestCount },
   { href: '/audit', label: 'Audit' },
@@ -32,6 +37,9 @@ export const APP_NAV: readonly AppNavEntry[] = [
   // The reference of the shipped plugins: documentation, so it comes last.
   { href: PROVIDERS_PATH, label: 'Providers' },
 ];
+
+/** Operators only: the administration pages have a bar of their own. */
+const ADMIN_ENTRY: AppNavEntry = { href: '/admin', label: 'Admin' };
 
 export function AppShell({
   principal,
@@ -41,27 +49,25 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   const who = principal.kind === 'user' ? principal.user.email : 'bootstrap token';
-  const operator = isOperatorPrincipal(principal);
+  const entries = isOperatorPrincipal(principal) ? [...APP_NAV, ADMIN_ENTRY] : APP_NAV;
+  const items: NavItem[] = entries.map((entry) => ({
+    href: entry.href,
+    label: entry.label,
+    count: entry.Count ? <entry.Count principal={principal} /> : undefined,
+  }));
   return (
-    <div className={styles.adminShell}>
-      <header className={styles.adminBar}>
-        <nav className={styles.adminNav} aria-label="Main">
+    <div className={styles.shell}>
+      <header className={styles.bar}>
+        <nav className={styles.nav} aria-label="Main">
           <Link href="/connections" className={styles.brand}>
             Vaubaan
           </Link>
-          {APP_NAV.map((entry) => (
-            <Link key={entry.href} href={entry.href}>
-              {entry.label}
-              {entry.Count && <entry.Count principal={principal} />}
-            </Link>
-          ))}
-          {operator && <Link href="/admin">Administration</Link>}
+          <NavLinks items={items} />
         </nav>
-        <div className={styles.actions}>
-          <span className={styles.muted}>{who}</span>
+        <UserMenu name={who}>
           <OperatorBadge principal={principal} />
           <SignOutButton />
-        </div>
+        </UserMenu>
       </header>
       <Container>{children}</Container>
       <BuildFooter />

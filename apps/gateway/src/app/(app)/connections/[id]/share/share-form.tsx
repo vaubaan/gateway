@@ -13,7 +13,7 @@ import { useMemo, useState } from 'react';
 
 import { SeverityBadge } from '@/components/risk/RiskBadges';
 import { RiskExplain } from '@/components/risk/RiskExplain';
-import { Banner, Button, Field, Input, Select } from '@/components/ui';
+import { Banner, Button, Field, Input, Select, Help } from '@/components/ui';
 import type { CatalogRisk } from '@/server/missions/model';
 import { providerPath, REFERENCE_SECTIONS } from '@/server/providers/links';
 import {
@@ -121,8 +121,8 @@ export function ShareForm({
         <p className={styles.summary} data-testid="restriction-summary" aria-live="polite">
           {summary}
         </p>
-        <details className={styles.fold} open>
-          <summary>Risks ({risks.length})</summary>
+        <div className={styles.fold}>
+          <h2 className={styles.foldTitle}>Risks ({risks.length})</h2>
           <div className={styles.tools}>
             <button
               type="button"
@@ -138,7 +138,9 @@ export function ShareForm({
             >
               Clear
             </button>
-            <span className={styles.muted}>
+          </div>
+          <Help id="share-risks" line="Tick the risks the target may accept in their own missions.">
+            <p>
               “Select all” ticks each risk of today&apos;s catalog, one by one; it leaves out
               deprecated entries and the uncategorized-write fallback. A risk added to the catalog
               later is not shared. Each id links to its entry in the{' '}
@@ -150,9 +152,10 @@ export function ShareForm({
               >
                 {provider.label} reference
               </a>{' '}
-              (new tab), where the badges are explained.
-            </span>
-          </div>
+              (new tab), where the six cells of a risk are explained. The line under a risk is why
+              it is one: click it to read it whole.
+            </p>
+          </Help>
           {bySeverity.map((group) => (
             <section key={group.level} aria-label={`${group.level} risks`}>
               <h3 className={styles.level}>
@@ -162,7 +165,7 @@ export function ShareForm({
                   {group.risks.length}
                 </span>
               </h3>
-              <ul className={styles.risks}>
+              <ul className={styles.risks} data-kind="risk">
                 {group.risks.map((risk) => (
                   <li key={risk.risk_id}>
                     <div className={styles.risk}>
@@ -182,7 +185,7 @@ export function ShareForm({
               </ul>
             </section>
           ))}
-        </details>
+        </div>
       </div>
 
       {notes.length > 0 && (

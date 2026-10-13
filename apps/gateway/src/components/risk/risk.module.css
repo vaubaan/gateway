@@ -9,7 +9,7 @@
 .head {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   gap: var(--space-1) var(--space-2);
 }
 .label {
@@ -22,36 +22,174 @@
   gap: var(--space-2);
   cursor: pointer;
 }
-.reason {
+.note {
+  color: var(--accent-warning-fg);
+}
+
+/* ── The reason: one line, unfolds in place ────────────────────────────── */
+
+/* The id, then why it is a risk, on one line. */
+.sub {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 var(--space-2);
+  min-width: 0;
+}
+.sub > :first-child {
+  flex: none;
+  max-width: 100%;
+}
+.why {
+  flex: 1 1 200px;
+  min-width: 0;
   color: var(--text-muted);
   font-size: var(--text-sm);
   line-height: 1.45;
 }
-.note {
-  color: var(--accent-warning-fg);
-  font-size: var(--text-xs);
-  line-height: 1.45;
+.why > summary {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  list-style: none;
+  border-radius: var(--radius-xs);
 }
-.vector {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
+.why > summary::-webkit-details-marker {
+  display: none;
 }
-.id {
-  font-family: var(--font-geist-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  overflow-wrap: anywhere;
+.why > summary::before {
+  content: '›';
+  display: inline-block;
+  width: var(--space-3);
+  color: var(--text-foreground);
+  font-weight: var(--font-weight-semibold);
+  transition: transform var(--duration-fast) var(--ease-out);
 }
-/* A link into the reference: underlined, so it reads as a link without hovering. */
-.ref {
-  text-decoration: underline;
-  text-decoration-color: var(--border-strong);
-  text-underline-offset: 3px;
+.why[open] > summary {
+  white-space: normal;
 }
-.ref:hover {
+.why[open] > summary::before {
+  transform: rotate(90deg);
+}
+.why > summary:hover {
   color: var(--text-foreground);
 }
+
+/* ── The vector strip: six cells, axis over value ──────────────────────── */
+
+.strip {
+  position: relative;
+  display: inline-grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  width: 100%;
+  max-width: 492px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-base);
+}
+.cell {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+  padding: 1px var(--space-1) 2px var(--space-2);
+  border-left: 1px solid var(--border-subtle);
+}
+.cell:first-child {
+  border-left: 0;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+.cell:last-child {
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+.axis {
+  font-size: var(--text-2xs);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+.value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-xs);
+  line-height: 1.3;
+}
+.cellMild .value {
+  color: var(--text-muted);
+}
+/* Above the mildest value: a status tone and a heavier word. The word itself
+   carries the value; the tone only draws the eye to it. */
+.cellMiddle {
+  background: var(--accent-warning-bg);
+}
+.cellMiddle .value,
+.cellMiddle .axis {
+  color: var(--accent-warning-fg);
+}
+.cellMiddle .value {
+  font-weight: var(--font-weight-medium);
+}
+.cellWorst {
+  background: var(--accent-danger-bg);
+}
+.cellWorst .value,
+.cellWorst .axis {
+  color: var(--accent-danger-fg);
+}
+.cellWorst .value {
+  font-weight: var(--font-weight-semibold);
+}
+/* Every axis in full, on hover and on keyboard focus. */
+.strip:hover::after,
+.strip:focus-visible::after {
+  content: attr(data-full);
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + var(--space-1));
+  right: 0;
+  width: max-content;
+  max-width: min(640px, 90vw);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-overlay);
+  box-shadow: var(--shadow-md);
+  color: var(--text-foreground);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  white-space: normal;
+  pointer-events: none;
+}
+
+/* ── The class of a risk: a word in an outline, not a type colour ──────── */
+
+.classTag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.class_write {
+  color: var(--text-foreground);
+  border-color: var(--text-foreground);
+}
+.class_destructive {
+  color: var(--accent-danger-fg);
+  border-color: var(--accent-danger-fg);
+  background: var(--accent-danger-bg);
+  font-weight: var(--font-weight-medium);
+}
+
+/* ── The legend of the vector ──────────────────────────────────────────── */
 
 .legend {
   display: grid;
@@ -61,11 +199,15 @@
 }
 .legendRow {
   display: grid;
-  grid-template-columns: 120px minmax(0, 1fr);
+  grid-template-columns: 180px minmax(0, 1fr);
   gap: var(--space-3);
 }
 .legendRow dt {
   font-weight: var(--font-weight-medium);
+}
+.legendRow dt .axis {
+  display: inline-block;
+  min-width: 52px;
 }
 .legendRow dd {
   margin: 0;

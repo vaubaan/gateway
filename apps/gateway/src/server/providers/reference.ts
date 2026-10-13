@@ -37,6 +37,7 @@ import {
 import { RISK_KINDS, type CatalogRisk, type RiskKind } from '../missions/model';
 import { expandPreset } from '../missions/preview';
 import { presetAnchor, riskAnchor } from './links';
+import { hasSeveralPlanes, OTHER_PLANE, planesOfPatterns, planesOfToolName } from './planes';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The index: one card per shipped plugin
@@ -60,6 +61,10 @@ export interface ProviderCard {
   readonly experimental: boolean;
   readonly credential_kind: CredentialKind;
   readonly counts: ProviderCounts;
+  /** The planes of the data model, declaration order (`db`, `storage`, …). */
+  readonly plane_slugs: readonly string[];
+  /** Every environment an entry of the catalog can be accepted in, catalog order. */
+  readonly envs: readonly string[];
 }
 
 function countsOf({ plugin }: RegisteredPlugin, risks: readonly CatalogRisk[]): ProviderCounts {
@@ -69,6 +74,11 @@ function countsOf({ plugin }: RegisteredPlugin, risks: readonly CatalogRisk[]): 
     presets: plugin.catalog.presets?.length ?? 0,
     tools: plugin.tools.length,
   };
+}
+
+/** Every environment the catalog names, in the order it first names them. */
+function catalogEnvs(entries: readonly RiskEntry[]): string[] {
+  return [...new Set(entries.flatMap((entry) => entry.acceptable_in_envs ?? []))];
 }
 
 function cardOf(registered: RegisteredPlugin, risks: readonly CatalogRisk[]): ProviderCard {
@@ -81,6 +91,8 @@ function cardOf(registered: RegisteredPlugin, risks: readonly CatalogRisk[]): Pr
     experimental: plugin.experimental === true,
     credential_kind: plugin.credential.kind,
     counts: countsOf(registered, risks),
+    plane_slugs: plugin.dataModel.planes.map((plane) => plane.slug),
+    envs: catalogEnvs(plugin.catalog.risks),
   };
 }
 
@@ -170,9 +182,7 @@ const ENVIRONMENT_EXPLANATIONS: Readonly<Record<EnvironmentSource, string>> = {
 };
 
 function environmentOf({ plugin }: RegisteredPlugin): EnvironmentReference {
-  const envs = [
-    ...new Set(plugin.catalog.risks.flatMap((entry) => entry.acceptable_in_envs ?? [])),
-  ];
+  const envs = catalogEnvs(plugin.catalog.risks);
   const source: EnvironmentSource =
     envs.length === 0 ? 'none' : plugin.envOf ? 'call' : 'resource-label';
   return {
@@ -265,6 +275,19 @@ export interface RiskReference extends RiskFamily {
   readonly rate_ceiling_per_minute: number | null;
   /** Touched by a tool that hands the agent a provider token (`ProviderPlugin.tokenHandouts`). */
   readonly hands_token: boolean;
+  /** The tools the plugin declares as touching this risk (`tokenHandouts`); usually none. */
+  readonly declared_tools: readonly string[];
+  /** The planes of the data model its patterns reach (`planes.ts`); `['other']` when none. */
+  readonly planes: readonly string[];
+  /** The presets that include it, wholly or in some environment, catalog order. */
+  readonly presets: readonly PresetTag[];
+}
+
+/** A preset as a risk names it: enough to print its tag and link to it. */
+export interface PresetTag {
+  readonly id: string;
+  readonly label: string;
+  readonly anchor: string;
 }
 
 export interface RiskReferenceGroup {
@@ -272,6 +295,13 @@ export interface RiskReferenceGroup {
   readonly title: string;
   readonly hint: string;
   readonly entries: readonly RiskReference[];
+}
+
+/** What an entry is read against, besides itself: the model, the handouts, the presets. */
+interface CatalogContext {
+  readonly model: DataModel;
+  readonly handouts: readonly TokenHandout[];
+  readonly presets: readonly PresetReference[];
 }
 
 function worstKind(variants: readonly CatalogRisk[]): RiskKind {
@@ -282,10 +312,20 @@ function worstKind(variants: readonly CatalogRisk[]): RiskKind {
 function riskReferenceOf(
   entry: RiskEntry,
   family: RiskFamily,
-  handedOut: ReadonlySet<RiskId>,
+  context: CatalogContext,
 ): RiskReference {
+  const tools = context.handouts
+    .filter((handout) => handout.riskIds.includes(entry.id))
+    .map((handout) => handout.tool);
   return {
-    hands_token: handedOut.has(entry.id),
+    hands_token: tools.length > 0,
+    declared_tools: tools,
+    planes: planesOfPatterns(context.model, patternsOf(entry)),
+    presets: context.presets
+      .filter((preset) =>
+        [...preset.auto, ...preset.approval].some((line) => line.risk.base_id === entry.id),
+      )
+      .map(({ id, label, anchor }) => ({ id, label, anchor })),
     ...family,
     anchor: riskAnchor(entry.id),
     kind: worstKind(family.variants),
@@ -306,13 +346,12 @@ function riskReferenceOf(
 function riskGroupsOf(
   entries: readonly RiskEntry[],
   risks: readonly CatalogRisk[],
-  handouts: readonly TokenHandout[],
+  context: CatalogContext,
 ): RiskReferenceGroup[] {
   const byId = new Map(entries.map((entry) => [entry.id, entry]));
-  const handedOut = new Set(handouts.flatMap((handout) => handout.riskIds));
   const references = groupVariants(risks).flatMap((family) => {
     const entry = byId.get(family.base_id);
-    return entry ? [riskReferenceOf(entry, family, handedOut)] : [];
+    return entry ? [riskReferenceOf(entry, family, context)] : [];
   });
   return RISK_KINDS.map((kind) => ({
     kind,
@@ -388,17 +427,21 @@ export interface ToolReference {
   readonly declared_risks: readonly RiskId[] | null;
   /** The tool returns a short-lived provider token to the agent (spec §2.4). */
   readonly hands_token: boolean;
+  /** The plane its name files it under (`planes.ts`); `['other']` when the name says none. */
+  readonly planes: readonly string[];
 }
 
 function toolReferenceOf(
   tool: McpToolDeclaration,
   handouts: readonly TokenHandout[],
+  model: DataModel,
 ): ToolReference {
   const required = tool.inputSchema.required ?? [];
   const handout = handouts.find((h) => h.tool === tool.name);
   return {
     declared_risks: handout ? handout.riskIds : null,
     hands_token: handout !== undefined,
+    planes: planesOfToolName(model, tool.name),
     name: tool.name,
     description: tool.description,
     required,
@@ -432,27 +475,70 @@ export interface ProviderReference extends ProviderCard {
   readonly catalog_version: number | null;
   readonly catalog_date: string | null;
   readonly planes: readonly PlaneTree[];
+  /**
+   * The planes a reader can slice the page by, with what each holds; empty
+   * when the model has one plane only (no plane control is then shown).
+   * `other` comes last, and only when something is filed there.
+   */
+  readonly plane_filters: readonly PlaneFilter[];
   readonly environment: EnvironmentReference;
   readonly risk_groups: readonly RiskReferenceGroup[];
   readonly presets: readonly PresetReference[];
   readonly tools: readonly ToolReference[];
 }
 
+export interface PlaneFilter {
+  readonly slug: string;
+  readonly description: string | null;
+  /** Catalog entries and tools filed under this plane. */
+  readonly risks: number;
+  readonly tools: number;
+}
+
+/** How the page explains the `other` plane, and how tools are filed. */
+export const OTHER_PLANE_NOTE =
+  'A risk is filed under the plane of the first entity of its pattern that one plane alone declares. A tool declares no pattern: it is filed under a plane only when its name contains the name of such an entity. Whatever names none — a risk over the whole provider, a tool whose name says nothing — is under "other" rather than guessed.';
+
+function planeFiltersOf(
+  model: DataModel,
+  groups: readonly RiskReferenceGroup[],
+  tools: readonly ToolReference[],
+): PlaneFilter[] {
+  if (!hasSeveralPlanes(model)) return [];
+  const entries = groups.flatMap((group) => group.entries);
+  const filterOf = (slug: string, description: string | null): PlaneFilter => ({
+    slug,
+    description,
+    risks: entries.filter((entry) => entry.planes.includes(slug)).length,
+    tools: tools.filter((tool) => tool.planes.includes(slug)).length,
+  });
+  const other = filterOf(OTHER_PLANE, null);
+  return [
+    ...model.planes.map((plane) => filterOf(plane.slug, plane.description ?? null)),
+    ...(other.risks + other.tools > 0 ? [other] : []),
+  ];
+}
+
 export function providerReferenceOf(registered: RegisteredPlugin): ProviderReference {
   const { plugin } = registered;
   const risks = enumerateCatalog(plugin.catalog);
   const handouts = plugin.tokenHandouts ?? [];
+  const model = plugin.dataModel;
+  const presets = (plugin.catalog.presets ?? []).map((preset) => presetReferenceOf(preset, risks));
+  const riskGroups = riskGroupsOf(plugin.catalog.risks, risks, { model, handouts, presets });
+  const tools = plugin.tools.map((tool) => toolReferenceOf(tool, handouts, model));
   return {
     ...cardOf(registered, risks),
     summary: plugin.summary ?? null,
     docs_url: plugin.docsUrl ?? null,
     catalog_version: plugin.catalog.catalog_version ?? null,
     catalog_date: plugin.catalog.catalog_date ?? null,
-    planes: dataModelTrees(plugin.dataModel),
+    planes: dataModelTrees(model),
+    plane_filters: planeFiltersOf(model, riskGroups, tools),
     environment: environmentOf(registered),
-    risk_groups: riskGroupsOf(plugin.catalog.risks, risks, handouts),
-    presets: (plugin.catalog.presets ?? []).map((preset) => presetReferenceOf(preset, risks)),
-    tools: plugin.tools.map((tool) => toolReferenceOf(tool, handouts)),
+    risk_groups: riskGroups,
+    presets,
+    tools,
   };
 }
 

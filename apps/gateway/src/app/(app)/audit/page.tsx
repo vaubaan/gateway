@@ -25,7 +25,9 @@ import {
   Th,
   Thead,
   Tr,
+  Slug,
 } from '@/components/ui';
+import { RiskIdLink } from '@/components/risk/RiskExplain';
 import { requirePrincipal } from '@/lib/auth/session';
 import {
   AUDIT_DECISIONS,
@@ -238,10 +240,9 @@ function EntryRow({ entry }: { entry: AuditEntryView }) {
 }
 
 function CallRow({ entry }: { entry: AuditCallView }) {
-  const where = [
-    entry.connection ? (entry.connection.display_name ?? entry.connection.id) : null,
-    entry.resource_ref,
-  ].filter(Boolean);
+  const connection = entry.connection
+    ? (entry.connection.display_name ?? entry.connection.id)
+    : null;
   return (
     <Tr>
       <Td>
@@ -252,7 +253,13 @@ function CallRow({ entry }: { entry: AuditCallView }) {
         {entry.refusal_code && <div className={styles.mono}>{entry.refusal_code}</div>}
       </Td>
       <Td>
-        {entry.mission.name ?? 'deleted mission'}
+        {entry.mission.name ? (
+          <Slug kind="mission" mono={false}>
+            {entry.mission.name}
+          </Slug>
+        ) : (
+          'deleted mission'
+        )}
         {entry.mission.creator_email && (
           <div className={styles.muted}>{entry.mission.creator_email}</div>
         )}
@@ -275,8 +282,17 @@ function CallRow({ entry }: { entry: AuditCallView }) {
         )}
       </Td>
       <Td>
-        <span className={`${styles.mono} ${styles.wraps}`}>{entry.tool}</span>
-        {where.length > 0 && <div className={styles.muted}>{where.join(' · ')}</div>}
+        <Slug kind="tool">{entry.tool}</Slug>
+        {(connection || entry.resource_ref) && (
+          <div className={styles.where}>
+            {connection && (
+              <Slug kind="connection" mono={false}>
+                {connection}
+              </Slug>
+            )}
+            {entry.resource_ref && <Slug kind="resource">{entry.resource_ref}</Slug>}
+          </div>
+        )}
       </Td>
       <Td>
         {entry.risks_touched.length === 0 ? (
@@ -285,7 +301,7 @@ function CallRow({ entry }: { entry: AuditCallView }) {
           <div className={styles.risks}>
             {entry.risks_touched.map((risk) => (
               <span key={risk} className={`${styles.mono} ${styles.wraps}`}>
-                {risk}
+                <RiskIdLink riskId={risk} />
                 {entry.remaining_budget?.[risk] !== undefined &&
                   ` → ${entry.remaining_budget[risk]}`}
               </span>

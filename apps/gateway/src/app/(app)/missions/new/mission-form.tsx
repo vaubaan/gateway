@@ -14,7 +14,7 @@
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 
-import { Badge, Banner, Button, Input, Select, Textarea } from '@/components/ui';
+import { Badge, Banner, Button, Input, Select, Slug, Textarea } from '@/components/ui';
 import type { BootstrapKit } from '@/server/missions/bootstrap-kit';
 import type {
   DraftPeriod,
@@ -25,6 +25,7 @@ import type {
   ResolvedDraftConnection,
 } from '@/server/missions/model';
 import { defaultResources, previewDraft } from '@/server/missions/preview';
+import type { RiskPlanes } from '@/server/providers/planes';
 
 import { RevealDialog } from '../bootstrap-kit-view';
 import { messageOf } from '../message-of';
@@ -120,8 +121,11 @@ export function MissionForm({
   context,
   missions,
   initial,
+  planes,
 }: {
   context: readonly IssuanceConnection[];
+  /** Per provider id: the planes of its data model, for the providers that have several. */
+  planes: Readonly<Record<string, RiskPlanes>>;
   missions: readonly { id: string; name: string }[];
   initial: InitialDraft | null;
 }) {
@@ -516,7 +520,7 @@ export function MissionForm({
                               )
                             }
                           />
-                          <span className={styles.mono}>{r.ref}</span>
+                          <Slug kind="resource">{r.ref}</Slug>
                           {r.env && <Badge mono>{r.env}</Badge>}
                           {r.hidden && <Badge>hidden</Badge>}
                           {r.stale && <Badge tone="warning">stale</Badge>}
@@ -602,6 +606,7 @@ export function MissionForm({
                     <CustomEditor
                       connection={connection}
                       state={cs}
+                      planes={planes[connection.provider] ?? null}
                       onChange={(next) => patchConnection(connection.id, next)}
                       onStartFrom={(presetId) => startFrom(connection, cs, presetId)}
                     />

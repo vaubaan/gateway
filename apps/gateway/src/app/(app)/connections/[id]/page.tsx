@@ -41,6 +41,7 @@ import {
   Th,
   Thead,
   Tr,
+  Slug,
 } from '@/components/ui';
 import { currentActor, takeNotice, type PageSearchParams } from '@/lib/connections/session';
 import {
@@ -385,7 +386,7 @@ function ResourceRow({
   return (
     <Tr className={resource.staleSince ? styles.staleRow : undefined}>
       <Td>
-        <span className={styles.ref}>{resource.ref}</span>{' '}
+        <Slug kind="resource">{resource.ref}</Slug>{' '}
         {resource.staleSince && (
           <Badge tone="warning">stale since {day(resource.staleSince)}</Badge>
         )}
