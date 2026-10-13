@@ -6,7 +6,9 @@
  *
  *   1. plugin.classify(tool, args, resources) → slices[]
  *   2. risks_touched = ∪_{slice ∈ slices} risksTouchedBy(slice, catalog),
- *      each id env-qualified through the `EnvResolver`
+ *      each id env-qualified through the `EnvResolver` ; an env-scoped
+ *      risk touched outside its `acceptable_in_envs` (or on an unlabelled
+ *      resource) refuses the call — it is never dropped from the set
  *   3. if risks_touched ⊆ mission.accepted_risks → ALLOW (then budget, gate)
  *      else                                      → DENY `risk-not-accepted`
  *
@@ -41,7 +43,7 @@ export interface EvaluateCallInput {
    * can env-qualify the touched risks (`supabase.bulk-row-write` →
    * `supabase[staging].bulk-row-write`) before the subset check against
    * `token_accepted_risks`, which are stored qualified (spec §4.4). Build
-   * one with `resourceEnvResolver(mission resources)`. When omitted, no
+   * one with `envResolverFor(mission resources, plugin.envOf)`. When omitted, no
    * qualification happens and `acceptable_in_envs` is not filtered —
    * the test mode.
    */
@@ -58,7 +60,7 @@ export interface EvaluateCallInput {
  *     executed_slices: outcome.slices,
  *     token_accepted_risks: new Set(acceptedRisksOf(mission)),
  *     catalog: registry.catalogOf(provider),
- *     envResolver: resourceEnvResolver(missionResources),
+ *     envResolver: envResolverFor(missionResources, plugin.envOf),
  *   });
  *   if (decision.outcome === 'allowed') { budget, gate, execute } else { refuse }
  */
@@ -84,22 +86,45 @@ export function evaluateCall(input: EvaluateCallInput): RiskDecision {
   // `supabase.bulk-row-write` from the catalog → silent deny.
   const seen = new Set<RiskId>();
   const risks_touched: RiskId[] = [];
+  const not_acceptable_here: RiskOutsideItsEnvs[] = [];
   for (const slice of executed_slices) {
     const env = resolver.resolveEnv(slice);
     for (const baseId of risksTouchedBy(slice, catalog)) {
       const entry = findRiskEntry(catalog, baseId);
-      // When resolving envs, skip risks whose acceptable_in_envs excludes
-      // this slice's env. Without this, overlapping patterns (two entries
-      // sharing a pattern with disjoint acceptable_in_envs) would produce
-      // phantom qualified ids that no mission can ever contain. Skipped in
-      // the test mode where env qualification is disabled entirely.
-      if (qualifying && !isAcceptableInEnv(entry, env)) continue;
       const qualified = qualifyRiskId(baseId, env, entry);
-      if (!seen.has(qualified)) {
-        seen.add(qualified);
-        risks_touched.push(qualified);
+      if (seen.has(qualified)) continue;
+      seen.add(qualified);
+      risks_touched.push(qualified);
+      // A touched env-scoped risk whose `acceptable_in_envs` excludes the
+      // slice's environment (or whose resource carries no label) is NOT
+      // dropped: the call still takes that risk, and no mission can hold
+      // it there. Dropping it would let a broader co-touched risk carry
+      // the call alone — fewer risks required exactly where the catalog
+      // says the risk is not acceptable. Skipped in the test mode, where
+      // env qualification is disabled entirely.
+      if (qualifying && !isAcceptableInEnv(entry, env)) {
+        not_acceptable_here.push({
+          id: qualified,
+          env,
+          acceptable_in_envs: entry?.acceptable_in_envs ?? [],
+        });
       }
     }
+  }
+
+  if (not_acceptable_here.length > 0) {
+    const refused = new Set(not_acceptable_here.map((r) => r.id));
+    return {
+      outcome: 'denied',
+      code: 'risk-not-accepted',
+      missing_risks: risks_touched.filter((r) => refused.has(r) || !token_accepted_risks.has(r)),
+      covered_risks: risks_touched.filter((r) => !refused.has(r) && token_accepted_risks.has(r)),
+      executed_slices,
+      hint:
+        `${not_acceptable_here.map(describeOutsideItsEnvs).join(' ; ')}. ` +
+        `No mission can accept such a risk there: ask the connection owner to label the resource ` +
+        `with one of the listed environments if that is what it is, or restrict the operation.`,
+    };
   }
 
   if (risks_touched.length === 0) {
@@ -148,6 +173,21 @@ export function evaluateCall(input: EvaluateCallInput): RiskDecision {
   }
 
   return { outcome: 'allowed', risks_touched };
+}
+
+interface RiskOutsideItsEnvs {
+  readonly id: RiskId;
+  readonly env: string | null;
+  readonly acceptable_in_envs: readonly string[];
+}
+
+function describeOutsideItsEnvs(risk: RiskOutsideItsEnvs): string {
+  const where =
+    risk.env === null
+      ? 'a resource with no environment label'
+      : `a resource labelled '${risk.env}'`;
+  const envs = risk.acceptable_in_envs.join(', ');
+  return `'${risk.id}' is touched on ${where}, but is acceptable only in [${envs}]`;
 }
 
 function selectResolver(input: EvaluateCallInput): EnvResolver {

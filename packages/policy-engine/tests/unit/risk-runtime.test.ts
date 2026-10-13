@@ -419,3 +419,132 @@ describe('evaluateCall — acceptable_in_envs runtime filter', () => {
     }
   });
 });
+
+// ─── An env-scoped risk touched outside its envs refuses, never vanishes ────
+
+describe('evaluateCall — env-scoped risk outside its acceptable envs', () => {
+  const vector = {
+    reversibility: 'reversible',
+    blast: 'single',
+    data: 'data',
+    cost: 'free',
+    visibility: 'internal',
+    persistence: 'stateless',
+  } as const;
+  const acme: RiskCatalog = {
+    provider: 'acme',
+    risks: [
+      // Broad, account-scoped read that co-fires with the specific one below.
+      {
+        id: 'acme.read-runtime',
+        label: 'read runtime',
+        reason: 'r',
+        matches: 'acme.project[**].**.R',
+        vector,
+      },
+      {
+        id: 'acme.read-variables',
+        label: 'read variable values',
+        reason: 'r',
+        matches: 'acme.project[**].variable[**].R',
+        vector,
+        acceptable_in_envs: ['staging', 'prod'],
+      },
+      {
+        id: 'acme.schema-write',
+        label: 'schema write',
+        reason: 'r',
+        matches: 'acme.project[**].table[*].W',
+        vector,
+        acceptable_in_envs: ['staging', 'prod'],
+      },
+      {
+        id: 'acme.bulk-row-write',
+        label: 'bulk row write',
+        reason: 'r',
+        matches: 'acme.project[**].table[**].row[bulk].W',
+        vector,
+        acceptable_in_envs: ['staging'],
+      },
+    ],
+  };
+  const acmeIdx = indexCatalog(acme);
+  const resource = (ref: string, env: string | null): Resource => ({
+    provider: 'acme',
+    ref,
+    env,
+    displayName: ref,
+  });
+  const readVariables = (ref: string) => parseSlice(`acme.project[${ref}].variable[DB_URL].R`);
+
+  test('labelled resource: the specific risk is required on top of the broad one', () => {
+    const d = evaluateCall({
+      executed_slices: [readVariables('p1')],
+      token_accepted_risks: new Set(['acme.read-runtime']),
+      catalog: acmeIdx,
+      envResolver: resourceEnvResolver([resource('p1', 'prod')]),
+    });
+    expect(d).toMatchObject({ outcome: 'denied', missing_risks: ['acme[prod].read-variables'] });
+  });
+
+  test.each([
+    ['no environment label', null, 'acme.read-variables'],
+    ['a label outside the list', 'production', 'acme[production].read-variables'],
+  ])(
+    'resource with %s: the broad co-touched risk does not carry the call alone',
+    (_title, env, missing) => {
+      const d = evaluateCall({
+        executed_slices: [readVariables('p1')],
+        token_accepted_risks: new Set(['acme.read-runtime']),
+        catalog: acmeIdx,
+        envResolver: resourceEnvResolver([resource('p1', env)]),
+      });
+      expect(d.outcome).toBe('denied');
+      if (d.outcome !== 'denied') return;
+      expect(d.code).toBe('risk-not-accepted');
+      expect(d.missing_risks).toEqual([missing]);
+      expect(d.covered_risks).toEqual(['acme.read-runtime']);
+      expect(d.hint).toContain('acceptable only in [staging, prod]');
+    },
+  );
+
+  test('multi-slice call: a risk not acceptable in this env refuses the whole call', () => {
+    const d = evaluateCall({
+      executed_slices: [
+        parseSlice('acme.project[p1].table[users].W'),
+        parseSlice('acme.project[p1].table[users].row[bulk].W'),
+      ],
+      token_accepted_risks: new Set(['acme[prod].schema-write']),
+      catalog: acmeIdx,
+      envResolver: resourceEnvResolver([resource('p1', 'prod')]),
+    });
+    expect(d).toMatchObject({
+      outcome: 'denied',
+      missing_risks: ['acme[prod].bulk-row-write'],
+      covered_risks: ['acme[prod].schema-write'],
+    });
+  });
+
+  test('holding the unqualified id does not open an unlabelled resource', () => {
+    const d = evaluateCall({
+      executed_slices: [readVariables('p1')],
+      token_accepted_risks: new Set(['acme.read-runtime', 'acme.read-variables']),
+      catalog: acmeIdx,
+      envResolver: resourceEnvResolver([resource('p1', null)]),
+    });
+    expect(d).toMatchObject({ outcome: 'denied', missing_risks: ['acme.read-variables'] });
+  });
+
+  test('the same slices are allowed where every touched risk is acceptable and accepted', () => {
+    const d = evaluateCall({
+      executed_slices: [
+        parseSlice('acme.project[p1].table[users].W'),
+        parseSlice('acme.project[p1].table[users].row[bulk].W'),
+      ],
+      token_accepted_risks: new Set(['acme[staging].schema-write', 'acme[staging].bulk-row-write']),
+      catalog: acmeIdx,
+      envResolver: resourceEnvResolver([resource('p1', 'staging')]),
+    });
+    expect(d.outcome).toBe('allowed');
+  });
+});
