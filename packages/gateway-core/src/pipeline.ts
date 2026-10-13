@@ -404,6 +404,45 @@ function describeUpstreamFailure(thrown: unknown): UpstreamFailure {
   };
 }
 
+/** Longest structural reason an audit entry keeps. */
+export const AUDIT_REASON_MAX_LENGTH = 500;
+/** What stands for an argument value in the audit copy of a reason. */
+export const ARGUMENT_PLACEHOLDER = '[argument]';
+/** Shorter values are not looked for: they would match inside ordinary words. */
+const MIN_ARGUMENT_VALUE_LENGTH = 3;
+
+/** Every string in the arguments, and every finite number as text, at any depth. */
+function argumentValues(args: unknown, out: Set<string>): Set<string> {
+  if (typeof args === 'string') {
+    if (args.length >= MIN_ARGUMENT_VALUE_LENGTH) out.add(args);
+  } else if (typeof args === 'number') {
+    const text = String(args);
+    if (Number.isFinite(args) && text.length >= MIN_ARGUMENT_VALUE_LENGTH) out.add(text);
+  } else if (Array.isArray(args)) {
+    for (const item of args) argumentValues(item, out);
+  } else if (typeof args === 'object' && args !== null) {
+    for (const member of Object.values(args)) argumentValues(member, out);
+  }
+  return out;
+}
+
+/**
+ * The reason of a structural rejection as the audit keeps it (spec §6, §8: the audit
+ * holds the fingerprint of the arguments, never the arguments). A plugin's denial
+ * may quote the value it refuses — `path: 'secrets/prod.env' is not …` — which is
+ * right for the caller, who sent it, and wrong for an entry others read for as long
+ * as retention says. Every argument value found in the reason is replaced, longest
+ * first, and the whole is bounded.
+ */
+export function auditReason(reason: string, args: unknown): string {
+  let kept = reason;
+  const values = [...argumentValues(args, new Set())].sort((a, b) => b.length - a.length);
+  for (const value of values) kept = kept.split(value).join(ARGUMENT_PLACEHOLDER);
+  return kept.length > AUDIT_REASON_MAX_LENGTH
+    ? `${kept.slice(0, AUDIT_REASON_MAX_LENGTH - 1)}…`
+    : kept;
+}
+
 export interface CallPipelineDeps {
   readonly resources: ResourceStage;
   readonly risks: RiskStage;
@@ -513,7 +552,7 @@ export class CallPipeline {
     if (!resolved.ok) {
       return 'refusal' in resolved
         ? this.refused(base, resolved.refusal)
-        : this.rejected(base, resolved.reason);
+        : this.rejected(base, resolved.reason, call.args);
     }
     const { target } = resolved;
     const entry: CallAuditEntry = {
@@ -542,7 +581,7 @@ export class CallPipeline {
           `risk catalog for '${target.connection.provider}' is not loaded; refusing (fail closed).`,
         );
       case 'classify-denied':
-        return this.rejected(entry, verdict.reason);
+        return this.rejected(entry, verdict.reason, call.args);
       case 'deny':
         return this.refused(
           {
@@ -666,12 +705,21 @@ export class CallPipeline {
     return { kind: 'refused', refusal, audit: entry };
   }
 
-  private async rejected(base: CallAuditEntry, reason: string): Promise<CallOutcome> {
+  /**
+   * A structural rejection. `reason` goes to the caller as it is; the audit entry
+   * keeps a copy without the argument values a plugin may have quoted in it
+   * (`args`, when the reason comes from a plugin), and bounded.
+   */
+  private async rejected(
+    base: CallAuditEntry,
+    reason: string,
+    args?: unknown,
+  ): Promise<CallOutcome> {
     const entry: CallAuditEntry = {
       ...base,
       decision: 'refused',
       refusal_code: null,
-      refusal_reason: reason,
+      refusal_reason: auditReason(reason, args),
     };
     await this.deps.audit.write(entry);
     return { kind: 'rejected', reason, audit: entry };

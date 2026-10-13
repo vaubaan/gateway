@@ -367,6 +367,10 @@ export const INVARIANTS: readonly Invariant[] = [
         tests: ['writes no secret and no argument to the logs: token by prefix, arguments by hash'],
       },
       {
+        file: 'packages/gateway-core/tests/unit/pipeline.test.ts',
+        tests: ['the agent reads it whole, the audit entry holds no argument value'],
+      },
+      {
         file: `${SERVER}/logging/logging.test.ts`,
         tests: ['replaces every configured secret, longest first, also when JSON-escaped'],
       },
@@ -443,6 +447,22 @@ export const INVARIANTS: readonly Invariant[] = [
       {
         file: `${INTEGRATION}/execution/door-http.test.ts`,
         tests: ['rejects a call whose arguments JSON cannot carry (`1e999`)'],
+      },
+    ],
+  },
+  {
+    id: 'every-slice-covered',
+    statement:
+      'A call is allowed only when every slice it executes matches a catalog entry and every risk touched is accepted: no slice, no risk, an uncovered slice, a missing catalog and a classifier that fails all refuse.',
+    source: 'spec §3.1, §6; ADR execution-door-json-faithful-arguments-and-shared-throttle',
+    proofs: [
+      {
+        file: 'packages/policy-engine/tests/unit/risk-runtime.test.ts',
+        tests: [
+          'a slice no catalog entry matches denies the call, although another slice is covered and accepted',
+          'a slice of another provider is not dropped: it denies',
+          'no slice → deny (classification gap)',
+        ],
       },
     ],
   },
@@ -551,6 +571,8 @@ export const INVARIANTS: readonly Invariant[] = [
         tests: [
           'names both cookies with the __Host- prefix and keeps what the prefix requires',
           'refuses to write a __Host- cookie on another path',
+          'matches the cookie name exactly: a look-alike name a sibling subdomain can set is not the session',
+          'reads no session when the name appears twice',
         ],
       },
     ],

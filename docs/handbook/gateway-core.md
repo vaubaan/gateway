@@ -151,7 +151,13 @@ Two conventions:
 upstream_error IS NOT NULL`.
 - A structural rejection without a code (an argument JSON cannot carry, unknown tool, a provider the
   mission has no connection for, classifier denial, catalog not loaded) is `decision = 'refused'`, `refusal_code = null`,
-  `refusal_reason = <text>`.
+  `refusal_reason = <text>`. The text is the **audit copy** of the reason
+  (`auditReason` in `pipeline.ts`): a plugin's denial may quote the value it
+  refuses, which the caller reads whole in its JSON-RPC error, while the entry
+  has every argument value found in the text (strings and numbers of three
+  characters or more, at any depth) replaced by `[argument]` and is cut at
+  500 characters — the audit holds the fingerprint of the arguments, never
+  the arguments.
 
 **Administrative entry**: `ts`, `user_id`, `act` (`AdminAct` union:
 connection created/reconnected/refused/transferred/reassigned/revoked, resources

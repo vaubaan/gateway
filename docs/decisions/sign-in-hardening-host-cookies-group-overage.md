@@ -43,6 +43,11 @@ extends:
    `Path=/` and no `Domain`, set by the host itself, so a sibling subdomain
    cannot write it. `serializeCookie` and `clearCookie` refuse a `__Host-`
    name on another path rather than emit a cookie the browser would drop.
+   The reader holds the other half: `readCookie` matches the name exactly
+   (never `trim()`, which would equate `\u00a0__Host-vbn_session` — a name a
+   browser lets a sibling subdomain set — with the session cookie), and a
+   name present twice in the header is no cookie. Found by the security
+   review of this very change.
 2. **A token whose groups were moved out is refused**, with the closed code
    `groups-overage`, before anything is written: no user row, no group sync.
    Detected on the configured groups claim: `_claim_names` naming it, or

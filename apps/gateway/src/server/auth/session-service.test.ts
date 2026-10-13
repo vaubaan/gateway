@@ -58,6 +58,42 @@ describe('cookies', () => {
       }
     }
   });
+  it('matches the cookie name exactly: a look-alike name a sibling subdomain can set is not the session', () => {
+    // A browser enforces the __Host- rules on the literal name. `\u00a0__Host-…` is
+    // another name to it — settable with Domain=<parent>, without Secure — and must be
+    // another name here too (`String.prototype.trim` would have made them equal).
+    const planted = 'PLANTED';
+    for (const lookalike of [
+      `\u00a0${SESSION_COOKIE}`,
+      // U+2003 and U+FEFF as the bytes a server receives (UTF-8, read as latin1).
+      `\u00e2\u0080\u0083${SESSION_COOKIE}`,
+      `\u00ef\u00bb\u00bf${SESSION_COOKIE}`,
+      `\u000b${SESSION_COOKIE}`,
+      `\u000c${SESSION_COOKIE}`,
+      `${SESSION_COOKIE}\u00a0`,
+      `${SESSION_COOKIE} `,
+      `${SESSION_COOKIE}\t`,
+    ]) {
+      const headers = new Headers({ cookie: `other=1; ${lookalike}=${planted}` });
+      expect(readCookie(headers, SESSION_COOKIE), JSON.stringify(lookalike)).toBeNull();
+    }
+    // The separator's own space and tab are not part of the name.
+    expect(
+      readCookie(new Headers({ cookie: `a=1;  \t${SESSION_COOKIE}=abc` }), SESSION_COOKIE),
+    ).toBe('abc');
+    expect(readCookie(new Headers({ cookie: `${SESSION_COOKIE}=abc` }), SESSION_COOKIE)).toBe(
+      'abc',
+    );
+  });
+
+  it('reads no session when the name appears twice: which one the browser meant cannot be told', () => {
+    const twice = new Headers({ cookie: `${SESSION_COOKIE}=first; x=1; ${SESSION_COOKIE}=second` });
+    expect(readCookie(twice, SESSION_COOKIE)).toBeNull();
+    // Another cookie twice does not matter.
+    const other = new Headers({ cookie: `x=1; x=2; ${SESSION_COOKIE}=abc` });
+    expect(readCookie(other, SESSION_COOKIE)).toBe('abc');
+  });
+
   it('refuses to write a __Host- cookie on another path', () => {
     expect(() =>
       serializeCookie(SESSION_COOKIE, 'abc', { maxAgeSeconds: 1, path: '/admin' }),

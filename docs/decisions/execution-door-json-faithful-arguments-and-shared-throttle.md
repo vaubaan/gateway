@@ -53,6 +53,19 @@ extends:
    the instance logs one warning at boot naming the key, what it costs and the
    remedy. The reference deployment sets it.
 
+Two more, from the last security review of the same pass:
+
+4. **Every slice of a call must be covered by the catalog.** The risk
+   decision collected the risks of all the slices and refused only when the
+   union was empty: a slice matching nothing (or a slice of another
+   provider) was carried by the slices next to it. `evaluateCall` now denies
+   as soon as one slice is uncovered. No shipped plugin emitted such a call;
+   the rule was only asserted on samples by the plugin test kit.
+5. **The audit copy of a structural reason holds no argument value.** A
+   plugin's denial may quote the value it refuses. The caller still reads it
+   whole; the audit entry (`refusal_reason`) has every argument value found
+   in the text replaced by `[argument]`, and is bounded.
+
 ## Consequences
 
 - A client that sends `1e999`, `-1e999` or anything parsing to a non-finite

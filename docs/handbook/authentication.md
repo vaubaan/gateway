@@ -309,6 +309,12 @@ sibling subdomain cannot plant one. `serializeCookie` and `clearCookie` throw
 a `RangeError` for a `__Host-` name on another path instead of emitting a
 cookie the browser would drop (ADR
 [sign-in-hardening-host-cookies-group-overage](../decisions/sign-in-hardening-host-cookies-group-overage.md)).
+`readCookie` matches the name **exactly** — only the padding after the `;`
+separator is dropped, never with `trim()`, which strips Unicode white space: a
+browser applies the `__Host-` rules to the literal name, so
+`\u00a0__Host-vbn_session` is to it an ordinary cookie a sibling subdomain may
+set for the parent domain, and must not read as the session here. A name that
+appears twice in the header reads as no cookie at all.
 A cookie value that is not base64url is ignored. There is no sliding expiry: a
 session ends 8 hours after sign-in whatever the activity. A sign-in (IdP or
 bootstrap token) deletes the session the browser presented before it issues

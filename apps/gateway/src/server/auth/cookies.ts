@@ -22,17 +22,38 @@ export const LOGIN_COOKIE = `${HOST_PREFIX}vbn_login`;
 
 const COOKIE_VALUE = /^[A-Za-z0-9_-]+$/;
 
+/** What separates two pairs of a `Cookie` header besides `;` (RFC 6265 §4.2.1: one SP; tabs tolerated). */
+const PAIR_PADDING = /^[ \t]+/;
+
+/**
+ * The value of the cookie named **exactly** `name`, or `null`.
+ *
+ * Exactly: only the padding after the `;` separator is dropped, and nothing
+ * after the name. A browser applies the `__Host-` rules to the literal name, so
+ * a name that merely *trims* to ours — `\u00a0__Host-vbn_session` — is to the
+ * browser an ordinary cookie that a sibling subdomain may set for the parent
+ * domain. Matching it here (as `String.prototype.trim` would, which strips
+ * Unicode white space) would hand that subdomain the very session fixation the
+ * prefix exists to prevent.
+ *
+ * And once: a browser holds at most one host-only cookie of a name on `Path=/`,
+ * so the name appearing twice means something else wrote one of them. Which one
+ * cannot be told, so neither is a session.
+ */
 export function readCookie(headers: Headers, name: string): string | null {
   const header = headers.get('cookie');
   if (!header) return null;
+  let found: string | null = null;
+  let matches = 0;
   for (const part of header.split(';')) {
-    const eq = part.indexOf('=');
-    if (eq < 0) continue;
-    if (part.slice(0, eq).trim() !== name) continue;
-    const value = part.slice(eq + 1).trim();
-    return COOKIE_VALUE.test(value) ? value : null;
+    const pair = part.replace(PAIR_PADDING, '');
+    const eq = pair.indexOf('=');
+    if (eq < 0 || pair.slice(0, eq) !== name) continue;
+    matches += 1;
+    const value = pair.slice(eq + 1);
+    found = COOKIE_VALUE.test(value) ? value : null;
   }
-  return null;
+  return matches === 1 ? found : null;
 }
 
 export interface CookieOptions {
