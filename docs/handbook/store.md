@@ -255,6 +255,25 @@ atomicity. `findApproval` / `findOpenRequest` are non-consuming lookups so that 
 can decide on every risk before it consumes an approval or drops a request. Rate-limit
 sliding windows are not stored here (in-memory, same handbook).
 
+## The claim decision primitive
+
+`store.requests.decideClaim(id, decidedByUserId, apply)` is the same pattern for the
+creator's answer to a claim (P1.7, handbook [requests](requests.md)): one
+`BEGIN IMMEDIATE` transaction holding the check that the request is an open, unexpired
+claim (an overdue one is flipped to `expired` there and reported `not-open`), the
+synchronous `apply(ctx)` callback, and the conditional `UPDATE … WHERE state = 'open'`
+that stores the outcome. `ClaimDecisionContext` offers `counters(periodStart)`,
+`resetCounters(periodStart)`, `creditCounter(periodStart, riskId, amount)` (refuses to
+take a counter below zero), `setMissionExpiry(iso)` (a mission stored `expired` becomes
+`active`, `closed_at` cleared) and `recordEvent(event)`. A thrown callback rolls
+everything back.
+
+`store.requests.sweepExpired()` flips every overdue open request to `expired`, erases
+its argument blob and records a `request` event (`state: 'expired'`) on the mission's
+session, returning the records; `expireOpen()` (count only, no event) remains.
+`store.sessions.listEvents(sessionId, { since?, limit?, kinds?, order? })` filters by
+event kind and can return the tail of the timeline first (`order: 'desc'`).
+
 ## Backup
 
 `store.backupTo('/data/backups/gateway-2026-10-13.sqlite')` runs `VACUUM INTO`: a
@@ -286,7 +305,10 @@ capture both files atomically are also fine.
   (exactly one allow), two connections on one file (`SQLITE_BUSY` while the other
   transaction is open, then success), an unknown mission as `NotFoundError`,
   in-transaction approval consumption and request drop, the
-  counters-vs-audit structural check, argument erasure on decision and expiry.
+  counters-vs-audit structural check, argument erasure on decision and expiry,
+  the `listEvents` kind filter and descending order. `decideClaim` and
+  `sweepExpired` are exercised by `tests/integration/requests/request-service.test.ts`
+  (handbook [requests](requests.md)).
 - `tests/integration/compose/boot.test.ts` (handbook [configuration](configuration.md)) — the
   composition root opening this store on a temporary file with the real encryptor
   and the registry-backed catalog index.

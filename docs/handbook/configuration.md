@@ -121,6 +121,11 @@ deploy/config/                  gateway.example.yaml, .env.example (every key do
      `handlers`; handbook [connections](connections.md)), with
      `RootDeps.providerFetch` for the outbound HTTP of the connect flows
      and of plugin discovery (tests inject `mockFetch`);
+   - `createRequestsModule()` → `root.requests` (`service`, `handlers`,
+     `sweeper`, `requestUrl`; handbook [requests](requests.md)). This starts
+     the inbox's expiry sweeper (an `unref`-ed interval); `root.close()`
+     stops it before closing the store. The per-IP limit of `/r/*` goes
+     through `root.rateLimiter` and reads `trusted_proxies`;
    - the boot line `composition root ready` (`store`, `schema_version`,
      `plugins`, `build`) closes the sequence.
 5. On `ConfigError`, `bootOrExit()` prints the error to stderr with a

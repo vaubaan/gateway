@@ -130,7 +130,7 @@ const service = new SessionService({
   sessions: store.sessions, // decideAndDecrement, getByMission, counters
   requests: store.requests, // prepareArguments (seals approval-request arguments ahead of the transaction)
   rateWindows: new SlidingWindowRateLimiter(), // the budget's SlidingWindows
-  requestUrl: (id) => `${config.publicUrl.origin}/r/${id}`, // never hard-coded
+  requestUrl: root.requests.requestUrl, // `<public_url>/r/<id>`, the one builder (handbook requests)
   requestExpirySeconds: config.requests.expirySeconds,
 });
 
@@ -174,7 +174,9 @@ risk, `request` with `{ request_id, request_kind, tool, fingerprint }`.
 
 **Not refunded.** The counter increment commits before the upstream call. An upstream
 failure leaves `decision: allowed` + `upstream_error` in the audit and the credit
-consumed; the creator gives credit back through a claim (ADR).
+consumed; the creator gives credit back through a claim (ADR). What happens to the
+request after this refusal — who may open its URL, the creator's four answers, their
+events, the expiry sweep — is [requests](requests.md).
 
 `stateOf(mission, now)` reads the session's counters and returns
 `deriveMissionState(...)`.
@@ -226,9 +228,12 @@ budget; both satisfy the port.
 ## Structural check (`consistency.ts`)
 
 `countersAgreeWithAudit({ sessions, audit }, mission, now)` returns, per accepted risk,
-`counted` (sum of `session_counters.consumed` for the current period) and `audited`
+`counted` (sum of `session_counters.consumed` for the current period), `credited` (the
+actions granted claims gave back in the period: `details.credits` of the session's
+`reset` / `extension` events whose `details.period_start` is the period's, see
+[requests](requests.md)) and `audited`
 (`audit.countAllowedTouches(mission, risk, period.start, period.end ?? open-ended)`), plus
-`mismatches`. The integration suite asserts `mismatches` is empty after a mixed run
+`mismatches` (`counted + credited !== audited`). The integration suite asserts `mismatches` is empty after a mixed run
 through the real `CallPipeline` (allowed, failed upstream, exhausted, rate-limited,
 approval-required, concurrent burst); an operator diagnostic may run it on a live store.
 
@@ -269,10 +274,11 @@ fingerprint applies to approval requests only). Nothing was renamed.
   arguments and fingerprint on the request, consumption by an identical replay in another
   key order, single use, exact fingerprint, expiry, whole-call refusal, approved actions
   count against the quota; invariant abort leaves no session; `stateOf`.
-- `tests/integration/budget/pipeline-consistency.test.ts` (4) — the stage inside the real
+- `tests/integration/budget/pipeline-consistency.test.ts` (5) — the stage inside the real
   `CallPipeline` with the store's `SqliteAuditWriter`: **`SUM(session_counters) ==
 COUNT(audit allowed)` per risk after a mixed run**, upstream failure keeps the credit, a
-  one-off mission's open-ended period, a mission with no session.
+  one-off mission's open-ended period, a mission with no session, granted claims
+  (`counted + credited == audited`).
 
 ## References
 
