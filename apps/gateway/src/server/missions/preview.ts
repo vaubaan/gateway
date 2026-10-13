@@ -24,6 +24,8 @@ import type {
 } from '@vaubaan/shared';
 import { GATES } from '@vaubaan/shared/domain';
 
+// The file, not the barrel: `catalog-authority.ts` is pure and browser-safe, the barrel is not.
+import { uncoveredRisks } from '../authority/catalog-authority';
 import { isResolvable } from './catalog-view';
 import type {
   CatalogRisk,
@@ -300,7 +302,13 @@ interface ClassifyInput {
 function classifyLines(lines: readonly DraftPolicyEntry[], input: ClassifyInput): LineBuckets {
   const { connection, selected, presetOnly, preset } = input;
   const catalog = new Map(connection.risks.map((r) => [r.risk_id, r]));
-  const held = new Set(connection.authority);
+  // Monotonicity (spec §3.1): the lines the creator's authority does not cover.
+  const outside = new Set(
+    uncoveredRisks(
+      { riskIds: connection.authority },
+      lines.map((line) => line.risk_id),
+    ),
+  );
   const seen = new Set<RiskId>();
   const buckets: LineBuckets = {
     passes: [],
@@ -326,7 +334,7 @@ function classifyLines(lines: readonly DraftPolicyEntry[], input: ClassifyInput)
       buckets.unknown.push(line.risk_id);
       continue;
     }
-    if (!held.has(line.risk_id)) {
+    if (outside.has(line.risk_id)) {
       if (presetOnly) {
         buckets.skipped.push({ risk_id: line.risk_id, reason: 'outside-authority', env: risk.env });
       } else buckets.exceeds.push(line.risk_id);

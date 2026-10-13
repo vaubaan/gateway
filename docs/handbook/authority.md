@@ -21,6 +21,7 @@ tracks:
   - apps/gateway/src/app/admin/(guarded)/connections/
   - apps/gateway/tests/integration/authority/
   - apps/gateway/tests/integration/store/ownership-and-orphans.test.ts
+  - apps/gateway/tests/integration/store/audit-guarded-append.test.ts
   - apps/gateway/tests/unit/structural/authority-not-snapshotted.test.ts
   - apps/gateway/tests/e2e/v5/share-and-orphan.spec.ts
 ---
@@ -55,7 +56,7 @@ other is stored:
 
 ```
 apps/gateway/src/server/authority/
-  catalog-authority.ts   fullCatalogRiskIds(), explicitRiskIdsOf()            (pure)
+  catalog-authority.ts   fullCatalogRiskIds(), explicitRiskIdsOf(), uncoveredRisks()   (pure, browser-safe)
   authority-service.ts   AuthorityService, ConnectionAuthorityService: authorityOf / connectionsOf / gapsOf
   mission-grounds.ts     MissionGrounds: check / inspect / derive / watchConnection / watchCreator; partitionOf()
   derived-missions.ts    derivedMissionReads(missions, grounds): a listing with the derived status
@@ -71,7 +72,7 @@ apps/gateway/src/server/shares/
   index.ts               createSharesModule(deps) → root.shares
 apps/gateway/src/server/groups/
   service.ts             GroupService: list / create / addMember / removeMember
-  errors.ts              GroupError, GROUP_ERROR_MESSAGES
+  errors.ts              GroupError, GROUP_ERROR_MESSAGES, GROUP_NAME_MAX_LENGTH
   handlers.ts            POST /admin/groups/create, …/<id>/members, …/<id>/members/<userId>/remove
   index.ts               createGroupsModule(deps) → root.groups
 apps/gateway/src/server/connections/service.ts
@@ -83,7 +84,19 @@ and hands it to the modules that check, derive or watch: `missions`
 (`authority.service`, and `authority.grounds` to derive), `requests` and
 `execution` (`authority.grounds`, to derive), `connections` and `shares`
 (`authority.grounds`, to watch), `groups` and `auth` (`authority.membership`),
-`oauth` (its mission listing wrapped by `derivedMissionReads`).
+`oauth` (its mission listing wrapped by `derivedMissionReads`). The management
+door receives no part of it: it is handed `missions.service` as a port
+(`compose/management.ts`) and reads every mission through it.
+
+`catalog-authority.ts` holds the two rules every other file reuses instead of
+restating them. **The enumeration** (`explicitRiskIdsOf` / `fullCatalogRiskIds`,
+spec §3.1): the catalog view of the pages (`missions/catalog-view.ts`,
+`enumerateCatalog`) is a projection of it, and a share restriction is validated
+against it, so the ids a page shows, the ids a share may carry and the ids an
+authority returns are one list by construction. **Monotonicity**
+(`uncoveredRisks(authority, requested)`, "asked minus held"): issuance sorts a
+draft's lines with it (`missions/preview.ts`, `classifyLines`) and `gapsOf`
+names what a share no longer covers with it.
 
 ## How it works
 
@@ -132,10 +145,12 @@ A share is `(connection, target, restriction)`; rows `shares` +
   does not own the connection now. A beneficiary therefore cannot share
   further, list or revoke (no transitive sharing, spec §11.2).
 - **The restriction is risks only**: no quantity, no gate, no resource.
-  `restrictionOf` refuses an empty list (`restriction-empty`) and any id that
+  `restrictionOf` refuses a connection whose provider has no registered plugin
+  (`provider-unknown`), an empty list (`restriction-empty`) and any id that
   is not an explicit id of the provider's catalog (`risk-unknown`, naming
   them) — a wildcard, a base id of an env-scoped entry, a preset name, a risk
-  of another provider. The store checks again (`assertKnownRiskIds`, and the
+  of another provider. The catalog it checks against is `fullCatalogRiskIds`,
+  the function `authorityOf` filters a share by. The store checks again (`assertKnownRiskIds`, and the
   `CHECK` of `share_restrictions`).
 - **One active share per `(connection, target)`.** `share()` calls
   `SharesRepo.replaceForTarget`: the previous active share of that target is
@@ -147,14 +162,24 @@ A share is `(connection, target, restriction)`; rows `shares` +
   user, or `target-unknown` / `target-ambiguous`) or a group by id (any group
   of the instance). The owning principal itself is refused (`target-is-owner`).
 - Refused on a `revoked` connection (`connection-revoked`) and on an
-  `unowned` one (`connection-unowned`; in practice nobody passes the owner
-  check there).
-- `revoke()` is terminal for the share and idempotent. `share()` and
+  `unowned` one (`connection-unowned`). Nobody passes the owner check on an
+  `unowned` connection, except a member who joined the emptied owner group
+  again: the connection stays `unowned` until the operator reassigns it, and
+  that member is the one who reads `connection-unowned`.
+- `revoke(actor, shareId, onConnectionId?)` is terminal for the share and
+  idempotent: a share already revoked is returned as it is, with no entry, and
+  so is one that another revocation won between this one's read and its
+  conditional `UPDATE` (the entry belongs to the act that revoked). The route
+  passes the connection of its URL as `onConnectionId`: a share of another
+  connection answers `not-found`, even to an owner of both. `share()` and
   `revoke()` both watch the missions of the connection across the act
   (`grounds.watchConnection`): the outcome carries `orphaned` (missions the
   change left ungrounded) and, for `share()`, `restored` (orphaned missions
   the new share covers again — they serve calls from then on). The notice
-  says both counts.
+  says both counts. The settlement runs in a `finally`: once the share or the
+  revocation is stored, the missions it orphaned or restored are settled even
+  when the act's own entry (`share-created`, `share-revoked`) cannot be
+  written; that failure still reaches the caller.
 - `received(actor)`: the active shares targeting the user or one of their
   current groups, each with `via` (`you` or `group <name>`) and the exact
   restriction; a risk the catalog dropped since is listed with `known: false`.
@@ -194,10 +219,18 @@ actor (`auditActorId(principal)`, so the bootstrap operator is `bootstrap`).
   (`name-taken`, `GroupsRepo.createLocal` returns `null`) and when it is the
   group of the admin rule (`name-reserved`).
 - `addMember(actorId, groupId, email)`: local groups only (`not-local`), a
-  known active user (`user-unknown`, `user-ambiguous`); idempotent. Returns
-  `restored`: the orphaned missions of that user the membership grounds again.
+  known active user (`user-unknown`, `user-ambiguous`); idempotent. Writes
+  `group-member-added` only when the membership was added
+  (`GroupsRepo.addMember` returns whether it was): adding a member who is one
+  already writes nothing. Returns `restored`: the orphaned missions of that
+  user the membership grounds again.
 - `removeMember(actorId, groupId, userId)`: writes `group-member-removed`.
   Returns `unowned` and `orphaned`.
+- Both settle in a `finally`: once the membership is stored, what it held is
+  settled (`markOwnerlessUnowned`, the grounds entries) even when the act's
+  own entry cannot be written. `unowned` is a stored state and does not depend
+  on another write succeeding; the failure of the entry still reaches the
+  caller.
 - Both wrap the edit in `MembershipSettler.watch(userId)` … `settle(actorId)`.
 
 There is no group deletion: a group that owns a connection or receives a
@@ -271,12 +304,13 @@ is ungrounded, with the reason (`cause`, `connectionId`, `uncovered`);
 `revoked` or `expired` is returned as it is, without a read. Nothing is
 written, and no administrative entry: no human is behind a read.
 
-| Reader                                                             | Call                                                                            |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| the execution door, every request                                  | `grounds.inspect` (`execution/door.ts`)                                         |
-| `MissionService`: list, detail, session page, gate, rotate, revoke | `grounds.inspect` (`ownInspected`, `list`)                                      |
-| `RequestService`: view, claim and approval decisions               | `grounds.derive` (`own`)                                                        |
-| the Delegations listing                                            | `derivedMissionReads(store.missions, grounds)`, wrapped by the composition root |
+| Reader                                                                                              | Call                                                                                                                                                                                                      |
+| --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| the execution door, every request                                                                   | `grounds.inspect` (`execution/door.ts`)                                                                                                                                                                   |
+| `MissionService`: list, detail, session page, gate, rotate, revoke, `draftFrom` / `duplicate`       | `grounds.inspect` (`ownInspected`, `list`)                                                                                                                                                                |
+| `RequestService`: view, claim and approval decisions                                                | `grounds.derive` (`own`)                                                                                                                                                                                  |
+| the Delegations listing                                                                             | `derivedMissionReads(store.missions, grounds)`, wrapped by the composition root                                                                                                                           |
+| the management door (`list_my_missions`, `issue_mission`, `rotate_mission_token`, `revoke_mission`) | none of its own: it is handed `MissionService` methods as a port (`compose/management.ts`, `managementMissionsOf`), so the state and `MissionOverview.orphan` reach `management/views.ts` already derived |
 
 A record loaded from `store.missions` carries the **stored** status. A new
 reader that shows or decides on the status must go through `inspect` /
@@ -321,12 +355,34 @@ connection_id, uncovered }`;
 | a sign-in (`completeLogin`, around the group sync) | `MembershipSettler.watch` (user)   | yes     | yes      | the user who signed in |
 
 The watch holds verdicts for the length of one act, for the audit only: no
-reader sees them. The watch and the act are not one transaction, so two
-concurrent acts on one mission may both record the same change; the state
-itself is never wrong, only an attribution can be doubled. A change made by a
-path no service watched (a repair in the database, a future import) is seen
-by every reader at once and has no administrative entry: the two acts of a
-mission need not come in pairs.
+reader sees them. The watch and the act are not one transaction, so two acts
+under way at once on one mission may both see the same change. **It is
+recorded once.** `settle` writes each entry through
+`AuditRepo.appendUnlessLatest(entry, { among, since })` ([store](store.md)),
+`among` being the two acts `mission-orphaned` and `mission-restored`: in one
+store transaction, the entry is held back when the mission's latest entry of
+those two acts is the same act **and** was written since this watch was taken
+(`since`). The act that settled first is the one the trail names; the other
+one writes nothing, and its outcome does not count that mission (`orphaned` /
+`restored` of a settlement list only the missions whose entry it wrote, so the
+notices of two acts do not both claim the change). An equal entry **older**
+than the watch does not hold a new one back: it records an earlier change (the
+restoration in between went unrecorded, or retention purged it), and a mission
+with no earlier entry is always written. The state itself is never concerned:
+every reader derives it.
+
+One case remains, marked `// single-process only` above `watch()` in
+`mission-grounds.ts`. When another act undoes the change before this one
+settles (A revokes a share, B shares again and settles, then A settles), A's
+watch sees the same verdict before and after and writes nothing: the trail
+holds a `mission-restored` with no `mission-orphaned` before it. It is not
+reachable while every store call is synchronous in one process; with a second
+process or an asynchronous driver it needs the watch, the act and the
+settlement in one store transaction.
+
+A change made by a path no service watched (a repair in the database, a
+future import) is seen by every reader at once and has no administrative
+entry: the two acts of a mission need not come in pairs.
 
 `MembershipSettler.watch(userId)` → `settle(actorId)` also runs
 `ConnectionsRepo.markOwnerlessUnowned()` (the one stored state here) and
@@ -412,26 +468,29 @@ A page that catches a service error matches it by shape (`isShareError(err,
 
 ### Tests
 
-| File                                                      | Covers                                                                                                                                          |
-| --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/server/authority/authority-service.test.ts`          | owner, union of shares, per-connection subsets, `gapsOf`, cheap path                                                                            |
-| `src/server/authority/mission-grounds.test.ts`            | every cause, partition, `inspect` / `derive`, watches, `MembershipSettler`, `derivedMissionReads`                                               |
-| `src/server/missions/orphan-reason.test.ts`               | the sentences of the mission page, per cause                                                                                                    |
-| `src/server/shares/*.test.ts`                             | restriction helpers, share service, error shape                                                                                                 |
-| `src/server/groups/service.test.ts`                       | local groups, admin rule and local groups, `findActiveUserByEmail`                                                                              |
-| `tests/integration/authority/share-and-orphan.test.ts`    | share → issue within R1 → exceed → revoke → orphaned → refused; lose → regain: same token, session, counters; revoked connection stays orphaned |
-| `tests/integration/authority/ownership.test.ts`           | transfer, unowned, reassignment (restores), a group claim missing at one sign-in then back at the next                                          |
-| `tests/integration/authority/handlers.test.ts`            | the form posts and their notices                                                                                                                |
-| `tests/integration/store/ownership-and-orphans.test.ts`   | the repository transitions; migration `0007` (reset, triggers)                                                                                  |
-| `tests/unit/structural/authority-not-snapshotted.test.ts` | spec §10: no state in the module, every check follows the store; no stored orphan verdict, every reader of a mission record classified          |
-| `tests/e2e/v5/share-and-orphan.spec.ts`                   | the dialog, Shares received, revocation, restoration by a new share, the ownership loop (browser)                                               |
+| File                                                      | Covers                                                                                                                                                                                                                                                       |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/server/authority/authority-service.test.ts`          | owner, union of shares, per-connection subsets, `gapsOf`, cheap path, `uncoveredRisks`                                                                                                                                                                       |
+| `src/server/authority/mission-grounds.test.ts`            | every cause (`connection-missing` included), partition, `inspect` / `derive`, watches, two acts under way at once (one change, one entry; an older equal entry does not hold a new one back; the mirror case), `MembershipSettler`, `derivedMissionReads`    |
+| `src/server/missions/orphan-reason.test.ts`               | the sentences of the mission page, per cause                                                                                                                                                                                                                 |
+| `src/server/shares/*.test.ts`                             | restriction helpers, share service (`connection-unowned`, `provider-unknown`, the route's connection, a revocation lost to another one, settlement when the entry fails), error shape                                                                        |
+| `src/server/groups/service.test.ts`                       | local groups (one entry per change, settlement when the entry fails), admin rule and local groups, `findActiveUserByEmail`                                                                                                                                   |
+| `src/server/missions/catalog-view.test.ts`                | the catalog view is the authority enumeration, an entry the authority cannot enumerate included                                                                                                                                                              |
+| `tests/integration/authority/share-and-orphan.test.ts`    | share → issue within R1 → exceed → revoke → orphaned → refused; lose → regain: same token, session, counters; revoked connection stays orphaned; a claim and an approval request on an orphaned mission expire on the normal delay ([requests](requests.md)) |
+| `tests/integration/authority/ownership.test.ts`           | transfer, unowned, reassignment (restores), a group claim missing at one sign-in then back at the next                                                                                                                                                       |
+| `tests/integration/authority/handlers.test.ts`            | the form posts and their notices                                                                                                                                                                                                                             |
+| `tests/integration/store/ownership-and-orphans.test.ts`   | the repository transitions; migration `0007` (reset, triggers)                                                                                                                                                                                               |
+| `tests/integration/store/audit-guarded-append.test.ts`    | `AuditRepo.appendUnlessLatest`: two writers, one entry; per object, within the guarded acts, not for an older equal entry                                                                                                                                    |
+| `tests/unit/structural/authority-not-snapshotted.test.ts` | spec §10: no state in the module, every check follows the store; no stored orphan verdict, every reader of a mission record classified                                                                                                                       |
+| `tests/e2e/v5/share-and-orphan.spec.ts`                   | the dialog, Shares received, revocation, restoration by a new share, the ownership loop (browser)                                                                                                                                                            |
 
 ## How to debug
 
 - **A mission answers `mission-inactive` / `orphaned`.** Its page
   (`/missions/<id>`) shows the cause as of that page load, the connection and
   the uncovered risks; `grounds.check(mission)` gives the same. Audit → the
-  mission: a `mission-orphaned` entry names the act and its author. No entry
+  mission: a `mission-orphaned` entry names the act and its author (when two
+  acts were under way at once, the one that settled first). No entry
   means no service watched the change: the instance log has `mission orphaned
 at the execution door` with the same fields. Do not look for `orphaned` in
   the `missions` table: the row is `active`.
@@ -470,14 +529,19 @@ with a local group`), and local membership does not count.
   `AuthorityBasis`.
 - **A new act that can remove or return an authority** takes the matching
   watch before it and settles it after, and is classified in
-  `tests/integration/audit/admin-mutations.test.ts`. Forgetting the watch
-  loses an audit entry, never the state.
+  `tests/integration/audit/admin-mutations.test.ts`. It settles in a `finally`
+  once its own write is stored. Forgetting the watch loses an audit entry,
+  never the state.
 - **A new reader of a mission's status** goes through `grounds.inspect` or
   `grounds.derive`, and is classified in `MISSION_READERS` of the structural
   test.
 - **Hosted deployment**: nothing here is process state. `gapsOf` costs one to
   three indexed reads per request; a shared cache in front of it would be the
-  snapshot the spec forbids.
+  snapshot the spec forbids. Two things assume one process today, both marked
+  in the code: the mirror case of the watch (above), and the order of the
+  trail that `appendUnlessLatest` reads (`ts`, then the id, which is insertion
+  order for one process). On Postgres its transaction must be `SERIALIZABLE`
+  or hold a per-mission advisory lock.
 
 ## Not built here
 

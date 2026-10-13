@@ -24,13 +24,20 @@ import type { AuditWriter } from '@vaubaan/gateway-core';
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 import type { RiskId } from '@vaubaan/shared';
 
-import { findActiveUserByEmail, principalLabel, type MissionGrounds } from '../authority';
+import {
+  findActiveUserByEmail,
+  fullCatalogRiskIds,
+  principalLabel,
+  type GroundsShift,
+  type MissionGrounds,
+} from '../authority';
 import { ConnectError, type Actor, type ConnectionService } from '../connections';
 import type { Logger } from '../logging';
 import { enumerateCatalog } from '../missions/catalog-view';
 import type { CatalogRisk } from '../missions/model';
 import type { Store } from '../store';
 import { toIso, type Clock } from '../store/clock';
+import { InvariantError } from '../store/errors';
 import type {
   ConnectionRecord,
   ConnectionResourceRecord,
@@ -156,24 +163,31 @@ export class ShareService {
       restriction,
       createdByUserId: actor.user.id,
     });
-    if (replaced) await this.auditRevoked(actor, replaced, { replaced_by: created.id });
-    await this.deps.audit.write({
-      kind: 'admin',
-      ts: this.nowIso(),
-      user_id: actor.user.id,
-      act: 'share-created',
-      object: { type: 'share', id: created.id },
-      before: replaced ? { share_id: replaced.id, restriction: replaced.restriction } : null,
-      after: {
-        connection_id: connection.id,
-        target: created.target,
-        restriction: created.restriction,
-      },
-      delegated_client_id: null,
-    });
+    // The share is stored: what it did to the missions is settled whether or not its
+    // own entries could be written (the failure, if any, still reaches the caller).
     // A replacement may have narrowed the restriction under missions already issued;
     // a share made again may ground missions that an earlier revocation orphaned.
-    const { orphaned, restored } = await watch.settle(actor.user.id);
+    let settled: GroundsShift;
+    try {
+      if (replaced) await this.auditRevoked(actor, replaced, { replaced_by: created.id });
+      await this.deps.audit.write({
+        kind: 'admin',
+        ts: this.nowIso(),
+        user_id: actor.user.id,
+        act: 'share-created',
+        object: { type: 'share', id: created.id },
+        before: replaced ? { share_id: replaced.id, restriction: replaced.restriction } : null,
+        after: {
+          connection_id: connection.id,
+          target: created.target,
+          restriction: created.restriction,
+        },
+        delegated_client_id: null,
+      });
+    } finally {
+      settled = await watch.settle(actor.user.id);
+    }
+    const { orphaned, restored } = settled;
     this.deps.logger.info('connection shared', {
       connection_id: connection.id,
       share_id: created.id,
@@ -196,17 +210,38 @@ export class ShareService {
    * Terminal for the share (spec §2.3). The missions it grounded read
    * `orphaned` until a new share covers them again.
    */
-  async revoke(actor: Actor, shareId: string): Promise<RevokeOutcome> {
+  async revoke(actor: Actor, shareId: string, onConnectionId?: string): Promise<RevokeOutcome> {
     const share = await this.deps.store.shares.getById(shareId);
     if (!share) throw new ShareError('not-found');
+    // A route names the connection in its URL: a share of another connection is not there.
+    if (onConnectionId !== undefined && share.connectionId !== onConnectionId) {
+      throw new ShareError('not-found');
+    }
     await this.owned(actor, share.connectionId);
     const targetLabel = await principalLabel(this.deps.store, share.target);
     if (share.status === 'revoked') return { share, targetLabel, orphaned: 0 };
 
     const watch = await this.deps.grounds.watchConnection(share.connectionId);
-    const revoked = await this.deps.store.shares.revoke(share.id);
-    await this.auditRevoked(actor, share, null);
-    const { orphaned } = await watch.settle(actor.user.id);
+    let revoked: ShareRecord;
+    try {
+      revoked = await this.deps.store.shares.revoke(share.id);
+    } catch (err) {
+      // Another revocation won between the read above and the conditional UPDATE: the
+      // share is revoked, by the act that wrote its entry. Same answer as a repeat.
+      const current =
+        err instanceof InvariantError ? await this.deps.store.shares.getById(share.id) : null;
+      if (current?.status !== 'revoked') throw err;
+      return { share: current, targetLabel, orphaned: 0 };
+    }
+    // The revocation is stored: the missions it orphaned are settled whether or not
+    // its own entry could be written (the failure, if any, still reaches the caller).
+    let settled: GroundsShift;
+    try {
+      await this.auditRevoked(actor, share, null);
+    } finally {
+      settled = await watch.settle(actor.user.id);
+    }
+    const { orphaned } = settled;
     this.deps.logger.info('share revoked', {
       connection_id: share.connectionId,
       share_id: share.id,
@@ -262,7 +297,9 @@ export class ShareService {
     if (!registered) throw new ShareError('provider-unknown');
     const asked = [...new Set(riskIds)];
     if (asked.length === 0) throw new ShareError('restriction-empty');
-    const catalog = enumerateCatalog(registered.plugin.catalog).map((risk) => risk.risk_id);
+    // The authority's own enumeration: what a share may carry and what an authority
+    // may return are one list (`authorityOf` filters a share by the same function).
+    const catalog = fullCatalogRiskIds(registered.plugin.catalog);
     const known = new Set(catalog);
     const unknown = asked.filter((id) => !known.has(id));
     if (unknown.length > 0) throw new ShareError('risk-unknown', unknown.join(', '));

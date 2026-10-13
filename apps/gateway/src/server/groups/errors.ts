@@ -12,11 +12,14 @@ export const GROUP_ERROR_CODES = [
   'user-ambiguous',
 ] as const;
 
+/** Longest name of a local group; the `name-invalid` sentence states it. */
+export const GROUP_NAME_MAX_LENGTH = 80;
+
 export type GroupErrorCode = (typeof GROUP_ERROR_CODES)[number];
 
 export const GROUP_ERROR_MESSAGES: Readonly<Record<GroupErrorCode, string>> = {
   'not-found': 'This group or this member does not exist.',
-  'name-invalid': 'A group name is 1 to 80 characters, without control characters.',
+  'name-invalid': `A group name is 1 to ${GROUP_NAME_MAX_LENGTH} characters, without control characters.`,
   'name-taken':
     'A group already has this name (local, or claimed by the identity provider). A name designates one group.',
   'name-reserved':

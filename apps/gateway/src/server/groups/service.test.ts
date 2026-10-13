@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   authorityRig,
@@ -86,11 +86,58 @@ describe('GroupService — local groups kept by the operator', () => {
       const [view] = await groups().list();
       expect(view?.members.map((m) => m.email)).toEqual(['ada@example.com', 'bob@example.com']);
       expect(view?.ownedConnections).toBe(0);
-      expect((await rig.adminEntries('group-member-added'))[0]).toMatchObject({
+      // One entry per change: the repeated addition of Bob wrote nothing.
+      const added = await rig.adminEntries('group-member-added');
+      expect(added).toHaveLength(2);
+      expect(added[0]).toMatchObject({
         user_id: op(),
         object: { type: 'group', id: group.id },
         after: { user_id: rig.bob.id, email: 'bob@example.com' },
       });
+      expect(added[1]).toMatchObject({ after: { user_id: rig.ada.id } });
+    });
+
+    it('settles a removal even when its own entry cannot be written: the emptied owner group leaves the connection unowned', async () => {
+      const group = await groups().create(op(), 'depot-admins');
+      await groups().addMember(op(), group.id, 'ada@example.com');
+      await rig.root.connections.service.transfer(
+        await rig.actor(rig.ada),
+        rig.connection.id,
+        group.id,
+      );
+      const mission = await rig.issueFor(rig.ada, [READ]);
+
+      vi.spyOn(rig.root.store.auditWriter, 'write').mockRejectedValueOnce(new Error('audit down'));
+      await expect(groups().removeMember(op(), group.id, rig.ada.id)).rejects.toThrow('audit down');
+
+      // The membership is gone; what it held was settled all the same.
+      expect(await rig.root.store.groups.listMembers(group.id)).toEqual([]);
+      expect((await rig.root.store.connections.getById(rig.connection.id))?.status).toBe('unowned');
+      expect(await rig.adminEntries('group-member-removed')).toEqual([]);
+      expect(await rig.adminEntries('mission-orphaned')).toMatchObject([
+        { user_id: op(), object: { id: mission.mission.id } },
+      ]);
+    });
+
+    it('settles an addition even when its own entry cannot be written', async () => {
+      const group = await groups().create(op(), 'platform');
+      await rig.root.shares.service.share(await rig.actor(rig.ada), rig.connection.id, {
+        target: { kind: 'group', groupId: group.id },
+        riskIds: [READ],
+      });
+      await groups().addMember(op(), group.id, 'bob@example.com');
+      const mission = await rig.issueFor(rig.bob, [READ]);
+      await groups().removeMember(op(), group.id, rig.bob.id);
+      expect(await rig.statusOf(mission)).toBe('orphaned');
+
+      vi.spyOn(rig.root.store.auditWriter, 'write').mockRejectedValueOnce(new Error('audit down'));
+      await expect(groups().addMember(op(), group.id, 'bob@example.com')).rejects.toThrow(
+        'audit down',
+      );
+      expect(await rig.statusOf(mission)).toBe('active');
+      expect(await rig.adminEntries('mission-restored')).toMatchObject([
+        { user_id: op(), object: { id: mission.mission.id } },
+      ]);
     });
 
     it('refuses an email nobody signed in with, and a group that does not exist', async () => {

@@ -56,5 +56,6 @@ export {
   GroupService,
   type GroupServiceDeps,
   type GroupView,
+  type MemberAddition,
   type MemberRemoval,
 } from './service';

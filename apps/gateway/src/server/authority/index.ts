@@ -18,8 +18,12 @@ import { MissionGrounds } from './mission-grounds';
 export interface AuthorityModuleDeps {
   readonly store: Pick<
     Store,
-    'users' | 'groups' | 'connections' | 'shares' | 'missions' | 'auditWriter'
-  >;
+    'users' | 'groups' | 'connections' | 'shares' | 'missions' | 'audit'
+  > &
+    // Accepted and unused: the grounds entries go to `store.audit` (the idempotent write
+    // reads the trail). Kept so a caller that still hands over its own writer compiles
+    // (`connections/testing.ts`); to drop once that harness passes the store as it is.
+    Partial<Pick<Store, 'auditWriter'>>;
   readonly registry: PluginRegistry;
   readonly logger: Logger;
   readonly clock?: Clock;
@@ -44,7 +48,7 @@ export function createAuthorityModule(deps: AuthorityModuleDeps): AuthorityModul
     authority: service,
     missions: deps.store.missions,
     connections: deps.store.connections,
-    audit: deps.store.auditWriter,
+    audit: deps.store.audit,
     clock: deps.clock ?? systemClock,
     logger,
   });
@@ -58,7 +62,6 @@ export function createAuthorityModule(deps: AuthorityModuleDeps): AuthorityModul
 
 export {
   ConnectionAuthorityService,
-  uncoveredRisks,
   type AuthorityBasis,
   type AuthorityGap,
   type AuthorityGaps,
@@ -69,7 +72,7 @@ export {
   type ConnectionAuthority,
   type ConnectionAuthorityDeps,
 } from './authority-service';
-export { explicitRiskIdsOf, fullCatalogRiskIds } from './catalog-authority';
+export { explicitRiskIdsOf, fullCatalogRiskIds, uncoveredRisks } from './catalog-authority';
 export { derivedMissionReads, type DerivedMissionReads } from './derived-missions';
 export {
   MembershipSettler,

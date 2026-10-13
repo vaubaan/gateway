@@ -22,14 +22,18 @@
  */
 import type { AuditWriter } from '@vaubaan/gateway-core';
 
-import { findActiveUserByEmail, type MembershipSettler } from '../authority';
+import {
+  findActiveUserByEmail,
+  type MembershipSettlement,
+  type MembershipSettler,
+} from '../authority';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
 import { toIso, type Clock } from '../store/clock';
 import type { GroupRecord, UserRecord } from '../store/types';
-import { GroupError } from './errors';
+import { GROUP_NAME_MAX_LENGTH, GroupError } from './errors';
 
-export const GROUP_NAME_MAX_LENGTH = 80;
+export { GROUP_NAME_MAX_LENGTH };
 // eslint-disable-next-line no-control-regex -- refusing control characters is the point
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
 
@@ -117,17 +121,27 @@ export class GroupService {
     }
     const { user } = lookup;
     const watch = await this.deps.membership.watch(user.id);
-    await this.deps.store.groups.addMember(group.id, user.id);
-    await this.audit(actorId, 'group-member-added', group, null, {
-      user_id: user.id,
-      email: user.email,
-    });
-    const settlement = await watch.settle(actorId);
-    this.deps.logger.info('local group member added', {
-      group_id: group.id,
-      user_id: user.id,
-      missions_restored: settlement.restored.length,
-    });
+    // One entry per change: adding a member who is one already writes nothing.
+    const added = await this.deps.store.groups.addMember(group.id, user.id);
+    // Settled whether or not the entry below could be written: the membership is stored.
+    let settlement: MembershipSettlement;
+    try {
+      if (added) {
+        await this.audit(actorId, 'group-member-added', group, null, {
+          user_id: user.id,
+          email: user.email,
+        });
+      }
+    } finally {
+      settlement = await watch.settle(actorId);
+    }
+    if (added) {
+      this.deps.logger.info('local group member added', {
+        group_id: group.id,
+        user_id: user.id,
+        missions_restored: settlement.restored.length,
+      });
+    }
     return { group, user, restored: settlement.restored.length };
   }
 
@@ -143,16 +157,23 @@ export class GroupService {
     if (!(await this.deps.store.groups.removeMember(group.id, userId))) {
       throw new GroupError('not-found');
     }
-    // Audited before the settlement: the removal is done whatever happens next, and each
-    // orphaned mission gets its own `mission-orphaned` entry.
-    await this.audit(
-      actorId,
-      'group-member-removed',
-      group,
-      { user_id: user.id, email: user.email },
-      null,
-    );
-    const settlement = await watch.settle(actorId);
+    // Audited before the settlement: each orphaned mission gets its own
+    // `mission-orphaned` entry after it. The removal is stored whatever happens next,
+    // so the settlement runs even when this entry cannot be written: `unowned` is a
+    // stored state and must not depend on another write succeeding. The failure of
+    // the entry, if any, still reaches the caller.
+    let settlement: MembershipSettlement;
+    try {
+      await this.audit(
+        actorId,
+        'group-member-removed',
+        group,
+        { user_id: user.id, email: user.email },
+        null,
+      );
+    } finally {
+      settlement = await watch.settle(actorId);
+    }
     this.deps.logger.info('local group member removed', {
       group_id: group.id,
       user_id: user.id,

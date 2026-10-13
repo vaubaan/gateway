@@ -1,4 +1,4 @@
-import { RISK_VECTOR_AXES } from '@vaubaan/shared';
+import { RISK_VECTOR_AXES, type RiskCatalog } from '@vaubaan/shared';
 import { describe, expect, it } from 'vitest';
 
 import { fullCatalogRiskIds } from '../authority';
@@ -32,6 +32,21 @@ describe('enumerateCatalog', () => {
   it('is the same enumeration as the owner authority, with no wildcard', () => {
     expect(rows.map((r) => r.risk_id)).toEqual(fullCatalogRiskIds(ACME_CATALOG));
     expect(rows.every((r) => !/[*?]/.test(r.risk_id))).toBe(true);
+  });
+
+  it('is built on the authority enumeration: an entry the authority cannot enumerate has no row', () => {
+    // An env-scoped entry whose id does not parse. A loaded catalog never holds one;
+    // the two enumerations must still agree on it, by construction.
+    const [, envScoped] = ACME_CATALOG.risks;
+    if (!envScoped) throw new Error('fixture: the second entry is env-scoped');
+    const malformed: RiskCatalog = {
+      provider: 'acme',
+      risks: [...ACME_CATALOG.risks, { ...envScoped, id: 'not a risk id' }],
+    };
+    expect(fullCatalogRiskIds(malformed)).toEqual(fullCatalogRiskIds(ACME_CATALOG));
+    expect(enumerateCatalog(malformed).map((r) => r.risk_id)).toEqual(
+      fullCatalogRiskIds(malformed),
+    );
   });
 
   it('carries the base id, the env, the flags and the rate ceiling', () => {

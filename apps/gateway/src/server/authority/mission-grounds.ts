@@ -37,13 +37,16 @@
  *                        taken before the act and again by `settle(actorId)`
  *                        after it, and each mission whose verdict changed
  *                        gets one entry naming that human: `mission-orphaned`
- *                        or `mission-restored`.
+ *                        or `mission-restored`. The entry is written through
+ *                        `AuditRepo.appendUnlessLatest`: a change another act
+ *                        already recorded while this one was under way is
+ *                        not recorded a second time.
  */
-import type { AuditWriter } from '@vaubaan/gateway-core';
 import type { RiskId } from '@vaubaan/shared';
 import { parseRiskId } from '@vaubaan/shared/risk-id';
 
 import type { Logger } from '../logging';
+import type { AuditRepo } from '../store/repositories/audit';
 import type { ConnectionsRepo } from '../store/repositories/connections';
 import type { MissionsRepo } from '../store/repositories/missions';
 import { toIso, type Clock } from '../store/clock';
@@ -96,10 +99,15 @@ export interface MissionGroundsDeps {
   readonly authority: AuthorityRecheck;
   readonly missions: Pick<MissionsRepo, 'listForConnection' | 'listForCreator'>;
   readonly connections: Pick<ConnectionsRepo, 'getById'>;
-  readonly audit: AuditWriter;
+  /** The trail itself, not the `AuditWriter`: the write is conditional on its latest entry. */
+  readonly audit: Pick<AuditRepo, 'appendUnlessLatest'>;
   readonly clock: Clock;
   readonly logger: Logger;
 }
+
+/** The two acts that alternate on a mission; the idempotent write compares within them. */
+const GROUNDS_ACTS = ['mission-orphaned', 'mission-restored'] as const;
+type GroundsAct = (typeof GROUNDS_ACTS)[number];
 
 const GROUNDED: GroundsVerdict = { grounded: true };
 const NO_SHIFT: GroundsShift = { orphaned: [], restored: [] };
@@ -174,7 +182,17 @@ export class MissionGrounds {
     return this.watch(() => this.deps.missions.listForCreator(userId));
   }
 
+  // single-process only: watch → act → settle is not one transaction. Two acts under
+  // way at once that both see one change record it once (`AuditRepo.appendUnlessLatest`
+  // holds the second entry back). The mirror case remains: when another act undoes the
+  // change before this one settles, this watch sees the same verdict before and after
+  // and writes nothing, so the trail can hold a `mission-restored` with no
+  // `mission-orphaned` before it (or the reverse). Not reachable while every store call
+  // is synchronous in one process; with a second process or an asynchronous driver,
+  // replace with a store transaction spanning the watch, the act and the settlement
+  // (a `Store.transaction(fn)` unit of work the services would run their act in).
   private async watch(list: () => Promise<MissionRecord[]>): Promise<GroundsWatch> {
+    const since = toIso(this.deps.clock.now());
     const before = await this.verdictsOf(await list());
     return {
       settle: async (actorId) => {
@@ -188,13 +206,12 @@ export class MissionGrounds {
           if (!was || mission.status !== 'active') continue;
           const now = await this.check(mission);
           if (was.grounded === now.grounded) continue;
-          if (now.grounded) {
-            await this.record(mission, 'mission-restored', actorId, was, now);
-            restored.push(mission);
-          } else {
-            await this.record(mission, 'mission-orphaned', actorId, was, now);
-            orphaned.push({ ...mission, status: 'orphaned' });
-          }
+          const act: GroundsAct = now.grounded ? 'mission-restored' : 'mission-orphaned';
+          // Counted only when this act's entry was written: a change another act
+          // recorded since the watch was taken is theirs, in the trail and in the notice.
+          if (!(await this.record(mission, act, actorId, was, now, since))) continue;
+          if (now.grounded) restored.push(mission);
+          else orphaned.push({ ...mission, status: 'orphaned' });
         }
         return { orphaned, restored };
       },
@@ -213,28 +230,41 @@ export class MissionGrounds {
     return verdicts;
   }
 
+  /**
+   * Writes the entry unless the mission's latest grounds entry is the same act and
+   * was written since `watchedSince`: then another act recorded this very change.
+   * An equal entry from before the watch is an earlier change (the one in between
+   * went unrecorded, or was purged), and does not hold this one back. Returns
+   * whether the entry was written.
+   */
   private async record(
     mission: MissionRecord,
-    act: 'mission-orphaned' | 'mission-restored',
+    act: GroundsAct,
     actorId: string,
     before: GroundsVerdict,
     after: GroundsVerdict,
-  ): Promise<void> {
+    watchedSince: string,
+  ): Promise<boolean> {
+    const written = await this.deps.audit.appendUnlessLatest(
+      {
+        kind: 'admin',
+        ts: toIso(this.deps.clock.now()),
+        user_id: actorId,
+        act,
+        object: { type: 'mission', id: mission.id },
+        before: stateOf(before),
+        after: stateOf(after),
+        delegated_client_id: null,
+      },
+      { among: GROUNDS_ACTS, since: watchedSince },
+    );
+    if (written === null) return false;
     this.deps.logger.warn(act === 'mission-orphaned' ? 'mission orphaned' : 'mission restored', {
       mission_id: mission.id,
       actor_id: actorId,
       ...reasonFields(before.grounded ? after : before),
     });
-    await this.deps.audit.write({
-      kind: 'admin',
-      ts: toIso(this.deps.clock.now()),
-      user_id: actorId,
-      act,
-      object: { type: 'mission', id: mission.id },
-      before: stateOf(before),
-      after: stateOf(after),
-      delegated_client_id: null,
-    });
+    return true;
   }
 }
 

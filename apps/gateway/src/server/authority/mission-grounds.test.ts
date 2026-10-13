@@ -1,4 +1,4 @@
-import { MemoryAuditWriter } from '@vaubaan/gateway-core';
+import type { AdminAuditEntry } from '@vaubaan/gateway-core';
 import { PluginRegistry } from '@vaubaan/plugin-sdk';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -13,6 +13,7 @@ import type { ConnectionRecord, MissionRecord, Principal, UserRecord } from '../
 import {
   createAuthorityModule,
   derivedMissionReads,
+  MissionGrounds,
   partitionOf,
   type AuthorityModule,
 } from './index';
@@ -24,7 +25,7 @@ const OTHER_READ = 'other.read-things';
 
 describe('MissionGrounds — the `orphaned` derivation', () => {
   let store: Store;
-  let audit: MemoryAuditWriter;
+  let clock: ManualClock;
   let authority: AuthorityModule;
   let ada: UserRecord;
   let bob: UserRecord;
@@ -38,13 +39,8 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
       encryptor: new StubEncryptor(),
       catalog: new RegistryCatalogIndex(registry),
     });
-    audit = new MemoryAuditWriter();
-    authority = createAuthorityModule({
-      store: { ...store, auditWriter: audit },
-      registry,
-      logger: silentLogger,
-      clock: new ManualClock(),
-    });
+    clock = new ManualClock();
+    authority = createAuthorityModule({ store, registry, logger: silentLogger, clock });
     ada = await store.users.upsertFromIdp({ subject: 'idp|ada', email: 'ada@example.com' });
     bob = await store.users.upsertFromIdp({ subject: 'idp|bob', email: 'bob@example.com' });
   });
@@ -85,6 +81,12 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
         gate: 'auto',
       })),
     });
+
+  /** The administrative entries of the trail, oldest first. */
+  const adminTrail = async (): Promise<AdminAuditEntry[]> =>
+    (await store.audit.list({ kind: 'admin' })).filter(
+      (entry): entry is Extract<typeof entry, { kind: 'admin' }> => entry.kind === 'admin',
+    );
 
   const reread = async (m: MissionRecord) => (await store.missions.getById(m.id))!;
   const user = (u: UserRecord): Principal => ({ kind: 'user', id: u.id });
@@ -159,6 +161,26 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
       expect(await authority.grounds.check(m)).toEqual({ grounded: true });
     });
 
+    it('connection-missing: a connection of the mission is no longer in the store', async () => {
+      const connection = await connect(user(ada));
+      const m = await mission(ada, [connection], [READ]);
+      const grounds = new MissionGrounds({
+        authority: authority.service,
+        missions: store.missions,
+        connections: { getById: async () => null },
+        audit: store.audit,
+        clock,
+        logger: silentLogger,
+      });
+      expect(await grounds.check(m)).toEqual({
+        grounded: false,
+        cause: 'connection-missing',
+        connectionId: connection.id,
+        uncovered: [],
+      });
+      expect((await grounds.inspect(m)).orphan?.cause).toBe('connection-missing');
+    });
+
     it('creator-removed: the creator vanished from the IdP', async () => {
       const connection = await connect(user(ada));
       const m = await mission(ada, [connection], [READ]);
@@ -216,7 +238,7 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
       });
       // No human is behind a read: the store still holds `active`, untouched.
       expect(await reread(m)).toEqual(m);
-      expect(audit.admin).toEqual([]);
+      expect(await adminTrail()).toEqual([]);
     });
 
     it('is reversible: the same mission reads active again once the authority is back', async () => {
@@ -228,7 +250,7 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
 
       await share(connection, user(bob), [READ]);
       expect(await authority.grounds.derive(await reread(m))).toEqual(m);
-      expect(audit.admin).toEqual([]);
+      expect(await adminTrail()).toEqual([]);
     });
 
     it('stays orphaned on a revoked connection whatever is shared afterwards', async () => {
@@ -289,7 +311,7 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
       expect(shift.restored).toEqual([]);
       expect((await reread(lost)).status).toBe('active');
       expect((await authority.grounds.derive(await reread(owners))).status).toBe('active');
-      expect(audit.admin).toEqual([
+      expect(await adminTrail()).toEqual([
         expect.objectContaining({
           user_id: ada.id,
           act: 'mission-orphaned',
@@ -318,7 +340,7 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
       expect(shift.orphaned).toEqual([]);
       expect(shift.restored.map((x) => x.id)).toEqual([m.id]);
       expect(shift.restored[0]?.status).toBe('active');
-      expect(audit.admin).toEqual([
+      expect(await adminTrail()).toEqual([
         expect.objectContaining({
           user_id: ada.id,
           act: 'mission-restored',
@@ -346,7 +368,7 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
       await store.shares.revoke(granted.id);
       await share(connection, user(bob), [READ, WRITE_STAGING]);
       expect(await replaced.settle(ada.id)).toEqual({ orphaned: [], restored: [] });
-      expect(audit.admin).toEqual([]);
+      expect(await adminTrail()).toEqual([]);
     });
 
     it('leaves out a mission revoked during the act, and one that was not active before it', async () => {
@@ -360,7 +382,7 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
       await store.shares.revoke(granted.id);
       await store.missions.setStatus(revokedMeanwhile.id, 'revoked');
       expect(await watch.settle(ada.id)).toEqual({ orphaned: [], restored: [] });
-      expect(audit.admin).toEqual([]);
+      expect(await adminTrail()).toEqual([]);
     });
 
     it('watchCreator follows the missions of that user only, in both directions', async () => {
@@ -379,10 +401,94 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
       await store.groups.addMember(group.id, bob.id);
       expect((await returning.settle('operator')).restored.map((m) => m.id)).toEqual([bobs.id]);
 
-      expect(audit.admin.map((entry) => [entry.act, entry.user_id, entry.object.id])).toEqual([
+      expect(
+        (await adminTrail()).map((entry) => [entry.act, entry.user_id, entry.object.id]),
+      ).toEqual([
         ['mission-orphaned', 'operator', bobs.id],
         ['mission-restored', 'operator', bobs.id],
       ]);
+    });
+  });
+
+  describe('two acts under way at once — one change, one entry', () => {
+    it('two watches taken before two acts record one mission-orphaned, naming the act that settled first', async () => {
+      const connection = await connect(user(ada));
+      const granted = await share(connection, user(bob), [READ]);
+      const m = await mission(bob, [connection], [READ]);
+
+      // Both watches see the mission grounded: the owner's revocation and Bob's sign-in.
+      const revocation = await authority.grounds.watchConnection(connection.id);
+      const signIn = await authority.grounds.watchCreator(bob.id);
+      clock.advance(1_000);
+      await store.shares.revoke(granted.id);
+      const first = await revocation.settle(ada.id);
+      clock.advance(1_000);
+      // The sign-in changed nothing that mattered; it settles second.
+      const second = await signIn.settle(bob.id);
+
+      expect(first.orphaned.map((x) => x.id)).toEqual([m.id]);
+      expect(second).toEqual({ orphaned: [], restored: [] });
+      expect((await adminTrail()).map((e) => [e.act, e.user_id, e.object.id])).toEqual([
+        ['mission-orphaned', ada.id, m.id],
+      ]);
+    });
+
+    it('two watches taken before two acts record one mission-restored', async () => {
+      const group = await store.groups.getOrCreate('admins', 'local');
+      const connection = await connect({ kind: 'group', id: group.id });
+      await store.groups.addMember(group.id, ada.id);
+      const m = await mission(bob, [connection], [READ]);
+
+      const sharing = await authority.grounds.watchConnection(connection.id);
+      const joining = await authority.grounds.watchCreator(bob.id);
+      await share(connection, user(bob), [READ]);
+      await store.groups.addMember(group.id, bob.id);
+      const first = await sharing.settle(ada.id);
+      const second = await joining.settle('operator');
+
+      expect(first.restored.map((x) => x.id)).toEqual([m.id]);
+      expect(second).toEqual({ orphaned: [], restored: [] });
+      expect((await adminTrail()).map((e) => [e.act, e.user_id])).toEqual([
+        ['mission-restored', ada.id],
+      ]);
+    });
+
+    it('an equal entry older than the watch does not hold a new change back', async () => {
+      const connection = await connect(user(ada));
+      const granted = await share(connection, user(bob), [READ]);
+      const m = await mission(bob, [connection], [READ]);
+
+      const revoking = await authority.grounds.watchConnection(connection.id);
+      await store.shares.revoke(granted.id);
+      await revoking.settle(ada.id);
+      // The authority comes back by a path nothing watched: no `mission-restored`.
+      clock.advance(60_000);
+      const again = await share(connection, user(bob), [READ]);
+      clock.advance(60_000);
+
+      const second = await authority.grounds.watchConnection(connection.id);
+      await store.shares.revoke(again.id);
+      expect((await second.settle(ada.id)).orphaned.map((x) => x.id)).toEqual([m.id]);
+      expect((await adminTrail()).map((e) => e.act)).toEqual([
+        'mission-orphaned',
+        'mission-orphaned',
+      ]);
+    });
+
+    it('the mirror case writes nothing: a change undone before the settlement leaves no entry of this act', async () => {
+      const connection = await connect(user(ada));
+      const granted = await share(connection, user(bob), [READ]);
+      await mission(bob, [connection], [READ]);
+
+      const revoking = await authority.grounds.watchConnection(connection.id);
+      await store.shares.revoke(granted.id);
+      // Another act, complete before this one settles, restores the mission.
+      const restoring = await authority.grounds.watchConnection(connection.id);
+      await share(connection, user(bob), [READ]);
+      await restoring.settle('operator');
+      expect(await revoking.settle(ada.id)).toEqual({ orphaned: [], restored: [] });
+      // Known limit (single-process only): a `mission-restored` with no `mission-orphaned`.
+      expect((await adminTrail()).map((e) => e.act)).toEqual(['mission-restored']);
     });
   });
 

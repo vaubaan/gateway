@@ -25,7 +25,8 @@ export interface GroupsRepo {
    * local group is skipped and returned in `skipped`.
    */
   syncIdpMemberships(userId: string, names: readonly string[]): Promise<{ skipped: string[] }>;
-  addMember(groupId: string, userId: string): Promise<void>;
+  /** Idempotent. `true` when the membership was added, `false` when it already existed. */
+  addMember(groupId: string, userId: string): Promise<boolean>;
   removeMember(groupId: string, userId: string): Promise<boolean>;
   listMembers(groupId: string): Promise<UserRecord[]>;
   memberCount(groupId: string): Promise<number>;
@@ -151,7 +152,7 @@ export function createGroupsRepo(ctx: RepoContext): GroupsRepo {
     },
     async addMember(groupId, userId) {
       requireGroup(groupId);
-      addMemberStmt.run(groupId, userId, nowIso(ctx));
+      return addMemberStmt.run(groupId, userId, nowIso(ctx)).changes > 0;
     },
     async removeMember(groupId, userId) {
       return removeMemberStmt.run(groupId, userId).changes > 0;
