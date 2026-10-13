@@ -7,7 +7,7 @@
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import type { Authenticator } from '../auth/authenticator';
-import type { MissionGrounds } from '../authority';
+import type { AuthorityService, MissionGrounds } from '../authority';
 import type { InstanceConfig } from '../config/types';
 import type { ConnectionsModule } from '../connections';
 import type { Logger } from '../logging';
@@ -21,6 +21,7 @@ export interface SharesModuleDeps {
   readonly store: Store;
   readonly registry: PluginRegistry;
   readonly connections: Pick<ConnectionsModule, 'service' | 'notices'>;
+  readonly authority: Pick<AuthorityService, 'authorityOf'>;
   readonly grounds: Pick<MissionGrounds, 'watchConnection'>;
   readonly authenticator: Authenticator;
   readonly logger: Logger;
@@ -38,6 +39,7 @@ export function createSharesModule(deps: SharesModuleDeps): SharesModule {
     store: deps.store,
     registry: deps.registry,
     connections: deps.connections.service,
+    authority: deps.authority,
     grounds: deps.grounds,
     audit: deps.store.auditWriter,
     clock: deps.clock ?? systemClock,

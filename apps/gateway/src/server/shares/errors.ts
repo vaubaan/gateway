@@ -27,7 +27,8 @@ export const SHARE_ERROR_MESSAGES: Readonly<Record<ShareErrorCode, string>> = {
     'Nobody matches this target. A user is known to the instance once they have signed in; a group must exist.',
   'target-ambiguous':
     'Several users carry this email. Ask an operator to share through a group instead.',
-  'target-is-owner': 'The target already owns this connection and needs no share.',
+  'target-is-owner':
+    'The target already owns this connection — as its owner, or as a member of the group that owns it — and needs no share.',
   'restriction-empty': 'Tick at least one risk: an empty restriction authorizes nothing.',
   'risk-unknown': "Some risks are not in this provider's catalog; nothing was shared.",
 };

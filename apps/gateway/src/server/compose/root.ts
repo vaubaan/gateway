@@ -295,6 +295,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     store,
     registry,
     connections,
+    authority: authority.service,
     grounds: authority.grounds,
     authenticator: auth.authenticator,
     logger,
