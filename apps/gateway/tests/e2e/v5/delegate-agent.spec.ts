@@ -183,7 +183,7 @@ test('an agent obtains a delegation, prepares and issues a mission, and the user
   await expect(page.locator('main')).toContainText('It is not verified');
   await expect(page.locator('main')).toContainText('127.0.0.1:43217');
   await expect(page.locator('main')).toContainText('mgmt');
-  await expect(page.locator('main')).toContainText('answer a request');
+  await expect(page.locator('main')).toContainText('answer what waits for you');
   await expect(page.getByRole('button')).toHaveText(['Deny', 'Authorize']);
   await snap(page, 'delegate-consent');
 

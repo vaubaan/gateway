@@ -7,7 +7,9 @@
  * A plain form post to `POST /api/requests/<id>/decide`: the server checks the
  * answer again and redirects back to the request. Only the fields of the
  * chosen answer are sent (the endpoint refuses any other), and a date is sent
- * as the instant the person meant in their own time zone.
+ * as the instant the person meant in their own time zone. The radios and the
+ * visible fields carry no name the form would send: they validate, the hidden
+ * fields are what is posted.
  */
 import { useId, useState } from 'react';
 
@@ -57,6 +59,7 @@ export function LimitAnswer({
   const quota = choices.find((choice) => choice.resolution === 'extend-quota');
   const [amount, setAmount] = useState(String(quota?.maxAmount ?? 1));
   const [end, setEnd] = useState('');
+  const formId = useId();
   const amountId = useId();
   const endId = useId();
 
@@ -70,12 +73,8 @@ export function LimitAnswer({
       : labelOf(chosen);
 
   return (
-    <form method="post" action={`/api/requests/${requestId}/decide`} data-testid="limit-answer">
-      <input type="hidden" name="resolution" value={chosen} />
-      {chosen === 'extend-quota' && <input type="hidden" name="amount" value={amount} />}
-      {chosen === 'extend-expiry' && endInstant && (
-        <input type="hidden" name="expires_at" value={endInstant} />
-      )}
+    <div data-testid="limit-answer">
+      {/* The choice is outside the form: the endpoint refuses any field it does not expect. */}
       <fieldset className={styles.choices} aria-label="How to answer">
         {choices.map((choice) => {
           const disabled = choice.unavailable !== null;
@@ -110,6 +109,7 @@ export function LimitAnswer({
                     max={choice.maxAmount}
                     value={amount}
                     onChange={(event) => setAmount(event.target.value)}
+                    form={formId}
                     required
                     className={styles.amount}
                   />
@@ -125,6 +125,7 @@ export function LimitAnswer({
                     min={choice.after ? localMinute(choice.after) : undefined}
                     value={end}
                     onChange={(event) => setEnd(event.target.value)}
+                    form={formId}
                     required
                     className={styles.end}
                   />
@@ -134,11 +135,18 @@ export function LimitAnswer({
           );
         })}
       </fieldset>
-      <DecideBar>
-        <Button type="submit" variant={chosen === 'refuse' ? 'secondary' : 'primary'} size="lg">
-          {submitLabel}
-        </Button>
-      </DecideBar>
-    </form>
+      <form id={formId} method="post" action={`/api/requests/${requestId}/decide`}>
+        <input type="hidden" name="resolution" value={chosen} />
+        {chosen === 'extend-quota' && <input type="hidden" name="amount" value={amount} />}
+        {chosen === 'extend-expiry' && endInstant && (
+          <input type="hidden" name="expires_at" value={endInstant} />
+        )}
+        <DecideBar>
+          <Button type="submit" variant={chosen === 'refuse' ? 'secondary' : 'primary'} size="lg">
+            {submitLabel}
+          </Button>
+        </DecideBar>
+      </form>
+    </div>
   );
 }

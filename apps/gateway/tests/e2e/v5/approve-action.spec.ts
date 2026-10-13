@@ -49,6 +49,16 @@ async function freshPage(browser: Browser): Promise<Page> {
   return context.newPage();
 }
 
+/** Opens "the fingerprint and what the call touches" of a request page, unless it is open already. */
+async function showCallDetails(page: Page): Promise<void> {
+  const fingerprint = page.getByTestId('approval-fingerprint');
+  await page.waitForLoadState('networkidle');
+  if (!(await fingerprint.isVisible())) {
+    await page.getByRole('button', { name: /^Show the fingerprint/ }).click();
+  }
+  await expect(fingerprint).toBeVisible();
+}
+
 function approvalRequired(outcome: CallOutcome): Refusal {
   if (outcome.outcome !== 'refused') throw new Error('the gated call was allowed');
   expect(outcome.refusal.code).toBe('approval-required');
@@ -108,7 +118,7 @@ test('a gated action of the developer preset: refused, approved by its creator o
   await expect(bob.getByText('This request is addressed to its creator.')).toBeVisible();
   for (const detail of [MARKER, TOOL, MISSION]) expect(await bob.content()).not.toContain(detail);
   await bob.goto('/waiting');
-  await expect(bob.getByText('Nothing awaits you.')).toBeVisible();
+  await expect(bob.getByTestId('waiting-empty')).toContainText('Nothing waits for you.');
   await bob.context().close();
 
   // ── The creator opens it, not signed in yet ─────────────────────────────
@@ -116,73 +126,96 @@ test('a gated action of the developer preset: refused, approved by its creator o
   const hedy = await freshPage(browser);
   await hedy.goto(approvalUrl);
   await expect(hedy).toHaveURL(/\/waiting\/[0-9a-f-]{36}$/);
-  await expect(hedy.getByRole('heading', { name: `Approval request on ${MISSION}` })).toBeVisible();
-  await expect(hedy.getByText(E2E_APPROVER_USER.email)).toBeVisible();
+  await expect(hedy.getByRole('heading', { name: 'Waiting for you', level: 1 })).toBeVisible();
+  await expect(hedy.getByTestId('user-menu')).toContainText(E2E_APPROVER_USER.email);
 
-  // The tool, the arguments in clear, the slices, the budget of what the call touches.
-  // The tool is named by its slug: its text, in the colour of its kind.
-  await expect(hedy.getByTestId('approval-tool').locator('[data-kind="tool"]')).toContainText(TOOL);
+  // Who asks and on which mission, then the call: the tool, the arguments in clear.
+  const statement = hedy.getByTestId('request-statement');
+  await expect(statement).toContainText(`on ${MISSION} wants to`);
+  await expect(statement).toContainText('using your key');
+  await expect(hedy.getByTestId('approval-tool')).toContainText(TOOL);
   const shown = hedy.getByTestId('approval-arguments');
   await expect(shown).toContainText(MARKER);
-  await expect(shown).toContainText('"path": ".github/workflows/ci.yml"');
-  await expect(shown).toContainText('"branch": "feature/ci"');
+  await expect(shown).toContainText('.github/workflows/ci.yml');
+  await expect(shown).toContainText('feature/ci');
+  // The permission it needs, with its id as the protocol spells it, and what it asks.
+  const needed = hedy.getByTestId('approval-gated-risks');
+  await expect(needed).toContainText(GATED);
+  await expect(hedy.getByTestId('approval-gate')).toHaveText('ask me first');
+  await expect(needed.locator('[data-severity]')).toHaveCount(1);
+  // What is left of every permission the call counts against, once it has run: the
+  // whole call is what waits, so the one that runs freely is listed too.
+  await expect(hedy.getByTestId(`approval-room-${GATED}`)).toContainText('49 of 50 left');
+  await expect(hedy.getByTestId(`approval-room-${UNGATED}`)).toContainText('2,999 of 3,000 left');
+  // The fingerprint and what the call touches are one click away.
+  await showCallDetails(hedy);
   await expect(hedy.getByTestId('approval-fingerprint')).toHaveText(String(refusal.fingerprint));
   await expect(hedy.getByTestId('approval-slices')).toContainText('workflow-via-file.W');
   await expect(hedy.getByTestId('approval-slices')).toContainText(
     `github.repo[${OWNER}/${REPO}].branch[feature/ci].file[.github/workflows/ci.yml].W`,
   );
-  await expect(hedy.getByTestId('approval-gate')).toHaveText(
-    'Gate: approval: each action asks you',
-  );
-  const gatedRow = hedy.getByTestId(`approval-risk-${GATED}`);
-  await expect(gatedRow.locator('td').nth(1)).toHaveText('approval');
-  await expect(gatedRow.locator('td').nth(2)).toHaveText('50');
-  await expect(gatedRow.locator('td').nth(4)).toHaveText('50');
-  // The whole call is what is refused: the ungated risk it touches is listed too.
-  const ungatedRow = hedy.getByTestId(`approval-risk-${UNGATED}`);
-  await expect(ungatedRow.locator('td').nth(1)).toHaveText('auto');
-  await expect(ungatedRow.locator('td').nth(4)).toHaveText('3000');
-  await expect(
-    hedy.getByRole('row', { name: new RegExp(`Refused ${TOOL} \\(approval-required\\)`) }).first(),
-  ).toBeVisible();
+  const led = hedy.getByTestId('request-events');
+  await expect(led).toContainText('was stopped on');
+  await expect(led).toContainText(TOOL);
+  await expect(led).toContainText('approval-required');
+  // What the agent holds meanwhile: the refusal, with the link.
+  await expect(hedy.getByTestId('agent-sees')).toContainText(approvalUrl);
 
-  // Three actions, each with its consequence in one line.
-  await expect(hedy.getByTestId('action-grant')).toContainText('once, within 10 minutes');
-  await expect(hedy.getByTestId('action-grant')).toContainText(
-    'counts against the quota and the rate limit',
+  // Three answers; what each one does is said before the buttons.
+  await expect(hedy.getByTestId('consequence-grant')).toContainText(
+    'Valid 10 minutes, for exactly this call',
   );
-  await expect(hedy.getByTestId('action-open-gate')).toContainText('until the period ends');
-  await expect(hedy.getByTestId('action-refuse')).toContainText('Nothing runs');
+  await expect(hedy.getByTestId('consequence-open-gate')).toContainText(
+    'runs without asking you until',
+  );
+  await expect(hedy.getByTestId('consequence-refuse')).toContainText('Nothing runs');
+  const answerOrder = await hedy.evaluate(() => {
+    const said = document.querySelector('[data-testid="consequence-grant"]');
+    const button = document.querySelector('[data-testid="action-grant"] button');
+    return said && button
+      ? Boolean(said.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING)
+      : false;
+  });
+  expect(answerOrder).toBe(true);
   await snap(hedy, 'approval-creator-view');
 
-  // The inbox shows it, with its tool, without any forwarded URL.
+  // The home shows it too, without the arguments; a yes is given on the request's page.
   await expect(hedy.getByTestId('open-request-count')).toHaveText('1');
+  await hedy.goto('/');
+  const waiting = hedy.getByTestId('now-waiting');
+  await expect(waiting).toContainText(MISSION);
+  await expect(waiting).toContainText(TOOL);
+  await expect(waiting.getByRole('button', { name: /Approve/ })).toHaveCount(0);
+  expect(await hedy.content()).not.toContain(MARKER);
+  await snap(hedy, 'approval-on-now');
+
+  // The inbox shows it without any forwarded URL: one list, the request open beside it.
   await hedy
     .getByRole('navigation', { name: 'Main' })
     .getByRole('link', { name: /Waiting for you/ })
     .click();
-  const inboxRow = hedy.getByRole('row', { name: new RegExp(MISSION) });
-  await expect(inboxRow).toContainText(TOOL);
-  await expect(inboxRow).toContainText(GATED);
-  // The list names the tool; the arguments are on the request's own page only.
-  // (Reloaded first: after an in-app navigation the document still holds the data
-  // of the page the creator just left.)
-  await hedy.reload();
-  await expect(inboxRow).toContainText(TOOL);
-  expect(await hedy.content()).not.toContain(MARKER);
+  const inboxItem = hedy
+    .getByTestId('waiting-list')
+    .getByRole('link', { name: new RegExp(MISSION) });
+  await expect(inboxItem).toHaveAttribute('aria-current', 'page');
+  // The list never carries the arguments: they are in the open request only.
+  expect(await hedy.getByTestId('waiting-list').innerHTML()).not.toContain(MARKER);
+  await expect(hedy.getByTestId('approval-arguments')).toContainText(MARKER);
   await snap(hedy, 'approval-inbox');
-  await inboxRow.getByRole('link', { name: 'Approval request' }).click();
-  await expect(hedy.getByRole('heading', { name: `Approval request on ${MISSION}` })).toBeVisible();
+  await inboxItem.click();
+  await expect(hedy).toHaveURL(/\/waiting\/[0-9a-f-]{36}$/);
+  await expect(hedy.getByTestId('request-statement')).toContainText(MISSION);
 
   // ── The grant ───────────────────────────────────────────────────────────
-  await hedy.getByRole('button', { name: 'Approve this action' }).click();
-  await expect(hedy.getByText('Decision recorded')).toBeVisible();
-  await expect(hedy.getByText('granted', { exact: true })).toBeVisible();
-  await expect(hedy.getByRole('button', { name: 'Approve this action' })).toHaveCount(0);
-  await expect(hedy.getByTestId('approval-outcome')).toContainText('approval usable once until');
+  await hedy.getByRole('button', { name: 'Approve this call' }).click();
+  await expect(hedy.getByTestId('request-decided')).toBeVisible();
+  await expect(hedy.getByTestId('request-state')).toHaveText('approved');
+  await expect(hedy.getByRole('button', { name: 'Approve this call' })).toHaveCount(0);
+  await expect(hedy.getByTestId('approval-outcome')).toContainText('Your yes is valid until');
   // Decided: the arguments are erased, only their fingerprint remains.
   await expect(hedy.getByTestId('approval-arguments-erased')).toBeVisible();
   await expect(hedy.getByTestId('approval-arguments')).toHaveCount(0);
+  await showCallDetails(hedy);
   await expect(hedy.getByTestId('approval-fingerprint')).toHaveText(String(refusal.fingerprint));
   expect(await hedy.content()).not.toContain(MARKER);
   await expect(hedy.getByTestId('open-request-count')).toHaveCount(0);
@@ -197,13 +230,10 @@ test('a gated action of the developer preset: refused, approved by its creator o
   expect(afterReplay.at(-1)?.with_installation_token).toBe(true);
 
   await hedy.reload();
-  await expect(hedy.getByTestId('approval-outcome')).toContainText(
-    'approval consumed by the replay',
-  );
-  // The approved action counted against both risks it touches.
-  await expect(gatedRow.locator('td').nth(3)).toHaveText('1');
-  await expect(gatedRow.locator('td').nth(4)).toHaveText('49');
-  await expect(ungatedRow.locator('td').nth(4)).toHaveText('2999');
+  await expect(hedy.getByTestId('approval-outcome')).toContainText('The agent ran it on');
+  // The approved action counted against both permissions it touches.
+  await expect(hedy.getByTestId(`approval-room-${GATED}`)).toContainText('49 of 50 left');
+  await expect(hedy.getByTestId(`approval-room-${UNGATED}`)).toContainText('2,999 of 3,000 left');
 
   // The same call again: the approval was single-use, a new request is dropped.
   const second = approvalRequired(await write());
@@ -222,9 +252,12 @@ test('a gated action of the developer preset: refused, approved by its creator o
   await hedy.goto(String(third.approval_url));
   await expect(hedy).toHaveURL(/\/waiting\/[0-9a-f-]{36}$/);
   await expect(hedy.getByTestId('approval-arguments')).toContainText(MARKER);
-  await hedy.getByRole('button', { name: 'Open the gate for the rest of the period' }).click();
-  await expect(hedy.getByText('Decision recorded')).toBeVisible();
-  await expect(hedy.getByTestId('approval-gate')).toContainText('approval, open until');
+  await hedy.getByRole('button', { name: 'Let it run freely until the reset' }).click();
+  await expect(hedy.getByTestId('request-decided')).toBeVisible();
+  await expect(hedy.getByTestId('approval-gate')).toContainText('runs freely until');
+  await expect(hedy.getByTestId('approval-outcome')).toContainText(
+    'You let it run freely until the limits reset',
+  );
   await expect(hedy.getByTestId('approval-arguments-erased')).toBeVisible();
   await snap(hedy, 'approval-gate-opened');
   // Any call on the risk passes now, within the budget; the request left open says so.
@@ -232,12 +265,15 @@ test('a gated action of the developer preset: refused, approved by its creator o
   expect(await write()).toMatchObject({ outcome: 'allowed' });
   expect(await workflowWrites()).toHaveLength(writesBefore + 3);
   await hedy.goto(String(second.approval_url));
-  await expect(hedy.getByTestId('action-open-gate')).toContainText('already open for this period');
+  await expect(hedy.getByTestId('consequence-open-gate')).toContainText(
+    'Not possible now: it already runs freely.',
+  );
   await expect(
-    hedy.getByRole('button', { name: 'Open the gate for the rest of the period' }),
+    hedy.getByRole('button', { name: 'Let it run freely until the reset' }),
   ).toBeDisabled();
   await hedy.getByRole('button', { name: 'Refuse' }).click();
-  await expect(hedy.getByText('refused', { exact: true })).toBeVisible();
+  await expect(hedy.getByTestId('request-state')).toHaveText('refused');
+  await expect(hedy.getByTestId('approval-outcome')).toContainText('Nothing ran');
   await expect(hedy.getByTestId('open-request-count')).toHaveCount(0);
 
   // ── While the gate is open, the session page says so too ────────────────
@@ -346,31 +382,29 @@ test('a call that touches two gated risks asks once: one request, one approval, 
   await hedy.goto(approvalUrl);
   await expect(hedy).toHaveURL(/\/waiting\/[0-9a-f-]{36}$/);
   const gated = hedy.getByTestId('approval-gated-risks');
-  await expect(gated).toContainText('This call touches 2 risks that wait for your approval');
-  await expect(gated).toContainText('one decision for the call');
-  await expect(hedy.getByTestId('approval-gated-risk')).toHaveCount(2);
+  await expect(gated).toContainText('one answer for the 2');
+  await expect(hedy.getByTestId('approval-permission')).toHaveCount(2);
   await expect(gated).toContainText(GATED);
   await expect(gated).toContainText(UNGATED);
-  await expect(hedy.getByTestId(`approval-risk-${GATED}`).locator('td').nth(1)).toHaveText(
-    'approval',
-  );
-  await expect(hedy.getByTestId(`approval-risk-${UNGATED}`).locator('td').nth(1)).toHaveText(
-    'approval',
+  await expect(hedy.getByTestId('approval-gate')).toHaveText(['ask me first', 'ask me first']);
+  await expect(hedy.getByTestId('consequence-grant')).toContainText(
+    'One yes covers the 2 permissions this call needs.',
   );
   await snap(hedy, 'approval-two-gated-risks');
 
-  // The inbox holds one line for the call, with both risks.
+  // The inbox holds one item for the call, and the home one row.
   await hedy.goto('/waiting');
-  const inboxRow = hedy.getByRole('row', { name: /Develop behind two gates/ });
-  await expect(inboxRow).toHaveCount(1);
-  await expect(inboxRow).toContainText(GATED);
-  await expect(inboxRow).toContainText(UNGATED);
+  const inboxItem = hedy
+    .getByTestId('waiting-list')
+    .getByRole('link', { name: /Develop behind two gates/ });
+  await expect(inboxItem).toHaveCount(1);
+  await expect(inboxItem).toContainText('and 1 more');
   await snap(hedy, 'approval-inbox-two-gated-risks');
 
   await hedy.goto(approvalUrl);
-  await hedy.getByRole('button', { name: 'Approve this action' }).click();
-  await expect(hedy.getByText('Decision recorded')).toBeVisible();
-  await expect(hedy.getByText('granted', { exact: true })).toBeVisible();
+  await hedy.getByRole('button', { name: 'Approve this call' }).click();
+  await expect(hedy.getByTestId('request-decided')).toBeVisible();
+  await expect(hedy.getByTestId('request-state')).toHaveText('approved');
 
   // ── One replay passes; the approval was for that one call ───────────────
   expect(await executor.call(TOOL, { ...WORKFLOW })).toMatchObject({ outcome: 'allowed' });
@@ -379,9 +413,7 @@ test('a call that touches two gated risks asks once: one request, one approval, 
   expect(again.approval_url).not.toBe(approvalUrl);
   expect(await workflowWrites()).toHaveLength(writesBefore + 1);
   await hedy.reload();
-  await expect(hedy.getByTestId('approval-outcome')).toContainText(
-    'approval consumed by the replay',
-  );
+  await expect(hedy.getByTestId('approval-outcome')).toContainText('The agent ran it on');
   await snap(hedy, 'approval-two-gated-risks-consumed');
   await hedy.context().close();
 });

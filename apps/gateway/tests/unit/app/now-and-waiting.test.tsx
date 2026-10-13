@@ -572,6 +572,9 @@ describe('the page of a limit that was reached', () => {
     expect(html.match(/<form/g)).toHaveLength(1);
     expect(html).toContain('name="resolution" value="reset-period"');
     expect(html).not.toContain('name="amount"');
+    const form = /<form[\s\S]*?<\/form>/.exec(html)?.[0] ?? '';
+    // The endpoint refuses a field it does not expect: the form holds the answer and nothing else.
+    expect([...form.matchAll(/ name="([^"]+)"/g)].map((match) => match[1])).toEqual(['resolution']);
   });
 
   it('answered or expired: what became of it, and no choice', () => {

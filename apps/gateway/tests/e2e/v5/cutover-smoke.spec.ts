@@ -189,17 +189,18 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   await expect(page.getByTestId('open-request-count')).toHaveCount(0);
   await page.goto(claimUrl);
   await expect(page).toHaveURL(/\/waiting\/[0-9a-f-]{36}$/);
-  await expect(page.getByRole('heading', { name: `Claim on ${MISSION}` })).toBeVisible();
-  await expect(page.getByTestId('claim-budget')).toHaveText(
-    `quota ${QUOTA} · consumed ${QUOTA} · 0 left`,
+  await expect(page.getByTestId('request-statement')).toContainText(
+    `on ${MISSION} reached a limit`,
   );
+  await expect(page.getByTestId('claim-budget')).toContainText(`${QUOTA} of ${QUOTA}`);
   await expect(page.getByTestId('open-request-count')).toHaveText('1');
   await snap(page, 'cutover-claim');
   // The creator grants: one more action on this risk, for the current period.
-  await page.getByLabel('Actions to give back').fill('1');
-  await page.getByRole('button', { name: 'Extend the quota' }).click();
-  await expect(page.getByText('Decision recorded')).toBeVisible();
-  await expect(page.getByText('granted', { exact: true })).toBeVisible();
+  await page.getByTestId('answer-extend-quota').getByRole('radio').check();
+  await page.getByLabel('Calls to give back').fill('1');
+  await page.getByRole('button', { name: 'Give back 1 call' }).click();
+  await expect(page.getByTestId('request-decided')).toBeVisible();
+  await expect(page.getByTestId('request-state')).toHaveText('answered');
   await expect(page.getByTestId('open-request-count')).toHaveCount(0);
 
   // ── 7. The replay passes, with the same token ─────────────────────────────

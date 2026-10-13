@@ -72,7 +72,7 @@ test('exhaust a budget, then the creator — and only the creator — answers th
   for (const detail of [mission, RISK, E2E_USER.email]) expect(refusedHtml).not.toContain(detail);
   // Nor is it in their inbox, nor reachable by its inbox address.
   await bob.goto('/waiting');
-  await expect(bob.getByText('Nothing awaits you.')).toBeVisible();
+  await expect(bob.getByTestId('waiting-empty')).toContainText('Nothing waits for you.');
   await expect(bob.getByTestId('open-request-count')).toHaveCount(0);
   await bob.goto(claimUrl.replace('/r/', '/waiting/'));
   await expect(bob.getByText('This request is addressed to its creator.')).toBeVisible();
@@ -85,41 +85,62 @@ test('exhaust a budget, then the creator — and only the creator — answers th
   await ada.goto(claimUrl);
   // Sign-in on the way, then straight to the request.
   await expect(ada).toHaveURL(/\/waiting\/[0-9a-f-]{36}$/);
-  await expect(ada.getByRole('heading', { name: `Claim on ${mission}` })).toBeVisible();
-  await expect(ada.getByText(E2E_USER.email)).toBeVisible();
+  await expect(ada.getByRole('heading', { name: 'Waiting for you', level: 1 })).toBeVisible();
+  await expect(ada.getByTestId('user-menu')).toContainText(E2E_USER.email);
 
-  // The risk concerned, its budget, the other risks, the session.
-  await expect(ada.getByTestId('claim-budget')).toHaveText('quota 2 · consumed 2 · 0 left');
+  // Who was stopped and on which mission, the permission, how much of its limit was used.
+  const statement = ada.getByTestId('request-statement');
+  await expect(statement).toContainText(`on ${mission} reached a limit`);
+  await expect(ada.getByTestId('claim-budget')).toContainText('2 of 2');
   await expect(ada.getByText(RISK).first()).toBeVisible();
+  // What led here: the call that was stopped, and the request it left.
+  const led = ada.getByTestId('request-events');
+  await expect(led).toContainText('was stopped on');
+  await expect(led).toContainText('github__get_file_contents');
+  await expect(led).toContainText('budget-exhausted');
+  await expect(led).toContainText('Asked you for more room after a limit was reached');
+  // The other permissions of the mission are one click away.
+  await ada
+    .getByRole('button', { name: /^Show the .* other permissions? of the mission$/ })
+    .click();
   await expect(ada.getByRole('row', { name: /github\.read-meta/ })).toContainText('10');
-  await expect(
-    ada.getByRole('row', { name: /Refused github__get_file_contents \(budget-exhausted\)/ }),
-  ).toBeVisible();
-  await expect(ada.getByRole('row', { name: /A claim was dropped/ })).toBeVisible();
 
-  // Four actions, each with its consequence in one line.
-  await expect(ada.getByTestId('action-reset-period')).toContainText(
-    'The other risks of the mission keep what they consumed',
+  // The ways of answering, each with what it does; the one that does not apply is not offered.
+  await expect(ada.getByTestId('answer-reset-period')).toContainText(
+    'the other permissions keep their count',
   );
-  await expect(ada.getByTestId('action-extend-quota')).toContainText('for the current period only');
-  await expect(ada.getByLabel('Actions to give back')).toHaveValue('2');
-  await expect(ada.getByTestId('action-extend-expiry')).toContainText('The mission never expires');
-  await expect(ada.getByRole('button', { name: 'Extend the expiry' })).toBeDisabled();
-  await expect(ada.getByTestId('action-refuse')).toContainText('stays exhausted');
+  await expect(ada.getByTestId('answer-extend-quota')).toContainText('at most 2, what was used');
+  await expect(ada.getByTestId('answer-refuse')).toContainText(
+    'everything else it may do keeps working',
+  );
+  // The mission has no end date: there is nothing to extend.
+  await expect(ada.getByTestId('answer-extend-expiry')).toHaveCount(0);
+  await ada.getByTestId('answer-extend-quota').getByRole('radio').check();
+  await expect(ada.getByLabel('Calls to give back')).toHaveValue('2');
+  await expect(ada.getByRole('button', { name: 'Give back 2 calls' })).toBeVisible();
+  await ada.getByTestId('answer-reset-period').getByRole('radio').check();
   await snap(ada, 'claim-creator-view');
 
-  // The inbox shows it without any forwarded URL.
+  // The home shows it without any forwarded URL, answerable from there.
   await expect(ada.getByTestId('open-request-count')).toHaveText('1');
+  await ada.goto('/');
+  await expect(ada.getByRole('heading', { name: 'Now', level: 1 })).toBeVisible();
+  const waiting = ada.getByTestId('now-waiting');
+  await expect(waiting).toContainText(`${mission} reached its`);
+  await snap(ada, 'claim-on-now');
+  await waiting.getByRole('link', { name: 'Answer' }).click();
+  await expect(ada).toHaveURL(/\/waiting\/[0-9a-f-]{36}$/);
+
+  // So does the inbox: one list, the request open beside it.
   await ada
     .getByRole('navigation', { name: 'Main' })
     .getByRole('link', { name: /Waiting for you/ })
     .click();
-  await expect(ada.getByRole('heading', { name: 'Waiting for you', level: 1 })).toBeVisible();
-  const row = ada.getByRole('row', { name: new RegExp(mission) });
-  await expect(row).toContainText(RISK);
+  await expect(ada).toHaveURL(/\/waiting$/);
+  const item = ada.getByTestId('waiting-list').getByRole('link', { name: new RegExp(mission) });
+  await expect(item).toHaveAttribute('aria-current', 'page');
+  await expect(ada.getByTestId('request-statement')).toContainText(mission);
   await snap(ada, 'request-inbox');
-  await row.getByRole('link', { name: 'Claim' }).click();
-  await expect(ada.getByRole('heading', { name: `Claim on ${mission}` })).toBeVisible();
 
   // Still exhausted until the creator decides.
   expect(await readFile(executor)).toMatchObject({
@@ -128,19 +149,28 @@ test('exhaust a budget, then the creator — and only the creator — answers th
   });
 
   // ── The decision ────────────────────────────────────────────────────────
-  await ada.getByRole('button', { name: 'Reset the period' }).click();
-  await expect(ada.getByText('Decision recorded')).toBeVisible();
-  await expect(ada.getByText('granted', { exact: true })).toBeVisible();
-  await expect(ada.getByRole('button', { name: 'Reset the period' })).toHaveCount(0);
-  await expect(ada.getByRole('row', { name: /The creator reset the period/ })).toBeVisible();
-  await expect(ada.getByTestId('claim-budget')).toHaveText('quota 2 · consumed 0 · 2 left');
+  await ada.getByRole('button', { name: 'Reset the count' }).click();
+  await expect(ada).toHaveURL(/\/waiting\/[0-9a-f-]{36}\?decided=1$/);
+  await expect(ada.getByTestId('request-decided')).toBeVisible();
+  await expect(ada.getByTestId('request-state')).toHaveText('answered');
+  await expect(ada.getByTestId('claim-outcome')).toContainText('You reset the count');
+  await expect(ada.getByTestId('limit-answer')).toHaveCount(0);
+  await expect(ada.getByTestId('request-events')).toContainText(
+    'You reset the count of this permission',
+  );
+  await expect(ada.getByTestId('claim-budget')).toContainText('0 of 2');
   await expect(ada.getByTestId('open-request-count')).toHaveCount(0);
   await snap(ada, 'claim-granted');
 
   // The token did not change: the executor replays its call.
   expect(await readFile(executor)).toMatchObject({ outcome: 'allowed' });
 
+  // Nothing waits any more: the inbox and the home each say so in one sentence.
   await ada.goto('/waiting');
-  await expect(ada.getByText('Nothing awaits you.')).toBeVisible();
+  await expect(ada.getByTestId('waiting-empty')).toContainText('Nothing waits for you.');
+  await expect(ada.getByTestId('waiting-empty')).toContainText('1 approved');
+  await ada.goto('/');
+  await expect(ada.getByTestId('now-nothing')).toContainText('Nothing needs you.');
+  await snap(ada, 'now-nothing-needs-you');
   await ada.context().close();
 });

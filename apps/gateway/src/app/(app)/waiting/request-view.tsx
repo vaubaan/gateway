@@ -142,9 +142,16 @@ function Asking({ asker, viewerId }: { asker: RequestAsker | null; viewerId: str
   );
 }
 
-function StateMark({ state }: { state: View['request']['state'] }) {
-  if (state === 'open') return null;
-  return <StatusMark testId="request-state">{REQUEST_STATES[state].label}</StatusMark>;
+function StateMark({ request }: { request: View['request'] }) {
+  if (request.state === 'open') return null;
+  // A limit that was reached is answered or left, not approved.
+  const label =
+    request.kind === 'claim' && request.state !== 'expired'
+      ? request.state === 'granted'
+        ? REQUEST_WORDS.limitAnswered
+        : REQUEST_WORDS.limitLeft
+      : REQUEST_STATES[request.state].label;
+  return <StatusMark testId="request-state">{label}</StatusMark>;
 }
 
 /** The notes that interrupt: the answer just given, an answer not taken, a mission that cannot run. */
@@ -352,8 +359,24 @@ function PermissionLine({
   );
 }
 
-/** What is left of one permission once this call has run. */
-function RoomAfter({ line, period }: { line: RiskBudgetLine; period: string }) {
+/** What is left of one permission: once this call has run while it waits, as it is afterwards. */
+function RoomAfter({
+  line,
+  period,
+  waiting,
+}: {
+  line: RiskBudgetLine;
+  period: string;
+  waiting: boolean;
+}) {
+  if (!waiting) {
+    return (
+      <div data-testid={`approval-room-${line.risk_id}`}>
+        {roomLeft(line.remaining, line.quota, period)}
+        <span className={styles.quiet}> · {line.label}</span>
+      </div>
+    );
+  }
   if (line.remaining === 0) {
     return (
       <div className={styles.none} data-testid={`approval-room-${line.risk_id}`}>
@@ -552,7 +575,7 @@ function ApprovalBody({
             {REQUEST_WORDS.wantsTo}
           </>
         }
-        status={<StateMark state={request.state} />}
+        status={<StateMark request={request} />}
       >
         {gates.map((gate) => gate.label).join(' and ')}
       </RequestStatement>
@@ -589,10 +612,16 @@ function ApprovalBody({
             )),
           },
           {
-            label: REQUEST_WORDS.roomLeftAfter,
+            label:
+              request.state === 'open' ? REQUEST_WORDS.roomLeftAfter : REQUEST_WORDS.roomLeftNow,
             testId: 'approval-room',
             value: call.risks.map((line) => (
-              <RoomAfter key={line.risk_id} line={line} period={period} />
+              <RoomAfter
+                key={line.risk_id}
+                line={line}
+                period={period}
+                waiting={request.state === 'open'}
+              />
             )),
           },
         ]}
@@ -801,7 +830,7 @@ function ClaimBody({
             {REQUEST_WORDS.reachedALimit}
           </>
         }
-        status={<StateMark state={request.state} />}
+        status={<StateMark request={request} />}
       >
         {request.risk_label}
         {risk && (
