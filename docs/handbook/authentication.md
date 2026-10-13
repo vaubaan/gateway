@@ -54,7 +54,7 @@ apps/gateway/src/server/auth/            host-agnostic, never imports `next`
 apps/gateway/src/server/store/repositories/
   web-sessions.ts     store.webSessions: the SessionStore port over table web_sessions, rows keyed by SHA-256(id)
 apps/gateway/migrations/0003_web_sessions.sql
-apps/gateway/src/lib/auth/session.ts     Next glue: currentPrincipal(), adminDecision(), requireOperator()
+apps/gateway/src/lib/auth/session.ts     Next glue: currentPrincipal(), requirePrincipal(), currentUser(), adminDecision(), requireOperator()
 apps/gateway/src/app/
   page.tsx                               /  — redirect: /missions with a session, /login without
   (public)/layout.tsx                    centred container of the pages reachable without a session
@@ -68,11 +68,14 @@ apps/gateway/src/app/
   admin/(guarded)/layout.tsx             the Administration shell (bar, "Not an operator" page) — not the boundary
   admin/(guarded)/page.tsx               /admin
   admin/(guarded)/identity-provider/page.tsx
-apps/gateway/src/components/auth/        PrincipalCard, OperatorBadge, SignOutButton, auth.module.css
+apps/gateway/src/components/auth/        PrincipalCard.tsx (PrincipalCard, OperatorBadge, SignOutButton), NeedsUser.tsx, auth.module.css
 ```
 
 The route handlers are one-line adapters over `root.auth.handlers`; the pages
-call `currentPrincipal()` or, under `/admin`, `requireOperator()`, and render.
+call `currentPrincipal()`, under `/admin` `requireOperator()`, and under
+`(app)` `currentUser()` (an identified user; `null` for the bootstrap
+operator, for whom the page renders `NeedsUser`) or `requirePrincipal()` (any
+session, the Audit page), and render.
 Everything that decides lives under `server/auth` and is tested without Next.
 
 ## The three states of an instance
@@ -169,7 +172,7 @@ GET /auth/callback?code&state           (Lax cookie travels on this top-level GE
       idTokenExpected); claims = { ...userinfo, ...idToken } when userinfo_endpoint exists
   mapClaims(claims, settings.claims)   ← refuses email_verified: false
   assertEmailDomainAllowed()
-  completeLogin(): users.upsertFromIdp, syncIdpGroups, currentAuthority, bootstrap revoke
+  completeLogin(): users.upsertFromIdp, membershipsChanging (watch), syncIdpGroups, settle, currentAuthority, bootstrap revoke
   sessions.destroy(cookie)             ← the session the browser already had, if any
   sessions.create({kind:'user', userId, login:{email, groups}})          TTL 8 h, absolute
   303 return_to   Set-Cookie: vbn_session=<id>; …   Set-Cookie: vbn_login=; Max-Age=0
@@ -209,6 +212,16 @@ names)`): one store transaction creates the missing groups (source `idp`),
   claimed name that already exists as a **local** group is skipped (returned
   in `skipped`, logged as a warning), never granted. Emptied IdP groups keep
   their row (they may own connections).
+- **Membership settlement.** `completeLogin` calls the optional
+  `LoginDeps.membershipsChanging(user)` before the group sync, and the
+  function it returns once the memberships are replaced. The root wires
+  `MembershipSettler.watch(user.id)` → `settle(user.id)` (handbook
+  [authority](authority.md)): a connection left without owner turns
+  `unowned`, and the user's missions that a lost membership orphaned, or a
+  regained one grounds again, are audited. A failure of either call is
+  logged at `error` (`could not settle the memberships changed by a
+sign-in`) and does not fail the sign-in: every authority check reads the
+  new memberships anyway.
 - **Errors** reach the browser as closed codes (`LOGIN_ERROR_CODES`,
   sentences in `LOGIN_ERROR_MESSAGES`): `/login?error=<code>` for the OIDC
   flow, `/admin/bootstrap?error=bootstrap-refused|bootstrap-unavailable` for
@@ -281,7 +294,8 @@ origin is known from the configuration rather than from forwarded headers.
 **One guard for every mutation.** `guardMutation(request, deps, 'user' |
 'operator')` (`guard.ts`) is the single implementation of the order and of
 the checks, used by the handlers of this module and of the connections,
-missions and requests modules:
+missions, requests, shares, groups, telemetry and OAuth authorization-server
+modules:
 
 1. origin (`isSameOrigin`) → `origin-mismatch`; the session of a foreign
    origin is not even read;
@@ -300,7 +314,8 @@ redirect or a page). `guardSession` is steps 2 and 3 alone, for the reads
 `/api/auth/bootstrap` need no session and check the origin only.
 
 `tests/unit/server/auth/mutation-guard.test.ts` holds the table of every
-handler of the four modules: a handler added without being classified (a
+handler of the eight human surfaces (`SURFACES`: auth, connections, missions,
+requests, telemetry, shares, groups, oauth): a handler added without being classified (a
 mutation with its role, or a read with the reason) fails it, and so does a
 `route.ts` exporting `POST` / `PUT` / `PATCH` / `DELETE` that delegates to
 anything but a classified mutation, an MCP door (execution, management) or
@@ -362,10 +377,13 @@ rendered without its layout. So:
   comes back as `?error=bootstrap-refused`; a visitor who already holds a
   bootstrap session is redirected to `/admin`.
 - **`/admin`** — issuer, source (file or Admin page), admin rule, bootstrap
-  state, build. The Administration bar links Identity provider and
-  Provider apps (`/admin/provider-apps`, handbook
-  [connections](connections.md)) and Telemetry (`/admin/telemetry`, handbook
-  [telemetry](telemetry.md)).
+  state, build. The Administration bar links Identity provider, Provider
+  apps (`/admin/provider-apps`, handbook [connections](connections.md)),
+  Groups and Connections (`/admin/groups`, `/admin/connections`: local
+  groups and ownerless connections, handbook [authority](authority.md)),
+  Telemetry (`/admin/telemetry`, handbook [telemetry](telemetry.md)) and
+  OAuth clients (`/admin/oauth-clients`, handbook
+  [management-door](management-door.md)).
 - **`/admin/identity-provider`** — the settings form (`POST
 /api/admin/identity-provider`: `issuer`, `client_id`, `client_secret`,
   `claim_sub`, `claim_email`, `claim_groups`, `allowed_email_domains`),
@@ -403,25 +421,33 @@ previous settings whole), file wins and read-only); `safeReturnTo`. The
 the digest and never the id, a clear-keyed row not read, TTL, sweep,
 overwrite, invalid TTL, an unreadable value removed).
 
-Unit, `tests/unit/app/admin-guard.test.ts` (24), over the real root on the
+Unit, `tests/unit/app/admin-guard.test.ts` (54), over the real root on the
 `:memory:` store with only `next/headers` replaced: `requireOperator()` with
 no session (bootstrap page, then `/login` once an IdP exists), an unknown
 cookie, a plain user (`notFound`), an operator, a bootstrap session before
-and after the token is revoked; then, for every page under
-`admin/(guarded)`, the page function itself renders nothing for those three
-non-operators and renders for an operator; and every route under it answers
-401 / 403.
+and after the token is revoked (6); the pages and routes of the surface are
+found (1); then, for each of the seven pages under `admin/(guarded)`, the
+page calls `requireOperator()`, renders nothing for those three
+non-operators and renders for an operator (5 each); and each of the six
+routes under it answers 401 / 403, and 401 to a revoked bootstrap session
+(2 each).
 
-Unit, `tests/unit/server/auth/mutation-guard.test.ts` (113), over the real
-root on the `:memory:` store with seeded connections, a mission and an open
-claim: the completeness checks above; then, for each of the thirteen
-mutating handlers, the rightful caller gets through (so the request is one
-that would be served), and the request is refused with every table of the
-store unchanged for another origin, no `Origin` and no `Referer`, a foreign
-`Referer`, an opaque `Origin`, no session (401), a session of the wrong role
-(a plain user on an operator endpoint, the bootstrap operator on a user
-endpoint: 403) and a bootstrap session whose token was revoked (401; only
-that session's row is removed).
+Unit, `tests/unit/server/auth/mutation-guard.test.ts` (224), over the real
+root on the `:memory:` store with seeded connections, a mission, an open
+claim, a registered OAuth client, a delegation and an unanswered consent
+screen: the completeness checks above (every handler classified; each of the
+25 mutating `route.ts` files delegates to a classified mutation, an MCP door
+or a protocol endpoint); the three OAuth protocol endpoints read no session
+(an operator's cookie sent from another origin changes neither the answer
+nor the store); then, for each of the twenty-five mutating handlers, the
+rightful caller gets through (so the request is one that would be served),
+and the request is refused with every table of the store unchanged for
+another origin, no `Origin` and no `Referer`, a foreign `Referer` and an
+opaque `Origin`; and, for the twenty-three that need a session (all but
+`/logout` and `/api/auth/bootstrap`), for no session (401), a session of the
+wrong role (a plain user on an operator endpoint, the bootstrap operator on
+a user endpoint: 403) and a bootstrap session whose token was revoked (401;
+only that session's row is removed).
 
 Integration, `tests/integration/auth/oidc-login.test.ts` (16) over the real
 root on the `:memory:` store and the in-process `FakeIdp` (`fake-idp.ts`:
