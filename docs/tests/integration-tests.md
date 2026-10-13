@@ -101,7 +101,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/authority/mission-grounds.test.ts`               |       16 |
 | `apps/gateway/src/server/compose/compose.test.ts`                         |       16 |
 | `apps/gateway/src/server/config/duration.test.ts`                         |        2 |
-| `apps/gateway/src/server/config/load.test.ts`                             |       38 |
+| `apps/gateway/src/server/config/load.test.ts`                             |       44 |
 | `apps/gateway/src/server/connections/codec-and-keypair.test.ts`           |       12 |
 | `apps/gateway/src/server/connections/credentials.test.ts`                 |       15 |
 | `apps/gateway/src/server/connections/input.test.ts`                       |       23 |
@@ -122,6 +122,16 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/missions/preview.test.ts`                        |       44 |
 | `apps/gateway/src/server/missions/summary.test.ts`                        |        8 |
 | `apps/gateway/src/server/missions/token.test.ts`                          |        8 |
+| `apps/gateway/src/server/oauth-as/authorization.test.ts`                  |       40 |
+| `apps/gateway/src/server/oauth-as/client-metadata-document.test.ts`       |       89 |
+| `apps/gateway/src/server/oauth-as/clients.test.ts`                        |       39 |
+| `apps/gateway/src/server/oauth-as/delegations.test.ts`                    |       16 |
+| `apps/gateway/src/server/oauth-as/endpoints.test.ts`                      |        8 |
+| `apps/gateway/src/server/oauth-as/pages.test.ts`                          |        9 |
+| `apps/gateway/src/server/oauth-as/pkce.test.ts`                           |       13 |
+| `apps/gateway/src/server/oauth-as/redirect-uri.test.ts`                   |       52 |
+| `apps/gateway/src/server/oauth-as/secrets.test.ts`                        |        6 |
+| `apps/gateway/src/server/oauth-as/token-service.test.ts`                  |       40 |
 | `apps/gateway/src/server/provider-apps/service.test.ts`                   |       15 |
 | `apps/gateway/src/server/requests/approval.test.ts`                       |       27 |
 | `apps/gateway/src/server/requests/claim.test.ts`                          |       37 |
@@ -135,7 +145,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/telemetry/outcome.test.ts`                       |       28 |
 | `apps/gateway/src/server/telemetry/settings.test.ts`                      |        7 |
 | `apps/gateway/src/server/telemetry/stats.test.ts`                         |       11 |
-| `apps/gateway/tests/integration/audit/admin-mutations.test.ts`            |       36 |
+| `apps/gateway/tests/integration/audit/admin-mutations.test.ts`            |       40 |
 | `apps/gateway/tests/integration/audit/audit-query.test.ts`                |       22 |
 | `apps/gateway/tests/integration/audit/mission-session.test.ts`            |       15 |
 | `apps/gateway/tests/integration/audit/retention.test.ts`                  |       10 |
@@ -156,6 +166,10 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/missions/gate.test.ts`                    |       17 |
 | `apps/gateway/tests/integration/missions/mission-handlers.test.ts`        |        8 |
 | `apps/gateway/tests/integration/missions/mission-lifecycle.test.ts`       |       28 |
+| `apps/gateway/tests/integration/oauth-as/credential-separation.test.ts`   |       17 |
+| `apps/gateway/tests/integration/oauth-as/http-surface.test.ts`            |       58 |
+| `apps/gateway/tests/integration/oauth-as/mcp-client-flow.test.ts`         |        4 |
+| `apps/gateway/tests/integration/oauth-as/routes.test.ts`                  |       15 |
 | `apps/gateway/tests/integration/requests/approval-access.test.ts`         |       29 |
 | `apps/gateway/tests/integration/requests/approval.test.ts`                |       42 |
 | `apps/gateway/tests/integration/requests/request-handlers.test.ts`        |       13 |
@@ -170,16 +184,17 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/store/delegations.test.ts`                |        7 |
 | `apps/gateway/tests/integration/store/identities.test.ts`                 |       10 |
 | `apps/gateway/tests/integration/store/missions.test.ts`                   |        8 |
+| `apps/gateway/tests/integration/store/oauth-clients.test.ts`              |       16 |
 | `apps/gateway/tests/integration/store/ownership-and-orphans.test.ts`      |       12 |
 | `apps/gateway/tests/integration/store/requests-approvals.test.ts`         |       10 |
 | `apps/gateway/tests/integration/store/schema.test.ts`                     |        6 |
 | `apps/gateway/tests/integration/store/sessions.test.ts`                   |       11 |
 | `apps/gateway/tests/integration/store/web-sessions.test.ts`               |        8 |
 | `apps/gateway/tests/integration/telemetry/telemetry.test.ts`              |       15 |
-| `apps/gateway/tests/unit/app/admin-guard.test.ts`                         |       47 |
-| `apps/gateway/tests/unit/app/app-guard.test.ts`                           |      102 |
+| `apps/gateway/tests/unit/app/admin-guard.test.ts`                         |       54 |
+| `apps/gateway/tests/unit/app/app-guard.test.ts`                           |      111 |
 | `apps/gateway/tests/unit/app/field.test.tsx`                              |        6 |
-| `apps/gateway/tests/unit/server/auth/mutation-guard.test.ts`              |      194 |
+| `apps/gateway/tests/unit/server/auth/mutation-guard.test.ts`              |      224 |
 | `apps/gateway/tests/unit/server/budget/decide.test.ts`                    |       15 |
 | `apps/gateway/tests/unit/server/budget/gates.test.ts`                     |        9 |
 | `apps/gateway/tests/unit/server/budget/mission-state.test.ts`             |        7 |
@@ -192,7 +207,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/structural/authority-not-snapshotted.test.ts`    |       17 |
 | `apps/gateway/tests/unit/structural/catalog-caps-enforced.test.ts`        |       12 |
 | `apps/gateway/tests/unit/structural/example-config-providers.test.ts`     |       10 |
-| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`          |      251 |
+| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`          |      279 |
 | `apps/gateway/tests/unit/structural/telemetry-collector-schema.test.ts`   |        7 |
 | `apps/gateway/tests/unit/structural/telemetry-report-shape.test.ts`       |        3 |
 | `packages/gateway-core/tests/unit/audit.test.ts`                          |        2 |
@@ -280,7 +295,7 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/vercel/tests/unit/plugin.test.ts`                                |       33 |
 | `plugins/vercel/tests/unit/risk-catalog.test.ts`                          |       55 |
 | `plugins/vercel/tests/unit/team-pin.test.ts`                              |       99 |
-| **TOTAL** (`npm run test`, 2026-10-13, after a build; 193 files)          | **4686** |
+| **TOTAL** (`npm run test`, 2026-10-13, after a build; 208 files)          | **5192** |
 
 After a build one test is skipped: the latency measurement of the authority
 re-check (`door-latency.bench.test.ts`, run with `VAUBAAN_BENCH=1`). Without `.next/standalone` the five

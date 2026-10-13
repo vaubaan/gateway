@@ -144,14 +144,12 @@ authority is recomputed on every request.
 
 ## The shell — `components/shell/`
 
-**Connections**, **Shares received**, **Missions**, **Requests**, **Audit**,
-**Delegations**.
 `AppShell({ principal, children })` (server component) renders one bar, then
 the page in a `Container`:
 
 - the brand link (to `/connections`) and one link per entry of `APP_NAV`:
-  **Connections**, **Shares received**, **Missions**, **Requests**, **Audit**.
-  Every principal sees these links;
+  **Connections**, **Shares received**, **Missions**, **Requests**, **Audit**,
+  **Delegations**. Every principal sees these links;
 - **Administration** (`/admin`), only when the principal is the bootstrap
   operator or a user with `isOperator`;
 - on the right: the user's email (or `bootstrap token`), `OperatorBadge`
