@@ -285,7 +285,7 @@ function AdminRow({ entry }: { entry: AuditAdminView }) {
         <Badge>act</Badge>
       </Td>
       <Td>
-        {entry.actor.email ?? entry.actor.id}
+        {entry.actor.label}
         {entry.delegated_client_id && (
           <div className={styles.muted}>through client {entry.delegated_client_id}</div>
         )}

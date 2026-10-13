@@ -114,11 +114,21 @@ export type AdminObjectType =
   | 'delegation'
   | 'instance-config';
 
+/**
+ * The `user_id` of administrative entries written by the bootstrap operator:
+ * the holder of the one-time bootstrap token, who has no user row yet. One
+ * constant for every writer (auth, connections) and every reader (audit).
+ */
+export const BOOTSTRAP_ACTOR_ID = 'bootstrap';
+
+/** How the bootstrap operator is named wherever an actor is shown. */
+export const BOOTSTRAP_ACTOR_LABEL = 'Bootstrap operator';
+
 export interface AdminAuditEntry {
   readonly kind: 'admin';
   readonly ts: string;
-  /** The human behind the act, always a user (a delegated client acts on
-   *  behalf of one). */
+  /** The human behind the act: a user id (a delegated client acts on behalf
+   *  of one), or `BOOTSTRAP_ACTOR_ID` for the bootstrap operator. */
   readonly user_id: string;
   readonly act: AdminAct;
   readonly object: { readonly type: AdminObjectType; readonly id: string };

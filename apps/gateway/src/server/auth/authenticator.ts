@@ -4,6 +4,8 @@
  * `authenticate()` then `authorizeAdmin()`; nothing is read from the session
  * record but the user id.
  */
+import { BOOTSTRAP_ACTOR_ID } from '@vaubaan/gateway-core';
+
 import type { AdminRule } from '../config/types';
 import type { Store } from '../store';
 import type { GroupRecord, UserRecord } from '../store/types';
@@ -27,6 +29,11 @@ export interface BootstrapPrincipal {
 }
 
 export type Principal = UserPrincipal | BootstrapPrincipal;
+
+/** The `user_id` an administrative audit entry records for this principal. */
+export function auditActorId(principal: Principal): string {
+  return principal.kind === 'user' ? principal.user.id : BOOTSTRAP_ACTOR_ID;
+}
 
 export type AdminDecision =
   | { readonly ok: true; readonly principal: Principal }

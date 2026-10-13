@@ -19,7 +19,12 @@
  */
 import type { AuditWriter } from '@vaubaan/gateway-core';
 
-import type { Authenticator, Principal, UserPrincipal } from '../auth/authenticator';
+import {
+  auditActorId,
+  type Authenticator,
+  type Principal,
+  type UserPrincipal,
+} from '../auth/authenticator';
 import { statusResponse } from '../auth/handlers';
 import { forbiddenOriginResponse, isSameOrigin } from '../auth/origin';
 import type { Logger } from '../logging';
@@ -275,7 +280,7 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
           await deps.audit.write({
             kind: 'admin',
             ts: toIso(deps.clock.now()),
-            user_id: decision.principal.kind === 'user' ? decision.principal.user.id : 'bootstrap',
+            user_id: auditActorId(decision.principal),
             act: 'config-changed',
             object: { type: 'instance-config', id: `provider-app:${providerId}` },
             before: auditView(before),
@@ -319,7 +324,7 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
         await deps.audit.write({
           kind: 'admin',
           ts: toIso(deps.clock.now()),
-          user_id: decision.principal.kind === 'user' ? decision.principal.user.id : 'bootstrap',
+          user_id: auditActorId(decision.principal),
           act: 'config-changed',
           object: { type: 'instance-config', id: `provider-app:${providerId}` },
           before: auditView(before),

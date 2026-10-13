@@ -18,7 +18,7 @@ import type { AuditWriter } from '@vaubaan/gateway-core';
 import type { Logger } from '../logging';
 import type { Clock } from '../store/clock';
 import { toIso } from '../store/clock';
-import type { Authenticator, Principal } from './authenticator';
+import { auditActorId, type Authenticator } from './authenticator';
 import type { BootstrapService } from './bootstrap';
 import { assertEmailDomainAllowed, mapClaims } from './claims';
 import { IdpSettingsError, LoginError, type LoginErrorCode } from './errors';
@@ -165,7 +165,7 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
         await deps.audit.write({
           kind: 'admin',
           ts: toIso(deps.clock.now()),
-          user_id: actorId(decision.principal),
+          user_id: auditActorId(decision.principal),
           act: 'config-changed',
           object: { type: 'instance-config', id: 'idp' },
           before: before ? { issuer: before.issuer.href, client_id: before.clientId } : null,
@@ -205,10 +205,6 @@ export function safeReturnTo(raw: string | null, fallback = LOGIN_PAGE): string 
 function stringField(form: FormData, name: string): string {
   const value = form.get(name);
   return typeof value === 'string' ? value.trim() : '';
-}
-
-function actorId(principal: Principal): string {
-  return principal.kind === 'user' ? principal.user.id : 'bootstrap';
 }
 
 export function statusResponse(status: number, reason: string): Response {

@@ -6,6 +6,7 @@
  * the host-agnostic handlers driven with web-standard `Request`s.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { BOOTSTRAP_ACTOR_ID } from '@vaubaan/gateway-core';
 
 import { BOOTSTRAP_REVOKED_KEY, IDP_CONFIG_KEYS, SESSION_COOKIE } from '../../../src/server/auth';
 import { memoryStoreDeps } from '../../../src/server/compose/testing';
@@ -289,7 +290,7 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
     expect(audit).toHaveLength(1);
     expect(audit[0]).toMatchObject({
       kind: 'admin',
-      user_id: 'bootstrap',
+      user_id: BOOTSTRAP_ACTOR_ID,
       act: 'config-changed',
       object: { type: 'instance-config', id: 'idp' },
     });

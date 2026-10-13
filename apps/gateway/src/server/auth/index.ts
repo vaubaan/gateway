@@ -76,6 +76,7 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
 
 export { describeAdminRule, isOperator, type AdminRuleSubject } from './admin-rule';
 export {
+  auditActorId,
   Authenticator,
   type AdminDecision,
   type BootstrapPrincipal,

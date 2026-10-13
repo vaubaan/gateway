@@ -10,7 +10,13 @@
  * "no secret in logs"), and the views built here are explicit field lists, so
  * nothing else of a record reaches the page.
  */
-import type { AdminAct, AdminObjectType, AuditDecision } from '@vaubaan/gateway-core';
+import {
+  BOOTSTRAP_ACTOR_ID,
+  BOOTSTRAP_ACTOR_LABEL,
+  type AdminAct,
+  type AdminObjectType,
+  type AuditDecision,
+} from '@vaubaan/gateway-core';
 import type { Principal, RefusalCode, RiskId } from '@vaubaan/shared';
 
 import type { AuditCursor, AuditRecord, AuditScope, Store } from '../store';
@@ -18,8 +24,7 @@ import type { AuditFilters } from './filters';
 
 export const AUDIT_PAGE_SIZE = 50;
 
-/** The `user_id` the Administration handlers record for the bootstrap operator. */
-export const BOOTSTRAP_ACTOR_ID = 'bootstrap';
+export { BOOTSTRAP_ACTOR_ID };
 
 /** Who is looking. `Principal` of `../auth` satisfies it. */
 export type AuditViewer =
@@ -71,7 +76,8 @@ export interface AuditAdminView {
   readonly kind: 'admin';
   readonly id: string;
   readonly ts: string;
-  readonly actor: { readonly id: string; readonly email: string | null };
+  /** `label` is what a page shows: the email, "Bootstrap operator", else the id. */
+  readonly actor: { readonly id: string; readonly email: string | null; readonly label: string };
   readonly act: AdminAct;
   readonly object: {
     readonly type: AdminObjectType;
@@ -275,7 +281,7 @@ async function toView(record: AuditRecord, names: NameCache): Promise<AuditEntry
     kind: 'admin',
     id: record.id,
     ts: record.ts,
-    actor: { id: record.user_id, email: await names.email(record.user_id) },
+    actor: await actorView(record.user_id, names),
     act: record.act,
     object: {
       type: record.object.type,
@@ -295,4 +301,11 @@ async function objectLabel(
   if (object.type === 'mission') return (await names.mission(object.id)).name;
   if (object.type === 'connection') return (await names.connection(object.id)).display_name;
   return null;
+}
+
+async function actorView(userId: string, names: NameCache): Promise<AuditAdminView['actor']> {
+  if (userId === BOOTSTRAP_ACTOR_ID)
+    return { id: userId, email: null, label: BOOTSTRAP_ACTOR_LABEL };
+  const email = await names.email(userId);
+  return { id: userId, email, label: email ?? userId };
 }
