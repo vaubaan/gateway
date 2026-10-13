@@ -16,6 +16,7 @@ import { MemoryCacheClient } from '@vaubaan/gateway-core';
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import { createAuthModule, type AuthModule, type OidcOptions } from '../auth';
+import { createConnectionsModule, type ConnectionsModule } from '../connections';
 import {
   loadInstanceConfig,
   type InstanceConfig,
@@ -24,11 +25,13 @@ import {
 } from '../config';
 import { createEncryptor, type Encryptor } from '../crypto';
 import { createLogger, createRedactor, type Logger, type LoggerOptions } from '../logging';
+import { ProviderAppsService } from '../provider-apps';
 import { SqliteSessionStore } from '../session';
 import type { Store } from '../store';
 import { MemoryRateLimiter } from './memory';
 import type { CacheClient, RateLimiter, SessionStore } from './ports';
-import { buildEmptyRegistry, checkProviderApps, RegistryCatalogIndex } from './registry';
+import { checkProviderApps, RegistryCatalogIndex } from './registry';
+import { buildShippedRegistry } from './shipped-plugins';
 import { openEmbeddedStore, type StoreContext } from './store';
 
 export interface GatewayRoot {
@@ -39,13 +42,17 @@ export interface GatewayRoot {
   readonly encryptor: Encryptor;
   /** The embedded store with its repositories (P0.3); satisfies `StoreLiveness` of `ports.ts`. */
   readonly store: Store;
-  /** The single provider list (P0.2); empty until the plugins migrate (P1.2). */
+  /** The single provider list (P0.2): the plugins the image ships (`shipped-plugins.ts`). */
   readonly registry: PluginRegistry;
   readonly rateLimiter: RateLimiter;
   readonly cache: CacheClient;
   readonly sessions: SessionStore;
   /** Human authentication: OIDC relying party, web sessions, bootstrap, admin rule (P1.1). */
   readonly auth: AuthModule;
+  /** The company's registered app per provider: mounted configuration or Admin page (P1.4). */
+  readonly providerApps: ProviderAppsService;
+  /** Connect flows, resources, credential broker with the generic OAuth refresh (P1.4). */
+  readonly connections: ConnectionsModule;
   readonly build: BuildInfo;
   readonly startedAt: Date;
   close(): Promise<void>;
@@ -70,6 +77,8 @@ export interface RootDeps {
   readonly sessions?: SessionStore;
   /** Outbound HTTP and issuer rules of the OIDC relying party (tests inject an in-process IdP). */
   readonly oidc?: OidcOptions;
+  /** Outbound HTTP of the connect flows and of plugin discovery (tests inject a mock provider). */
+  readonly providerFetch?: typeof fetch;
   readonly logWrite?: LoggerOptions['write'];
   readonly build?: BuildInfo;
 }
@@ -97,7 +106,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
 
   // The registry comes first: the store checks every persisted RiskId
   // against the loaded catalogs, and the provider apps against the ids.
-  const registry = await (deps.buildRegistry ?? buildEmptyRegistry)(config, logger);
+  const registry = await (deps.buildRegistry ?? buildShippedRegistry)(config, logger);
   checkProviderApps(config, registry, logger);
 
   const store = await (deps.openStore ?? openEmbeddedStore)({
@@ -113,6 +122,20 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
   const sessions = deps.sessions ?? new SqliteSessionStore({ db: store.db });
   const auth = createAuthModule({ config, store, sessions, logger, oidc: deps.oidc });
 
+  const rateLimiter = deps.rateLimiter ?? new MemoryRateLimiter();
+  const providerApps = new ProviderAppsService(config.providers, store.config, registry);
+  const connections = createConnectionsModule({
+    config,
+    store,
+    registry,
+    providerApps,
+    sessions,
+    rateLimiter,
+    authenticator: auth.authenticator,
+    logger,
+    fetch: deps.providerFetch,
+  });
+
   const root: GatewayRoot = {
     config,
     configFile,
@@ -120,10 +143,12 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
     encryptor,
     store,
     registry,
-    rateLimiter: deps.rateLimiter ?? new MemoryRateLimiter(),
+    rateLimiter,
     cache: deps.cache ?? new MemoryCacheClient(),
     sessions,
     auth,
+    providerApps,
+    connections,
     build,
     startedAt: new Date(),
     async close() {

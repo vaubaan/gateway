@@ -7,7 +7,7 @@
  * `deploy/config/*.example*` may show placeholders.
  *
  * Scope: the v5 perimeter (`apps/gateway/src/server`, `instrumentation.ts`,
- * `app/healthz`, `next.config.ts`, `deploy/`, `scripts/`, `.github/workflows`).
+ * `app/healthz`, the Connections and Provider apps pages with their components, `next.config.ts`, `deploy/`, `scripts/`, `.github/workflows`).
  * The v4 UI and `lib/` are not scanned: they are deleted feature by feature in
  * Phase 1, and each feature widens this scope as it lands.
  */
@@ -22,6 +22,10 @@ const SCANNED = [
   'apps/gateway/src/server',
   'apps/gateway/src/instrumentation.ts',
   'apps/gateway/src/app/healthz',
+  'apps/gateway/src/app/(app)/connections',
+  'apps/gateway/src/app/admin/(guarded)/provider-apps',
+  'apps/gateway/src/components/connections',
+  'apps/gateway/src/components/shell',
   'apps/gateway/next.config.ts',
   'deploy',
   'scripts',

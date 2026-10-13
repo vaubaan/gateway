@@ -16,4 +16,5 @@ export type {
 } from './ports';
 export { MemoryRateLimiter, MemorySessionStore } from './memory';
 export { buildEmptyRegistry, checkProviderApps, RegistryCatalogIndex } from './registry';
+export { buildShippedRegistry, SHIPPED_PLUGINS } from './shipped-plugins';
 export { openEmbeddedStore, type StoreContext } from './store';

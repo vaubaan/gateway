@@ -9,8 +9,10 @@ import type {
   Iso,
   Principal,
 } from '../types.ts';
+import { RESOURCE_ENV_SOURCES } from '../types.ts';
 import {
   nowIso,
+  parseEnum,
   parseJsonObject,
   placeholders,
   principalColumns,
@@ -49,7 +51,11 @@ export interface ConnectionsRepo {
   setStatus(id: string, status: ConnectionStatus): Promise<ConnectionRecord>;
   transferOwner(id: string, owner: Principal): Promise<ConnectionRecord>;
   setMetadata(id: string, metadata: Record<string, unknown> | null): Promise<ConnectionRecord>;
-  /** Discovery sync: upserts by ref (keeping ids and owner labels), drops refs no longer present. */
+  /**
+   * Destructive sync: upserts by ref (keeping ids and owner labels) and **deletes** refs no
+   * longer present, cascading to the mission selections that named them. The connect flows
+   * use `syncDiscoveredResources`, which never deletes.
+   */
   replaceResources(
     connectionId: string,
     resources: readonly DiscoveredResource[],
@@ -57,6 +63,52 @@ export interface ConnectionsRepo {
   listResources(connectionId: string): Promise<ConnectionResourceRecord[]>;
   getResource(id: string): Promise<ConnectionResourceRecord | null>;
   setResourceEnv(resourceId: string, env: string | null): Promise<ConnectionResourceRecord>;
+
+  /**
+   * Reconnection by an owner: like `setCredential` (new credential, status `active`) but
+   * refused for a `revoked` connection, whose revocation is terminal. Returns false when
+   * nothing was written.
+   */
+  reconnect(id: string, credential: string, expiresAt?: Iso | null): Promise<boolean>;
+  /**
+   * Token refresh: seals the new credential only while the connection is still `active`
+   * and leaves the status alone, so a refresh racing a revocation never resurrects the
+   * connection. Returns false when nothing was written.
+   */
+  refreshCredential(id: string, credential: string, expiresAt?: Iso | null): Promise<boolean>;
+  /**
+   * The provider rejected the credential and the refresh failed: `active` → `expired`.
+   * Conditional, so it never downgrades a `revoked` connection. Returns false when the
+   * connection was not `active`.
+   */
+  markExpired(id: string): Promise<boolean>;
+  /** Terminal revocation: status `revoked`, `revoked_at` set, the credential blob erased. */
+  revoke(id: string): Promise<ConnectionRecord>;
+  /**
+   * Discovery merge (spec §0 "Resource"): provider facts are refreshed, owner edits are
+   * kept, nothing is deleted.
+   *  - a new ref is inserted; an `env` the plugin returns marks the label `plugin`-set;
+   *  - a known ref keeps its id, its owner label, its owner metadata, its `hidden` flag and
+   *    its display name once the owner renamed it; the discovered metadata replaces the
+   *    previous provider facts; a plugin-set `env` always follows the plugin;
+   *  - a ref the discovery no longer returns is marked stale (`staleSince`), and a stale
+   *    ref that comes back is cleared.
+   */
+  syncDiscoveredResources(
+    connectionId: string,
+    resources: readonly DiscoveredResource[],
+  ): Promise<ConnectionResourceRecord[]>;
+  /** Owner rename; `null` hands the name back to discovery (the current name stays until then). */
+  setResourceDisplayName(
+    resourceId: string,
+    displayName: string | null,
+  ): Promise<ConnectionResourceRecord>;
+  setResourceHidden(resourceId: string, hidden: boolean): Promise<ConnectionResourceRecord>;
+  /** Owner edits over the discovered metadata; `null` clears them. */
+  setResourceOwnerMetadata(
+    resourceId: string,
+    metadata: Record<string, unknown> | null,
+  ): Promise<ConnectionResourceRecord>;
 }
 
 interface ConnectionRow {
@@ -82,11 +134,18 @@ interface ResourceRow {
   env: string | null;
   display_name: string;
   discovered_at: string;
+  metadata_json: string | null;
+  owner_metadata_json: string | null;
+  env_source: string;
+  display_name_edited: number;
+  hidden: number;
+  stale_since: string | null;
 }
 
 const COLUMNS = `id, provider, owner_kind, owner_user_id, owner_group_id, display_name, status,
   key_version, credential_expires_at, metadata_json, created_at, updated_at, revoked_at`;
-const RESOURCE_COLUMNS = 'id, connection_id, ref, env, display_name, discovered_at';
+const RESOURCE_COLUMNS = `id, connection_id, ref, env, display_name, discovered_at, metadata_json,
+  owner_metadata_json, env_source, display_name_edited, hidden, stale_since`;
 
 function toRecord(row: ConnectionRow): ConnectionRecord {
   return {
@@ -105,6 +164,11 @@ function toRecord(row: ConnectionRow): ConnectionRecord {
 }
 
 function resourceToRecord(row: ResourceRow): ConnectionResourceRecord {
+  const discovered = parseJsonObject(row.metadata_json, 'connection_resources.metadata_json');
+  const ownerMetadata = parseJsonObject(
+    row.owner_metadata_json,
+    'connection_resources.owner_metadata_json',
+  );
   return {
     id: row.id,
     connectionId: row.connection_id,
@@ -112,6 +176,12 @@ function resourceToRecord(row: ResourceRow): ConnectionResourceRecord {
     env: row.env,
     displayName: row.display_name,
     discoveredAt: row.discovered_at,
+    envSource: parseEnum(RESOURCE_ENV_SOURCES, row.env_source, 'connection_resources.env_source'),
+    metadata: discovered || ownerMetadata ? { ...discovered, ...ownerMetadata } : null,
+    ownerMetadata,
+    displayNameEdited: row.display_name_edited === 1,
+    hidden: row.hidden === 1,
+    staleSince: row.stale_since,
   };
 }
 
@@ -176,7 +246,51 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
        discovered_at = excluded.discovered_at`,
   );
   const setEnv = db.prepare<[string | null, string]>(
-    'UPDATE connection_resources SET env = ? WHERE id = ?',
+    "UPDATE connection_resources SET env = ?, env_source = 'owner' WHERE id = ?",
+  );
+  const reconnectStmt = db.prepare<[Buffer, number, string | null, string, string]>(
+    `UPDATE connections SET credential_blob = ?, key_version = ?, credential_expires_at = ?,
+       status = 'active', updated_at = ? WHERE id = ? AND status <> 'revoked'`,
+  );
+  const refreshCredentialStmt = db.prepare<[Buffer, number, string | null, string, string]>(
+    `UPDATE connections SET credential_blob = ?, key_version = ?, credential_expires_at = ?,
+       updated_at = ? WHERE id = ? AND status = 'active'`,
+  );
+  const markExpiredStmt = db.prepare<[string, string]>(
+    "UPDATE connections SET status = 'expired', updated_at = ? WHERE id = ? AND status = 'active'",
+  );
+  const revokeStmt = db.prepare<[string, string, string]>(
+    `UPDATE connections SET status = 'revoked', revoked_at = COALESCE(revoked_at, ?),
+       credential_blob = NULL, key_version = NULL, credential_expires_at = NULL, updated_at = ?
+     WHERE id = ?`,
+  );
+  const resourceByRef = db.prepare<[string, string], ResourceRow>(
+    `SELECT ${RESOURCE_COLUMNS} FROM connection_resources WHERE connection_id = ? AND ref = ?`,
+  );
+  const insertDiscovered = db.prepare<
+    [string, string, string, string | null, string, string, string | null, string]
+  >(
+    `INSERT INTO connection_resources (id, connection_id, ref, env, display_name, discovered_at,
+       metadata_json, env_source)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const updateDiscovered = db.prepare<
+    [string | null, string, string, string, string | null, string]
+  >(
+    `UPDATE connection_resources SET env = ?, env_source = ?, display_name = ?, discovered_at = ?,
+       metadata_json = ?, stale_since = NULL WHERE id = ?`,
+  );
+  const markStale = db.prepare<[string, string]>(
+    'UPDATE connection_resources SET stale_since = COALESCE(stale_since, ?) WHERE id = ?',
+  );
+  const setDisplayNameStmt = db.prepare<[string, number, string]>(
+    'UPDATE connection_resources SET display_name = ?, display_name_edited = ? WHERE id = ?',
+  );
+  const setHiddenStmt = db.prepare<[number, string]>(
+    'UPDATE connection_resources SET hidden = ? WHERE id = ?',
+  );
+  const setOwnerMetadataStmt = db.prepare<[string | null, string]>(
+    'UPDATE connection_resources SET owner_metadata_json = ? WHERE id = ?',
   );
 
   function requireConnection(id: string): ConnectionRecord {
@@ -313,6 +427,91 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
     },
     async setResourceEnv(resourceId, env) {
       const result = setEnv.run(env, resourceId);
+      if (result.changes === 0) throw new NotFoundError('connection_resource', resourceId);
+      return requireResource(resourceId);
+    },
+    async reconnect(id, plain, expiresAt = null) {
+      const sealed = await sealText(encryptor, id, plain);
+      const result = reconnectStmt.run(sealed.blob, sealed.keyVersion, expiresAt, nowIso(ctx), id);
+      return result.changes > 0;
+    },
+    async refreshCredential(id, plain, expiresAt = null) {
+      const sealed = await sealText(encryptor, id, plain);
+      const result = refreshCredentialStmt.run(
+        sealed.blob,
+        sealed.keyVersion,
+        expiresAt,
+        nowIso(ctx),
+        id,
+      );
+      return result.changes > 0;
+    },
+    async markExpired(id) {
+      return markExpiredStmt.run(nowIso(ctx), id).changes > 0;
+    },
+    async revoke(id) {
+      const now = nowIso(ctx);
+      const result = revokeStmt.run(now, now, id);
+      if (result.changes === 0) throw new NotFoundError('connection', id);
+      return requireConnection(id);
+    },
+    async syncDiscoveredResources(connectionId, resources) {
+      requireConnection(connectionId);
+      const now = nowIso(ctx);
+      withImmediateTransaction(db, () => {
+        const seen = new Set<string>();
+        for (const r of resources) {
+          if (seen.has(r.ref)) continue; // a plugin listing a ref twice: the first one wins
+          seen.add(r.ref);
+          const pluginEnv = r.env ?? null;
+          const metadataJson = toJson(r.metadata ?? null);
+          const existing = resourceByRef.get(connectionId, r.ref);
+          if (!existing) {
+            insertDiscovered.run(
+              ctx.newId(),
+              connectionId,
+              r.ref,
+              pluginEnv,
+              r.displayName,
+              now,
+              metadataJson,
+              pluginEnv !== null ? 'plugin' : 'owner',
+            );
+            continue;
+          }
+          updateDiscovered.run(
+            // A label the plugin sets follows the plugin; otherwise the owner's label stays
+            // (and becomes editable again if the plugin used to set it).
+            pluginEnv ?? existing.env,
+            pluginEnv !== null ? 'plugin' : 'owner',
+            existing.display_name_edited === 1 ? existing.display_name : r.displayName,
+            now,
+            metadataJson,
+            existing.id,
+          );
+        }
+        for (const row of resourcesOf.all(connectionId)) {
+          if (!seen.has(row.ref)) markStale.run(now, row.id);
+        }
+      });
+      return resourcesOf.all(connectionId).map(resourceToRecord);
+    },
+    async setResourceDisplayName(resourceId, displayName) {
+      const current = requireResource(resourceId);
+      setDisplayNameStmt.run(
+        displayName ?? current.displayName,
+        displayName === null ? 0 : 1,
+        resourceId,
+      );
+      return requireResource(resourceId);
+    },
+    async setResourceHidden(resourceId, hidden) {
+      const result = setHiddenStmt.run(hidden ? 1 : 0, resourceId);
+      if (result.changes === 0) throw new NotFoundError('connection_resource', resourceId);
+      return requireResource(resourceId);
+    },
+    async setResourceOwnerMetadata(resourceId, metadata) {
+      const result = setOwnerMetadataStmt.run(toJson(metadata), resourceId);
       if (result.changes === 0) throw new NotFoundError('connection_resource', resourceId);
       return requireResource(resourceId);
     },

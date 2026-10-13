@@ -84,13 +84,30 @@ export interface ConnectionResourceRecord {
   readonly env: string | null;
   readonly displayName: string;
   readonly discoveredAt: Iso;
+  /** Who set `env`: the plugin at discovery (read-only for the owner) or the owner. */
+  readonly envSource: ResourceEnvSource;
+  /** Effective metadata: the provider facts of the last discovery overlaid by the owner's edits. */
+  readonly metadata: Record<string, unknown> | null;
+  /** The owner's edits alone (keys that override the discovered metadata). */
+  readonly ownerMetadata: Record<string, unknown> | null;
+  /** True once the owner renamed the resource; discovery then keeps `displayName`. */
+  readonly displayNameEdited: boolean;
+  /** Hidden by the owner: kept and selectable by ref, left out of default listings. */
+  readonly hidden: boolean;
+  /** Set when the last discovery no longer returned the ref; `null` while it is reachable. */
+  readonly staleSince: Iso | null;
 }
+
+export const RESOURCE_ENV_SOURCES = ['owner', 'plugin'] as const;
+export type ResourceEnvSource = (typeof RESOURCE_ENV_SOURCES)[number];
 
 export interface DiscoveredResource {
   readonly ref: string;
   readonly displayName: string;
   /** Environment label; omitted keeps the label an owner already set. */
   readonly env?: string | null;
+  /** Provider-specific, non-secret facts (`Resource.metadata`); only `syncDiscoveredResources` stores them. */
+  readonly metadata?: Readonly<Record<string, unknown>> | null;
 }
 
 export interface ShareRecord {
