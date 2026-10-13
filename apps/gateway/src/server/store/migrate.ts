@@ -55,7 +55,10 @@ export const DEFAULT_MIGRATIONS_DIR = resolve(
 
 export function loadMigrations(dir: string = DEFAULT_MIGRATIONS_DIR): Migration[] {
   const migrations: Migration[] = [];
-  for (const file of readdirSync(dir).sort()) {
+  // turbopackIgnore: without it the bundler sees a dynamic directory read and
+  // traces the whole project into the standalone output. The SQL files reach
+  // the output through `outputFileTracingIncludes` in next.config.ts.
+  for (const file of readdirSync(/* turbopackIgnore: true */ dir).sort()) {
     const match = FILE_RE.exec(file);
     if (!match) {
       if (file.endsWith('.sql')) {
@@ -64,7 +67,7 @@ export function loadMigrations(dir: string = DEFAULT_MIGRATIONS_DIR): Migration[
       continue;
     }
     const version = Number.parseInt(match[1] ?? '', 10);
-    const sql = readFileSync(join(dir, file), 'utf8');
+    const sql = readFileSync(/* turbopackIgnore: true */ join(dir, file), 'utf8');
     migrations.push({ version, name: match[2] ?? '', sql, checksum: checksumOf(sql) });
   }
   for (let i = 1; i < migrations.length; i++) {
