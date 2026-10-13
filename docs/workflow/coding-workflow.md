@@ -74,20 +74,20 @@ type-check` at the root fans out to all of them.
 
 ## Scripts
 
-| Script                            | What it does                                                          |
-| --------------------------------- | --------------------------------------------------------------------- | --- | ------------------------------ |
-| `npm run ci`                      | type-check, lint, format:check, build, test — the exact CI gate       |
-| `npm run type-check`              | `tsc --noEmit` in every workspace                                     |
-| `npm run lint` / `lint:fix`       | ESLint over the repository                                            |
-| `npm run format` / `format:check` | Prettier write / check                                                |
-| `npm run build`                   | every workspace `build` (today: `next build` of `apps/gateway`)       |
-| `npm run test` / `test:watch`     | Vitest, whole suite                                                   |
-| `npm run test:e2e`                | builds, then Playwright on the ephemeral instance (manual; not in CI) |
-| `npm run dev`                     | `next dev` of `apps/gateway`                                          |
-| `npm run gen-master-key`          | prints a fresh 32-byte base64 master key                              |
-| `npm run docker:build`            | builds `deploy/docker/Dockerfile` as `vaubaan-gateway:local`          |
-| `npm run docker:smoke`            | runs `deploy/docker/smoke.sh` against that image                      |
-| `prepare`                         | installs the husky hook (`husky                                       |     | true`, never fails an install) |
+| Script                            | What it does                                                        |
+| --------------------------------- | ------------------------------------------------------------------- |
+| `npm run ci`                      | type-check, lint, format:check, build, test — the exact CI gate     |
+| `npm run type-check`              | `tsc --noEmit` in every workspace                                   |
+| `npm run lint` / `lint:fix`       | ESLint over the repository                                          |
+| `npm run format` / `format:check` | Prettier write / check                                              |
+| `npm run build`                   | every workspace `build` (today: `next build` of `apps/gateway`)     |
+| `npm run test` / `test:watch`     | Vitest, whole suite                                                 |
+| `npm run test:e2e`                | builds, then Playwright on the ephemeral instance (CI job `e2e`)    |
+| `npm run dev`                     | `next dev` of `apps/gateway`                                        |
+| `npm run gen-master-key`          | prints a fresh 32-byte base64 master key                            |
+| `npm run docker:build`            | builds `deploy/docker/Dockerfile` as `vaubaan-gateway:local`        |
+| `npm run docker:smoke`            | runs `deploy/docker/smoke.sh` against that image                    |
+| `prepare`                         | installs the husky hook (`husky \|\| true`, never fails an install) |
 
 Tests: Vitest collects `apps/*/tests/{unit,integration}`,
 `packages/*/tests/{unit,integration}`, `plugins/*/tests/unit` (`.test.ts`
@@ -126,6 +126,10 @@ jobs:
     - npm run format:check
     - npm run build # next build (Turbopack); standalone output
     - npm run test # vitest run
+  e2e: # needs: check; timeout 20 min
+    - npx playwright install --with-deps chromium
+    - npm run test:e2e:v5 # next build, then Playwright on the ephemeral instance
+    - on failure: upload test-results/v5 (traces, screenshots) for 7 days
   docker: # needs: check
     - docker/build-push-action (deploy/docker/Dockerfile, push: false, load: true,
       GitHub Actions layer cache, build-arg GIT_COMMIT_SHA=${{ github.sha }})
@@ -136,8 +140,17 @@ The `docker` job builds the single gateway image and runs the container
 smoke test described in [`docs/tests/e2e-tests.md`](../tests/e2e-tests.md)
 (fail-fast exit naming the key, https rule, `/healthz`, secret redaction,
 native addons, non-root). The image is not published; that is the release
-pipeline's job (P3.2). Playwright is not run in CI. No Node matrix, no
-cross-OS.
+pipeline's job (P3.2). No Node matrix, no cross-OS.
+
+The `e2e` job (P1.9) runs the browser tests of
+`apps/gateway/tests/e2e/v5/` — the cutover smoke among them — against an
+ephemeral instance: the built app on the real composition root with the
+`:memory:` store, a simulated identity provider and a mocked provider. It
+needs no secret and reaches no network besides the Chromium download. It is
+not part of `npm run ci`, which stays the `check` job's gate; run it locally
+with `npm run test:e2e:v5` (after `npx playwright install chromium` once).
+The cutover acceptance scenario itself is manual and is never run by CI
+([`docs/tests/e2e-tests.md`](../tests/e2e-tests.md)).
 
 ## Docker image
 

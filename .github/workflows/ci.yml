@@ -32,6 +32,32 @@ jobs:
       - run: npm run build
       - run: npm run test
 
+  # Browser tests against an ephemeral instance (apps/gateway/tests/e2e/v5):
+  # the built app on the real composition root with the `:memory:` store, a
+  # simulated identity provider and a mocked provider. No credential, no
+  # network beyond the browser download. Includes the cutover smoke
+  # (docs/tests/e2e-tests.md).
+  e2e:
+    runs-on: ubuntu-latest
+    needs: check
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e:v5
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-v5-results
+          path: test-results/v5
+          retention-days: 7
+          if-no-files-found: ignore
+
   # Builds the single gateway image (deploy/docker/Dockerfile) and runs the
   # container smoke test: incomplete configuration exits naming the key, a
   # complete one serves /healthz, native addons load, process is non-root.
