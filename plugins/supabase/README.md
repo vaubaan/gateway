@@ -12,11 +12,13 @@ Contract : `@vaubaan/plugin-sdk` (`definePlugin`, see
 ```
 plugins/supabase/
   src/
-    risk-catalog.yaml     23 risks + 1 deprecated + fallback, 3 presets (loaded at boot)
-    data-model.ts         4 planes : db, storage, auth, functions
+    risk-catalog.yaml     24 risks + 1 deprecated + fallback, 3 presets (loaded at boot)
+    data-model.ts         4 planes : db, storage, auth, functions ; the managed schemas
     tools.ts              44 MCP tools, prefix `supabase__`
     classify.ts           (tool, args, resources) → slices ; security-critical
     migration-sql.ts      allow-list reading of the SQL of apply_migration
+    query-sql.ts          allow-list reading of the SQL of execute_sql
+    sql-tokens.ts         the tokeniser both readers share
     execute.ts            Management API + data plane ; discoverResources
     credential.ts         oauth2 spec (the host runs the flow and the refresh)
     index.ts              definePlugin() — default export `supabasePlugin`
@@ -71,9 +73,15 @@ Rules a reviewer must know (`src/classify.ts`) :
   emits the marker slice alone (`user[one].W`, `object[one].W`) : the id or
   path is validated but is not a slice segment, so the call never lands on
   the fallback.
-- **`execute_sql` is read-only.** The classifier always emits
-  `schema[any].row[bulk].R` ; `execute.ts` enforces it by calling the
-  Management API **read-only query endpoint**
+- **`execute_sql` is read-only, and reads two kinds of schema.** The
+  classifier emits `schema[any].row[bulk].R`, plus
+  `schema[managed].row[bulk].R` when the query names a schema Supabase
+  manages (`auth`, `vault`, `storage`…) or cannot be read with confidence
+  (`src/query-sql.ts`, an allow-list : a function outside its inert list,
+  `$$`, a statement that is not a plain query). The second slice is the
+  risk `supabase.read-managed-schemas`, which no read-only preset carries.
+  `execute.ts` enforces read-only by calling the Management API
+  **read-only query endpoint**
   (`POST /v1/projects/{ref}/database/query/read-only`), where Postgres
   refuses any mutation. `list_tables` and `list_migrations` use the same
   endpoint. Consequence : no tool writes rows one by one, so
@@ -125,7 +133,7 @@ surfaced.
 
 ## Catalog
 
-`src/risk-catalog.yaml`, `catalog_version: 3`, 24 named risks — 23 live and
+`src/risk-catalog.yaml`, `catalog_version: 4`, 25 named risks — 24 live and
 the deprecated `supabase.row-write-one` — + the fallback
 `supabase.uncategorized-write` (`supabase.**.W`). A risk is never renamed or
 deleted, only deprecated.
@@ -133,15 +141,16 @@ deleted, only deprecated.
 **Every write risk is env-scoped** (`acceptable_in_envs`) : a mission accepts
 `supabase[staging].migration-write`, never a bare `supabase.migration-write`,
 and the environment comes from the label the owner put on the project.
-Reads are account-scoped except `auth.read-users` (PII).
+Reads are account-scoped except `auth.read-users` (PII) and
+`read-managed-schemas` (identities and secrets read through SQL).
 
 The runtime **refuses** a call that touches an env-scoped risk on a project
 whose label is absent or outside the risk's `acceptable_in_envs` ; the risk
 is not dropped. So :
 
-- on a project the owner has **not labelled**, every write and every user
-  read (`list_users`, `get_user`) is refused ; only account-scoped reads go
-  through ;
+- on a project the owner has **not labelled**, every write, every user
+  read (`list_users`, `get_user`) and every SQL read of a managed schema is
+  refused ; only account-scoped reads go through ;
 - the three bulk risks (`bulk-row-write`, `storage.bulk-object-write`,
   `auth.bulk-user-write`) list `preview` and `staging` only, so **a bulk
   write is refused on a prod project whatever the mission accepted** : a

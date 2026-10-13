@@ -35,6 +35,16 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
   checked against the services recorded for the mission's project at discovery; a
   project discovered by an earlier build has none recorded, and a call that names
   a service is refused until its owner refreshes the connection.
+- **Supabase: reading `auth`, `vault` or `storage` through SQL is a risk of its
+  own.** `supabase__execute_sql` now needs `supabase[<env>].read-managed-schemas`
+  on top of `supabase.read-data` when the query names a schema Supabase manages, and
+  also when the gateway cannot read the query with confidence: a call to a function
+  it does not know to be inert (any function of your application), `$$`, a
+  parameter, a statement that is not a plain query. A mission that holds `read-data`
+  alone keeps running plain queries on application tables; anything else is refused
+  `risk-not-accepted` until its creator adds the risk. The **Read-only analyst**
+  preset does not carry it; **Staging developer** does, on staging. Missions issued
+  before this build do not hold it. The Supabase plugin is `4.0.0`, its catalog `4`.
 - **Supabase missions.** A migration that changes a column type now needs
   `bulk-row-write` on top of the schema write. `supabase.row-write-one` is
   deprecated: it matches no call and grants nothing; missions and shares that name

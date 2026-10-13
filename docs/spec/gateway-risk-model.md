@@ -550,6 +550,18 @@ catalog entry could bound them:
    dedicated tools; migrations are read statement by statement against a
    list of known shapes and fail closed as described above.
 
+   Read-only is not "harmless to read". A database also holds what the
+   provider keeps for itself: the users and sessions of its
+   authentication service, its secret vault, the internals of its
+   storage. **Reading those is a risk of its own**, distinct from reading
+   application data and absent from every read preset. The classifier
+   decides by what the SQL **names**, never by what the database role
+   may read: a query that names a provider-managed schema touches that
+   risk. A query the classifier cannot read with confidence (a
+   statement that is not a plain query, a function outside the list it
+   knows to be inert, text it cannot tokenise) touches it too. The list
+   of managed schemas belongs to the plugin's data model.
+
 ## 8. The decision
 
 For one call, after the plugin returned its slices:
@@ -703,7 +715,7 @@ counterpart here: those mechanisms do not exist in v5.
 | A mission outliving a catalog change                        | A new risk is not held by existing missions; ids are never renamed or removed (§4.5).                                                                                      |
 | An environment assumed from a missing label                 | No label, no env-scoped risk (§6).                                                                                                                                         |
 | A trigger used as a bypass                                  | Workflow dispatch is not exposed (§7.2).                                                                                                                                   |
-| SQL misread as harmless                                     | The read-only guarantee comes from the provider; unread migrations fail closed (§7.2).                                                                                     |
+| SQL misread as harmless                                     | The read-only guarantee comes from the provider; unread migrations and unread queries fail closed, and provider-managed schemas are a read risk of their own (§7.2).       |
 | A limit declared and not applied                            | Shipped catalogs declare only the enforced limit (§4bis).                                                                                                                  |
 
 ## 15. What is checked mechanically

@@ -19,13 +19,15 @@
 # Environments : a Supabase project is the resource the owner labels (`staging`,
 # `prod`, `preview`), so every write risk is env-scoped : a mission accepts
 # `supabase[staging].migration-write`, never a bare `supabase.migration-write`.
-# Reads stay account-scoped except `auth.read-users` (PII).
+# Reads stay account-scoped except `auth.read-users` (PII) and
+# `read-managed-schemas` (identities, secrets).
 #
 # The runtime REFUSES a call that touches an env-scoped risk on a project
 # whose label is absent or outside `acceptable_in_envs` — the risk is not
 # dropped, and no mission can hold it there. Two consequences :
-#   - on a project the owner has not labelled, every write and every user
-#     read is refused ; only the account-scoped reads go through ;
+#   - on a project the owner has not labelled, every write, every user read
+#     and every SQL read of a managed schema is refused ; only the
+#     account-scoped reads go through ;
 #   - the three bulk risks exclude `prod`, so a bulk write is refused on a
 #     prod project whatever the mission accepted : a migration embedding DML
 #     or dropping a table, a migration the classifier cannot read, a bucket
@@ -40,10 +42,10 @@
 # Removing or renaming a risk : forbidden — mark it `deprecated: true` and
 # point `replaced_by` at its successor.
 #
-# Risk count : 24 named risks + 1 fallback.
+# Risk count : 25 named risks + 1 fallback.
 
 provider: supabase
-catalog_version: 3
+catalog_version: 4
 catalog_date: 2026-10-13
 
 risks:
@@ -55,12 +57,12 @@ risks:
     label: Read data and schema
     reason: >-
       SELECT and schema inspection, including `execute_sql`, which runs on
-      the Management API read-only endpoint. Can leak PII through
-      `auth.users` or application tables when the schema is not
-      compartmented. Deliberately broad : every Supabase read fires it, and
-      the more specific read risks (`auth.read-users`,
-      `storage.signed-url-read`, `functions.read`) co-fire to harden the
-      policy.
+      the Management API read-only endpoint. Can leak PII held in
+      application tables. Deliberately broad : every Supabase read fires it,
+      and the more specific read risks (`read-managed-schemas`,
+      `auth.read-users`, `storage.signed-url-read`, `functions.read`)
+      co-fire to harden the policy. Alone, it lets `execute_sql` run only a
+      plain query that names no schema Supabase manages.
     matches: supabase.**.R
     vector:
       reversibility: reversible
@@ -69,6 +71,28 @@ risks:
       cost: free
       visibility: internal
       persistence: stateless
+
+  - id: supabase.read-managed-schemas
+    label: Read the schemas Supabase manages, through SQL
+    reason: >-
+      `execute_sql` on what Supabase keeps for itself : `auth` (users,
+      identities, sessions, refresh tokens), `vault` (secrets and their
+      decrypted view), `storage` internals, `pgsodium` keys, `net` and
+      `cron` queues, and the catalog relations that hold password hashes or
+      other sessions' queries. Decided by what the SQL names, not by what
+      the database role may read. Also touched by any query the classifier
+      cannot read with confidence : a statement that is not a plain query,
+      a function outside the list it knows to be inert, dollar quoting,
+      prefixed strings. No read-only preset carries it.
+    matches: supabase.project[**].schema[managed].row[**].R
+    vector:
+      reversibility: reversible
+      blast: account
+      data: secret
+      cost: free
+      visibility: internal
+      persistence: stateless
+    acceptable_in_envs: [preview, staging, prod]
 
   - id: supabase.row-write-one
     label: Write rows one by one (bounded target) — deprecated, no tool touches it
@@ -273,8 +297,8 @@ risks:
     label: List or read users
     reason: >-
       PII : emails, providers, last sign-in, user metadata ; the volume can
-      be large. Also covers direct SELECTs on `auth.users` through
-      `execute_sql`.
+      be large. Through the auth admin API only : a SELECT on `auth.users`
+      through `execute_sql` is `read-managed-schemas`.
     matches: supabase.project[**].user[**].R
     vector:
       reversibility: reversible
@@ -470,7 +494,7 @@ risks:
 presets:
   - id: read-only-analyst
     label: Read-only analyst
-    description: Query data and schema, list buckets and objects, on every selected project. No write, no user PII listing.
+    description: Query application data and schema, list buckets and objects, on every selected project. No write, no user listing, no SQL on the schemas Supabase manages (auth, vault, storage).
     entries:
       - risk_id: supabase.read-data
         quota: 5000
@@ -483,7 +507,7 @@ presets:
 
   - id: staging-developer
     label: Staging developer
-    description: One mission per application. Day-to-day development on staging-labelled projects — migrations of any kind, RLS, buckets and objects, users one by one, edge functions and their secrets. Reads data, schema, objects and functions on every selected project. No auth, storage or SSO configuration, no signed URL, nothing written outside staging.
+    description: One mission per application. Day-to-day development on staging-labelled projects — migrations of any kind, RLS, buckets and objects, users one by one, edge functions and their secrets, SQL reads of the managed schemas. Reads data, schema, objects and functions on every selected project. No auth, storage or SSO configuration, no signed URL, nothing written outside staging.
     entries:
       - risk_id: supabase.read-data
         quota: 10000
@@ -500,6 +524,13 @@ presets:
       - risk_id: supabase[staging].auth.read-users
         quota: 500
         rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      # Not a read-only preset : this one already lists users and migrates
+      # on staging. Without it, any query calling a function of the
+      # application would be refused there.
+      - risk_id: supabase[staging].read-managed-schemas
+        quota: 2000
+        rate_limit: { max: 60, window_seconds: 60 }
         gate: auto
       - risk_id: supabase[staging].bulk-row-write
         quota: 200

@@ -51,12 +51,18 @@
  * segment would otherwise be classified as a function or an object and sent
  * to the parent endpoint, which URL parsers resolve `..` to.
  *
- * ─── execute_sql is read-only ───────────────────────────────────────────
+ * ─── execute_sql is read-only, and reads two kinds of schema ────────────
  *
  * Risk-model spec §7.2 #2 : `supabase__execute_sql` is strictly read-only. The
- * classifier always emits a single R slice ; `execute.ts` enforces it by
- * calling the Management API read-only endpoint, where Postgres refuses any
- * mutation.
+ * classifier only ever emits R slices ; `execute.ts` enforces it by calling
+ * the Management API read-only endpoint, where Postgres refuses any mutation.
+ *
+ * Which read is decided by `query-sql.ts`, from what the SQL names :
+ * `schema[any].row[bulk].R` always, plus `schema[managed].row[bulk].R` when
+ * the query names a schema Supabase manages (`auth`, `vault`, `storage`…) or
+ * cannot be read with confidence. `managed` is a literal marker like `bulk` :
+ * the catalog entry `supabase.read-managed-schemas` names it, and no argument
+ * of a tool can spell it into a slice.
  *
  * ─── apply_migration : one slice per write class, fail closed ───────────
  *
@@ -79,6 +85,7 @@ import {
 } from '@vaubaan/plugin-sdk';
 
 import { readMigrationSql, type MigrationWriteClass } from './migration-sql.ts';
+import { readQuerySql } from './query-sql.ts';
 import { supabaseTools } from './tools.ts';
 
 export type SupabasePlane = 'db' | 'storage' | 'auth' | 'functions';
@@ -291,6 +298,8 @@ function i(value: string): Segment {
 
 /** The "any identifier" placeholder of an executed slice. */
 const ANY = '*';
+/** The schema marker of a read that reaches the schemas Supabase manages. */
+const MANAGED = 'managed';
 function slice(path: readonly Segment[], action: 'R' | 'W'): Slice {
   return { provider: PROVIDER, path: [...path], action };
 }
@@ -397,12 +406,16 @@ const TOOLS: Readonly<Record<string, ToolDescriptor>> = {
       return query === null ? missing('query') : migrationSlices(query, ref);
     },
   },
-  // Always R : the SQL is opaque to the classifier, the read-only endpoint enforces it.
+  // Always R : the read-only endpoint enforces it. The data read, plus the managed
+  // schemas when the SQL names one or cannot be read with confidence (fail closed).
   supabase__execute_sql: {
     plane: 'db',
     produce: (_id, ref, args) => {
-      if (sqlText(args.query) === null) return missing('query');
-      return [slice([...project(ref), n('schema'), i('any'), n('row'), i('bulk')], 'R')];
+      const query = sqlText(args.query);
+      if (query === null) return missing('query');
+      const rows = (schema: string): Slice =>
+        slice([...project(ref), n('schema'), i(schema), n('row'), i('bulk')], 'R');
+      return readQuerySql(query).managed ? [rows('any'), rows(MANAGED)] : [rows('any')];
     },
   },
 
