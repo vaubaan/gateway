@@ -24,6 +24,7 @@ import type {
 } from '@vaubaan/shared';
 
 import type { CredentialSecret, CredentialSpec, ProviderAppConfig } from './credential.ts';
+import type { ToolResultPartSink } from './streaming.ts';
 
 /**
  * Result of `classify`. `denied` is the plugin's own refusal, before any
@@ -82,6 +83,15 @@ export interface ExecuteContext extends ConnectionContext {
   readonly agentLabel?: string | null;
   /** Connection-scoped cache for derived upstream credentials ; see `UpstreamCredentialCache`. */
   readonly credentialCache?: UpstreamCredentialCache;
+  /**
+   * Hands the caller one part of the result as soon as the provider
+   * delivered it, for a tool whose provider answers progressively. Optional
+   * for both sides : a plugin that never calls it is unaffected, and a host
+   * that does not provide it gets the complete result alone. `execute` still
+   * returns the whole `McpToolResult` ; see `streaming.ts` for the rules
+   * (`streamToolResult` applies them).
+   */
+  readonly emitPart?: ToolResultPartSink;
 }
 
 export interface ProviderPlugin {

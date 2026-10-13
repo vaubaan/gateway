@@ -20,8 +20,21 @@
  *   protocol      the MCP SDK (`@modelcontextprotocol/server`, v2): 2026-07-28
  *                 requests through `createMcpHandler` (stateless, JSON, upgraded
  *                 to SSE only if a handler emits notifications), 2025-era
- *                 requests through the stateless JSON transport
+ *                 requests through the stateless JSON transport — or, for a
+ *                 `tools/call` that carries a `progressToken`, through the
+ *                 SDK's stateless SSE fallback
  *   tools/call    `CallPipeline.execute` (gateway-core) with the real stages
+ *
+ * Streaming (spec §4.1 "the decision is made before the stream starts"). MCP
+ * has no partial result: a `tools/call` is answered by one message. What can
+ * leave early is `notifications/progress` on the call's own event stream, and
+ * only for a caller that sent a `progressToken`. The door hands the pipeline
+ * an `onPart` that turns each part a plugin emits into one such notification;
+ * the pipeline calls it from its last stage only, so no byte of a result
+ * leaves before the mission, resource, risk and budget checks have passed and
+ * the credit is counted, and a refused call is answered by its error alone. The
+ * complete result still closes the exchange. A caller that sent no token gets
+ * the same result as one JSON body.
  *
  * Refusals travel whole: a refused `tools/call` is the JSON-RPC error
  * `refusalToRpcError` describes — code `-32603`, `data` = the refusal with its
@@ -33,12 +46,16 @@
 import {
   createMcpHandler,
   isLegacyRequest,
+  legacyStatelessFallback,
   ProtocolError,
   Server,
   WebStandardStreamableHTTPServerTransport,
+  type AuthInfo,
   type CallToolResult,
+  type LegacyHttpHandler,
   type ListToolsResult,
   type McpHttpHandler,
+  type ServerContext,
 } from '@modelcontextprotocol/server';
 import {
   AUTH_REQUIRED_HTTP_STATUS,
@@ -51,6 +68,7 @@ import {
   refuse,
   rpcError,
   type CallPipeline,
+  type CallRequest,
   type ClientOrigin,
   type CredentialResolver,
   type DelegationContext,
@@ -74,7 +92,7 @@ import type { Store } from '../store';
 import { systemClock, type Clock } from '../store/clock';
 import type { MissionRecord } from '../store/types';
 import { loadMissionContext } from './mission-context';
-import { agentLabelOf, clientOriginOf, trustedProxyList } from './request-meta';
+import { clientOriginOf, readAgentLabel, trustedProxyList } from './request-meta';
 import type { TokenVerifier } from './token-verifier';
 import { buildCatalog, callableTools } from './tools';
 
@@ -93,6 +111,8 @@ const MS_PER_SECOND = 1000;
 /** Key under which the request scope rides `AuthInfo.extra` to the per-request server. */
 const SCOPE_KEY = 'vaubaan';
 const SESSION_ID_SHAPE = /^[A-Za-z0-9_-]{16,}$/;
+const TOOLS_CALL_METHOD = 'tools/call';
+const PROGRESS_NOTIFICATION = 'notifications/progress';
 
 /** Identifies a delegated token (management door, feature P2.3). Absent until then. */
 export interface DelegatedTokenResolver {
@@ -140,19 +160,24 @@ export class ExecutionDoor {
   private readonly missionsByContext = new WeakMap<MissionContext, MissionRecord>();
   private readonly proxies: ReturnType<typeof trustedProxyList>;
   private readonly modern: McpHttpHandler;
+  /** 2025-era calls that asked for progress: the SDK's stateless leg, answering in SSE. */
+  private readonly legacyStream: LegacyHttpHandler;
 
   constructor(private readonly deps: ExecutionDoorDeps) {
     this.clock = deps.clock ?? systemClock;
     this.proxies = trustedProxyList(deps.config.trustedProxies);
     // 2026-07-28 traffic. The handler holds nothing between requests; the factory
     // builds one server per request around the scope the door authenticated.
-    this.modern = createMcpHandler(
-      ({ authInfo }) => this.buildServer(authInfo?.extra?.[SCOPE_KEY] as RequestScope),
-      {
-        legacy: 'reject',
-        responseMode: 'auto',
-        onerror: (error) => deps.logger.debug('mcp request rejected', { error: error.message }),
-      },
+    const onerror = (error: Error): void =>
+      deps.logger.debug('mcp request rejected', { error: error.message });
+    this.modern = createMcpHandler(({ authInfo }) => this.buildServer(scopeOf(authInfo)), {
+      legacy: 'reject',
+      responseMode: 'auto',
+      onerror,
+    });
+    this.legacyStream = legacyStatelessFallback(
+      ({ authInfo }) => this.buildServer(scopeOf(authInfo)),
+      onerror,
     );
   }
 
@@ -165,16 +190,15 @@ export class ExecutionDoor {
       headers: request.headers,
       client: gate.client,
     };
-    if (await isLegacyRequest(request)) return this.serveLegacy(request, scope);
-    return this.modern.fetch(request, {
-      authInfo: {
-        // The SDK wants a token string; it gets the masked prefix, never the bearer.
-        token: maskedToken(scope.ctx.token.prefix),
-        clientId: scope.ctx.mission.id,
-        scopes: [],
-        extra: { [SCOPE_KEY]: scope },
-      },
-    });
+    const authInfo: AuthInfo = {
+      // The SDK wants a token string; it gets the masked prefix, never the bearer.
+      token: maskedToken(scope.ctx.token.prefix),
+      clientId: scope.ctx.mission.id,
+      scopes: [],
+      extra: { [SCOPE_KEY]: scope },
+    };
+    if (await isLegacyRequest(request)) return this.serveLegacy(request, scope, authInfo);
+    return this.modern.fetch(request, { authInfo });
   }
 
   /** `GET /mcp/catalog` — spec §4.1 "Catalog". */
@@ -317,14 +341,23 @@ export class ExecutionDoor {
   // MCP serving
   // ───────────────────────────────────────────────────────────────────────────
 
-  /** 2025-era clients: one stateless exchange, answered as plain JSON. */
-  private async serveLegacy(request: Request, scope: RequestScope): Promise<Response> {
+  /**
+   * 2025-era clients: one stateless exchange, answered as plain JSON — unless
+   * the call asked for progress, in which case the answer is the call's event
+   * stream (progress notifications, then the result).
+   */
+  private async serveLegacy(
+    request: Request,
+    scope: RequestScope,
+    authInfo: AuthInfo,
+  ): Promise<Response> {
     if (request.method !== 'POST') {
       // Stateless: there is no session to stream (GET) or to end (DELETE).
       return json(HTTP_METHOD_NOT_ALLOWED, rpcError(null, -32000, 'Method not allowed.'), {
         Allow: 'POST',
       });
     }
+    if (await asksForProgress(request)) return this.legacyStream(request, { authInfo });
     const server = this.buildServer(scope);
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
@@ -354,13 +387,16 @@ export class ExecutionDoor {
       return { tools: callableTools(ctx, this.deps.registry) as ListToolsResult['tools'] };
     });
 
-    server.setRequestHandler('tools/call', async (request) => {
+    server.setRequestHandler(TOOLS_CALL_METHOD, async (request, { mcpReq }) => {
       const { name, arguments: args, _meta: meta } = request.params;
+      const onPart = this.progressForwarder(mcpReq, ctx);
       const outcome = await this.deps.pipeline.execute(ctx, {
         tool: name,
         args: args ?? {},
-        agent_label: agentLabelOf(scope.headers, meta),
+        agent_label: this.agentLabel(scope, meta),
         client: scope.client,
+        ...(onPart ? { onPart } : {}),
+        signal: mcpReq.signal,
       });
       // Arguments are never logged; the audit entry carries their fingerprint.
       this.deps.logger.info('tools/call', {
@@ -396,6 +432,85 @@ export class ExecutionDoor {
     });
     return server;
   }
+
+  /**
+   * The label of a call (attribution only). A carrier whose value is not a
+   * label is dropped and logged — its reason and length, never its value —
+   * and changes nothing else about the call.
+   */
+  private agentLabel(scope: RequestScope, meta: unknown): string | null {
+    const reading = readAgentLabel(scope.headers, meta);
+    for (const dropped of reading.dropped) {
+      this.deps.logger.info('agent label dropped', {
+        mission_id: scope.ctx.mission.id,
+        carrier: dropped.carrier,
+        reason: dropped.reason,
+        length: dropped.length,
+      });
+    }
+    return reading.label;
+  }
+
+  /**
+   * What turns the parts of a streamed result into progress notifications on
+   * the call's event stream; nothing when the caller sent no `progressToken`.
+   * `progress` counts the parts; a text part travels as `message`. A
+   * notification that cannot be delivered never fails the call: the caller
+   * being gone is seen through the call's signal.
+   */
+  private progressForwarder(
+    mcpReq: ServerContext['mcpReq'],
+    ctx: MissionContext,
+  ): CallRequest['onPart'] {
+    const progressToken = mcpReq._meta?.progressToken;
+    if (progressToken === undefined) return undefined;
+    let sent = 0;
+    return async (part) => {
+      sent += 1;
+      try {
+        await mcpReq.notify({
+          method: PROGRESS_NOTIFICATION,
+          params: {
+            progressToken,
+            progress: sent,
+            ...(part.type === 'text' ? { message: part.text } : {}),
+          },
+        });
+      } catch (err) {
+        this.deps.logger.debug('progress notification not delivered', {
+          mission_id: ctx.mission.id,
+          error: err instanceof Error ? err.name : 'Error',
+        });
+      }
+    };
+  }
+}
+
+/** The request scope the door put in `AuthInfo.extra` for the per-request server. */
+function scopeOf(authInfo: AuthInfo | undefined): RequestScope | undefined {
+  return authInfo?.extra?.[SCOPE_KEY] as RequestScope | undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Does this POST carry a single `tools/call` with a `progressToken`? Read on
+ * a clone, so the SDK still reads the body itself. Anything else — a batch,
+ * another method, an unreadable body — is served as JSON.
+ */
+async function asksForProgress(request: Request): Promise<boolean> {
+  let body: unknown;
+  try {
+    body = await request.clone().json();
+  } catch {
+    return false;
+  }
+  if (!isRecord(body) || body.method !== TOOLS_CALL_METHOD || !isRecord(body.params)) return false;
+  const meta = body.params._meta;
+  if (!isRecord(meta)) return false;
+  return typeof meta.progressToken === 'string' || typeof meta.progressToken === 'number';
 }
 
 /** The JSON-RPC error of a refusal, as a throwable the SDK serializes untouched. */

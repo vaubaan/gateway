@@ -21,6 +21,7 @@ export * from './env-of.ts';
 export * from './define-plugin.ts';
 export * from './registry.ts';
 export * from './flags.ts';
+export * from './streaming.ts';
 
 // Re-exported so a plugin can import its whole vocabulary from one place.
 export type {

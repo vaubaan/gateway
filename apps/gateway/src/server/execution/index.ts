@@ -137,9 +137,15 @@ export {
   AGENT_LABEL_MAX_LENGTH,
   AGENT_LABEL_META_KEY,
   agentLabelOf,
-  cleanAgentLabel,
   clientOriginOf,
+  parseAgentLabel,
+  readAgentLabel,
   trustedProxyList,
+  type AgentLabelCarrier,
+  type AgentLabelParse,
+  type AgentLabelReading,
+  type AgentLabelRejection,
+  type DroppedAgentLabel,
 } from './request-meta';
 export { citedRefs, createResourceStage } from './resource-stage';
 export { createRiskStage } from './risk-stage';
