@@ -36,21 +36,21 @@ export const sshDataModel: DataModel = {
           parent: 'host',
           cardinalities: ['one'],
           description:
-            'One shell command line. `R` when every simple command of the line is on the read whitelist, `W` otherwise. Always cardinality one at the call site.',
+            'One shell command line. `R` for each simple command on the read allow-list, `W` for any other ; a line the classifier cannot see through is `W` with every marker and never `R`. Always cardinality one at the call site.',
         },
         {
           name: 'secret-file',
           parent: 'command',
           cardinalities: ['one'],
           description:
-            'Marker : the line reads a credential-bearing path (`/etc/shadow`, `/root/…`, `~/.ssh/…`, `~/.aws/…`). Emitted as an extra `R` slice.',
+            'Marker : the line references a credential-bearing path (`/etc/shadow`, `/root/…`, `.ssh/…`, `.aws/…`, `.env`, a private key, a raw device) or a path the classifier cannot see (an expansion, a parent segment, a recursive `grep`, `docker inspect`). Emitted as an extra `R` slice.',
         },
         {
           name: 'destructive',
           parent: 'command',
           cardinalities: ['one'],
           description:
-            'Marker : recursive or forced delete, disk-level tool, reboot or shutdown, account deletion, firewall flush, Docker prune.',
+            'Marker : recursive or forced delete, disk-level tool, reboot or shutdown, account deletion, firewall flush, journal vacuum, Docker prune.',
         },
         {
           name: 'package',

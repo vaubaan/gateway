@@ -1,10 +1,12 @@
 /**
  * Mandatory suite of the SSH plugin : the SDK kit, the v5 classifier (host
- * resolution, read / write, command classes, opaque lines), the command-line
- * splitter, the credential spec and the host key pin, `execute` and
- * `discoverResources` over a fake transport. No socket is ever opened : the
- * real `ssh2` transport is replaced through `createSshPlugin({ transport })`.
- * The classifier's scenario-by-scenario security suite is `classify.test.ts`.
+ * resolution, read / write, command classes, opaque lines), the presets
+ * evaluated through the policy engine, the command-line splitter, the
+ * credential spec and the pin helpers, `execute` and `discoverResources` over
+ * a fake transport. No socket is opened here : the real `ssh2` transport is
+ * replaced through `createSshPlugin({ transport })` ; it is exercised, host
+ * key verification included, by `host-key-pinning.test.ts`. The classifier's
+ * scenario-by-scenario suites are `classify.test.ts` and `adversarial.test.ts`.
  */
 import { createHash } from 'node:crypto';
 
@@ -23,7 +25,12 @@ import {
   assertPluginWellFormed,
   assertPresetsValid,
 } from '@vaubaan/plugin-sdk/testing';
-import { evaluateCall, indexCatalog, resourceEnvResolver } from '@vaubaan/policy-engine';
+import {
+  evaluateCall,
+  indexCatalog,
+  resourceEnvResolver,
+  risksTouchedBy,
+} from '@vaubaan/policy-engine';
 
 import {
   classifySsh,
@@ -33,13 +40,20 @@ import {
   hostKeyMatches,
   isDestructive,
   isPackageInstall,
+  isReadAllowed,
   isServiceControl,
+  lexCommandLine,
+  hasBrace,
+  hasGlob,
   MAX_CMD_LENGTH,
   normalizeFingerprint,
+  parseOptions,
   profileCommandLine,
   splitCommandLine,
+  SshHostKeyMismatchError,
   sshPlugin,
   sshTarget,
+  stripPrivilegePrefix,
   type ExecResult,
   type SshTarget,
   type SshTransport,
@@ -58,6 +72,7 @@ const staging: Resource = {
   displayName: `deploy@${HOST}:22`,
 };
 const prod: Resource = { provider: 'ssh', ref: OTHER, env: 'prod', displayName: `ops@${OTHER}:22` };
+const dev: Resource = { provider: 'ssh', ref: HOST, env: 'dev', displayName: `deploy@${HOST}:22` };
 const unlabelled: Resource = { provider: 'ssh', ref: HOST, displayName: HOST };
 
 const credential = {
@@ -150,9 +165,29 @@ describe('ssh plugin — structural kit', () => {
     );
     expect(report.toolsChecked).toBe(1);
     expect(report.risksUntouched).toEqual([]);
+    expect(report.fallbackHits).toEqual([]);
+    expect(report.risksTouched).toEqual([
+      'ssh.exec-read',
+      'ssh.exec-read-secret-files',
+      'ssh.exec-write',
+      'ssh.exec-destructive',
+      'ssh.exec-package-install',
+      'ssh.exec-service-control',
+      'ssh.exec-sudo',
+    ]);
   });
 
-  test('ships read-only, developer and operator ; developer never touches prod, packages, destructive or sudo ; no preset references the fallback', () => {
+  test('the fallback covers a write slice no dedicated risk matches, and only that', () => {
+    const indexed = indexCatalog(sshPlugin.catalog);
+    expect(risksTouchedBy(parseSlice('ssh.host[h].sftp.W'), indexed)).toEqual([
+      'ssh.uncategorized-write',
+    ]);
+    expect(risksTouchedBy(parseSlice('ssh.host[h].command.W'), indexed)).toEqual([
+      'ssh.exec-write',
+    ]);
+  });
+
+  test('ships read-only, developer and operator ; developer lists no prod, package, destructive, sudo or credential-file risk ; no preset references the fallback', () => {
     const presets = sshPlugin.catalog.presets ?? [];
     expect(presets.map((p) => p.id)).toEqual(['read-only', 'developer', 'operator']);
     for (const p of presets) {
@@ -204,8 +239,12 @@ describe('classifySsh — host resolution against mission resources', () => {
     expect(denied({ host: OTHER, cmd: 'ls' })).toBe(
       `host '${OTHER}' is not a host of this mission`,
     );
-    expect(denied({ cmd: 'ls' }, [staging, prod])).toMatch(/touches 2 SSH hosts/);
-    expect(denied({ cmd: 'ls' }, [])).toMatch(/touches no SSH host/);
+    expect(denied({ cmd: 'ls' }, [staging, prod])).toBe(
+      'host: argument missing and the mission touches 2 SSH hosts — name one',
+    );
+    expect(denied({ cmd: 'ls' }, [])).toBe(
+      'host: argument missing and the mission touches no SSH host',
+    );
     expect(denied({ host: 'a b', cmd: 'ls' })).toBe('host: malformed ref');
     expect(denied({ host: 42, cmd: 'ls' })).toBe('host: malformed ref');
   });
@@ -213,10 +252,18 @@ describe('classifySsh — host resolution against mission resources', () => {
   test('refuses a missing, empty, oversized or non-string cmd, a bad timeout, an unknown tool', () => {
     expect(denied({})).toBe('cmd: a non-empty string is required');
     expect(denied({ cmd: '   ' })).toBe('cmd: a non-empty string is required');
-    expect(denied({ cmd: 'x'.repeat(MAX_CMD_LENGTH + 1) })).toMatch(/longer than/);
+    expect(denied({ cmd: 42 })).toBe('cmd: a non-empty string is required');
+    expect(denied({ cmd: ['ls'] })).toBe('cmd: a non-empty string is required');
+    expect(denied({ cmd: 'x'.repeat(MAX_CMD_LENGTH + 1) })).toBe(
+      'cmd: longer than 16384 characters',
+    );
     expect(denied({ cmd: ';;' })).toBe('cmd: no command found on the line');
-    expect(denied({ cmd: 'ls', timeout_s: -1 })).toMatch(/timeout_s/);
-    expect(denied({ cmd: 'ls', timeout_s: 'soon' })).toMatch(/timeout_s/);
+    expect(denied({ cmd: '# only a comment' })).toBe('cmd: no command found on the line');
+    for (const timeout_s of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, 'soon', null]) {
+      expect(denied({ cmd: 'ls', timeout_s }), String(timeout_s)).toBe(
+        'timeout_s: must be a positive number of seconds',
+      );
+    }
     expect(classifySsh('ssh__sftp_put', { cmd: 'x' }, [staging])).toEqual({
       denied: "unknown tool 'ssh__sftp_put'",
     });
@@ -279,16 +326,57 @@ describe('classifySsh — read, write and command classes', () => {
     ]);
   });
 
-  test('redirections and substitutions make the whole line a write, fd duplication does not', () => {
+  /** What a line the classifier cannot see through emits : every class, no read. */
+  const OPAQUE = [
+    `${H}.secret-file.R`,
+    `${H}.W`,
+    `${H}.destructive.W`,
+    `${H}.package.W`,
+    `${H}.service.W`,
+    `${H}.privilege.W`,
+  ];
+
+  test('a redirection to a file makes the line a write ; a descriptor duplication does not', () => {
     expect(slices({ cmd: 'ls > /tmp/listing' })).toEqual([`${H}.W`]);
-    expect(slices({ cmd: 'echo $(cat /etc/shadow)' })).toEqual([`${H}.secret-file.R`, `${H}.W`]);
-    expect(slices({ cmd: 'uptime `whoami`' })).toEqual([`${H}.W`]);
+    expect(slices({ cmd: 'ls >> /tmp/listing' })).toEqual([`${H}.W`]);
+    expect(slices({ cmd: 'ls 2>&1' })).toEqual([`${H}.R`]);
     expect(slices({ cmd: 'journalctl -u nginx 2>&1 | grep -c error' })).toEqual([`${H}.R`]);
+    expect(slices({ cmd: 'ls >&listing' })).toEqual([`${H}.W`]);
+    // `>&2file` is not a duplication (bash writes the file `2file`), and after
+    // `>&` a `-` is a token of its own (`rm >&--rf x` runs `rm -rf x`) : opaque.
+    expect(slices({ cmd: 'ls >&2file' })).toEqual(OPAQUE);
+    expect(slices({ cmd: 'rm >&--rf /srv/old' })).toEqual(OPAQUE);
   });
 
-  test('quotes are honoured when splitting ; a broken quote is a write', () => {
+  test('a line that cannot be seen through carries every class and is never a read', () => {
+    expect(slices({ cmd: 'echo $(cat /etc/shadow)' })).toEqual(OPAQUE);
+    expect(slices({ cmd: 'uptime `whoami`' })).toEqual(OPAQUE);
+    expect(slices({ cmd: "bash -c 'uptime'" })).toEqual(OPAQUE);
+    expect(slices({ cmd: 'uptime; cat <<EOF\nx\nEOF' })).toEqual(OPAQUE);
+    expect(slices({ cmd: "grep 'oops /var/log/syslog" })).toEqual(OPAQUE);
+    expect(profileCommandLine('uptime `whoami`')?.opaque).toEqual(['substitution']);
+    expect(profileCommandLine("bash -c 'uptime'")?.opaque).toEqual(['inline-code']);
+    expect(profileCommandLine("grep $'a' f")?.opaque).toEqual(['ansi-c-quoting']);
+    expect(profileCommandLine('$CMD x')?.opaque).toEqual(['command-word']);
+    expect(profileCommandLine('sudo -i')?.opaque).toEqual(['wrapper-option']);
+    expect(profileCommandLine('ssh other uptime')?.opaque).toEqual(['indirect-command']);
+    expect(profileCommandLine('systemctl -H other status x')?.opaque).toEqual(['another-host']);
+    expect(profileCommandLine('docker exec web ls')?.opaque).toEqual(['container-exec']);
+    expect(profileCommandLine('xargs systemctl')?.opaque).toEqual(['unseen-arguments']);
+  });
+
+  test('quotes and comments are read the way the shell reads them', () => {
     expect(slices({ cmd: 'grep "a;b" /var/log/syslog' })).toEqual([`${H}.R`]);
-    expect(slices({ cmd: "grep 'oops /var/log/syslog" })).toEqual([`${H}.W`]);
+    expect(slices({ cmd: "grep 'a|b' /var/log/syslog" })).toEqual([`${H}.R`]);
+    expect(slices({ cmd: 'uptime # how long' })).toEqual([`${H}.R`]);
+    // The quote sits inside a comment : the shell runs `touch` on the next line.
+    expect(slices({ cmd: "uptime #'\ntouch /tmp/x #'" })).toEqual([`${H}.R`, `${H}.W`]);
+    // `a#b` is one word, not a comment.
+    expect(slices({ cmd: 'grep a#b /var/log/syslog; rm -rf /srv/old' })).toEqual([
+      `${H}.R`,
+      `${H}.W`,
+      `${H}.destructive.W`,
+    ]);
   });
 
   test('emitted slices parse back (round-trip)', () => {
@@ -310,10 +398,12 @@ describe('classifySsh — the runtime qualifies write risks from the host label'
       catalog: indexed,
       envResolver: resourceEnvResolver([prod]),
     });
-    expect(decision.outcome).toBe('denied');
-    if (decision.outcome === 'denied') {
-      expect(decision.missing_risks).toContain('ssh[prod].exec-destructive');
-    }
+    expect(decision).toMatchObject({
+      outcome: 'denied',
+      code: 'risk-not-accepted',
+      missing_risks: ['ssh[prod].exec-destructive'],
+      covered_risks: ['ssh[prod].exec-write'],
+    });
   });
 
   test('a read needs only ssh.exec-read, whatever the label', () => {
@@ -328,16 +418,197 @@ describe('classifySsh — the runtime qualifies write risks from the host label'
     expect(decision.outcome).toBe('allowed');
   });
 
-  test('an unlabelled host never qualifies a write risk — the owner must label it', () => {
-    const out = classifySsh('ssh__exec', { cmd: 'touch /tmp/x' }, [unlabelled]);
-    if ('denied' in out) throw new Error(out.denied);
+  test.each([
+    ['unlabelled', unlabelled, 'ssh.exec-write'],
+    ['labelled outside dev / staging / prod', { ...unlabelled, env: 'qa' }, 'ssh[qa].exec-write'],
+  ])(
+    'a write on a host that is %s is refused whatever the mission accepts — the owner must label it',
+    (_label, host, refused) => {
+      const out = classifySsh('ssh__exec', { cmd: 'touch /tmp/x' }, [host]);
+      if ('denied' in out) throw new Error(out.denied);
+      const decision = evaluateCall({
+        executed_slices: out.slices,
+        token_accepted_risks: new Set([
+          'ssh.exec-write',
+          'ssh[dev].exec-write',
+          'ssh[staging].exec-write',
+          'ssh[prod].exec-write',
+          'ssh[qa].exec-write',
+          'ssh.uncategorized-write',
+        ]),
+        catalog: indexed,
+        envResolver: resourceEnvResolver([host]),
+      });
+      expect(decision).toMatchObject({
+        outcome: 'denied',
+        code: 'risk-not-accepted',
+        missing_risks: [refused],
+        covered_risks: [],
+      });
+      // A read is not env-scoped : the same host can still be inspected.
+      const read = classifySsh('ssh__exec', { cmd: 'uptime' }, [host]);
+      if ('denied' in read) throw new Error(read.denied);
+      expect(
+        evaluateCall({
+          executed_slices: read.slices,
+          token_accepted_risks: new Set(['ssh.exec-read']),
+          catalog: indexed,
+          envResolver: resourceEnvResolver([host]),
+        }).outcome,
+      ).toBe('allowed');
+    },
+  );
+});
+
+// ─── presets, evaluated ──────────────────────────────────────────────────────
+
+describe('presets — evaluated through the policy engine, not just listed', () => {
+  const indexed = indexCatalog(sshPlugin.catalog);
+  type Verdict = 'auto' | 'approval' | 'denied';
+
+  /** What a mission holding exactly the preset does with `cmd` on `host`. */
+  const verdict = (presetId: string, cmd: string, host: Resource): Verdict => {
+    const preset = (sshPlugin.catalog.presets ?? []).find((p) => p.id === presetId);
+    if (!preset) throw new Error(`no preset '${presetId}'`);
+    const out = classifySsh('ssh__exec', { cmd }, [host]);
+    if ('denied' in out) return 'denied';
     const decision = evaluateCall({
       executed_slices: out.slices,
-      token_accepted_risks: new Set(['ssh[staging].exec-write', 'ssh[prod].exec-write']),
+      token_accepted_risks: new Set(preset.entries.map((e) => e.risk_id)),
       catalog: indexed,
-      envResolver: resourceEnvResolver([unlabelled]),
+      envResolver: resourceEnvResolver([host]),
     });
-    expect(decision.outcome).toBe('denied');
+    if (decision.outcome === 'denied') return 'denied';
+    const gates = decision.risks_touched.map(
+      (id) => preset.entries.find((e) => e.risk_id === id)?.gate,
+    );
+    return gates.includes('approval') ? 'approval' : 'auto';
+  };
+
+  const HOSTS: readonly Resource[] = [dev, staging, prod, unlabelled];
+
+  const INSPECTION = [
+    'uptime',
+    'journalctl -u nginx -n 50 --no-pager',
+    'sudo systemctl status nginx',
+    'ls -la /srv | grep app',
+    'cat /etc/hostname',
+    'docker ps',
+    'docker logs --tail 100 web',
+    'grep -rn error /var/log/nginx',
+    'df -h && free -m',
+  ];
+
+  const NEVER_A_READ = [
+    'touch /tmp/x',
+    'ls > /tmp/listing',
+    'rm -rf /srv/old',
+    'sudo ls /srv',
+    'cat /etc/shadow',
+    'cat .ssh/id_ed25519',
+    'cat .env',
+    'docker inspect web',
+    'grep -r token /srv/app',
+    'grep . </etc/shadow',
+    'journalctl --vacuum-time=1s',
+    'sudo journalctl --rotate --vacuum-size=1',
+    "grep x /etc/hostname #'\ntouch /tmp/pwned #'",
+    "grep $'a\\'' ; touch /tmp/pwned #'",
+    'grep -c root /etc/hostname >&2file',
+    'sudo systemctl status -H root@other-host nginx',
+    'echo $(id)',
+    "bash -c 'uptime'",
+    '/bin/ls',
+  ];
+
+  test.each(INSPECTION)('every preset allows the inspection %j on every host', (cmd) => {
+    for (const preset of ['read-only', 'developer', 'operator']) {
+      for (const host of HOSTS) {
+        expect(verdict(preset, cmd, host), `${preset} on ${host.env ?? 'unlabelled'}`).toBe('auto');
+      }
+    }
+  });
+
+  test.each(NEVER_A_READ)('read-only refuses %j on every host', (cmd) => {
+    for (const host of HOSTS) {
+      expect(verdict('read-only', cmd, host), host.env ?? 'unlabelled').toBe('denied');
+    }
+  });
+
+  test('developer : plain writes on dev and staging, service control auto on dev and under approval on staging, nothing on prod', () => {
+    for (const cmd of ['touch /tmp/x', 'git pull --ff-only', './deploy.sh', 'bash deploy.sh']) {
+      expect(verdict('developer', cmd, dev), cmd).toBe('auto');
+      expect(verdict('developer', cmd, staging), cmd).toBe('auto');
+      expect(verdict('developer', cmd, prod), cmd).toBe('denied');
+      expect(verdict('developer', cmd, unlabelled), cmd).toBe('denied');
+    }
+    for (const cmd of ['systemctl restart app', 'docker compose up -d', 'kill 1234']) {
+      expect(verdict('developer', cmd, dev), cmd).toBe('auto');
+      expect(verdict('developer', cmd, staging), cmd).toBe('approval');
+      expect(verdict('developer', cmd, prod), cmd).toBe('denied');
+    }
+  });
+
+  test.each([
+    'rm -rf /srv/old',
+    '/bin/rm -rf /srv/old',
+    '(rm -rf /srv/old)',
+    '{ rm -rf /srv/old; }',
+    'env rm -rf /srv/old',
+    'command rm -rf /srv/old',
+    'nohup rm -rf /srv/old &',
+    "bash -c 'rm -rf /srv/old'",
+    'echo $(rm -rf /srv/old)',
+    'ls | xargs rm -rf',
+    'find /srv -delete',
+    'find /srv -exec rm {} +',
+    'sudo ls /root',
+    '/usr/bin/sudo ls /srv',
+    'sudo -n rm -rf /srv/old',
+    'apt-get install -y nginx',
+    '/usr/bin/apt-get install -y nginx',
+    'apt-get --yes install nginx',
+    'npm install -g pm2',
+    'cat .ssh/id_ed25519',
+    'cat /etc/shadow',
+    'docker exec web sh',
+    'ssh other-host uptime',
+    'systemctl poweroff',
+    "python3 -c 'print(1)'",
+  ])('developer refuses %j on dev and on staging', (cmd) => {
+    expect(verdict('developer', cmd, dev)).toBe('denied');
+    expect(verdict('developer', cmd, staging)).toBe('denied');
+  });
+
+  test('operator : auto on dev, approval for the classes that hurt on staging, approval for every write on prod', () => {
+    const table: ReadonlyArray<readonly [string, Verdict, Verdict, Verdict]> = [
+      ['touch /tmp/x', 'auto', 'auto', 'approval'],
+      ['rm -rf /srv/old', 'auto', 'approval', 'approval'],
+      ['/bin/rm -rf /srv/old', 'auto', 'approval', 'approval'],
+      ['apt-get --yes install nginx', 'auto', 'approval', 'approval'],
+      ['/usr/bin/apt-get install -y nginx', 'auto', 'approval', 'approval'],
+      ['systemctl restart app', 'auto', 'approval', 'approval'],
+      ['sudo systemctl restart app', 'auto', 'approval', 'approval'],
+      ['sudo -n true', 'auto', 'approval', 'approval'],
+      // A credential-file read is under approval everywhere.
+      ['cat /etc/shadow', 'approval', 'approval', 'approval'],
+      ['cat .env', 'approval', 'approval', 'approval'],
+      // An opaque line carries the credential-file marker too.
+      ["bash -c 'make build'", 'approval', 'approval', 'approval'],
+      ['echo $(date)', 'approval', 'approval', 'approval'],
+    ];
+    for (const [cmd, onDev, onStaging, onProd] of table) {
+      expect(verdict('operator', cmd, dev), `${cmd} on dev`).toBe(onDev);
+      expect(verdict('operator', cmd, staging), `${cmd} on staging`).toBe(onStaging);
+      expect(verdict('operator', cmd, prod), `${cmd} on prod`).toBe(onProd);
+    }
+    // On an unlabelled host no write risk qualifies ; a credential-file read is not a write.
+    for (const [cmd] of table) {
+      const readOnly = cmd === 'cat /etc/shadow' || cmd === 'cat .env';
+      expect(verdict('operator', cmd, unlabelled), `${cmd} on an unlabelled host`).toBe(
+        readOnly ? 'approval' : 'denied',
+      );
+    }
   });
 });
 
@@ -375,6 +646,210 @@ describe('splitCommandLine', () => {
     expect(splitCommandLine('ls 2>&-').redirection).toBe(false);
     expect(splitCommandLine('ls < f').redirection).toBe(false);
   });
+
+  test('every spelling of an output redirection ; a duplication only when the descriptor is the whole word', () => {
+    for (const line of ['ls >| f', 'ls <> f', 'ls >& f', 'ls >&f', 'ls >&2file', 'ls &>> f']) {
+      expect(splitCommandLine(line).redirection, line).toBe(true);
+    }
+    for (const line of ['ls <&3', 'ls 2>&1;', 'ls >&2|cat', 'ls 3>&-']) {
+      expect(splitCommandLine(line).redirection, line).toBe(false);
+      expect(splitCommandLine(line).opaque, line).toEqual([]);
+    }
+    expect(splitCommandLine('tee >(cat)').substitution).toBe(true);
+    expect(splitCommandLine('ls >').malformed).toBe(true);
+    expect(splitCommandLine('ls > > f').malformed).toBe(true);
+  });
+
+  test('comments, continuations, grouping, escapes inside double quotes', () => {
+    expect(splitCommandLine('a # b; c\nd').commands).toEqual(['a', 'd']);
+    expect(splitCommandLine('a#b; c').commands).toEqual(['a#b', 'c']);
+    expect(splitCommandLine('a \\\n b').commands).toEqual(['a \\\n b']);
+    expect(splitCommandLine('(a; b) && { c; }').commands).toEqual(['a', 'b', '{ c', '}']);
+    expect(splitCommandLine('echo "a\\"b;c"').commands).toEqual(['echo "a\\"b;c"']);
+    expect(splitCommandLine('echo "a\\"b;c"').malformed).toBe(false);
+    expect(splitCommandLine('echo a\\').malformed).toBe(true);
+  });
+
+  test('names what it cannot see through', () => {
+    expect(splitCommandLine('ls').opaque).toEqual([]);
+    expect(splitCommandLine('ls <<EOF').opaque).toEqual(['here-document']);
+    expect(splitCommandLine('ls <<< x').opaque).toEqual(['here-document']);
+    expect(splitCommandLine('cat <&word').opaque).toEqual(['redirection']);
+    expect(splitCommandLine('ls >&2file').opaque).toEqual(['redirection']);
+    expect(splitCommandLine('ls >&2-').opaque).toEqual(['redirection']);
+    expect(splitCommandLine('rm >&--rf x').opaque).toEqual(['redirection']);
+    expect(splitCommandLine('rm >& -rf x').opaque).toEqual(['redirection']);
+    expect(splitCommandLine('ls >&file').opaque).toEqual([]);
+    expect(splitCommandLine("echo $'x'").opaque).toEqual(['ansi-c-quoting']);
+    expect(splitCommandLine('echo $"x"').opaque).toEqual(['ansi-c-quoting']);
+    expect(splitCommandLine('echo "$"').opaque).toEqual([]);
+    expect(splitCommandLine('echo ${x:-y} ${x%.*} $x $? "$1"').opaque).toEqual([]);
+    expect(splitCommandLine('echo ${x:-y z}').opaque).toEqual(['parameter-expansion']);
+    expect(splitCommandLine('echo ${x:-"}"; rm -rf / #}').opaque).toContain('parameter-expansion');
+    expect(splitCommandLine('echo ${x').opaque).toEqual(['malformed']);
+    expect(splitCommandLine('echo $[1+1]').opaque).toEqual(['substitution']);
+    expect(splitCommandLine('ls\u0000').opaque).toEqual(['control-character']);
+    expect(splitCommandLine('ls\r').opaque).toEqual(['control-character']);
+    expect(splitCommandLine('ls\t-la').opaque).toEqual([]);
+  });
+
+  test('a backslash-newline is transparent after a blank, opaque when glued to a token', () => {
+    // The shell deletes it before reading tokens, so `$\<newline>'…'` is ANSI-C quoting.
+    expect(splitCommandLine('docker ps \\\n --all').opaque).toEqual([]);
+    expect(splitCommandLine('ls &&\\\nuptime').opaque).toEqual(['line-continuation']);
+    expect(splitCommandLine("grep $\\\n'a' f").opaque).toEqual(['line-continuation']);
+    expect(splitCommandLine('echo "$\\\n(id)"').opaque).toEqual(['line-continuation']);
+    expect(splitCommandLine('r\\\nm -rf /').opaque).toEqual(['line-continuation']);
+    expect(splitCommandLine('ls <\\\n(id)').opaque).toEqual(['line-continuation', 'malformed']);
+    // Inside single quotes it is two ordinary characters.
+    expect(splitCommandLine("grep 'a\\\nb' f").opaque).toEqual([]);
+  });
+});
+
+describe('lexCommandLine — words as the shell builds them', () => {
+  const argv = (line: string): string[][] =>
+    lexCommandLine(line).commands.map((c) => c.words.map((w) => w.value));
+
+  test('quotes and backslashes are removed, adjacent pieces are one word', () => {
+    expect(argv(`r"m" -'r'f \\/tmp/x ''`)).toEqual([['rm', '-rf', '/tmp/x', '']]);
+    expect(argv('echo "a b" c\\ d')).toEqual([['echo', 'a b', 'c d']]);
+    expect(argv('echo "x\\$y" "x\\ny"')).toEqual([['echo', 'x$y', 'x\\ny']]);
+  });
+
+  test('a descriptor number glued to a redirection is not an argument ; targets are kept apart', () => {
+    const [command] = lexCommandLine('echo 3 2>err >out <in').commands;
+    expect(command?.words.map((w) => w.value)).toEqual(['echo', '3']);
+    expect(command?.redirects.map((r) => [r.kind, r.target.value])).toEqual([
+      ['out', 'err'],
+      ['out', 'out'],
+      ['in', 'in'],
+    ]);
+    // Quoted or escaped digits are a word : bash runs the command `2`.
+    expect(argv("''2>f")).toEqual([['2']]);
+    expect(argv('\\2>f')).toEqual([['2']]);
+    expect(argv('"2">f x')).toEqual([['2', 'x']]);
+    expect(argv('2"">f x')).toEqual([['2', 'x']]);
+    // After `>&` the `-` is consumed alone, as bash does : the rest is an argument.
+    expect(argv('rm >&--rf x')).toEqual([['rm', '-rf', 'x']]);
+    expect(argv('2>f')).toEqual([[]]);
+  });
+
+  test('flags what the shell would rewrite : expansions, globs, braces — unless quoted', () => {
+    const word = (text: string) => lexCommandLine(`x ${text}`).commands[0]!.words[1]!;
+    expect(word('$HOME/x').expansion).toBe(true);
+    expect(word('"${HOME}"').expansion).toBe(true);
+    expect(word("'$HOME'").expansion).toBe(false);
+    expect(word('\\$HOME').expansion).toBe(false);
+    expect(hasGlob(word('*.log'))).toBe(true);
+    expect(hasGlob(word('a?[bc]'))).toBe(true);
+    expect(hasGlob(word("'*.log'"))).toBe(false);
+    expect(hasGlob(word('\\*'))).toBe(false);
+    expect(hasBrace(word('{a,b}'))).toBe(true);
+    expect(hasBrace(word('"{a,b}"'))).toBe(false);
+    expect(hasBrace(word('{}'))).toBe(false);
+  });
+});
+
+describe('the read allow-list matches whole commands', () => {
+  test.each([
+    ['ls -la /srv', true],
+    ['ls', true],
+    ['ls /srv /tmp', false],
+    ['ls; ls', false],
+    ['ls > f', false],
+    ['ls 2>&1', true],
+    ['/bin/ls', false],
+    ['./ls', false],
+    ['ls $HOME', false],
+    ['ls *.log', false],
+    ['X=1 ls', false],
+    ['cat /etc/hostname', true],
+    ['cat -n /etc/hostname', false],
+    ['cat /etc/hostname /etc/os-release', false],
+    ['tail -n 50 /var/log/syslog', true],
+    ['tail -f /var/log/syslog', true],
+    ['tail -n 50', false],
+    ['head -20 /var/log/syslog', true],
+    ['journalctl', true],
+    ['journalctl -u nginx -n 50 --since yesterday', true],
+    ['journalctl -xeu nginx', true],
+    ['journalctl _SYSTEMD_UNIT=nginx.service', true],
+    ['journalctl --vacuum-time=1s', false],
+    ['journalctl --rotate', false],
+    ['journalctl --flush', false],
+    ['journalctl -D /mnt/x', false],
+    ['journalctl --file=/tmp/x.journal', false],
+    ['journalctl -M web', false],
+    ['sudo journalctl -u nginx', true],
+    ['sudo -n journalctl -u nginx', false],
+    ['sudo cat /etc/hostname', false],
+    ['grep -c error /var/log/syslog', true],
+    ['grep -e a -e b /var/log/syslog', true],
+    ['grep', false],
+    ['grep --unknown x f', false],
+    ['pgrep -fa nginx', true],
+    ['pgrep -u www-data nginx', true],
+    ['pgrep --ns 1 nginx', false],
+    ['ps', true],
+    ['ps -ef', true],
+    ['ps aux', false],
+    ['docker ps --all', true],
+    ['docker ps -a', false],
+    ['docker logs --since 1h web', true],
+    ['docker logs web db', false],
+    ['docker inspect web', true],
+    ['docker inspect', false],
+    ['docker exec web ls', false],
+    ['systemctl status nginx', true],
+    ['systemctl is-active nginx --quiet', true],
+    ['systemctl list-units --type=service --state=failed', true],
+    ["systemctl status 'nginx*'", true],
+    ['systemctl status nginx*', false],
+    ['systemctl --no-pager status nginx', false],
+    ['systemctl status -H other nginx', false],
+    ['systemctl status --machine=web nginx', false],
+    ['systemctl restart nginx', false],
+    ['sudo systemctl status nginx', true],
+    ['df -h', true],
+    ['df -h /', false],
+    ['free -m', true],
+    ['uptime', true],
+    ['uptime -p', false],
+    ['who', true],
+    ['ss -tlnp', true],
+    ['sudo ss -tlnp', true],
+    ['ss -K dst 10.0.0.1', false],
+    ['md5sum /usr/bin/ssh', true],
+    ['stat /etc/hostname', true],
+    ['stat -c %a /etc/hostname', false],
+  ])('isReadAllowed(%j) === %s', (cmd, expected) => {
+    expect(isReadAllowed(cmd)).toBe(expected);
+  });
+
+  test('parseOptions : clusters, glued and separate values, `--`, the two modes', () => {
+    const spec = { flags: 'ab', valued: 'n', longFlags: ['all'], longValued: ['lines'] };
+    expect(
+      parseOptions(['-ab', '-n5', '-n', '6', '--all', '--lines=7', 'x'], spec, 'interleaved'),
+    ).toEqual({ seen: ['a', 'b', 'n', 'n', 'all', 'lines'], operands: ['x'] });
+    expect(parseOptions(['x', '-a', 'y'], spec, 'interleaved')?.operands).toEqual(['x', 'y']);
+    expect(parseOptions(['-a', 'x', '-z', 'y'], spec, 'leading')?.operands).toEqual([
+      'x',
+      '-z',
+      'y',
+    ]);
+    expect(parseOptions(['-a', '--', '-z'], spec, 'interleaved')?.operands).toEqual(['-z']);
+    expect(parseOptions(['-z'], spec, 'interleaved')).toBeNull();
+    expect(parseOptions(['-az'], spec, 'interleaved')).toBeNull();
+    expect(parseOptions(['--all=1'], spec, 'interleaved')).toBeNull();
+    expect(parseOptions(['--other'], spec, 'interleaved')).toBeNull();
+    expect(parseOptions(['-n'], spec, 'interleaved')).toBeNull();
+    expect(parseOptions(['--lines'], spec, 'interleaved')).toBeNull();
+    expect(parseOptions(['-5'], spec, 'interleaved')).toBeNull();
+    expect(parseOptions(['-5'], { numeric: true }, 'interleaved')).toEqual({
+      seen: [],
+      operands: [],
+    });
+  });
 });
 
 describe('command classes', () => {
@@ -397,6 +872,44 @@ describe('command classes', () => {
     ['crontab -l', false],
     ['FOO=1 rm -rf x', true],
     ['touch x', false],
+    ['userdel bob', true],
+    ['wipefs -a /dev/sdb', true],
+    ['truncate -s 0 /var/log/app.log', true],
+    ['ip6tables --flush', true],
+    ['nft flush ruleset', true],
+    ['ufw reset', true],
+    ['docker rmi image', true],
+    ['docker image prune -f', true],
+    ['docker container rm -f web', true],
+    ['docker network rm net', true],
+    ['docker compose down -v', true],
+    ['docker compose down', false],
+    ['docker-compose rm -f', true],
+    ['kill -1 1', true],
+    ['pkill -1 -f node', true],
+    ['kill 1234', false],
+    ['telinit 6', true],
+    ['systemctl poweroff', true],
+    ['systemctl reboot', true],
+    ['systemctl halt', true],
+    ['systemctl restart nginx', false],
+    ['journalctl --vacuum-size=1M', true],
+    ['journalctl -u nginx', false],
+    ['find / -delete', true],
+    ['find / -name core', false],
+    ['rsync -a --delete src/ dst/', true],
+    ['rsync -a src/ dst/', false],
+    // The command word is normalised before the detector looks at it.
+    ['/bin/rm -rf x', true],
+    ['./rm -rf x', true],
+    ["'rm' -rf x", true],
+    ['\\rm -rf x', true],
+    ['RM -rf x', true],
+    ['sudo -n rm -rf x', true],
+    ['env -i nohup nice -n 5 rm -rf x', true],
+    ['xargs rm', false],
+    // A command word that is not a literal cannot be cleared.
+    ['$RM -rf x', true],
   ])('isDestructive(%j) === %s', (cmd, expected) => {
     expect(isDestructive(cmd)).toBe(expected);
   });
@@ -425,6 +938,23 @@ describe('command classes', () => {
     ['yarn global add serve', true],
     ['npm install', false],
     ['pip install requests', false],
+    ['aptitude install vim', true],
+    ['microdnf install vim', true],
+    ['zypper -n in vim', true],
+    ['apk del curl', true],
+    ['rpm -e vim', true],
+    ['snap refresh', true],
+    ['pipx upgrade black', true],
+    ['pnpm add -g serve', true],
+    ['bun add -g serve', true],
+    ['yarn global remove serve', true],
+    ['apt-get --yes install nginx', true],
+    ['apt-get -qq -y install nginx', true],
+    ['apt-get -o Dpkg::Options::=--force-confold install nginx', true],
+    ['/usr/bin/apt-get install nginx', true],
+    ['sudo -E apt install nginx', true],
+    ['dpkg --configure -a', true],
+    ['apt-get update', false],
   ])('isPackageInstall(%j) === %s', (cmd, expected) => {
     expect(isPackageInstall(cmd)).toBe(expected);
   });
@@ -449,6 +979,17 @@ describe('command classes', () => {
     ['nginx -t', false],
     ['kill 1234', true],
     ['pkill -f node', true],
+    ['podman restart web', true],
+    ['podman-compose up', true],
+    ['killall node', true],
+    ['supervisorctl shutdown', true],
+    ['systemctl mask nginx', true],
+    ['/usr/bin/systemctl restart nginx', true],
+    ['/bin/kill -9 1234', true],
+    ['docker container stop web', true],
+    ['docker compose -f prod.yml up -d', true],
+    ['docker service scale web=3', true],
+    ['docker service ls', false],
   ])('isServiceControl(%j) === %s', (cmd, expected) => {
     expect(isServiceControl(cmd)).toBe(expected);
   });
@@ -462,8 +1003,60 @@ describe('command classes', () => {
       packageInstall: true,
       serviceControl: true,
       privilege: true,
+      opaque: [],
     });
     expect(profileCommandLine(';')).toBeNull();
+  });
+
+  test('stripPrivilegePrefix : sudo / doas / pkexec with their options, `--`, assignments ; su is not looked into', () => {
+    expect(stripPrivilegePrefix('ls -la')).toEqual({ inner: 'ls -la', privileged: false });
+    expect(stripPrivilegePrefix('sudo -u postgres psql -c "select 1"')).toEqual({
+      inner: 'psql -c select 1',
+      privileged: true,
+    });
+    expect(stripPrivilegePrefix('sudo -n rm -rf /')).toEqual({
+      inner: 'rm -rf /',
+      privileged: true,
+    });
+    expect(stripPrivilegePrefix('sudo -- rm -rf /')).toEqual({
+      inner: 'rm -rf /',
+      privileged: true,
+    });
+    expect(stripPrivilegePrefix('/usr/bin/sudo FOO=1 id')).toEqual({
+      inner: 'id',
+      privileged: true,
+    });
+    expect(stripPrivilegePrefix('doas -u www ls')).toEqual({ inner: 'ls', privileged: true });
+    expect(stripPrivilegePrefix('pkexec --user root id')).toEqual({
+      inner: 'id',
+      privileged: true,
+    });
+    expect(stripPrivilegePrefix('su - root')).toEqual({ inner: 'su - root', privileged: true });
+    expect(stripPrivilegePrefix('sudo su -')).toEqual({ inner: 'sudo su -', privileged: true });
+    // An option that hands the command to a shell : nothing reliable inside.
+    expect(stripPrivilegePrefix('sudo -i')).toEqual({ inner: 'sudo -i', privileged: true });
+  });
+
+  test('every privilege wrapper adds the privilege marker next to the classes of what it runs', () => {
+    const profile = (cmd: string) => profileCommandLine(cmd);
+    expect(profile('doas rm -rf /srv/old')).toMatchObject({
+      destructive: true,
+      privilege: true,
+      opaque: [],
+    });
+    expect(profile('pkexec apt-get install nginx')).toMatchObject({
+      packageInstall: true,
+      privilege: true,
+      opaque: [],
+    });
+    expect(profile('sudo -u deploy touch /tmp/x')).toMatchObject({
+      write: true,
+      destructive: false,
+      privilege: true,
+      opaque: [],
+    });
+    expect(profile('touch /tmp/x')).toMatchObject({ privilege: false });
+    expect(profile('su - deploy')?.opaque).toEqual(['indirect-command']);
   });
 });
 
@@ -483,6 +1076,10 @@ describe('ssh credential spec and host key pin', () => {
     ]);
     expect(spec.fields.every((f) => f.secret === false)).toBe(true);
     expect(spec.fields.find((f) => f.name === 'port')?.required).toBe(false);
+    // `required` defaults to true ; only an explicit `false` makes a field optional.
+    for (const name of ['host', 'user', 'host_key_fingerprint']) {
+      expect(spec.fields.find((f) => f.name === name)?.required, name).not.toBe(false);
+    }
     const host = spec.fields.find((f) => f.name === 'host')!;
     expect(new RegExp(host.pattern!).test('vps-1.example.com')).toBe(true);
     expect(new RegExp(host.pattern!).test('10.0.0.7')).toBe(true);
@@ -599,9 +1196,8 @@ describe('execute over an injected transport', () => {
     expect(transport.calls).toHaveLength(0);
   });
 
-  test('transport failures propagate : auth, host key mismatch, timeout', async () => {
+  test('errors raised by the transport propagate unchanged : auth, host key mismatch, timeout', async () => {
     const { UpstreamAuthError } = await import('@vaubaan/plugin-sdk');
-    const { SshHostKeyMismatchError } = await import('../../src/index.ts');
     const auth = createSshPlugin({
       transport: fakeTransport(() => new UpstreamAuthError('authentication failed', 401)),
     });
@@ -670,13 +1266,29 @@ describe('discoverResources over an injected transport', () => {
     });
   });
 
-  test('a rejected key or a wrong host key fails discovery with the typed error', async () => {
+  test('a rejected key fails discovery with the typed authentication error', async () => {
     const { UpstreamAuthError } = await import('@vaubaan/plugin-sdk');
     const plugin = createSshPlugin({
       transport: fakeTransport(() => new UpstreamAuthError('authentication failed', 401)),
     });
     await expect(plugin.discoverResources(connCtx())).rejects.toMatchObject({
       name: 'UpstreamAuthError',
+      upstreamStatus: 401,
+    });
+  });
+
+  test('a host key mismatch raised by the transport fails discovery with the typed error', async () => {
+    // The mismatch itself is produced by the real transport in `host-key-pinning.test.ts`.
+    const plugin = createSshPlugin({
+      transport: fakeTransport(
+        () => new SshHostKeyMismatchError(HOST, FINGERPRINT, 'SHA256:other'),
+      ),
+    });
+    await expect(plugin.discoverResources(connCtx())).rejects.toMatchObject({
+      name: 'SshHostKeyMismatchError',
+      host: HOST,
+      expected: FINGERPRINT,
+      actual: 'SHA256:other',
     });
   });
 });

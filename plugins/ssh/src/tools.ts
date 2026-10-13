@@ -18,7 +18,7 @@ export const sshTools: readonly McpToolDeclaration[] = [
   {
     name: SSH_EXEC,
     description:
-      'Run a shell command on an SSH host of the mission. Reads on the whitelist (journalctl, cat, ls, tail, head, grep, ps, docker ps/inspect/logs, systemctl status, df, free, uptime, ss -tlnp, md5sum, stat) are low-risk ; anything else is a write, and destructive deletes, package changes, service control and sudo need their own accepted risk. Output is capped at 1 MiB.',
+      'Run a shell command on an SSH host of the mission. A simple command on the read allow-list (journalctl, cat, ls, tail, head, grep, pgrep, ps, docker ps/inspect/logs, systemctl status, df, free, uptime, who, ss -tlnp, md5sum, stat — bare command name, known options only) is low-risk ; anything else is a write, and destructive deletes, package changes, service control and sudo need their own accepted risk. Keep the line plain : a command substitution, a here-document, a variable as the command, inline code (bash -c, python -c, eval), ssh, docker exec or su cannot be classified and need every write risk plus the credential-file risk. Output is capped at 1 MiB.',
     inputSchema: {
       type: 'object',
       properties: {

@@ -40,6 +40,7 @@ import {
   MAX_STDERR_BYTES,
   MAX_STDOUT_BYTES,
   SshHostKeyMismatchError,
+  SshHostKeyNotPinnedError,
   ssh2Transport,
 } from './transport.ts';
 import type { SshRuntimeOptions } from './execute.ts';
@@ -58,7 +59,7 @@ export function createSshPlugin(options: SshRuntimeOptions = {}): ProviderPlugin
     displayName: 'SSH (bash)',
     version: '1.0.0',
     description:
-      'Shell commands on a host over SSH — inspection on a read whitelist, writes priced by class (destructive, package, service, sudo).',
+      'Shell commands on a host over SSH — inspection on a read allow-list, writes priced by class (destructive, package, service, sudo), lines that cannot be classified priced as all of them.',
     docsUrl:
       'https://github.com/sbw-vaubaan/vaubaan-gateway/blob/main/docs/handbook/providers/ssh.md',
     tools: sshTools,
@@ -89,6 +90,7 @@ export {
   sshTarget,
   sshTools,
   SshHostKeyMismatchError,
+  SshHostKeyNotPinnedError,
   DEFAULT_TIMEOUT_S,
   DISCOVERY_PROBE,
   MAX_READY_TIMEOUT_MS,
@@ -118,18 +120,21 @@ export {
   type CommandProfile,
   type SplitLine,
 } from './command-classes.ts';
-export { isReadAllowed } from './policy.ts';
-
-// Annotated bash scripts — parser, argument materialisation and invocation
-// builder. Not wired to a tool yet : an owner-curated script needs per-connection configuration
-// the connection model does not carry (see the handbook, "Annotated scripts").
 export {
-  parseAnnotatedBash,
-  summarize,
-  ParseError,
-  type ParsedArg,
-  type ParsedScript,
-  type ParsedTool,
-} from './bash/parse.ts';
-export { materializeArgs, type MaterializeResult, type RawArgs } from './bash/args.ts';
-export { buildToolInvocation, type BuiltCommand } from './bash/exec.ts';
+  isReadAllowed,
+  matchRead,
+  parseOptions,
+  type OptionSpec,
+  type ParsedOptions,
+  type ReadMatch,
+} from './policy.ts';
+export {
+  hasBrace,
+  hasGlob,
+  isDynamic,
+  lexCommandLine,
+  type LexedLine,
+  type Redirect,
+  type SimpleCommand,
+  type Word,
+} from './shell-lex.ts';
