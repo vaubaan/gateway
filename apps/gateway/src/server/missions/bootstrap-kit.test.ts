@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
 import { REFUSAL_CODES } from '@vaubaan/shared';
 import { describe, expect, it } from 'vitest';
 
@@ -113,5 +116,25 @@ describe('buildBootstrapKit', () => {
       instanceUrl: 'https://tools.acme.example/gw/',
     });
     expect(kitAtPath.endpoint).toBe('https://tools.acme.example/gw/mcp');
+  });
+});
+
+describe('/agent-bootstrap.md', () => {
+  const page = readFileSync(
+    fileURLToPath(new URL('../../app/agent-bootstrap.md/content.md', import.meta.url)),
+    'utf8',
+  );
+
+  it('documents every structured refusal and the rule never to work around one', () => {
+    for (const code of REFUSAL_CODES) expect(page).toContain(`\`${code}\``);
+    expect(page).toContain('Never work around a refusal');
+    expect(page).toContain('`claim_url`');
+    expect(page).toContain('`approval_url`');
+  });
+
+  it('refers to the token by its variable and names no instance', () => {
+    expect(page).toContain(`Bearer \${${MISSION_TOKEN_ENV}}`);
+    expect(page).not.toMatch(/https?:\/\/[a-z0-9.-]+\.[a-z]{2,}/);
+    expect(page).not.toMatch(/vbn_live_[A-Za-z0-9]{8}_/);
   });
 });
