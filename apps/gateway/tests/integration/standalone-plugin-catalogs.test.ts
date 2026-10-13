@@ -11,15 +11,11 @@
  * computes relative to itself.
  *
  * The same output must hold no test file. The plugin loader's computed path
- * (`catalogPathNextTo`) makes the build trace the whole application directory,
- * and `outputFileTracingExcludes` in `next.config.ts` keeps `tests/**` and
- * every `*.test.ts` out of every route trace. Turbopack does not apply that
- * option to the trace of the boot hook (`server/instrumentation.js.nft.json`),
- * so the last test asserts two things: no route trace names a test file, and
- * a test file found in the standalone tree is there through the boot hook's
- * trace and nothing else. Once `catalogPathNextTo` carries
- * `turbopackIgnore` (plugin SDK), that trace names none and the second
- * assertion is "no test file at all".
+ * (`catalogPathNextTo`) carries a `turbopackIgnore` hint: without it the build
+ * answers "dynamic filesystem access" by tracing the whole application
+ * directory, tests included. `outputFileTracingExcludes` in `next.config.ts`
+ * is the second guard, for the route traces. The last test asserts that no
+ * trace names a test file and that the standalone tree holds none.
  *
  * Skipped when `apps/gateway/.next/standalone` is absent (no build yet). CI
  * builds before testing, so it runs there; the container smoke test
@@ -87,23 +83,20 @@ describe.skipIf(!hasBuild)('standalone output keeps the plugin risk catalogs (Ne
     expect(missing).toEqual([]);
   });
 
-  it('ships no test file through a route: only the boot hook’s trace can still carry one', () => {
+  it('ships no test file: no trace names one and the standalone tree holds none', () => {
     const serverDir = join(appDir, '.next/server');
-    const bootTrace = join(serverDir, 'instrumentation.js.nft.json');
     const testFilesOf = (trace: string): string[] => {
       const { files } = JSON.parse(readFileSync(trace, 'utf8')) as { files: string[] };
       return files
         .map((file) => relative(repoRoot, resolve(dirname(trace), file)))
         .filter(isTestFile);
     };
-    // No route (page or handler) needs a test file at run time.
-    const routes = routeTraces(serverDir).filter((trace) => trace !== bootTrace);
-    expect(routes.length).toBeGreaterThan(0);
-    expect([...new Set(routes.flatMap(testFilesOf))]).toEqual([]);
-    // What the image copies: a test file is there only if the boot hook's trace names it.
-    const viaBootHook = new Set(existsSync(bootTrace) ? testFilesOf(bootTrace) : []);
-    const shipped = filesUnder(standaloneDir).filter(isTestFile);
-    expect(shipped.filter((file) => !viaBootHook.has(file))).toEqual([]);
+    // No route (page or handler) and no boot hook needs a test file at run time.
+    const traces = routeTraces(serverDir);
+    expect(traces.length).toBeGreaterThan(0);
+    expect([...new Set(traces.flatMap(testFilesOf))]).toEqual([]);
+    // What the image copies.
+    expect(filesUnder(standaloneDir).filter(isTestFile)).toEqual([]);
     // The server the image runs is still there.
     expect(existsSync(join(standaloneDir, 'apps/gateway/server.js'))).toBe(true);
   });
