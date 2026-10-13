@@ -457,6 +457,13 @@ code) :
   `instrumentation.ts`, `app/healthz`, `next.config.ts`, `deploy/`,
   `scripts/`, `.github/workflows`; only `telemetry-default.ts` and
   `deploy/config/*.example*` are exempt. Scope widens as v4 code is deleted.
+- **`apps/gateway/tests/integration/standalone-native-addons.test.ts`** (3,
+  P0.6) — reads the build output and is skipped when `.next/standalone` is
+  absent (CI builds before testing): the `/healthz` route handler trace lists
+  the `argon2` and `better-sqlite3` `.node` binaries; a Node process started
+  inside the standalone tree resolves both packages from the standalone
+  `node_modules` (not the repository's), hashes with argon2 and runs a query
+  on an in-memory SQLite database.
 
 Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
 [`e2e-tests.md`](./e2e-tests.md).

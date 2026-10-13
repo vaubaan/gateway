@@ -170,6 +170,12 @@ in the blob. `scripts/gen-master-key.mjs` prints a key.
   scheduled right after the P0 wave. The root is designed to survive it:
   no `middleware.ts` (16 renames it `proxy.ts`), no module-level state,
   nothing that depends on webpack (16 defaults to Turbopack).
+  _2026-10-13, P0.6: done — 16.4.0 / React 19.3.0, Turbopack build, no
+  change to the process shape; the standalone output no longer copies the
+  `packages/` and `plugins/` sources (Turbopack bundles the transpiled
+  workspaces), and `better-sqlite3`'s runtime files are traced explicitly
+  until the store is imported by the route graph. Details in the handbook
+  [configuration](../handbook/configuration.md#framework)._
 - **MCP SDK v2 before P1.6.** The repo is on `@modelcontextprotocol/sdk`
   1.29. v2 (`@modelcontextprotocol/server` 2.3.x) implements the 2026-07-28
   stateless Streamable HTTP through `createMcpHandler().fetch(Request,
