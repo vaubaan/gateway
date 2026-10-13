@@ -1,791 +1,228 @@
 ---
-title: Vercel provider — modélisation v4 risk-based
+title: Vercel provider — plugin and risk model
 status: current
-date: 2026-07-01
+date: 2026-10-13
 tracks:
+  - plugins/vercel/src/index.ts
+  - plugins/vercel/src/classify.ts
+  - plugins/vercel/src/credential.ts
   - plugins/vercel/src/custom-tools.ts
   - plugins/vercel/src/data-model.ts
   - plugins/vercel/src/execute.ts
-  - plugins/vercel/src/risk-catalog.ts
   - plugins/vercel/src/risk-catalog.yaml
-  - plugins/vercel/src/risk-classifier.ts
+  - plugins/vercel/src/tools.ts
+  - plugins/vercel/tests/unit/plugin.test.ts
 ---
 
-> **v4 document.** English rewrite scheduled by the v5 plan; `tracks` paths updated for the new layout.
+# Vercel provider — plugin and risk model
 
-# Vercel provider — modélisation v4
+`@vaubaan/plugin-vercel` (`plugins/vercel`), migrated to the v5 Plugin SDK in
+P1.2b. Spec: [`vaubaan-gateway.md`](../../spec/vaubaan-gateway.md) §5 (plugins),
+§3.2 (presets); [`gateway-risk-model.md`](../../spec/gateway-risk-model.md) §2,
+§4, §7. ADRs: [[plugin-contract-and-credential-spec]],
+[[rewrap-official-mcps]], [[vercel-augment-with-rest-tools]]. Contributor
+guide: [`plugins/vercel/README.md`](../../../plugins/vercel/README.md).
 
-Document de travail pour la **bascule du provider Vercel** depuis le modèle
-capability-based v1 (`(plane, level, action, env)`) vers le modèle
-risk-based v4 (`accepted_risks[] + bindings[]`). Cible :
+The v4 research document this handbook replaces (French, 2026-07-01) remains
+in the git history; its decisions — four classifier bug fixes, one
+`domain-write` risk, a dedicated `read-env-var-plaintext` risk, toolbar as
+its own low risk — are all implemented and listed in §5.
 
-- Un **data-model** explicite pour le plane `runtime` (sert au classify + au
-  pattern matching du catalogue).
-- Un **mapping tool → slice(s)** exhaustif (32 tools exposés : 18 upstream
-  rewrap de `mcp.vercel.com` + 14 custom REST).
-- Un **catalogue de risks** (16 entrées + fallback) avec vecteur 6D
-  raisonné et `acceptable_in_envs` quand pertinent.
-- Une **matrice de couverture** tool × risk garantissant qu'aucun tool ne
-  tombe dans le vide.
-- Un point sur les **edge cases** structurels du provider (DNS posture-shift,
-  fan-out env-var, deployment-protection governance).
-- Un récap des **trous** qui demandent une décision humaine avant codage.
+## 1. Data model
 
-Sourcing : spec v4 §2.4 (data-model Vercel), §3 (DSL slice), §4 (catalogue),
-classifier `risk-classifier.ts` (complet), `custom-tools.ts`
-(14 custom REST), handbook `docs/handbook/vercel-provider.md` (concepts
-supportés/non), Context7 `/llmstxt/vercel_llms-full_txt` (semantics Vercel
-"team / project / deployment / env-var", 2026-05-31).
-
----
-
-## 1. Data-model du plane `runtime`
-
-> _« Un provider est une BDD mutable de `(entité_1, entité_2, …)` avec des
-> side effects observables via `read` sur certaines entités. »_ (spec §2)
-
-Vercel n'expose qu'**un seul plane** côté Vaubaan : `runtime` (par contraste
-avec Supabase qui en a 4). Toutes les entités vivent sous un `team`, et la
-quasi-totalité sous un `project`. Les seules entités account-level sont
-`team` lui-même et le `account` (porteur du PAT / Integration Bearer).
-
-### 1.1 Graphe d'entités
+One plane, `runtime`. The **project** is the resource; the **environment** is
+a slice segment.
 
 ```mermaid
 flowchart TB
-  account[account / installation]
-  team[team]
-  account --> team
-
-  team --> project[project]
-
-  %% Project-scoped governance / posture
-  project --> project-settings[project-settings<br/>framework, build cmd, node version, root dir]
-  project --> deployment-protection[deployment-protection<br/>SSO + password gate]
-  project --> domain[domain<br/>custom DNS attachment]
-  project --> firewall[firewall<br/>WAF toggle + managed rulesets]
-  firewall --> firewall-rule[firewall-rule<br/>custom WAF rule]
-  firewall --> ip-rule[ip-rule<br/>IP block / challenge / bypass]
-
-  %% Project × env triad
-  project --> env[env<br/>prod | preview | development]
-
-  %% Env-scoped resources
-  env --> deployment[deployment<br/>built + served instance]
-  env --> env-var[env-var<br/>key/value, plain|encrypted|sensitive]
-
-  %% Deployment-scoped artefacts
-  deployment --> build-log[build-log]
-  deployment --> runtime-log[runtime-log]
-  deployment --> bypass-token[bypass-token<br/>protection bypass URL]
-  deployment --> toolbar-thread[toolbar-thread<br/>comments + reactions]
-  toolbar-thread --> toolbar-message[toolbar-message]
+  account --> team --> project
+  project --> ps[project-settings]
+  project --> domain
+  project --> fw[firewall] --> fr[firewall-rule]
+  fw --> ip[ip-rule]
+  project --> fan[env-var-fan-out<br/>synthetic marker]
+  project --> env["env[prod | preview | development]"]
+  env --> ev[env-var]
+  env --> dep[deployment]
+  dep --> bl[build-log]
+  dep --> rl[runtime-log]
+  dep --> bt[bypass-token]
+  dep --> tt[toolbar-thread] --> tm[toolbar-message]
 ```
 
-### 1.2 Cardinalités déclarées
-
-| Path                                                                          | Cardinalité | Justification                                                                            |
-| ----------------------------------------------------------------------------- | ----------- | ---------------------------------------------------------------------------------------- |
-| `vercel.account[*]`                                                           | `one`       | Un seul Bearer/Integration côté Vaubaan par admin row.                                   |
-| `vercel.team[*]`                                                              | `bounded`   | Le PAT/Integration est team-scoped (souvent 1, parfois listé via `list_teams`).          |
-| `vercel.team[X].project[*]`                                                   | `bounded`   | Liste finie par team. Le binding Vaubaan force `project ∈ bindings`.                     |
-| `vercel.project[X].env[prod, preview, development]`                           | `bounded`   | Triade Vercel **fermée** (pas de "stage", pas de "qa" custom).                           |
-| `vercel.project[X].env[E].deployment[*]`                                      | `unbounded` | Vercel garde l'historique complet, peut être très long.                                  |
-| `vercel.project[X].env[E].env-var[*]`                                         | `bounded`   | Quota Vercel ~1000 par project.                                                          |
-| `vercel.project[X].domain[*]`                                                 | `bounded`   | Quelques unités par projet en pratique.                                                  |
-| `vercel.project[X].firewall`                                                  | `one`       | Singleton WAF config par projet (toggle + managed rulesets + OWASP CRS).                 |
-| `vercel.project[X].firewall.firewall-rule[*]`                                 | `bounded`   | Custom WAF rules (condition groups + actions).                                           |
-| `vercel.project[X].firewall.ip-rule[*]`                                       | `bounded`   | IP-based block/challenge/bypass/log rules.                                               |
-| `vercel.project[X].deployment-protection`                                     | `one`       | Une seule config par projet (ssoProtection + passwordProtection comme deux sous-champs). |
-| `vercel.project[X].project-settings`                                          | `one`       | Singleton par projet (framework, build cmd, node version, …).                            |
-| `vercel.project[X].env[E].deployment[D].toolbar-thread[*]`                    | `bounded`   | Threads de feedback toolbar, ~dizaines.                                                  |
-| `vercel.project[X].env[E].deployment[D].toolbar-thread[T].toolbar-message[*]` | `bounded`   | Réponses dans un thread.                                                                 |
-| `vercel.project[X].env[E].deployment[D].bypass-token[*]`                      | `bounded`   | Token TTL court généré on-demand pour bypass de la deployment-protection.                |
-| `vercel.project[X].env[E].deployment[D].build-log`                            | `one`       | Stream/blob unique par deployment.                                                       |
-| `vercel.project[X].env[E].deployment[D].runtime-log`                          | `unbounded` | Stream de lignes, filtrable par `since/until/level/source/requestId`.                    |
-
-### 1.3 Containment vs ce que `classify.ts` voit aujourd'hui
-
-Le classifier actuel collapse beaucoup d'entités sous 4 levels
-(`account`, `project-settings`, `deployment`, `config`). Le data-model v4
-en distingue **16** (account, team, project, env, deployment, env-var,
-env-var-fan-out, domain, firewall, firewall-rule, ip-rule,
-deployment-protection, project-settings, toolbar-thread/-message,
-build-log, runtime-log, bypass-token), ce qui permet au catalogue de risks
-de discriminer finement :
-
-- `deployment.W[target=prod]` ≠ `domain.W` (un est runtime, l'autre est DNS
-  posture-shift externe).
-- `env-var.W[secret]` ≠ `project-settings.W[framework]` (un est secret, l'autre
-  est métadonnée de build).
-- `toolbar-thread.W` (commentaire UI) ≠ `deployment.W` (trigger build).
-
-### 1.4 Side effects observables via `read`
-
-Certains reads ne sont **pas inertes** au sens HTTP :
-
-- `vercel__get_access_to_vercel_url` → **génère un bypass-token** (crée une
-  ressource). Sémantiquement c'est un `bypass-token.W` même si l'API est un
-  GET → à classifier `W`, pas `R` (cf. §5 edge cases).
-- `vercel__web_fetch_vercel_url` → fait un HTTP fetch sortant (side effect
-  externe : log d'accès côté target, potentiellement coût bande passante).
-
-Tous les autres reads sont vraiment des reads.
-
----
-
-## 2. Mapping tool → slice(s)
-
-32 tools exposés (18 upstream rewrap + 14 custom REST). La colonne **slice** suit le DSL spec v4 §3. La colonne
-**env-resolution** indique comment l'env est résolu au call (`static` =
-env-less ; `runtime` = depuis `args.target`). La colonne **fan-out** signale
-les cas où une seule invocation touche plusieurs envs (cf. risk
-`vercel.env-var-fan-out`).
-
-### 2.1 Reads (16 tools)
-
-| Tool                                               | Slice (pattern catalogue)                                                 | Env-resolution | Fan-out |
-| -------------------------------------------------- | ------------------------------------------------------------------------- | -------------- | ------- |
-| `vercel__search_vercel_documentation`              | `vercel.account[*].docs.R`                                                | n/a            | —       |
-| `vercel__list_teams`                               | `vercel.account[*].team[*].R`                                             | n/a            | —       |
-| `vercel__list_projects`                            | `vercel.team[T].project[*].R`                                             | n/a            | —       |
-| `vercel__get_project`                              | `vercel.project[P].project-settings.R`                                    | n/a            | —       |
-| `vercel__list_project_domains` _(custom)_          | `vercel.project[P].domain[*].R`                                           | n/a            | —       |
-| `vercel__check_domain_availability_and_price`      | `vercel.account[*].registrar.R` (lookup public)                           | n/a            | —       |
-| `vercel__list_deployments`                         | `vercel.project[P].env[*].deployment[*].R`                                | n/a            | —       |
-| `vercel__get_deployment`                           | `vercel.project[P].env[E].deployment[D].R`                                | static         | —       |
-| `vercel__get_deployment_build_logs`                | `vercel.project[P].env[E].deployment[D].build-log.R`                      | static         | —       |
-| `vercel__get_runtime_logs`                         | `vercel.project[P].env[E].deployment[D].runtime-log.R`                    | static         | —       |
-| `vercel__web_fetch_vercel_url`                     | `vercel.project[P].env[E].deployment[D].R` (+ external fetch side-effect) | static         | —       |
-| `vercel__list_toolbar_threads`                     | `vercel.project[P].env[E].deployment[D].toolbar-thread[*].R`              | static         | —       |
-| `vercel__get_toolbar_thread`                       | `vercel.project[P].env[E].deployment[D].toolbar-thread[T].R`              | static         | —       |
-| `vercel__list_env_vars` _(custom)_                 | `vercel.project[P].env-var[*].R`                                          | static         | —       |
-| `vercel__list_env_vars` _(custom, `decrypt=true`)_ | `vercel.project[P].env-var[*].R[plaintext]` (sous-cas)                    | static         | —       |
-| `vercel__get_firewall_config` _(custom)_           | `vercel.project[P].firewall.R`                                            | n/a            | —       |
-
-### 2.2 Writes (16 tools)
-
-| Tool                                           | Slice (pattern catalogue)                                                       | Env-resolution                                 | Fan-out                                          |
-| ---------------------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------ | ------------------ | --------------------------------------------- |
-| `vercel__deploy_to_vercel`                     | `vercel.project[P].env[target].deployment.W`                                    | `runtime` (`args.target` → `prod               | preview                                          | development`)      | Non — 1 env                                   |
-| `vercel__get_access_to_vercel_url`             | `vercel.project[P].env[E].deployment[D].bypass-token.W`                         | static (héritage de la deployment)             | Non                                              |
-| `vercel__upsert_env_var` _(custom)_            | `vercel.project[P].env[target ∈ array].env-var[KEY].W`                          | `runtime` (`args.target: ('prod'               | 'preview'                                        | 'development')[]`) | **Oui** — `target` array, par défaut = 3 envs |
-| `vercel__delete_env_var` _(custom)_            | `vercel.project[P].env[target].env-var[ID].W` (delete)                          | `runtime` (`args.target`, défaut `production`) | Non (delete unique côté API mais hint d'env)     |
-| `vercel__update_project_settings` _(custom)_   | `vercel.project[P].project-settings.W`                                          | static                                         | Implicite — affecte les builds futurs des 3 envs |
-| `vercel__add_project_domain` _(custom)_        | `vercel.project[P].domain[NAME].W` (+ DNS posture-shift externe)                | static                                         | Non                                              |
-| `vercel__verify_project_domain` _(custom)_     | `vercel.project[P].domain[NAME].W` (re-check, pas d'écriture nouvelle)          | static                                         | Non                                              |
-| `vercel__remove_project_domain` _(custom)_     | `vercel.project[P].domain[NAME].W` (delete)                                     | static                                         | Non                                              |
-| `vercel__change_toolbar_thread_resolve_status` | `vercel.project[P].env[E].deployment[D].toolbar-thread[T].W`                    | static                                         | Non                                              |
-| `vercel__reply_to_toolbar_thread`              | `vercel.project[P].env[E].deployment[D].toolbar-thread[T].toolbar-message.W`    | static                                         | Non                                              |
-| `vercel__edit_toolbar_message`                 | `vercel.project[P].env[E].deployment[D].toolbar-thread[T].toolbar-message[M].W` | static                                         | Non                                              |
-| `vercel__add_toolbar_reaction`                 | `vercel.project[P].env[E].deployment[D].toolbar-thread[T].toolbar-message[M].W` | static                                         | Non                                              |
-| `vercel__toggle_firewall` _(custom)_           | `vercel.project[P].firewall.W`                                                  | static                                         | Non                                              |
-| `vercel__upsert_firewall_rule` _(custom)_      | `vercel.project[P].firewall.firewall-rule[RULE_ID].W`                           | static                                         | Non                                              |
-| `vercel__remove_firewall_rule` _(custom)_      | `vercel.project[P].firewall.firewall-rule[RULE_ID].W`                           | static                                         | Non                                              |
-| `vercel__manage_ip_blocking` _(custom)_        | `vercel.project[P].firewall.ip-rule[ID].W`                                      | static                                         | Non                                              |
-
-### 2.3 Notes sur l'env-resolution
-
-- **`deploy_to_vercel`** : `args.target` est un scalaire optionnel. Classifier
-  actuel défaute à `prod` quand absent — **conservateur correct**, on garde.
-- **`upsert_env_var`** : `args.target` est un **array** `('production' |
-'preview' | 'development')[]`. Absent → Vercel applique aux 3 envs (cf.
-  `custom-tools.ts:99-107`). Le classifier actuel ne traite que le scalaire
-  → **bug latent v1** à corriger en v4 : émettre **une slice par env du
-  target array**, ce qui force le risk `vercel.env-var-fan-out` si > 1 env
-  ou si l'array contient `production`.
-- **`delete_env_var`** : `args.target` est un scalaire (hint Vaubaan, pas
-  consommé par l'API Vercel). Défaut `production` (conservateur).
-- **Tools toolbar** : env-less côté actuel mais l'env est résolvable depuis
-  le `deployment.id` (sous-jacent à la thread). En v4 on garde env-less pour
-  simplicité — risque déjà faible (cf. §3).
-
----
-
-## 3. Catalogue de risks YAML
-
-16 entrées + 1 fallback. RiskId qualifié par binding via convention
-`vercel[<env>].<name>` quand env-scoped, `vercel.<name>` sinon
-(spec §4.4 + §16 Q2).
-
-```yaml
-vercel:
-  risks:
-    # ─── READS ─────────────────────────────────────────────────────────────
-
-    - id: vercel.read-account
-      label: 'Lire account/team/project metadata'
-      reason: "Inventaire des projects/teams/deployments. Aucune mutation,
-        metadata non-secret. Surface d'attaque négligeable."
-      matches: 'vercel.{account,team,project}[**].R'
-      vector:
-        reversibility: reversible
-        blast: single
-        data: metadata
-        cost: free
-        visibility: internal
-        persistence: stateless
-
-    - id: vercel.read-deployment
-      label: 'Lire deployments + build/runtime logs'
-      reason: "Logs runtime peuvent contenir des données applicatives (PII si
-        l'app les log par accident, OWASP LLM01 via tokens injectés
-        dans les logs). Mais c'est la posture standard d'un coding
-        agent en debug."
-      matches: 'vercel.project[**].env[**].deployment[**].{R,build-log.R,runtime-log.R}'
-      vector:
-        reversibility: reversible
-        blast: single
-        data: data
-        cost: free
-        visibility: internal
-        persistence: stateless
-
-    - id: vercel.read-env-var
-      label: 'Lire les env vars (sans plaintext)'
-      reason: "Lecture des clés et valeurs encryptées. Pas d'exfil directe
-        possible — les valeurs renvoyées sont chiffrées par Vercel."
-      matches: 'vercel.project[**].env-var[**].R'
-      vector:
-        reversibility: reversible
-        blast: single
-        data: metadata
-        cost: free
-        visibility: internal
-        persistence: stateless
-
-    - id: vercel.read-env-var-plaintext
-      label: 'Lire les env vars en clair (decrypt=true)'
-      reason: "Exfil directe possible des secrets prod (Stripe key, DB url,
-        JWT signing key…) si l'agent a ce risk. Equivalent à une
-        compromission complète des credentials prod."
-      matches: 'vercel.project[**].env-var[**].R[plaintext]'
-      vector:
-        reversibility: reversible
-        blast: account
-        data: secret
-        cost: free
-        visibility: internal
-        persistence: stateless
-
-    - id: vercel.fetch-deployment-url
-      label: 'Fetch HTTP vers une deployment URL'
-      reason: "Side effect externe : log d'accès côté target, potentielle
-        consommation de bande passante. Pas un risque sécu majeur
-        mais à tracer."
-      matches: 'vercel.project[**].env[**].deployment[**].R'
-      vector:
-        reversibility: reversible
-        blast: single
-        data: data
-        cost: free
-        visibility: public
-        persistence: stateless
-
-    - id: vercel.mint-bypass-token
-      label: 'Minter un token de bypass de deployment protection'
-      reason: 'Credential creation. Le token contourne la SSO/Password Gate
-        sur une URL de deployment. TTL court mais exposable hors-bande.'
-      matches: 'vercel.project[**].env[**].deployment[**].bypass-token.W'
-      vector:
-        reversibility: reversible
-        blast: single
-        data: secret
-        cost: free
-        visibility: internal
-        persistence: session
-
-    # ─── WRITES — DEPLOYMENT ───────────────────────────────────────────────
-
-    - id: vercel.deploy-preview
-      label: 'Déclencher un deploy preview'
-      reason: "Pas d'impact prod. Build sur infra Vercel, URL non-indexée.
-        Reversible (les builds preview expirent ou peuvent être
-        supprimés)."
-      matches: 'vercel.project[**].env[preview,development].deployment.W'
-      vector:
-        reversibility: reversible
-        blast: single
-        data: data
-        cost: moderate
-        visibility: team
-        persistence: session
-
-    - id: vercel.deploy-prod
-      label: 'Déclencher un deploy prod'
-      reason: 'Public, costly à rollback (alias prod re-pointé, cache CDN
-        invalidé, communications/release notes en aval). Effet
-        immédiat sur les visiteurs.'
-      matches: 'vercel.project[**].env[prod].deployment.W'
-      vector:
-        reversibility: costly
-        blast: env
-        data: data
-        cost: moderate
-        visibility: public
-        persistence: session
-
-    # ─── WRITES — TOOLBAR (low-risk feedback comments) ─────────────────────
-
-    - id: vercel.toolbar-write
-      label: 'Écrire / éditer / réagir sur les toolbar threads'
-      reason: 'Commentaires UI sur deployment preview. Visible team-only,
-        réversible par delete/edit, aucune incidence sur build/runtime.
-        Mutate sémantiquement, mais risque minimal.'
-      matches: 'vercel.project[**].env[**].deployment[**].toolbar-thread[**].**.W'
-      vector:
-        reversibility: reversible
-        blast: single
-        data: data
-        cost: free
-        visibility: team
-        persistence: session
-
-    # ─── WRITES — ENV VARS (secrets) ───────────────────────────────────────
-
-    - id: vercel.env-var-write-preview
-      label: 'Écrire un env var preview/development'
-      reason: "Affecte les builds preview/dev futurs. Pas d'impact prod direct.
-        Mais valeur stockée = secret côté Vercel."
-      matches: 'vercel.project[**].env[preview,development].env-var[**].W'
-      vector:
-        reversibility: reversible
-        blast: env
-        data: secret
-        cost: free
-        visibility: internal
-        persistence: posture
-
-    - id: vercel.env-var-write-prod
-      label: 'Écrire un env var prod'
-      reason: "Posture-shift sur les credentials prod (DB url, JWT secret,
-        API keys). Une valeur erronée peut casser le service au
-        prochain deploy. Une valeur attacker-injectée peut exfiltrer
-        le trafic ou prendre le contrôle de l'app."
-      matches: 'vercel.project[**].env[prod].env-var[**].W'
-      vector:
-        reversibility: costly
-        blast: env
-        data: secret
-        cost: free
-        visibility: internal
-        persistence: posture
-
-    - id: vercel.env-var-fan-out
-      label: 'Écrire un env var sur tous les envs (prod inclus)'
-      reason: "`upsert_env_var target=['production','preview','development']`
-        ou target omis → écriture **simultanée** sur les 3 envs. Élève
-        une erreur preview-only à un incident prod. Risk distinct du
-        write env-par-env."
-      matches: 'vercel.project[**].env[*,*,*].env-var[**].W'
-      vector:
-        reversibility: costly
-        blast: bulk
-        data: secret
-        cost: free
-        visibility: internal
-        persistence: posture
-
-    # ─── WRITES — PROJECT SETTINGS (build pipeline) ────────────────────────
-
-    - id: vercel.project-settings-write
-      label: 'Modifier project settings (framework, build cmd, node version, root dir)'
-      reason: 'Affecte le pipeline de build de **toutes** les futures
-        deployments des 3 envs. Une mauvaise install/build command
-        peut casser preview ET prod au prochain push. Posture-shift
-        sur la chaîne CI.'
-      matches: 'vercel.project[**].project-settings.W'
-      vector:
-        reversibility: costly
-        blast: account
-        data: metadata
-        cost: free
-        visibility: internal
-        persistence: posture
-
-    # ─── WRITES — DOMAINS (DNS posture-shift externe) ──────────────────────
-
-    - id: vercel.domain-write
-      label: 'Attacher / détacher / vérifier un domaine custom'
-      reason: "Couplage DNS externe. Add → routing public (peut détourner
-        trafic d'un domaine sous notre contrôle). Remove → casse le
-        service public si c'est le domaine prod. Verify → réversible
-        et inoffensif, mais inclus pour homogénéité."
-      matches: 'vercel.project[**].domain[**].W'
-      vector:
-        reversibility: costly
-        blast: account
-        data: metadata
-        cost: free
-        visibility: public
-        persistence: posture
-
-    # ─── READS — FIREWALL (WAF config inspection) ────────────────────────
-
-    - id: vercel.firewall-read
-      label: 'Lire la configuration firewall / WAF'
-      reason: "Expose la posture WAF complète d'un projet : rules custom,
-        entrées IP blocking, managed rulesets, OWASP CRS, et le toggle
-        firewallEnabled. Metadata-only (pas de mutation), mais révèle
-        la surface de politique sécu — un attaquant qui voit les rules
-        peut crafter des bypasses."
-      matches: 'vercel.project[**].firewall.R'
-      vector:
-        reversibility: reversible
-        blast: single
-        data: metadata
-        cost: free
-        visibility: internal
-        persistence: stateless
-
-    # ─── WRITES — FIREWALL (WAF toggle + rules + IP blocking) ────────────
-
-    - id: vercel.firewall-write
-      label: 'Activer / désactiver le firewall du projet'
-      reason: "Couper le WAF expose le projet à tout le trafic non-filtré.
-        L'activer peut bloquer des visiteurs légitimes si les rules sont
-        mal configurées. Posture-shift affectant le trafic prod
-        immédiatement."
-      matches: 'vercel.project[**].firewall.W'
-      vector:
-        reversibility: reversible
-        blast: env
-        data: metadata
-        cost: free
-        visibility: public
-        persistence: posture
-
-    - id: vercel.firewall-rule-write
-      label: 'Créer / modifier / supprimer une custom firewall rule'
-      reason: "Une mauvaise rule peut exposer silencieusement la prod aux
-        attaques (trop permissive) ou bloquer le trafic légitime (trop
-        restrictive). Chaque rule est project-scoped et s'applique à
-        tous les deployments. Posture-shift public sur chaque requête."
-      matches: 'vercel.project[**].firewall.firewall-rule[**].W'
-      vector:
-        reversibility: reversible
-        blast: env
-        data: metadata
-        cost: free
-        visibility: public
-        persistence: posture
-
-    - id: vercel.ip-rule-write
-      label: 'Ajouter / supprimer une règle IP blocking'
-      reason: 'Les IP rules contrôlent directement quelles IPs sources
-        peuvent atteindre le projet. Un mauvais deny bloque des clients
-        payants ; un mauvais bypass laisse un attaquant entrer.
-        Posture-shift public immédiat.'
-      matches: 'vercel.project[**].firewall.ip-rule[**].W'
-      vector:
-        reversibility: reversible
-        blast: env
-        data: metadata
-        cost: free
-        visibility: public
-        persistence: posture
-
-    # ─── FALLBACK générique (DOIT être présent) ────────────────────────────
-
-    - id: vercel.uncategorized-write
-      label: 'Écriture Vercel non catégorisée'
-      reason: "Catch-all pour les writes qui n'ont pas été explicitement
-        catégorisés. Si vu en prod, signale qu'il manque une entrée
-        au catalogue."
-      matches: 'vercel.**.W'
-      vector:
-        reversibility: costly
-        blast: env
-        data: data
-        cost: free
-        visibility: internal
-        persistence: session
-```
-
-### 3.1 `acceptable_in_envs` (spec v4 §4.1, §16 Q5)
-
-Risques pour lesquels accepter en prod n'a structurellement pas de sens :
-
-- `vercel.env-var-write-preview` → `acceptable_in_envs: ['preview', 'development']`
-  (par construction, la cible env est dans le risk-id).
-
-Les autres risks sont soit account-scoped (`project-settings`, `domain`,
-`deployment-protection`) et donc non env-qualifiables, soit déjà qualifiés
-par env dans le RiskId (`deploy-preview` vs `deploy-prod`,
-`env-var-write-preview` vs `env-var-write-prod`).
-
----
-
-## 4. Lint coverage — matrice tool × risk
-
-Vérifie que **chaque tool exposé** matche au moins un risk du catalogue.
-Ligne = tool, colonne = risk-id matché. ✓ = match direct, (✓) = match via
-fallback uniquement (signal de risk manquant).
-
-### 4.1 Reads (16 tools)
-
-| Tool                                          | read-account | read-deployment | read-env-var | read-env-var-plaintext | fetch-deployment-url | firewall-read |
-| --------------------------------------------- | :----------: | :-------------: | :----------: | :--------------------: | :------------------: | :-----------: |
-| `vercel__search_vercel_documentation`         |      ✓       |                 |              |                        |                      |               |
-| `vercel__list_teams`                          |      ✓       |                 |              |                        |                      |               |
-| `vercel__list_projects`                       |      ✓       |                 |              |                        |                      |               |
-| `vercel__get_project`                         |      ✓       |                 |              |                        |                      |               |
-| `vercel__list_project_domains`                |      ✓       |                 |              |                        |                      |               |
-| `vercel__check_domain_availability_and_price` |      ✓       |                 |              |                        |                      |               |
-| `vercel__list_deployments`                    |              |        ✓        |              |                        |                      |               |
-| `vercel__get_deployment`                      |              |        ✓        |              |                        |                      |               |
-| `vercel__get_deployment_build_logs`           |              |        ✓        |              |                        |                      |               |
-| `vercel__get_runtime_logs`                    |              |        ✓        |              |                        |                      |               |
-| `vercel__web_fetch_vercel_url`                |              |                 |              |                        |          ✓           |               |
-| `vercel__list_toolbar_threads`                |              |        ✓        |              |                        |                      |               |
-| `vercel__get_toolbar_thread`                  |              |        ✓        |              |                        |                      |               |
-| `vercel__list_env_vars` (decrypt=false)       |              |                 |      ✓       |                        |                      |               |
-| `vercel__list_env_vars` (decrypt=true)        |              |                 |      ✓       |           ✓            |                      |               |
-| `vercel__get_firewall_config`                 |              |                 |              |                        |                      |       ✓       |
-
-### 4.2 Writes (16 tools)
-
-| Tool                                            | deploy-preview | deploy-prod | toolbar-write | env-var-write-preview | env-var-write-prod | env-var-fan-out | project-settings-write | domain-write | mint-bypass-token | firewall-write | firewall-rule-write | ip-rule-write | uncategorized (fallback) |
-| ----------------------------------------------- | :------------: | :---------: | :-----------: | :-------------------: | :----------------: | :-------------: | :--------------------: | :----------: | :---------------: | :------------: | :-----------------: | :-----------: | :----------------------: |
-| `vercel__deploy_to_vercel` (target=preview)     |       ✓        |             |               |                       |                    |                 |                        |              |                   |                |                     |               |                          |
-| `vercel__deploy_to_vercel` (target=prod)        |                |      ✓      |               |                       |                    |                 |                        |              |                   |                |                     |               |                          |
-| `vercel__deploy_to_vercel` (target=development) |       ✓        |             |               |                       |                    |                 |                        |              |                   |                |                     |               |                          |
-| `vercel__upsert_env_var` (target=[preview])     |                |             |               |           ✓           |                    |                 |                        |              |                   |                |                     |               |                          |
-| `vercel__upsert_env_var` (target=[production])  |                |             |               |                       |         ✓          |                 |                        |              |                   |                |                     |               |                          |
-| `vercel__upsert_env_var` (target=all 3 / omis)  |                |             |               |           ✓           |         ✓          |        ✓        |                        |              |                   |                |                     |               |                          |
-| `vercel__delete_env_var` (target=preview)       |                |             |               |           ✓           |                    |                 |                        |              |                   |                |                     |               |                          |
-| `vercel__delete_env_var` (target=production)    |                |             |               |                       |         ✓          |                 |                        |              |                   |                |                     |               |                          |
-| `vercel__update_project_settings`               |                |             |               |                       |                    |                 |           ✓            |              |                   |                |                     |               |                          |
-| `vercel__add_project_domain`                    |                |             |               |                       |                    |                 |                        |      ✓       |                   |                |                     |               |                          |
-| `vercel__verify_project_domain`                 |                |             |               |                       |                    |                 |                        |      ✓       |                   |                |                     |               |                          |
-| `vercel__remove_project_domain`                 |                |             |               |                       |                    |                 |                        |      ✓       |                   |                |                     |               |                          |
-| `vercel__get_access_to_vercel_url`              |                |             |               |                       |                    |                 |                        |              |         ✓         |                |                     |               |                          |
-| `vercel__change_toolbar_thread_resolve_status`  |                |             |       ✓       |                       |                    |                 |                        |              |                   |                |                     |               |                          |
-| `vercel__reply_to_toolbar_thread`               |                |             |       ✓       |                       |                    |                 |                        |              |                   |                |                     |               |                          |
-| `vercel__edit_toolbar_message`                  |                |             |       ✓       |                       |                    |                 |                        |              |                   |                |                     |               |                          |
-| `vercel__add_toolbar_reaction`                  |                |             |       ✓       |                       |                    |                 |                        |              |                   |                |                     |               |                          |
-| `vercel__toggle_firewall`                       |                |             |               |                       |                    |                 |                        |              |                   |       ✓        |                     |               |                          |
-| `vercel__upsert_firewall_rule`                  |                |             |               |                       |                    |                 |                        |              |                   |                |          ✓          |               |                          |
-| `vercel__remove_firewall_rule`                  |                |             |               |                       |                    |                 |                        |              |                   |                |          ✓          |               |                          |
-| `vercel__manage_ip_blocking`                    |                |             |               |                       |                    |                 |                        |              |                   |                |                     |       ✓       |                          |
-
-**Résultat lint** : 0 tool tombe uniquement dans le fallback. Le fallback
-`vercel.uncategorized-write` reste néanmoins **obligatoire** (spec §14 anti-
-pattern "catalogue avec trous") pour les futurs tools non-encore-catégorisés
-introduits par le rewrap.
-
-### 4.3 Cas multi-slice signalé par le mapping
-
-Trois tools émettent **plusieurs slices** ou **plusieurs risks_touched** :
-
-1. **`vercel__upsert_env_var` avec `target=['production','preview','development']`**
-   (ou target omis) → émet 3 slices `vercel.project[P].env[E].env-var[KEY].W`
-   (une par env), donc touche `env-var-write-preview` ET `env-var-write-prod`
-   ET `env-var-fan-out`. Le token doit avoir accepté les 3 risks pour
-   passer.
-
-2. **`vercel__get_access_to_vercel_url`** → émet `bypass-token.W` (risk
-   `mint-bypass-token`). Vérifier que le classifier émet bien un `W` ici et
-   pas un `R` (cf. §5 edge case).
-
----
-
-## 5. Edge cases — décisions à acter
-
-### 5.1 Deployment Protection (SSO / Password) — non modifiable via API
-
-Vercel interdit aux tokens API (PAT et intégrations) de modifier les settings
-de Vercel Authentication (SSO + Password Protection). Le tool
-`vercel__update_deployment_protection` a été **supprimé** — l'opération
-ne peut être faite que manuellement dans le dashboard Vercel :
-**Project → Settings → Deployment Protection**.
-
-Le `validateBinding` retourne un **warning** à ce sujet pour que l'admin
-soit informé dès le onboarding.
-
-**Alternative** : attacher un custom domain au projet
-(`vercel__add_project_domain`) — les custom domains ne sont pas soumis
-au SSO gate de `*.vercel.app`.
-
-### 5.2 `vercel__add_project_domain` — DNS = posture-shift externe
-
-Le risk `vercel.domain-write` couvre add/verify/remove. Les 3 sous-tools ont
-des sémantiques **différentes** :
-
-- `add` → attache un domaine, peut router publiquement vers le projet (si
-  les DNS pointent déjà). Si l'attacker a déjà compromis le DNS de
-  `victim.com`, attacher `victim.com` au projet permet du **bait-and-switch**.
-- `verify` → re-déclenche la vérification, **inoffensif** (idempotent, pas
-  de mutation côté Vercel).
-- `remove` → casse le service public si c'est le domaine prod.
-
-**Option A** : un seul risk `vercel.domain-write` (proposé ci-dessus).
-Simple, cohérent.
-**Option B** : 3 risks (`domain-add`, `domain-verify`, `domain-remove`).
-Permet d'accepter `verify` sans le reste.
-
-**Décision proposée** : **Option A** au MVP. `verify` est rarement utile
-isolément (on l'appelle juste après `add`). Si l'usage montre un besoin de
-granularité, splitter en Phase 2.
-
-### 5.3 Tools custom vs natifs Vercel — risk distinct ?
-
-Les 14 tools custom REST (domains, env vars, project settings, venv push,
-firewall/WAF) sont des **augmentations sur des trous du MCP
-officiel**, pas des opérations sémantiquement différentes.
-
-**Décision** : **pas de distinction risk-side** entre custom et natif.
-Le risk porte l'intention métier ("écrire un env var prod"), pas la
-plomberie d'implémentation (REST vs JSON-RPC forward).
-
-Conséquence : le risk-catalog reste stable même si Vercel finit par exposer
-nativement `upsert_env_var` côté MCP (cf. ADR `vercel-augment-with-rest-tools`
-§ conditions de bascule).
-
-### 5.4 `vercel__get_access_to_vercel_url` — read ou write ?
-
-L'API est un GET mais **crée une ressource** (bypass-token) avec TTL court.
-Classifier actuel le marque `read-deployment` → **bug latent**, sous-classifié.
-
-**Décision proposée** : reclassifier `bypass-token.W`, matche
-`vercel.mint-bypass-token`. Le coding agent qui veut juste "lire les logs"
-n'en a pas besoin ; celui qui veut "partager une preview avec un client
-en bypass de la SSO" en a besoin et c'est un acte distinct.
-
-### 5.5 `vercel__web_fetch_vercel_url` — risk dédié ?
-
-Le tool fait un HTTP fetch sortant vers une URL Vercel. Side effects :
-log d'accès côté target + consommation bande passante. Pas un risque sécu
-majeur (l'agent peut faire la même chose via `fetch()` côté son sandbox),
-mais on a un risk dédié `vercel.fetch-deployment-url` pour la traçabilité.
-
-**Décision** : conserver le risk dédié. Permet à l'audit log de voir
-précisément quelles URLs ont été fetched par l'agent.
-
-### 5.6 Toolbar — `mutate` ou `inspect` ?
-
-Les 4 tools toolbar (`reply`, `edit`, `react`, `resolve`) sont
-sémantiquement **mutate** (créent/modifient des commentaires) mais le risk
-est **très faible** (texte UI sur preview, pas d'incidence build/runtime).
-
-**Décision** : risk distinct `vercel.toolbar-write`. Permet à un coding
-agent d'interagir avec des reviewers humains sur les preview sans devoir
-grant un risk plus large.
-
-### 5.7 `list_env_vars decrypt=true` — risk dédié ?
-
-Le param `decrypt` du tool `list_env_vars` change radicalement la classe
-de risque : sans → metadata ; avec → exfil de secrets.
-
-**Décision proposée** : **deux risks distincts**
-(`read-env-var` et `read-env-var-plaintext`), discriminés au classify par
-inspection de `args.decrypt === true`. Émettre les 2 slices quand
-`decrypt=true`.
-
-### 5.8 `delete_env_var` — env hint vs réalité Vercel
-
-`args.target` côté `delete_env_var` est un **hint Vaubaan**, pas consommé
-par l'API Vercel (le delete enlève le var de tous ses envs d'un coup).
-
-**Conséquence** : si l'agent passe `target='preview'` mais que le var était
-défini sur prod aussi, le delete supprime aussi sur prod sans déclencher
-`env-var-write-prod`. **Bug de safety**.
-
-**Décision proposée** : le classifier doit **émettre la slice sur les 3
-envs** (`env[*]`) au lieu de honorer `args.target`. Force le risk
-`env-var-fan-out` à se déclencher — le token devra avoir accepté ce
-risk explicitement.
-
----
-
-## 6. Trous identifiés
-
-### 6.1 Trous data-model
-
-| Manque                         | Impact                                                                                                                                                               |
-| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `edge-config`                  | Volontairement hors-scope (handbook §Concepts non-supportés). Pas de risk catalogue dédié — si un jour exposé, risk `edge-config-write` à ajouter (posture).         |
-| `log-drain`                    | Hors-scope. Si exposé : risk `log-drain-write` (data flow externe, `data: data`, `visibility: public`, `persistence: posture`).                                      |
-| `webhook`                      | Hors-scope. Si exposé : risk `webhook-write` (data flow externe).                                                                                                    |
-| `alias` (custom alias mapping) | Sous-cas de `deployment` côté Vercel (un alias re-mappe le DNS d'un domaine vers une deployment précise). Si exposé, à modéliser comme entité `alias` sous `domain`. |
-| `marketplace billing`          | Hors-scope (Vaubaan n'est pas une Marketplace listing).                                                                                                              |
-
-### 6.2 Trous catalogue
-
-Tous les tools sont catégorisés. Aucun tombe dans `vercel.uncategorized-
-write` au mapping actuel. Le fallback reste présent **pour le futur**.
-
-### 6.3 Bugs latents du classifier v1 à corriger en v4
-
-1. `vercel__upsert_env_var` ne traite que le scalaire `target` → doit
-   itérer sur l'array et émettre une slice par env.
-2. `vercel__delete_env_var` honore `args.target` comme hint → doit émettre
-   sur les 3 envs (la réalité de l'API Vercel).
-3. `vercel__get_access_to_vercel_url` classifié `read-deployment` → doit
-   être `bypass-token.W` (mint credential).
-4. `vercel__list_env_vars` ne discrimine pas `decrypt=true` → doit émettre
-   une slice supplémentaire `env-var[**].R[plaintext]` dans ce cas.
-
-### 6.4 Décisions résiduelles à acter (avant code)
-
-- **D1** — Adopter Option A (un seul risk `domain-write`) ou Option B
-  (3 risks `add/verify/remove`) ? Proposition : A.
-- **D3** — `read-env-var-plaintext` : risk distinct (proposé) ou bloquer le
-  `decrypt=true` à la source (retirer le param du tool) ? Proposition :
-  garder le risk pour préserver le cas légitime "rotation manuelle assistée".
-
----
-
-## 7. Récap — mapping v1 → v4 pour ce provider
-
-| Aspect classifier                  | v1 actuel (`classify.ts`)                                 | v4 proposé                                                                              |
-| ---------------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Sortie                             | `{ capability: {plane, level, action, env?} }`            | `{ slices: Slice[] }` (multi-slice quand fan-out)                                       |
-| Niveaux                            | 4 (`account`, `project-settings`, `deployment`, `config`) | 16 entités (cf. §1.1) — plus expressif                                                  |
-| Env-resolution                     | `static` ou `runtime` selon kind                          | identique, étendu pour gérer `target: string[]` (fan-out)                               |
-| `upsert_env_var target=[3 envs]`   | 1 capability `config:write@prod` (perd preview+dev)       | 3 slices + risk `env-var-fan-out`                                                       |
-| `delete_env_var`                   | 1 capability `config:write@<hint>`                        | 3 slices (env[*]) + risks `env-var-write-prod` + `env-var-write-preview`                |
-| `get_access_to_vercel_url`         | `deployment:read`                                         | `bypass-token.W` → risk `mint-bypass-token`                                             |
-| `list_env_vars decrypt=true`       | `config:read`                                             | 2 slices : `env-var[**].R` + `env-var[**].R[plaintext]` → risk `read-env-var-plaintext` |
-| `update_project_settings`          | `project-settings:write`                                  | `project-settings.W` → risk `project-settings-write`                                    |
-| `update_deployment_protection`     | `project-settings:write` (mélangé avec settings normaux)  | **supprimé** — Vercel interdit la modification via API                                  |
-| `add/verify/remove_project_domain` | `project-settings:write`                                  | risk distinct `domain-write`                                                            |
-| `toolbar-*` writes                 | `deployment:write` (env-less, mélangé avec deploy)        | risk distinct `toolbar-write`                                                           |
-| `firewall-*` (5 tools)             | non couvert                                               | 4 risks : `firewall-read`, `firewall-write`, `firewall-rule-write`, `ip-rule-write`     |
-| Décision binaire                   | gates `allow/confirm/deny` côté policy                    | `risk ∈ accepted_risks` (strict-fail au runtime, ADR unified-gates-drop-confirm)        |
-| Bypass impossible via              | `dispatch_workflow` retiré (côté GitHub, plus Vercel)     | identique                                                                               |
-
----
-
-## Annexe — preset de risks "Coding Agent Standard" pour Vercel
-
-Profil-type proposé pour un coding agent autonome sur un projet
-`vaubaan-gateway`-like (cf. Annexe A spec v4) :
-
-```
-Bindings : vercel(prj_xxx)
-
-Coder Vercel — risks à cocher au mint :
-  ☑ vercel.read-account
-  ☑ vercel.read-deployment
-  ☑ vercel.read-env-var
-  ☑ vercel.fetch-deployment-url
-  ☑ vercel.deploy-preview
-  ☑ vercel.toolbar-write
-  ☐ vercel.deploy-prod
-  ☐ vercel.env-var-write-preview
-  ☐ vercel.mint-bypass-token
-  ☐ vercel.project-settings-write
-  ☐ vercel.env-var-fan-out
-  ☐ vercel.read-env-var-plaintext
-  ☐ vercel.env-var-write-prod
-  ☐ vercel.domain-write
-  ☐ vercel.firewall-read
-  ☐ vercel.firewall-write
-  ☐ vercel.firewall-rule-write
-  ☐ vercel.ip-rule-write
-```
-
-6 risks cochés par défaut + 13 explicites à ajouter selon la tâche. Post
-drop-confirm la décision est binaire : un risk est dans
-`accepted_risks` (allow) ou non (deny). Aligné avec l'UX cible spec §0.
+| Entity                                 | Cardinality  | Notes                                                                             |
+| -------------------------------------- | ------------ | --------------------------------------------------------------------------------- |
+| `account`, `team`                      | one, bounded | The token's account and the team the connection is pinned to (`team_id` field).   |
+| `project`                              | bounded      | The resource (`prj_xxx`). Discovered at connection time; selected by the mission. |
+| `project-settings`, `firewall`         | one          | Singletons per project. Writes affect every environment.                          |
+| `domain`, `firewall-rule`, `ip-rule`   | bounded      | Project-scoped posture entities with public effect.                               |
+| `env`                                  | bounded      | Closed triad. `envScopable: true`; its ident **is** the environment label.        |
+| `deployment`, `runtime-log`            | unbounded    | Vercel keeps history.                                                             |
+| `env-var`, `bypass-token`, `toolbar-*` | bounded      | Per environment / per deployment.                                                 |
+| `env-var-fan-out`                      | one          | Emitted when one env-var write touches several environments in a single call.     |
+
+## 2. Tools → slices
+
+31 tools: 18 rewrapped from `mcp.vercel.com` (frozen in
+`src/upstream-tools.json`), 13 custom REST (`src/custom-tools.ts`). The
+classifier (`src/classify.ts`) is pure and emits one or more slices per call.
+
+**Project resolution.** `projectId` (or `project_id`) must be a resource of
+the mission; absent, the mission's single Vercel project applies; several
+projects and no argument, a project the mission does not hold, or a malformed
+ref are refused. Four account-level tools need no project
+(`search_vercel_documentation`, `list_teams`, `list_projects`,
+`check_domain_availability_and_price`) but still refuse a foreign `projectId`.
+
+**Environment.** `target` (`production | preview | development`, `prod`
+accepted) maps to `env[prod | preview | development]`. `deploy_to_vercel`
+without a target defaults to **prod** (conservative). `upsert_env_var` honours
+the whole `target` array — one slice per environment, plus the
+`env-var-fan-out` marker when more than one; omitted or unknown targets mean
+all three. `delete_env_var` always emits the three environments plus the
+marker: the Vercel API removes the variable from every environment it lives
+in, whatever the hint.
+
+**Identifiers.** Deployment (`idOrUrl`, `deploymentId`, `url`), thread,
+message, domain, rule and env-var ids are embedded when slice-safe
+(`[a-zA-Z0-9_/-]+`) and replaced by `[*]` otherwise (URLs, FQDNs). Catalog
+patterns match any ident there, so only audit precision is lost.
+
+| Tool                                                                        | Slice                                                                       | Risk                                                |
+| --------------------------------------------------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------- |
+| `search_vercel_documentation`                                               | `account.docs.R`                                                            | read-account                                        |
+| `list_teams` / `list_projects`                                              | `account.team[*].R` / `account.project[*].R`                                | read-account                                        |
+| `check_domain_availability_and_price`                                       | `account.domain-registrar.R`                                                | read-account                                        |
+| `get_project`                                                               | `project[P].project-settings.R`                                             | read-account                                        |
+| `list_project_domains`                                                      | `project[P].domain[*].R`                                                    | read-account                                        |
+| `list_deployments` / `get_deployment`                                       | `project[P].deployment[D].R`                                                | read-deployment                                     |
+| `get_deployment_build_logs` / `get_runtime_logs`                            | `project[P].deployment[D].{build-log,runtime-log}.R`                        | read-deployment                                     |
+| `web_fetch_vercel_url`                                                      | `project[P].deployment[D].fetch.R`                                          | fetch-deployment-url                                |
+| `list_toolbar_threads` / `get_toolbar_thread`                               | `project[P].deployment[D].toolbar-thread[T].R`                              | read-deployment                                     |
+| `list_env_vars`                                                             | `project[P].env-var[*].R` (+ `…env-var[*].plaintext.R` when `decrypt=true`) | read-env-var (+ read-env-var-plaintext)             |
+| `get_firewall_config`                                                       | `project[P].firewall.R`                                                     | firewall-read                                       |
+| `deploy_to_vercel`                                                          | `project[P].env[E].deployment.W`                                            | deploy (`vercel[E].deploy`)                         |
+| `get_access_to_vercel_url`                                                  | `project[P].deployment[D].bypass-token.W`                                   | mint-bypass-token                                   |
+| `upsert_env_var`                                                            | `project[P].env[E].env-var[K].W` × envs (+ `project[P].env-var-fan-out.W`)  | env-var-write (`vercel[E].env-var-write`) + fan-out |
+| `delete_env_var`                                                            | `project[P].env[E].env-var[ID].W` × 3 + `project[P].env-var-fan-out.W`      | env-var-write × 3 + env-var-fan-out                 |
+| `update_project_settings`                                                   | `project[P].project-settings.W`                                             | project-settings-write                              |
+| `add_project_domain` / `verify_project_domain` / `remove_project_domain`    | `project[P].domain[N].W`                                                    | domain-write                                        |
+| `toggle_firewall`                                                           | `project[P].firewall.W`                                                     | firewall-write                                      |
+| `upsert_firewall_rule` / `remove_firewall_rule`                             | `project[P].firewall.firewall-rule[R].W`                                    | firewall-rule-write                                 |
+| `manage_ip_blocking`                                                        | `project[P].firewall.ip-rule[I].W`                                          | ip-rule-write                                       |
+| `change_toolbar_thread_resolve_status`                                      | `project[P].deployment[D].toolbar-thread[T].W`                              | toolbar-write                                       |
+| `reply_to_toolbar_thread` / `edit_toolbar_message` / `add_toolbar_reaction` | `project[P].deployment[D].toolbar-thread[T].toolbar-message[M].W`           | toolbar-write                                       |
+
+`assertCatalogCoverage` (kit) runs one sample per tool in
+`tests/unit/plugin.test.ts`: every tool is covered by a dedicated risk; the
+fallback `vercel.uncategorized-write` matches every write too and stays
+mandatory for tools added later.
+
+## 3. Catalog
+
+`src/risk-catalog.yaml`, `catalog_version: 2`, loaded at boot by the SDK (the
+v4 `risk-catalog.ts` twin and its sync test are gone). 16 risks + fallback,
+ids unchanged since v4. Two risks are env-scoped —
+`vercel.deploy` and `vercel.env-var-write`, `acceptable_in_envs: [preview,
+development, prod]`, `vector_overrides.prod` raising reversibility (and, for
+deploys, blast and visibility). Everything else is account-scoped: project
+settings, domains and firewall affect every environment at once;
+`env-var-fan-out` is by construction multi-environment.
+
+### Presets
+
+| Preset      | Entries                                                                                                                                                                                                                                                                  |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `read-only` | read-account, read-deployment, read-env-var, fetch-deployment-url, firewall-read — all `auto`.                                                                                                                                                                           |
+| `developer` | The reads above (larger quotas) + `vercel[preview].deploy`, `vercel[development].deploy`, `vercel[preview].env-var-write`, `vercel[development].env-var-write`, toolbar-write, mint-bypass-token — all `auto`. No production configuration of any kind.                  |
+| `operator`  | Developer + `vercel[prod].deploy`, `vercel[prod].env-var-write`, env-var-fan-out, project-settings-write, domain-write, firewall-read, firewall-write, firewall-rule-write, ip-rule-write, read-env-var-plaintext. Every production-affecting entry is gated `approval`. |
+
+Values: reads 2 000–5 000 per period at 120/min; preview writes 200 per
+period at 10–20/min; production and posture writes 20–50 per period at
+5/min. The deferred ADR `mission-presets-default-values` (plan §5.5) may
+revise the numbers; the shape is fixed by [[plugin-contract-and-credential-spec]] D5.
+
+### Environment axis — what the host must do
+
+For Vercel the environment lives in the arguments, not in a resource label.
+The default `resourceEnvResolver` of `@vaubaan/policy-engine` resolves the
+environment from the **owner's label on the project resource**, which for a
+Vercel project (spanning all three environments) is meaningless: a project
+labelled `prod` would qualify a preview deploy as `vercel[prod].deploy`, and
+an unlabelled project would never qualify anything, so the env-qualified
+preset entries above would not match `risks_touched`. The plugin exports
+`vercelEnvOf(slice)` (reads the `env[<label>]` segment; `null` when
+env-less) for the host to use as the Vercel `EnvResolver`. Wiring it is a
+host decision (P0.5 / P1.6), recorded as an open question in the P1.2b
+report. `discoverResources` notes the axis in `metadata.environments`.
+
+## 4. Credential
+
+`api-key` with `token` (secret) and `team_id` (`^team_[A-Za-z0-9]+$`). What
+v4 did — a personal access token scoped to a team, team auto-detected through
+`/v2/teams` — becomes a declarative form: the user pastes the token and the
+team id, the host stores them encrypted, the plugin narrows them with
+`vercelAuth()`. No refresh: the token expires on the date chosen at creation;
+`UpstreamAuthError` on 401/403 lets the host mark the connection `expired`.
+The team is pinned: an explicit `teamId` argument that differs from the
+connection's team is refused by `execute` before any network call (v4
+forwarded it).
+
+## 5. Execution and discovery
+
+- Rewrapped tools: `POST https://mcp.vercel.com/` with a JSON-RPC
+  `tools/call` (prefix stripped), SSE-framed answer, one frame per response.
+  The upstream result is already an `McpToolResult` and is passed through.
+- Custom tools: REST on `https://api.vercel.com` (`/v9/projects`,
+  `/v10/projects/{id}/env`, `/v9|v10/projects/{id}/domains`,
+  `/v1/security/firewall/config`), bodies whitelisted field by field.
+- Argument normalisation: `teamId` and `projectId` are filled from the
+  connection and the mission's single project **only when the tool's schema
+  declares them** (upstream tools declare `additionalProperties: false`).
+- Errors: 401/403 → `UpstreamAuthError` (thrown); any other upstream failure
+  (HTTP error, JSON-RPC error frame) → `isError: true` result the agent reads.
+- `discoverResources`: `GET /v2/teams/{team_id}` then `GET /v10/projects`
+  paged by `pagination.next` → `until`, 100 per page, 10 pages at most.
+
+### Edge cases carried from v4 (all implemented, all tested)
+
+1. `get_access_to_vercel_url` is a credential mint → `bypass-token.W`, not a read.
+2. `list_env_vars decrypt=true` adds the plaintext slice → distinct risk.
+3. `upsert_env_var` fans out; `delete_env_var` always touches the three environments.
+4. One `domain-write` risk for add / verify / remove (option A of the research).
+5. Deployment Protection (SSO / password) cannot be changed by API tokens; no tool. The legacy adapter's `validateBinding` still warns about it.
+6. `deploy_to_vercel` upstream declares no argument (it deploys "the current project" from CLI context); it is classified on `target` and the mission project, and its usefulness through a remote rewrap is doubtful — kept for parity, to be re-evaluated when the upstream tool list is refreshed.
+
+## 6. Legacy v4 shells (deleted in P1.6)
+
+`src/vercel-adapter.ts` (`VercelAdapter`), `src/risk-classifier.ts`
+(`classifyVercelV4`), the `availableTools` alias and the `vercelRiskCatalog`
+export keep `apps/gateway` compiling. They delegate to the v5 modules; the
+venv secret transfer (`upsert_env_from_venv`) is removed, the `venvStore`
+option is accepted and ignored.
+
+## How to debug
+
+- **Boot fails with `Invalid risk catalog '…/plugins/vercel/src/risk-catalog.yaml'`** —
+  read every bullet; a preset entry naming an env on a non-env-scoped risk,
+  or an env outside `acceptable_in_envs`, is the usual cause.
+- **`projectId: argument missing and the mission touches N Vercel projects`** —
+  the mission selects several projects; the agent must name one.
+- **`teamId '…' is not the team of this connection`** — the agent copied a
+  team id from elsewhere; omit it, the connection's team applies.
+- **Every preview deploy refused as `vercel[prod].deploy` (or never qualified)** —
+  the host resolves the environment from the resource label; wire
+  `vercelEnvOf` (see §3).
+- **`next build` fails with `The "path" argument must be of type string or an instance of URL. Received an instance of URL`** —
+  a plugin imported by `apps/gateway` used `new URL('./risk-catalog.yaml', import.meta.url)`;
+  Turbopack rewrites that pattern into an asset URL of another realm. The
+  plugin builds the path as a string instead (`VERCEL_CATALOG_PATH` in
+  `src/index.ts`); keep it that way.
+- **`mockFetch: unexpected GET …`** in tests — the plugin called a URL no
+  route covers; the message names it.
+
+## References
+
+- Code: `plugins/vercel/src/`, tests `plugins/vercel/tests/unit/` (137 tests:
+  22 kit/v5, 31 v4 classifier, 60 v4 catalog lint, 23 v4 adapter, 1 data model).
+- Neighbours: [[plugin-sdk]], [[policy-engine]], [`providers/README.md`](./README.md).

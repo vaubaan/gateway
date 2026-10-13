@@ -1,16 +1,24 @@
 /**
  * Vercel custom tools — REST-API-backed augmentations on top of the rewrap.
  *
- * Spec : docs/spec/vaubaan-gateway.md §7.4.
- * ADR  : docs/decisions/vercel-augment-with-rest-tools.md.
+ * ADR : docs/decisions/vercel-augment-with-rest-tools.md.
  *
  * The upstream MCP at mcp.vercel.com only exposes read + deploy + toolbar
- * tools — no mutation of project settings or env vars. We layer a small,
- * typed-strict surface on top that hits api.vercel.com directly. Any name
- * listed here is routed by `execute.ts` to REST instead of JSON-RPC forward.
+ * tools — no mutation of project settings, env vars, domains or firewall. We
+ * layer a small, typed-strict surface on top that hits api.vercel.com
+ * directly. Any name listed here is routed by `execute.ts` to REST instead of
+ * the JSON-RPC forward.
+ *
+ * Every custom tool takes the project ref (`projectId`) explicitly ; the
+ * classifier falls back to the mission's single project when it is absent.
+ * `teamId` is always the connection's team : an explicit different value is
+ * refused by `execute`.
+ *
+ * The v4 `vercel__upsert_env_from_venv` tool (secret transfer from the
+ * project env-var store) is gone : v5 has no venv counterpart (plan §8-Q5).
  */
 
-import type { McpToolDeclaration } from '@vaubaan/shared';
+import type { McpToolDeclaration } from '@vaubaan/plugin-sdk';
 
 export const UPDATE_PROJECT_SETTINGS = 'vercel__update_project_settings';
 export const UPSERT_ENV_VAR = 'vercel__upsert_env_var';
@@ -20,12 +28,26 @@ export const LIST_DOMAINS = 'vercel__list_project_domains';
 export const ADD_DOMAIN = 'vercel__add_project_domain';
 export const VERIFY_DOMAIN = 'vercel__verify_project_domain';
 export const REMOVE_DOMAIN = 'vercel__remove_project_domain';
-export const UPSERT_ENV_FROM_VENV = 'vercel__upsert_env_from_venv';
 export const GET_FIREWALL_CONFIG = 'vercel__get_firewall_config';
 export const TOGGLE_FIREWALL = 'vercel__toggle_firewall';
 export const UPSERT_FIREWALL_RULE = 'vercel__upsert_firewall_rule';
 export const REMOVE_FIREWALL_RULE = 'vercel__remove_firewall_rule';
 export const MANAGE_IP_BLOCKING = 'vercel__manage_ip_blocking';
+
+const projectIdArg = {
+  projectId: {
+    type: 'string',
+    description: 'Vercel project id (`prj_xxx`), one of the resources of the mission.',
+  },
+} as const;
+
+const teamIdArg = {
+  teamId: {
+    type: 'string',
+    description:
+      "Team id (`team_xxx`). Optional : the connection's team is used ; a different value is refused.",
+  },
+} as const;
 
 export const customTools: readonly McpToolDeclaration[] = [
   {
@@ -35,14 +57,8 @@ export const customTools: readonly McpToolDeclaration[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        projectId: {
-          type: 'string',
-          description: 'Vercel project id (e.g. `prj_xxx`).',
-        },
-        teamId: {
-          type: 'string',
-          description: 'Team id (slug or team_xxx). Auto-injected if omitted.',
-        },
+        ...projectIdArg,
+        ...teamIdArg,
         rootDirectory: {
           type: ['string', 'null'],
           description:
@@ -80,18 +96,12 @@ export const customTools: readonly McpToolDeclaration[] = [
   {
     name: UPSERT_ENV_VAR,
     description:
-      'Create or update an environment variable on a Vercel project. Backed by POST /v10/projects/{projectId}/env?upsert=true.',
+      'Create or update an environment variable on a Vercel project. Backed by POST /v10/projects/{projectId}/env?upsert=true. Omitting `target` applies the variable to all three environments (production included) — a fan-out the catalog treats as its own risk.',
     inputSchema: {
       type: 'object',
       properties: {
-        projectId: {
-          type: 'string',
-          description: 'Vercel project id (e.g. `prj_xxx`).',
-        },
-        teamId: {
-          type: 'string',
-          description: 'Team id (slug or team_xxx). Auto-injected if omitted.',
-        },
+        ...projectIdArg,
+        ...teamIdArg,
         key: {
           type: 'string',
           description: 'Environment variable name.',
@@ -132,18 +142,12 @@ export const customTools: readonly McpToolDeclaration[] = [
   {
     name: LIST_ENV_VARS,
     description:
-      'List environment variables on a Vercel project. Values are returned encrypted by default; pass `decrypt: true` to receive plaintext (requires the access token to have plaintext-read rights on Vercel). Backed by GET /v10/projects/{projectId}/env.',
+      'List environment variables on a Vercel project. Values are returned encrypted by default; pass `decrypt: true` to receive plaintext (a distinct, high-severity risk of the catalog). Backed by GET /v10/projects/{projectId}/env.',
     inputSchema: {
       type: 'object',
       properties: {
-        projectId: {
-          type: 'string',
-          description: 'Vercel project id (e.g. `prj_xxx`).',
-        },
-        teamId: {
-          type: 'string',
-          description: 'Team id (slug or team_xxx). Auto-injected if omitted.',
-        },
+        ...projectIdArg,
+        ...teamIdArg,
         decrypt: {
           type: 'boolean',
           description:
@@ -156,18 +160,12 @@ export const customTools: readonly McpToolDeclaration[] = [
   {
     name: DELETE_ENV_VAR,
     description:
-      'Delete an environment variable on a Vercel project by its Vercel-issued id. Pass `target` to declare which Vaubaan env this delete touches — the gateway uses it to gate the capability (write@prod, write@preview, …). Backed by DELETE /v9/projects/{projectId}/env/{id}.',
+      'Delete an environment variable on a Vercel project by its Vercel-issued id. The Vercel API removes the variable from every environment it lives in at once, so the gateway always classifies this call as touching all three environments. Backed by DELETE /v9/projects/{projectId}/env/{id}.',
     inputSchema: {
       type: 'object',
       properties: {
-        projectId: {
-          type: 'string',
-          description: 'Vercel project id (e.g. `prj_xxx`).',
-        },
-        teamId: {
-          type: 'string',
-          description: 'Team id (slug or team_xxx). Auto-injected if omitted.',
-        },
+        ...projectIdArg,
+        ...teamIdArg,
         id: {
           type: 'string',
           description:
@@ -177,7 +175,7 @@ export const customTools: readonly McpToolDeclaration[] = [
           type: 'string',
           enum: ['production', 'preview', 'development'],
           description:
-            'Vaubaan env target hint for capability gating. The Vercel API does not need it (the var is removed from all its targets at once), but Vaubaan uses it to require `config:write@<env>`. Defaults to `production` (conservative).',
+            'Informational hint only. Ignored by the Vercel API and by the gateway classifier (the delete fans out to every environment).',
         },
       },
       required: ['projectId', 'id'],
@@ -189,13 +187,7 @@ export const customTools: readonly McpToolDeclaration[] = [
       'List custom domains attached to a Vercel project (including verification status). Backed by GET /v9/projects/{projectId}/domains.',
     inputSchema: {
       type: 'object',
-      properties: {
-        projectId: { type: 'string', description: 'Vercel project id (e.g. `prj_xxx`).' },
-        teamId: {
-          type: 'string',
-          description: 'Team id (slug or team_xxx). Auto-injected if omitted.',
-        },
-      },
+      properties: { ...projectIdArg, ...teamIdArg },
       required: ['projectId'],
     },
   },
@@ -206,8 +198,8 @@ export const customTools: readonly McpToolDeclaration[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        projectId: { type: 'string' },
-        teamId: { type: 'string' },
+        ...projectIdArg,
+        ...teamIdArg,
         name: {
           type: 'string',
           description: 'The domain name to attach (e.g. `www.example.com`).',
@@ -236,8 +228,8 @@ export const customTools: readonly McpToolDeclaration[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        projectId: { type: 'string' },
-        teamId: { type: 'string' },
+        ...projectIdArg,
+        ...teamIdArg,
         domain: { type: 'string', description: 'The exact domain name attached to the project.' },
       },
       required: ['projectId', 'domain'],
@@ -250,49 +242,11 @@ export const customTools: readonly McpToolDeclaration[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        projectId: { type: 'string' },
-        teamId: { type: 'string' },
+        ...projectIdArg,
+        ...teamIdArg,
         domain: { type: 'string', description: 'The exact domain name to detach.' },
       },
       required: ['projectId', 'domain'],
-    },
-  },
-  {
-    name: UPSERT_ENV_FROM_VENV,
-    description:
-      "Deploy an env var from this project's venv store to a Vercel project. The secret value is read server-side from venv and pushed directly to Vercel — it is NEVER returned in the tool response. Use a `_to_venv` tool (e.g. `supabase__service_role_to_venv`) to populate the venv key first.",
-    inputSchema: {
-      type: 'object',
-      properties: {
-        projectId: {
-          type: 'string',
-          description: 'Vercel project id (e.g. `prj_xxx`).',
-        },
-        teamId: {
-          type: 'string',
-          description: 'Team id (slug or team_xxx). Auto-injected if omitted.',
-        },
-        venv_key: {
-          type: 'string',
-          description:
-            'The env var key to read from venv (e.g. `SUPABASE_SERVICE_ROLE_KEY`). This same key name is used as the Vercel env var name.',
-        },
-        target: {
-          type: 'array',
-          items: {
-            type: 'string',
-            enum: ['production', 'preview', 'development'],
-          },
-          description:
-            'Vercel environments to apply this variable to. Defaults to all three when omitted.',
-        },
-        type: {
-          type: 'string',
-          enum: ['plain', 'encrypted', 'sensitive'],
-          description: 'Variable type. Defaults to `encrypted`.',
-        },
-      },
-      required: ['projectId', 'venv_key'],
     },
   },
 
@@ -304,16 +258,7 @@ export const customTools: readonly McpToolDeclaration[] = [
       'Read the active firewall (WAF) configuration for a Vercel project — returns firewallEnabled flag, custom rules, IP blocking rules, managed rulesets, and OWASP CRS settings. Backed by GET /v1/security/firewall/config/active.',
     inputSchema: {
       type: 'object',
-      properties: {
-        projectId: {
-          type: 'string',
-          description: 'Vercel project id (e.g. `prj_xxx`).',
-        },
-        teamId: {
-          type: 'string',
-          description: 'Team id (slug or team_xxx). Auto-injected if omitted.',
-        },
-      },
+      properties: { ...projectIdArg, ...teamIdArg },
       required: ['projectId'],
     },
   },
@@ -324,14 +269,8 @@ export const customTools: readonly McpToolDeclaration[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        projectId: {
-          type: 'string',
-          description: 'Vercel project id (e.g. `prj_xxx`).',
-        },
-        teamId: {
-          type: 'string',
-          description: 'Team id (slug or team_xxx). Auto-injected if omitted.',
-        },
+        ...projectIdArg,
+        ...teamIdArg,
         enabled: {
           type: 'boolean',
           description: 'Set to `true` to enable the firewall, `false` to disable it.',
@@ -347,14 +286,8 @@ export const customTools: readonly McpToolDeclaration[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        projectId: {
-          type: 'string',
-          description: 'Vercel project id (e.g. `prj_xxx`).',
-        },
-        teamId: {
-          type: 'string',
-          description: 'Team id (slug or team_xxx). Auto-injected if omitted.',
-        },
+        ...projectIdArg,
+        ...teamIdArg,
         ruleId: {
           type: 'string',
           description: 'Existing rule id to update. Omit to insert a new rule.',
@@ -463,14 +396,8 @@ export const customTools: readonly McpToolDeclaration[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        projectId: {
-          type: 'string',
-          description: 'Vercel project id (e.g. `prj_xxx`).',
-        },
-        teamId: {
-          type: 'string',
-          description: 'Team id (slug or team_xxx). Auto-injected if omitted.',
-        },
+        ...projectIdArg,
+        ...teamIdArg,
         ruleId: {
           type: 'string',
           description: 'The id of the firewall rule to remove.',
@@ -486,14 +413,8 @@ export const customTools: readonly McpToolDeclaration[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        projectId: {
-          type: 'string',
-          description: 'Vercel project id (e.g. `prj_xxx`).',
-        },
-        teamId: {
-          type: 'string',
-          description: 'Team id (slug or team_xxx). Auto-injected if omitted.',
-        },
+        ...projectIdArg,
+        ...teamIdArg,
         operation: {
           type: 'string',
           enum: ['insert', 'remove'],
