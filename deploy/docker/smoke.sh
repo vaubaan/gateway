@@ -9,6 +9,12 @@
 # 4. native addons traced      -> argon2 and better-sqlite3 (prebuilt .node) load inside the image
 # 5. non-root                  -> the process runs as uid 10001
 # 6. no env file shipped       -> the standalone output carries no apps/gateway/.env*
+#
+# Optional expectations, set by the release pipeline (.github/workflows/release.yml),
+# which knows what it built:
+#   SMOKE_EXPECT_VERSION   /healthz must answer this version (root package.json)
+#   SMOKE_EXPECT_COMMIT    /healthz must answer this commit (7 characters)
+#   SMOKE_EXPECT_ARCH      Node's process.arch inside the image (x64, arm64)
 set -euo pipefail
 
 EXIT_CONFIG_ERROR=78
@@ -76,6 +82,21 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 curl -fsS "http://127.0.0.1:${PORT}/healthz" >/dev/null || fail "/healthz never answered"
+if [ -n "${SMOKE_EXPECT_VERSION:-}" ]; then
+  grep -qF "\"version\":\"${SMOKE_EXPECT_VERSION}\"" <<<"$body" \
+    || fail "/healthz does not answer version ${SMOKE_EXPECT_VERSION}: $body"
+  pass "/healthz answers version ${SMOKE_EXPECT_VERSION}"
+fi
+if [ -n "${SMOKE_EXPECT_COMMIT:-}" ]; then
+  grep -qF "\"commit\":\"${SMOKE_EXPECT_COMMIT}\"" <<<"$body" \
+    || fail "/healthz does not answer commit ${SMOKE_EXPECT_COMMIT}: $body"
+  pass "/healthz answers commit ${SMOKE_EXPECT_COMMIT}"
+fi
+if [ -n "${SMOKE_EXPECT_ARCH:-}" ]; then
+  arch="$(docker exec "$NAME" node -p process.arch)"
+  [ "$arch" = "$SMOKE_EXPECT_ARCH" ] || fail "image runs on ${arch}, expected ${SMOKE_EXPECT_ARCH}"
+  pass "image runs on ${arch}"
+fi
 # Capture the logs once: `docker logs | grep -q` under pipefail can die of SIGPIPE
 # on a match and turn a leak into a false pass.
 logs="$(docker logs "$NAME" 2>&1)" || fail "cannot read the container logs"

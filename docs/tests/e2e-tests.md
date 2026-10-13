@@ -326,7 +326,10 @@ possible (spec §4, §5, §7):
 > `.github/workflows/ci.yml` after the image build (tag
 > `vaubaan-gateway:ci`) and locally with
 > `npm run docker:build && npm run docker:smoke` (tag
-> `vaubaan-gateway:local`).
+> `vaubaan-gateway:local`). The release pipeline
+> (`.github/workflows/release.yml`) runs it on each architecture
+> (`linux/amd64`, `linux/arm64`, native runners): on the image it builds,
+> then again on the digest it pushed, before any tag exists.
 
 1. **Incomplete configuration** — `docker run` with only `VAUBAAN_PUBLIC_URL`
    exits 78 (`EX_CONFIG`) and stderr names `encryption.master_key` with
@@ -345,6 +348,13 @@ possible (spec §4, §5, §7):
 5. **Non-root** — the process runs as uid 10001.
 6. **No env file shipped** — the image contains no `apps/gateway/.env*`
    file (the build context excludes every `.env*`).
+
+Optional, when the caller knows what it built (the release pipeline sets
+the three): `SMOKE_EXPECT_VERSION` and `SMOKE_EXPECT_COMMIT` — `/healthz`
+must answer that version (the root `package.json`) and that commit —, and
+`SMOKE_EXPECT_ARCH` — Node's `process.arch` inside the image (`x64`,
+`arm64`). Step 4 on `arm64` is what proves the two native addons load on
+both published architectures.
 
 The container smoke and the cutover smoke do not overlap: the first proves the
 image boots from configuration, the second proves the application path on a

@@ -28,6 +28,8 @@ export default defineConfig({
       'plugins/*/tests/unit/**/*.test.ts',
       'packages/*/src/**/*.test.ts',
       'apps/*/src/**/*.test.ts',
+      // Release helpers (plain Node scripts, no workspace of their own).
+      'scripts/*.test.mjs',
     ],
     exclude: ['node_modules', 'dist', '.next', 'apps/*/tests/e2e/**'],
     passWithNoTests: false,

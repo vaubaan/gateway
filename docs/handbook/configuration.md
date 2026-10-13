@@ -211,7 +211,10 @@ deploy/config/                  gateway.example.yaml, .env.example (every key do
 root cannot be built. `version` and `commit` are frozen into the bundle by `next.config.ts`
 (`NEXT_PUBLIC_GATEWAY_VERSION`, `NEXT_PUBLIC_COMMIT_SHA`; `dev` outside a
 build) and read by `config/build-info.ts` (`buildInfoFromEnv()`), like every
-other read of the process environment. The handler does not take the root:
+other read of the process environment. The version is the `version` of the
+root `package.json` and has no other source; the footer of the interface and
+the telemetry field `gateway_version` show the same stamp
+([coding workflow, "One version"](../workflow/coding-workflow.md#one-version)). The handler does not take the root:
 `healthResponse(deps: HealthDeps)` needs the store's liveness (`kind`,
 `ping`), a logger, the build stamps, `startedAt` and an optional `now` (the
 wall clock by default, a fixed instant in tests). `GatewayRoot` satisfies

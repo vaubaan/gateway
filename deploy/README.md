@@ -10,6 +10,7 @@ tracks:
   - deploy/config/
   - deploy/collector/
   - .github/workflows/ci.yml
+  - .github/workflows/release.yml
   - scripts/gen-master-key.mjs
 ---
 
@@ -24,7 +25,7 @@ every configuration key: handbook
 ```
 deploy/
   docker/Dockerfile        multi-stage build (node:22.23.3-bookworm-slim pinned by digest, non-root, HEALTHCHECK)
-  docker/smoke.sh          container smoke test (also run by CI)
+  docker/smoke.sh          container smoke test (run by CI and, per architecture, by the release pipeline)
   compose.yaml             gateway + data volume + Caddy (automatic TLS)
   caddy/Caddyfile          reverse proxy, streaming-friendly, security headers
   config/gateway.example.yaml  every key, documented, all commented out
@@ -86,6 +87,60 @@ Invalid instance configuration (1 problem):
   - encryption.master_key: missing required key (env: VAUBAAN_MASTER_KEY or VAUBAAN_MASTER_KEY_FILE)
 ```
 
+## Released images
+
+Every release publishes one image for `linux/amd64` and `linux/arm64` on the
+GitHub Container Registry, under the repository's name
+(`ghcr.io/sbw-vaubaan/vaubaan-gateway`). No release exists yet; until the
+first one, build the image from the sources as the quick start does.
+
+| Tag               | Moves?                            | Use it for                                    |
+| ----------------- | --------------------------------- | --------------------------------------------- |
+| `2.1.3`           | never                             | production: pin it, or better, pin its digest |
+| `2.1`             | to each patch of 2.1              | following the fixes of one minor              |
+| `latest`          | to each final release             | trying the product                            |
+| `2.2.0-rc.1`, ... | never; pre-releases have no alias | testing what comes next                       |
+
+```bash
+docker pull ghcr.io/sbw-vaubaan/vaubaan-gateway:2.1.3
+```
+
+To run a released image with the reference Compose file, replace the
+`build:` block and the `image:` line of the `gateway` service by
+`image: ghcr.io/sbw-vaubaan/vaubaan-gateway:<version>` and drop `--build`.
+The version you run is on `/healthz` (`version`, `commit`) and in the footer
+of every page.
+
+**Verify what you pulled.** The release pipeline signs a build-provenance
+attestation for the image: it states that this digest was built by the
+`release` workflow of this repository, from the commit of the tag, on
+GitHub's runners. Check it with the GitHub CLI before the first start:
+
+```bash
+gh attestation verify oci://ghcr.io/sbw-vaubaan/vaubaan-gateway:2.1.3 \
+  --repo sbw-vaubaan/vaubaan-gateway \
+  --signer-workflow sbw-vaubaan/vaubaan-gateway/.github/workflows/release.yml \
+  --source-ref refs/tags/v2.1.3
+```
+
+A zero exit code means the image is the one that tag built; anything else,
+do not run it. The command needs a recent GitHub CLI (`gh attestation`),
+signed in. Attestations exist for releases published while the repository
+is public, or private on GitHub Enterprise Cloud.
+
+**Bill of materials.** Each GitHub release carries the SBOM of the image
+(SPDX JSON, one file per architecture). The image also carries BuildKit's
+own SBOM and provenance:
+
+```bash
+docker buildx imagetools inspect ghcr.io/sbw-vaubaan/vaubaan-gateway:2.1.3 --format '{{ json .SBOM }}'
+docker buildx imagetools inspect ghcr.io/sbw-vaubaan/vaubaan-gateway:2.1.3 --format '{{ json .Provenance }}'
+```
+
+What a version number promises (configuration keys, refusal codes, the
+plugin contract, catalog ids), and how a release is cut:
+[`docs/workflow/coding-workflow.md`](../docs/workflow/coding-workflow.md#release).
+
 ## Running the image without Compose
 
 ```bash
@@ -142,14 +197,19 @@ environment.
 - **Key rotation**: generate a new key, set `encryption.key_version` to
   `n+1`, move the old key under `encryption.previous_keys.<n>`, restart.
   Old credentials still open; new ones use the new key.
-- **Upgrade**: pull the new image and restart; schema migrations run at
-  boot (forward-only, checksummed; see the
-  [store handbook](../docs/handbook/store.md)).
+- **Upgrade**: read the release notes, pull the new image and restart;
+  schema migrations run at boot (forward-only, checksummed; see the
+  [store handbook](../docs/handbook/store.md)). A patch or a minor release
+  needs nothing else; a major one says what to change first
+  ([versioning policy](../docs/workflow/coding-workflow.md#versioning-policy)).
+  There is no downgrade: an older image refuses a newer database.
 - **Smoke test an image**: `npm run docker:build && npm run docker:smoke`
   (`deploy/docker/smoke.sh vaubaan-gateway:local`; needs Docker and curl)
   checks the fail-fast exit (within 60 seconds), the https rule,
   `/healthz`, secret redaction, native addons, the non-root user and that
-  no env file is shipped.
+  no env file is shipped. `SMOKE_EXPECT_VERSION`, `SMOKE_EXPECT_COMMIT` and
+  `SMOKE_EXPECT_ARCH` (`x64`, `arm64`) make it also check what `/healthz`
+  answers and the architecture of the image, as the release pipeline does.
 - **Management door**: the instance is also the OAuth authorization server of
   `/mcp/manage` (handbook
   [management-door](../docs/handbook/management-door.md)). Defaults: access
@@ -214,4 +274,6 @@ docker buildx imagetools inspect caddy:<version>-alpine
 The digest is what is pulled: once it is present the registry ignores the
 tag, which is why the Dockerfile takes one `NODE_IMAGE` argument rather than
 a version on its own. The base must stay a Debian (glibc) image. Nothing
-proposes these bumps automatically yet.
+proposes these bumps automatically yet: they are done by hand before every
+release and on a Node or Debian security release — the procedure is in
+[`docs/workflow/coding-workflow.md`](../docs/workflow/coding-workflow.md#refreshing-the-base-image-digests).

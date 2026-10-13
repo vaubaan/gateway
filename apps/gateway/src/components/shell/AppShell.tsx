@@ -1,6 +1,6 @@
 /**
  * Shell of the v5 human surface (spec §4.2): one bar with the cardinal pages
- * and the account, then the page. Server component. A feature adds its page
+ * and the account, then the page, then the build footer. Server component. A feature adds its page
  * by appending one entry to `APP_NAV`.
  */
 import Link from 'next/link';
@@ -11,6 +11,7 @@ import { isOperatorPrincipal } from '@/components/auth/principal';
 import { Container } from '@/components/ui';
 import type { Principal } from '@/server/auth';
 
+import { BuildFooter } from './BuildFooter';
 import { OpenRequestCount } from './OpenRequestCount';
 
 export interface AppNavEntry {
@@ -60,6 +61,7 @@ export function AppShell({
         </div>
       </header>
       <Container>{children}</Container>
+      <BuildFooter />
     </div>
   );
 }

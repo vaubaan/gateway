@@ -11,6 +11,14 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Added
 
+- **Releases.** Pushing a tag `v2.x.y` publishes the image for `linux/amd64` and
+  `linux/arm64` to `ghcr.io/sbw-vaubaan/vaubaan-gateway` (`<version>`, `<major>.<minor>`
+  and `latest`; a pre-release only its own version), with an SBOM and a signed
+  build-provenance attestation you can check with `gh attestation verify`, and creates
+  the GitHub release from this file. The version you run is shown in the footer of every
+  page, next to the commit, as on `/healthz`. What a version number promises —
+  configuration keys, refusal codes, the plugin contract, catalog ids — is written down in
+  `docs/workflow/coding-workflow.md`; pulling and verifying an image in `deploy/README.md`.
 - **`npm run demo`: the whole interface in your browser, nothing to register.** One
   command starts the real application on `http://localhost:3210` with a demo identity
   provider (an account picker: Alice the operator, Bob, Carol — no password), simulated

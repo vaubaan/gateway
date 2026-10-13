@@ -11,7 +11,8 @@ extends:
 > Records as decided the repository shape that the v5 implementation plan
 > (§2) proposed, and the contribution workflow an Apache-2.0 repository
 > needs. Implemented by feature P0.1 ("repository reshaping"). The release
-> half (image publishing, GitHub releases) is refined in Phase 3.
+> half (image publishing, GitHub releases) is decided in
+> "Amendment 2026-10-13 — Release" at the end of this document (feature P3.2).
 
 ## Context
 
@@ -66,7 +67,8 @@ template), tool configuration (`package.json`, `tsconfig.base.json`,
   `@vaubaan/plugin-<provider>`; the folder name equals the provider id.
 - Packages and plugins stay **workspace-internal** (not published to npm)
   until a third-party plugin exists outside this repository. Publishing is
-  a Phase 3 release decision; the layout does not depend on it.
+  a Phase 3 release decision; the layout does not depend on it. (Decided:
+  not published for v2 — amendment "Release", R11.)
 - Plugins import only `@vaubaan/shared`, `@vaubaan/policy-engine` and, from
   P0.2, `@vaubaan/plugin-sdk`. A plugin never imports the application.
 
@@ -77,6 +79,8 @@ template), tool configuration (`package.json`, `tsconfig.base.json`,
 - Root version `2.0.0-alpha.0`. The public product name is **v2**; the
   internal plan number **v5** appears only in ADR and plan prose. Release
   tags are `v2.x.y` (semver). The last SaaS release is tag `v4-final`.
+  (What the version promises, pre-releases and who tags: amendment
+  "Release", R1 to R3, R9, R10.)
 - `CHANGELOG.md` follows Keep a Changelog; every user-visible change adds
   an entry under `## [Unreleased]`.
 
@@ -93,7 +97,8 @@ template), tool configuration (`package.json`, `tsconfig.base.json`,
 - CI (`.github/workflows/ci.yml`) runs `type-check`, `lint`,
   `format:check`, `build`, `test` on every push and PR to `main` and `v5`;
   the Docker build step is added by P0.4 and image publishing to GHCR by
-  the release pipeline (P3.2).
+  the release pipeline (P3.2; amendment "Release", R4 to R8). How `v5`
+  reaches `main`: R13.
 
 ### Private tooling dependency
 
@@ -162,3 +167,195 @@ that the harness is not needed to build, test or run the gateway.
 - **Drop `@sbw-vaubaan/harness` from `package.json` immediately.** The
   maintainers' workflow depends on it and `npm ci` already works without
   the token; the decision is deferred to Q18 with the facts recorded here.
+
+## Amendment 2026-10-13 — Release
+
+Refines "Licence and version", "Workspaces and naming" (publication) and
+"Branch model and pull requests" (image publishing); changes none of the
+other decisions. Implemented by feature P3.2. The procedure is in
+[`docs/workflow/coding-workflow.md`](../workflow/coding-workflow.md#release).
+
+### Context
+
+The decision above fixed semver, the `v2.x.y` tags, Keep a Changelog and
+GHCR as the registry ([[docker-image-and-config-format]]), and left the rest
+to Phase 3: what a tag triggers, what the version number promises, how
+pre-releases are named, how the ten in-tree plugins — each with its own
+version, reported by telemetry — relate to the gateway's, who refreshes the
+pinned base image, and how the `v5` integration branch reaches `main`.
+
+Facts that constrain the answer:
+
+- The version already had one reader (`next.config.ts` freezes the root
+  `package.json` version into the bundle for `/healthz`), but nothing tied a
+  tag to it, and the interface did not show it.
+- The image depends on two native addons. `argon2` ships prebuilt binaries
+  for `linux-x64` and `linux-arm64` (glibc and musl) inside its package;
+  `better-sqlite3` publishes prebuilt `linux-x64` and `linux-arm64` binaries
+  for the Node ABI of the base image; the pinned `node:22-bookworm-slim`
+  index has both platforms. Checked on 2026-10-13 (argon2 0.41.1,
+  better-sqlite3 12.11.1, Node ABI 127).
+- GitHub offers `ubuntu-24.04-arm` hosted runners to public and private
+  repositories. Artifact attestations are available to public repositories
+  on every plan, and to private ones on Enterprise Cloud only. The
+  repository is private today and becomes public with v2.
+- The product is deployed on premises by people who did not build it: the
+  image is the artefact they trust, so its origin must be checkable.
+
+### Decision
+
+**R1 — One version, in the root `package.json`.** Nothing else states the
+gateway version. The build stamps it; `/healthz`, the footer of every page,
+the MCP server info and the telemetry `gateway_version` read that stamp. A
+structural test holds the stamp and the manifest together. Workspace
+packages keep `0.0.0`.
+
+**R2 — A tag is a claim the pipeline verifies, not a command it obeys.**
+`release.yml` runs on the push of a tag `v2.*.*` and refuses it unless the
+tag names the version of `package.json`, is the highest release so far, has
+a dated section in `CHANGELOG.md` (not `Unreleased`, not empty), and its
+commit is on `main` — or, for a pre-release, on `v5` until the cutover.
+
+**R3 — Preparing a release is a script; tagging is a human act.**
+`npm run release:prepare -- <version>` cuts the changelog section and sets
+the version, and prints the tag command. It creates no commit and no tag.
+No workflow, script or agent creates or pushes a release tag.
+
+**R4 — The gates are CI itself.** `release.yml` calls `ci.yml`
+(`workflow_call`) instead of copying its jobs: a gate added to CI is a gate
+of the release without a second edit.
+
+**R5 — One image, two architectures, built natively.** `linux/amd64` and
+`linux/arm64`, each built and smoke-tested on a runner of its own
+architecture — no emulation. The smoke test loads both native addons on
+both, at every release.
+
+**R6 — Tested before tagged.** Each architecture is pushed by digest,
+without a tag, only after the gates and the local smoke test pass; the
+pushed digest is pulled back and smoke-tested again; only then are the two
+digests assembled under `<version>`. A version tag never moves: the
+pipeline keeps an existing one that holds the same images and refuses any
+other. A final release also moves `<major>.<minor>` and `latest`, after the
+attestation of R7 exists. Because these two only move forward, a tag older
+than an existing release is refused: one line of releases, no maintenance
+branch.
+
+**R7 — Provenance and bill of materials.** The published digest gets a
+signed build-provenance attestation (`actions/attest`, Sigstore; stored on
+GitHub and in the registry), verifiable with `gh attestation verify`. Each
+platform image carries BuildKit's SBOM and provenance (`mode=max`), and the
+GitHub release carries one SPDX file per architecture. Actions are pinned
+by commit.
+
+**R8 — Least privilege, and a dry run that cannot publish.** No permission
+at the workflow level. The jobs that plan, gate and build hold
+`contents: read`. The three that write (`push`, `publish`, `release`) run
+only on a tag push; a manual run is a dry run in which they are skipped —
+it holds no credential that could publish.
+
+**R9 — What the version promises.** Semver over four named surfaces —
+configuration keys, refusal codes, the plugin SDK contract, catalog ids
+(provider ids, tool names, preset ids; risk ids never change at all) — plus
+the doors' paths and credentials, `/healthz` and the image's promises to its
+host. The interface, log texts and the workspace-internal packages are not
+part of the contract. A fix that refuses what was wrongly allowed is not a
+breaking change; it ships under `### Security`.
+
+**R10 — Pre-releases.** `-alpha.N`, `-beta.N`, `-rc.N` and nothing else.
+They publish their own version tag only and promise no compatibility with
+one another.
+
+**R11 — Plugins keep their own versions; the gateway bundles them.** D9 of
+[[plugin-contract-and-credential-spec]] governs a plugin's version. A
+plugin patch needs a gateway patch at least, a plugin minor a gateway
+minor, a plugin major a gateway major — except a stricter classification
+that is a security fix (R9). The gateway version does not mirror any
+plugin's. Nothing is published to npm: the question "Workspaces and naming"
+left to Phase 3 is answered **no** for v2; the image is the only artefact.
+
+**R12 — Base images are refreshed by hand.** The digests of the Node and
+Caddy images are bumped, version and digest together, before every release
+and on a security release of Node or Debian.
+
+**R13 — The cutover of `v5` to `main` is manual and Renaud's alone.** One
+pull request `v5` → `main`, merged with a merge commit (the exception to
+the squash rule), by Renaud. No branch, workflow or agent does it. `v5`
+lives until `2.0.0` is out.
+
+### Consequences
+
+- `ci.yml` gains `workflow_call`, and its concurrency group includes
+  `github.workflow`, so a release and the CI run of the same ref do not
+  cancel each other.
+- `deploy/docker/smoke.sh` accepts three optional expectations (version,
+  commit, architecture); without them it behaves as before.
+- A release builds and smoke-tests the amd64 image three times (CI's
+  `docker` job, `image`, and `push` from the cache of `image`) and the
+  arm64 image twice. Accepted: releases are rare and the redundancy is what
+  makes "tested before tagged" true.
+- `image` reads no cache, so a release never reuses a layer of another run;
+  it writes one cache scope per run and architecture, which counts against
+  the repository's Actions cache quota until GitHub evicts it.
+- While the repository is private and not on Enterprise Cloud, `publish`
+  fails at the attestation: the image is in the registry under its version
+  tag, `latest` has not moved and no GitHub release is created. The first
+  real release waits for the repository to be public. The dry run is
+  unaffected — but GitHub only offers a manual run for a workflow file on
+  the default branch, so there is no dry run before the cutover (R13).
+- A run that fails after `push` leaves untagged digests in GHCR. They are
+  harmless and unreferenced; nothing cleans them up.
+- The step that assembles and tags the image is a shell script
+  (`scripts/release-image-index.sh`) with no automated test: it needs a
+  registry. It was rehearsed against a local one.
+- Without a maintenance branch, a fix for 2.0 after 2.1 exists means
+  upgrading to 2.1.x. Supporting an older minor would need its own decision
+  (and `latest` could no longer be "the tag that was just pushed").
+- Protecting `v2.*` tags and requiring an approval before the publishing
+  jobs are repository settings; they are recommended, and deliberately not
+  set by this feature.
+- The pinned base digests and the pinned actions age silently. Nothing
+  proposes their bumps; R12 is a discipline, not a mechanism.
+
+### Rejected alternatives
+
+- **Tag from the pipeline (release-please, semantic-release, a "release"
+  button that tags).** Automates the one step that must stay a decision:
+  what is published under the project's name. It would also give a workflow
+  `contents: write` on every merge. Rejected; the script prepares, a
+  maintainer tags.
+- **Derive the version from the tag at build time** (`git describe`, or a
+  build argument). Two sources — the manifest and the tag — that can
+  disagree, and a local or CI build that reports nothing useful. Rejected;
+  the manifest is the source and the tag must match it.
+- **Copy CI's jobs into `release.yml`.** No dependency between the two
+  files, but the copies drift, and the day they do a release passes less
+  than a pull request. Rejected.
+- **One runner, QEMU emulation for `arm64`.** One job instead of a matrix
+  and a merge, but an emulated `next build` is several times slower and the
+  smoke test would exercise an emulated CPU. Rejected while native runners
+  are available; it is the fallback if they are not.
+- **Ship `amd64` only.** Simplest, and was the fallback had an addon lacked
+  an `arm64` binary. Both have one, and ARM hosts are common on premises
+  and on laptops. Rejected.
+- **Build once, tag immediately, test after.** The usual shape of the
+  docker actions' quick start. A failing image would be reachable under its
+  version tag, or under `latest`, until someone noticed. Rejected.
+- **One job with every permission and `if:` on the pushing steps.** Fewer
+  lines and a single build, but a dry run would hold `packages: write` and
+  rely on conditions to not use it. Rejected for R8.
+- **Hand the built image from job to job as an OCI archive** so that the
+  bytes pushed are the bytes tested, with no second build. Needs a second
+  tool to push an archive by digest and loses BuildKit's in-registry
+  attestations. Rejected; smoke-testing the pushed digest gives the same
+  guarantee with the tools already in use.
+- **Cosign signatures managed by the project.** A key, or keyless signing
+  wired by hand, for what `actions/attest` provides with GitHub's identity
+  and one CLI command to verify. Rejected for now.
+- **Lock plugin versions to the gateway's.** One number to read, but D9
+  would lose its meaning (a risk added to one plugin would bump ten) and
+  telemetry's `plugin_version` would stop saying anything about a plugin.
+  Rejected.
+- **Bump the version to the next `-alpha.0` after each release.** Tells a
+  development build from a release by its version; adds a commit per
+  release and a version that names something that may never exist. The
+  commit stamp already tells builds apart. Rejected.

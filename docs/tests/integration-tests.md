@@ -5,6 +5,7 @@ date: 2026-10-13
 last_synced: 2026-10-13
 tracks:
   - vitest.config.ts
+  - scripts/release-lib.test.mjs
   - packages/policy-engine/tests/
   - packages/plugin-sdk/tests/
   - plugins/_template/tests/
@@ -2871,12 +2872,61 @@ and `rotateSuccessorOf`; the refresh reuse window is in
   folder** and no file naming `/__demo`; the route manifest has `/missions`
   and no route under the prefix.
 
+## Scenarios — Release
+
+> Covers: [`coding-workflow.md`](../workflow/coding-workflow.md#release)
+> ("One version", "Versioning policy", "Pre-releases", "Cutting a release");
+> ADR [[repository-layout-and-contribution-workflow]], amendment "Release"
+> (R1 to R3, R6, R10). No network, no registry, no tag: the workflow itself
+> (`.github/workflows/release.yml`) is checked with `actionlint` and by its
+> dry run, not by this suite. These three files joined the suite after the
+> Coverage table above was last generated.
+
+- **`scripts/release-lib.test.mjs`** (50) — **versions**: a final version and
+  the three pre-release stages parse; a leading `v`, two or four numbers, a
+  leading zero, `rc1`, `preview.1`, build metadata and free text are refused;
+  semver precedence orders `alpha < beta < rc < final` and numbers
+  numerically. **Image tags**: a final release gives `<version>`,
+  `<major>.<minor>` and `latest`; **a pre-release gives its own version only**.
+  **A tag**: must name the version of `package.json` and be the highest
+  release among the existing tags (tags that are not releases, such as
+  `v4-final`, are ignored). **Release notes from a fixture changelog**
+  (`scripts/fixtures/CHANGELOG.fixture.md`): the body of a dated section
+  without its heading, stopping at the next section and never taking the
+  compare links; a final release also carries the sections of its
+  pre-releases, newest first; **refused**: a version whose changes are still
+  titled `Unreleased`, a missing section, an undated one, an empty one, notes
+  longer than GitHub accepts; a heading inside a code block is not a section.
+  **Preparing**: `Unreleased` moves under a dated heading and an empty
+  `Unreleased` stays above it, the rest of the file untouched; the compare
+  links are rewritten from the repository URL already in the file; an empty
+  `Unreleased` is refused, except to promote a release candidate unchanged;
+  an existing section, a missing `Unreleased` and a bad date are refused.
+  **Manifests**: `package.json` changes by its version only; both copies of
+  the root version change in the lockfile. **The two scripts, end to end**,
+  in a temporary copy of the files they touch: `release:prepare` edits the
+  three files and prints the tag command without running it; a refusal
+  writes nothing; the plan of a tag writes the notes and the workflow
+  outputs, fails while the changes are still titled `Unreleased` and when the
+  tag is not the version of `package.json`; a dry run previews `Unreleased`
+  with a warning. **The repository itself** has an `Unreleased` section and a
+  version the scripts accept.
+- **`apps/gateway/tests/unit/structural/version-single-source.test.ts`** (4) —
+  **one source for the version**: what `next.config.ts` stamps into the build
+  is the `version` of the root `package.json`; that version fits the
+  telemetry pattern of `gateway_version` and the release scripts' spelling;
+  the lockfile carries the same value.
+- **`apps/gateway/tests/unit/app/build-footer.test.tsx`** (3) — the footer
+  renders the version and commit it is given, the stamps of the build by
+  default (the ones `/healthz` answers), and `dev` for an unstamped build.
+
 ## Out of scope for these tests
 
 - **E2E** (Playwright, container smoke) → [`e2e-tests.md`](./e2e-tests.md).
-- **UI rendering** (React components) — one static-markup suite only
-  (`apps/gateway/tests/unit/app/field.test.tsx`, label binding); the pages
-  are walked by Playwright.
+- **UI rendering** (React components) — two static-markup suites only
+  (`apps/gateway/tests/unit/app/field.test.tsx`, label binding;
+  `build-footer.test.tsx`, the build stamps); the pages are walked by
+  Playwright.
 - **Accounting rules** (period arithmetic, quota/rate comparison, gates) —
   "Scenarios — Budget and sessions" tests them against the store's
   `decideAndDecrement`.
