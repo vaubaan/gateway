@@ -33,9 +33,11 @@
  *     denied, never escaped. `execute` resolves the call with the same
  *     `resolveTarget` and `readVariableWrite`, and sends the ids they return :
  *     what is classified is what is sent.
- *   - `serviceId` and `deploymentId` are checked for their shape only :
- *     discovery stores the environments of a project, not its services or
- *     deployments, so the classifier cannot tell which project owns them.
+ *   - `deploymentId` is checked for its shape only : discovery stores the
+ *     environments and the services of a project, not its deployments, so
+ *     nothing here can tell which project owns one. A `serviceId` is bound
+ *     to the project by `execute`, from the services discovery stored
+ *     (`servicesOf`, `readService`) ; the classifier checks its shape.
  *
  * Crucial cases :
  *   1. Variable writes emit `service-var[K1,K2,…].W`, which matches

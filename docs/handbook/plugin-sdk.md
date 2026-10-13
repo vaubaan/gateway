@@ -25,7 +25,9 @@ The package a provider plugin is written against, and the single place the
 gateway learns which providers exist. ADRs:
 [plugin-contract-and-credential-spec](../decisions/plugin-contract-and-credential-spec.md),
 [plugin-catalog-path-and-standalone-tracing](../decisions/plugin-catalog-path-and-standalone-tracing.md),
-[fallback-risk-only-when-uncategorized](../decisions/fallback-risk-only-when-uncategorized.md).
+[fallback-risk-only-when-uncategorized](../decisions/fallback-risk-only-when-uncategorized.md),
+[plugin-identifiers-one-grammar-for-classify-and-execute](../decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md),
+[plugin-arguments-closed-surface-and-typed-refusals](../decisions/plugin-arguments-closed-surface-and-typed-refusals.md).
 Spec: [`vaubaan-gateway.md`](../spec/vaubaan-gateway.md) §5 (plugins), §3.2
 (presets), §10 (structural tests);
 [`gateway-risk-model.md`](../spec/gateway-risk-model.md) §7.
@@ -36,7 +38,7 @@ Spec: [`vaubaan-gateway.md`](../spec/vaubaan-gateway.md) §5 (plugins), §3.2
 packages/plugin-sdk/
   src/
     plugin.ts           ProviderPlugin, ClassifyOutcome, ConnectionContext, ExecuteContext, PluginLogger,
-                        UpstreamCredentialCache
+                        UpstreamCredentialCache, TokenHandout
     streaming.ts        ToolResultPartSink, PartEmitter, streamToolResult, textParts, appendPart
     credential.ts       CredentialSpec (4 kinds) and the per-kind Spec/Secret interfaces, CredentialSecret,
                         CredentialField, ProviderAppConfig, OAuth2ClientAuthMethod,
@@ -49,9 +51,15 @@ packages/plugin-sdk/
                         riskIdWildcardIssues / presetWildcardIssues / structuralIssues, catalogWarnings,
                         isCompleteVector
     catalog-path.ts     catalogPathNextTo, CATALOG_FILE_NAME — the filesystem path of the YAML
-    env-of.ts           envFromSliceSegment, EnvOf — helpers for `ProviderPlugin.envOf`
+    arguments.ts        declaredArgumentsOf, undeclaredArgumentDenial, DeclaredArguments — the closed
+                        argument surface of a tool
+    slices.ts           ANY_IDENT, isSliceIdent, identSegment, sliceRoundTripIssues — the identifier
+                        segments a classifier may emit
+    refusal.ts          ExecutorRefusal, refusalResult, declining — what an executor declines itself
+    env-of.ts           envFromSliceSegment, EnvOf, NO_SINGLE_ENV (re-exported from the policy engine)
+                        — helpers for `ProviderPlugin.envOf`
     define-plugin.ts    definePlugin, pluginIssues, PluginDefinitionError, PLUGIN_VERSION_PATTERN,
-                        MAX_INSTALLATIONS_PER_PAGE
+                        PLUGIN_SUMMARY_MAX_LENGTH, MAX_INSTALLATIONS_PER_PAGE
     registry.ts         PluginRegistry, createRegistry, RegisteredPlugin, ProviderLabel, PluginRegistryError
     flags.ts            PluginHostFlags, DEFAULT_HOST_FLAGS, normalizeArgsIfEnabled
     index.ts            barrel + re-exports of the shared vocabulary a plugin needs
@@ -59,12 +67,13 @@ packages/plugin-sdk/
     testing/
       mock-fetch.ts     mockFetch, MockRoute, RecordedCall, MockFetch, FetchInput
       assertions.ts     assertPluginWellFormed, assertCatalogCoverage, assertNoWildcard,
-                        assertPresetsValid, PluginAssertionError,
+                        assertPresetsValid, declaredOnly, refusalText, PluginAssertionError,
                         SampleCall, ToolSamples, CoverageOptions, CoverageReport
   tests/
     fixtures/acme/      a tiny valid plugin (risk-catalog.yaml + acme-plugin.ts) used by the tests
-    unit/               catalog-loader (31), catalog-path (4), env-of (3), registry (10),
-                        define-plugin (24), testing-kit (14), streaming (9)
+    unit/               catalog-loader (31), catalog-path (4), env-of (8), registry (11),
+                        define-plugin (26), testing-kit (14), streaming (9), arguments (10),
+                        slices (21)
 ```
 
 Dependencies: `@vaubaan/shared`, `@vaubaan/policy-engine`, `js-yaml`.
@@ -101,9 +110,9 @@ flowchart LR
 | `catalog`                                            | —     | `RiskCatalog` with `presets`; loaded from YAML, see below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `credential`                                         | —     | `CredentialSpec`, see below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `classify(tool, args, resources)`                    | yes   | `{ slices: Slice[] } \| { denied: string }`. `resources` = the mission's resources on this connection; used to derive the env and default refs. The gateway core's `Classifier` is this member plus `envOf` (`Pick<ProviderPlugin, 'classify' \| 'envOf'>`).                                                                                                                                                                                                                                                                    |
-| `execute(ctx, tool, args)`                           | no    | `ctx: ExecuteContext` = credential (decrypted), appConfig, fetch, signal?, logger?, resources, agentLabel?, credentialCache?, emitPart?. Throws every provider failure (`UpstreamAuthError` on 401/403, `UpstreamHttpError` on another failed status); returns `isError` only for what it declines itself — see "Errors of `execute`".                                                                                                                                                                                          |
+| `execute(ctx, tool, args)`                           | no    | `ctx: ExecuteContext` = credential (decrypted), appConfig, fetch, signal?, logger?, resources, agentLabel?, credentialCache?, emitPart?. Throws every provider failure (`UpstreamAuthError` on 401/403, `UpstreamHttpError` on another failed status); returns `isError` only for what it declines itself (`ExecutorRefusal` + `declining`) — see "Errors of `execute`".                                                                                                                                                        |
 | `discoverResources(ctx)`                             | no    | `ctx: ConnectionContext` (same minus resources/agentLabel). Returns `Resource[]`.                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `envOf?(slice, resources)`                           | yes   | The environment a slice carries in itself (Vercel's `env[prod]` segment, the only shipped plugin declaring it); `undefined` defers to the resource label. See "Environment resolution".                                                                                                                                                                                                                                                                                                                                         |
+| `envOf?(slice, resources)`                           | yes   | The environment a slice carries in itself (Vercel's `env[prod]` segment, the only shipped plugin declaring it); `undefined` defers to the resource label; `NO_SINGLE_ENV` says the slice names several environments, and nothing stands in for them. See "Environment resolution".                                                                                                                                                                                                                                              |
 | `refresh?(ctx)`                                      | no    | Override for a non-standard refresh only (re-minted installation token…). A standard `oauth2` credential is refreshed by the host from the spec (`tokenUrl`, `clientAuthMethod`, `resourceIndicator`): `refreshable: true` needs no `refresh`.                                                                                                                                                                                                                                                                                  |
 | `normalizeForCaps?(args, caps)`                      | yes   | Scope caps. **Reserved: the v5.0 host never calls it** ([ADR](../decisions/scope-caps-not-enforced-in-v5-0.md)).                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `normalizeArgs?(args, resources)`                    | yes   | Only called when `PluginHostFlags.argNormalization` is on. **Default off** (plan §8-Q4).                                                                                                                                                                                                                                                                                                                                                                                                                                        |
@@ -111,9 +120,11 @@ flowchart LR
 `definePlugin(def)` validates (`pluginIssues`) and `Object.freeze`s. Issues
 are aggregated into one `PluginDefinitionError` so a contributor fixes a
 broken definition in one pass. `pluginIssues` is the concatenation of
-`identityIssues`, `toolIssues` (a malformed tool entry is an issue —
-`tools[i].name: expected a string` — not a `TypeError`), `dataModelIssues`,
-`catalogIssues`, `credentialSpecIssues` and `hookIssues`.
+`identityIssues` (the `summary` rule included), `toolIssues` (a malformed tool
+entry is an issue — `tools[i].name: expected a string` — not a `TypeError`),
+`dataModelIssues`, `catalogIssues`, `credentialSpecIssues`, `hookIssues` and
+`tokenHandoutIssues` (each hand-out names a declared tool and at least one
+risk of the plugin's own catalog).
 
 `catalogIssues` runs `semanticIssues` on `plugin.catalog`. It is the only
 validation a catalog **written in TypeScript** goes through (it never
@@ -180,8 +191,11 @@ what the caller receives, the audit entry, the limits — is
 
 #### Errors of `execute`
 
-One rule, two channels: **a provider failure is thrown; what the executor
-declines itself is returned.**
+What `execute` returns and what it throws. One rule, two channels: **a
+provider failure is thrown; what the executor declines itself is returned**
+(ADR
+[plugin-arguments-closed-surface-and-typed-refusals](../decisions/plugin-arguments-closed-surface-and-typed-refusals.md)
+D3).
 
 | What happened                                                                                          | The plugin                                   | Audit entry (`allowed`)                             | Telemetry                                   |
 | ------------------------------------------------------------------------------------------------------ | -------------------------------------------- | --------------------------------------------------- | ------------------------------------------- |
@@ -202,11 +216,39 @@ a `PATCH` the provider answered with 500 would read `allowed` with no
 `upstream_error`, as if the write had gone through, and telemetry would
 count a failing provider as a classifier defect. The agent loses nothing
 when a plugin throws — the door answers it an `isError` result carrying the
-plugin's sentence. The pattern the shipped plugins use when refusals are
-raised deep in the executor: a private `class ExecutorRefusal extends Error`
-and, at the entry point, `catch (e) { if (e instanceof ExecutorRefusal)
-return errorResult(e.message); throw e; }` (`plugins/vercel`,
-`plugins/upstash-redis`, `plugins/cloudflare-dns`).
+plugin's sentence.
+
+The reverse mistake is as costly: a refusal thrown as a plain `Error` is read
+as a provider failure. The audit says the provider failed when no request
+left, telemetry files a plugin fault, and the agent gets an opaque "upstream
+error" instead of a sentence it can act on. `refusal.ts` is the typed way to
+decline from anywhere inside an executor:
+
+| Export                   | What it is                                                                                                                                                                              |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ExecutorRefusal`        | `class extends Error` (`name` = `ExecutorRefusal`). Thrown **inside** `execute` to say "I will not run this, and nothing failed at the provider"; never let out of it.                  |
+| `declining(run)`         | Runs the body of an `execute`. An `ExecutorRefusal` thrown at any depth becomes the `isError` result carrying its message; any other throw propagates untouched for the host to record. |
+| `refusalResult(message)` | The `isError` result of a declined call: one text block, the reason. For a refusal decided at the entry point, where nothing needs to be thrown.                                        |
+
+```ts
+export function executeAcme(ctx, tool, args) {
+  return declining(async () => {
+    const id = pathIdent(args.id);
+    if (id === null) throw new ExecutorRefusal('acme: id: missing or malformed'); // declined
+    const response = await ctx.fetch(url(id), { headers });
+    if (!response.ok) throw new UpstreamHttpError('…', response.status); // the provider failed
+    return { content: [{ type: 'text', text: await response.text() }] };
+  });
+}
+```
+
+Not every shipped plugin wraps its entry point in `declining`: several
+catch `ExecutorRefusal` themselves, keep a local class of the same shape, or
+return the `isError` result directly from the entry point. The contract is
+the result, not the helper: a declined call is an `isError` result, a
+provider failure is a throw. In a test, `refusalText(promise)` of the test
+kit awaits `execute`, requires an `isError` result and returns its text — a
+throw fails the test as the provider failure it would be.
 
 The execution door treats only a 401 as a rejected credential (refresh,
 retry, then the connection is `expired`); a 403 is reported as a failed call
@@ -389,7 +431,7 @@ warns.
 Env-scoped risks (`vercel[prod].env-var-write`) need the environment of the
 executed slice. The policy engine's default resolver, `envResolverFor(
 resources, plugin.envOf)`, asks the plugin first, then the owner's label on
-the matching resource, then gives up (unqualified):
+the resources the slice names, then gives up (unqualified):
 
 | Provider shape                                                            | Declare                                 |
 | ------------------------------------------------------------------------- | --------------------------------------- |
@@ -398,14 +440,104 @@ the matching resource, then gives up (unqualified):
 | The environment is the owner's label on the resource (Supabase, Railway)  | nothing                                 |
 | The plugin labels one resource per mode at discovery (Stripe test / live) | nothing                                 |
 
+`EnvOf` — the shape of the hook — has three answers, and the host reads
+them differently:
+
+| `envOf` returns | Meaning                                                                                                                    | The host                                                                                                       |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| a label         | the one environment the slice touches                                                                                      | qualifies the touched risks with it                                                                            |
+| `undefined`     | the slice says nothing about its environment                                                                               | falls back to the owner's label on the resource                                                                |
+| `NO_SINGLE_ENV` | the slice names its environment but not exactly one: a wildcard, a list, a glob, a value outside the provider's closed set | resolves **no** environment and does not consult the label: every env-scoped risk the slice touches is refused |
+
+`NO_SINGLE_ENV` is the policy engine's symbol, re-exported here
+([policy-engine](./policy-engine.md), `qualify.ts`). It exists because the
+label says what the _resource_ is, while such a slice says the call reaches
+several environments of it: falling back would price a call that reaches
+`prod` as whatever the resource happens to be labelled (ADR
+[decision-stages-fail-closed-and-audited](../decisions/decision-stages-fail-closed-and-audited.md)
+D3).
+
 `envFromSliceSegment(entity)` returns the identifier following the named
-entity, `undefined` for wildcards, lists or an absent segment. The hook is
-pure and validated by `definePlugin` (a function when present).
-`gateway-core`'s `evaluateCallForToken` builds its default resolver as
-`envResolverFor(resources, adapter.envOf?.bind(adapter))` (P1.2-align).
+entity; `NO_SINGLE_ENV` when that position holds a wildcard, a list or an
+identifier containing `*`; `undefined` when the slice has no such entity,
+when the entity is the last segment, or when another entity name follows it.
+The value is returned as it is: the classifier is responsible for emitting
+the owner-facing label. The hook is pure and validated by `definePlugin` (a
+function when present). `gateway-core`'s `evaluateCallForToken` builds its
+default resolver as `envResolverFor(resources, adapter.envOf?.bind(adapter))`.
 Today only vercel declares `envOf` (`vercelEnvOf`, which also validates the
-label against the closed triad); github's catalog has no env-scoped risk,
-so the branch rule stays a documented possibility, not a hook.
+label against the closed triad and answers `NO_SINGLE_ENV` for anything
+else in that position); github's catalog has no env-scoped risk, so the
+branch rule stays a documented possibility, not a hook.
+
+### Declared arguments (`arguments.ts`)
+
+The argument surface of a tool is closed: what its input schema does not
+declare is refused. A classifier reads the arguments it knows; an argument it
+does not know was priced by no rule, and an executor that forwards the
+arguments it was given — a JSON body built from `args`, a rewrapped upstream
+tool — would send it to the provider all the same (ADR
+[plugin-arguments-closed-surface-and-typed-refusals](../decisions/plugin-arguments-closed-surface-and-typed-refusals.md)
+D1).
+
+- `declaredArgumentsOf(tools)` → `DeclaredArguments`, a
+  `ReadonlyMap<tool name, ReadonlySet<argument name>>` built once per plugin
+  from the `inputSchema.properties` of its tool declarations.
+- `undeclaredArgumentDenial(declared, tool, args, routing?)` → the denial for
+  the first argument of the call its tool does not declare, in the order the
+  call gives them, or `null`. The sentence reads
+  `<name>: not an argument of '<tool>' — nothing classifies it, so it is not sent.`;
+  a key that is not name-shaped (`^[A-Za-z_][A-Za-z0-9_-]{0,63}$`) is
+  described as `an argument with a malformed name`, never quoted. An
+  argument given as `undefined` is absent (`null`, `false`, `0` and `''` are values); another spelling of a
+  declared name is another argument; inherited property names are not
+  declared. An unknown tool yields `null`: the classifier says that in its
+  own words.
+- `routing` names the arguments the plugin reads itself whatever the tool
+  declares, and writes again (or drops) before the call leaves: the project
+  or team a mission pins.
+
+Top-level keys only: the value of a declared argument is the tool's own
+business. A plugin whose executor forwards arguments calls the function in
+`classify` — a denial, so the call is refused before the budget and audited
+as a refusal — **and** in `execute`, the second lock for a caller that did
+not go through `classify`. A plugin that builds its request field by field
+from declared arguments forwards nothing else and does not need it: an
+undeclared argument is never read. Which shipped plugin does which is in its
+handbook ([`providers/`](./providers/README.md)).
+
+### Slice identifiers (`slices.ts`)
+
+A classifier builds its slices structurally (`{ kind: 'ident', value }`), so
+nothing stops it from putting into an identifier a character the slice
+grammar has no place for (`@`, `:`, `+`, a space). The slice is also
+_written_ — in the audit entry, in the refusal the agent reads, in the
+session — and written with such a character it cannot be read back; a `,` or
+a `]` would even read back as a different slice.
+
+- `isSliceIdent(value)` — true when the grammar can carry `value` as one
+  bracket identifier (`BRACKET_IDENT_CHAR_CLASS` of the policy engine, one
+  character or more).
+- `identSegment(value)` — `[value]` when it can, `ANY_IDENT` otherwise (an
+  empty value, a character outside the grammar, a glob such as `feature/*`).
+  Never throws.
+- `ANY_IDENT` — `{ kind: 'ident', value: '*' }`, serialised `[*]`: the "any
+  identifier" placeholder of an executed slice.
+- `sliceRoundTripIssues(slice)` — why a slice cannot be serialised and parsed
+  back as itself; empty when it can.
+
+A call naming an identifier the grammar cannot carry is therefore classified
+on **every** instance of the entity: only a mission whose pattern covers them
+all accepts it. The identifier is never dropped (the slice would match a
+narrower pattern than the call deserves) and never escaped (the slice would
+no longer be the name an owner writes in a restriction). A classifier that
+writes a caller's value into an `ident` segment without these helpers can
+emit `feature/*`: the policy engine refuses an executed slice carrying `*`
+inside an identifier (`carriesGlobIdentifier`,
+[policy-engine](./policy-engine.md)), and `assertCatalogCoverage` fails on
+it and on a slice that does not read back as itself (ADR
+[plugin-arguments-closed-surface-and-typed-refusals](../decisions/plugin-arguments-closed-surface-and-typed-refusals.md)
+D2).
 
 ### Registry (`registry.ts`)
 
@@ -437,8 +569,8 @@ instance configuration; no contract change.
 ### Test kit (`testing/`)
 
 ```ts
-import { assertCatalogCoverage, assertNoWildcard, assertPluginWellFormed, assertPresetsValid, mockFetch }
-  from '@vaubaan/plugin-sdk/testing';
+import { assertCatalogCoverage, assertNoWildcard, assertPluginWellFormed, assertPresetsValid,
+  declaredOnly, mockFetch, refusalText } from '@vaubaan/plugin-sdk/testing';
 
 assertPluginWellFormed(plugin);
 assertPresetsValid(plugin);
@@ -459,7 +591,10 @@ was written in.
 `assertCatalogCoverage` fails when a declared tool has no sample, a sample
 names an undeclared tool, a non-`expectDenied` sample is denied (or an
 `expectDenied` one is not), a sample yields no slice, a slice carries
-another provider, or a slice matches no catalog risk. `risksUntouched`
+another provider, a slice does not read back as itself through serialise →
+parse (`sliceRoundTripIssues`), a slice carries `*` inside an identifier
+(`carriesGlobIdentifier`: the host refuses it), or a slice matches no
+catalog risk. `risksUntouched`
 leaves the fallback out: it is reachable by design only through writes no
 dedicated entry covers, so a complete catalog never touches it and a plugin
 test asserts `risksUntouched` equal to `[]` (or to the entries it knowingly
@@ -467,6 +602,17 @@ leaves unreached). `fallbackHits` lists the samples only the fallback
 covered — informational, but a realistic sample there means the catalog
 misses an entry. Every assertion throws `PluginAssertionError { subject,
 findings }`.
+
+Two helpers serve the tests of the rules above:
+
+- `declaredOnly(plugin, tool, args)` — the entries of `args` that `tool`
+  declares in its input schema (throws on a tool the plugin does not have).
+  For test tables that feed one argument object to a whole family of tools:
+  an argument a tool does not declare is refused by its classifier, which
+  would hide the rule the table is about.
+- `refusalText(promise)` — awaits an `execute`, requires an `isError` result
+  (`PluginAssertionError` otherwise; a throw propagates and fails the test as
+  a provider failure) and returns the text of its first block.
 
 `mockFetch(routes)` returns a `fetch` with `.calls` (method, url,
 lower-cased headers, body text, parsed JSON) and `.pending()` (routes whose
@@ -494,7 +640,9 @@ metadata? }`, `ConnectionResource`, `Credential` (encrypted envelope),
   `Restriction`, `Mission`, `MissionPolicyEntry` (`risk_id`, `quota`,
   `rate_limit`, `gate`), `MissionPolicy` (the explicit entry list),
   `Budget`, `RateLimit`, `Gate` + `GATES`, `Period`, `MissionResourceSelection`,
-  `MissionToken`, `Session`,
+  `MissionToken` (one holder each: `kind`, `holder_user_id` or `name`),
+  `MissionTokenKind` + `MISSION_TOKEN_KINDS` + `isMissionTokenKind`,
+  `TokenAttribution` (`token_id`, `token_kind`, `holder`), `Session`,
   `SessionEvent`, `SessionCounter`, `Request`, `Approval`, `Delegation`,
   `User`, `Group`, `Principal`, `CREDENTIAL_KINDS`, `acceptedRisksOf(mission)`,
   `AuditDecision` (`allowed` | `refused`), the guards `isCredentialKind` and
@@ -551,9 +699,9 @@ name, nothing else. The test derives its expectations the same way,
 including the catalog path, which it computes from its own location.
 
 `index.ts` exports the plugin as a named export and as the **default
-export** (what `shipped-plugins.ts` imports), and declares an `api-key`
-credential with `createUrl`, `required`, `placeholder`, `pattern` and
-`help`.
+export** (what `shipped-plugins.ts` imports), fills `description` and
+`summary`, and declares an `api-key` credential with `createUrl`,
+`required`, `placeholder`, `pattern` and `help`.
 
 The classifier shows the conventions every plugin follows:
 
@@ -584,7 +732,9 @@ The classifier shows the conventions every plugin follows:
   dot-only segments. A plugin proves it with a test file that feeds hostile
   values (`..`, `.`, `a/../b`, `%2e%2e`, `%2f`, empty, overlong) to both
   sides; `apps/gateway/tests/unit/structural/plugin-identifier-tests.test.ts`
-  fails for a plugin directory without one. Each provider handbook lists its
+  fails for a plugin directory without one (it parses each test file: the
+  hostile values are string literals of the code, the classifier and the
+  executor are called, and at least one test runs). Each provider handbook lists its
   grammars under "Identifiers";
 - a call that cannot be placed on the data model is `denied`, never mapped
   to a broad slice;
@@ -657,6 +807,18 @@ fallback: true on it`** — add the flag to the catch-all entry; the kit's
   fallback. Either the slice path is wrong (check against `dataModel`) or
   the catalog needs an entry. The fallback `<provider>.**.W` only catches
   writes; a read slice needs its own entry.
+- **`assertCatalogCoverage` says `cannot be read back`, or
+  `carries '*' inside an identifier`** — the classifier put a raw value into an `ident`
+  segment. Refuse the value in the grammar function of its kind, or emit
+  `identSegment(value)` when the provider legitimately accepts characters the
+  slice grammar does not.
+- **A call is refused with `<name>: not an argument of '<tool>'`** — the
+  argument is not in the tool's `inputSchema.properties`. Declare it (and
+  classify it), or stop sending it. In a test table shared by several tools,
+  `declaredOnly` keeps the entries each tool declares.
+- **The audit shows `upstream_error` although no request left** — the
+  executor threw a plain `Error` to decline. Throw `ExecutorRefusal` under
+  `declining`, or return `refusalResult(message)`.
 - **`mockFetch: unexpected GET …`** — the plugin called a URL no route
   covers. The message names the method and URL; add a route or fix the
   URL building.
@@ -686,11 +848,13 @@ fallback: true on it`** — add the flag to the catch-all entry; the kit's
   [plugin-contract-and-credential-spec](../decisions/plugin-contract-and-credential-spec.md),
   [plugin-catalog-path-and-standalone-tracing](../decisions/plugin-catalog-path-and-standalone-tracing.md),
   [fallback-risk-only-when-uncategorized](../decisions/fallback-risk-only-when-uncategorized.md),
-  [plugin-identifiers-one-grammar-for-classify-and-execute](../decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md);
+  [plugin-identifiers-one-grammar-for-classify-and-execute](../decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md),
+  [plugin-arguments-closed-surface-and-typed-refusals](../decisions/plugin-arguments-closed-surface-and-typed-refusals.md),
+  [decision-stages-fail-closed-and-audited](../decisions/decision-stages-fail-closed-and-audited.md);
   neighbours [policy-engine](./policy-engine.md),
   [`providers/README.md`](./providers/README.md) (index of the
   per-provider handbooks).
 - Guide: [`plugins/README.md`](../../plugins/README.md).
-- Tests: `npx vitest run packages/plugin-sdk plugins/_template` — 120 tests;
+- Tests: `npx vitest run packages/plugin-sdk plugins/_template` — 159 tests;
   `apps/gateway/tests/integration/standalone-plugin-catalogs.test.ts` after
   a `next build`.

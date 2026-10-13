@@ -1,5 +1,5 @@
 -- Migration 0011 — a user is (issuer, subject), not the subject alone (spec §0 "User";
--- ADR oidc-relying-party-and-web-session, amendment of 2026-10-13).
+-- ADR users-keyed-by-issuer-and-subject).
 --
 -- OpenID Connect makes a subject unique *within its issuer*. `users.subject` was UNIQUE
 -- on its own: after the operator points the instance at another identity provider, a
@@ -23,7 +23,7 @@
 --
 -- Accounts that exist already. The store never recorded which issuer vouched for them,
 -- and this file cannot read the configuration. They are bound, all at once, to the
--- issuer of the first sign-in that follows the migration (`UsersRepo.upsertFromIdp`):
+-- issuer of the first sign-in that follows the migration (`UsersRepo.bindUnboundTo`):
 -- that is the provider the instance was using. Consequence for the operator: upgrade,
 -- let somebody sign in, and only then change the identity provider — changing it in the
 -- same restart as the upgrade would bind the existing accounts to the new provider.

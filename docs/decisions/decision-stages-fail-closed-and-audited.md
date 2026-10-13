@@ -23,7 +23,7 @@ failed closed without a trace.
 **A stage that threw left no audit entry.** A classifier that throws on an
 argument shape it did not expect, a catalog lookup that fails, a store error in
 the budget stage: the exception went up to the door, the agent received a 500,
-and the audit log had nothing. Spec §11 says every call is recorded. A refusal
+and the audit log had nothing. Spec §8 says every call is recorded, allowed or refused. A refusal
 nobody can see is also a way to probe a classifier without leaving a trace.
 
 **One identifier decided the environment of a call that named several.** The

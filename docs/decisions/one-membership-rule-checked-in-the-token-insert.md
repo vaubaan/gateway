@@ -49,11 +49,17 @@ and `list` call it, and so does the repository.
 
 ### D2. The token insert checks the mission and the holder itself
 
-`MissionsRepo.issueToken` runs in one transaction: it reads the mission's state
-and the holder's membership, and inserts only if the mission is active and the
-holder is on it. Otherwise it throws `TokenNotIssuableError` with one of
-`mission-not-active`, `holder-not-a-member`, `name-taken`. The team service maps
-each to the HTTP answer it already gave for the check done earlier.
+`MissionsRepo.issueToken` runs in one transaction: it reads the mission's
+stored status and the holder's membership, and inserts only if the status is
+`active` and the holder is on the mission. Otherwise it throws
+`TokenNotIssuableError` with one of `mission-not-active`, `holder-not-a-member`,
+`name-taken`. The team service maps each to the HTTP answer it already gave for
+the check done earlier.
+
+The stored status is what a revocation writes. A mission that is expired by its
+date or orphaned by a lost authority is not a stored status: those two are
+derived, the service's earlier check refuses them, and the door refuses a token
+of such a mission on every call whatever was inserted.
 
 The earlier check in the service stays: it produces the precise message. The
 check in the insert is the one that cannot be raced.
@@ -66,7 +72,7 @@ comes back generates a new token; nothing from the earlier membership works.
 
 ### D4. A reactivation first closes what a deactivation left open
 
-`UserService.reactivate` calls `closeHeldBy` — delegations, mission tokens held as a
+`UserAdminService.reactivate` calls `closeHeldBy` — delegations, mission tokens held as a
 member, group memberships — before it
 restores the status, and does not restore it if that fails.
 

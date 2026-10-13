@@ -360,7 +360,8 @@ async function main(): Promise<void> {
     claims: { sub: 'sub', email: 'email', groups: 'groups' },
     allowedEmailDomains: [],
   });
-  const seeded = await seedInstance(root);
+  // Seeded under the issuer their ID tokens will carry: the same people sign in below.
+  const seeded = await seedInstance(root, idp.iss);
   // Ada's GitHub connection is an installation of the mocked GitHub, so her
   // missions' calls go all the way through the door to the mocked provider.
   await root.store.connections.reconnect(
