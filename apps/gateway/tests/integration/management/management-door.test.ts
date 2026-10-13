@@ -586,6 +586,71 @@ describe('management door — tools of a delegated agent', () => {
       await bob.close();
     });
 
+    it('rotates only what its own delegation issued: the user’s own mission and another delegation’s are refused, their tokens keep working', async () => {
+      // The human issues a wide mission in the interface (here: the service, as the page does).
+      const human = await rig.root.missions.service.issue(
+        rig.seeded.ada,
+        draftOn(github, ['github.read-code', NOT_SHARED]) as never,
+      );
+      if (!human.ok) throw new Error('the human issuance was refused');
+      const first = await rig.agentOf(ADA);
+      const second = await rig.agentOf(ADA);
+      expect(second.delegated.delegationId).not.toBe(first.delegated.delegationId);
+      const byFirst = await issue(first, draftOn(github, ['github.read-code']));
+
+      // The human's mission: listed (it is the user's), not rotated.
+      const listed = await second.call<MissionsAnswer>('list_my_missions');
+      const views = new Map(listed.data.missions.map((m) => [m.mission_id, m.issued_via]));
+      expect(views.get(human.mission.id)).toBeNull();
+      expect(views.get(byFirst.mission.mission_id)).toMatchObject({ this_delegation: false });
+
+      for (const missionId of [human.mission.id, byFirst.mission.mission_id]) {
+        const answer = await second.call<Refused>('rotate_mission_token', {
+          mission_id: missionId,
+        });
+        expect(answer.isError, missionId).toBe(true);
+        expect(answer.data.error, missionId).toMatchObject({
+          code: 'mission-not-issued-here',
+          mission_id: missionId,
+        });
+        // Nothing of a token is in the refusal.
+        expect(answer.text).not.toContain('vbn_live_');
+      }
+      expect(await rig.adminEntries('mission-rotated')).toEqual([]);
+      expect(await executionSays(human.token.secret)).toBe('ok');
+      expect(await executionSays(byFirst.token.secret)).toBe('ok');
+
+      // The delegation that issued it rotates it; the human rotates their own in the interface.
+      const own = await first.call<RotatedTokenAnswer>('rotate_mission_token', {
+        mission_id: byFirst.mission.mission_id,
+      });
+      expect(own.isError).toBe(false);
+      const inInterface = await rig.root.missions.service.rotate(rig.seeded.ada, human.mission.id);
+      expect(inInterface.ok).toBe(true);
+      // Ending a mission enlarges nothing: revoke still reaches the human's mission.
+      const revoked = await second.call<RevokedMissionAnswer>('revoke_mission', {
+        mission_id: human.mission.id,
+      });
+      expect(revoked.data).toMatchObject({ state: 'revoked', already_revoked: false });
+      await first.close();
+      await second.close();
+    });
+
+    it('the mission service refuses a rotation asked in the name of another delegation, whoever calls it', async () => {
+      const agent = await rig.agentOf(ADA);
+      const issued = await issue(agent, draftOn(github, ['github.read-code']));
+      const asked = await rig.root.missions.service.rotate(
+        rig.seeded.ada,
+        issued.mission.mission_id,
+        {
+          delegation: { id: 'another-delegation', clientId: agent.delegated.clientId },
+        },
+      );
+      expect(asked).toEqual({ ok: false, reason: 'not-issued-by-delegation' });
+      expect(await executionSays(issued.token.secret)).toBe('ok');
+      await agent.close();
+    });
+
     it('a revoked delegation stops the agent at its next call', async () => {
       const agent = await rig.agentOf(ADA);
       await rig.root.oauth.delegations.revoke(rig.seeded.ada, agent.delegated.delegationId);

@@ -124,7 +124,9 @@ export function createMissionHandlers(deps: MissionHandlerDeps): MissionHandlers
           kit: result.kit,
         });
       }
-      if (result.reason === 'not-found') return json(404, NOT_FOUND);
+      // `not-issued-by-delegation` is the management door's refusal: no delegation asks
+      // here, so the service never answers it; were it to, the mission is not the caller's.
+      if (result.reason !== 'inactive') return json(404, NOT_FOUND);
       return json(409, {
         error: 'mission-inactive',
         message: `The mission is ${result.state}; its token cannot be rotated.`,

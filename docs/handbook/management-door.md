@@ -620,20 +620,34 @@ between two requests.
 
 ### The seven tools (`definitions.ts`, `tools.ts`)
 
-| Tool                   | Kind     | `ManagementTools` method | Reads / writes through                                                 |
-| ---------------------- | -------- | ------------------------ | ---------------------------------------------------------------------- |
-| `list_my_connections`  | read     | `listMyConnections`      | `missions.issuanceContext(user)`                                       |
-| `get_catalog`          | read     | `getCatalog`             | `catalog.get(provider)`, `issuanceContext` for `connection_id`         |
-| `list_my_missions`     | read     | `listMyMissions`         | `missions.list(user)`, or `missions.get` with `mission_id`             |
-| `preview_policy`       | preview  | `previewPolicy`          | `missions.preview(user, draft)`                                        |
-| `issue_mission`        | mutation | `issueMission`           | `missions.preview`, then `missions.issue(user, draft, { delegation })` |
-| `rotate_mission_token` | mutation | `rotateMissionToken`     | `missions.get`, then `missions.rotate(user, id, { delegation })`       |
-| `revoke_mission`       | mutation | `revokeMission`          | `missions.get`, then `missions.revoke(user, id, { delegation })`       |
+| Tool                   | Kind     | `ManagementTools` method | Reads / writes through                                                                 |
+| ---------------------- | -------- | ------------------------ | -------------------------------------------------------------------------------------- |
+| `list_my_connections`  | read     | `listMyConnections`      | `missions.issuanceContext(user)`                                                       |
+| `get_catalog`          | read     | `getCatalog`             | `catalog.get(provider)`, `issuanceContext` for `connection_id`                         |
+| `list_my_missions`     | read     | `listMyMissions`         | `missions.list(user)`, or `missions.get` with `mission_id`                             |
+| `preview_policy`       | preview  | `previewPolicy`          | `missions.preview(user, draft)`                                                        |
+| `issue_mission`        | mutation | `issueMission`           | `missions.preview`, then `missions.issue(user, draft, { delegation })`                 |
+| `rotate_mission_token` | mutation | `rotateMissionToken`     | `missions.get`, the delegation check, then `missions.rotate(user, id, { delegation })` |
+| `revoke_mission`       | mutation | `revokeMission`          | `missions.get`, then `missions.revoke(user, id, { delegation })`                       |
 
 `user` is always `{ id: actor.userId }`: every act is the delegating user's,
 checked against their **current** authority by the mission service — owner,
 or the union of their direct and group shares (handbook
 [authority](authority.md)). The door decides nothing about authority itself.
+
+**Rotation reaches only what the delegation issued** (ADR
+[management-door-rotation-scope-and-replay-trace](../decisions/management-door-rotation-scope-and-replay-trace.md)).
+`rotate_mission_token` answers with the new token, so rotating a mission is
+obtaining its token. A mission the user issued in the interface, or that
+another client or an earlier delegation of the same client issued, is refused
+`mission-not-issued-here` before anything is read of its state and before the
+mutation budget is touched: `mission.delegationId` must equal the delegation
+of the call. The same rule is held a second time by
+`MissionService.rotate` itself (`not-issued-by-delegation` whenever a
+`delegation` option names another delegation than the mission's), so the door
+cannot reach a wider rotation through its one `rotate` port. `revoke_mission`
+keeps reaching every mission of the user: ending a mission enlarges nothing.
+The human rotates any of their missions on the mission's page.
 
 **Inputs** are Zod schemas, advertised as JSON Schema by `tools/list` and
 validated by the SDK before the method runs; unknown keys are refused
@@ -647,15 +661,16 @@ advertises (next section). A "no" is a tool error — `isError: true`
 with `structuredContent: { error: { code, message, hint, … } }` — so the
 model reads it and corrects itself:
 
-| `error.code`         | When                                                                                  | Extra fields                     |
-| -------------------- | ------------------------------------------------------------------------------------- | -------------------------------- |
-| `draft-refused`      | `issue_mission` on a draft the preview does not accept                                | `uncovered`, `issues`, `preview` |
-| `mission-not-found`  | no such mission of this user (another user's reads the same)                          | `mission_id`                     |
-| `mission-inactive`   | `rotate_mission_token` on a revoked, expired or orphaned mission                      | `mission_id`, `state`, `orphan`  |
-| `unknown-provider`   | `get_catalog` on a provider the instance does not ship                                | `providers`                      |
-| `unknown-connection` | `get_catalog` with a `connection_id` the user holds nothing on                        | `connection_id`                  |
-| `rate-limited`       | the delegation's mutation budget is spent                                             | `retry_after_seconds`            |
-| `internal-error`     | the method threw (logged `management tool failed`); the message never carries details |                                  |
+| `error.code`              | When                                                                                  | Extra fields                     |
+| ------------------------- | ------------------------------------------------------------------------------------- | -------------------------------- |
+| `draft-refused`           | `issue_mission` on a draft the preview does not accept                                | `uncovered`, `issues`, `preview` |
+| `mission-not-found`       | no such mission of this user (another user's reads the same)                          | `mission_id`                     |
+| `mission-inactive`        | `rotate_mission_token` on a revoked, expired or orphaned mission                      | `mission_id`, `state`, `orphan`  |
+| `mission-not-issued-here` | `rotate_mission_token` on a mission of the user that this delegation did not issue    | `mission_id`                     |
+| `unknown-provider`        | `get_catalog` on a provider the instance does not ship                                | `providers`                      |
+| `unknown-connection`      | `get_catalog` with a `connection_id` the user holds nothing on                        | `connection_id`                  |
+| `rate-limited`            | the delegation's mutation budget is spent                                             | `retry_after_seconds`            |
+| `internal-error`          | the method threw (logged `management tool failed`); the message never carries details |                                  |
 
 A call that fails the input schema is a tool error whose text is the SDK's
 validation message; a tool name that does not exist is the JSON-RPC error
@@ -733,7 +748,8 @@ What each answer contains (`views.ts`):
   `revoked`) and `orphan` (`cause`, `connection_id`, `uncovered`,
   `can_come_back`) exactly as `MissionService.list` derives them at this
   read; `policy` with `remaining` per risk; `session` (current period);
-  `exhausted`; `issued_via` (`client_id`, `client_name`, `this_client`);
+  `exhausted`; `issued_via` (`client_id`, `client_name`, `this_client`,
+  `this_delegation` — true for the missions `rotate_mission_token` accepts);
   the masked `token_prefix`. Revoked and expired missions are left out
   unless `include_closed` (`hidden_closed` counts them). With `mission_id`: plus `connections` with the
   resources reached and `policy_details` (label, `gate_open_until`).
@@ -745,7 +761,8 @@ What each answer contains (`views.ts`):
   `issued_via_client_id`), `token` (`secret`, `prefix`, `env_var`,
   `shown_once`), `bootstrap_kit` (`endpoint`, `env`, `mcp_json`,
   `agent_instructions`, `verify`), `policy`, `summary`, `notices`.
-- **`rotate_mission_token`** — the new `token` and `bootstrap_kit`.
+- **`rotate_mission_token`** — the new `token` and `bootstrap_kit`, for a
+  mission this delegation issued.
 - **`revoke_mission`** — `state: revoked`, `tokens_revoked`,
   `already_revoked` (a second call changes nothing and writes nothing).
 

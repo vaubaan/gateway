@@ -213,7 +213,8 @@ export const MANAGEMENT_TOOLS: readonly ManagementToolDefinition[] = [
     kind: 'mutation',
     destructive: true,
     description: [
-      'Replaces the token of one of the user’s active missions: the previous token stops working at once, the mission, its policy, its session and its budget are unchanged.',
+      'Replaces the token of an active mission that this delegation issued (`issued_via.this_delegation` in `list_my_missions`): the previous token stops working at once, the mission, its policy, its session and its budget are unchanged.',
+      'A mission the user issued in the web interface, or that another client or an earlier authorization of this one issued, is refused with `mission-not-issued-here`: the user rotates those themselves.',
       'The answer contains the new `token.secret`, shown this once, and the bootstrap kit.',
       'Use it when a token leaked or was lost. A revoked or expired mission is not rotated: issue a new one. An orphaned mission is not rotated either: it refuses every call until the user’s authority returns, and its token then works again.',
     ].join(' '),

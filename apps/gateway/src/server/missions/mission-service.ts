@@ -139,6 +139,8 @@ export type RotateResult =
       readonly kit: BootstrapKit;
     }
   | { readonly ok: false; readonly reason: 'not-found' }
+  /** A delegated client asked for a mission its delegation did not issue. */
+  | { readonly ok: false; readonly reason: 'not-issued-by-delegation' }
   | { readonly ok: false; readonly reason: 'inactive'; readonly state: MissionState['kind'] };
 
 export type RevokeResult =
@@ -512,7 +514,16 @@ export class MissionService {
     throw new Error(`could not draw an unused token prefix in ${MAX_MINT_ATTEMPTS} attempts`);
   }
 
-  /** New token, same mission, same session, same budget (spec §7.8). */
+  /**
+   * New token, same mission, same session, same budget (spec §7.8).
+   *
+   * Through a delegation (`options.delegation`, the management door) only a
+   * mission that very delegation issued is rotated: the new token is handed to
+   * the caller, so rotating a mission the human issued — wider, perhaps with a
+   * gate they opened — would hand a delegated client an authority nobody
+   * issued to it (ADR management-door-rotation-scope-and-replay-trace). The
+   * human rotates any of their missions in the interface.
+   */
   async rotate(
     user: AuthoritySubject,
     missionId: string,
@@ -520,6 +531,9 @@ export class MissionService {
   ): Promise<RotateResult> {
     const mission = await this.ownMission(user, missionId);
     if (!mission) return { ok: false, reason: 'not-found' };
+    if (options.delegation && mission.delegationId !== options.delegation.id) {
+      return { ok: false, reason: 'not-issued-by-delegation' };
+    }
     const state = await this.stateOf(mission);
     if (state.kind !== 'active') return { ok: false, reason: 'inactive', state: state.kind };
 

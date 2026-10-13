@@ -217,6 +217,96 @@ describe('ManagementTools — every act is the delegating user’s', () => {
     expect(calls.some((call) => call.method === 'rotate' || call.method === 'revoke')).toBe(false);
   });
 
+  describe('rotate reaches only the missions this delegation issued (ADR management-door-rotation-scope-and-replay-trace)', () => {
+    /** An active mission of the user, as `get` returns it, issued by `delegationId` (or by the human). */
+    const activeIssuedBy = (
+      delegationId: string | null,
+      clientId = ACTOR.clientId,
+    ): MissionDetail =>
+      ({
+        mission: {
+          id: 'm1',
+          name: 'M',
+          connections: [],
+          policy: [],
+          periodSeconds: null,
+          delegationId,
+        },
+        state: { kind: 'active', period: { start: NOW.toISOString(), end: null }, remaining: {} },
+        orphan: null,
+        token: null,
+        issuedVia:
+          delegationId === null
+            ? null
+            : { delegation_id: delegationId, client_id: clientId, client_name: 'Agent' },
+        connections: [],
+        policy: [],
+      }) as unknown as MissionDetail;
+
+    it.each([
+      ['the user issued in the interface', null, ACTOR.clientId],
+      ['another client of the user issued', 'delegation-of-another-client', 'vbn_client_other'],
+      // The same program after a new consent is another delegation: the earlier one's
+      // missions (possibly issued by whoever stole its tokens) are not its own.
+      ['an earlier delegation of this same client issued', 'delegation-0', ACTOR.clientId],
+    ])(
+      'refuses a mission %s: nothing is rotated, no budget is spent',
+      async (_n, delegationId, clientId) => {
+        const { tools, calls, rateKeys } = rig({
+          missions: { get: async () => activeIssuedBy(delegationId, clientId) },
+        });
+        const outcome = await tools.rotateMissionToken(ACTOR, { mission_id: 'm1' });
+        expect(outcome).toMatchObject({
+          ok: false,
+          refusal: { code: 'mission-not-issued-here', mission_id: 'm1' },
+        });
+        expect(outcome.ok ? '' : outcome.refusal.hint).toMatch(/in the web interface/);
+        expect(calls.some((call) => call.method === 'rotate')).toBe(false);
+        expect(rateKeys).toEqual([]);
+      },
+    );
+
+    it('rotates a mission this delegation issued, and tells the service which delegation asks', async () => {
+      const { tools, calls } = rig({
+        missions: { get: async () => activeIssuedBy(ACTOR.delegationId) },
+      });
+      await tools.rotateMissionToken(ACTOR, { mission_id: 'm1' });
+      const rotate = calls.find((call) => call.method === 'rotate');
+      expect(rotate?.args).toEqual([
+        { id: ACTOR.userId },
+        'm1',
+        { delegation: { id: ACTOR.delegationId, clientId: ACTOR.clientId } },
+      ]);
+    });
+
+    it('the service’s own refusal of a foreign mission reads the same (the two checks agree)', async () => {
+      const { tools } = rig({
+        missions: {
+          get: async () => activeIssuedBy(ACTOR.delegationId),
+          rotate: async () => ({ ok: false, reason: 'not-issued-by-delegation' }),
+        },
+      });
+      expect(await tools.rotateMissionToken(ACTOR, { mission_id: 'm1' })).toMatchObject({
+        ok: false,
+        refusal: { code: 'mission-not-issued-here' },
+      });
+    });
+
+    it('revoke still reaches every mission of the user: ending one enlarges nothing', async () => {
+      const { tools, calls } = rig({ missions: { get: async () => activeIssuedBy(null) } });
+      await tools.revokeMission(ACTOR, { mission_id: 'm1' });
+      expect(calls.some((call) => call.method === 'revoke')).toBe(true);
+    });
+
+    it('a listing says which missions this delegation issued', () => {
+      const view = (delegationId: string | null) =>
+        missionView(activeIssuedBy(delegationId), ACTOR, (prefix) => prefix).issued_via;
+      expect(view(null)).toBeNull();
+      expect(view(ACTOR.delegationId)).toMatchObject({ this_client: true, this_delegation: true });
+      expect(view('delegation-0')).toMatchObject({ this_client: true, this_delegation: false });
+    });
+  });
+
   describe('the mission service decides last: its answer after the door’s own check stands', () => {
     const within: MissionDraft = {
       ...DRAFT,
@@ -224,11 +314,22 @@ describe('ManagementTools — every act is the delegating user’s', () => {
     };
     /** A mission of the user that serves calls, as `get` returns it. */
     const active = {
-      mission: { id: 'm1', name: 'M', connections: [], policy: [], periodSeconds: null },
+      mission: {
+        id: 'm1',
+        name: 'M',
+        connections: [],
+        policy: [],
+        periodSeconds: null,
+        delegationId: ACTOR.delegationId,
+      },
       state: { kind: 'active', period: { start: NOW.toISOString(), end: null }, remaining: {} },
       orphan: null,
       token: null,
-      issuedVia: null,
+      issuedVia: {
+        delegation_id: ACTOR.delegationId,
+        client_id: ACTOR.clientId,
+        client_name: 'Agent',
+      },
       connections: [],
       policy: [],
     } as unknown as MissionDetail;
@@ -426,7 +527,7 @@ describe('views', () => {
       'authority-lost',
     ] as const;
     const answers = causes.map((cause) => {
-      const view = missionView(overview(cause), ACTOR.clientId, (prefix) => prefix);
+      const view = missionView(overview(cause), ACTOR, (prefix) => prefix);
       const orphan = { cause, connection_id: 'conn-acme', uncovered: ['acme.read' as RiskId] };
       expect(view.orphan?.can_come_back, cause).toBe(explainOrphan(orphan, []).reversible);
       return view.orphan?.can_come_back;
@@ -534,14 +635,19 @@ describe('views', () => {
       token: { prefix: 'AbCd1234', createdAt: NOW.toISOString() },
       issuedVia: { delegation_id: 'delegation-2', client_id: 'other', client_name: 'Other agent' },
     } as MissionOverview;
-    const view = missionView(overview, ACTOR.clientId, (prefix) => `masked:${prefix}`);
+    const view = missionView(overview, ACTOR, (prefix) => `masked:${prefix}`);
     expect(view).toMatchObject({
       mission_id: 'm1',
       state: 'orphaned',
       orphan: { cause: 'connection-revoked', can_come_back: false },
       period: { kind: 'recurring', length_seconds: 3600 },
       session: null,
-      issued_via: { client_id: 'other', client_name: 'Other agent', this_client: false },
+      issued_via: {
+        client_id: 'other',
+        client_name: 'Other agent',
+        this_client: false,
+        this_delegation: false,
+      },
       token_prefix: 'masked:AbCd1234',
       policy: [
         {
