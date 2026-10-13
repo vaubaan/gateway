@@ -21,7 +21,7 @@ import type {
   SessionCounterRecord,
   SessionRecord,
 } from '../types.ts';
-import { consumeApprovalSync } from './approvals.ts';
+import { consumeApprovalSync, findApprovalSync } from './approvals.ts';
 import {
   DEFAULT_LIST_LIMIT,
   nowIso,
@@ -31,7 +31,12 @@ import {
   toJson,
   type RepoContext,
 } from './context.ts';
-import { insertRequestSync, type InsertRequestInput } from './requests.ts';
+import {
+  findOpenRequestSync,
+  insertRequestSync,
+  type InsertRequestInput,
+  type OpenRequestLookup,
+} from './requests.ts';
 
 export interface DecideInput {
   readonly missionId: string;
@@ -47,8 +52,12 @@ export interface DecideContext {
   /** Consumed count per requested risk in this period (0 when no row exists yet). */
   readonly counters: ReadonlyMap<RiskId, number>;
   readonly now: Iso;
+  /** Non-consuming lookup of a valid approval bound to `(mission, risk, fingerprint)`. */
+  findApproval(riskId: RiskId, fingerprint: string): ApprovalRecord | null;
   /** Single-use approval consumption bound to `(mission, risk, fingerprint)`. */
   consumeApproval(riskId: RiskId, fingerprint: string): ApprovalRecord | null;
+  /** A request of the mission still open in the creator's inbox, to reuse on a replay. */
+  findOpenRequest(lookup: OpenRequestLookup): RequestRecord | null;
   /**
    * Drops a claim or approval request into the creator's inbox (refusal path). Approval
    * arguments must be sealed beforehand with `RequestsRepo.prepareArguments` (the
@@ -246,8 +255,11 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
           session,
           counters,
           now,
+          findApproval: (riskId, fingerprint) =>
+            findApprovalSync(ctx, input.missionId, riskId, fingerprint, now),
           consumeApproval: (riskId, fingerprint) =>
             consumeApprovalSync(ctx, input.missionId, riskId, fingerprint, now),
+          findOpenRequest: (lookup) => findOpenRequestSync(ctx, input.missionId, lookup, now),
           createRequest: (request) =>
             insertRequestSync(
               ctx,
