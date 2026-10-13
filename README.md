@@ -57,6 +57,7 @@ Workspaces: `apps/*`, `packages/*`, `plugins/*` (npm). Node >= 20.
 ```bash
 npm ci
 npm run ci        # type-check, lint, format check, build, tests
+npm run demo      # the whole interface on http://localhost:3210, simulated IdP and providers (docs/handbook/demo-mode.md)
 ```
 
 Running an instance (Docker image, Compose with TLS proxy, every

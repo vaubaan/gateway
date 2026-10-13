@@ -152,6 +152,17 @@ A `COPY plugins/*/src/*.yaml` line would fix the image but not
 run ; it also duplicates in the Dockerfile a fact about the build. Rejected
 ; tracing is the mechanism Next provides for exactly this.
 
+## Amendment — 2026-10-13 : the computed path is hidden from the tracer
+
+The helper's `join(dirname(fileURLToPath(url)), fileName)` made Turbopack warn
+"dynamic filesystem access causes tracing of the whole project" and copy the
+whole `apps/gateway` directory (sources, `tests/`, `tsconfig`) into
+`.next/standalone`, next to the catalogs D2 traces by name. The call now
+carries `/* turbopackIgnore: true */`. D1 and D2 are unchanged ; the standalone
+output no longer contains test files, which
+`apps/gateway/tests/integration/demo/demo-safety.test.ts` holds. Decided in
+[[local-demo-mode]] D7.
+
 ## References
 
 - ADR amended : [[plugin-contract-and-credential-spec]] D4 ; context

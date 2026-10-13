@@ -13,6 +13,7 @@ period; it will be completed when the first `v2.0.0` release approaches.
 ```bash
 npm ci
 npm run ci        # type-check + lint + format check + build + tests
+npm run demo      # try the interface locally: simulated identity provider and providers, seeded data
 ```
 
 `npm run ci` is the gate of CI's `check` job; CI then builds the image and
