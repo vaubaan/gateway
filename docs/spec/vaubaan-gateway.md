@@ -537,8 +537,13 @@ JSON-RPC, authenticated by `Authorization: Bearer <mission token>`.
   and environment labels of the resources the mission may touch, and the
   remaining budget per `RiskId`. It is the agent's only source of discovery for upstream
   refs, as in v4.
-- **Streaming**: the gateway forwards streamed responses unmodified; the
-  decision is made before the stream starts.
+- **Streaming**: a tool call is always answered by one complete result.
+  A plugin reading a long upstream response may emit its parts as they
+  arrive; the gateway forwards each at once as a progress notification
+  to a caller that asked for progress, then closes with the result. The
+  decision and the budget decrement are complete before the first part
+  leaves. A stream that breaks midway is an allowed call with an
+  upstream error: the credit stays consumed and nothing is replayed.
 
 ### 4.1 bis Management surface over MCP
 
