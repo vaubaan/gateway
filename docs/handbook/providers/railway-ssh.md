@@ -3,12 +3,16 @@ title: Railway + SSH providers — modélisation v4 risk-based
 status: current
 date: 2026-06-15
 tracks:
-  - plugins/ssh/src/data-model.ts
-  - plugins/ssh/src/risk-catalog.ts
+  - plugins/railway/src/risk-classifier.ts
   - plugins/ssh/src/risk-classifier.ts
 ---
 
 > **v4 document.** English rewrite scheduled by the v5 plan; `tracks` paths updated for the new layout.
+>
+> **Both halves are legacy since 2026-10-13**: Railway is on the v5 SDK and
+> documented in [`railway.md`](./railway.md) (P1.2d); SSH is on the v5 SDK and
+> documented in [`ssh.md`](./ssh.md) (P1.2i). Only the two kept v4 classifiers
+> (`@deprecated` until P1.6) are still tracked here.
 
 # Railway & SSH — modélisation v4 (data-model, slices, risk catalog)
 

@@ -1,15 +1,19 @@
 ---
-title: Bash provider — annotated-script dispatcher over SSH
-status: current
+title: Bash provider — annotated-script dispatcher over SSH (legacy v4)
+status: legacy
 date: 2026-06-15
+superseded_by: providers/ssh
 tracks:
-  - plugins/ssh/src/
-  - apps/gateway/src/lib/bash/
   - apps/gateway/src/app/api/v1/bash-bindings/
   - apps/gateway/src/app/(app)/orgs/[slug]/projects/[project]/bash-bindings/
 ---
 
-> **v4 document.** English rewrite scheduled by the v5 plan; `tracks` paths updated for the new layout.
+> **Legacy v4 document (French).** Superseded on 2026-10-13 by
+> [`providers/ssh.md`](./providers/ssh.md) (P1.2i): the plugin is on the v5
+> SDK, the parser and runner described below moved to `plugins/ssh/src/bash/`
+> and `apps/gateway/src/lib/bash/{parse,args,exec}.ts` are re-export shims.
+> Only the v4 `bash-bindings` routes and pages, deleted in P1.6, still follow
+> this text.
 
 # Bash provider — adapter setup & invocation
 

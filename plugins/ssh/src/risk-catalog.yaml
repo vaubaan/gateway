@@ -1,116 +1,313 @@
-# SSH risk catalog — provider `ssh`.
+# Risk catalog of the `ssh` provider (bash over SSH).
 #
-# Spec    : docs/spec/gateway-risk-model.md §4.
-# Source  : .vaubaan/research/providers/railway-ssh.md §2.4.
+# Spec     : docs/spec/gateway-risk-model.md §4 (schema), docs/spec/vaubaan-gateway.md §3.2 (presets).
+# Handbook : docs/handbook/providers/ssh.md.
 #
-# Four risks + one fallback :
-#   - ssh.exec-read                    — whitelisted reads
-#   - ssh.exec-write                   — writes on any host (env-varied via vector_overrides)
-#   - ssh.exec-read-secret-files       — co-touched on cat /etc/..., etc.
-#   - ssh.uncategorized-write          — fallback catch-all
+# Loaded at boot by `@vaubaan/plugin-sdk` (`loadCatalogFile`) ; this file is
+# the only catalog artefact (the v4 TypeScript twin is gone). The v4 file used
+# the legacy top-level `ssh:` key ; this is the v5 shape.
 #
-# CONVENTION — `acceptable_in_envs`
-# ---------------------------------
-# SSH's "env" segment is the `host_slug` of the binding (one host = one env).
-# `acceptable_in_envs` lists every known host slug the manager may accept
-# this risk for. The canonical slugs are `staging-vps`, `dev-vps`, and
-# `prod-vps`.
+# 7 named risks + 1 fallback. The three v4 ids survive unchanged
+# (`exec-read`, `exec-read-secret-files`, `exec-write`, `uncategorized-write`) ;
+# four command classes the v4 research listed as "holes" get their own risk
+# (`exec-destructive`, `exec-package-install`, `exec-service-control`,
+# `exec-sudo`) so a preset can gate them with `approval`.
 #
-# PER-ENV RISK PROFILE — `vector_overrides`
-# ------------------------------------------
-# `ssh.exec-write` carries a default vector (non-prod profile) and
-# `vector_overrides` for env slugs whose risk profile differs. The
-# runtime resolves the effective vector via `resolveVector(entry, env)`.
-# Cf. docs/spec/risk-entry-per-env-vector.md §1.
+# How a command reaches a risk (see `src/command-classes.ts`) :
+#   - the command line is split into simple commands on `;`, `&&`, `||`, `|`,
+#     `&` and newlines (quotes honoured) ;
+#   - a simple command matching the read whitelist (`src/policy.ts`) is a
+#     read → `ssh.host[<host>].command.R` ;
+#   - anything else is a write → `ssh.host[<host>].command.W`, plus one marker
+#     slice per detected class (`command.destructive.W`, `command.package.W`,
+#     `command.service.W`, `command.privilege.W`) ;
+#   - a read of a credential-bearing path (`/etc/shadow`, `/root/…`, `~/.ssh/…`)
+#     adds `command.secret-file.R` ;
+#   - command substitution or an output redirection makes the whole line a write.
 #
-# MULTI-SLICE — secret-file co-touch
-# -----------------------------------
-# The classifier (`risk-classifier.ts`) emits TWO slices when the cmd
-# matches "looks like reading a secret file" heuristics
-# (`cat /etc/...`, `cat ~/.ssh/...`, `stat /root/...`, ...) :
-#   1. `ssh.host[<slug>].command.R`              (touches `ssh.exec-read`)
-#   2. `ssh.host[<slug>].command.R`              (also touches `ssh.exec-read-secret-files`)
-# Both risks must be accepted for the call to pass — forcing the manager
-# to explicitly consent to potential credential-file exfiltration via the
-# `cat` whitelist hole.
+# ENVIRONMENT — the host is the resource ; the owner labels it `dev`, `staging`
+# or `prod` in the UI. Every write risk is env-scoped on those three labels ;
+# the default `resourceEnvResolver` reads the label from the `host[<ref>]`
+# segment, no plugin hook needed. An unlabelled host cannot be written to
+# through a preset (no env → no qualified risk) ; label it.
+#
+# Rules the loader enforces : every id starts with `ssh.` ; every pattern
+# parses as a slice of this provider ; the `ssh.uncategorized-*` fallback
+# exists ; at least one preset ; every preset entry names an explicit risk of
+# THIS catalog with a numeric quota, a rate limit and a gate ; no preset
+# references the fallback.
+#
+# Adding a risk : append an entry, bump `catalog_version`, update `catalog_date`.
+# Removing or renaming a risk : forbidden — mark it `deprecated: true` and
+# point `replaced_by` at its successor, so existing missions keep working.
 
-ssh:
-  risks:
-    - id: ssh.exec-read
-      label: 'Exécuter une commande shell read-only whitelist'
-      reason: >
-        Commandes en lecture seule reconnues par la whitelist regex
-        (`journalctl`, `cat`, `ls`, `tail`, `head`, `grep`, `ps`,
-        `docker ps/inspect/logs`, `systemctl status`, `df`, `free`,
-        `uptime`, `ss -tlnp`, `md5sum`, `stat`). Pas de mutation.
-      matches: 'ssh.host[**].command.R'
-      vector:
-        reversibility: reversible
-        blast: env
-        data: data
-        cost: free
-        visibility: internal
-        persistence: stateless
+provider: ssh
+catalog_version: 2
+catalog_date: 2026-10-13
 
-    - id: ssh.exec-write
-      label: 'Exécuter une commande shell arbitraire'
-      reason: >
-        Toute commande hors-whitelist read → traitée W. Inclut sudo,
-        install, rm, systemctl restart, docker run, etc. Sur un host
-        non-prod (`staging-vps`, `dev-vps`) le risque est acceptable
-        avec confirmation explicite du manager (reversal coûteux mais
-        blast limité). Sur un host de production (`prod-vps`) la surface
-        d'attaque est maximale : posture-shift potentiel, downtime
-        possible, coût non borné. Le vector_overrides prod-vps reflète
-        cette escalation.
-      matches: 'ssh.host[**].command.W'
-      vector:
-        reversibility: costly
-        blast: env
-        data: data
-        cost: moderate
-        visibility: internal
-        persistence: posture
-      vector_overrides:
-        prod-vps:
-          reversibility: irreversible
-          data: secret
-          cost: unbounded
-      acceptable_in_envs:
-        - staging-vps
-        - dev-vps
-        - prod-vps
+risks:
+  # ─── READS ─────────────────────────────────────────────────────────────
 
-    - id: ssh.exec-read-secret-files
-      label: 'Lire un fichier potentiellement sensible (cat /etc/..., stat key)'
-      reason: >
-        La whitelist autorise `cat <path>` sans filtrer le path — donc
-        `cat /etc/shadow`, `cat ~/.ssh/id_rsa`, `cat /root/.env` passent
-        en R. Risque d'exfiltration des credentials hôte. Co-touché par
-        le classifier en plus de `ssh.exec-read` quand le cmd ressemble
-        à un read sensible — force le manager à consentir explicitement.
-      matches: 'ssh.host[**].command.R'
-      vector:
-        reversibility: reversible
-        blast: env
+  - id: ssh.exec-read
+    label: 'Run a whitelisted read-only command'
+    reason: >-
+      Inspection commands recognised by the read whitelist (`journalctl`,
+      `cat`, `ls`, `tail`, `head`, `grep`, `ps`, `docker ps/inspect/logs`,
+      `systemctl status`, `df`, `free`, `uptime`, `ss -tlnp`, `md5sum`,
+      `stat`), alone or piped together. No mutation. Logs and files may still
+      contain secrets, which is why `exec-read-secret-files` exists next to it.
+    matches: 'ssh.host[**].command.R'
+    vector:
+      reversibility: reversible
+      blast: env
+      data: data
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: ssh.exec-read-secret-files
+    label: 'Read a credential-bearing file'
+    reason: >-
+      The read whitelist accepts `cat <path>` without filtering the path, so
+      `cat /etc/shadow`, `cat /root/.env` or `stat /home/<u>/.ssh/id_ed25519`
+      are reads. The classifier recognises those shapes and emits an extra
+      slice, so a mission must accept this risk on top of `exec-read` to read
+      them. Exfiltration of host credentials ; refused by every preset but
+      `operator`, under approval.
+    matches: 'ssh.host[**].command.secret-file.R'
+    vector:
+      reversibility: reversible
+      blast: env
+      data: secret
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  # ─── WRITES ────────────────────────────────────────────────────────────
+
+  - id: ssh.exec-write
+    label: 'Run an arbitrary shell command'
+    reason: >-
+      Any simple command outside the read whitelist, any output redirection
+      and any command substitution. File edits, builds, git operations,
+      process launches. On a `dev` or `staging` host the blast radius is the
+      host ; on `prod` a write can shift the security posture or cause
+      downtime, hence the override.
+    matches: 'ssh.host[**].command.W'
+    vector:
+      reversibility: costly
+      blast: env
+      data: data
+      cost: moderate
+      visibility: internal
+      persistence: posture
+    vector_overrides:
+      prod:
+        reversibility: irreversible
         data: secret
-        cost: free
-        visibility: internal
-        persistence: stateless
+        cost: unbounded
+    acceptable_in_envs: [dev, staging, prod]
 
-    - id: ssh.uncategorized-write
-      label: 'Écriture SSH non catégorisée'
-      reason: >
-        Catch-all pour les writes qui n'ont pas été explicitement
-        catégorisés (toute slice W non couverte par exec-write).
-        Sert de filet pour les futurs tools (ex.
-        `ssh__sftp_put`) — en pratique jamais touché tant que `ssh__exec`
-        est le seul tool exposé.
-      matches: 'ssh.**.W'
-      vector:
-        reversibility: costly
-        blast: env
-        data: data
-        cost: moderate
-        visibility: internal
-        persistence: session
+  - id: ssh.exec-destructive
+    label: 'Destructive command (recursive delete, disk, reboot)'
+    reason: >-
+      `rm` with `-r` or `-f`, `mkfs`, `dd`, `shred`, `wipefs`, partitioning
+      tools, `reboot` / `shutdown`, `userdel`, firewall flushes, Docker
+      prunes. Irreversible at the host level ; emitted together with
+      `exec-write`. Presets gate it with `approval` outside `dev`.
+    matches: 'ssh.host[**].command.destructive.W'
+    vector:
+      reversibility: irreversible
+      blast: env
+      data: data
+      cost: moderate
+      visibility: internal
+      persistence: posture
+    vector_overrides:
+      prod:
+        data: secret
+        cost: unbounded
+    acceptable_in_envs: [dev, staging, prod]
+
+  - id: ssh.exec-package-install
+    label: 'Install, remove or upgrade packages'
+    reason: >-
+      System package managers (`apt`, `dpkg`, `yum`, `dnf`, `zypper`, `apk`,
+      `pacman`, `snap`, `brew`, `flatpak`, `rpm`) in a mutating mode, global
+      `npm` / `pnpm` / `yarn` installs, `pipx`. Changes what runs on the host
+      for every service ; supply-chain exposure. Emitted together with
+      `exec-write`.
+    matches: 'ssh.host[**].command.package.W'
+    vector:
+      reversibility: costly
+      blast: env
+      data: data
+      cost: moderate
+      visibility: internal
+      persistence: posture
+    acceptable_in_envs: [dev, staging, prod]
+
+  - id: ssh.exec-service-control
+    label: 'Start, stop or restart a service or process'
+    reason: >-
+      `systemctl` lifecycle verbs, `service <x> restart`, Docker and Compose
+      lifecycle, `pm2`, `supervisorctl`, `nginx -s`, `kill` / `pkill`.
+      Availability impact, reversible by starting again. Emitted together
+      with `exec-write`. A developer preset allows it on `dev` and asks for
+      approval on `staging`.
+    matches: 'ssh.host[**].command.service.W'
+    vector:
+      reversibility: reversible
+      blast: env
+      data: data
+      cost: moderate
+      visibility: internal
+      persistence: session
+    vector_overrides:
+      prod:
+        visibility: public
+    acceptable_in_envs: [dev, staging, prod]
+
+  - id: ssh.exec-sudo
+    label: 'Privilege escalation (sudo, su, doas)'
+    reason: >-
+      A non-whitelisted command run through `sudo`, `su`, `doas` or `pkexec`.
+      Whatever the inner command does, it does as another user, usually root.
+      Emitted together with `exec-write` and the inner command's classes.
+      Inspection verbs the whitelist already admits under `sudo`
+      (`sudo journalctl`, `sudo systemctl status`, `sudo ss -tlnp`) stay reads.
+    matches: 'ssh.host[**].command.privilege.W'
+    vector:
+      reversibility: costly
+      blast: env
+      data: secret
+      cost: moderate
+      visibility: internal
+      persistence: posture
+    acceptable_in_envs: [dev, staging, prod]
+
+  # ─── FALLBACK ──────────────────────────────────────────────────────────
+
+  - id: ssh.uncategorized-write
+    label: 'Uncategorized SSH write'
+    reason: >-
+      Catch-all for writes without a dedicated entry. Every write of the
+      single `ssh__exec` tool is covered by `exec-write` ; this entry exists
+      for tools added later (an `ssh__sftp_put`, say) and is never referenced
+      by a preset.
+    matches: 'ssh.**.W'
+    vector:
+      reversibility: costly
+      blast: env
+      data: data
+      cost: moderate
+      visibility: internal
+      persistence: session
+
+presets:
+  - id: read-only
+    label: Read-only
+    description: Inspect a host — logs, processes, disk, services, files outside credential paths. No write.
+    entries:
+      - risk_id: ssh.exec-read
+        quota: 2000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+
+  - id: developer
+    label: Developer
+    description: One token per code project — reads everywhere, file and process operations on dev and staging hosts, service restarts on dev ; nothing destructive, no packages, no sudo, no prod.
+    entries:
+      - risk_id: ssh.exec-read
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: ssh[dev].exec-write
+        quota: 1000
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: ssh[staging].exec-write
+        quota: 500
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: ssh[dev].exec-service-control
+        quota: 200
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: ssh[staging].exec-service-control
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+
+  - id: operator
+    label: Operator
+    description: Everything on every labelled host ; credential-file reads, destructive commands, package changes, service control and sudo under approval outside dev ; every prod write under approval.
+    entries:
+      - risk_id: ssh.exec-read
+        quota: 10000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: ssh.exec-read-secret-files
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+      - risk_id: ssh[dev].exec-write
+        quota: 2000
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: ssh[staging].exec-write
+        quota: 1000
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: ssh[prod].exec-write
+        quota: 200
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: approval
+      - risk_id: ssh[dev].exec-destructive
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: ssh[staging].exec-destructive
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+      - risk_id: ssh[prod].exec-destructive
+        quota: 10
+        rate_limit: { max: 2, window_seconds: 60 }
+        gate: approval
+      - risk_id: ssh[dev].exec-package-install
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: ssh[staging].exec-package-install
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+      - risk_id: ssh[prod].exec-package-install
+        quota: 10
+        rate_limit: { max: 2, window_seconds: 60 }
+        gate: approval
+      - risk_id: ssh[dev].exec-service-control
+        quota: 500
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: ssh[staging].exec-service-control
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: approval
+      - risk_id: ssh[prod].exec-service-control
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+      - risk_id: ssh[dev].exec-sudo
+        quota: 200
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: ssh[staging].exec-sudo
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+      - risk_id: ssh[prod].exec-sudo
+        quota: 20
+        rate_limit: { max: 2, window_seconds: 60 }
+        gate: approval
