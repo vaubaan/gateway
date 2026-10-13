@@ -1,15 +1,20 @@
 /**
- * Upstash Redis MCP tools — all custom, no upstream MCP server to rewrap.
+ * MCP tools of the `upstash-redis` provider — all custom, no upstream MCP
+ * server to rewrap.
  *
- * 21 tools total :
- *   - 6 management tools (hit api.upstash.com/v2 with Basic Auth)
- *   - 15 data tools (hit per-database endpoint with Bearer token)
+ * Handbook : docs/handbook/providers/upstash-redis.md §2.
  *
- * Names are prefixed `upstash_redis__` to match the Vaubaan policy DSL
- * provider scoping convention.
+ * 21 tools :
+ *   - 6 management tools (Management API, api.upstash.com/v2, Basic auth) ;
+ *   - 15 data tools (per-database REST endpoint, Bearer token).
+ *
+ * Names are prefixed `upstash_redis__` (the SDK prefix rule : `-` → `_`,
+ * then `__`). Every database-scoped tool takes the database id as the
+ * explicit `databaseId` argument, which must be a resource of the mission ;
+ * absent, the mission's single Upstash database applies.
  */
 
-import type { McpToolDeclaration } from '@vaubaan/shared';
+import type { McpToolDeclaration } from '@vaubaan/plugin-sdk';
 
 // ─── Management tools ────────────────────────────────────────────────────────
 
@@ -133,7 +138,8 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
       properties: {
         databaseId: {
           type: 'string',
-          description: 'The Upstash database id (resolved from binding if omitted).',
+          description:
+            'The Upstash database id — a resource of the mission. Defaults to the single database of the mission.',
         },
         command: {
           type: 'array',
@@ -152,7 +158,8 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
       properties: {
         databaseId: {
           type: 'string',
-          description: 'The Upstash database id (resolved from binding if omitted).',
+          description:
+            'The Upstash database id — a resource of the mission. Defaults to the single database of the mission.',
         },
         key: {
           type: 'string',
@@ -170,7 +177,8 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
       properties: {
         databaseId: {
           type: 'string',
-          description: 'The Upstash database id (resolved from binding if omitted).',
+          description:
+            'The Upstash database id — a resource of the mission. Defaults to the single database of the mission.',
         },
         key: {
           type: 'string',
@@ -208,7 +216,8 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
       properties: {
         databaseId: {
           type: 'string',
-          description: 'The Upstash database id (resolved from binding if omitted).',
+          description:
+            'The Upstash database id — a resource of the mission. Defaults to the single database of the mission.',
         },
         keys: {
           type: 'array',
@@ -227,7 +236,8 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
       properties: {
         databaseId: {
           type: 'string',
-          description: 'The Upstash database id (resolved from binding if omitted).',
+          description:
+            'The Upstash database id — a resource of the mission. Defaults to the single database of the mission.',
         },
         pattern: {
           type: 'string',
@@ -246,7 +256,8 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
       properties: {
         databaseId: {
           type: 'string',
-          description: 'The Upstash database id (resolved from binding if omitted).',
+          description:
+            'The Upstash database id — a resource of the mission. Defaults to the single database of the mission.',
         },
         cursor: {
           type: 'number',
@@ -273,7 +284,8 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
       properties: {
         databaseId: {
           type: 'string',
-          description: 'The Upstash database id (resolved from binding if omitted).',
+          description:
+            'The Upstash database id — a resource of the mission. Defaults to the single database of the mission.',
         },
         key: {
           type: 'string',
@@ -291,7 +303,8 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
       properties: {
         databaseId: {
           type: 'string',
-          description: 'The Upstash database id (resolved from binding if omitted).',
+          description:
+            'The Upstash database id — a resource of the mission. Defaults to the single database of the mission.',
         },
         key: {
           type: 'string',
@@ -313,7 +326,8 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
       properties: {
         databaseId: {
           type: 'string',
-          description: 'The Upstash database id (resolved from binding if omitted).',
+          description:
+            'The Upstash database id — a resource of the mission. Defaults to the single database of the mission.',
         },
         key: {
           type: 'string',
@@ -335,7 +349,8 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
       properties: {
         databaseId: {
           type: 'string',
-          description: 'The Upstash database id (resolved from binding if omitted).',
+          description:
+            'The Upstash database id — a resource of the mission. Defaults to the single database of the mission.',
         },
         key: {
           type: 'string',
@@ -353,7 +368,8 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
       properties: {
         databaseId: {
           type: 'string',
-          description: 'The Upstash database id (resolved from binding if omitted).',
+          description:
+            'The Upstash database id — a resource of the mission. Defaults to the single database of the mission.',
         },
         key: {
           type: 'string',
@@ -376,7 +392,8 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
       properties: {
         databaseId: {
           type: 'string',
-          description: 'The Upstash database id (resolved from binding if omitted).',
+          description:
+            'The Upstash database id — a resource of the mission. Defaults to the single database of the mission.',
         },
         key: {
           type: 'string',
@@ -402,7 +419,8 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
       properties: {
         databaseId: {
           type: 'string',
-          description: 'The Upstash database id (resolved from binding if omitted).',
+          description:
+            'The Upstash database id — a resource of the mission. Defaults to the single database of the mission.',
         },
         key: {
           type: 'string',
@@ -425,7 +443,8 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
       properties: {
         databaseId: {
           type: 'string',
-          description: 'The Upstash database id (resolved from binding if omitted).',
+          description:
+            'The Upstash database id — a resource of the mission. Defaults to the single database of the mission.',
         },
         key: {
           type: 'string',
@@ -443,17 +462,33 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
       properties: {
         databaseId: {
           type: 'string',
-          description: 'The Upstash database id (resolved from binding if omitted).',
+          description:
+            'The Upstash database id — a resource of the mission. Defaults to the single database of the mission.',
         },
       },
     },
   },
 ];
 
-export const availableTools: readonly McpToolDeclaration[] = [...MANAGEMENT_TOOLS, ...DATA_TOOLS];
+/** Every tool the plugin declares, management first. */
+export const upstashRedisTools: readonly McpToolDeclaration[] = [
+  ...MANAGEMENT_TOOLS,
+  ...DATA_TOOLS,
+];
 
-/** The set of management tool names (used by execute.ts to route). */
-export const MANAGEMENT_TOOL_NAMES = new Set(MANAGEMENT_TOOLS.map((t) => t.name));
+/** Management tool names (Management API routing in `execute.ts`). */
+export const MANAGEMENT_TOOL_NAMES: ReadonlySet<string> = new Set(
+  MANAGEMENT_TOOLS.map((t) => t.name),
+);
 
-/** The set of data tool names. */
-export const DATA_TOOL_NAMES = new Set(DATA_TOOLS.map((t) => t.name));
+/** Data tool names (Data API routing in `execute.ts`). */
+export const DATA_TOOL_NAMES: ReadonlySet<string> = new Set(DATA_TOOLS.map((t) => t.name));
+
+/** Management tools that need no database : account-rooted. */
+export const ACCOUNT_TOOL_NAMES: ReadonlySet<string> = new Set([
+  'upstash_redis__list_databases',
+  'upstash_redis__create_database',
+]);
+
+/** @deprecated legacy v4, deleted in P1.6 — use `upstashRedisTools`. */
+export const availableTools: readonly McpToolDeclaration[] = upstashRedisTools;

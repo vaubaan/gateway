@@ -1,23 +1,26 @@
 /**
- * Upstash Redis data-model — declarative entity graph for the v4 risk-based engine.
+ * Data model of the `upstash-redis` provider.
  *
- * Spec : docs/spec/gateway-risk-model.md §2.
+ * Spec     : docs/spec/gateway-risk-model.md §2.
+ * Handbook : docs/handbook/providers/upstash-redis.md §1.
  *
- * Upstash Redis exposes a single plane (`cache`). Every entity lives under
- * an `account`, and data operations are scoped to a `database`. The
- * database is the binding unit (one Vaubaan binding = one Upstash database).
+ * Upstash Redis exposes a single plane, `cache`. Every entity lives under
+ * the `account` the Management API key belongs to, and every data operation
+ * is scoped to a `database`. The **database** is the resource a connection
+ * exposes and a mission selects (`ref` = Upstash database id) ; it carries
+ * the environment label the owner sets, hence `envScopable`.
  *
- * This data-model is the canonical source for :
- *   - the mermaid diagram auto-rendered into the handbook (spec §2),
- *   - the catalog's `matches` patterns (each pattern must refer to entity
- *     slugs declared here — lint at CI),
- *   - the lint that every MCP tool exposed by this provider classifies
- *     into at least one slice rooted at a declared entity.
+ * Two API layers walk the same graph : the Management API
+ * (`account.database[*]`, `database[D].stats`, `database[D].credentials`)
+ * and the per-database Data API (`database[D].key-space[K]`). The classifier
+ * adds three literal markers under `key-space` — `delete`, `flush`,
+ * `execute` — so the catalog can grade DEL, FLUSHDB/FLUSHALL and unknown
+ * Redis verbs separately from an ordinary key write.
  */
 
-import type { DataModel } from '@vaubaan/shared';
+import type { DataModel } from '@vaubaan/plugin-sdk';
 
-export const dataModel: DataModel = {
+export const upstashRedisDataModel: DataModel = {
   provider: 'upstash-redis',
   planes: [
     {
@@ -31,16 +34,16 @@ export const dataModel: DataModel = {
           parent: null,
           cardinalities: ['one'],
           description:
-            'The Upstash account backing the Management API credentials used by Vaubaan. ' +
-            'Singleton per ProviderAdmin row.',
+            'The Upstash account behind the Management API key of a connection. One per connection.',
         },
         {
           name: 'database',
           parent: 'account',
           cardinalities: ['bounded'],
+          envScopable: true,
           description:
-            'An Upstash Redis database. The Vaubaan binding pins which database ids the ' +
-            'access token can reach.',
+            'An Upstash Redis database — the resource discovered at connection time (database id ' +
+            'ref), labelled with an environment by the owner, selected by a mission.',
         },
         {
           name: 'key-space',
@@ -48,15 +51,16 @@ export const dataModel: DataModel = {
           cardinalities: ['unbounded'],
           description:
             'The key-value data stored in a database. Covers all Redis data structures ' +
-            '(strings, hashes, lists, sets, sorted sets).',
+            '(strings, hashes, lists, sets, sorted sets). The classifier appends the literal ' +
+            'markers `delete`, `flush` and `execute` for DEL, FLUSHDB/FLUSHALL and unknown verbs.',
         },
         {
           name: 'credentials',
           parent: 'database',
           cardinalities: ['one'],
           description:
-            'Per-database tokens and passwords. Rename / password-reset operations touch ' +
-            'this entity.',
+            'Per-database identity : name, tokens and passwords. Rename / password-reset ' +
+            'operations touch this entity.',
         },
         {
           name: 'stats',
@@ -69,10 +73,13 @@ export const dataModel: DataModel = {
           parent: 'database',
           cardinalities: ['bounded'],
           description:
-            'Per-database backup snapshots. Not directly exposed as tools in the current ' +
-            'surface but declared for completeness.',
+            'Per-database backup snapshots. Not exposed as tools in the current surface but ' +
+            'declared so a future tool lands on an existing entity.',
         },
       ],
     },
   ],
 };
+
+/** @deprecated legacy v4, deleted in P1.6 — use `upstashRedisDataModel`. */
+export const dataModel: DataModel = upstashRedisDataModel;

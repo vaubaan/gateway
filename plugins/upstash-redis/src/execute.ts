@@ -1,53 +1,230 @@
 /**
- * Upstash Redis tool dispatcher — routes tool calls to either the
- * Management API (api.upstash.com/v2, Basic Auth) or the per-database
- * Data API (REST endpoint, Bearer token).
+ * Upstream calls of the `upstash-redis` provider, and resource discovery.
  *
- * Auth model :
- *   - Management API : the stored secret is `email:api_key` (concatenated
- *     at paste-token time). Decoded → split on first `:` → Basic Auth header.
- *   - Data API : call Management API `GET /redis/database/{id}` to get
- *     `rest_url` + `rest_token`, then use `Authorization: Bearer <rest_token>`
- *     against the database endpoint.
+ * Spec : docs/spec/vaubaan-gateway.md §2.4 (the credential arrives decrypted
+ *        in the context, is used for one call, never returned), §5.
+ * Handbook : docs/handbook/providers/upstash-redis.md §4.
+ *
+ * Two upstream surfaces, one credential :
+ *   - the 6 management tools hit the Management API (`api.upstash.com/v2`)
+ *     with HTTP Basic auth (`email:api_key`) ;
+ *   - the 15 data tools hit the per-database REST endpoint with the
+ *     database's own Bearer token, which the plugin reads from the
+ *     Management API at call time (`GET /v2/redis/database/{id}`) and never
+ *     returns to the agent.
+ *
+ * Rules :
+ *   - `fetch` comes from the context, never from the global ;
+ *   - 401 / 403 from either surface → `UpstreamAuthError`, so the host marks
+ *     the connection `expired` ;
+ *   - the database a data tool targets must be a resource of the mission ;
+ *     absent, the mission's single database applies ; anything else is
+ *     refused before any network call ;
+ *   - Management API answers about a database are **redacted** : the REST
+ *     tokens and password never reach the agent (`read-database-metadata`
+ *     promises "no credential leak").
+ *
+ * The response of `fetch` is only read through `ok`, `status` and `text()`,
+ * so the legacy adapter tests (hand-rolled response objects) keep passing
+ * until P1.6 deletes them.
  */
 
-import { UpstreamAuthError } from '@vaubaan/shared';
+import {
+  UpstreamAuthError,
+  type ConnectionContext,
+  type ExecuteContext,
+  type McpToolResult,
+  type Resource,
+} from '@vaubaan/plugin-sdk';
+
+import { PROVIDER } from './classify.ts';
+import {
+  basicAuthHeader,
+  parseLegacyCredentials,
+  upstashAuth,
+  type UpstashAuth,
+} from './credential.ts';
 import { MANAGEMENT_TOOL_NAMES } from './tools.ts';
 
+/** The Upstash Developer (Management) API. A fact about the provider. */
+export const UPSTASH_MANAGEMENT_API = 'https://api.upstash.com/v2';
+
+/** Databases kept by `discoverResources` (the list endpoint is unpaged upstream). */
+export const MAX_DISCOVERED_DATABASES = 200;
+
+/** Keys stripped from every Management API answer about a database. */
+export const REDACTED_DATABASE_FIELDS: readonly string[] = [
+  'rest_token',
+  'read_only_rest_token',
+  'password',
+];
+
+/** @deprecated legacy v4, deleted in P1.6. */
 export type FetchImpl = typeof fetch;
 
-const MANAGEMENT_API = 'https://api.upstash.com/v2';
+/** What one upstream call needs. Built from the context by `execute`, by hand by the legacy adapter. */
+export interface UpstashCall {
+  readonly fetch: typeof fetch;
+  readonly auth: UpstashAuth;
+  readonly signal?: AbortSignal;
+}
+
+type ManagementMethod = 'GET' | 'POST' | 'DELETE';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// v5 entry points
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function executeUpstashRedis(
+  ctx: ExecuteContext,
+  tool: string,
+  args: Readonly<Record<string, unknown>>,
+): Promise<McpToolResult> {
+  const call: UpstashCall = {
+    fetch: ctx.fetch,
+    auth: upstashAuth(ctx.credential),
+    ...(ctx.signal ? { signal: ctx.signal } : {}),
+  };
+
+  const own = ctx.resources.filter((r) => r.provider === PROVIDER);
+  const explicit = args.databaseId ?? args.database_id;
+  if (explicit !== undefined) {
+    if (typeof explicit !== 'string' || !own.some((r) => r.ref === explicit)) {
+      return errorResult(
+        `databaseId '${String(explicit)}' is not a database of this mission — omit the argument or name one of the mission's databases.`,
+      );
+    }
+  }
+
+  try {
+    if (MANAGEMENT_TOOL_NAMES.has(tool)) {
+      return toToolResult(await executeManagementTool(call, tool, args));
+    }
+    const databaseId =
+      typeof explicit === 'string' ? explicit : own.length === 1 ? own[0]!.ref : null;
+    if (databaseId === null) {
+      return errorResult(
+        own.length === 0
+          ? `Upstash Redis data tool '${tool}' requires a databaseId and the mission touches no Upstash database.`
+          : `Upstash Redis data tool '${tool}' requires a databaseId : the mission touches ${own.length} Upstash databases — name one.`,
+      );
+    }
+    return toToolResult(await executeDataTool(call, databaseId, tool, args));
+  } catch (e) {
+    if (e instanceof UpstreamAuthError) throw e;
+    return errorResult(e instanceof Error ? e.message : String(e));
+  }
+}
 
 /**
- * Parse the stored secret (`email:api_key`) into Basic Auth components.
- * The split is on the FIRST `:` — the api_key itself may contain colons.
+ * Resources reachable with this credential : one `Resource` per Redis
+ * database of the account (`GET /v2/redis/databases`, unpaged upstream,
+ * capped at `MAX_DISCOVERED_DATABASES` with a logger warning). The owner
+ * labels `env` on the connection page ; the classifier then resolves
+ * env-scoped risks through the `database[<id>]` segment.
  */
-function parseCredentials(secret: string): { email: string; apiKey: string } {
-  const idx = secret.indexOf(':');
-  if (idx < 0) {
-    throw new Error('Upstash Redis credentials must be in `email:api_key` format.');
+export async function discoverUpstashRedisResources(
+  ctx: ConnectionContext,
+): Promise<readonly Resource[]> {
+  const call: UpstashCall = {
+    fetch: ctx.fetch,
+    auth: upstashAuth(ctx.credential),
+    ...(ctx.signal ? { signal: ctx.signal } : {}),
+  };
+  const body = await callManagementApi(call, 'GET', '/redis/databases');
+  const all = (Array.isArray(body) ? (body as DatabaseDto[]) : []).filter(
+    (d) => typeof d.database_id === 'string' && d.database_id.length > 0,
+  );
+  if (all.length > MAX_DISCOVERED_DATABASES) {
+    ctx.logger?.warn('upstash-redis: more databases than the discovery cap, list truncated', {
+      total: all.length,
+      cap: MAX_DISCOVERED_DATABASES,
+    });
   }
-  return { email: secret.slice(0, idx), apiKey: secret.slice(idx + 1) };
+  return all.slice(0, MAX_DISCOVERED_DATABASES).map((d) => ({
+    provider: PROVIDER,
+    ref: d.database_id,
+    displayName: d.database_name ?? d.database_id,
+    metadata: {
+      ...(d.region ? { region: d.region } : {}),
+      ...(d.primary_region ? { primary_region: d.primary_region } : {}),
+      ...(Array.isArray(d.read_regions) ? { read_regions: d.read_regions } : {}),
+      ...(d.endpoint ? { endpoint: d.endpoint } : {}),
+      ...(d.state ? { state: d.state } : {}),
+      ...(d.database_type ? { database_type: d.database_type } : {}),
+      ...(typeof d.tls === 'boolean' ? { tls: d.tls } : {}),
+    },
+  }));
 }
 
-/** Build a Base64-encoded Basic Auth header value. */
-function basicAuth(email: string, apiKey: string): string {
-  // btoa is available in both Node 18+ and Edge runtimes.
-  const encoded = btoa(`${email}:${apiKey}`);
-  return `Basic ${encoded}`;
+interface DatabaseDto {
+  readonly database_id: string;
+  readonly database_name?: string;
+  readonly database_type?: string;
+  readonly region?: string;
+  readonly primary_region?: string;
+  readonly read_regions?: readonly string[];
+  readonly endpoint?: string;
+  readonly rest_url?: string;
+  readonly rest_token?: string;
+  readonly state?: string;
+  readonly tls?: boolean;
 }
 
-async function callManagementApi(
+// ─────────────────────────────────────────────────────────────────────────────
+// Core : one tool call → raw upstream payload
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Run one tool against Upstash and return the raw payload (Management API
+ * body, or the Data API `{ result }` envelope). Throws `UpstreamAuthError`
+ * on 401/403, a plain `Error` otherwise. `databaseId` is only used by data
+ * tools, and only when the arguments carry none.
+ */
+export async function callUpstashTool(
+  call: UpstashCall,
+  databaseId: string | null,
+  tool: string,
+  args: Readonly<Record<string, unknown>>,
+): Promise<unknown> {
+  if (MANAGEMENT_TOOL_NAMES.has(tool)) return executeManagementTool(call, tool, args);
+  const effective = typeof args.databaseId === 'string' ? args.databaseId : databaseId;
+  if (!effective) {
+    throw new Error(
+      `Upstash Redis data tool '${tool}' requires a databaseId (from the mission or args).`,
+    );
+  }
+  return executeDataTool(call, effective, tool, args);
+}
+
+/** @deprecated legacy v4, deleted in P1.6 — use `callUpstashTool`. */
+export async function executeCall(
   fetchImpl: FetchImpl,
   credentials: string,
-  method: 'GET' | 'POST' | 'DELETE',
+  databaseId: string | null,
+  tool: string,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  return callUpstashTool(
+    { fetch: fetchImpl, auth: parseLegacyCredentials(credentials) },
+    databaseId,
+    tool,
+    args,
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Management API (Basic auth)
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function callManagementApi(
+  call: UpstashCall,
+  method: ManagementMethod,
   path: string,
   body?: Record<string, unknown>,
 ): Promise<unknown> {
-  const { email, apiKey } = parseCredentials(credentials);
-  const url = `${MANAGEMENT_API}${path}`;
   const headers: Record<string, string> = {
-    Authorization: basicAuth(email, apiKey),
+    Authorization: basicAuthHeader(call.auth),
     Accept: 'application/json',
   };
   const init: RequestInit = { method, headers };
@@ -55,7 +232,8 @@ async function callManagementApi(
     headers['Content-Type'] = 'application/json';
     init.body = JSON.stringify(body);
   }
-  const res = await fetchImpl(url, init);
+  if (call.signal) init.signal = call.signal;
+  const res = await call.fetch(`${UPSTASH_MANAGEMENT_API}${path}`, init);
   const text = await res.text();
   if (!res.ok) {
     const msg = `Upstash Management API ${method} ${path} ${res.status}: ${text.slice(0, 300)}`;
@@ -70,21 +248,98 @@ async function callManagementApi(
   }
 }
 
-async function callDataApi(
-  fetchImpl: FetchImpl,
-  endpoint: string,
-  token: string,
-  command: string[],
+async function executeManagementTool(
+  call: UpstashCall,
+  tool: string,
+  args: Readonly<Record<string, unknown>>,
 ): Promise<unknown> {
-  const url = `${endpoint}`;
-  const res = await fetchImpl(url, {
+  switch (tool) {
+    case 'upstash_redis__list_databases':
+      return redactDatabases(await callManagementApi(call, 'GET', '/redis/databases'));
+    case 'upstash_redis__get_database':
+      return redactDatabases(
+        await callManagementApi(call, 'GET', `/redis/database/${databasePath(args)}`),
+      );
+    case 'upstash_redis__create_database': {
+      const body: Record<string, unknown> = { name: args.name, region: args.region };
+      if (args.primary_region !== undefined) body.primary_region = args.primary_region;
+      if (args.read_regions !== undefined) body.read_regions = args.read_regions;
+      if (args.tls !== undefined) body.tls = args.tls;
+      if (args.eviction !== undefined) body.eviction = args.eviction;
+      return redactDatabases(await callManagementApi(call, 'POST', '/redis/database', body));
+    }
+    case 'upstash_redis__delete_database':
+      return callManagementApi(call, 'DELETE', `/redis/database/${databasePath(args)}`);
+    case 'upstash_redis__rename_database':
+      return redactDatabases(
+        await callManagementApi(call, 'POST', `/redis/rename/${databasePath(args)}`, {
+          name: args.name,
+        }),
+      );
+    case 'upstash_redis__get_database_stats':
+      return callManagementApi(call, 'GET', `/redis/stats/${databasePath(args)}`);
+    default:
+      throw new Error(`Upstash Redis management tool not implemented: ${tool}`);
+  }
+}
+
+function databasePath(args: Readonly<Record<string, unknown>>): string {
+  const id = args.databaseId ?? args.database_id;
+  if (typeof id !== 'string' || id.length === 0) throw new Error('databaseId is required.');
+  return encodeURIComponent(id);
+}
+
+/** Strip the per-database credentials from a Management API answer (object or list). */
+export function redactDatabases(payload: unknown): unknown {
+  if (Array.isArray(payload)) return payload.map(redactDatabases);
+  if (typeof payload !== 'object' || payload === null) return payload;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(payload as Record<string, unknown>)) {
+    if (!REDACTED_DATABASE_FIELDS.includes(k)) out[k] = v;
+  }
+  return out;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Data API (per-database Bearer token)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** The REST endpoint and token of a database, read from the Management API. */
+async function databaseConnection(
+  call: UpstashCall,
+  databaseId: string,
+): Promise<{ endpoint: string; restToken: string }> {
+  const db = (await callManagementApi(
+    call,
+    'GET',
+    `/redis/database/${encodeURIComponent(databaseId)}`,
+  )) as DatabaseDto;
+  const endpoint = db.rest_url ?? (db.endpoint ? `https://${db.endpoint}` : undefined);
+  const restToken = db.rest_token;
+  if (!endpoint || !restToken) {
+    throw new Error(
+      `Upstash database ${databaseId} does not expose a REST endpoint/token. ` +
+        'Ensure the database is active and its REST API is enabled.',
+    );
+  }
+  return { endpoint, restToken };
+}
+
+async function executeDataTool(
+  call: UpstashCall,
+  databaseId: string,
+  tool: string,
+  args: Readonly<Record<string, unknown>>,
+): Promise<unknown> {
+  const command = buildCommand(tool, args);
+  const { endpoint, restToken } = await databaseConnection(call, databaseId);
+  const init: RequestInit = {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
+    headers: { Authorization: `Bearer ${restToken}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(command),
-  });
+  };
+  if (call.signal) init.signal = call.signal;
+  const res = await call.fetch(endpoint, init);
   const text = await res.text();
   if (!res.ok) {
     const msg = `Upstash Data API ${res.status}: ${text.slice(0, 300)}`;
@@ -98,17 +353,15 @@ async function callDataApi(
   }
 }
 
-/**
- * Build the Redis command array for a data tool based on tool name and args.
- */
-function buildCommand(tool: string, args: Record<string, unknown>): string[] {
+/** The Redis command array of a data tool. Throws on a malformed argument set. */
+export function buildCommand(tool: string, args: Readonly<Record<string, unknown>>): string[] {
   switch (tool) {
     case 'upstash_redis__execute':
-      return args.command as string[];
+      return stringList(args.command, 'command');
     case 'upstash_redis__get':
-      return ['GET', args.key as string];
+      return ['GET', str(args.key, 'key')];
     case 'upstash_redis__set': {
-      const cmd = ['SET', args.key as string, args.value as string];
+      const cmd = ['SET', str(args.key, 'key'), str(args.value, 'value')];
       if (args.ex !== undefined) cmd.push('EX', String(args.ex));
       if (args.px !== undefined) cmd.push('PX', String(args.px));
       if (args.nx === true) cmd.push('NX');
@@ -116,37 +369,40 @@ function buildCommand(tool: string, args: Record<string, unknown>): string[] {
       return cmd;
     }
     case 'upstash_redis__del':
-      return ['DEL', ...(args.keys as string[])];
+      return ['DEL', ...stringList(args.keys, 'keys')];
     case 'upstash_redis__keys':
-      return ['KEYS', args.pattern as string];
+      return ['KEYS', str(args.pattern, 'pattern')];
     case 'upstash_redis__scan': {
-      const cmd = ['SCAN', String(args.cursor)];
-      if (args.match !== undefined) cmd.push('MATCH', args.match as string);
+      const cmd = ['SCAN', String(args.cursor ?? 0)];
+      if (args.match !== undefined) cmd.push('MATCH', str(args.match, 'match'));
       if (args.count !== undefined) cmd.push('COUNT', String(args.count));
       return cmd;
     }
     case 'upstash_redis__ttl':
-      return ['TTL', args.key as string];
+      return ['TTL', str(args.key, 'key')];
     case 'upstash_redis__expire':
-      return ['EXPIRE', args.key as string, String(args.seconds)];
+      return ['EXPIRE', str(args.key, 'key'), String(args.seconds)];
     case 'upstash_redis__hset': {
-      const cmd = ['HSET', args.key as string];
-      const fields = args.fields as Record<string, string>;
-      for (const [field, value] of Object.entries(fields)) {
-        cmd.push(field, value);
+      const cmd = ['HSET', str(args.key, 'key')];
+      const fields = args.fields;
+      if (typeof fields !== 'object' || fields === null || Array.isArray(fields)) {
+        throw new Error('fields must be an object of field-value pairs.');
+      }
+      for (const [field, value] of Object.entries(fields as Record<string, unknown>)) {
+        cmd.push(field, String(value));
       }
       return cmd;
     }
     case 'upstash_redis__hgetall':
-      return ['HGETALL', args.key as string];
+      return ['HGETALL', str(args.key, 'key')];
     case 'upstash_redis__lpush':
-      return ['LPUSH', args.key as string, ...(args.values as string[])];
+      return ['LPUSH', str(args.key, 'key'), ...stringList(args.values, 'values')];
     case 'upstash_redis__lrange':
-      return ['LRANGE', args.key as string, String(args.start), String(args.stop)];
+      return ['LRANGE', str(args.key, 'key'), String(args.start), String(args.stop)];
     case 'upstash_redis__sadd':
-      return ['SADD', args.key as string, ...(args.members as string[])];
+      return ['SADD', str(args.key, 'key'), ...stringList(args.members, 'members')];
     case 'upstash_redis__smembers':
-      return ['SMEMBERS', args.key as string];
+      return ['SMEMBERS', str(args.key, 'key')];
     case 'upstash_redis__dbsize':
       return ['DBSIZE'];
     default:
@@ -154,122 +410,27 @@ function buildCommand(tool: string, args: Record<string, unknown>): string[] {
   }
 }
 
-/**
- * Fetch the per-database REST endpoint and token from the Management API.
- */
-async function getDatabaseConnection(
-  fetchImpl: FetchImpl,
-  credentials: string,
-  databaseId: string,
-): Promise<{ endpoint: string; restToken: string }> {
-  const db = (await callManagementApi(
-    fetchImpl,
-    credentials,
-    'GET',
-    `/redis/database/${databaseId}`,
-  )) as {
-    rest_url?: string;
-    endpoint?: string;
-    rest_token?: string;
-  };
-  const endpoint = db.rest_url ?? (db.endpoint ? `https://${db.endpoint}` : undefined);
-  const restToken = db.rest_token;
-  if (!endpoint || !restToken) {
-    throw new Error(
-      `Upstash database ${databaseId} does not expose REST endpoint/token. ` +
-        'Ensure the database is active and REST API is enabled.',
-    );
-  }
-  return { endpoint, restToken };
+function str(value: unknown, arg: string): string {
+  if (typeof value !== 'string') throw new Error(`${arg} must be a string.`);
+  return value;
 }
 
-/**
- * Execute an Upstash Redis tool call.
- *
- * @param fetchImpl - fetch implementation (injectable for tests)
- * @param credentials - the stored secret (`email:api_key`)
- * @param databaseId - the database id from the binding's resource_ref
- *   (required for data tools and database-scoped management tools)
- * @param tool - the full tool name (e.g. `upstash_redis__get`)
- * @param args - the tool arguments
- */
-export async function executeCall(
-  fetchImpl: FetchImpl,
-  credentials: string,
-  databaseId: string | null,
-  tool: string,
-  args: Record<string, unknown>,
-): Promise<unknown> {
-  if (MANAGEMENT_TOOL_NAMES.has(tool)) {
-    return executeManagementTool(fetchImpl, credentials, tool, args);
+function stringList(value: unknown, arg: string): string[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error(`${arg} must be a non-empty array of strings.`);
   }
-  // Data tools require a database id.
-  const effectiveDbId =
-    (typeof args.databaseId === 'string' ? args.databaseId : null) ?? databaseId;
-  if (!effectiveDbId) {
-    throw new Error(
-      `Upstash Redis data tool '${tool}' requires a databaseId (from binding or args).`,
-    );
-  }
-  const { endpoint, restToken } = await getDatabaseConnection(
-    fetchImpl,
-    credentials,
-    effectiveDbId,
-  );
-  const command = buildCommand(tool, args);
-  return callDataApi(fetchImpl, endpoint, restToken, command);
+  return value.map((v) => String(v));
 }
 
-async function executeManagementTool(
-  fetchImpl: FetchImpl,
-  credentials: string,
-  tool: string,
-  args: Record<string, unknown>,
-): Promise<unknown> {
-  switch (tool) {
-    case 'upstash_redis__list_databases':
-      return callManagementApi(fetchImpl, credentials, 'GET', '/redis/databases');
-    case 'upstash_redis__get_database':
-      return callManagementApi(
-        fetchImpl,
-        credentials,
-        'GET',
-        `/redis/database/${args.databaseId as string}`,
-      );
-    case 'upstash_redis__create_database': {
-      const body: Record<string, unknown> = {
-        name: args.name,
-        region: args.region,
-      };
-      if (args.primary_region !== undefined) body.primary_region = args.primary_region;
-      if (args.read_regions !== undefined) body.read_regions = args.read_regions;
-      if (args.tls !== undefined) body.tls = args.tls;
-      if (args.eviction !== undefined) body.eviction = args.eviction;
-      return callManagementApi(fetchImpl, credentials, 'POST', '/redis/database', body);
-    }
-    case 'upstash_redis__delete_database':
-      return callManagementApi(
-        fetchImpl,
-        credentials,
-        'DELETE',
-        `/redis/database/${args.databaseId as string}`,
-      );
-    case 'upstash_redis__rename_database':
-      return callManagementApi(
-        fetchImpl,
-        credentials,
-        'POST',
-        `/redis/rename/${args.databaseId as string}`,
-        { name: args.name },
-      );
-    case 'upstash_redis__get_database_stats':
-      return callManagementApi(
-        fetchImpl,
-        credentials,
-        'GET',
-        `/redis/stats/${args.databaseId as string}`,
-      );
-    default:
-      throw new Error(`Upstash Redis management tool not implemented: ${tool}`);
-  }
+// ─────────────────────────────────────────────────────────────────────────────
+// Results
+// ─────────────────────────────────────────────────────────────────────────────
+
+function toToolResult(payload: unknown): McpToolResult {
+  const text = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
+  return { content: [{ type: 'text', text }] };
+}
+
+function errorResult(message: string): McpToolResult {
+  return { content: [{ type: 'text', text: message }], isError: true };
 }
