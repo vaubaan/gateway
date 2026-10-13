@@ -56,9 +56,12 @@ are absent.
 | Suite                                                                             |                                        Tests |
 | --------------------------------------------------------------------------------- | -------------------------------------------: |
 | `apps/gateway/src/lib/bash/exec-host.test.ts` (v4 glue)                           |                                            7 |
+| `apps/gateway/tests/integration/auth/oidc-login.test.ts`                          |                                           12 |
+| `apps/gateway/tests/integration/budget/pipeline-consistency.test.ts`              |                                            4 |
+| `apps/gateway/tests/integration/budget/session-service.test.ts`                   |                                           19 |
 | `apps/gateway/tests/integration/compose/boot.test.ts`                             |                                            4 |
-| `apps/gateway/tests/integration/standalone-native-addons.test.ts`                 |                        3 (skipped w/o build) |
-| `apps/gateway/tests/integration/standalone-plugin-catalogs.test.ts`               |                        2 (skipped w/o build) |
+| `apps/gateway/tests/integration/standalone-native-addons.test.ts`                 |                                            3 |
+| `apps/gateway/tests/integration/standalone-plugin-catalogs.test.ts`               |                                            2 |
 | `apps/gateway/tests/integration/store/audit.test.ts`                              |                                           13 |
 | `apps/gateway/tests/integration/store/config.test.ts`                             |                                            4 |
 | `apps/gateway/tests/integration/store/connections-shares.test.ts`                 |                                           11 |
@@ -76,10 +79,15 @@ are absent.
 | `apps/gateway/tests/unit/lib/risk-catalog/loader.test.ts`                         |                                           12 |
 | `apps/gateway/tests/unit/providers/data-model-to-mermaid.test.ts`                 |                                            8 |
 | `apps/gateway/tests/unit/providers/plane-filters.test.ts`                         |                                            5 |
+| `apps/gateway/tests/unit/server/budget/decide.test.ts`                            |                                           15 |
+| `apps/gateway/tests/unit/server/budget/fingerprint.test.ts`                       |                                            8 |
+| `apps/gateway/tests/unit/server/budget/mission-state.test.ts`                     |                                            7 |
+| `apps/gateway/tests/unit/server/budget/period.test.ts`                            |                                            8 |
+| `apps/gateway/tests/unit/server/rate-limit/sliding-window.test.ts`                |                                            8 |
 | `apps/gateway/tests/unit/server/store/db.test.ts`                                 |                                            2 |
 | `apps/gateway/tests/unit/server/store/ids.test.ts`                                |                                            6 |
 | `apps/gateway/tests/unit/server/store/migrate.test.ts`                            |                                            9 |
-| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts` (one per file)   |                                           56 |
+| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts` (one per file)   |                                           83 |
 | `packages/gateway-core/tests/unit/audit.test.ts`                                  |                                            6 |
 | `packages/gateway-core/tests/unit/authenticate.test.ts`                           |                                           11 |
 | `packages/gateway-core/tests/unit/cache.test.ts`                                  |                                            6 |
@@ -154,8 +162,8 @@ are absent.
 | `plugins/vercel/tests/unit/plugin.test.ts` (v5)                                   |                                           23 |
 | `plugins/vercel/tests/unit/risk-catalog.test.ts`                                  |                                           60 |
 | `plugins/vercel/tests/unit/risk-classifier.test.ts` (v4, kept until P1.6)         |                                           31 |
-| `apps/gateway/src/server/**/*.test.ts` (v5, P0.4 + P0.R + P1.1)                   |                                           71 |
-| **TOTAL** (`npm run test`, 2026-10-13, P1.2-align)                                | **1783 (8 skipped without a build, 3 with)** |
+| `apps/gateway/src/server/**/*.test.ts` (v5, P0.4 + P0.R + P1.1)                   |                                          111 |
+| **TOTAL** (`npm run test`, 2026-10-13, P1.2-align)                                | **1931 (8 skipped without a build, 3 with)** |
 
 Skipped: `members-post` (1), `tokens-rotate` (2), both legacy v4, and the
 five standalone tests (`standalone-native-addons` 3,

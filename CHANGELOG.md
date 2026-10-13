@@ -193,7 +193,7 @@ resources)` lets a plugin derive the environment carried by the call
   the `payment-intent.W` slice of `create_subscription` reaching only the
   fallback: `stripe.subscription-create` matches it since catalog v3
   (`@vaubaan/plugin-stripe` 0.2.0). Docs: `integration-tests.md` plugin
-  section rewritten from the test files (1783 tests), English index of the
+  section rewritten from the test files (1931 tests after the rebase on P1.1 and P1.3), English index of the
   ten plugins under `docs/handbook/providers/README.md`, handbook
   `plugin-sdk`, ADRs `plugin-contract-and-credential-spec` and
   `fallback-risk-only-when-uncategorized` amended with dated notes.
