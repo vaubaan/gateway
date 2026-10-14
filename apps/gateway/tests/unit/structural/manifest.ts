@@ -87,6 +87,19 @@ export const INVARIANTS: readonly Invariant[] = [
     ],
   },
   {
+    id: 'git-remote-shares-the-admission',
+    statement:
+      'The git remote admits a request with the very admission object of the execution door — one key check, one mission, one set of budgets and one audit for both doors, never a second implementation.',
+    source: 'spec §4.1 ter, §10; ADR gateway-as-git-remote',
+    specBullet: 'the git remote admits with the execution door',
+    proofs: [
+      {
+        file: `${INTEGRATION}/git/git-remote-limits.test.ts`,
+        tests: ['the git door admits with the MCP door’s own admission'],
+      },
+    ],
+  },
+  {
     id: 'counters-agree-with-audit',
     statement:
       'For every risk of every mission, the session counters equal the number of allowed touches in the audit, under random concurrent load.',
