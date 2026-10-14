@@ -26,6 +26,8 @@ Plugin version 3.0.0, catalog version 4.
 | `src/credential.ts`       | `app-install` `CredentialSpec`, app-config keys, `installationTokenFor(ctx, scope)`.                                                       |
 | `src/app-install.ts`      | RS256 App JWT → `POST /app/installations/{id}/access_tokens` (scoped to repositories and permissions).                                     |
 | `src/execute.ts`          | `execute` (per-call token + Octokit over `ctx.fetch`), `mint_install_token`, `discoverResources` (paged).                                  |
+| `src/app-manifest.ts`     | `GITHUB_APP_PERMISSIONS` (the one list of the App's permissions and the tools each serves), the manifest flow.                             |
+| `src/permission-check.ts` | A call the installation has no permission for is declined by name, before anything is sent.                                                |
 | `src/octokit-dispatch.ts` | Checked call → Octokit call; a merge first checks the pull request's real base against the declared one and declines a mismatch.           |
 
 The plugin imports the SDK only (plus `@octokit/rest` and `jose`); nothing
@@ -120,9 +122,23 @@ Presets are UI sugar — the persisted policy is always the explicit list.
 
 ## Credential: the company's GitHub App
 
-1. **Register the App** (once, by an administrator): GitHub → Settings →
-   Developer settings → GitHub Apps → New GitHub App. Permissions the
-   tools need: Contents (read & write), Pull requests (read & write),
+1. **Create the App from the gateway** (once, by an administrator):
+   Settings → Administration → Company apps → GitHub. Choose the owner (an
+   organisation, or your own account), keep or change the name (`Vaubaan
+<host>` by default) and the permissions — by default what the tools need;
+   Contents write, Administration and Workflows are marked sensitive and can
+   be withheld, and the page says which tools stop without each. The gateway
+   posts GitHub's App manifest (private App, user authorization on install,
+   the callback below, no webhook); GitHub shows the App and asks you to
+   confirm, then sends you back; the gateway exchanges the one-hour code for
+   the App's id, key and secrets and stores them encrypted. Nothing to copy.
+   Then "Install it on your repositories" is connecting an account (step 3).
+   The App belongs to you: every gateway has its own, never a shared one
+   (ADR [company-app-created-from-a-manifest](../../docs/decisions/company-app-created-from-a-manifest.md)).
+
+   **Or register it by hand** ("Enter an app registered by hand" on the same
+   page): GitHub → Settings → Developer settings → GitHub Apps → New GitHub
+   App. Permissions the tools need: Contents (read & write), Pull requests (read & write),
    Issues (read & write), Metadata (read), Actions (read), Administration
    (read & write, for branch protection), Workflows (read & write, for
    pushes touching `.github/workflows/`). Generate a **private key** and
@@ -132,7 +148,8 @@ Presets are UI sugar — the persisted policy is always the explicit list.
    (`<public_url>/connections/callback/github`, shown in Settings → Administration → Company apps). With that box ticked GitHub offers no setup URL: the
    callback URL receives both `code` and `installation_id`. Keep "Expire
    user authorization tokens" on.
-2. **Configure the instance** with the five app-config keys the spec
+
+2. **By hand only: configure the instance** with the five app-config keys the spec
    declares: `app_id`, `private_key` (PEM, PKCS#1 or PKCS#8; a one-line
    PEM with literal `\n` is accepted), `app_slug`, `client_id` (the
    App's client ID, not its App ID) and `client_secret`. Missing keys leave the
@@ -185,5 +202,11 @@ npx vitest run plugins/github
   path that was classified.
 - `data-model.test.ts` — data-model integrity.
 - `token-cache.test.ts` — connection-scoped reuse of installation tokens.
+- `app-manifest.test.ts` — the permission declaration, the manifest per
+  choice, the code exchange, and the refusal of a call by its missing permission.
 
-587 tests; none reaches GitHub.
+A call the App has no permission for is declined by name
+(`github__create_branch needs the GitHub App permission Contents …`), never
+left to GitHub's 403.
+
+623 tests; none reaches GitHub.

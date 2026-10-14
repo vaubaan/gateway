@@ -14,6 +14,7 @@ tracks:
   - apps/gateway/src/app/(app)/layout.tsx
   - apps/gateway/src/app/admin/(guarded)/provider-apps/
   - apps/gateway/src/components/connections/
+  - apps/gateway/src/components/settings/AppRegistration.tsx
   - apps/gateway/src/components/shell/AppShell.tsx
   - apps/gateway/src/lib/connections/session.ts
   - apps/gateway/tests/integration/connections/
@@ -43,7 +44,9 @@ D2 (the host runs the four flows and the standard refresh). Built on the
 ```
 apps/gateway/src/server/provider-apps/      host-agnostic, never imports `next`
   fields.ts            appConfigFieldsOf(spec): which settings a provider's app needs
-  service.ts           ProviderAppsService: file-or-store values, sealed secrets, host/plugin views
+  service.ts           ProviderAppsService: file-or-store values, sealed secrets, host/plugin views,
+                       saveRegistered / registration (an app created from the page)
+  registration.ts      AppRegistrationService: the manifest flow (start, pending, complete)
 apps/gateway/src/server/connections/        host-agnostic, never imports `next`
   index.ts             createConnectionsModule(deps) → root.connections; barrel
   service.ts           ConnectionService: start/complete, discover, updateResource, revoke, transferTargets/transfer, listOwnerless/reassign, views
@@ -89,6 +92,10 @@ apps/gateway/src/app/admin/(guarded)/connections/
 apps/gateway/src/app/admin/(guarded)/provider-apps/
   page.tsx                           /admin/provider-apps   "Company apps"
   [provider]/route.ts                POST /admin/provider-apps/<provider>
+  [provider]/create/route.ts         POST /admin/provider-apps/<provider>/create   → handlers.startAppRegistration
+  [provider]/confirm/page.tsx        /admin/provider-apps/<provider>/confirm?state=…   posts the manifest to the service
+  [provider]/created/route.ts        GET  /admin/provider-apps/<provider>/created  → handlers.completeAppRegistration
+apps/gateway/src/components/settings/AppRegistration.tsx   AppCreateForm, RegisteredAppFacts, permissionSummary
 ```
 
 Route handlers are one-line adapters over `root.connections.handlers` (the
@@ -206,6 +213,78 @@ same endpoint. Accepting is audited (`config-changed`), logged at `warn`
 and answered with a warning notice; the mark then reads "Unverified installations
 accepted". No shipped plugin needs it
 (`shipped-providers.test.ts` fails if one does).
+
+### Company apps created from the page (manifest flow)
+
+ADR [company-app-created-from-a-manifest](../decisions/company-app-created-from-a-manifest.md).
+An `app-install` spec may declare `manifestRegistration` (plugin SDK,
+`AppManifestRegistration`): the permissions the app may request, each with
+levels and the tools that need them (`AppPermission`; the SDK's
+`app-permissions.ts` reads it), the registration address per owner, the
+manifest builder, the code exchange and the reader of its answer. GitHub is
+the one shipped plugin that declares it (`plugins/github/src/app-manifest.ts`).
+
+`AppRegistrationService` (`root.connections.registration`), nothing in it
+naming a provider:
+
+- **`availability(id)`** → `null` (offer it), `not-supported` (no
+  manifest), `read-only` (the configuration file sets the app) or
+  `already-set` (any field is stored: replacing an app is the form's job).
+- **`start(actor, id, choice)`** checks the owner (organisation login against
+  `ownerLoginPattern`, or the personal account), the name (required, at most
+  `nameMaxLength`) and the permissions (`checkPermissionChoice`: a level per
+  permission or `none`, a mandatory one kept, an unknown name or level
+  refused), builds the manifest (`url` = `public_url`, `callback_urls` = the
+  connection callback, `redirect_url` =
+  `<public_url>/admin/provider-apps/<id>/created`, the chosen
+  `default_permissions`) and stores it in the `SessionStore` under
+  `app-registration:<state>` with the web session id, the audit actor and
+  the choice, for `REGISTRATION_TTL_MS` (15 minutes). The state is 32 random
+  bytes, base64url. Refusals are `AppRegistrationError` with a closed code and
+  plain sentences.
+- **`pending(sessionId, id, state)`** — the confirm page reads the record back
+  (same session, same provider) without consuming it: the form's `action` is
+  `registrationUrl(owner)` with `?state=`, its one hidden field the manifest
+  JSON.
+- **`complete(sessionId, id, query)`** — the state is taken once (deleted
+  whatever happens next; refused if absent, expired, of another session or
+  provider), a missing code is `cancelled`, a code outside the plugin's
+  grammar `code-invalid`; availability is checked again; the code is posted
+  to `conversionUrl(code)` with `conversionHeaders` and no credential
+  (`redirect: 'error'`); a failed status is `exchange-refused` (only the
+  status is logged), no answer `exchange-failed`, an answer the plugin cannot
+  read `answer-unreadable`. The app is then stored by
+  **`ProviderAppsService.saveRegistered(id, appConfig, record)`**: the same
+  validation and sealing as `save`, plus the record of what the page shows —
+  name, slug, owner, link, the permissions the service answered, who and when
+  — as JSON under `provider_apps.<id>.registered`, in one transaction, refused
+  if any field is already stored. The webhook secret is not kept. One
+  `config-changed` entry on `provider-app:<id>`: `before`/`after` as a form
+  save, plus `created_from: 'manifest'`, `app_name`, `app_slug`, `owner`,
+  `owner_kind`, `permissions_requested` — never a secret.
+- **`registration(id)`** returns that record while the stored non-secret
+  fields still equal those it was created with (an app replaced by hand
+  drops it); `clear(id)` removes it with the fields.
+
+On the page, the line of such a service opens on `AppCreateForm` while
+`availability` is `null`: two plain sentences (it belongs to the owner, its
+key stays here encrypted, the service asks to confirm), the owner, the name
+(`Vaubaan <host>` by default), and one select per permission, the default
+every highest level, a sensitive permission marked "Sensitive." with its
+sentence, and what stops a level down ("Read only stops: …"; per condition,
+"…, for a file under .github/workflows/"), read from the plugin's tool
+titles. "Enter an app registered by hand" (`?by=hand`) opens the usual form,
+which links back. `POST …/create` (`guardMutation`, operator) answers 303 to
+the confirm page, or back to the line with a notice. The confirm page
+(`requireOperator`) shows owner, name and permissions and the button
+"Continue to <service>"; an unknown or expired state shows "This creation is
+no longer waiting". `GET …/created` is a top-level GET from the service
+(`guardSession`, operator; no session → `/login`, not an administrator →
+the Company apps page): success and every failure come back to the line
+as a one-time notice. A created app's line shows `RegisteredAppFacts` — the
+name linking to the app at the service, the owner, the permissions — the
+primary "Install it on your repositories" (`/accounts/new/<id>`: installing
+is connecting an account), and the form behind "Edit its settings by hand".
 
 ## The connect driver
 
@@ -816,7 +895,14 @@ Unit, co-located (`src/server/connections/*.test.ts`,
   (12, the generated key is parsed and used by `ssh2`),
   `shipped-providers.test.ts` (7, the real plugins through the driver; no
   shipped `app-install` plugin is unverifiable),
-  `provider-apps/service.test.ts` (15).
+  `provider-apps/service.test.ts` (15), `provider-apps/registration.test.ts`
+  (25: the manifest per permission choice and owner, invalid choices, the
+  file and already-set refusals, the state single-use, expiring and bound to
+  the session, a replay and a foreign session exchanging nothing, a cancelled
+  return, a malformed code, a refused, unreachable or unreadable exchange
+  storing nothing, an app entered by hand meanwhile, what is stored and
+  sealed, the audit entry and the logs without a secret, the record dropped
+  when the app is replaced by hand).
 
 Integration: `tests/integration/store/connections-shares.test.ts` (+2: the
 merge rule and the credential state transitions at the repository) and

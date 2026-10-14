@@ -192,6 +192,24 @@ names, and the notes about them do too.
 
 ### Added
 
+- **Create the company's GitHub App from the gateway.** Settings → Company apps →
+  GitHub offers "Create the GitHub App" while none is set: choose the owner (an
+  organisation or your own account), the name (`Vaubaan <host>` by default) and the
+  permissions it requests — by default what the tools need, with Contents write,
+  Administration and Workflows explained as sensitive and each permission saying which
+  tools stop without it. GitHub's App manifest flow does the rest: GitHub shows the App
+  and asks you to confirm, and the App's id, key and secrets come back stored
+  encrypted, never shown — nothing to copy. The page then shows the App (name, owner,
+  link, permissions) and "Install it on your repositories". The form to enter an App
+  registered by hand stays one click away; an App set in the configuration stays
+  read-only. Every gateway has its own App, never a shared one: a shared App's key would
+  mint tokens for every customer's installations (ADR
+  company-app-created-from-a-manifest).
+- **A GitHub call the App has no permission for is refused by name**, before anything
+  is sent (`github__create_branch needs the GitHub App permission Contents (contents:
+write …)`), instead of GitHub's bare 403. The push token of
+  `github__mint_install_token` carries `pull_requests` and `workflows` only when the
+  installation holds them.
 - **Several sign-in providers on one instance**, OpenID Connect and GitHub: a
   company directory (Entra ID, Google Workspace, Okta, Keycloak) and people who
   sign in with their own account (personal Google or Microsoft, GitHub), at once.
@@ -610,6 +628,11 @@ names, and the notes about them do too.
 
 ### Security
 
+- **Creating a company app from the page is bound to the administrator's session.**
+  Its `state` is random, single use, bound to the web session, and expires after 15
+  minutes; the code GitHub returns is exchanged once, server to server, only while no
+  app is set and the configuration does not set it. The audit records who created which
+  App and the permissions it requested — never a secret.
 - **What is executed is what was classified.** Every plugin validates each identifier
   with one grammar used by its classifier and its executor, and refuses what does not
   fit instead of escaping it (a path with `..`, a tag written `refs/tags/…`, a recipient
