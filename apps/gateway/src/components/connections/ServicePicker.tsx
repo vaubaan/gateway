@@ -9,7 +9,7 @@
  * anyone else reads who to ask.
  */
 import { PickCard, PickGrid, ServiceMark } from '@/components/ui';
-import { ACCOUNT_WORDS } from '@/lib/vocabulary';
+import { ACCOUNT_WORDS, TOKEN_CONNECT } from '@/lib/vocabulary';
 import {
   NEW_CONNECTION_PATH,
   PROVIDER_APPS_PAGE,
@@ -21,8 +21,19 @@ function lowerFirst(label: string): string {
   return /^[A-Z][a-z]/.test(label) ? label.charAt(0).toLowerCase() + label.slice(1) : label;
 }
 
-/** How the account is connected, in the words of the service where it has some. */
+/**
+ * How the account is connected, in the words of the service where it has some:
+ * the way offered first, then "or a token" when a second way can be used now
+ * (the company app is registered and the service also takes a pasted token).
+ */
 export function howToConnect(provider: ConnectableProvider): string {
+  const first = wayWords(provider);
+  const second = provider.methods.find((m) => m.kind !== provider.kind && m.configured);
+  if (!second) return first;
+  return `${first} · ${second.usesApp ? `or your company’s app` : TOKEN_CONNECT.orToken}`;
+}
+
+function wayWords(provider: ConnectableProvider): string {
   switch (provider.kind) {
     case 'oauth2':
       return `sign in at ${provider.displayName}`;

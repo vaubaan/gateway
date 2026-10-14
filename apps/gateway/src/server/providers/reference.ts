@@ -10,7 +10,12 @@
  * community validation status.
  */
 import { parseSlice } from '@vaubaan/policy-engine';
-import type { PluginRegistry, RegisteredPlugin, TokenHandout } from '@vaubaan/plugin-sdk';
+import {
+  credentialSpecsOf,
+  type PluginRegistry,
+  type RegisteredPlugin,
+  type TokenHandout,
+} from '@vaubaan/plugin-sdk';
 import type {
   CredentialKind,
   DataModel,
@@ -59,7 +64,10 @@ export interface ProviderCard {
   /** One line: what it connects to. */
   readonly description: string | null;
   readonly experimental: boolean;
+  /** The primary way of connecting. */
   readonly credential_kind: CredentialKind;
+  /** Every way of connecting, primary first (a token beside the company app). */
+  readonly credential_kinds: readonly CredentialKind[];
   readonly counts: ProviderCounts;
   /** The planes of the data model, declaration order (`db`, `storage`, …). */
   readonly plane_slugs: readonly string[];
@@ -90,6 +98,7 @@ function cardOf(registered: RegisteredPlugin, risks: readonly CatalogRisk[]): Pr
     description: plugin.description ?? null,
     experimental: plugin.experimental === true,
     credential_kind: plugin.credential.kind,
+    credential_kinds: credentialSpecsOf(plugin).map((spec) => spec.kind),
     counts: countsOf(registered, risks),
     plane_slugs: plugin.dataModel.planes.map((plane) => plane.slug),
     envs: catalogEnvs(plugin.catalog.risks),

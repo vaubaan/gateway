@@ -1214,3 +1214,50 @@ export function agoSentence(from: Date | string, now: Date = new Date()): string
   if (short === 'now') return 'just now';
   return short === 'yesterday' ? short : `${short} ago`;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Connecting with a token pasted by hand, beside the company app (ADR
+// token-connections-beside-the-integration-app). The steps and permissions
+// themselves come from the plugin; only the frame is written here.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const TOKEN_CONNECT = {
+  useToken: 'Use a token instead',
+  useApp: (service: string) => `Connect through your company’s ${service} app instead`,
+  appMissing: (service: string) =>
+    `No company ${service} app is registered, so you connect with a token you create there.`,
+  appMissingForAdmin:
+    'Registering the company app under Settings → Company apps adds the other way; both can stay.',
+  stepsTitle: (service: string) => `Create the token at ${service}`,
+  openTokenPage: (service: string) => `Open the token page at ${service}`,
+  permissionsTitle: 'Permissions to tick',
+  permissionsNote:
+    'Tick these and nothing else; a permission left out makes the tools that need it fail.',
+  readAccess: 'read',
+  writeAccess: 'read and write',
+  usedBy: (titles: string) => `for ${titles}`,
+  expiry: (days: number) =>
+    `Choose an expiry of about ${days} days. The account page shows the date, and you reconnect with a new token before it.`,
+  noExpiry: (service: string) =>
+    `${service} gives these tokens no expiry: delete the token there when you no longer need it.`,
+  sharedAccount:
+    'A shared service account is fine: agents act through missions, and Activity records which person and which mission made each call.',
+  whatWeDo: (service: string) =>
+    `Checked against ${service} when you paste it, then stored encrypted. It is never shown again, and no agent ever sees it.`,
+  notWithToken: (count: number) =>
+    count === 1 ? 'Not with a token' : `${count} tools need the company app`,
+  submit: 'Check and connect',
+  submitHint: (service: string) => `Checked against ${service} before saving, encrypted at rest.`,
+  tokenFacts: 'Token',
+  actsAs: (account: string) => `acts as ${account}`,
+  tokenExpires: (date: string) => `expires ${date}`,
+  tokenExpired: (date: string) => `expired ${date}`,
+  tokenNoExpiry: 'no expiry known',
+  expiresSoonTitle: (date: string) => `The token expires ${date}`,
+  expiresSoonBody:
+    'Create a new token at the service and reconnect before then; missions keep running on the same account.',
+  orToken: 'or a token',
+} as const;
+
+/** A token that expires within this many days is announced on its account page. */
+export const TOKEN_EXPIRY_NOTICE_DAYS = 14;

@@ -62,7 +62,9 @@ export default async function ServiceReferencePage({ params }: Props) {
         <SummaryLine
           items={[
             { label: catalogSize(reference) },
-            { label: `connects through: ${credentialKindLabel(reference.credential_kind)}` },
+            {
+              label: `connects through: ${reference.credential_kinds.map(credentialKindLabel).join(' or ')}`,
+            },
           ]}
         />
         <Disclosure
@@ -78,7 +80,7 @@ export default async function ServiceReferencePage({ params }: Props) {
                 : []),
               {
                 term: 'Credential',
-                value: `${credentialKindLabel(reference.credential_kind)} · encrypted at rest, never shown`,
+                value: `${reference.credential_kinds.map(credentialKindLabel).join(' or ')} · encrypted at rest, never shown`,
               },
               {
                 term: 'Environments',

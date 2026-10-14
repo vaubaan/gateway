@@ -180,3 +180,8 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* The guide to a token created by hand, under its form. */
+.guideBlock {
+  margin-top: var(--section-gap);
+}
