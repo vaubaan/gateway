@@ -104,6 +104,26 @@ describe('the home and the inbox: read models', () => {
       expect(item?.budget.map((line) => [line.risk_id, line.remaining])).toEqual([[MERGE, 2]]);
       // The list never carries the arguments of a call.
       expect(JSON.stringify(item)).not.toContain(ARGUMENT_MARKER);
+      // What a page heads the request with: what the tool does, in the plugin's words,
+      // and the resource the refused call resolved to — read from its audit entry.
+      expect(item?.request.call).toEqual({
+        tool: 'github__merge_pull_request',
+        title: 'Merge a pull request',
+        resource: 'acme/app',
+      });
+      const view = await rig.root.requests.service.view(ada, item?.request.id ?? '');
+      expect(view.outcome === 'ok' && view.view.request.call).toEqual(item?.request.call);
+      // The inbox of the mission page reads the same head.
+      const [listed] = await rig.root.requests.service.inbox(ada);
+      expect(listed?.call).toEqual(item?.request.call);
+    });
+
+    it('a limit that was reached is about a permission, not a call: it has no call to head it', async () => {
+      const mission = await issueMission(rig);
+      const pr = { tool: 'github__create_pull_request', risks: [PR] } as const;
+      for (let i = 0; i < 3; i++) await seedCall(rig, mission, pr);
+      const [item] = await rig.root.requests.service.waiting(ada);
+      expect(item?.request).toMatchObject({ kind: 'claim', call: null });
     });
 
     it('is the creator’s: a member of the mission and an administrator get nothing', async () => {

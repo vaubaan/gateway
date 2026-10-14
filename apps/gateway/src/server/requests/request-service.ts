@@ -79,6 +79,7 @@ import {
   type ClaimProblem,
   type ClaimSituation,
 } from './claim';
+import { toolTitleOf } from '../providers/tool-titles';
 import { askedBy, REFUSED_CALL_KIND } from './asker';
 import { eventLineOf, type SessionEventLine } from './events';
 import { effectiveState } from './state';
@@ -140,6 +141,26 @@ export interface RequestSummary {
   readonly mission: { readonly id: string; readonly name: string };
   /** Approval requests: the tool of the call. Never its arguments. */
   readonly tool: string | null;
+  /**
+   * Approval requests: what the agent wants to do, as a page heads it — the
+   * tool, its title when the plugin gives one, and the resource the call
+   * resolved to. `null` for a claim. Never the arguments.
+   */
+  readonly call: RequestCall | null;
+}
+
+/** The call of an approval request, from what the gateway already knows of it. */
+export interface RequestCall {
+  readonly tool: string;
+  /** `ProviderPlugin.toolTitles`: "Merge a pull request"; `null` when the plugin gives none. */
+  readonly title: string | null;
+  /**
+   * The resource the refused call resolved to, as the audit recorded it
+   * (`resource_ref`: `acme-org/app`); `null` when the call names none, when the
+   * entry is gone, and on the reads that do not look it up (a list of answered
+   * requests, the answer to a decision).
+   */
+  readonly resource: string | null;
 }
 
 export interface RiskBudgetLine {
@@ -357,7 +378,14 @@ export class RequestService {
         name = (await this.deps.store.missions.getById(request.missionId))?.name ?? '';
         names.set(request.missionId, name);
       }
-      summaries.push(this.summaryOf(request, { id: request.missionId, name }, now));
+      summaries.push(
+        this.summaryOf(
+          request,
+          { id: request.missionId, name },
+          now,
+          await this.resourceOf(request),
+        ),
+      );
     }
     return summaries;
   }
@@ -390,7 +418,7 @@ export class RequestService {
       const budget = budgetMissionOf(mission);
       const { period, consumed } = await this.budget.usageOf(budget, now);
       items.push({
-        request: this.summaryOf(request, mission, now),
+        request: this.summaryOf(request, mission, now, await this.resourceOf(request)),
         asker: await this.askerOf(request),
         budget: request.riskIds.flatMap((riskId) => {
           const entry = budget.policy.find((candidate) => candidate.risk_id === riskId);
@@ -428,7 +456,7 @@ export class RequestService {
     if (!owned) return { outcome: 'forbidden' };
     const { request, mission } = owned;
     const now = this.deps.clock.now();
-    const summary = this.summaryOf(request, mission, now);
+    const summary = this.summaryOf(request, mission, now, await this.resourceOf(request));
     if (request.kind !== 'claim') {
       return { outcome: 'ok', view: await this.approvalView(request, mission, summary, now) };
     }
@@ -818,10 +846,28 @@ export class RequestService {
     return { request, mission: await this.deps.grounds.derive(stored) };
   }
 
+  /**
+   * The resource the call of an approval request resolved to: the pipeline wrote
+   * it on the audit entry of the refused call, keyed by the tool and the
+   * fingerprint the request holds. `null` for a claim.
+   */
+  private async resourceOf(request: RequestRecord): Promise<string | null> {
+    if (request.kind === 'claim' || !request.tool || !request.fingerprint) return null;
+    const audited = await this.deps.store.audit.latestCall({
+      missionId: request.missionId,
+      tool: request.tool,
+      argumentsHash: request.fingerprint,
+      refusalCode: 'approval-required',
+    });
+    return audited?.resource_ref ?? null;
+  }
+
   private summaryOf(
     request: RequestRecord,
     mission: { readonly id: string; readonly name: string },
     now: Date,
+    /** `resourceOf(request)`, on the reads that head a page with the call. */
+    resource: string | null = null,
   ): RequestSummary {
     return {
       id: request.id,
@@ -837,6 +883,14 @@ export class RequestService {
       url: requestUrl(this.deps.publicUrl, request.id),
       mission: { id: mission.id, name: mission.name },
       tool: request.tool,
+      call:
+        request.kind !== 'claim' && request.tool
+          ? {
+              tool: request.tool,
+              title: toolTitleOf(this.deps.registry, request.tool),
+              resource,
+            }
+          : null,
     };
   }
 

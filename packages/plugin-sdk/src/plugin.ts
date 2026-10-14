@@ -139,6 +139,19 @@ export interface ProviderPlugin {
    * that hands no token.
    */
   readonly tokenHandouts?: readonly TokenHandout[];
+  /**
+   * What each tool does, in a few words a person reads at a glance : a verb
+   * and its object, sentence case, no final period (`github__merge_pull_request`
+   * → "Merge a pull request"). Keyed by tool name. The web interface puts it
+   * at the head of an approval request, before the resource the call resolves
+   * to ("Merge a pull request · acme-org/app") : a person decides on what the
+   * agent wants to do, not on the name of a permission. A tool without a
+   * title is shown by its name. For people only : it is not part of
+   * `tools/list` and the host decides nothing from it. Optional in the
+   * contract ; every tool of a plugin shipped with the gateway has one
+   * (structural test).
+   */
+  readonly toolTitles?: Readonly<Record<string, string>>;
   /** URL of the plugin's modelling handbook, when published. */
   readonly docsUrl?: string;
   /**

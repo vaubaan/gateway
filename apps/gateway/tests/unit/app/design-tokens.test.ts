@@ -64,7 +64,16 @@ const PAIRS: readonly (readonly [text: string, surface: string])[] = [
   ['--ink-2', '--paper'],
   ['--ink-2', '--paper-side'],
   ['--ink-2', '--fill'],
+  // Tinted surfaces (an exception row, a callout, the one filled box): the quiet ink
+  // is remapped to the second ink there, so the second ink is what must pass.
+  ['--ink', '--warn-soft'],
+  ['--ink', '--bad-soft'],
+  ['--ink', '--ok-soft'],
+  ['--ink', '--accent-soft'],
   ['--ink-2', '--warn-soft'],
+  ['--ink-2', '--bad-soft'],
+  ['--ink-2', '--ok-soft'],
+  ['--ink-2', '--accent-soft'],
   ['--ink-3', '--paper'],
   ['--ink-3', '--paper-side'],
   ['--ink-3', '--fill'],
@@ -161,6 +170,10 @@ describe('the styles of the interface', () => {
     '--tone-bg',
     '--tone-fg',
     '--bar-height',
+    '--phone-bar',
+    '--dialog-top',
+    '--dialog-bottom',
+    '--stack-label',
   ]);
 
   it('refers only to tokens that exist', () => {

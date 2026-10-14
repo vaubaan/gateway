@@ -335,7 +335,7 @@ risks:
 presets:
   - id: read-only
     label: Read-only
-    description: Read code and metadata of the selected repositories ; no write, no global search.
+    description: Read code and metadata of the selected repositories; no write, no global search.
     entries:
       - risk_id: github.read-code
         quota: 5000
@@ -348,7 +348,7 @@ presets:
 
   - id: developer
     label: Developer
-    description: One mission per code repository — read everything, write on feature branches, open PRs and comment ; no merge on protected branches, no branch-protection changes.
+    description: One mission per code repository — read everything, write on feature branches, open PRs and comment; no merge on protected branches, no branch-protection changes.
     entries:
       - risk_id: github.read-code
         quota: 10000
@@ -393,7 +393,7 @@ presets:
 
   - id: release-manager
     label: Release manager
-    description: Ship a release — merge into protected branches, create and delete releases, each asking the creator first ; read everything.
+    description: Ship a release — merge into protected branches, create and delete releases, each asking the creator first; read everything.
     entries:
       - risk_id: github.read-code
         quota: 5000

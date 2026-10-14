@@ -1,8 +1,14 @@
+/* Never taller than the window: the top margin and the same room under it are
+   taken off the height, and the body scrolls between a head and a foot that
+   stay in view. `--dialog-top` is the one number both use. */
 .dialog {
+  --dialog-top: 96px;
+  --dialog-bottom: var(--space-6);
   width: 520px;
   max-width: calc(100vw - var(--space-8));
-  max-height: calc(100vh - var(--space-12));
-  margin-top: 96px;
+  max-height: calc(100vh - var(--dialog-top) - var(--dialog-bottom));
+  max-height: calc(100dvh - var(--dialog-top) - var(--dialog-bottom));
+  margin-top: var(--dialog-top);
   padding: 0;
   overflow: hidden;
   border: 0;
@@ -19,8 +25,14 @@
   background: var(--scrim);
 }
 .wide {
+  --dialog-top: 60px;
   width: 640px;
-  margin-top: 60px;
+}
+/* A short window gives the room to the dialog, not to the margin above it. */
+@media (max-height: 820px) {
+  .dialog {
+    --dialog-top: var(--space-6);
+  }
 }
 
 .head {
@@ -118,7 +130,12 @@
 
 @media (max-width: 720px) {
   .dialog {
-    margin-top: var(--space-6);
+    --dialog-top: var(--space-4);
+    --dialog-bottom: var(--space-4);
+  }
+  .head,
+  .foot {
+    flex: none;
   }
   .foot {
     flex-wrap: wrap;

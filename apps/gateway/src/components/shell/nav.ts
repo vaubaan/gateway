@@ -15,6 +15,14 @@ export function isCurrentSection(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+/**
+ * The entries of the bar a phone draws at the bottom of the screen, in the
+ * order of the navigation: where a person goes every day. The others
+ * (`NAV_ORDER` minus these) are behind "More". Four and "More" is what a
+ * 360 px screen holds with a word under each icon.
+ */
+export const PHONE_BAR: readonly NavKey[] = ['now', 'waiting', 'missions', 'accounts'];
+
 /** The paths of a section besides the entry's own. */
 const ALSO_UNDER: Readonly<Partial<Record<NavKey, readonly string[]>>> = {
   accounts: ['/shares'],

@@ -110,7 +110,7 @@ const PEOPLE: readonly Person[] = [
 const PEOPLE_COLUMNS: readonly Column<Person>[] = [
   {
     id: 'holder',
-    header: 'Holder',
+    header: 'Who',
     cell: (p) => <KeyHolder name={p.name} kind={p.kind} qualifier={p.qualifier} />,
   },
   { id: 'role', header: 'Role', cell: (p) => p.role, detail: true, nowrap: true },

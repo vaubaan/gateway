@@ -1,12 +1,18 @@
 /**
  * `/login` — the entry of the interface: one button for the identity provider
- * of the company, the closed error codes of a failed attempt, and, once signed
- * in, who is signed in and where to go.
+ * of the company, and the closed error codes of a failed attempt.
+ *
+ * A person who is signed in has nothing to read here: the page sends them to
+ * the home ("Now"), and the sign-in it starts returns there too. The card
+ * "who is signed in" is kept for the two cases where the home is not the
+ * answer: a failed attempt while a session exists (`?error=`), and the
+ * install session of the bootstrap token, which owns nothing and has no home.
  *
  * It checks nothing itself: the session is the authenticator's, and what a
  * person may do is recomputed from their groups on every request.
  */
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 
 import { AuthHeading, AuthPage } from '@/components/auth/AuthPage';
 import styles from '@/components/auth/auth.module.css';
@@ -84,6 +90,9 @@ export default async function LoginPage({ searchParams }: Props) {
   const params = await searchParams;
   const errorCode = first(params.error);
   const { root, principal } = await currentPrincipal();
+  const failed = errorCode !== null && isLoginErrorCode(errorCode);
+  // Signed in: the home, not a card about being signed in.
+  if (principal?.kind === 'user' && !failed) redirect(ROUTES.home);
   const idp = await root.auth.idp.current();
   const bootstrap = await root.auth.bootstrap.state();
   const instance = root.config.publicUrl.host;
@@ -92,7 +101,9 @@ export default async function LoginPage({ searchParams }: Props) {
     <AuthPage instance={instance} footer={<BuildFooter />}>
       <AuthHeading title={principal ? 'You are signed in' : `Sign in to ${instance}`}>
         {principal
-          ? 'What you may do here is recomputed from your teams on every request.'
+          ? principal.kind === 'user'
+            ? 'The attempt below failed; the session you already had is still open.'
+            : 'This session sets the gateway up; it is not a person’s.'
           : 'This gateway signs you in through the identity provider of your company. Nobody has a password here.'}
       </AuthHeading>
 
@@ -108,7 +119,7 @@ export default async function LoginPage({ searchParams }: Props) {
         <SignedIn principal={principal} />
       ) : idp ? (
         <form method="get" action="/auth/login" className={styles.act}>
-          <input type="hidden" name="return_to" value="/login" />
+          <input type="hidden" name="return_to" value={ROUTES.home} />
           <Button type="submit" variant="primary" size="lg">
             Continue with {idp.settings.issuer.hostname}
           </Button>

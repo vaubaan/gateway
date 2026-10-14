@@ -200,11 +200,35 @@ describe('DataTable', () => {
       />,
     );
     expect(html).toContain('<caption class="vbn-sr-only">People</caption>');
-    expect(html.match(/<th scope="col"/g)).toHaveLength(4);
+    expect(html.match(/<th role="columnheader" scope="col"/g)).toHaveLength(4);
     expect(html).toContain('<span class="vbn-sr-only">Actions</span>');
     expect(html).not.toContain('data-details');
-    expect(html).toMatch(/<td class="[^"]*detail[^"]*" data-column="key">/);
-    expect(html).toMatch(/<tr class="[^"]*row_quiet[^"]*" data-row="b">/);
+    expect(html).toMatch(/<td role="cell" class="[^"]*detail[^"]*" data-column="key"/);
+    expect(html).toMatch(/<tr role="row" class="[^"]*row_quiet[^"]*" data-row="b">/);
+    // On a phone a row is drawn as a block: every cell after the first carries the name
+    // of its column, and the roles keep the table a table whatever its drawing.
+    expect(html).toMatch(/<table role="table" class="[^"]*stack[^"]*"/);
+    const firstRow = html.slice(html.indexOf('data-row="a"'), html.indexOf('data-row="b"'));
+    const labels = [...firstRow.matchAll(/data-column="([a-z]+)"(?: data-label="([^"]*)")?/g)].map(
+      (match) => [match[1], match[2]],
+    );
+    expect(labels[0]?.[1]).toBeUndefined();
+    expect(labels.slice(1).every(([, label]) => typeof label === 'string' && label !== '')).toBe(
+      true,
+    );
+    // The actions of a row are in the document for every device; only their drawing waits for a pointer.
+    expect(firstRow).toContain('Replace key');
+
+    const grid = renderToStaticMarkup(
+      <DataTable
+        caption="People"
+        columns={COLUMNS}
+        rows={LINES}
+        rowKey={(l) => l.id}
+        narrow="scroll"
+      />,
+    );
+    expect(grid).not.toMatch(/<table role="table" class="[^"]*stack/);
 
     const open = renderToStaticMarkup(
       <DataTable caption="People" columns={COLUMNS} rows={LINES} rowKey={(l) => l.id} details />,
@@ -235,7 +259,7 @@ describe('DataTable', () => {
       />,
     );
     expect(grouped).toContain('scope="rowgroup"');
-    expect(grouped).toContain('<thead class="vbn-sr-only">');
+    expect(grouped).toContain('<thead role="rowgroup" class="vbn-sr-only">');
   });
 });
 

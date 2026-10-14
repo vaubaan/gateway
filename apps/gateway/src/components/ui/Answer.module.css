@@ -40,6 +40,8 @@
 
 /* The one filled box of a page: this mission waits for you. */
 .boxed {
+  /* On a tint the quiet ink is the second ink (see `Table.module.css`). */
+  --ink-3: var(--ink-2);
   padding: var(--space-3) 14px;
   border: 1px solid var(--warn-line);
   border-radius: var(--radius-lg);

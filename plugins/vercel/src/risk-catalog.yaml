@@ -346,7 +346,7 @@ risks:
 presets:
   - id: read-only
     label: Read-only
-    description: Inspect projects, deployments, logs, env-var keys and the firewall ; no write.
+    description: Inspect projects, deployments, logs, env-var keys and the firewall; no write.
     entries:
       - risk_id: vercel.read-account
         quota: 2000
@@ -371,7 +371,7 @@ presets:
 
   - id: developer
     label: Developer
-    description: One mission per code project — preview and development deploys, logs, preview env vars, toolbar comments ; nothing that touches production configuration.
+    description: One mission per code project — preview and development deploys, logs, preview env vars, toolbar comments; nothing that touches production configuration.
     entries:
       - risk_id: vercel.read-account
         quota: 5000

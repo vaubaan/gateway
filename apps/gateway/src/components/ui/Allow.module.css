@@ -1,6 +1,7 @@
+/* The label column grows with its longest label: a label never runs under its value. */
 .allow {
   display: grid;
-  grid-template-columns: 110px minmax(0, 1fr);
+  grid-template-columns: minmax(110px, max-content) minmax(0, 1fr);
   gap: 6px var(--space-4);
   max-width: var(--measure);
   margin: 0;

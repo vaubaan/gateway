@@ -62,6 +62,32 @@ describe('definePlugin', () => {
     ]);
   });
 
+  test('toolTitles is optional; a title names a declared tool and reads as a headline', () => {
+    const [tool] = acmePlugin.tools;
+    const name = tool!.name;
+    expect(pluginIssues({ ...acmePlugin, toolTitles: { [name]: 'List things' } })).toEqual([]);
+    expect(pluginIssues({ ...acmePlugin, toolTitles: {} })).toEqual([]);
+    expect(
+      pluginIssues({ ...acmePlugin, toolTitles: [] as unknown as Record<string, string> }),
+    ).toEqual(['toolTitles: expected an object keyed by tool name when present']);
+    expect(pluginIssues({ ...acmePlugin, toolTitles: { acme__no_such_tool: 'Do it' } })).toEqual([
+      "toolTitles['acme__no_such_tool'] is not a tool of this plugin",
+    ]);
+    expect(pluginIssues({ ...acmePlugin, toolTitles: { [name]: '  ' } })).toEqual([
+      `toolTitles['${name}']: expected a non-empty string`,
+    ]);
+    expect(pluginIssues({ ...acmePlugin, toolTitles: { [name]: 'list things.' } })).toEqual([
+      `toolTitles['${name}']: a title has no final period`,
+      `toolTitles['${name}']: a title starts with a capital letter`,
+    ]);
+    expect(pluginIssues({ ...acmePlugin, toolTitles: { [name]: `L${'x'.repeat(60)}` } })).toEqual([
+      `toolTitles['${name}']: expected at most 60 characters`,
+    ]);
+    expect(pluginIssues({ ...acmePlugin, toolTitles: { [name]: 'List\nthings' } })).toEqual([
+      `toolTitles['${name}']: expected a single line without surrounding spaces`,
+    ]);
+  });
+
   test('manualRevocation is optional, and a sentence or two when present; revoke is a function', () => {
     const sentence = 'Delete the API key in the Acme dashboard, under API keys.';
     expect(pluginIssues({ ...acmePlugin, manualRevocation: sentence })).toEqual([]);

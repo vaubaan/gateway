@@ -205,6 +205,14 @@ export interface SessionOpenRequest {
    * member, who sees that a request is waiting and cannot answer it.
    */
   readonly path: string | null;
+  /** An approval request: the tool of the call, as the activity already shows it. `null` for a claim. */
+  readonly tool: string | null;
+  /**
+   * An approval request: the resource the refused call resolved to, as its
+   * audit entry holds it (`acme-org/app`). The same fact a reader of this view
+   * finds on the entry in the activity; never the arguments or their fingerprint.
+   */
+  readonly resource_ref: string | null;
 }
 
 /** The calls of the current period under one label (`null`: no label). Not a budget. */
@@ -308,16 +316,30 @@ export class MissionSessionService {
       events: await this.eventViews(timeline.shown, names),
       next_events: timeline.next,
       timeline_filter: filter,
-      open_requests: requests
-        .filter((r) => isDecidable(r, now))
-        .map((r) => ({
-          id: r.id,
-          kind: r.kind,
-          risk_id: r.riskId,
-          created_at: r.createdAt,
-          expires_at: r.expiresAt,
-          path: answers ? inboxRequestPath(r.id) : null,
-        })),
+      open_requests: await Promise.all(
+        requests
+          .filter((r) => isDecidable(r, now))
+          .map(async (r) => ({
+            id: r.id,
+            kind: r.kind,
+            risk_id: r.riskId,
+            created_at: r.createdAt,
+            expires_at: r.expiresAt,
+            path: answers ? inboxRequestPath(r.id) : null,
+            tool: r.kind === 'claim' ? null : r.tool,
+            resource_ref:
+              r.kind !== 'claim' && r.tool && r.fingerprint
+                ? ((
+                    await store.audit.latestCall({
+                      missionId,
+                      tool: r.tool,
+                      argumentsHash: r.fingerprint,
+                      refusalCode: 'approval-required',
+                    })
+                  )?.resource_ref ?? null)
+                : null,
+          })),
+      ),
       agent_labels: await store.audit.agentLabels(missionId),
       label_activity: activity.map(labelActivityView),
       holder_activity: holderActivity,

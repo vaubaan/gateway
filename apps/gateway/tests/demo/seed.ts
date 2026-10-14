@@ -15,7 +15,7 @@
  *                     state: active with a session of calls under two agent
  *                     labels, quota spent with an open claim, an open approval
  *                     request, expired, revoked, issued by a delegated client;
- *                     a fresh mission with a tiny quota for the tour.
+ *                     a fresh mission with a small limit for the tour.
  *   Bob               the share received and a mission issued within it.
  *   Carol             member of "GitHub admins"; a Stripe account of her own
  *                     (test and live), its test mode shared to Alice.
@@ -524,7 +524,7 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
   await root.missions.service.revoke(alice.user, revoked.id);
 
   const quota = await seeder.issue(alice.user, {
-    name: 'Tour: a tiny quota to exhaust',
+    name: 'Tour: a small limit to reach',
     connections: [
       {
         connection_id: github.id,

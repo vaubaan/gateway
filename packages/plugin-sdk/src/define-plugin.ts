@@ -34,6 +34,9 @@ export const PLUGIN_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 /** Upper bound of `ProviderPlugin.summary` : a paragraph, not a handbook. */
 export const PLUGIN_SUMMARY_MAX_LENGTH = 600;
 
+/** Upper bound of one `ProviderPlugin.toolTitles` entry : a headline, not a description. */
+export const TOOL_TITLE_MAX_LENGTH = 60;
+
 export class PluginDefinitionError extends Error {
   constructor(
     readonly pluginId: string,
@@ -49,6 +52,7 @@ export function pluginIssues(plugin: ProviderPlugin): string[] {
   return [
     ...identityIssues(plugin),
     ...toolIssues(plugin),
+    ...toolTitleIssues(plugin),
     ...dataModelIssues(plugin),
     ...catalogIssues(plugin),
     ...credentialSpecIssues(plugin),
@@ -218,6 +222,36 @@ function toolIssues(plugin: ProviderPlugin): string[] {
     if (!isRecord(tool.inputSchema) || tool.inputSchema.type !== 'object')
       issues.push(`tools[${i}].inputSchema.type must be 'object'`);
   });
+  return issues;
+}
+
+/**
+ * A title names a declared tool and reads as a headline : a few words, sentence
+ * case, no final period. Which tools have one is the plugin's choice.
+ */
+function toolTitleIssues(plugin: ProviderPlugin): string[] {
+  const titles: unknown = plugin.toolTitles;
+  if (titles === undefined) return [];
+  if (!isRecord(titles)) return ['toolTitles: expected an object keyed by tool name when present'];
+  const tools = new Set(isList(plugin.tools) ? plugin.tools.map((t) => t?.name) : []);
+  const issues: string[] = [];
+  for (const [tool, title] of Object.entries(titles)) {
+    if (!tools.has(tool)) issues.push(`toolTitles['${tool}'] is not a tool of this plugin`);
+    if (typeof title !== 'string' || title.trim().length === 0) {
+      issues.push(`toolTitles['${tool}']: expected a non-empty string`);
+      continue;
+    }
+    if (title !== title.trim() || /\s{2,}|[\r\n]/.test(title)) {
+      issues.push(`toolTitles['${tool}']: expected a single line without surrounding spaces`);
+    }
+    if (title.length > TOOL_TITLE_MAX_LENGTH) {
+      issues.push(`toolTitles['${tool}']: expected at most ${TOOL_TITLE_MAX_LENGTH} characters`);
+    }
+    if (/[.!]$/.test(title)) issues.push(`toolTitles['${tool}']: a title has no final period`);
+    if (!/^[A-Z]/.test(title)) {
+      issues.push(`toolTitles['${tool}']: a title starts with a capital letter`);
+    }
+  }
   return issues;
 }
 

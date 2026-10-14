@@ -48,6 +48,7 @@ import {
   UPSTASH_MANAGEMENT_API,
   UPSTASH_REST_HOST_SUFFIX,
 } from './execute.ts';
+import { upstashRedisToolTitles } from './tool-titles.ts';
 import { upstashRedisTools } from './tools.ts';
 
 // The YAML sits next to this module ; `catalogPathNextTo` keeps the path a
@@ -69,6 +70,7 @@ export const upstashRedisPlugin = definePlugin({
   docsUrl:
     'https://github.com/sbw-vaubaan/vaubaan-gateway/blob/main/docs/handbook/providers/upstash-redis.md',
   tools: upstashRedisTools,
+  toolTitles: upstashRedisToolTitles,
   dataModel: upstashRedisDataModel,
   catalog: upstashRedisCatalog.catalog,
   credential: upstashRedisCredential,

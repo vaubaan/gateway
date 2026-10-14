@@ -591,13 +591,16 @@ millisecond of a deactivation is refused.
   set up yet" (`login-not-configured`), with the way to the bootstrap page
   while the token is active. A failed attempt shows the sentence of its code
   (`login-error`, `LOGIN_ERROR_MESSAGES`); an unknown code shows nothing.
-  Signed in, the title is "You are signed in" and the page shows who
-  (`signed-in-as`): the display name or the email, the teams, and what the
-  person is here when it is more than a person — "administrator", or
-  "installing this gateway" for the bootstrap operator —, then "Open the
-  gateway" (the home) for a user or "Set up sign-in" (`/admin`) for the
-  bootstrap operator, a link to Settings for an administrator, and the
-  sign-out form. The page checks nothing itself: the session is the
+  **A signed-in person has nothing to read here**: the page redirects them to
+  the home ("Now"), and the sign-in its button starts returns there too
+  (`return_to=/`) — one sign-in, then the home, with no card in between. The
+  card "You are signed in" (`signed-in-as`: the display name or the email, the
+  teams, what the person is here when it is more than a person, "Open the
+  gateway" or "Set up sign-in", the sign-out form) is kept for the two cases
+  where the home is not the answer: a failed attempt while a session exists
+  (`/login?error=<code>`: the error is shown, the session is still open), and
+  the install session of the bootstrap token, which owns nothing and has no
+  home ("Set up sign-in" → `/admin`). The page checks nothing itself: the session is the
   authenticator's.
 - **`/admin/bootstrap`** — "Set up this gateway", inside `AuthPage`: the
   token form (`POST /api/auth/bootstrap`, field `token`; the label says the

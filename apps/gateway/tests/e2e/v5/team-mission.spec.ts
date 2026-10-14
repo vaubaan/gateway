@@ -162,6 +162,64 @@ test('a creator adds a teammate and a machine key; each holder is attributed; ea
   await expect(team.getByRole('heading', { name: /People and keys/ })).toContainText('3');
   await snap(ines, 'team-creator');
 
+  // ── The acts of a row do not depend on hovering ─────────────────────────
+  // With a pointer they are drawn when the row is pointed at — and when the keyboard
+  // reaches them: each is a real button, in the tab order, named after its act and its key.
+  const revokeMachine = machineRow(ines, CI).getByRole('button', {
+    name: `Revoke the machine key ${CI}`,
+  });
+  const drawn = (button: typeof revokeMachine) =>
+    button.evaluate((el) => Number(getComputedStyle(el.parentElement ?? el).opacity));
+  await ines.mouse.move(0, 0);
+  expect(await drawn(revokeMachine)).toBe(0);
+  await revokeMachine.focus();
+  await expect(revokeMachine).toBeFocused();
+  expect(await drawn(revokeMachine)).toBe(1);
+  await ines.keyboard.press('Shift+Tab');
+  await expect(
+    machineRow(ines, CI).getByRole('button', { name: `Replace the machine key ${CI}` }),
+  ).toBeFocused();
+
+  // On a phone there is nothing to hover with: every act of every row is drawn, the table
+  // is rows of labelled lines instead of a grid cut word by word, and nothing scrolls sideways.
+  await ines.setViewportSize({ width: 390, height: 780 });
+  await ines.mouse.move(0, 0);
+  for (const button of [
+    revokeMachine,
+    personRow(ines, E2E_SHARE_TARGET.email).getByRole('button', {
+      name: `Remove ${E2E_SHARE_TARGET.email}`,
+    }),
+    personRow(ines, E2E_SHARE_OWNER.email).getByRole('button', { name: 'Replace my key' }),
+  ]) {
+    await expect(button).toBeVisible();
+    expect(await drawn(button)).toBe(1);
+    const box = await button.boundingBox();
+    expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(390);
+  }
+  // A cell is as wide as the page allows, not a 60 px column: the sentence of a row
+  // ("no key yet", "2 calls today · last call …") reads on one or two lines.
+  const callsCell = personRow(ines, E2E_SHARE_TARGET.email).locator('td[data-column="calls"]');
+  expect((await callsCell.boundingBox())?.width).toBeGreaterThan(300);
+  expect(await ines.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  // A dialog is never taller than the screen: its buttons stay in view.
+  await ines.getByRole('button', { name: 'Setup kit' }).click();
+  const kit = ines.getByRole('dialog');
+  await expect(kit).toBeVisible();
+  const kitBox = await kit.boundingBox();
+  expect(kitBox?.y).toBeGreaterThanOrEqual(0);
+  expect((kitBox?.y ?? 0) + (kitBox?.height ?? 0)).toBeLessThanOrEqual(780);
+  await expect(kit.getByRole('button', { name: 'Close' })).toBeInViewport();
+  await snap(ines, 'team-creator-phone-kit');
+  await kit.getByRole('button', { name: 'Close' }).click();
+  await snap(ines, 'team-creator-phone');
+  // …and neither is it at the size of a small laptop.
+  await ines.setViewportSize({ width: 1280, height: 800 });
+  await ines.getByRole('button', { name: 'Setup kit' }).click();
+  const kitWide = await ines.getByRole('dialog').boundingBox();
+  expect(kitWide?.y).toBeGreaterThanOrEqual(0);
+  expect((kitWide?.y ?? 0) + (kitWide?.height ?? 0)).toBeLessThanOrEqual(800 - 16);
+  await ines.getByRole('dialog').getByRole('button', { name: 'Close' }).click();
+
   // ── Joan finds it shared with her, reads it, and generates her own key ──
   const joan = await browserOf(browser, request, E2E_SHARE_TARGET, '/missions');
   const shared = joan.getByTestId('missions-shared');
@@ -308,17 +366,25 @@ test('a creator adds a teammate and a machine key; each holder is attributed; ea
     E2E_SHARE_TARGET.email,
     E2E_SHARE_TARGET.email,
   ]);
+  // One form for a date, whatever the browser's locale (en-US here): "14 Oct, 01:48:59",
+  // never "10/14/2026, 1:48:59 AM".
+  const times = await ines.locator('main time').allInnerTexts();
+  expect(times.length).toBeGreaterThan(0);
+  for (const text of times) {
+    expect(text).toMatch(/^\d{1,2} [A-Z][a-z]{2}(?: \d{4})?(?:, \d\d:\d\d(?::\d\d)?)?$/);
+  }
+  expect(await ines.getByRole('main').innerText()).not.toMatch(/\d{1,2}\/\d{1,2}\/\d{4}|\b[AP]M\b/);
 
   await ines.goto('/activity');
   // Her audit also holds other missions on her connections: this one only.
   await ines.locator('select[name="mission"]').selectOption({ label: MISSION });
   await ines.getByRole('button', { name: 'More filters' }).click();
-  await ines.getByLabel(/^Key holder/).fill(CI);
+  await ines.getByLabel(/^Who/).fill(CI);
   await ines.getByRole('button', { name: 'Apply' }).click();
   const audit = ines.getByTestId('audit-table');
   // A machine key is said in words, and drawn as a dashed square, not as a person.
   await expect(audit.getByTestId('audit-holder')).toHaveText([/CI runner\s*·\s*machine key/]);
-  await ines.getByLabel(/^Key holder/).fill(E2E_SHARE_TARGET.email);
+  await ines.getByLabel(/^Who/).fill(E2E_SHARE_TARGET.email);
   await ines.getByRole('button', { name: 'Apply' }).click();
   await expect(audit.getByTestId('audit-holder')).toHaveText([
     new RegExp(E2E_SHARE_TARGET.email.replace('.', '\\.')),

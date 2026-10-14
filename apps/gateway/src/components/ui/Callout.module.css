@@ -39,6 +39,13 @@
   align-self: center;
 }
 
+/* On a tint the quiet ink is the second ink (see `Table.module.css`). */
+.tone_info,
+.tone_ok,
+.tone_warn,
+.tone_bad {
+  --ink-3: var(--ink-2);
+}
 .tone_info {
   --tone: var(--accent);
   border-color: var(--accent-line);

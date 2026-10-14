@@ -16,6 +16,7 @@ tracks:
   - apps/gateway/src/components/ui/
   - apps/gateway/src/components/shell/
   - apps/gateway/src/lib/vocabulary.ts
+  - apps/gateway/src/lib/dates.ts
   - apps/gateway/src/lib/theme.ts
   - apps/gateway/src/lib/theme-server.ts
   - apps/gateway/src/app/(app)/design/
@@ -293,7 +294,8 @@ seven is the budget (style guide §1).
 - `NavLinks` (client, `usePathname`) renders them from `NavItem`s
   (`{ key, href, label, count?, ruleBefore? }`) with the icon of each entry
   (`Icon`). The current entry carries `aria-current="page"`, a fill and the
-  strong weight.
+  strong weight. The same list has three drawings, chosen by the width of the
+  window ([The collapsed form and the phone bar](#the-collapsed-form-and-the-phone-bar)).
 - **Which entry is current** is `sectionOf(pathname)` (`nav.ts`, pure): the
   home is its own path only; any other entry is its path and what is under
   it; and the pages that have no entry belong to one — `/admin/**` and
@@ -322,11 +324,35 @@ seven is the budget (style guide §1).
 - `ThemeToggle` (client): one icon button showing the current choice; a press
   moves to the next of System, Light, Dark. `data-testid="theme-toggle"`.
 
+#### The collapsed form and the phone bar
+
 **The collapsed form** is CSS only (`shell.module.css`). Under 1024 px the
 navigation is a 56 px rail of icons: the labels and the person's name are
 visually hidden, still read by assistive technology, and each link carries its
-label as `title`. Under 641 px it becomes a bar above the page, and the theme
-toggle is hidden (the choice is in Settings).
+label as `title`.
+
+**A phone** (640 px and under) has no pointer to hover an icon with, so an
+icon alone would say nothing: the navigation is a **bar fixed at the bottom of
+the screen, an icon and a word per entry**
+([ADR](../decisions/interface-fixes-after-the-visual-review.md)).
+
+- The bar holds the four places a person goes to every day — `PHONE_BAR` in
+  `nav.ts`: Now, Waiting for you, Missions, Accounts — and **More**
+  (`NAV_MORE`, `data-testid="nav-more"`), a button that opens the other
+  entries (Activity, Reference, Settings) in a sheet above the bar
+  (`data-testid="nav-sheet"`). Seven entries stay seven: none is removed on a
+  phone. The sheet closes on Escape (the focus returns to the button), on a
+  press outside, and when the path changes. While it is closed its list is
+  empty, so every entry is in the document once.
+- A label too long for a fifth of the screen is drawn in a short form
+  (`NAV_SHORT`: "Waiting" for "Waiting for you"); the link keeps its full
+  name for assistive technology and as its `title`. The count of what waits
+  stays on its entry.
+- "More" is marked as the current entry when the page is under one of the
+  entries it holds.
+- The top of the screen keeps who and where: the brand with its name, the
+  person, the theme toggle. The page ends above the bar
+  (`padding-bottom` of the main column, with the safe-area inset).
 
 **The page column.** `main.page` is 1120 px wide at most, with 44 px of side
 padding. A page chooses another measure through its `PageHeader`
@@ -356,9 +382,17 @@ Accounts without owner; [telemetry](telemetry.md);
 [management-door](management-door.md): Connected apps, Registered apps).
 
 `/settings` (`(app)/settings/page.tsx`, `requirePrincipal()`) holds the theme
-as three named options (`ThemeChoiceControl`, `data-testid="settings-theme"`),
-a link to connected apps and to the interface reference, and for an
-administrator a link to Administration.
+as three named options (`ThemeChoiceControl`, `data-testid="settings-theme"`)
+and a link to connected apps, and for an administrator a link to
+Administration and to the interface reference
+(`data-testid="settings-interface-reference"`). The interface reference
+(`/design`) is a component gallery, a tool of whoever maintains the gateway:
+the page stays open to every session by its address, and is listed for
+administrators only.
+
+On a phone the local navigation (`SubNav`) is one labelled row of chips per
+group — the label above, each entry a target a finger can hit — instead of a
+wrapping line of words.
 
 `BuildFooter` (server component) is one quiet line where the page ends:
 `Vaubaan Gateway <version> · <commit>`, the build stamps of
@@ -366,8 +400,11 @@ administrator a link to Administration.
 reports as `gateway_version`; `dev` for an unstamped build. Every page a human
 reads carries it:
 
-- the shell, for the application and for Administration, and the "You do not
-  administer this gateway" explanation of the Administration layout;
+- the shell, for the application and for Administration — the "You do not
+  administer this gateway" explanation of the Administration layout is drawn
+  inside the same shell (`AppShell`, the empty-state component, "Go to Now"):
+  a person who opens `/admin` without administering keeps their navigation,
+  like on "Not found" (`data-testid="not-administrator"`);
 - `/login`, `/admin/bootstrap` (outside every layout) and the root
   `not-found.tsx`, through the `footer` of `AuthPage`;
 - the pages of the authorization endpoint — the consent screen and its
@@ -448,8 +485,17 @@ refusal runs nothing and is a plain form post from the row. The row of a
 limit leads to its request ("Answer"). ADR
 [now-and-waiting-pages](../decisions/now-and-waiting-pages.md).
 
-The date under the title (`Today`, client) is the reader's own; the server
-renders the UTC instant and the browser replaces it after hydration.
+The date under the title (`Today`, client) is the reader's own, written by
+`formatToday` of `lib/dates` ("Wednesday 14 October, 02:02"); the server
+renders the UTC instant, says "UTC", and the browser replaces it after
+hydration.
+
+**The head of an approval** on the home, in the inbox and on the mission is
+what the agent wants to do — "Merge a pull request · acme-org/app"
+(`CallHeadline`, [requests](requests.md), "What a page heads a request with")
+— and the line under it names the permission the call needs. Who asks reads
+agent first, then whose key it holds ("release-bot, with your key"): `asker`
+of `lib/vocabulary.ts`.
 
 ## Pages outside the shell
 
@@ -460,14 +506,14 @@ passes as `footer`. `AuthHeading` is its title and its one sentence. It reads
 the tokens, so it follows the theme like any page, and has no hook: `error.tsx`
 (a client component) uses it too.
 
-| Page                               | Says                                                                                                                                                                                                      |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/login`                           | "Sign in to `<host>`" and one button per identity provider; the closed error codes of a failed attempt; signed in, who is signed in and "Open the gateway" ([authentication](authentication.md), "Pages") |
-| `/admin/bootstrap`                 | "Set up this gateway": the bootstrap token form while it is active, otherwise that it no longer works ([authentication](authentication.md))                                                               |
-| `app/not-found.tsx`                | an address that matches no page, and a page of Administration asked by someone who does not administer: "This page does not exist", the way to the home, nothing about what exists                        |
-| `(app)/not-found.tsx`              | `notFound()` thrown by a page of the application — an unknown mission, account or service, or one that is not the reader's: the shell stays, the title is "Not found" (`data-testid="not-found"`)         |
-| `(app)/error.tsx`, `app/error.tsx` | a page failed while rendering: "This page could not be shown", "Try again" (`reset`), and the digest the server logged the error under as a reference to quote (`page-error`, `error-reference`)          |
-| `app/global-error.tsx`             | the root layout itself failed: it replaces the document, imports the style sheet and reads no session and no theme cookie                                                                                 |
+| Page                               | Says                                                                                                                                                                                                                                   |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/login`                           | "Sign in to `<host>`" and one button per identity provider; the closed error codes of a failed attempt; a signed-in person is sent to the home, and the sign-in it starts returns there ([authentication](authentication.md), "Pages") |
+| `/admin/bootstrap`                 | "Set up this gateway": the bootstrap token form while it is active, otherwise that it no longer works ([authentication](authentication.md))                                                                                            |
+| `app/not-found.tsx`                | an address that matches no page, and a page of Administration asked by someone who does not administer: "This page does not exist", the way to the home, nothing about what exists                                                     |
+| `(app)/not-found.tsx`              | `notFound()` thrown by a page of the application — an unknown mission, account or service, or one that is not the reader's: the shell stays, the title is "Not found" (`data-testid="not-found"`)                                      |
+| `(app)/error.tsx`, `app/error.tsx` | a page failed while rendering: "This page could not be shown", "Try again" (`reset`), and the digest the server logged the error under as a reference to quote (`page-error`, `error-reference`)                                       |
+| `app/global-error.tsx`             | the root layout itself failed: it replaces the document, imports the style sheet and reads no session and no theme cookie                                                                                                              |
 
 ## Self-contained documents — `server/http/document.ts`
 
@@ -632,11 +678,32 @@ each one is in its file header and on the gallery.
 
 **Lists and tables**
 
-| Export                              | What it is                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Rows`, `Row`                       | a `<ul>` of quiet rows: `lead` (a mark), `title` (a link with `href`), `description`, `aside` (at most one thing), `end` (an action or a short fact), `muted`                                                                                                                                                                                                                                                                                     |
-| `DataTable`, `Column`               | a typed table: `columns` (`id`, `header`, `cell`, `align`, `nowrap`, `width`, `detail`), `rows` or `groups`, `rowKey`, a required `caption` (not drawn), `actions` (shown on hover and on focus), `rowTone` (`bad`, `warn`, `quiet`), `rowDetail`, `headless`, `density`, `empty`. **Five columns by default, seven with details**: `checkColumnBudget` throws beyond that; `columnBudget={6}` is the documented exception of the activity record |
-| `Meter`, `meterState`, `NEAR_LIMIT` | `used`, `limit`, `threshold` (a share of the limit, default 0.6): below it a dash (`placeholder="none"` renders nothing) that still says the figure to assistive technology; near it an amber bar; at the limit a red one and "Limit reached". `threshold={0}` always draws. `format="percent"`, `label`                                                                                                                                          |
+| Export                              | What it is                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Rows`, `Row`                       | a `<ul>` of quiet rows: `lead` (a mark), `title` (a link with `href`), `description`, `aside` (at most one thing), `end` (an action or a short fact), `muted`                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `DataTable`, `Column`               | a typed table: `columns` (`id`, `header`, `cell`, `align`, `nowrap`, `width`, `detail`), `rows` or `groups`, `rowKey`, a required `caption` (not drawn), `actions` (shown on hover and on focus; always drawn on a device that cannot hover and in a phone-sized window), `narrow` (`stack` by default, `scroll`), `rowTone` (`bad`, `warn`, `quiet`), `rowDetail`, `headless`, `density`, `empty`. **Five columns by default, seven with details**: `checkColumnBudget` throws beyond that; `columnBudget={6}` is the documented exception of the activity record |
+| `Meter`, `meterState`, `NEAR_LIMIT` | `used`, `limit`, `threshold` (a share of the limit, default 0.6): below it a dash (`placeholder="none"` renders nothing) that still says the figure to assistive technology; near it an amber bar; at the limit a red one and "Limit reached". `threshold={0}` always draws. `format="percent"`, `label`                                                                                                                                                                                                                                                           |
+
+**A table on a phone.** Five columns in 390 px wrap word by word, so under
+641 px a `DataTable` draws each row as a block (`.stack` in
+`Table.module.css`): the first cell is the title of the row, every other cell
+is a line — the name of its column in the quiet ink (`data-label`, the
+`header` when it is text, or the column's `label`; `label: null` draws the
+value alone), then the value. The head leaves the drawing and stays in the
+document; the roles (`table`, `row`, `cell`, `columnheader`) are written out
+so that the table stays one for assistive technology whatever its drawing.
+The actions of a row are always drawn there: nothing on a phone depends on
+hovering. A tinted row is tinted as a whole. `narrow="scroll"` keeps the grid
+and scrolls it inside its own box; nothing uses it today. The preset
+comparison of the reference (a plain `<table>`, `reference.module.css`) keeps
+its grid and scrolls inside its box.
+
+**The quiet ink on a tint.** `--ink-3` on `--bad-soft` is 4.48:1, under AA. A
+tinted surface — an exception row of a table, a `Callout`, the one filled box
+(`AnswerRow boxed`) — redefines `--ink-3` as `--ink-2` for everything it
+holds, so "quiet" stays readable there without each component knowing where
+it is drawn. `design-tokens.test.ts` checks `--ink` and `--ink-2` on the four
+tints in both themes.
 
 **Marks**
 
@@ -664,18 +731,18 @@ each one is in its file header and on the gallery.
 
 **Actions, overlays, details, forms**
 
-| Export                                                                     | What it is                                                                                                                                                                                                                                                                                                                                                               |
-| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `Button`, `ButtonLink`                                                     | `variant` (`primary` — the accent —, `secondary`, `ghost`, `danger`), `size` (`sm` 26 px, `md` 30 px, `lg` 36 px; the two small ones answer on 32 px), `loading`. `ButtonLink` is a link with the same look (`external` for a plain `<a>`)                                                                                                                               |
-| `Dialog`, `DialogPanel`, `ConfirmDialog`, `OptionCard`, `DangerConfirm`    | client. A native `<dialog>` opened with `showModal()`: the browser keeps the focus inside, Escape and the backdrop call `onClose` (not while `dismissible` is false). `ConfirmDialog` takes a required `consequence`, optional `options` (radio cards), a `confirmLabel` named after the act, `tone`, `busy`, `error`, `hint`. `DangerConfirm` asks for a typed `phrase` |
-| `ToastProvider`, `useToast`, `ToastCard`                                   | client. Mounted once by the shell; `useToast()` returns `toast({ title, description?, tone? })`; announced politely; leaves after five seconds unless it is a failure                                                                                                                                                                                                    |
-| `Disclosure`, `DetailScope`, `DetailToggle`, `DetailOnly`, `useRemembered` | client. Details on demand, remembered in `localStorage` under `vaubaan:open:<id>` (`id` names the page and the region). A scope flips `data-details` on a wrapper: the `detail` columns of a `DataTable` and any `DetailOnly` block inside follow it, even when rendered by the server                                                                                   |
-| `TabList`, `TabPanel`, `TabItem`                                           | client. Tabs with the ARIA roles and keyboard; the state belongs to the caller                                                                                                                                                                                                                                                                                           |
-| `PickGrid`, `PickCard`                                                     | a handful of choices of the same kind as quiet bordered cards — a mark, a name, one line that says how; `unavailable` is dashed and says why. The one exception to "rows, not cards": the cards are the action (the services an account can be connected to)                                                                                                             |
-| `ConfirmSubmit`                                                            | client. A button whose act is a plain form post, asked first: it opens a `ConfirmDialog` with a required `consequence` and submits the form (`action`, hidden `fields`) on confirmation. For an act that stops, removes or hands over something                                                                                                                          |
-| `Segmented`, `FilterChips`, `SearchField`, `FilterOption`                  | client. One choice among a few; facets that add up; a search field. An option with `href` is a link (the filter lives in the URL), otherwise a button                                                                                                                                                                                                                    |
-| `Field`, `Input`, `Textarea`, `Select`, `Checkbox`, `Radio`, `Switch`      | `Field` takes `label`, `htmlFor`, `shape` (the expected shape, said in the label), `optional`, `hint`, `error`; it gives its control `aria-describedby` and, with an error, `aria-invalid`. Controls take `size="sm"` and `mono`                                                                                                                                         |
-| `Code`, `CodeBlock`, `CodeTone`, `CopyButton`                              | inline code; a dark block with a Copy button that copies `copy` (or the text when it is a plain string); a keyword, a string or a comment inside a block; a copy button on its own                                                                                                                                                                                       |
+| Export                                                                     | What it is                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Button`, `ButtonLink`                                                     | `variant` (`primary` — the accent —, `secondary`, `ghost`, `danger`), `size` (`sm` 26 px, `md` 30 px, `lg` 36 px; the two small ones answer on 32 px), `loading`. `ButtonLink` is a link with the same look (`external` for a plain `<a>`)                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `Dialog`, `DialogPanel`, `ConfirmDialog`, `OptionCard`, `DangerConfirm`    | client. A native `<dialog>` opened with `showModal()`: the browser keeps the focus inside, Escape and the backdrop call `onClose` (not while `dismissible` is false). Never taller than the window: its top margin (`--dialog-top`: 96 px, 60 px when wide, 24 px in a window under 820 px high, 16 px on a phone) and the same room under it are taken off `max-height`, and the body scrolls between a head and a foot that stay in view — a page adds no height rule of its own. `ConfirmDialog` takes a required `consequence`, optional `options` (radio cards), a `confirmLabel` named after the act, `tone`, `busy`, `error`, `hint`. `DangerConfirm` asks for a typed `phrase` |
+| `ToastProvider`, `useToast`, `ToastCard`                                   | client. Mounted once by the shell; `useToast()` returns `toast({ title, description?, tone? })`; announced politely; leaves after five seconds unless it is a failure                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `Disclosure`, `DetailScope`, `DetailToggle`, `DetailOnly`, `useRemembered` | client. Details on demand, remembered in `localStorage` under `vaubaan:open:<id>` (`id` names the page and the region). A scope flips `data-details` on a wrapper: the `detail` columns of a `DataTable` and any `DetailOnly` block inside follow it, even when rendered by the server                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `TabList`, `TabPanel`, `TabItem`                                           | client. Tabs with the ARIA roles and keyboard; the state belongs to the caller                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `PickGrid`, `PickCard`                                                     | a handful of choices of the same kind as quiet bordered cards — a mark, a name, one line that says how; `unavailable` is dashed and says why. The one exception to "rows, not cards": the cards are the action (the services an account can be connected to)                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `ConfirmSubmit`                                                            | client. A button whose act is a plain form post, asked first: it opens a `ConfirmDialog` with a required `consequence` and submits the form (`action`, hidden `fields`) on confirmation. For an act that stops, removes or hands over something                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `Segmented`, `FilterChips`, `SearchField`, `FilterOption`                  | client. One choice among a few; facets that add up; a search field. An option with `href` is a link (the filter lives in the URL), otherwise a button                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `Field`, `Input`, `Textarea`, `Select`, `Checkbox`, `Radio`, `Switch`      | `Field` takes `label`, `htmlFor`, `shape` (the expected shape, said in the label), `optional`, `hint`, `error`; it gives its control `aria-describedby` and, with an error, `aria-invalid`. Controls take `size="sm"` and `mono`                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `Code`, `CodeBlock`, `CodeTone`, `CopyButton`                              | inline code; a dark block with a Copy button that copies `copy` (or the text when it is a plain string) — on a phone the button sits above the block, not over its first line; a keyword, a string or a comment inside a block; a copy button on its own                                                                                                                                                                                                                                                                                                                                                                                                                               |
 
 **Labels are bound to their controls.** A `Field` that holds one control
 takes `htmlFor`, the `id` of that control, and renders a real `<label for>`.
@@ -740,14 +807,36 @@ before the redesign — `components/risk/` — is deleted: a permission is a
 - `components/auth/principal.ts`: `isOperatorPrincipal(principal)`
   ([The shell](#the-shell--componentsshell)).
 
-`components/LocalDate.tsx` (client) renders a timestamp: the ISO form on the
-server, the browser's locale after hydration, without a hydration mismatch.
-`dateOnly` drops the time. The Missions list, the mission page, its session
-page, Connected apps and three Administration pages (`/admin`,
-`/admin/bootstrap`, `/admin/oauth-clients`) use it. The accounts pages print a
-short day (`shortDate` of `lib/vocabulary.ts`: "14 Sep", UTC) or how long ago
-(`ago`); the activity record prints the time of a line with its own `When`
-(`activity/when.tsx`: the clock time, the day under it).
+**Dates: one form, one helper.** `lib/dates.ts` (pure, no import) is the one
+place a date becomes text, and the text does not depend on the reader's
+locale ([ADR](../decisions/interface-fixes-after-the-visual-review.md)):
+
+| Function                         | Writes                                           |
+| -------------------------------- | ------------------------------------------------ |
+| `formatDay(at, { zone, now })`   | "14 Oct"; "14 Oct 2025" when it is not this year |
+| `formatClock(at, { seconds })`   | "01:48" on 24 hours; "01:48:59"                  |
+| `formatDayTime(at, { seconds })` | "14 Oct, 01:48"; "14 Oct, 01:48:59"              |
+| `formatToday(at)`                | "Wednesday 14 October, 02:02" (the home, once)   |
+
+No page calls `toLocaleString`, `toLocaleDateString`, `toLocaleTimeString` or
+`Intl.DateTimeFormat` (a test of `lib/dates.test.ts` reads the sources): a
+browser set to US English would print "10/14/2026, 1:48:59 AM" beside a page
+that says "14 Oct". The locale never changes the text; the time zone does.
+The server does not know the reader's zone, so it writes UTC (`zone: 'utc'`,
+the default) and the client components replace it with the reader's own after
+hydration (`zone: 'local'`), without a hydration mismatch:
+
+- `components/LocalDate.tsx` — a `<time>` with the exact instant as `dateTime`
+  and `title`: "14 Oct, 01:48", `dateOnly` "14 Oct", `seconds` for a timeline
+  read line by line (the last events of a mission). The mission pages, the
+  request pages, Connected apps and the Administration pages use it;
+- `waiting/local-time.tsx` (`LocalTime`: "10:58"), `activity/when.tsx`
+  (`When`: the clock to the second, the day under it), `_now/today.tsx`.
+
+A sentence built on the server prints a short day in UTC (`shortDate` of
+`lib/vocabulary.ts`, which is `formatDay`: "14 Sep") or how long ago (`ago`,
+`agoSentence`, `until`). The native date fields of the activity filters are
+the browser's own control and show the browser's own placeholder.
 
 The other shared components belong to one feature and are described in its
 handbook:

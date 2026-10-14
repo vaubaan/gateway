@@ -587,7 +587,7 @@ presets:
 
   - id: migration-operator
     label: Migration operator
-    description: Apply migrations. Any migration on staging-labelled projects. On prod, only plain schema changes (create or alter tables and indexes) and RLS changes, each asking first ; a prod migration that writes rows, drops a table or a column, grants privileges, enables an extension or defines a function is refused.
+    description: Apply migrations. Any migration on staging-labelled projects. On prod, only plain schema changes (create or alter tables and indexes) and RLS changes, each asking first; a prod migration that writes rows, drops a table or a column, grants privileges, enables an extension or defines a function is refused.
     entries:
       - risk_id: supabase.read-data
         quota: 2000

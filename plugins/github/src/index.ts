@@ -16,6 +16,7 @@ import { classifyGithub } from './classify.ts';
 import { githubCredential } from './credential.ts';
 import { githubDataModel } from './data-model.ts';
 import { discoverGithubResources, executeGithub } from './execute.ts';
+import { githubToolTitles } from './tool-titles.ts';
 import { githubTools } from './tools.ts';
 
 // The YAML sits next to this module ; `catalogPathNextTo` keeps the path a
@@ -48,6 +49,7 @@ export const githubPlugin = definePlugin({
     },
   ],
   tools: githubTools,
+  toolTitles: githubToolTitles,
   dataModel: githubDataModel,
   catalog: githubCatalog.catalog,
   credential: githubCredential,

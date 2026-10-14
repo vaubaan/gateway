@@ -256,7 +256,7 @@ risks:
 presets:
   - id: read-only
     label: Read-only
-    description: Inspect databases, usage statistics and key-value data on the selected databases ; no write.
+    description: Inspect databases, usage statistics and key-value data on the selected databases; no write.
     entries:
       - risk_id: upstash-redis.read-database-metadata
         quota: 2000
@@ -273,7 +273,7 @@ presets:
 
   - id: developer
     label: Developer
-    description: Key-level reads and writes (with TTL) and targeted deletions on development and staging databases ; no FLUSH, no arbitrary command, no database management.
+    description: Key-level reads and writes (with TTL) and targeted deletions on development and staging databases; no FLUSH, no arbitrary command, no database management.
     entries:
       - risk_id: upstash-redis.read-database-metadata
         quota: 5000

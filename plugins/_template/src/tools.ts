@@ -50,3 +50,16 @@ export const templateTools: readonly McpToolDeclaration[] = [
     },
   },
 ];
+
+/**
+ * What each tool does, in a few words a person reads at a glance
+ * (`ProviderPlugin.toolTitles`) : the head of an approval request in the web
+ * interface, before the resource the call resolves to. A verb and its object,
+ * sentence case, no final period. For people only : never part of `tools/list`.
+ */
+export const templateToolTitles: Readonly<Record<string, string>> = {
+  [TOOL.listWidgets]: 'List widgets',
+  [TOOL.getWidget]: 'Read a widget',
+  [TOOL.updateWidget]: 'Rename a widget',
+  [TOOL.deleteWidget]: 'Delete a widget',
+};

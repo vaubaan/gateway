@@ -17,7 +17,7 @@ import { classifyTemplate } from './classify.ts';
 import { templateDataModel } from './data-model.ts';
 import { discoverTemplateResources, executeTemplate } from './execute.ts';
 import { API_KEY_FIELD, PROVIDER_ID } from './identity.ts';
-import { templateTools } from './tools.ts';
+import { templateTools, templateToolTitles } from './tools.ts';
 
 // `catalogPathNextTo` builds a filesystem path from `import.meta.url` ; never
 // write `new URL('./risk-catalog.yaml', import.meta.url)` here — the Next.js
@@ -38,6 +38,9 @@ export const templatePlugin = definePlugin({
   manualRevocation: "Delete the API key in the service's dashboard.",
   // Add `docsUrl` once the provider handbook exists (docs/handbook/providers/<id>.md).
   tools: templateTools,
+  // What each tool does, in a few words : the head of an approval request in the web
+  // interface ("Delete a widget · <workspace>"). Optional ; a tool without one is shown by its name.
+  toolTitles: templateToolTitles,
   dataModel: templateDataModel,
   catalog: templateCatalog.catalog,
   // How a connection of this provider is obtained. The host runs the flow

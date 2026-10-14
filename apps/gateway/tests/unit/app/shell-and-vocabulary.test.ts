@@ -259,7 +259,8 @@ describe('the vocabulary', () => {
     expect(GATE_WORDS[gateWordOf('auto')]).toBe('runs freely');
     expect(GATE_WORDS[gateWordOf('approval')]).toBe('ask me first');
     expect(asksFirst(null)).toBe('Asks you first');
-    expect(asksFirst('Alice')).toBe('Asks Alice first');
+    // A label of a narrow column: the role, not the address (the header names the creator).
+    expect(asksFirst('alice@acme-demo.example')).toBe('Asks the creator first');
   });
 
   it('says roles and keys in sentences', () => {

@@ -122,6 +122,7 @@ export {
   type ApprovalCall,
   type ApprovalGateLine,
   type RequestAsker,
+  type RequestCall,
   type RequestMissionView,
   type WaitingItem,
   type ApprovalView,

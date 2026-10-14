@@ -17,7 +17,7 @@ import {
   until,
   usedOf,
 } from '@/lib/vocabulary';
-import type { RequestAsker, RequestSummary, WaitingItem } from '@/server/requests';
+import type { RequestAsker, RequestCall, RequestSummary, WaitingItem } from '@/server/requests';
 import { inboxRequestPath } from '@/server/requests/url';
 
 /** Who asks, as a page names them. */
@@ -26,7 +26,7 @@ export interface Who {
   readonly name: string;
   readonly machine: boolean;
   readonly you: boolean;
-  /** "Carol · codex", "You · codex", "machine key nightly", "An agent". */
+  /** "codex, with Carol’s key", "codex, with your key", "An agent with the machine key nightly", "An agent". */
   readonly words: string;
   readonly holder: string | null;
   readonly agent: string | null;
@@ -59,18 +59,43 @@ export function permissionsOf(request: RequestSummary): string {
   return `${first} and ${others.length} more`;
 }
 
-/** The statement of a row: what is asked (an approval), or that a limit was reached. */
-export function titleOf(item: WaitingItem): string {
-  return item.request.kind === 'approval'
-    ? permissionsOf(item.request)
-    : missionReachedLimit(item.request.mission.name, item.period_seconds);
+/**
+ * What the agent wants to do, as the head of an approval request: what the
+ * tool does in a few words, then the resource the call resolves to — "Merge a
+ * pull request · acme-org/app". Composed from what the gateway already knows
+ * of the call, never written per request: the title is the plugin's
+ * (`toolTitles`), and a tool without one is printed by its name, as the
+ * protocol spells it. The permission the call needs is said right under it,
+ * by the page.
+ */
+export function CallHeadline({ call }: { call: RequestCall }) {
+  return (
+    <span data-testid="call-headline">
+      {call.title ?? <Mono>{call.tool}</Mono>}
+      {call.resource && (
+        <>
+          {' '}
+          · <span className="vbn-nowrap">{call.resource}</span>
+        </>
+      )}
+    </span>
+  );
+}
+
+/** The statement of a row: what the agent wants to do (an approval), or that a limit was reached. */
+export function titleOf(item: WaitingItem): React.ReactNode {
+  const { request } = item;
+  if (request.kind !== 'approval') {
+    return missionReachedLimit(request.mission.name, item.period_seconds);
+  }
+  return request.call ? <CallHeadline call={request.call} /> : permissionsOf(request);
 }
 
 /** The shorter statement of an inbox item. */
-export function shortTitleOf(item: WaitingItem): string {
-  return item.request.kind === 'approval'
-    ? permissionsOf(item.request)
-    : limitReachedOn(item.request.risk_label, item.period_seconds);
+export function shortTitleOf(item: WaitingItem): React.ReactNode {
+  const { request } = item;
+  if (request.kind !== 'approval') return limitReachedOn(request.risk_label, item.period_seconds);
+  return request.call ? <CallHeadline call={request.call} /> : permissionsOf(request);
 }
 
 /** "resets in 13 h"; `null` for a mission whose limits never reset. */
@@ -79,8 +104,9 @@ export function resetWords(periodEnd: string | null, now: Date): string | null {
 }
 
 /**
- * The line under the statement, on the home: who and where, why it is asked,
- * the room left. A tool is printed as the protocol spells it.
+ * The line under the statement, on the home: who and where, the permission
+ * the call needs (the statement above says what the agent wants to do), why
+ * it is asked, the room left.
  */
 export function WaitingDescription({ item, who, now }: { item: WaitingItem; who: Who; now: Date }) {
   const { request, budget, period, period_seconds: periodSeconds } = item;
@@ -88,14 +114,7 @@ export function WaitingDescription({ item, who, now }: { item: WaitingItem; who:
   if (request.kind === 'approval') {
     return (
       <>
-        {who.words} on {request.mission.name}
-        {request.tool && (
-          <>
-            {' '}
-            · <Mono>{request.tool}</Mono>
-          </>
-        )}{' '}
-        · {ASKED_FIRST}
+        {who.words}, on {request.mission.name} · needs “{permissionsOf(request)}” · {ASKED_FIRST}
         {line && <> · {roomLeft(line.remaining, line.quota, periodNow(periodSeconds))}</>}
       </>
     );
@@ -104,7 +123,7 @@ export function WaitingDescription({ item, who, now }: { item: WaitingItem; who:
   return (
     <>
       {request.risk_label}
-      {line && <> · {usedOf(line.consumed, line.quota)}</>} · {who.words} is stopped on it until{' '}
+      {line && <> · {usedOf(line.consumed, line.quota)}</>} · {who.words} · stopped on it until{' '}
       {reset ? `the limit ${reset} or your answer` : 'your answer'}
     </>
   );
@@ -139,6 +158,10 @@ export function WaitingList({
             title={shortTitleOf(item)}
             context={
               <>
+                {/* The head says what the agent wants to do; the permission it needs is the second line. */}
+                {request.kind === 'approval' && request.call && (
+                  <>needs “{permissionsOf(request)}” · </>
+                )}
                 {request.mission.name} · {who.words}
               </>
             }

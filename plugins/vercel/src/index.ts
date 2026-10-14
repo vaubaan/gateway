@@ -34,6 +34,7 @@ import {
   VERCEL_API_BASE,
   VERCEL_MCP_URL,
 } from './execute.ts';
+import { vercelToolTitles } from './tool-titles.ts';
 import { vercelTools } from './tools.ts';
 
 // The YAML sits next to this module ; `catalogPathNextTo` keeps the path a
@@ -54,6 +55,7 @@ export const vercelPlugin = definePlugin({
   docsUrl:
     'https://github.com/sbw-vaubaan/vaubaan-gateway/blob/main/docs/handbook/providers/vercel.md',
   tools: vercelTools,
+  toolTitles: vercelToolTitles,
   dataModel: vercelDataModel,
   catalog: vercelCatalog.catalog,
   credential: vercelCredential,

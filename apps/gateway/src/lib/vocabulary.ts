@@ -9,8 +9,10 @@
  * `quota`, `request`, `delegation`, `operator`…). A page prints an id as the
  * protocol spells it (in mono) and everything around it with these words.
  *
- * Pure and browser-safe: no import, usable in server and client components.
+ * Pure and browser-safe, usable in server and client components. Its one
+ * import is `lib/dates`, the one place a date becomes text.
  */
+import { formatDay } from './dates';
 
 /** The product, and how it names itself in the shell. */
 export const PRODUCT = { name: 'Vaubaan', mark: 'V' } as const;
@@ -53,6 +55,17 @@ export const NAV: Readonly<Record<NavKey, { readonly label: string; readonly hre
 };
 
 /** The order of the side navigation; Settings comes after the rule. */
+/**
+ * The word under an entry's icon where the room is a fifth of a phone's width:
+ * given only for a label that does not fit. The link keeps its full name.
+ */
+export const NAV_SHORT: Readonly<Partial<Record<NavKey, string>>> = {
+  waiting: 'Waiting',
+};
+
+/** The last entry of a phone's bar: the entries it has no room for. */
+export const NAV_MORE = 'More';
+
 export const NAV_ORDER: readonly NavKey[] = [
   'now',
   'waiting',
@@ -220,9 +233,14 @@ export const ALLOW_WORDS = {
   limits: 'Limits today',
 } as const;
 
-/** Said of someone else's mission: who is asked is the creator, not the reader. */
+/**
+ * Said of someone else's mission: who is asked is the creator, not the reader.
+ * A label of a narrow column: it names the role, not the address — the page
+ * names the creator in its header, and an email here ran under the value
+ * beside it.
+ */
 export function asksFirst(creator: string | null): string {
-  return creator ? `Asks ${creator} first` : ALLOW_WORDS.asks;
+  return creator ? 'Asks the creator first' : ALLOW_WORDS.asks;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -267,7 +285,7 @@ export const WHY_VALUES: Readonly<Record<WhyAxis, Readonly<Record<string, string
     account: 'whole account',
     bulk: 'many at once',
   },
-  data: { metadata: 'metadata', data: 'data', secret: 'secrets', pii: 'personal data' },
+  data: { metadata: 'metadata', data: 'contents', secret: 'secrets', pii: 'personal data' },
   cost: { free: 'free', moderate: 'moderate', unbounded: 'unbounded' },
   visibility: { internal: 'internal', team: 'the team', public: 'public' },
   persistence: { stateless: 'nothing', session: 'the session', posture: 'until reverted' },
@@ -318,6 +336,10 @@ export const KEY_WORDS = {
   machineKey: 'machine key',
   shownOnce: 'Shown once.',
   notGenerated: 'no key yet',
+  /** A mission that was stopped: its keys are not "not made yet", they were revoked. */
+  revoked: 'keys revoked',
+  /** A mission that ended before the reader made a key. */
+  noneMade: 'no key was made',
 } as const;
 
 /** "Carol's key", "your key", "the machine key nightly". */
@@ -921,9 +943,11 @@ export function delay(seconds: number): string {
 }
 
 /**
- * Who asks, in the fewest words: "Carol · codex", "You · codex", "machine key
- * nightly", "An agent" when the record names nobody. The label of the agent is
- * what it said about itself.
+ * Who asks, in the fewest words — the agent first, then whose key it used:
+ * "codex, with Carol’s key", "codex, with your key", "An agent with the
+ * machine key nightly", "An agent" when the record names nobody. Never "You ·
+ * codex": the person is not the one asking, their key is what the agent
+ * holds. The label of the agent is what it said about itself.
  */
 export function asker(who: {
   readonly holder: string | null;
@@ -931,15 +955,17 @@ export function asker(who: {
   readonly you: boolean;
   readonly agent: string | null;
 }): string {
-  const holder = who.machine
+  const key = who.machine
     ? who.holder
-      ? `${KEY_WORDS.machineKey} ${who.holder}`
-      : KEY_WORDS.machineKey
+      ? `the ${KEY_WORDS.machineKey} ${who.holder}`
+      : `a ${KEY_WORDS.machineKey}`
     : who.you
-      ? 'You'
-      : who.holder;
-  if (!holder) return who.agent ?? 'An agent';
-  return who.agent ? `${holder} · ${who.agent}` : holder;
+      ? KEY_WORDS.yourKey
+      : who.holder
+        ? `${possessive(who.holder)} key`
+        : null;
+  if (!key) return who.agent ?? 'An agent';
+  return who.agent ? `${who.agent}, with ${key}` : `An agent with ${key}`;
 }
 
 /** The words of the home. */
@@ -1151,18 +1177,13 @@ export function periodWord(lengthSeconds: number | null): string {
   return 'this period';
 }
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
 /**
  * A day in the fewest characters: "12 Nov", with the year when it is not this
  * one. Read in UTC so that the server and the browser print the same text;
  * the full date belongs to a `title`.
  */
 export function shortDate(at: Date | string, now: Date = new Date()): string {
-  const date = new Date(at);
-  if (Number.isNaN(date.getTime())) return '';
-  const day = `${date.getUTCDate()} ${MONTHS[date.getUTCMonth()] ?? ''}`;
-  return date.getUTCFullYear() === now.getUTCFullYear() ? day : `${day} ${date.getUTCFullYear()}`;
+  return formatDay(at, { now });
 }
 
 /** "expires 12 Nov", "expired 12 Nov", "never expires". */

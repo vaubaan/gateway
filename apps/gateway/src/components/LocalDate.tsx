@@ -1,44 +1,44 @@
 'use client';
 
 /**
- * Renders a timestamp in the user's locale without causing a hydration
- * mismatch.
+ * An instant in the reader's time zone, in the one form the interface writes
+ * dates in (`lib/dates`): "14 Oct, 01:48", "14 Oct" with `dateOnly`,
+ * "14 Oct, 01:48:59" with `seconds`. Never the browser's locale: a page reads
+ * the same whatever language the browser is set to.
  *
- * Why : `new Date(...).toLocaleString()` returns a *different string* on the
- * server (UTC, en-US default) vs the client (browser timezone + locale), which
- * triggers React error #418 ("Text content does not match server-rendered
- * HTML.") on hydration.
- *
- * How : SSR renders the deterministic ISO form (`YYYY-MM-DD HH:mm:ss` or just
- * the date). After hydration, useEffect swaps it for `toLocaleString()`.
- * `suppressHydrationWarning` covers the brief moment when React reconciles.
+ * The server does not know the reader's zone: it renders the instant in UTC,
+ * and the browser replaces it with the reader's own after hydration.
+ * `suppressHydrationWarning` covers the moment React reconciles the two. The
+ * exact instant is the element's `dateTime` and its `title`.
  */
-
 import { useEffect, useState } from 'react';
+
+import { formatDay, formatDayTime } from '@/lib/dates';
 
 export function LocalDate({
   ts,
   dateOnly = false,
+  seconds = false,
 }: {
   ts: string | null | undefined;
-  /** Render just the date (no time). */
+  /** The day alone: "14 Oct". */
   dateOnly?: boolean;
+  /** The clock to the second, where a record is read line by line. */
+  seconds?: boolean;
 }) {
-  const [isClient, setIsClient] = useState(false);
+  const [local, setLocal] = useState(false);
   useEffect(() => {
-    setIsClient(true);
+    setLocal(true);
   }, []);
   if (!ts) return null;
+  const date = new Date(ts);
+  if (Number.isNaN(date.getTime())) return null;
 
-  const d = new Date(ts);
-  const text = isClient
-    ? dateOnly
-      ? d.toLocaleDateString()
-      : d.toLocaleString()
-    : d
-        .toISOString()
-        .replace('T', ' ')
-        .slice(0, dateOnly ? 10 : 19);
-
-  return <span suppressHydrationWarning>{text}</span>;
+  const zone = local ? 'local' : 'utc';
+  const text = dateOnly ? formatDay(date, { zone }) : formatDayTime(date, { zone, seconds });
+  return (
+    <time dateTime={date.toISOString()} title={date.toISOString()} suppressHydrationWarning>
+      {text}
+    </time>
+  );
 }

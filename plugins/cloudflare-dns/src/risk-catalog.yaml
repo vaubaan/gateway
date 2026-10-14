@@ -272,7 +272,7 @@ presets:
 
   - id: zone-admin
     label: Zone admin
-    description: Everything on the selected zones except deleting them ; record deletion, apex / MX / NS changes, imports, zone settings and DNSSEC ask first.
+    description: Everything on the selected zones except deleting them; record deletion, apex / MX / NS changes, imports, zone settings and DNSSEC ask first.
     entries:
       - risk_id: cloudflare-dns.read-zone-metadata
         quota: 5000

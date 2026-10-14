@@ -194,8 +194,22 @@ in the detail of a line, in mono.
   who is shown it when `arguments_hash` is `null`: `standingOn`), the refusal
   code with what the agent was told, and the technical facts (a yes used,
   latency, the service's error, the client address). For a change: the act
-  and its object as the protocol names them, who made it, and `before` /
-  `after` as stored.
+  and its object as the protocol names them, who made it, then **what changed
+  in words** (`changeLines`, `activity/change-lines.ts`, pure;
+  `data-testid="change-line"`): the account by its name, the resources by
+  theirs, each permission with its limits and whether it asks first ("Read
+  code · 200 a day · 60 a minute · runs freely", its id in mono beside it), a
+  status in the words of its object ("stopped · was running" for a mission),
+  a value that changed with what it was, and nothing for a value that did not
+  change. The lines are read from the keys the record holds, not written per
+  act: a new act with known keys reads well at once, and an unknown key is
+  printed under its own name rather than dropped. `before` / `after` as stored
+  — the protocol's names, the raw ids — are one click away ("Show the raw
+  record", `change-raw`). The names behind the ids come from
+  `AuditQueryService.changeNames(entry)`: read-only, called for the one line a
+  person opened, it names the ids of an entry this service already returned to
+  the reader (an account, a resource, a person by their email, a team) and
+  reveals nothing the entry does not hold.
 - **Paging**: "Earlier" follows `page.next`; "Newest" returns to the first
   page.
 
@@ -285,18 +299,18 @@ mission that does not exist or that the user neither created nor is a member of 
 answer, as on the mission detail page: it goes through `MissionService.get`), otherwise —
 for the creator and for a member alike, with `viewer_role` saying which:
 
-| Field             | Content                                                                                                                                                                                                                                              |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `state`           | `deriveMissionState` (active with its current period, expired, revoked, orphaned)                                                                                                                                                                    |
-| `session`         | `{ id, created_at }`, or `null` until the first call                                                                                                                                                                                                 |
-| `risks`           | one row per accepted risk: catalog label and severity `level`, `quota`, `consumed` and `remaining` this period, `exhausted`, `rate_limit`, `gate`, and `gate_open_until` (below)                                                                     |
-| `periods`         | the counters per period, newest first: the current one (listed even before its first action) then up to `PAST_PERIODS_SHOWN` (7) past ones                                                                                                           |
-| `events`          | the timeline, newest first, `SESSION_EVENTS_PAGE_SIZE` (100) per page, keyset-paged with `next_events` (`SessionsRepo.listRecentEvents`)                                                                                                             |
-| `open_requests`   | requests in state `open` whose expiry is in the future, with their `path` — `null` for a member: they see that a request waits, only the creator answers it                                                                                          |
-| `holder_activity` | the calls of the **current period** per token holder — `holder` (`{ kind, key, label }`, `null` for calls written before tokens had a holder), `allowed`, `refused`, `last_seen_at` — busiest first, then by label (`AuditRepo.tokenHolderActivity`) |
-| `agent_labels`    | distinct `agent_label` of the mission's call entries with call count and last seen (`AuditRepo.agentLabels`)                                                                                                                                         |
-| `label_activity`  | the calls of the **current period** per agent label — `allowed`, `refused`, `last_seen_at`, the unlabelled calls as `label: null` — busiest first; empty when the mission is not active (`AuditRepo.agentLabelActivity`)                             |
-| `timeline_filter` | the filter `events` was read with (below)                                                                                                                                                                                                            |
+| Field             | Content                                                                                                                                                                                                                                                                                                                                                                                 |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `state`           | `deriveMissionState` (active with its current period, expired, revoked, orphaned)                                                                                                                                                                                                                                                                                                       |
+| `session`         | `{ id, created_at }`, or `null` until the first call                                                                                                                                                                                                                                                                                                                                    |
+| `risks`           | one row per accepted risk: catalog label and severity `level`, `quota`, `consumed` and `remaining` this period, `exhausted`, `rate_limit`, `gate`, and `gate_open_until` (below)                                                                                                                                                                                                        |
+| `periods`         | the counters per period, newest first: the current one (listed even before its first action) then up to `PAST_PERIODS_SHOWN` (7) past ones                                                                                                                                                                                                                                              |
+| `events`          | the timeline, newest first, `SESSION_EVENTS_PAGE_SIZE` (100) per page, keyset-paged with `next_events` (`SessionsRepo.listRecentEvents`)                                                                                                                                                                                                                                                |
+| `open_requests`   | requests in state `open` whose expiry is in the future, with their `path` — `null` for a member: they see that a request waits, only the creator answers it — and, for an approval request, the `tool` of the call and the `resource_ref` its audit entry holds (what the page heads the request with: "Merge a pull request · acme-org/app"); never the arguments or their fingerprint |
+| `holder_activity` | the calls of the **current period** per token holder — `holder` (`{ kind, key, label }`, `null` for calls written before tokens had a holder), `allowed`, `refused`, `last_seen_at` — busiest first, then by label (`AuditRepo.tokenHolderActivity`)                                                                                                                                    |
+| `agent_labels`    | distinct `agent_label` of the mission's call entries with call count and last seen (`AuditRepo.agentLabels`)                                                                                                                                                                                                                                                                            |
+| `label_activity`  | the calls of the **current period** per agent label — `allowed`, `refused`, `last_seen_at`, the unlabelled calls as `label: null` — busiest first; empty when the mission is not active (`AuditRepo.agentLabelActivity`)                                                                                                                                                                |
+| `timeline_filter` | the filter `events` was read with (below)                                                                                                                                                                                                                                                                                                                                               |
 
 `consumed` and `remaining` are read from `session_counters` as they stand, never
 recomputed from the audit: a granted claim (period reset, quota extension —
@@ -522,7 +536,7 @@ the page prints it after the type, and falls back to the id when it is `null`:
 | `oauth-client`    | the name the client declared                                                                    |
 | `user`            | the user's email                                                                                |
 | `delegation`      | the name of the client the delegation was given to                                              |
-| `request`         | `claim on <mission name>` / `approval request on <mission name>`                                |
+| `request`         | `the limit of <mission name>` (a claim) / `a call of <mission name>` (an approval request)      |
 | `instance-config` | none: the id is the name (`idp`, `telemetry`, `bootstrap`, `provider-app:<id>`)                 |
 
 `objectLabel` is a `switch` over `AdminObjectType` with one case per member and no
@@ -604,7 +618,7 @@ const removed = await root.audit.retention.sweep(); // number, or null when the 
   session attributed per holder, with no link to answer a request, and loses it when
   removed; for a non-member, creator only; before the
   first call, counters / remaining / exhausted, past periods, one-off mission, open
-  requests by link only, decided request, agent labels, calls per label for the current
+  requests by link, tool and resource (never a fingerprint or an argument), decided request, agent labels, calls per label for the current
   period (allowed, refused, unlabelled, past periods left out, nothing when inactive,
   the counters unchanged), the timeline filtered by label and to unlabelled calls, the
   calls of one label paged among more than two thousand events of other labels (order,

@@ -134,6 +134,16 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* The short form of a long label and the "More" entry are a phone's. */
+.navLabelShort,
+.navMore {
+  display: none;
+}
+.navSheet {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
 /* What waits for the person: the one amber mark of the navigation. */
 .navCount {
   display: grid;
@@ -338,9 +348,15 @@
   }
 }
 
-/* A phone: the navigation is a bar above the page. */
+/*
+ * A phone: who and where at the top (the brand, the person, the theme), and
+ * the navigation as a bar at the bottom of the screen — an icon AND a word per
+ * entry, because a finger has no tooltip. Four entries and "More"; the others
+ * open in a sheet above the bar.
+ */
 @media (max-width: 640px) {
   .app {
+    --phone-bar: 56px;
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto 1fr;
   }
@@ -357,26 +373,121 @@
   }
   .brand {
     margin: 0;
+    margin-right: auto;
   }
+  /* The brand has the room again: its name is drawn. */
+  .brandText {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 0;
+    overflow: visible;
+    clip-path: none;
+  }
+  .brandInstance {
+    display: none;
+  }
+
   .nav {
-    flex: 1;
-    overflow-x: auto;
-    overflow-y: visible;
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 40;
+    overflow: visible;
+    padding: 0 var(--space-1) env(safe-area-inset-bottom, 0);
+    border-top: 1px solid var(--line);
+    background: var(--paper-side);
   }
   .navList {
-    flex-direction: row;
-    justify-content: center;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0;
   }
-  .navRuled {
-    margin: 0 0 0 var(--space-1);
-    padding: 0 0 0 var(--space-1);
-    border-top: 0;
-    border-left: 1px solid var(--line);
+  .navBeyondBar {
+    display: none;
+  }
+  .navMore {
+    display: block;
+    position: relative;
   }
   .navLink {
-    width: var(--control-lg);
-    height: var(--control-lg);
+    flex-direction: column;
+    justify-content: center;
+    gap: var(--space-half);
+    width: 100%;
+    height: var(--phone-bar);
+    padding: 0 var(--space-half);
+    border: 0;
+    background: none;
+    font-size: var(--text-xs);
+    line-height: 1.2;
   }
+  .navLink:hover {
+    background: none;
+  }
+  /* The current entry: the ink and the weight; no fill behind a column of five. */
+  .navLinkOn {
+    background: none;
+  }
+  /* The words are drawn again, under the icon. */
+  .navLabel {
+    position: static;
+    width: auto;
+    max-width: 100%;
+    height: auto;
+    margin: 0;
+    overflow: hidden;
+    clip-path: none;
+    text-overflow: ellipsis;
+  }
+  /* A label too long for a fifth of the screen stays the link's name; its short form is drawn. */
+  .navLabelLong {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .navLabelShort {
+    display: block;
+  }
+  .navCount {
+    top: 6px;
+    right: calc(50% - 22px);
+  }
+
+  /* "More": the entries the bar has no room for, in a sheet above it. */
+  .navSheet {
+    position: absolute;
+    right: var(--space-1);
+    bottom: calc(100% + var(--space-2));
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-half);
+    min-width: 190px;
+    padding: 6px;
+    border-radius: var(--radius-lg);
+    background: var(--paper-raised);
+    box-shadow: var(--shadow-overlay);
+  }
+  .navSheet[hidden] {
+    display: none;
+  }
+  .navSheetLink {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 10px;
+    height: 44px;
+    padding: 0 var(--space-3);
+    font-size: var(--text-base);
+  }
+  .navSheetLink:hover,
+  .navSheetLink.navLinkOn {
+    background: var(--fill);
+  }
+
   .foot {
     flex: none;
     flex-direction: row;
@@ -393,11 +504,10 @@
     left: auto;
     min-width: 0;
   }
-  .themeToggle {
-    display: none;
-  }
   .main {
     min-height: 0;
+    /* The page ends above the bar. */
+    padding-bottom: calc(var(--phone-bar) + env(safe-area-inset-bottom, 0));
   }
   .page {
     padding: var(--space-5) var(--space-4) var(--space-10);

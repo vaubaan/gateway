@@ -90,12 +90,14 @@ this table says where each requirement lives, and what is not written yet.
 
 | Suite                                                                                                     |    Tests |
 | --------------------------------------------------------------------------------------------------------- | -------: |
+| `apps/gateway/src/app/(app)/activity/change-lines.test.ts`                                                |        7 |
 | `apps/gateway/src/app/(app)/missions/[id]/session/event-words.test.ts`                                    |        8 |
 | `apps/gateway/src/app/(app)/missions/message-of.test.ts`                                                  |        2 |
 | `apps/gateway/src/app/(app)/missions/mission-view.test.ts`                                                |       12 |
 | `apps/gateway/src/app/(app)/missions/new/form-state.test.ts`                                              |       40 |
 | `apps/gateway/src/components/auth/principal.test.ts`                                                      |        2 |
 | `apps/gateway/src/components/connections/shape.test.ts`                                                   |        5 |
+| `apps/gateway/src/lib/dates.test.ts`                                                                      |        8 |
 | `apps/gateway/src/server/audit/filters.test.ts`                                                           |       24 |
 | `apps/gateway/src/server/auth/admin-rule.test.ts`                                                         |        5 |
 | `apps/gateway/src/server/auth/bootstrap.test.ts`                                                          |        3 |
@@ -113,14 +115,14 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/config/load.test.ts`                                                             |       54 |
 | `apps/gateway/src/server/connections/codec-and-keypair.test.ts`                                           |       12 |
 | `apps/gateway/src/server/connections/credentials.test.ts`                                                 |       15 |
-| `apps/gateway/src/server/connections/input.test.ts`                                                       |       23 |
+| `apps/gateway/src/server/connections/input.test.ts`                                                       |       25 |
 | `apps/gateway/src/server/connections/install-verification.test.ts`                                        |        5 |
 | `apps/gateway/src/server/connections/mapping.test.ts`                                                     |        3 |
 | `apps/gateway/src/server/connections/oauth2.test.ts`                                                      |       28 |
 | `apps/gateway/src/server/connections/pending.test.ts`                                                     |        7 |
 | `apps/gateway/src/server/connections/provider-revocation.test.ts`                                         |       16 |
 | `apps/gateway/src/server/connections/service.test.ts`                                                     |       33 |
-| `apps/gateway/src/server/connections/shipped-providers.test.ts`                                           |        7 |
+| `apps/gateway/src/server/connections/shipped-providers.test.ts`                                           |        8 |
 | `apps/gateway/src/server/crypto/aead.test.ts`                                                             |       12 |
 | `apps/gateway/src/server/execution/execution.test.ts`                                                     |       21 |
 | `apps/gateway/src/server/groups/service.test.ts`                                                          |       15 |
@@ -187,7 +189,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/budget/pipeline-consistency.test.ts`                                      |        6 |
 | `apps/gateway/tests/integration/budget/session-service.test.ts`                                           |       20 |
 | `apps/gateway/tests/integration/compose/boot.test.ts`                                                     |        4 |
-| `apps/gateway/tests/integration/connections/connect-flow.test.ts`                                         |        6 |
+| `apps/gateway/tests/integration/connections/connect-flow.test.ts`                                         |        7 |
 | `apps/gateway/tests/integration/connections/reassign-and-settle.test.ts`                                  |        5 |
 | `apps/gateway/tests/integration/connections/repository-status.test.ts`                                    |        6 |
 | `apps/gateway/tests/integration/demo/build-stamp.test.ts`                                                 |       10 |
@@ -209,7 +211,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/missions/mission-lifecycle.test.ts`                                       |       33 |
 | `apps/gateway/tests/integration/missions/team-interleaving.test.ts`                                       |        6 |
 | `apps/gateway/tests/integration/missions/team.test.ts`                                                    |       28 |
-| `apps/gateway/tests/integration/now/now.test.ts`                                                          |       11 |
+| `apps/gateway/tests/integration/now/now.test.ts`                                                          |       12 |
 | `apps/gateway/tests/integration/oauth-as/credential-separation.test.ts`                                   |       19 |
 | `apps/gateway/tests/integration/oauth-as/http-surface.test.ts`                                            |       66 |
 | `apps/gateway/tests/integration/oauth-as/mcp-client-flow.test.ts`                                         |        4 |
@@ -243,9 +245,9 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/app/app-guard.test.ts`                                                           |      131 |
 | `apps/gateway/tests/unit/app/build-footer.test.tsx`                                                       |        3 |
 | `apps/gateway/tests/unit/app/design-system.test.tsx`                                                      |       33 |
-| `apps/gateway/tests/unit/app/design-tokens.test.ts`                                                       |       62 |
-| `apps/gateway/tests/unit/app/field.test.tsx`                                                              |        6 |
-| `apps/gateway/tests/unit/app/now-and-waiting.test.tsx`                                                    |       28 |
+| `apps/gateway/tests/unit/app/design-tokens.test.ts`                                                       |       76 |
+| `apps/gateway/tests/unit/app/field.test.tsx`                                                              |        8 |
+| `apps/gateway/tests/unit/app/now-and-waiting.test.tsx`                                                    |       30 |
 | `apps/gateway/tests/unit/app/shell-and-vocabulary.test.ts`                                                |       23 |
 | `apps/gateway/tests/unit/server/auth/mutation-guard.test.ts`                                              |      287 |
 | `apps/gateway/tests/unit/server/budget/decide.test.ts`                                                    |       20 |
@@ -263,7 +265,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/structural/example-config-providers.test.ts`                                     |       10 |
 | `apps/gateway/tests/unit/structural/index.test.ts`                                                        |      100 |
 | `apps/gateway/tests/unit/structural/no-arguments-in-logs.test.ts`                                         |        3 |
-| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`                                          |      408 |
+| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`                                          |      411 |
 | `apps/gateway/tests/unit/structural/persisted-enumerations.test.ts`                                       |       10 |
 | `apps/gateway/tests/unit/structural/plugin-identifier-tests.test.ts`                                      |       25 |
 | `apps/gateway/tests/unit/structural/shipped-presets.test.ts`                                              |       41 |
@@ -281,7 +283,7 @@ this table says where each requirement lives, and what is not written yet.
 | `packages/plugin-sdk/tests/unit/arguments.test.ts`                                                        |       10 |
 | `packages/plugin-sdk/tests/unit/catalog-loader.test.ts`                                                   |       31 |
 | `packages/plugin-sdk/tests/unit/catalog-path.test.ts`                                                     |        4 |
-| `packages/plugin-sdk/tests/unit/define-plugin.test.ts`                                                    |       32 |
+| `packages/plugin-sdk/tests/unit/define-plugin.test.ts`                                                    |       33 |
 | `packages/plugin-sdk/tests/unit/env-of.test.ts`                                                           |        8 |
 | `packages/plugin-sdk/tests/unit/identifiers-kit.test.ts`                                                  |        9 |
 | `packages/plugin-sdk/tests/unit/registry.test.ts`                                                         |       11 |
@@ -512,7 +514,7 @@ npx vitest run packages/policy-engine     # one package
   `toolDeclarations`, `labels` (with `experimental`, and `summary` when the plugin has one), `idEnum` (non-empty tuple, throws when
   empty), `catalogOf` indexed, `presetsOf`; conflicts: same id twice, tool
   outside the plugin prefix, ill-formed plugin reported with its id.
-- **`define-plugin.test.ts`** (32) — fixture well-formed and frozen; `summary` optional, a non-empty paragraph of at most 600 characters when present; a `tokenHandouts` entry names a declared tool and risks of the catalog; **a preset that leaves a token-handing risk on `auto` is refused unless the plugin declares that risk read-only** (`readOnlyRiskIds`, a list of the handout's own risks; undeclared means write; refused where it is on `auto`, per preset and environment); every issue
+- **`define-plugin.test.ts`** (33) — fixture well-formed and frozen; `summary` optional, a non-empty paragraph of at most 600 characters when present; **`toolTitles` optional — a title names a declared tool and reads as a headline** (one line, at most 60 characters, a capital first, no final period; an object, never a list); a `tokenHandouts` entry names a declared tool and risks of the catalog; **a preset that leaves a token-handing risk on `auto` is refused unless the plugin declares that risk read-only** (`readOnlyRiskIds`, a list of the handout's own risks; undeclared means write; refused where it is on `auto`, per preset and environment); every issue
   collected (id grammar, semver, tool prefix and duplicates, data-model
   and catalog provider mismatch); catalog rules through the definition;
   data-model referential integrity; credential spec rules per kind
@@ -1331,18 +1333,39 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   session or for a revoked bootstrap session; each route only delegates to
   a handler known to authenticate (401 / 403 otherwise, the bootstrap
   operator refused where a user is needed).
-- **`tests/unit/app/field.test.tsx`** (6) — form labels are bound to their
+- **`tests/unit/app/field.test.tsx`** (8) — form labels are bound to their
   controls, rendered to static markup (no browser): `Field` with `htmlFor`
   is a real `<label for>`, a group named by its label when it holds several
   controls, no label element without a label, the error shown in place of
   the hint; `CredentialFieldInputs` binds every label, textarea included,
-  with ids that stay unique when two lists share a page.
-- **`tests/unit/app/design-tokens.test.ts`** (62) — the token sheet is the
+  with ids that stay unique when two lists share a page; **a refused form is
+  drawn again** — the values kept, the field in error `aria-invalid` with
+  its shape said again under it, and **no value in a secret field**; the
+  sentence of each problem (`fieldErrorWords`).
+- **`src/lib/dates.test.ts`** (8) — **the one form of a date**: "14 Oct"
+  (the year when it is not this one), "01:48" / "01:48:59" on 24 hours,
+  "14 Oct, 01:48", the date of a page in full; never the US form whatever
+  the locale; UTC unless the reader's zone is asked for; an empty text for
+  what is not an instant; and **no source of the pages hands a date to the
+  browser's locale** (`toLocaleDateString`, `toLocaleTimeString`,
+  `Intl.DateTimeFormat`, a bare `toLocaleString()`).
+- **`src/app/(app)/activity/change-lines.test.ts`** (7) — **a change of the
+  record in words**: a created mission names its account, its resources and
+  each permission with its limits and whether it asks first, with the id
+  beside the name and no raw account or resource id left; a change says what
+  changed and what it was, and leaves out what did not; a status reads in
+  the words of its object (a mission is "stopped", an install token
+  "revoked"); a person and a team by the name behind their id; a teammate
+  once, not by id too; an unknown key under its own name; nothing for a
+  record that is not an object.
+- **`tests/unit/app/design-tokens.test.ts`** (76) — the token sheet is the
   specification of the look: light is the default, dark exists for a chosen
   theme and for the system, and the two dark blocks hold the same values;
   four text sizes and two weights; **every documented pair of text and
-  surface meets WCAG AA in both themes** (26 pairs each; the placeholder ink
-  is below it on purpose); a white letter holds on every mark hue; every
+  surface meets WCAG AA in both themes** (33 pairs each — the first and the
+  second ink on each of the four tints among them, since a tinted surface
+  draws its quiet text in the second ink; the placeholder ink is below AA on
+  purpose); a white letter holds on every mark hue; every
   style refers only to tokens that exist, every token is used, no style sheet
   holds a raw colour, and a font size is a token or relative.
 - **`tests/unit/app/shell-and-vocabulary.test.ts`** (23) — the words of the accounts, reference, activity and settings pages (who owns an account and who else holds it, the confirming button of "Give access", a short date, what a preset holds, the retention in the lede of the record, the setup count; a word for every refusal code and every administrative act, none of them a protocol word), the two pages that were folded into another (`/shares`, `/delegations`) and the server's constant of connected apps; and the side
@@ -1874,7 +1897,9 @@ Unit, co-located under `apps/gateway/src/server/connections/` and
 - **`pending.test.ts`** (7) — state single use, bound to the user, burnt
   by a foreign attempt, malformed / unknown refused, TTL, two concurrent
   callbacks → exactly one; notices read once by their web session.
-- **`input.test.ts`** (23) — field reading; `resolveReturnTo` (fifteen
+- **`input.test.ts`** (25) — field reading, the problems by field too
+  (`invalid`); **`echoOfForm` keeps the name and the non-secret values of a
+  refused form and never a secret**; `resolveReturnTo` (fifteen
   refused shapes: userinfo, port and scheme tricks, paths that normalise to
   `//host`, control characters and backslashes a browser strips or
   rewrites); names; environment labels; editable metadata keys; list
@@ -1892,8 +1917,11 @@ Unit, co-located under `apps/gateway/src/server/connections/` and
   malformed items refused; a spec header cannot replace `Authorization`;
   the cap of 20 pages refuses; refusal versus unreachable for each failure,
   and no error message carries the user token or the client secret.
-- **`shipped-providers.test.ts`** (7) — the plugins the image ships:
-  registered once; every provider-app field is expressible in the mounted
+- **`shipped-providers.test.ts`** (8) — the plugins the image ships:
+  registered once; **every tool has a title a person reads at a glance**
+  (`toolTitles`, eight words at most, not the description again; `toolTitleOf`
+  reads it through the registry and answers `null` for an unknown tool or
+  provider), and the declaration `tools/list` returns is unchanged; every provider-app field is expressible in the mounted
   configuration; no shipped `app-install` plugin is unverifiable;
   redirect-flow providers are offered only once their app
   is configured, forms need nothing; a valid https redirect with state,
@@ -1942,7 +1970,10 @@ Integration:
   has an owner or is revoked. **The missions an act orphans are recorded
   whatever happens to the entry of the act**: a revocation whose own audit
   entry fails still writes `mission-orphaned`.
-- **`tests/integration/connections/connect-flow.test.ts`** (6; the two
+- **`tests/integration/connections/connect-flow.test.ts`** (7; **a refused
+  form comes back as typed** — the redirect keeps `return_to`, the notice
+  carries the name, the non-secret values and the field in error, the key is
+  in nothing that is kept, no connection exists; the two
   `app-install` scenarios are the installation binding: a foreign installation id and a
   callback without code are refused through the handlers with a
   `connection-refused` audit row each, the rightful user connects, and
@@ -2864,10 +2895,12 @@ asserted in "Scenarios — Execution door" (`budget-exhausted`).
   share used, ties to the first listed, never more used than the limit, a
   limit of zero is reached, `null` for an empty policy; missions sort by last
   activity, the never-called ones after, newest first.
-- **`tests/integration/now/now.test.ts`** (11, real root) —
+- **`tests/integration/now/now.test.ts`** (12, real root) —
   `RequestService.waiting` names the holder by display name and the agent by
   its label, counts the replays, lists what is left, names a machine key by
-  its name, **is the creator's alone** (a teammate and an administrator get
+  its name, **heads an approval with its call** (`call`: the tool, the
+  plugin's title, the resource of the refused call's audit entry — the same
+  in `view` and `inbox`; `null` for a limit that was reached), **is the creator's alone** (a teammate and an administrator get
   nothing) and **never carries arguments**; the `asker` of a view;
   `answered` since an instant, never someone else's. `readNow`: a newcomer is
   on a first run; what waits and what runs with its keys, its nearest limit
@@ -2876,8 +2909,12 @@ asserted in "Scenarios — Execution door" (`budget-exhausted`).
   of its requests, and their own key first once generated; a stopped mission
   is named apart. `readSetup`: every service that needs a company app is
   registered or missing; telemetry undecided.
-- **`tests/unit/app/now-and-waiting.test.tsx`** (28, static markup) — the
-  words of a period, of a delay and of who asks; an event in the words of the
+- **`tests/unit/app/now-and-waiting.test.tsx`** (30, static markup) — the
+  words of a period, of a delay and of who asks (the agent first, then whose
+  key: "codex, with your key", never "You · codex"); **an approval is headed
+  by what the agent wants to do** ("Merge a pull request · acme-org/app"),
+  by the tool's name in mono when the plugin gives no title, and by the
+  permission when the request holds no call; an event in the words of the
   interface, total on malformed details. **The page of an approval is read
   in order**: who, the mission, the call and its arguments, the permission
   and its severity, the room left, what an answer does, then the answers —
@@ -3120,8 +3157,8 @@ itself are asserted in "Scenarios — Execution door".
   (`app/(app)/missions/[id]/session/event-words.test.ts`). And: creator only (another user, an operator and an unknown
   id get `null`); before the first call (no session, full budget, gate per risk, catalog
   labels); counted / left / exhausted per risk; past periods kept apart and yesterday's
-  exhaustion gone; one-off mission; **open requests by link only** (kind, risk, dates,
-  `/waiting/<id>`; the sealed arguments exist in the store and are not in the view); decided
+  exhaustion gone; one-off mission; **open requests by link, tool and resource** (kind, risk, dates,
+  `/waiting/<id>`, the tool of an approval and the resource its call resolved to; the sealed arguments exist in the store and neither they nor their fingerprint are in the view); decided
   request no longer listed; **a granted claim lowers the counters** (quota extension then
   period reset: counted and left follow the counter, the `extension` / `reset` events carry
   the credits, the decisions are in the mission's audit); agent labels with counts; timeline newest first with tool,

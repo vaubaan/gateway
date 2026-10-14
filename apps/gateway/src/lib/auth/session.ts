@@ -69,10 +69,15 @@ export async function currentUser(): Promise<UserSession | null> {
   return { root, principal, user: principal.user };
 }
 
-export async function adminDecision(): Promise<{ root: GatewayRoot; decision: AdminDecision }> {
+export async function adminDecision(): Promise<{
+  root: GatewayRoot;
+  decision: AdminDecision;
+  /** Who asked, whatever the decision: a refusal is explained inside their shell. */
+  principal: Principal | null;
+}> {
   const { root, principal } = await currentPrincipal();
   const decision = await root.auth.authenticator.authorizeAdmin(principal);
-  return { root, decision };
+  return { root, decision, principal };
 }
 
 /**

@@ -215,6 +215,8 @@ export default async function SetupPage() {
   ];
   const counted = steps.filter((step) => step.counted);
   const done = counted.filter((step) => step.state === 'done').length;
+  // The one primary action of the page: the first thing a fresh install still needs.
+  const next = steps.find((step) => step.counted && step.state !== 'done' && step.action);
 
   return (
     <>
@@ -236,7 +238,11 @@ export default async function SetupPage() {
               description={step.description}
               end={
                 step.action ? (
-                  <ButtonLink href={step.action.href} size="sm">
+                  <ButtonLink
+                    href={step.action.href}
+                    size="sm"
+                    variant={step.key === next?.key ? 'primary' : 'secondary'}
+                  >
                     {step.action.label}
                   </ButtonLink>
                 ) : step.state === 'done' ? (

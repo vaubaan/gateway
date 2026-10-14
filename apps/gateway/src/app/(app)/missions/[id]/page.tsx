@@ -60,7 +60,11 @@ import {
 import { enumerateCatalog, groupVariants } from '@/server/missions/catalog-view';
 import { explainOrphan } from '@/server/missions/orphan-reason';
 import { riskExplainer } from '@/server/providers/reference';
+import { toolTitleOf } from '@/server/providers/tool-titles';
+import type { RequestCall } from '@/server/requests';
 import { inboxRequestPath } from '@/server/requests/url';
+
+import { CallHeadline } from '../../waiting/parts';
 
 import styles from '../missions.module.css';
 import { allowLines, createdBy, missionMark, nearestLimit } from '../mission-view';
@@ -83,7 +87,8 @@ interface Waiting {
   readonly id: string;
   readonly kind: 'claim' | 'approval';
   readonly labels: readonly string[];
-  readonly tool: string | null;
+  /** An approval: what the agent wants to do, as the banner heads it. */
+  readonly call: RequestCall | null;
   readonly created_at: string;
   /** Where the creator answers; `null` for a teammate. */
   readonly path: string | null;
@@ -115,7 +120,7 @@ export default async function MissionPage({ params }: Props) {
           id: request.id,
           kind: request.kind,
           labels: request.risks.map((risk) => risk.label),
-          tool: request.tool,
+          call: request.call,
           created_at: request.created_at,
           path: inboxRequestPath(request.id),
         }))
@@ -123,7 +128,15 @@ export default async function MissionPage({ params }: Props) {
         id: request.id,
         kind: request.kind,
         labels: [labelOf.get(request.risk_id) ?? request.risk_id],
-        tool: null,
+        // A teammate reads the same head as the creator: the tool and the resource are
+        // on the call's line of the activity they may read; never the arguments.
+        call: request.tool
+          ? {
+              tool: request.tool,
+              title: toolTitleOf(root.registry, request.tool),
+              resource: request.resource_ref,
+            }
+          : null,
         created_at: request.created_at,
         path: null,
       }));
@@ -179,19 +192,19 @@ export default async function MissionPage({ params }: Props) {
     ) : undefined;
   const titleOf = (request: Waiting) => (
     <>
-      {request.kind === 'claim'
-        ? `${listed([...request.labels], 2)} reached its limit`
-        : listed([...request.labels], 2)}{' '}
+      {request.kind === 'claim' ? (
+        `${listed([...request.labels], 2)} reached its limit`
+      ) : request.call ? (
+        <CallHeadline call={request.call} />
+      ) : (
+        listed([...request.labels], 2)
+      )}{' '}
       · {request.kind === 'claim' && isCreator ? 'asks you for more room' : waitingFor(creatorName)}
     </>
   );
   const descriptionOf = (request: Waiting) => (
     <>
-      {request.tool && (
-        <>
-          <Mono>{request.tool}</Mono> ·{' '}
-        </>
-      )}
+      {request.kind === 'approval' && <>needs “{listed([...request.labels], 2)}” · </>}
       {askerOf(request)?.agent_label && `${askerOf(request)?.agent_label} · `}
       asked {agoSentence(request.created_at, now)}
       {!isCreator && ' · only the creator of the mission answers'}

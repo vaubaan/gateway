@@ -697,7 +697,17 @@ patterns are in `lib/vocabulary.ts` (`ACCOUNT_PAGES`, `ACCOUNT_ACTIONS`,
   pattern ("starts with sk*test* or rk*test*", "20 characters or more",
   "digits only"; nothing when the pattern has another form), the plugin's
   `placeholder` is in the field and its `help` under it, and a field that
-  may stay empty says "optional". The how-to is folded by default
+  may stay empty says "optional". **A form the server refused comes back as
+  it was typed**: the handler stores, with the notice, the name and the
+  non-secret values (`echoOfForm`, `input.ts` → `Notice.form`), and which
+  field is wrong (`FieldValues.invalid`: `required`, `too-long`, `format`);
+  the page fills the fields again, marks the one in error (`aria-invalid`,
+  the red line) and says under it what is wrong with the shape repeated
+  (`fieldErrorWords`: "This does not have the expected shape: it starts with
+  sk*test* or rk*test*. A secret is never kept: type it again."). **A secret
+  is never echoed**: a field declared `secret` is left out of `Notice.form`
+  whatever it held, so a key exists nowhere between the two requests. The
+  redirect back to the form keeps `?connection=` and `?return_to=`. The how-to is folded by default
   (`Disclosure`, remembered per kind of credential). `?connection=<id>`
   turns the page into "Reconnect".
 - **`/accounts/<id>`** (`accounts/[id]/page.tsx` → `account-view.tsx`:
@@ -746,7 +756,7 @@ patterns are in `lib/vocabulary.ts` (`ACCOUNT_PAGES`, `ACCOUNT_ACTIONS`,
 - **`/accounts/<id>/share`** — "Give access", a dialog over the same page
   (handbook [authority](authority.md)).
 - **Notices.** A handler never puts a message in a URL: it stores a
-  `Notice { tone, title, lines }` in the `NoticeStore` (`notice:<id>`,
+  `Notice { tone, title, lines, form? }` in the `NoticeStore` (`notice:<id>`,
   5 min, readable once, only by the web session it was written for) and
   redirects with `?notice=<id>`; the page calls `takeNotice()` and renders
   `NoticeBanner` (a `Callout`). The sentences are written in the handlers

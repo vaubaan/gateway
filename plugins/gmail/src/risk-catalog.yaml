@@ -312,7 +312,7 @@ risks:
 presets:
   - id: read-only
     label: Read-only triage
-    description: List labels and drafts, search and read threads from automated, internal, allowlisted and unknown senders ; no write, no bulk read, no sensitive label.
+    description: List labels and drafts, search and read threads from automated, internal, allowlisted and unknown senders; no write, no bulk read, no sensitive label.
     entries:
       - risk_id: gmail.read-mailbox
         quota: 2000
@@ -341,7 +341,7 @@ presets:
 
   - id: developer
     label: Developer
-    description: Experimental — read-only triage plus drafts to self, colleagues and allowlisted contacts and single-thread labelling ; bulk reads ask first.
+    description: Experimental — read-only triage plus drafts to self, colleagues and allowlisted contacts and single-thread labelling; bulk reads ask first.
     entries:
       - risk_id: gmail.read-mailbox
         quota: 5000
