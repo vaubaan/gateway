@@ -49,7 +49,12 @@ export type {
   SliceAction,
   SliceSegment,
 } from '@vaubaan/shared';
+export type { WildcardToken } from '@vaubaan/shared';
 export {
+  matchWildcard,
+  wildcardLiteral,
+  WILDCARD_ANY,
+  WILDCARD_ONE,
   UpstreamAuthError,
   UpstreamHttpError,
   toolPrefixFor,

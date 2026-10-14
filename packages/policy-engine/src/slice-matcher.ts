@@ -31,8 +31,18 @@
  */
 
 import type { Slice, SliceSegment } from '@vaubaan/shared';
+import {
+  matchWildcard,
+  wildcardLiteral,
+  WILDCARD_ANY,
+  WILDCARD_ONE,
+  type WildcardToken,
+} from '@vaubaan/shared/wildcard';
 
 import { BRACKET_IDENT_CHAR_CLASS } from './slice-dsl.ts';
+
+/** A value made of identifier characters only, the only ones a glob covers. */
+const IDENT_VALUE = new RegExp(`^${BRACKET_IDENT_CHAR_CLASS}*$`);
 
 /** True iff `pattern` accepts the concrete slice `concrete`.
  *  Assumes `concrete` has no wildcards on its path (no `wild-one`/`wild-rec`,
@@ -114,13 +124,17 @@ function matchOne(p: SliceSegment, c: SliceSegment): boolean {
  *  `release-1.2`). */
 function identGlobMatches(pattern: string, value: string): boolean {
   if (!pattern.includes('*')) return pattern === value;
-  // Escape regex metas (`.` is a legal ident char), then expand `*`.
-  const re = new RegExp(
-    '^' +
-      pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, `${BRACKET_IDENT_CHAR_CLASS}+`) +
-      '$',
+  // Never a regex built from the pattern: `a*a*a*…` backtracks exponentially
+  // and a policy can come through the management door. Every character a
+  // star may take is an identifier character, and so is every literal of the
+  // pattern (the parser accepts nothing else): a value with any other
+  // character cannot match, and past that check `*` is "one character, then
+  // any number" (`matchWildcard` runs in linear time).
+  if (!IDENT_VALUE.test(value)) return false;
+  const tokens: WildcardToken[] = [...pattern].flatMap((ch) =>
+    ch === '*' ? [WILDCARD_ONE, WILDCARD_ANY] : wildcardLiteral(ch),
   );
-  return re.test(value);
+  return matchWildcard(tokens, value);
 }
 
 function coversSegments(

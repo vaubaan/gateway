@@ -270,7 +270,10 @@ of the path does not matter:
   bash's `/dev/tcp/<host>/<port>`);
 - a path that cannot be seen: a `..` segment (resolving it would need the
   symlinks), an expansion (`$HOME/…`, `$FILE`), a brace, a glob that can match
-  one of the names above (`/etc/shad?w`, `certs/*.pem`, `/srv/app/*`).
+  one of the names above (`/etc/shad?w`, `certs/*.pem`, `/srv/app/*`). The
+  glob is matched against sample names with `matchWildcard` (plugin SDK),
+  never as a regular expression: `cat ~/.ssh/***…*z` with a few dozen stars
+  used to backtrack for seconds and hold every call of the instance.
 
 A word is also cut on `=`, `:` and `,`, so `--file=/etc/shadow`,
 `dd if=/etc/shadow` and `host:/root/x` are examined. This is a list of names,

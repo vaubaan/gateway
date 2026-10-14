@@ -176,3 +176,28 @@ describe('canonical catalog overlap scenarios', () => {
     expect(matches(pattern, exec)).toBe(true);
   });
 });
+
+describe('matches — a glob in a bracket cannot stall the instance', () => {
+  // Found by Semgrep (detect-non-literal-regexp): `*` used to become a
+  // backtracking regex, and `a*a*a*a*a*a*!` against a 200-character branch
+  // never answered. A policy can come through the management door.
+  const branch = (glob: string): ReturnType<typeof p> => p(`github.repo[x].branch[${glob}].W`);
+
+  test('many stars against a long value answer at once, with the same reading', () => {
+    const value = 'a'.repeat(240);
+    const started = performance.now();
+    expect(matches(branch(`${'a*'.repeat(40)}b`), branch(value))).toBe(false);
+    expect(matches(branch('a*'.repeat(40)), branch(value))).toBe(true);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
+  test.each([
+    ['release-*', 'release-1.2', true],
+    ['release-*', 'release-', false],
+    ['a**', 'ab', false],
+    ['a**', 'abc', true],
+    ['feature/*', 'feature/x/y', true],
+  ])('[%s] against [%s] is %s', (glob, value, expected) => {
+    expect(matches(branch(glob), branch(value))).toBe(expected);
+  });
+});

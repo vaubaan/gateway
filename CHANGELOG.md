@@ -683,6 +683,13 @@ write …)`), instead of GitHub's bare 403. The push token of
 
 ### Security
 
+- **A glob can no longer stall the instance.** SSH: a path glob in an agent's command
+  line (`cat ~/.ssh/****…*z`) was matched as a regular expression whose backtracking
+  grew exponentially with the stars — two dozen stars held the single process for
+  close to a minute, and every other call with it. Slice policies: a bracket glob such
+  as `branch[a*a*a*…]` did the same against a long branch name, and a policy can be
+  written through the management door. Both now use a linear wildcard matcher with the
+  same reading (found by the new Semgrep check).
 - **Creating a company app from the page is bound to the administrator's session.**
   Its `state` is random, single use, bound to the web session, and expires after 15
   minutes; the code GitHub returns is exchanged once, server to server, only while no

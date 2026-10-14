@@ -33,6 +33,14 @@
  * boundary (login user, sudoers) is the last word.
  */
 
+import {
+  matchWildcard,
+  wildcardLiteral,
+  WILDCARD_ANY,
+  WILDCARD_ONE,
+  type WildcardToken,
+} from '@vaubaan/plugin-sdk';
+
 import { ASSIGNMENT, parseOptions, readMatchOf, type OptionSpec } from './policy.ts';
 import { hasBrace, isDynamic, lexCommandLine, type SimpleCommand, type Word } from './shell-lex.ts';
 
@@ -169,22 +177,20 @@ interface Segment {
   readonly text: string;
   /** Holds a glob character the shell expands. */
   readonly glob: boolean;
-  /** Source of a regex equivalent to the segment (literal when `glob` is false). */
-  readonly pattern: string;
+  /** The segment as a wildcard pattern (literal when `glob` is false). */
+  readonly pattern: readonly WildcardToken[];
 }
-
-const escapeRegex = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** Cut `word[from, to)` into path segments ; empty and `.` segments are dropped (`a//b`, `a/./b`). */
 function segmentsOf(word: Word, from: number, to: number): Segment[] {
   const segments: Segment[] = [];
   let text = '';
-  let pattern = '';
+  let pattern: WildcardToken[] = [];
   let glob = false;
   const flush = (): void => {
     if (text !== '' && text !== '.') segments.push({ text, glob, pattern });
     text = '';
-    pattern = '';
+    pattern = [];
     glob = false;
   };
   for (let i = from; i < to; i += 1) {
@@ -197,7 +203,7 @@ function segmentsOf(word: Word, from: number, to: number): Segment[] {
     if (word.bare[i] === true && (ch === '*' || ch === '?' || ch === '[')) {
       glob = true;
       // A bracket expression is read as "any one character" : a superset.
-      pattern += ch === '*' ? '.*' : '.';
+      pattern.push(ch === '*' ? WILDCARD_ANY : WILDCARD_ONE);
       if (ch === '[') {
         const close = word.value.indexOf(']', i + 1);
         if (close !== -1 && close < to && !word.value.slice(i, close).includes('/')) {
@@ -206,7 +212,7 @@ function segmentsOf(word: Word, from: number, to: number): Segment[] {
         }
       }
     } else {
-      pattern += escapeRegex(ch);
+      pattern.push(...wildcardLiteral(ch));
     }
   }
   flush();
@@ -216,9 +222,10 @@ function segmentsOf(word: Word, from: number, to: number): Segment[] {
 function segmentIsSecret(segment: Segment): boolean {
   if (segment.text === '..') return true; // the target cannot be resolved without following symlinks
   if (!segment.glob) return SECRET_SEGMENT.test(segment.text);
-  const regex = new RegExp(`^${segment.pattern}$`);
+  // Matched without a regex: a glob of an agent's command line turned into
+  // one (`*******…z`) backtracks for seconds and blocks the instance.
   return (
-    SECRET_NAME_SAMPLES.some((name) => regex.test(name)) ||
+    SECRET_NAME_SAMPLES.some((name) => matchWildcard(segment.pattern, name)) ||
     SECRET_SEGMENT.test(segment.text.replace(/[*?[\]]/g, ''))
   );
 }
