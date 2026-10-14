@@ -287,7 +287,7 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
         body: form.toString(),
       }),
     );
-    expect(saved.headers.get('location')).toBe('/admin/identity-provider?saved=1');
+    expect(saved.headers.get('location')).toBe('/admin/identity-provider?saved=idp');
     expect(await root.store.config.getSecret(IDP_CONFIG_KEYS.clientSecret)).toBe(
       CLIENT.clientSecret,
     );
@@ -487,7 +487,7 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
     );
     vi.restoreAllMocks();
     // The settings are stored (one transaction); the missing entry is an error line naming the actor.
-    expect(saved.headers.get('location')).toBe('/admin/identity-provider?saved=1');
+    expect(saved.headers.get('location')).toBe('/admin/identity-provider?saved=idp');
     expect((await root.auth.idp.current())?.settings.clientId).toBe(CLIENT.clientId);
     const errorLine = lines.find((l) => l.includes('audit entry not written'));
     expect(errorLine).toBeDefined();

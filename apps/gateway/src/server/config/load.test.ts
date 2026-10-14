@@ -229,6 +229,7 @@ describe('loadInstanceConfig — IdP block', () => {
       clientSecret: 'idp-secret-value',
       claims: { sub: 'sub', email: 'email', groups: 'groups' },
       allowedEmailDomains: [],
+      invitationOnly: false,
     });
   });
 

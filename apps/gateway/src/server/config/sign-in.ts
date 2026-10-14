@@ -120,10 +120,7 @@ export function isOpenProvider(provider: Pick<SignInProvider, 'kind' | 'issuer'>
  * directory (not open), has no allowed domain and is not "invited only".
  */
 export function admitsEveryone(
-  provider: Pick<
-    SignInProvider,
-    'kind' | 'issuer' | 'allowedEmailDomains' | 'invitationOnly'
-  >,
+  provider: Pick<SignInProvider, 'kind' | 'issuer' | 'allowedEmailDomains' | 'invitationOnly'>,
 ): boolean {
   return (
     !isOpenProvider(provider) &&

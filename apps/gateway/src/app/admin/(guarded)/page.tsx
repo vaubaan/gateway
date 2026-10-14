@@ -88,16 +88,17 @@ function ruleWords(admin: InstanceConfig['admin']): React.ReactNode {
 
 export default async function SetupPage() {
   const { root } = await requireOperator();
-  const [providers, rule, bootstrap, apps, ownerless, clients, telemetry, users] = await Promise.all([
-    root.auth.providers.views(),
-    root.auth.providers.adminRule(),
-    root.auth.bootstrap.state(),
-    root.providerApps.list(),
-    root.connections.service.listOwnerless(),
-    root.oauth.clients.list(),
-    root.telemetry.overview(),
-    root.users.service.list(),
-  ]);
+  const [providers, rule, bootstrap, apps, ownerless, clients, telemetry, users] =
+    await Promise.all([
+      root.auth.providers.views(),
+      root.auth.providers.adminRule(),
+      root.auth.bootstrap.state(),
+      root.providerApps.list(),
+      root.connections.service.listOwnerless(),
+      root.oauth.clients.list(),
+      root.telemetry.overview(),
+      root.users.service.list(),
+    ]);
 
   const needApp = apps.filter((app) => app.needsApp);
   const registered = needApp.filter((app) => app.configured);

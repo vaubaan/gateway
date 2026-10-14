@@ -54,7 +54,11 @@ export default async function NewSignInProviderPage({ searchParams }: Props) {
           label="Kind of provider"
           value={kind}
           options={[
-            { value: 'oidc', label: 'OpenID Connect', href: `${NEW_SIGN_IN_PROVIDER_PAGE}?kind=oidc` },
+            {
+              value: 'oidc',
+              label: 'OpenID Connect',
+              href: `${NEW_SIGN_IN_PROVIDER_PAGE}?kind=oidc`,
+            },
             { value: 'github', label: 'GitHub', href: `${NEW_SIGN_IN_PROVIDER_PAGE}?kind=github` },
           ]}
         />

@@ -8,11 +8,7 @@
  * store, the client secret sealed by the `Encryptor` under
  * `instance_config:idp.client_secret`.
  */
-import {
-  admissionProblem,
-  LEGACY_PROVIDER_ID,
-  normalizeEmailDomains,
-} from '../config/sign-in';
+import { admissionProblem, LEGACY_PROVIDER_ID, normalizeEmailDomains } from '../config/sign-in';
 import type { IdpClaimMapping, IdpConfig } from '../config/types';
 import type { ConfigRepo } from '../store/repositories/config';
 import { IdpSettingsError } from './errors';

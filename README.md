@@ -19,7 +19,8 @@ Expect breaking changes until a `v2.0.0` tag exists. This code base is
 called **v5** in its design documents and will be released as **v2**; it
 replaces an earlier hosted product and shares no data with it.
 
-What exists today: sign-in through your identity provider; accounts at your
+What exists today: sign-in through your identity provider, GitHub, or both at
+once, with invitations for people outside your directory; accounts at your
 cloud services with their resources, and access given to a teammate or a
 team; missions with limits per permission and "ask me first" where you want
 it, worked on alone or as a team, each person with their own key; both MCP
@@ -74,8 +75,9 @@ tour: [demo mode](docs/handbook/demo-mode.md).
 
 Needs Docker with Compose v2, a DNS name pointing at the host, and ports 80
 and 443 reachable (the bundled proxy obtains the TLS certificate), plus
-Node.js on the host for the key-generation script. You also need an OpenID
-Connect client at your identity provider.
+Node.js on the host for the key-generation script. You also need a client at
+a sign-in provider: OpenID Connect at your identity provider, or a GitHub
+OAuth App. On Railway, follow [deploy/railway.md](deploy/railway.md).
 
 ```bash
 cp deploy/config/.env.example deploy/config/.env
@@ -89,7 +91,7 @@ Before the last command, edit `deploy/config/.env`: `GATEWAY_DOMAIN`,
 `VAUBAAN_PUBLIC_URL` (https, same host), `VAUBAAN_ADMIN_EMAILS`, and the two
 secrets above. Anything missing stops the container with a message naming
 the key. Then open `https://<your domain>/login`, follow the bootstrap link,
-and configure your identity provider.
+and add your sign-in provider.
 
 - Every step, running the image without Compose, operations, upgrades,
   and, once a release exists, pulling a published image by tag and

@@ -93,9 +93,7 @@ export function SignInProviderForm({
         optional={github}
         htmlFor={`${prefix}-issuer`}
         hint={
-          github
-            ? undefined
-            : 'Discovery runs against <issuer>/.well-known/openid-configuration.'
+          github ? undefined : 'Discovery runs against <issuer>/.well-known/openid-configuration.'
         }
       >
         <Input
@@ -104,7 +102,9 @@ export function SignInProviderForm({
           type="url"
           required={!github}
           defaultValue={values.issuer}
-          placeholder={github ? 'https://github.example.com' : 'https://login.example.com/realms/acme'}
+          placeholder={
+            github ? 'https://github.example.com' : 'https://login.example.com/realms/acme'
+          }
           mono
         />
       </Field>
@@ -177,9 +177,13 @@ export function SignInProviderForm({
       >
         <div className={styles.form}>
           {!github && (
-            <Radio name="admission" value="everyone" defaultChecked={values.admission === 'everyone'}>
-              Everyone your directory signs in — only for your company’s own provider; refused
-              for one where anyone can open an account
+            <Radio
+              name="admission"
+              value="everyone"
+              defaultChecked={values.admission === 'everyone'}
+            >
+              Everyone your directory signs in — only for your company’s own provider; refused for
+              one where anyone can open an account
             </Radio>
           )}
           <Radio name="admission" value="domains" defaultChecked={values.admission === 'domains'}>

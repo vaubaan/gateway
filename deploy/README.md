@@ -5,6 +5,7 @@ date: 2026-10-13
 last_synced: 2026-10-14
 tracks:
   - deploy/docker/
+  - deploy/railway.md
   - deploy/compose.yaml
   - deploy/caddy/
   - deploy/config/
@@ -27,8 +28,10 @@ every configuration key: handbook
 deploy/
   docker/Dockerfile        multi-stage build (node:22.23.3-bookworm-slim pinned by digest, non-root, HEALTHCHECK)
   docker/smoke.sh          container smoke test (run by CI and, per architecture, by the release pipeline)
+  docker/entrypoint.sh     started as root (a root-owned volume), gives /data to uid 10001 and drops root
+  railway.md               deploying on Railway: one service, one volume, GitHub sign-in
   compose.yaml             gateway + data volume + Caddy (automatic TLS)
-  caddy/Caddyfile          reverse proxy, streaming-friendly, security headers
+  caddy/Caddyfile          reverse proxy, streaming-friendly (the gateway sets the security headers)
   config/gateway.example.yaml  every key, documented, all commented out
   config/.env.example          every environment variable, documented
   collector/schema.sql     the community telemetry collector (optional; not part of an instance)
@@ -71,12 +74,18 @@ variables.
 
 First sign-in: open `https://<your domain>/login`, follow the bootstrap link
 and paste the bootstrap token; on **Settings → Administration → Sign-in**
-enter your OpenID Connect issuer, client id and secret (redirect URI
-`https://<your domain>/auth/callback`), then "Test the sign-in". The first
-sign-in of a user matching the admin rule revokes the bootstrap token. You
-may instead put the IdP in the configuration (`idp.*`); the Sign-in page is
-then read-only and no bootstrap token is needed
-(handbook [authentication](../docs/handbook/authentication.md)).
+add a sign-in provider — your company's OpenID Connect directory (redirect URI
+`https://<your domain>/auth/callback/<id>`), or GitHub — then "Test". The
+first sign-in of a user matching the admin rule revokes the bootstrap token.
+You may instead put the providers in the configuration (`idp.*` for one
+OpenID Connect provider, whose callback stays `https://<your domain>/auth/callback`,
+and `sign_in.<id>.*` for any number); they are then read-only on that page and
+no bootstrap token is needed. Several providers may be offered at once; a
+provider where anyone can open an account (GitHub, personal Google or
+Microsoft) needs allowed email domains or "invitation only", and invitations
+are made on Settings → People (handbook
+[authentication](../docs/handbook/authentication.md)). On Railway, follow
+[railway.md](railway.md).
 
 Minimum to start: `public_url` (https), `store.path`,
 `encryption.master_key`, the admin rule (`admin.group` or `admin.emails`)
@@ -163,19 +172,22 @@ append the client address to `X-Forwarded-For`, and list the proxy's
 address in `trusted_proxies` so that header is believed. The gateway builds
 every URL from `public_url`, never from forwarded host or scheme headers.
 
-The gateway sets no security header itself; the proxy does. Send these four
-on every response, as `deploy/caddy/Caddyfile` does:
+**The gateway sets the security headers itself**, on every response (ADR
+[security-headers-set-by-the-application](../docs/decisions/security-headers-set-by-the-application.md)):
+your proxy must not add or override them.
 
-| Header                      | Value                    | Why                                                                                                  |
-| --------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------- |
-| `Strict-Transport-Security` | `max-age=31536000`       | browsers never fall back to http for this host                                                       |
-| `X-Content-Type-Options`    | `nosniff`                | a response is never re-interpreted as another type                                                   |
-| `Content-Security-Policy`   | `frame-ancestors 'none'` | no page can frame the UI (one-click forms change security settings); framing only, not a full policy |
-| `Referrer-Policy`           | `same-origin`            | no path leaks to another site; same-origin requests keep `Referer`, the origin check's fallback      |
+| Header                      | Value                                                                                                     | Why                                                                                             |
+| --------------------------- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `Content-Security-Policy`   | `default-src 'self'; script-src 'self' 'nonce-<per request>' 'strict-dynamic'; …; frame-ancestors 'none'` | only the gateway's own scripts run; no page can frame the UI                                    |
+| `X-Frame-Options`           | `DENY`                                                                                                    | framing refused by browsers that ignore `frame-ancestors`                                       |
+| `X-Content-Type-Options`    | `nosniff`                                                                                                 | a response is never re-interpreted as another type                                              |
+| `Referrer-Policy`           | `same-origin`                                                                                             | no path leaks to another site; same-origin requests keep `Referer`, the origin check's fallback |
+| `Permissions-Policy`        | camera, microphone, geolocation… `=()`                                                                    | no page may use a device                                                                        |
+| `Strict-Transport-Security` | `max-age=31536000`, when `public_url` is https                                                            | browsers never fall back to http for this host                                                  |
 
 They do not affect the MCP door (non-browser clients ignore them, streaming
-is untouched). Do not use `no-referrer`: a same-origin form post that
-carries no `Origin` header is accepted on its `Referer`.
+is untouched). The OAuth consent pages (`/oauth/authorize`) carry a stricter
+policy of their own.
 
 Give the proxy only what it needs (its host name), never the gateway's
 environment.
@@ -216,9 +228,10 @@ environment.
 - **Smoke test an image**: `npm run docker:build && npm run docker:smoke`
   (`deploy/docker/smoke.sh vaubaan-gateway:local`; needs Docker and curl)
   checks the fail-fast exit (within 60 seconds), the https rule,
-  `/healthz`, secret redaction, native addons, the non-root user and that
+  `/healthz`, secret redaction, native addons, the non-root user, that
   no env file and no test, fixture or demo file of the repository is
-  shipped. `SMOKE_EXPECT_VERSION`, `SMOKE_EXPECT_COMMIT` and
+  shipped, the security headers of a page, and a start as root on a
+  root-owned volume (the server still runs as uid 10001, without capability). `SMOKE_EXPECT_VERSION`, `SMOKE_EXPECT_COMMIT` and
   `SMOKE_EXPECT_ARCH` (`x64`, `arm64`) make it also check what `/healthz`
   answers and the architecture of the image, as the release pipeline does.
   The version and the commit are compared with the body of one more
@@ -276,7 +289,12 @@ run, the other end.
 ## What the image contains
 
 Next.js 16 standalone output built with Turbopack (`apps/gateway/server.js`,
-traced `node_modules`, `.next/static`, `public`), running as uid 10001.
+traced `node_modules`, `.next/static`, `public`), running as uid 10001. The
+entrypoint (`deploy/docker/entrypoint.sh`) execs the server as is; started as
+root — a platform whose volume is root-owned, such as Railway with
+`RAILWAY_RUN_UID=0` — it first gives `/data` to uid 10001 when anything there
+belongs to someone else, then drops to that user with `setpriv` (no
+capability, no new privilege). The smoke test runs both.
 Native addons (`argon2`, `better-sqlite3`) are prebuilt for glibc, which is
 why the base is Debian slim rather than Alpine; `next.config.ts` traces
 their binaries and runtime files explicitly (`outputFileTracingIncludes`)

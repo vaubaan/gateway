@@ -16,7 +16,10 @@ describe('admin rule', () => {
 
   it('matches a member of the IdP group of the one provider', () => {
     expect(
-      isOperator({ email: 'a@x.test', groups: [group('dev', 'idp'), group('gateway-admins', 'idp')] }, single),
+      isOperator(
+        { email: 'a@x.test', groups: [group('dev', 'idp'), group('gateway-admins', 'idp')] },
+        single,
+      ),
     ).toBe(true);
     expect(isOperator({ email: 'a@x.test', groups: [group('dev', 'idp')] }, single)).toBe(false);
   });
@@ -34,7 +37,10 @@ describe('admin rule', () => {
   });
 
   it('a group of provider A never satisfies a rule written for provider B', () => {
-    const rule = resolveAdminRule({ group: 'github:acme/admins', emails: [] }, ['company', 'github']);
+    const rule = resolveAdminRule({ group: 'github:acme/admins', emails: [] }, [
+      'company',
+      'github',
+    ]);
     expect(rule.group).toEqual({ provider: 'github', name: 'acme/admins' });
     expect(isOperator({ email: 'a@x.test', groups: [group('acme/admins', 'github')] }, rule)).toBe(
       true,
@@ -47,7 +53,9 @@ describe('admin rule', () => {
   it('a group without a provider is ambiguous with several providers and matches nobody', () => {
     const rule = resolveAdminRule({ group: 'admins', emails: ['ops@example.com'] }, ['a', 'b']);
     expect(rule.group).toBeNull();
-    expect(isOperator({ email: 'x@example.com', groups: [group('admins', 'a')] }, rule)).toBe(false);
+    expect(isOperator({ email: 'x@example.com', groups: [group('admins', 'a')] }, rule)).toBe(
+      false,
+    );
     // The emails still work, whatever the provider.
     expect(isOperator({ email: 'ops@example.com', groups: [] }, rule)).toBe(true);
     expect(describeAdminRule(rule)).toContain('names no configured sign-in provider');

@@ -1518,6 +1518,46 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   12. a plain user, a foreign origin and no session are refused, and nobody
       is deactivated.
 
+- **Several sign-in providers** (spec §0 "Identity provider", "Open
+  provider", "Invitation", §4.3 admin rule, §6; ADRs
+  [[sign-in-providers-admission-and-admin-rule]], [[github-sign-in]]):
+  - **`server/config/sign-in.test.ts`** (15) — the `idp.*` keys load as the
+    provider `idp`; a GitHub provider from `VAUBAAN_SIGN_IN_GITHUB_*` (issuer
+    `https://github.com`, the bootstrap token then optional); several
+    providers from the file with a secret by `${file:…}`; refused with the
+    key and both variables: an open provider (GitHub, `accounts.google.com`
+    through `idp.*`) without domains or invitation only, invitation only with
+    domains, a bare `admin.group` with several providers, two providers of
+    one issuer, an unknown kind, claims on GitHub, a bad id, an http issuer;
+    the bootstrap token still required with no provider; the `_FILE` secret
+    and hyphenated ids; `isOpenProvider`, `admitsEveryone`,
+    `resolveAdminGroup`, `issuerKey`, `githubApiBase`.
+  - **`server/auth/admission.test.ts`** (5), **`server/auth/github.test.ts`**
+    (9, against the in-process `FakeGithub`),
+    **`server/auth/sign-in-providers.test.ts`** (6),
+    **`server/auth/admin-rule.test.ts`** (9) — handbook
+    [[authentication]], "Tests".
+  - **`tests/integration/auth/sign-in-providers.test.ts`** (16) — a company
+    directory (`FakeIdp`) and GitHub (`FakeGithub`, invitation only) on one
+    root: listing and choosing; per-provider callbacks; uninvited refused with
+    nothing written, invited admitted (numeric id as subject); **identities
+    never merge by email**; an unverified primary GitHub address refused; an
+    unverified admin email refused; **a callback of GitHub on the directory's
+    path refused** (`state-mismatch`); a GitHub team administrator while the
+    directory's group of that name grants nothing; a team GitHub cannot answer
+    for refuses the sign-in; admin emails admitted; removing an invitation;
+    **removing a provider** (no sign-in, sessions over, missions running until
+    deactivation); the removal through Settings, audited without the secret;
+    one issuer per provider; an open provider without a rule refused.
+  - **`tests/integration/store/sign-in-providers-store.test.ts`** (4) —
+    invitations, groups bound to their provider, `endSessionsOfIssuer`, and
+    migration 0014 over an earlier database.
+  - **`server/http/security-headers.test.ts`** (6) — the headers (HSTS only
+    for https), the nonce CSP stricter than framing alone, the consent
+    documents left to their own policy, the https flag the root publishes;
+    structural: only the module, the proxy and the consent documents write a
+    CSP, and the Caddyfile sets none of the application's headers.
+
 ## Scenarios — Store
 
 > Covers: spec [`vaubaan-gateway.md`](../spec/vaubaan-gateway.md) §2, §3.3,

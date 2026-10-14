@@ -23,7 +23,14 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { KEYS, PROVIDER_ENV_PREFIX, envNamesFor, type KeySpec } from './sources';
+import {
+  KEYS,
+  PROVIDER_ENV_PREFIX,
+  SIGN_IN_ENV_PREFIX,
+  SIGN_IN_FIELDS,
+  envNamesFor,
+  type KeySpec,
+} from './sources';
 import { PROVIDER_APP_FIELDS } from './types';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../..');
@@ -31,6 +38,7 @@ const HANDBOOK = 'docs/handbook/configuration.md';
 const SECTION = '## Configuration keys';
 const COLUMNS = ['Key', 'Type', 'Default', 'Bounds', 'Environment variable', 'Consumed by'];
 const PROVIDER_FAMILY = 'providers.<id>.<field>';
+const SIGN_IN_FAMILY = 'sign_in.<id>.<field>';
 const NONE = '—';
 
 interface Row {
@@ -107,7 +115,7 @@ function expectedDefault(spec: KeySpec): string {
     case 'with-idp':
       return 'required once idp is set';
     case 'without-idp':
-      return 'required while idp is absent';
+      return 'required while no sign-in provider is set';
     case undefined:
       return spec.default === undefined ? NONE : String(spec.default);
   }
@@ -147,7 +155,7 @@ describe('the key table of the configuration handbook', () => {
   });
 
   it('has no row the loader does not accept', () => {
-    const known = new Set([...KEYS.map((k) => k.path), PROVIDER_FAMILY]);
+    const known = new Set([...KEYS.map((k) => k.path), PROVIDER_FAMILY, SIGN_IN_FAMILY]);
     expect([...documented.keys()].filter((key) => !known.has(key))).toEqual([]);
   });
 
@@ -175,6 +183,16 @@ describe('the key table of the configuration handbook', () => {
     expect(row.default).toBe(NONE);
     expect(row.bounds).toBe(PROVIDER_APP_FIELDS.join(', '));
     expect(plain(row.env)).toContain(`${PROVIDER_ENV_PREFIX}<ID>_<FIELD>`);
+    expect(row.consumedBy).not.toBe('');
+  });
+
+  it('documents the sign-in provider family with the fields and variables the loader accepts', () => {
+    const row = documented.get(SIGN_IN_FAMILY);
+    expect(row, `no row for ${SIGN_IN_FAMILY}`).toBeDefined();
+    if (!row) return;
+    expect(row.bounds).toBe(SIGN_IN_FIELDS.map((f) => f.field).join(', '));
+    expect(plain(row.env)).toContain(`${SIGN_IN_ENV_PREFIX}<ID>_<FIELD>`);
+    for (const field of SIGN_IN_FIELDS) expect(plain(row.env)).toContain(field.env);
     expect(row.consumedBy).not.toBe('');
   });
 });

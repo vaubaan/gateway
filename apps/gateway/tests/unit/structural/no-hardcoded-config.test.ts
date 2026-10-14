@@ -28,6 +28,8 @@ const SCANNED = [
 /** Files allowed to contain what the scan forbids, with the reason. */
 const ALLOWED: Record<string, string> = {
   'apps/gateway/src/server/config/telemetry-default.ts': 'the single default URL (spec §4.3)',
+  'apps/gateway/src/server/config/sign-in.ts':
+    'public sign-in providers by address: github.com, and the issuers anyone can hold an account at (ADR sign-in-providers-admission-and-admin-rule)',
   'deploy/config/gateway.example.yaml': 'documented placeholders',
   'deploy/config/.env.example': 'documented placeholders',
 };

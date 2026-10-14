@@ -63,7 +63,9 @@ export function isOperator(subject: AdminRuleSubject, rule: ResolvedAdminRule): 
 export function describeAdminRule(rule: ResolvedAdminRule): string {
   const parts: string[] = [];
   if (rule.group !== null) {
-    parts.push(`members of the group "${rule.group.name}" of sign-in provider "${rule.group.provider}"`);
+    parts.push(
+      `members of the group "${rule.group.name}" of sign-in provider "${rule.group.provider}"`,
+    );
   } else if (rule.groupAsWritten !== null) {
     parts.push(`no group: "${rule.groupAsWritten}" names no configured sign-in provider`);
   }

@@ -343,9 +343,7 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
           null,
         );
         logger.warn('sign-in provider removed', { provider: removed.id, users: ended });
-        return redirect(
-          `${IDP_PAGE}?removed=${encodeURIComponent(removed.id)}&people=${ended}`,
-        );
+        return redirect(`${IDP_PAGE}?removed=${encodeURIComponent(removed.id)}&people=${ended}`);
       } catch (err) {
         if (err instanceof IdpSettingsError) {
           const params = new URLSearchParams();

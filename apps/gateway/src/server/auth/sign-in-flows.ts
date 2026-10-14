@@ -10,11 +10,7 @@
  * provider of a user is found by that issuer (sessions end when it is removed,
  * its groups count for the admin rule).
  */
-import {
-  issuerKey,
-  type AdminGroup,
-  type SignInProvider,
-} from '../config/sign-in';
+import { issuerKey, type AdminGroup, type SignInProvider } from '../config/sign-in';
 import { mapClaims, type IdentityClaims } from './claims';
 import { LoginError } from './errors';
 import { GithubSignIn } from './github';

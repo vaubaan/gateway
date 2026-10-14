@@ -1,5 +1,5 @@
 ---
-title: Authentication — OIDC sign-in, web session, bootstrap token, admin rule
+title: Authentication — sign-in providers (OIDC, GitHub), admission, web session, bootstrap token, admin rule
 status: current
 date: 2026-10-13
 last_synced: 2026-10-14
@@ -14,6 +14,12 @@ tracks:
   - apps/gateway/src/app/logout/route.ts
   - apps/gateway/src/app/api/auth/
   - apps/gateway/src/app/api/admin/identity-provider/route.ts
+  - apps/gateway/src/app/api/admin/sign-in-providers/
+  - apps/gateway/src/server/config/sign-in.ts
+  - apps/gateway/src/server/store/repositories/invitations.ts
+  - apps/gateway/src/components/settings/SignInProviderForm.tsx
+  - apps/gateway/migrations/0014_sign_in_providers_and_invitations.sql
+  - apps/gateway/tests/integration/store/sign-in-providers-store.test.ts
   - apps/gateway/src/app/(public)/login/page.tsx
   - apps/gateway/src/app/(app)/page.tsx
   - apps/gateway/src/app/(public)/layout.tsx
@@ -29,7 +35,7 @@ tracks:
   - apps/gateway/tests/unit/server/auth/mutation-guard.test.ts
 ---
 
-# Authentication — OIDC sign-in, web session, bootstrap token, admin rule
+# Authentication — sign-in providers (OIDC, GitHub), admission, web session, bootstrap token, admin rule
 
 How a human gets a session on the instance (spec §0 "Operator", "User",
 "Group", "IdP"; §4.2 Administration; §4.3; §6 "human authentication";
@@ -38,7 +44,9 @@ How a human gets a session on the instance (spec §0 "Operator", "User",
 [oidc-relying-party-and-web-session](../decisions/oidc-relying-party-and-web-session.md),
 [sign-in-hardening-host-cookies-group-overage](../decisions/sign-in-hardening-host-cookies-group-overage.md),
 [users-keyed-by-issuer-and-subject](../decisions/users-keyed-by-issuer-and-subject.md)
-and [operator-deactivates-a-user](../decisions/operator-deactivates-a-user.md).
+[operator-deactivates-a-user](../decisions/operator-deactivates-a-user.md),
+[sign-in-providers-admission-and-admin-rule](../decisions/sign-in-providers-admission-and-admin-rule.md)
+and [github-sign-in](../decisions/github-sign-in.md).
 Built on the [configuration](configuration.md) root (`InstanceConfig.idp`,
 `admin`, `bootstrapToken`, the `SessionStore` port) and the
 [store](store.md) repositories (`users`, `groups`, `config`, `audit`).
@@ -48,10 +56,14 @@ Built on the [configuration](configuration.md) root (`InstanceConfig.idp`,
 ```
 apps/gateway/src/server/auth/            host-agnostic, never imports `next`
   index.ts            createAuthModule(deps) → root.auth; barrel
-  relying-party.ts    openid-client v6 RP: discovery cache, PKCE/state/nonce, code grant, userinfo merge
+  relying-party.ts    openid-client v6 RP: discovery cache, PKCE/state/nonce, code grant, userinfo merge; callbackUrl(public, id)
+  github.ts           GithubSignIn: GitHub's OAuth web flow (state, PKCE), /user, /user/emails, the admin rule's team
+  sign-in-flows.ts    createSignInFlows(): one SignInFlow per provider, whatever its kind; the iss of a token must be the provider's
+  sign-in-providers.ts SignInProvidersService: the providers of the file and of Settings; views() (no secret), resolve(id), save, remove, adminRule()
+  admission.ts        admit(): verified email; domains, invitation, admin email, or everyone of a directory
   claims.ts           mapClaims(), parseGroupsClaim(), groupsMovedOutOfToken(), assertEmailDomainAllowed()
-  admin-rule.ts       isOperator(), describeAdminRule()
-  idp-settings.ts     IdpSettingsService: file-or-store IdP settings, secret sealed in instance_config
+  admin-rule.ts       resolveAdminRule(), isOperator(), describeAdminRule()
+  idp-settings.ts     IdpSettingsService: the provider `idp` saved from the interface, secret sealed in instance_config
   bootstrap.ts        BootstrapService: constant-time verify, revoked flag in instance_config
   session-service.ts  SessionService over SessionStore: session + pending-login records, their type guards, cookies
   cookies.ts          __Host-vbn_session / __Host-vbn_login: HttpOnly, Secure, SameSite=Lax, Path=/
@@ -59,36 +71,48 @@ apps/gateway/src/server/auth/            host-agnostic, never imports `next`
   guard.ts            guardMutation() / guardSession(): origin → session → role, for every handler; refusalResponse()
   login.ts            completeLogin(): unbound accounts bound to the issuer, deactivated user refused, users upsert, IdP group sync, bootstrap revocation; currentAuthority()
   authenticator.ts    Authenticator.authenticate(headers) → Principal; authorizeAdmin(); auditActorId()
-  handlers.ts         Request → Response handlers of the five endpoints; adminSignInPage()
+  handlers.ts         Request → Response handlers of the sign-in endpoints and of Settings → Sign-in; adminSignInPage()
+apps/gateway/src/server/config/sign-in.ts  pure: provider ids, issuerKey(), the open issuers, admissionProblem(), resolveAdminGroup()
   errors.ts           LoginError (closed codes + UI sentences), IdpSettingsError
 apps/gateway/src/server/users/           host-agnostic; built by the root as root.users
   index.ts            createUsersModule(deps) → { service, handlers }; barrel
   service.ts          UserAdminService: list(), deactivate(), reactivate()
-  handlers.ts         Request → Response handlers of the two endpoints; USERS_PAGE
+  invitations.ts      InvitationService: list(), invite(), remove() — the invitation list, audited
+  handlers.ts         Request → Response handlers of the four endpoints; USERS_PAGE
   errors.ts           UserAdminError (closed codes + UI sentences + HTTP status)
 apps/gateway/src/server/store/repositories/
   web-sessions.ts     store.webSessions: the SessionStore port over table web_sessions, rows keyed by SHA-256(id)
-  users.ts            store.users: getByIdentity(issuer, subject), bindUnboundTo(issuer), upsertFromIdp (never changes the status), markRemoved, reactivate; identityKeyOf()
+  users.ts            store.users: getByIdentity(issuer, subject), bindUnboundTo(issuer), upsertFromIdp (never changes the status), markRemoved, reactivate, endSessionsOfIssuer; identityKeyOf()
+  invitations.ts      store.invitations: add, remove, get, list (table invitations)
 apps/gateway/migrations/0003_web_sessions.sql
 apps/gateway/migrations/0009_user_sessions_ended_at.sql    users.sessions_ended_at
 apps/gateway/migrations/0011_users_keyed_by_issuer_and_subject.sql    users.issuer, users.subject, users.identity_key (unique)
+apps/gateway/migrations/0014_sign_in_providers_and_invitations.sql    groups.provider, table invitations
 apps/gateway/src/lib/auth/session.ts     Next glue: currentPrincipal(), requirePrincipal(), currentUser(), adminDecision(), requireOperator()
 apps/gateway/src/app/
   (app)/page.tsx                         /  — the home ("Now"); a visitor with no session is sent to /login
   (public)/layout.tsx                    centred container of the pages reachable without a session
-  (public)/login/page.tsx                /login — IdP button, account view, error codes
-  auth/login/route.ts                    GET  /auth/login?return_to=
-  auth/callback/route.ts                 GET  /auth/callback
+  (public)/login/page.tsx                /login — one link per provider, the bootstrap link, account view, error codes
+  auth/login/route.ts                    GET  /auth/login?return_to=          (the one provider, or /login to choose)
+  auth/login/[provider]/route.ts         GET  /auth/login/<id>?return_to=
+  auth/callback/route.ts                 GET  /auth/callback                   (the provider idp)
+  auth/callback/[provider]/route.ts      GET  /auth/callback/<id>
   logout/route.ts                        POST /logout
   api/auth/bootstrap/route.ts            POST /api/auth/bootstrap
-  api/admin/identity-provider/route.ts   POST /api/admin/identity-provider
+  api/admin/identity-provider/route.ts   POST /api/admin/identity-provider    (save a provider; without an id, idp)
+  api/admin/sign-in-providers/route.ts   POST /api/admin/sign-in-providers    (the same handler)
+  api/admin/sign-in-providers/[id]/remove/route.ts   POST …/<id>/remove
   admin/bootstrap/page.tsx               /admin/bootstrap (outside the guard)
   admin/(guarded)/layout.tsx             the shell with the local navigation of Settings, or "You do not administer this gateway" — not the boundary
   admin/(guarded)/page.tsx               /admin
-  admin/(guarded)/identity-provider/page.tsx
+  admin/(guarded)/identity-provider/page.tsx         /admin/identity-provider — Settings → Sign-in: the list
+  admin/(guarded)/identity-provider/new/page.tsx     …/new?kind=oidc|github — add one
+  admin/(guarded)/identity-provider/[id]/page.tsx    …/<id> — edit one saved in Settings
   admin/(guarded)/users/page.tsx         /admin/users
   admin/(guarded)/users/[id]/deactivate/route.ts   POST /admin/users/<id>/deactivate
   admin/(guarded)/users/[id]/reactivate/route.ts   POST /admin/users/<id>/reactivate
+  admin/(guarded)/users/invitations/route.ts        POST /admin/users/invitations           (field email)
+  admin/(guarded)/users/invitations/remove/route.ts POST /admin/users/invitations/remove    (field email)
 apps/gateway/src/components/auth/        AuthPage.tsx (AuthPage, AuthHeading: the frame of a page outside the shell), principal.ts (isOperatorPrincipal), NeedsUser.tsx, auth.module.css
 ```
 
@@ -103,11 +127,11 @@ tested without Next.
 
 ## The three states of an instance
 
-| State                        | How a human gets in                                         | Who is operator                                  |
-| ---------------------------- | ----------------------------------------------------------- | ------------------------------------------------ |
-| No IdP configured            | `/admin/bootstrap` with the `bootstrap_token` of the config | whoever holds the bootstrap token                |
-| IdP configured, token active | both: bootstrap token **or** IdP sign-in                    | bootstrap holder, and any user matching the rule |
-| Token revoked (or absent)    | IdP sign-in only                                            | any user matching the **admin rule**             |
+| State                     | How a human gets in                                         | Who is operator                                  |
+| ------------------------- | ----------------------------------------------------------- | ------------------------------------------------ |
+| No sign-in provider       | `/admin/bootstrap` with the `bootstrap_token` of the config | whoever holds the bootstrap token                |
+| Provider(s), token active | both: bootstrap token **or** a provider's sign-in           | bootstrap holder, and any user matching the rule |
+| Token revoked (or absent) | a provider's sign-in only                                   | any user matching the **admin rule**             |
 
 The transition happens on the **first IdP sign-in of a user matching the admin
 rule**: `completeLogin()` writes `bootstrap.revoked_at` into `instance_config`
@@ -122,10 +146,20 @@ given next to the IdP is kept and stays `active` until the first operator
 sign-in.
 
 The **admin rule** is `InstanceConfig.admin` (`admin.group` and/or
-`admin.emails`, required by the loader): `isOperator({ email, groupNames },
-rule)` is true for a member of the named IdP group or a listed email
-(lower-cased compare). Only groups the IdP claimed count (`groups.source =
-'idp'`): membership of a local group, kept by an operator in Settings →
+`admin.emails`, required by the loader), resolved against the providers
+configured now (`resolveAdminRule`, `SignInProvidersService.adminRule()`):
+`admin.group` is `<provider>:<group>` — a GitHub group is a team, `org/team` —
+or a bare name while one provider is configured (`resolveAdminGroup`; with no
+provider at all it reads as the provider `idp`'s, as before several providers).
+A bare name with several providers resolves to nobody, is refused by the loader
+when the file sets several, and Settings refuses a provider whose addition
+would make it ambiguous or change what it names. A `<provider>:` prefix that
+names no configured provider names nobody (except under the one provider
+`idp`, whose group names may contain a colon). `isOperator({ email, groups },
+rule)` is true for a member of the rule's group **of the rule's provider**
+(`group.source = 'idp'` and `group.provider = rule.group.provider`) or a listed
+email (lower-cased compare, the user of any provider: every stored email passed
+admission). Only groups a provider claimed count: membership of a local group, kept by an operator in Settings →
 Teams (`/admin/groups`, [authority](authority.md)), never makes anyone an operator, and a
 local group cannot take the rule's name. It is evaluated by
 `currentAuthority()` from the user's
@@ -142,19 +176,145 @@ directory's administrators. As a floor, a sign-in whose claims say
 below), so an address the IdP itself calls unproven never decides operator
 status nor passes the domain filter.
 
-## Identity provider settings
+## Sign-in providers
+
+An instance offers zero, one or several sign-in providers
+(`SignInProvidersService`, `root.auth.providers`; ADR
+[sign-in-providers-admission-and-admin-rule](../decisions/sign-in-providers-admission-and-admin-rule.md)).
+Each is a `SignInProvider` (`config/sign-in.ts`): `id` (a lower-case slug),
+`name` (the button says "Continue with <name>"), `kind` — `oidc` or `github` —,
+`issuer` (the OIDC issuer; for GitHub `https://github.com` or a GitHub
+Enterprise Server base URL), `clientId`, `clientSecret`, `claims` (OIDC),
+`allowedEmailDomains` and `invitationOnly`.
+
+| Source                      | Providers                                                                                                             | In Settings → Sign-in          |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| configuration (`file`)      | `idp.*` as the provider `idp`; every `sign_in.<id>.*` (`VAUBAAN_SIGN_IN_<ID>_<FIELD>`)                                | read-only; wins on its id      |
+| `instance_config` (`store`) | `idp` in the single-provider keys below; any other as `sign_in.<id>` (JSON) and `sign_in.<id>.client_secret` (sealed) | added, edited, tested, removed |
+
+- `views()` lists them, the file's first, **without the secret** (no
+  decryption: the authenticator reads it on every request); `resolve(id)`
+  returns one with its secret, for a sign-in; `ofIssuer(iss)` finds a user's
+  provider by issuer (`issuerKey`: the URL without its trailing slash).
+- `save(input, 'create' | 'update')` validates everything at once
+  (`IdpSettingsError.problems`): the id grammar and that it is free (or exists
+  and is not the file's, on update), the kind (it cannot change), an https
+  issuer without query or fragment (`allowInsecureIssuer` for tests), the
+  client id, the secret (blank keeps the stored one **for the same issuer**,
+  never sent to another), the claims, the domains, the admission rule
+  (`admissionProblem`), one provider per issuer, and the admin rule's group
+  (above). Settings and secret are written by one `ConfigRepo.apply()`.
+  `remove(id)` deletes the keys (refused for a file provider, and when it would
+  change what the admin rule's group names).
+- **Callbacks**: `<public_url>/auth/callback/<id>`; the provider `idp` keeps
+  `<public_url>/auth/callback`, the address companies registered before
+  (`callbackUrl(publicUrl, id)`, `root.auth.flows.callbackUrl(id)`).
+- **Audit**: `config-changed` on `instance-config` / `sign-in:<id>` (`idp` for
+  the provider `idp`), `before` / `after` = `signInProviderAuditView` (never the
+  secret); a removal has `after: null` and `before.users`, the number of
+  people whose sessions it ended.
+- The loader refuses (exit 78, naming the key): an open provider without
+  domains or `invitation_only` (`idp.allowed_email_domains` /
+  `sign_in.<id>.allowed_email_domains`, with both variables), `invitation_only`
+  together with domains, two providers of one issuer, `sign_in.idp` next to the
+  `idp` block, a bad id or kind, `claims` on a GitHub provider, and a bare
+  `admin.group` when the file sets several providers. The bootstrap token is
+  required only while the configuration sets no provider.
+
+## Admission
+
+`admit(identity, provider, { isInvited, adminEmails })` (`admission.ts`) runs
+after the provider vouched for the identity and before anything is written: a
+refusal creates no user, syncs no group and revokes no bootstrap token.
+
+1. An explicit "unverified" (`email_verified: false`) was already refused by
+   `mapClaims`. An **open provider** — `isOpenProvider`: every GitHub provider,
+   and the OIDC issuers `https://accounts.google.com`,
+   `https://login.microsoftonline.com/{common,organizations,consumers}/v2.0`
+   and the personal-accounts tenant `9188040d-6c67-4c5b-b112-36a304b66dad` —
+   must say the email is verified (`emailVerified: true`), else
+   `email-not-verified`.
+2. A company directory with no domain and not `invitationOnly` admits everyone
+   it signs in (`everyone-of-the-directory`; never an open provider: the
+   loader and `save` refuse such a provider).
+3. Otherwise: the email's domain in `allowedEmailDomains` (`domain`), the
+   address on the invitation list (`invitation`), or in `admin.emails`
+   (`admin-email`). Refused: `not-invited` when the provider has no domain
+   (invited only), `email-domain-not-allowed` otherwise.
+
+The reason is logged (`sign-in admitted`, with the provider). **Identities
+never merge by email**: an email never selects an account; the same address
+through two providers is two users, and nothing links them.
+
+## Invitations
+
+The table `invitations` (migration 0014): `email` (lower-cased, primary key),
+`invited_by` (a user id, or `bootstrap`), `created_at`. `InvitationService`
+(`root.users.invitations`) normalises and checks the address
+(`normalizeInvitedEmail`), refuses a duplicate (`invitation-exists`) and an
+unknown removal (`invitation-not-found`), and audits `invitation-added` /
+`invitation-removed` on `instance-config` / `invitations` (the address in
+`after` / `before`; a failed audit write is logged at `error`, the change
+stands). `list()` says who invited and whether somebody has signed in with the
+address. An invitation is read at each sign-in: removing one refuses the next
+sign-in that nothing else admits; a session already open runs to its end.
+
+## GitHub sign-in
+
+`GithubSignIn` (`github.ts`; ADR [github-sign-in](../decisions/github-sign-in.md)),
+for a provider of kind `github`:
+
+```
+GET /auth/login/github → 303 <issuer>/login/oauth/authorize?client_id&redirect_uri=<public>/auth/callback/github
+      &scope=read:user user:email[ read:org]&state&code_challenge&code_challenge_method=S256&allow_signup=false
+GET /auth/callback/github?code&state
+  state compared in constant time with the pending sign-in's (state-mismatch); error= → idp-error
+  POST <issuer>/login/oauth/access_token (client secret, code, redirect_uri, code_verifier), Accept: application/json
+  GET <api>/user          id (numeric) → subject; name ?? login → display name
+  GET <api>/user/emails   the primary address; unverified or absent → email-not-verified
+  GET <api>/orgs/<org>/teams/<team>/memberships/<login>   only the admin rule's team of this provider:
+      200 state=active → member; 404 → not; anything else → groups-unavailable
+```
+
+`<api>` is `api.github.com` for `https://github.com`, `<base>/api/v3` for a
+GitHub Enterprise Server (`githubApiBase`). The issuer recorded for the user is
+the base URL. `read:org` is requested only when a team must be read. The token
+is used for these calls and dropped. The identity is an `IdentityClaims` like
+an OIDC one (`emailVerified: true`), and goes through the same admission and
+`completeLogin`. The team, when the user is in it, becomes an IdP group of the
+provider.
+
+## Removing a provider
+
+In Settings → Sign-in, "Remove" (asked first, saying how many people signed in
+through it) posts to `/api/admin/sign-in-providers/<id>/remove`
+(`removeSignInProvider`, operator, origin-checked): the provider's keys are
+deleted, **every web session of its users ends** at once
+(`users.endSessionsOfIssuer`: `sessions_ended_at` = now, the status untouched),
+and the removal is audited. Its users can no longer start a sign-in
+(`provider-unknown`). Their missions, keys, connected apps and group
+memberships are untouched: they follow the rules of a deactivation — they stop
+when an administrator deactivates the person on People (threat model, A28).
+Added again with the same issuer, the provider gives the same accounts back. A
+provider removed from the configuration file ends no session (they run their
+8 hours at most).
+
+## The provider `idp` (single-provider settings)
 
 `IdpSettingsService.current()` returns the effective `IdpConfig` and its
 `source`:
 
-- `file` — `InstanceConfig.idp` is set (`idp.*` / `VAUBAAN_IDP_*`). It wins;
-  the Sign-in page of Settings is read-only (`readOnly`), `save()` refuses.
+- `file` — `InstanceConfig.idp` is set (`idp.*` / `VAUBAAN_IDP_*`). It wins
+  over the stored one; the provider `idp` is read-only in Settings (`readOnly`), `save()` refuses.
 - `store` — the operator saved the settings from `/admin/identity-provider`.
   Keys in `instance_config`: `idp.issuer`, `idp.client_id`,
   `idp.client_secret` (**sealed** by the `Encryptor`, associated data
   `instance_config:idp.client_secret`, `key_version` stamped),
   `idp.claims.{sub,email,groups}`, `idp.allowed_email_domains` (JSON array,
-  lower-cased). `IDP_CONFIG_KEYS` names them.
+  lower-cased), `idp.invitation_only` (`true` / `false`). `IDP_CONFIG_KEYS` names them.
+  `SignInProvidersService.save` writes a provider with the id `idp` through
+  this service, so an instance saved before several providers existed keeps
+  its settings, and its callback.
 
 `save()` validates everything at once (`IdpSettingsError.problems`): https
 issuer without query/fragment (an `http://` issuer only with
@@ -223,28 +383,33 @@ issuer.
 ## Sign-in flow
 
 ```
-GET /auth/login?return_to=/x
-  idp.current()  ──none──▶ 303 /login?error=idp-not-configured
-  rp.start(): discovery (cached), PKCE S256 verifier+challenge, state, nonce
-  sessions.createPending({state, nonce, codeVerifier, returnTo})   TTL 10 min
-  303 <authorization_endpoint>?client_id&redirect_uri=<public_url>/auth/callback
+GET /auth/login?return_to=/x            none ▶ /login?error=idp-not-configured; several ▶ 303 /login?return_to=/x
+GET /auth/login/<id>?return_to=/x
+  providers.resolve(id)  ──none──▶ 303 /login?error=provider-unknown
+  flow.start() (OIDC: discovery (cached), PKCE S256 verifier+challenge, state, nonce;
+                GitHub: PKCE, state — see "GitHub sign-in")
+  sessions.createPending({providerId, state, nonce, codeVerifier, returnTo})   TTL 10 min
+  303 <authorization_endpoint>?client_id&redirect_uri=<public_url>/auth/callback[/<id>]
       &scope=openid profile email [groups]&code_challenge&state&nonce
       Set-Cookie: __Host-vbn_login=<id>; Path=/; HttpOnly; Secure; SameSite=Lax
 
-GET /auth/callback?code&state           (Lax cookie travels on this top-level GET)
+GET /auth/callback[/<id>]?code&state    (Lax cookie travels on this top-level GET; no id = idp)
   sessions.takePending(cookie)  ──none──▶ 303 /login?error=login-expired
-  url = callbackUrl(public_url) + request's query string   ← never request.url
-  rp.finish(url, {state, nonce, codeVerifier}):
+  pending.providerId ≠ <id>     ──────▶ 303 /login?error=state-mismatch   (a callback of B never completes A)
+  url = callbackUrl(public_url, id) + request's query string   ← never request.url
+  OIDC: rp.finish(url, {state, nonce, codeVerifier}):
       authorizationCodeGrant (ClientSecretPost, expectedState, expectedNonce, pkceCodeVerifier,
       idTokenExpected); claims = { ...userinfo, ...idToken } when userinfo_endpoint exists
-  mapClaims(claims, settings.claims, {userinfoFailed})
+    mapClaims(claims, provider.claims, {userinfoFailed})
       ← refuses groups that could not be read, email_verified: false, and a group overage
-  assertEmailDomainAllowed()
-  completeLogin(): users.bindUnboundTo(iss), users.getByIdentity(iss, sub) (not active →
+    iss ≠ the provider's issuer → idp-error
+  GitHub: GithubSignIn.finish (see "GitHub sign-in")
+  admit()                                ← see "Admission"
+  completeLogin(identity, {providerId, adminRule}): users.bindUnboundTo(iss) (provider idp only), users.getByIdentity(iss, sub) (not active →
       account-deactivated), users.upsertFromIdp (status read again → account-deactivated),
       membershipsChanging (watch), syncIdpGroups, settle, currentAuthority, bootstrap revoke
   sessions.destroy(cookie)             ← the session the browser already had, if any
-  sessions.create({kind:'user', userId, login:{email, groups}})          TTL 8 h, absolute
+  sessions.create({kind:'user', userId, login:{email, groups, provider}}) TTL 8 h, absolute
   303 return_to   Set-Cookie: __Host-vbn_session=<id>; …   Set-Cookie: __Host-vbn_login=; Max-Age=0
 ```
 
@@ -312,12 +477,14 @@ GET /auth/callback?code&state           (Lax cookie travels on this top-level GE
   returns: a user deactivated between the first read and the upsert is
   refused with the same code, before any group is synced.
 - **Groups sync** (`syncIdpGroups` → `GroupsRepo.syncIdpMemberships(userId,
-names)`): one store transaction creates the missing groups (source `idp`),
+names, providerId)`): one store transaction creates the missing groups (source `idp`, `provider` = the sign-in provider),
   adds the claimed memberships and removes the IdP-sourced ones the user no
   longer claims. A membership change is an authorization change, so it is
   applied whole or not at all: a failure leaves the previous memberships. A
-  claimed name that already exists as a **local** group is skipped (returned
-  in `skipped`, logged as a warning), never granted. Emptied IdP groups keep
+  claimed name that already exists as a **local** group, or as a group of
+  **another sign-in provider**, is skipped (returned in `skipped`, logged as a
+  warning), never granted (migration 0014: `groups.provider`; every IdP group
+  from before it is the provider `idp`'s). Emptied IdP groups keep
   their row (they may own connections).
 - **Membership settlement.** `completeLogin` calls the optional
   `LoginDeps.membershipsChanging(user)` before the group sync, and the
@@ -411,9 +578,10 @@ the session's next request.
 `/api/admin/identity-provider`) passes `isSameOrigin(headers, publicUrl)`:
 `Origin` must equal `public_url`'s origin, `Referer`'s origin is the
 fallback, neither → 403 `origin-mismatch`. The forms are plain HTML
-`method="post"` forms, so browsers always send `Origin`. No `proxy.ts`
-(Next middleware) is needed: the check is in the handler, where the public
-origin is known from the configuration rather than from forwarded headers.
+`method="post"` forms, so browsers always send `Origin`. The check is in the
+handler, where the public origin is known from the configuration rather than
+from forwarded headers; `src/proxy.ts` sets the security headers only
+(handbook [configuration](configuration.md), "Security headers").
 
 **One guard for every mutation.** `guardMutation(request, deps, 'user' |
 'operator')` (`guard.ts`) is the single implementation of the order and of
@@ -586,8 +754,12 @@ millisecond of a deactivation is refused.
 - **`/login`** (where `/` sends a visitor with no session; a signed-in one
   stays on `/`, the home — `app/(app)/page.tsx`) — inside `AuthPage`
   ([web-app](web-app.md), "Pages outside the shell"): the title "Sign in to
-  `<host>`", one sentence, and one button per configured IdP ("Continue with
-  `<issuer host>`" → `GET /auth/login`). With no IdP it says "Sign-in is not
+  `<host>`", one sentence, and one button per sign-in provider ("Continue with
+  `<name>`", the first primary — `data-testid="sign-in-providers"`), each a
+  **plain link** to `/auth/login/<id>?return_to=<path>` (never prefetched by
+  the framework: a prefetch would start a sign-in); `return_to` is the page's
+  own, validated, else the home; and "Set up this gateway with the install
+  token" while the token is active. With no provider it says "Sign-in is not
   set up yet" (`login-not-configured`), with the way to the bootstrap page
   while the token is active. A failed attempt shows the sentence of its code
   (`login-error`, `LOGIN_ERROR_MESSAGES`); an unknown code shows nothing.
@@ -639,23 +811,42 @@ millisecond of a deactivation is refused.
   (`/admin/oauth-clients`, handbook [management-door](management-door.md)).
   A signed-in person who does not match the rule reads "You do not administer
   this gateway", with no navigation and the build footer.
-- **`/admin/identity-provider`** — **Sign-in**: the settings form (`POST
-/api/admin/identity-provider`: `issuer`, `client_id`, `client_secret`,
-  `claim_sub`, `claim_email`, `claim_groups`, `allowed_email_domains`), each
-  field saying its shape in its label; disabled when the file sets the IdP,
-  with "set in the mounted configuration" beside the title. Problems come
-  back as `?problem=…` and are listed in a note; `?saved=1` confirms. The
-  redirect address to register at the provider is a copyable block. **Test
-  the sign-in** runs the real sign-in with
-  `return_to=/admin/identity-provider?tested=1` and the page then shows what
-  the provider returned (email, teams, administrator yes/no) from the new
-  session. Note that the tester's session replaces the install one: a tester
-  who does not match the rule lands on the explanation above and signs out to
-  return to the install token.
+- **`/admin/identity-provider`** — **Sign-in**: the providers in a
+  `DataTable` (provider: name, id, issuer; kind, with "open to anyone"; who it
+  admits; how many people signed in through it), "Add a sign-in provider"
+  (primary, OpenID Connect) and "Add GitHub". Row actions: **Test** (a plain
+  link running the real sign-in with
+  `return_to=/admin/identity-provider?tested=<id>`; the page then shows what
+  the provider returned — provider, email, teams, administrator yes/no — from
+  the new session, which replaces the tester's), **Edit**, and **Remove**
+  (`ConfirmSubmit`, with the people it concerns) for a provider saved here; a
+  provider of the file shows "set in the mounted configuration". Notices:
+  `?saved=<id>`, `?removed=<id>&people=<n>`, `?problem=…`. A hint says who the
+  administrators are (`describeAdminRule`) and that accounts are never joined.
+- **`/admin/identity-provider/new?kind=oidc|github`** — the form
+  (`SignInProviderForm`, `POST /api/admin/sign-in-providers`, `mode=create`):
+  the address to register at the provider first (a copyable block), then the
+  id (GitHub: `github` suggested), the name, the issuer (GitHub: the Enterprise
+  Server address, blank for github.com), client id and secret, the claim
+  names (OIDC), and **who may sign in** — radio buttons: everyone the directory
+  signs in (OIDC only), these email domains and invited people, invited people
+  only (GitHub's default) — sent as `admission`. A refused form comes back as
+  it was typed, never the secret.
+- **`/admin/identity-provider/<id>`** — the same form for a provider saved
+  here (`mode=update`): id and kind fixed, the secret blank keeps it; a file
+  provider or an unknown id is "not found".
 - **`/admin/users`** — **People**: everyone who has signed in, in sign-up
   order (`UserAdminService.list()`), one row each: the name with "· you ·
-  admin" where it applies and the email under it, the teams, the last
-  sign-in, and "deactivated <date>" on a quiet row. Row actions:
+  admin" where it applies (the admin rule resolved now, on the user's group
+  records) and the email under it, **the provider they signed in with** ("a
+  removed provider" when it is gone), the teams, the last
+  sign-in, and "deactivated <date>" on a quiet row. A hint says that one
+  person signing in through two providers is two people. Under it,
+  **Invitations**: an "Email address" field and **Invite** (`POST
+/admin/users/invitations`), then the invited addresses (address, invited by,
+  when, signed in yet), each with **Remove** asked first (`POST
+/admin/users/invitations/remove`): the next sign-ins are refused, an open
+  session runs to its end. Row actions:
   **Deactivate**, asked first with everything it stops (`ConfirmSubmit`, then
   `POST /admin/users/<id>/deactivate`) — none on one's own row; **Reactivate**
   on a deactivated one. The notice of the last act is shown once at the top:
@@ -701,29 +892,31 @@ previous settings whole), file wins and read-only); `safeReturnTo`. The
 the digest and never the id, a clear-keyed row not read, TTL, sweep,
 overwrite, invalid TTL, an unreadable value removed).
 
-Unit, `tests/unit/app/admin-guard.test.ts` (63), over the real root on the
+Unit, `tests/unit/app/admin-guard.test.ts` (77), over the real root on the
 `:memory:` store with only `next/headers` replaced: `requireOperator()` with
 no session (bootstrap page, then `/login` once an IdP exists), an unknown
 cookie, a plain user (`notFound`), an operator, a bootstrap session before
 and after the token is revoked (6); the pages and routes of the surface are
-found (1); then, for each of the eight pages under `admin/(guarded)`, the
+found (1); then, for each of the ten pages under `admin/(guarded)` (the
+provider page rendered for the provider `idp`), the
 page calls `requireOperator()`, renders nothing for those three
-non-operators and renders for an operator (5 each); and each of the eight
+non-operators and renders for an operator (5 each); and each of the
 routes under it answers 401 / 403, and 401 to a revoked bootstrap session
 (2 each).
 
-Unit, `tests/unit/server/auth/mutation-guard.test.ts` (287), over the real
+Unit, `tests/unit/server/auth/mutation-guard.test.ts` (342), over the real
 root on the `:memory:` store with seeded connections, a mission, an open
 claim, a registered OAuth client, a delegation and an unanswered consent
-screen: the completeness checks above (every handler classified; each of the
-32 mutating `route.ts` files delegates to a classified mutation, an MCP door
+screen: the completeness checks above (every handler classified; each
+mutating `route.ts` file delegates to a classified mutation, an MCP door
 or a protocol endpoint); the three OAuth protocol endpoints read no session
 (an operator's cookie sent from another origin changes neither the answer
-nor the store); then, for each of the thirty-two mutating handlers, the
+nor the store); then, for each mutating handler — the sign-in providers'
+save and removal and the two invitation endpoints included —, the
 rightful caller gets through (so the request is one that would be served),
 and the request is refused with every table of the store unchanged for
 another origin, no `Origin` and no `Referer`, a foreign `Referer` and an
-opaque `Origin`; and, for the thirty that need a session (all but
+opaque `Origin`; and, for those that need a session (all but
 `/logout` and `/api/auth/bootstrap`), for no session (401), a session of the
 wrong role (a plain user on an operator endpoint, the bootstrap operator on
 a user endpoint: 403) and a bootstrap session whose token was revoked (401;
@@ -794,5 +987,52 @@ written; the bootstrap operator deactivates an operator; over HTTP the two
 routes answer `303` to the Users page for an operator and refuse a plain
 user, a foreign origin and no session.
 
-Not automated: a browser run against a real IdP (Google, Entra ID,
-Keycloak) — [e2e-tests](../tests/e2e-tests.md) describes the manual check.
+Unit, `src/auth/admission.test.ts` (5): a directory without domains admits
+everyone it signs in; domains admit theirs, invitations and admin emails the
+others, with the right refusal code; invitation only; an open provider never
+admits an email it did not say it verified, invited or admin alike.
+`src/auth/github.test.ts` (9), against the in-process `FakeGithub`
+(`tests/integration/auth/fake-github.ts`): the scopes (`read:org` only with a
+team), state and S256 PKCE, the numeric id as subject and the primary verified
+address, the team read (member, not member), a forged state, a wrong verifier,
+an unverified or absent primary address, an error of the provider.
+`src/auth/sign-in-providers.test.ts` (6): a GitHub provider saved with its
+secret sealed and absent from every view; the blank secret kept for the same
+issuer and asked again for another; the provider `idp` in the single-provider
+keys; a file provider read-only; a bare admin group made ambiguous by a second
+provider refused; bad id, duplicate, change of kind, open provider without a
+rule. `src/auth/admin-rule.test.ts` (9): the group of the rule's provider only,
+local groups never, emails of any provider, ambiguity, a removed provider's
+prefix, the legacy colon. `src/config/sign-in.test.ts` (15): the `idp.*` keys
+as the provider `idp`, a GitHub provider from the environment (bootstrap token
+then optional), several from the file with a secret by reference, every refusal
+of the loader, the env-name parser, the open issuers, `resolveAdminGroup`.
+
+Integration, `tests/integration/auth/sign-in-providers.test.ts` (16), over the
+real root with the `FakeIdp` (a company directory, allowed domain) and the
+`FakeGithub` (invitation only), routed by origin (`routeFetch`): both listed and
+`/auth/login` sending to the choice; the callbacks; a directory sign-in; an
+uninvited GitHub address refused with nothing written, then admitted once
+invited, keyed by the numeric id; the same address through both providers is two
+users; an unverified primary address refused although invited; an unverified
+admin email refused through the directory (token still active); a GitHub
+callback finished on the directory's path refused (`state-mismatch`); a GitHub
+team member is an administrator (and revokes the token) while the directory's
+group of the same name is skipped and grants nothing; a team GitHub cannot
+answer for refuses the sign-in; the admin emails admitted on an invitation-only
+provider; removing an invitation refuses the next sign-in and keeps the open
+session; removing a provider: no sign-in, sessions over, the user active and
+the mission serving until deactivation orphans it; the removal through Settings,
+audited without the secret; a second provider of one issuer and a GitHub
+provider without a rule refused. `tests/integration/store/sign-in-providers-store.test.ts`
+(4): invitations, groups bound to their provider, `endSessionsOfIssuer`, and
+migration 0014 over an earlier database.
+
+End to end, `tests/e2e/v5/sign-in-providers.spec.ts`: an administrator adds
+GitHub from Settings → Sign-in, the sign-in page offers both providers, an
+uninvited address is refused, invited from People it is admitted, the provider
+is removed (asked first, with the person it concerns); the security headers of a
+page are checked on the way.
+
+Not automated: a browser run against a real provider (Google, Entra ID,
+Keycloak, GitHub) — [e2e-tests](../tests/e2e-tests.md) describes the manual check.

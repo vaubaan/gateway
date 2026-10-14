@@ -56,6 +56,7 @@ import { serializeSecret } from '../../../src/server/connections';
 import { seedConnection } from '../../../src/server/missions/testing';
 import type { UserRecord } from '../../../src/server/store/types';
 import { seedDayOfWork, type AuditRig } from '../../integration/audit/support';
+import { FakeGithub, routeFetch } from '../../integration/auth/fake-github';
 import { FakeIdp } from '../../integration/auth/fake-idp';
 import { seedInstance, testRootDeps } from '../../integration/missions/support';
 import {
@@ -66,6 +67,8 @@ import {
   E2E_OPERATOR,
   E2E_SHARE_OWNER,
   E2E_SHARE_TARGET,
+  GITHUB_SIGN_IN_BASE,
+  GITHUB_SIGN_IN_CLIENT,
   IDP_ISSUER,
   instancePort,
   MOCK_GITHUB,
@@ -339,6 +342,12 @@ async function main(): Promise<void> {
   }
   const port = instancePort();
   const idp = new FakeIdp({ issuer: IDP_ISSUER, ...CLIENT });
+  // GitHub as a sign-in provider: added by the sign-in spec through Settings, removed after.
+  const githubSignIn = new FakeGithub(
+    GITHUB_SIGN_IN_CLIENT.clientId,
+    GITHUB_SIGN_IN_CLIENT.clientSecret,
+    GITHUB_SIGN_IN_BASE,
+  );
   // No default user: the IdP has no claims to hand out until a spec says who
   // signs in (`idp/next-user`), so a spec that forgets to fails at its sign-in.
   const github = mockedGithub();
@@ -350,7 +359,15 @@ async function main(): Promise<void> {
       publicUrl: PUBLIC_URL,
       // The admin rule names the operator of the share spec.
       env: { ...githubEnv(), VAUBAAN_ADMIN_EMAILS: E2E_OPERATOR.email },
-      deps: { oidc: { fetch: idp.fetch }, providerFetch: github },
+      deps: {
+        oidc: {
+          fetch: routeFetch({
+            [idp.issuer.origin]: idp.fetch,
+            [githubSignIn.base.origin]: githubSignIn.fetch,
+          }),
+        },
+        providerFetch: github,
+      },
     }),
   );
   await root.auth.idp.save({
@@ -393,6 +410,37 @@ async function main(): Promise<void> {
           name: string;
         };
         idp.nextClaims = { ...user, groups: [] };
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+      if (url.pathname === `${CONTROL_PREFIX}/github/authorize`) {
+        // The consent step of the simulated GitHub sign-in.
+        const authorization = new URL('/login/oauth/authorize', githubSignIn.base);
+        authorization.search = url.search;
+        sendJson(res, 200, { callback: githubSignIn.authorize(authorization).href });
+        return;
+      }
+      if (url.pathname === `${CONTROL_PREFIX}/github/next-user` && req.method === 'POST') {
+        const user = JSON.parse(await readBody(req)) as {
+          id: number;
+          login: string;
+          email: string;
+        };
+        githubSignIn.nextUser = {
+          id: user.id,
+          login: user.login,
+          name: null,
+          emails: [{ email: user.email, primary: true, verified: true }],
+        };
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+      if (url.pathname === `${CONTROL_PREFIX}/github/cleanup` && req.method === 'POST') {
+        // What the sign-in spec leaves behind when it fails half-way.
+        if (await root.auth.providers.view('github')) await root.auth.providers.remove('github');
+        for (const invitation of await root.store.invitations.list()) {
+          await root.store.invitations.remove(invitation.email);
+        }
         sendJson(res, 200, { ok: true });
         return;
       }

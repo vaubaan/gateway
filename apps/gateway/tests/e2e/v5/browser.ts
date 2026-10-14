@@ -14,7 +14,7 @@
  */
 import type { APIRequestContext, BrowserContext, Route } from '@playwright/test';
 
-import { controlUrl, IDP_ISSUER, localOrigin, PUBLIC_URL } from './instance';
+import { controlUrl, GITHUB_SIGN_IN_BASE, IDP_ISSUER, localOrigin, PUBLIC_URL } from './instance';
 
 /** Headers that describe the browser's connection, not the request. */
 const HOP_HEADERS = new Set(['host', 'connection', 'content-length', 'accept-encoding']);
@@ -94,6 +94,16 @@ export async function routeToInstance(context: BrowserContext): Promise<void> {
     const url = new URL(route.request().url());
     const consent = await route.fetch({
       url: `${controlUrl('/idp/authorize')}${url.search}`,
+    });
+    const { callback } = (await consent.json()) as { callback: string };
+    await fulfillRedirect(route, callback, []);
+  });
+
+  // The consent page of the simulated GitHub sign-in (the sign-in spec only).
+  await context.route(`${GITHUB_SIGN_IN_BASE}/login/oauth/authorize**`, async (route) => {
+    const url = new URL(route.request().url());
+    const consent = await route.fetch({
+      url: `${controlUrl('/github/authorize')}${url.search}`,
     });
     const { callback } = (await consent.json()) as { callback: string };
     await fulfillRedirect(route, callback, []);

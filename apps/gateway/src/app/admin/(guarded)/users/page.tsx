@@ -152,7 +152,8 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
       id: 'state',
       header: 'Signed in',
       nowrap: true,
-      cell: (invitation) => (invitation.signedIn ? 'yes' : <span className={styles.quiet}>not yet</span>),
+      cell: (invitation) =>
+        invitation.signedIn ? 'yes' : <span className={styles.quiet}>not yet</span>,
     },
   ];
 
@@ -241,8 +242,8 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
         </form>
         {invitations.length === 0 ? (
           <Hint>
-            Nobody is invited. Only allowed domains and the administrators’ emails are admitted on
-            a provider where anyone can open an account.
+            Nobody is invited. Only allowed domains and the administrators’ emails are admitted on a
+            provider where anyone can open an account.
           </Hint>
         ) : (
           <DataTable

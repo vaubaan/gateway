@@ -308,8 +308,7 @@ export class SignInProvidersService {
     }
     const claims = kind === 'oidc' ? normalizeClaims(input.claims, problems) : undefined;
     const allowedEmailDomains = normalizeEmailDomains(input.allowedEmailDomains, problems);
-    const name =
-      input.name.trim() || (kind === 'github' ? 'GitHub' : (issuer?.hostname ?? id));
+    const name = input.name.trim() || (kind === 'github' ? 'GitHub' : (issuer?.hostname ?? id));
     const others = (await this.views()).filter((p) => p.id !== id);
     if (issuer) {
       const admission = admissionProblem({
@@ -405,7 +404,10 @@ export class SignInProvidersService {
    * Refuses a change of the provider list that would leave the admin rule's group
    * ambiguous, or make it name another provider's group than it does now.
    */
-  private adminRuleChange(beforeIds: readonly string[], afterIds: readonly string[]): string | null {
+  private adminRuleChange(
+    beforeIds: readonly string[],
+    afterIds: readonly string[],
+  ): string | null {
     const raw = this.rule.group;
     if (raw === null) return null;
     const before = resolveAdminGroup(raw, beforeIds);
@@ -432,10 +434,15 @@ export class SignInProvidersService {
     try {
       url = new URL(text);
     } catch {
-      problems.push(kind === 'github' ? 'the GitHub address must be a URL' : 'issuer must be a URL');
+      problems.push(
+        kind === 'github' ? 'the GitHub address must be a URL' : 'issuer must be a URL',
+      );
       return null;
     }
-    if (url.protocol !== 'https:' && !(this.options.allowInsecureIssuer && url.protocol === 'http:')) {
+    if (
+      url.protocol !== 'https:' &&
+      !(this.options.allowInsecureIssuer && url.protocol === 'http:')
+    ) {
       problems.push('issuer must use https');
       return null;
     }

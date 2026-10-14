@@ -85,8 +85,7 @@ export default async function SignInSettingsPage({ searchParams }: Props) {
       cell: ({ provider }) => (
         <span className={styles.namedText}>
           <span>
-            <span className={styles.name}>{provider.name}</span>{' '}
-            <Mono>{provider.id}</Mono>
+            <span className={styles.name}>{provider.name}</span> <Mono>{provider.id}</Mono>
           </span>
           <span className={styles.sub}>{issuerKey(provider.issuer)}</span>
         </span>
@@ -211,6 +210,8 @@ export default async function SignInSettingsPage({ searchParams }: Props) {
                   href={`${signInStartPath(provider.id)}?return_to=${encodeURIComponent(`${IDP_PAGE}?tested=${provider.id}`)}`}
                   size="sm"
                   aria-label={`${SETTINGS_ACTIONS.testSignIn} through ${provider.name}`}
+                  // A plain link: a prefetch of /auth/login would start a sign-in.
+                  external
                 >
                   Test
                 </ButtonLink>
@@ -234,7 +235,10 @@ export default async function SignInSettingsPage({ searchParams }: Props) {
                       title={`Remove ${provider.name}?`}
                       consequence={
                         people === 0 ? (
-                          <>Nobody has signed in through it yet. Nobody can sign in through it after.</>
+                          <>
+                            Nobody has signed in through it yet. Nobody can sign in through it
+                            after.
+                          </>
                         ) : (
                           <>
                             {people} {people === 1 ? 'person has' : 'people have'} signed in through

@@ -137,6 +137,8 @@ export default async function LoginPage({ searchParams }: Props) {
               href={`${signInStartPath(provider.id)}?return_to=${encodeURIComponent(returnTo)}`}
               variant={index === 0 ? 'primary' : 'secondary'}
               size="lg"
+              // A plain link: a prefetch of /auth/login would start a sign-in.
+              external
             >
               Continue with {provider.name}
             </ButtonLink>

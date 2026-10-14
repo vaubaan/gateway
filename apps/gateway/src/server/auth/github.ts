@@ -15,7 +15,7 @@
  *               is asked for only then
  *
  * Scopes: `read:user user:email`, plus `read:org` when a team must be read. The
- * issuer recorded for the users is the provider's base URL (`https://github.com`,
+ * issuer recorded for the users is the provider's base URL (github.com,
  * or a GitHub Enterprise Server), whose REST API is `api.github.com` or
  * `<base>/api/v3` (`githubApiBase`).
  */
@@ -84,8 +84,7 @@ export class GithubSignIn {
     private readonly options: GithubSignInOptions,
   ) {
     this.api = githubApiBase(provider.issuer);
-    this.fetchImpl =
-      options.fetch ?? ((url, init) => fetch(url, init as unknown as RequestInit));
+    this.fetchImpl = options.fetch ?? ((url, init) => fetch(url, init as unknown as RequestInit));
   }
 
   /** The scopes of an attempt: `read:org` only when a team must be read. */
@@ -118,7 +117,10 @@ export class GithubSignIn {
     const error = params.get('error');
     const state = params.get('state') ?? '';
     if (!sameSecret(state, checks.state)) {
-      throw new LoginError('state-mismatch', 'the "state" of the GitHub callback is not the one of the attempt');
+      throw new LoginError(
+        'state-mismatch',
+        'the "state" of the GitHub callback is not the one of the attempt',
+      );
     }
     if (error) {
       throw new LoginError(
@@ -135,12 +137,17 @@ export class GithubSignIn {
     const id = isRecord(user) ? user.id : undefined;
     const login = isRecord(user) && typeof user.login === 'string' ? user.login : null;
     if (typeof id !== 'number' || !Number.isSafeInteger(id) || id <= 0 || login === null) {
-      throw new LoginError('claims-missing', 'GitHub /user answered without a numeric id and a login');
+      throw new LoginError(
+        'claims-missing',
+        'GitHub /user answered without a numeric id and a login',
+      );
     }
     const subject = String(id);
     const emails = await this.get(token, '/user/emails');
     const primary = Array.isArray(emails)
-      ? emails.find((entry): entry is Record<string, unknown> => isRecord(entry) && entry.primary === true)
+      ? emails.find(
+          (entry): entry is Record<string, unknown> => isRecord(entry) && entry.primary === true,
+        )
       : undefined;
     if (!primary || typeof primary.email !== 'string' || primary.email.trim() === '') {
       throw new LoginError(
@@ -154,7 +161,10 @@ export class GithubSignIn {
         `the primary email address of GitHub user ${subject} is not verified at GitHub`,
       );
     }
-    const name = isRecord(user) && typeof user.name === 'string' && user.name.trim() ? user.name.trim() : login;
+    const name =
+      isRecord(user) && typeof user.name === 'string' && user.name.trim()
+        ? user.name.trim()
+        : login;
     const groups = await this.teamsOf(token, login, subject, warnings);
     return {
       identity: {
@@ -178,7 +188,9 @@ export class GithubSignIn {
   ): Promise<string[]> {
     const { readable, unreadable } = readableTeams(this.options.teams);
     for (const name of unreadable) {
-      warnings.push(`the admin rule names "${name}", which is not a GitHub team (org/team): not read`);
+      warnings.push(
+        `the admin rule names "${name}", which is not a GitHub team (org/team): not read`,
+      );
     }
     const member: string[] = [];
     for (const { org, team, name } of readable) {
@@ -201,29 +213,35 @@ export class GithubSignIn {
   private async exchange(code: string, codeVerifier: string): Promise<string> {
     let response: Response;
     try {
-      response = await this.fetchImpl(`${issuerKey(this.provider.issuer)}/login/oauth/access_token`, {
-        method: 'POST',
-        headers: {
-          accept: 'application/json',
-          'content-type': 'application/x-www-form-urlencoded',
-          'user-agent': USER_AGENT,
+      response = await this.fetchImpl(
+        `${issuerKey(this.provider.issuer)}/login/oauth/access_token`,
+        {
+          method: 'POST',
+          headers: {
+            accept: 'application/json',
+            'content-type': 'application/x-www-form-urlencoded',
+            'user-agent': USER_AGENT,
+          },
+          body: new URLSearchParams({
+            client_id: this.provider.clientId,
+            client_secret: this.provider.clientSecret,
+            code,
+            redirect_uri: this.options.redirectUri.href,
+            code_verifier: codeVerifier,
+          }).toString(),
+          redirect: 'manual',
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         },
-        body: new URLSearchParams({
-          client_id: this.provider.clientId,
-          client_secret: this.provider.clientSecret,
-          code,
-          redirect_uri: this.options.redirectUri.href,
-          code_verifier: codeVerifier,
-        }).toString(),
-        redirect: 'manual',
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-      });
+      );
     } catch (err) {
-      throw new LoginError('discovery-failed', `GitHub token endpoint: ${errorMessage(err)}`, { cause: err });
+      throw new LoginError('discovery-failed', `GitHub token endpoint: ${errorMessage(err)}`, {
+        cause: err,
+      });
     }
     const body: unknown = await response.json().catch(() => null);
     if (!response.ok || !isRecord(body) || typeof body.access_token !== 'string') {
-      const reason = isRecord(body) && typeof body.error === 'string' ? body.error : `HTTP ${response.status}`;
+      const reason =
+        isRecord(body) && typeof body.error === 'string' ? body.error : `HTTP ${response.status}`;
       throw new LoginError('idp-error', `GitHub refused the code: ${reason}`);
     }
     return body.access_token;
@@ -231,7 +249,8 @@ export class GithubSignIn {
 
   private async get(token: string, path: string): Promise<unknown> {
     const response = await this.request(token, path);
-    if (!response.ok) throw new LoginError('idp-error', `GitHub ${path} answered ${response.status}`);
+    if (!response.ok)
+      throw new LoginError('idp-error', `GitHub ${path} answered ${response.status}`);
     return response.json().catch(() => null);
   }
 
@@ -251,7 +270,9 @@ export class GithubSignIn {
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
     } catch (err) {
-      throw new LoginError('discovery-failed', `GitHub ${path}: ${errorMessage(err)}`, { cause: err });
+      throw new LoginError('discovery-failed', `GitHub ${path}: ${errorMessage(err)}`, {
+        cause: err,
+      });
     }
   }
 }

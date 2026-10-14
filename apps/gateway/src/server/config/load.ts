@@ -541,14 +541,22 @@ function readSignInProvider(r: Reader, id: string, base: string): SignInProvider
     const issuer = r.url(`${base}.issuer`, { fallback: GITHUB_DOT_COM, https: true });
     const name = r.string(`${base}.name`, { fallback: 'GitHub' }) ?? 'GitHub';
     if (issuer && (issuer.search || issuer.hash)) {
-      r.issues.add(`${base}.issuer`, 'must not carry a query string or fragment', envNamesFor(`${base}.issuer`));
+      r.issues.add(
+        `${base}.issuer`,
+        'must not carry a query string or fragment',
+        envNamesFor(`${base}.issuer`),
+      );
     }
     if (r.issues.items.length > before || !issuer || !clientId || !clientSecret) return null;
     return { kind, id, name, issuer, clientId, clientSecret, allowedEmailDomains, invitationOnly };
   }
   const issuer = r.url(`${base}.issuer`, { required: kind === 'oidc', https: true });
   if (issuer && (issuer.search || issuer.hash)) {
-    r.issues.add(`${base}.issuer`, 'must not carry a query string or fragment', envNamesFor(`${base}.issuer`));
+    r.issues.add(
+      `${base}.issuer`,
+      'must not carry a query string or fragment',
+      envNamesFor(`${base}.issuer`),
+    );
   }
   const claims = {
     sub: r.string(`${base}.claims.sub`, { fallback: 'sub' }) ?? 'sub',
@@ -594,7 +602,11 @@ function checkSignInProviders(
   const issuers = new Map<string, string>();
   for (const provider of all) {
     const path = provider.id === LEGACY_PROVIDER_ID && idp ? 'idp' : `sign_in.${provider.id}`;
-    if (provider.id === LEGACY_PROVIDER_ID && idp && signIn.some((p) => p.id === LEGACY_PROVIDER_ID)) {
+    if (
+      provider.id === LEGACY_PROVIDER_ID &&
+      idp &&
+      signIn.some((p) => p.id === LEGACY_PROVIDER_ID)
+    ) {
       r.issues.add(
         'sign_in.idp',
         "the id 'idp' is the provider the idp.* keys describe; set one or the other",
@@ -613,7 +625,9 @@ function checkSignInProviders(
     const problem = admissionProblem(provider);
     if (problem) {
       r.issues.add(
-        provider.id === LEGACY_PROVIDER_ID && idp ? 'idp.allowed_email_domains' : `${path}.allowed_email_domains`,
+        provider.id === LEGACY_PROVIDER_ID && idp
+          ? 'idp.allowed_email_domains'
+          : `${path}.allowed_email_domains`,
         problem,
         provider.id === LEGACY_PROVIDER_ID && idp
           ? [...envNamesFor('idp.allowed_email_domains'), ...envNamesFor('idp.invitation_only')]

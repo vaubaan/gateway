@@ -448,7 +448,8 @@ function readSignInEnv(ctx: SourceContext, tree: RawTree): void {
       case 'bool': {
         const raw = ctx.env[base] ?? '';
         value = parseBool(raw);
-        if (value === undefined) ctx.issues.add(path, `expected true or false, got "${raw}"`, [base]);
+        if (value === undefined)
+          ctx.issues.add(path, `expected true or false, got "${raw}"`, [base]);
         break;
       }
       case 'string':
@@ -459,7 +460,9 @@ function readSignInEnv(ctx: SourceContext, tree: RawTree): void {
   }
 }
 
-const SIGN_IN_FIELDS_LONGEST_FIRST = [...SIGN_IN_FIELDS].sort((a, b) => b.env.length - a.env.length);
+const SIGN_IN_FIELDS_LONGEST_FIRST = [...SIGN_IN_FIELDS].sort(
+  (a, b) => b.env.length - a.env.length,
+);
 
 /**
  * `VAUBAAN_SIGN_IN_ACME_ENTRA_CLIENT_ID` → `{ providerId: 'acme-entra', spec: client_id }`;
