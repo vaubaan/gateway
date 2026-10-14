@@ -49,14 +49,15 @@ export function providerGrantReport(
       return {
         actionNeeded: true,
         title: `Access NOT withdrawn at ${providerLabel}`,
-        text: `The gateway asked ${providerLabel} to withdraw the access and ${providerLabel} did not confirm: it may still stand there. Remove it by hand. ${how}`,
+        // What to do is said once, by the plugin's own sentence.
+        text: `The gateway asked ${providerLabel} to withdraw the access and ${providerLabel} did not confirm: it may still stand there. ${how}`,
       };
     case 'manual':
     case null:
       return {
         actionNeeded: true,
-        title: `Remove the access at ${providerLabel} by hand`,
-        text: `The gateway did not withdraw the access at ${providerLabel}: it still stands there until you remove it. ${how}`,
+        title: `Still granted at ${providerLabel}`,
+        text: `The gateway did not withdraw the access at ${providerLabel}. ${how}`,
       };
   }
 }

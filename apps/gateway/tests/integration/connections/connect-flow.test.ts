@@ -376,7 +376,7 @@ describe('connections: provider app, connect, resources, revoke', () => {
     // that the access still stands there and is theirs to remove.
     const told = await noticeOf(revoked, alice);
     expect(told).toMatchObject({ tone: 'warning', title: 'Account disconnected' });
-    expect(told?.lines[1]).toMatch(/^Remove the access at .+ by hand\. /);
+    expect(told?.lines[1]).toMatch(/^Still granted at .+\. The gateway did not withdraw /);
     const after = root.store.db
       .prepare<
         [string],

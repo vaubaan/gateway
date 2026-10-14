@@ -644,9 +644,9 @@ export function AccountView({
               The missions that use it keep running meanwhile.
             </Callout>
           )}
-          {revoked && grant && (
+          {revoked && grant && !grantSaid && (
             <Callout
-              tone={grant.actionNeeded && !grantSaid ? 'warn' : 'neutral'}
+              tone={grant.actionNeeded ? 'warn' : 'neutral'}
               title={`Disconnected${connection.revokedAt ? ` on ${shortDate(connection.revokedAt, now)}` : ''}`}
               testId="account-disconnected"
             >
