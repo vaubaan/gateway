@@ -62,3 +62,5 @@ export default githubPlugin;
 export { classifyGithub, githubCredential, githubDataModel, githubTools };
 export { buildAppJwt, mintInstallationToken } from './app-install.ts';
 export { discoverGithubResources, executeGithub, MINT_PERMISSIONS } from './execute.ts';
+export { GITHUB_APP_PERMISSIONS, githubManifestRegistration } from './app-manifest.ts';
+export { assertAppPermissions, needsOf } from './permission-check.ts';

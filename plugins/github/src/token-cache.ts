@@ -33,6 +33,14 @@ interface CachedToken {
   readonly token: string;
   /** ISO-8601 expiry announced by GitHub. */
   readonly expiresAt: string;
+  /** What the installation holds, as GitHub answered; absent in an entry cached by an older build. */
+  readonly permissions?: Readonly<Record<string, string>>;
+}
+
+/** The token of one call and the permissions the installation holds (empty when GitHub did not say). */
+export interface CallGrant {
+  readonly token: string;
+  readonly permissions: Readonly<Record<string, string>>;
 }
 
 export function installationTokenCacheKey(repo: string | undefined): string {
@@ -54,17 +62,34 @@ export async function installationTokenForCall(
   repo: string | undefined,
   now: () => number = Date.now,
 ): Promise<string> {
+  return (await installationGrantForCall(ctx, repo, now)).token;
+}
+
+/** `installationTokenForCall`, with the permissions the installation holds. */
+export async function installationGrantForCall(
+  ctx: ExecuteContext,
+  repo: string | undefined,
+  now: () => number = Date.now,
+): Promise<CallGrant> {
   const cache = ctx.credentialCache;
   const key = installationTokenCacheKey(repo);
   if (cache) {
     const cached = await cache.get<CachedToken>(key);
-    if (cached && secondsLeft(cached.expiresAt, now()) > 0) return cached.token;
+    if (cached && secondsLeft(cached.expiresAt, now()) > 0) {
+      return { token: cached.token, permissions: cached.permissions ?? {} };
+    }
   }
   const minted = await installationTokenFor(ctx, repo ? { repositories: [repo] } : {});
   if (cache) {
     const expiresAt = minted.expiresAt.toISOString();
     const ttl = Math.min(INSTALLATION_TOKEN_CACHE_SECONDS, secondsLeft(expiresAt, now()));
-    if (ttl > 0) await cache.set<CachedToken>(key, { token: minted.token, expiresAt }, ttl);
+    if (ttl > 0) {
+      await cache.set<CachedToken>(
+        key,
+        { token: minted.token, expiresAt, permissions: minted.permissions },
+        ttl,
+      );
+    }
   }
-  return minted.token;
+  return { token: minted.token, permissions: minted.permissions };
 }

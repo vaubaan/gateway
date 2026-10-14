@@ -6,7 +6,9 @@
  *        plugin-contract-and-credential-spec D2.
  *
  * The operator configures the App once (app id, private key, slug, OAuth
- * client id and secret) ; the host redirects the connecting user to the
+ * client id and secret) — created from the interface through GitHub's App
+ * manifest flow (`app-manifest.ts`, `manifestRegistration` below), or
+ * entered by hand ; the host redirects the connecting user to the
  * installation page and receives `installation_id` on the callback. The App
  * is registered with "Request user authorization (OAuth) during
  * installation", so the callback also carries a `code` : the host exchanges
@@ -23,8 +25,6 @@
  */
 
 import {
-  CLIENT_ID_FIELD,
-  CLIENT_SECRET_FIELD,
   expectCredentialKind,
   type AppInstallCredentialSpec,
   type ConnectionContext,
@@ -38,19 +38,10 @@ import {
   type AppCredentials,
   type ScopedInstallationToken,
 } from './app-install.ts';
+import { githubManifestRegistration } from './app-manifest.ts';
+import { GITHUB_APP_CONFIG, GITHUB_WEB_BASE } from './credential-keys.ts';
 
-/** Keys of `ctx.appConfig` for this provider — one source for the spec and the readers. */
-export const GITHUB_APP_CONFIG = {
-  appId: 'app_id',
-  privateKey: 'private_key',
-  appSlug: 'app_slug',
-  /** Used by the host only, to verify installations ; `clientSecret` never reaches this plugin. */
-  clientId: CLIENT_ID_FIELD,
-  clientSecret: CLIENT_SECRET_FIELD,
-} as const;
-
-/** GitHub's web origin : the installation page and the OAuth token endpoint. */
-export const GITHUB_WEB_BASE = 'https://github.com';
+export { GITHUB_APP_CONFIG, GITHUB_WEB_BASE };
 /** `GET /user/installations` accepts at most 100 items per page. */
 const INSTALLATIONS_PER_PAGE = 100;
 
@@ -106,6 +97,8 @@ export const githubCredential: AppInstallCredentialSpec = {
     installationIdField: 'id',
     pagination: { pageParam: 'page', perPageParam: 'per_page', perPage: INSTALLATIONS_PER_PAGE },
   },
+  // The administrator may create the App from Settings → Administration → Company apps.
+  manifestRegistration: githubManifestRegistration,
 };
 
 /** Read one app-config key or fail naming it (never a silent default). */
