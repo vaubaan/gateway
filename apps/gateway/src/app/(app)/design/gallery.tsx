@@ -12,7 +12,7 @@ import { PAGES } from '@/lib/vocabulary';
 import { AccountSections } from './sections-accounts';
 import { ListSections, PermissionSections } from './sections-data';
 import { GallerySection } from './specimen';
-import { FormSections, LegacySections, OverlaySections, StateSections } from './sections-feedback';
+import { FormSections, OverlaySections, StateSections } from './sections-feedback';
 import {
   ButtonSections,
   MarkSections,
@@ -73,7 +73,6 @@ export const GALLERY_SECTIONS: readonly {
       { id: 'toast', label: 'Toast' },
       { id: 'forms', label: 'Form fields' },
       { id: 'code', label: 'Code' },
-      { id: 'legacy', label: 'Kept for older pages' },
     ],
   },
   {
@@ -130,7 +129,6 @@ export function Gallery() {
         <StateSections />
         <OverlaySections />
         <FormSections />
-        <LegacySections />
         <WaitingSections />
         <MissionSections />
         <AccountSections />

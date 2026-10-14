@@ -2,7 +2,7 @@
 title: Deploying Vaubaan Gateway
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - deploy/docker/
   - deploy/compose.yaml
@@ -70,11 +70,11 @@ go in through `${NAME}` / `${file:/path}` references in the YAML or `*_FILE`
 variables.
 
 First sign-in: open `https://<your domain>/login`, follow the bootstrap link
-and paste the bootstrap token; on **Administration → Identity provider**
+and paste the bootstrap token; on **Settings → Administration → Sign-in**
 enter your OpenID Connect issuer, client id and secret (redirect URI
-`https://<your domain>/auth/callback`), then "Test login". The first
+`https://<your domain>/auth/callback`), then "Test the sign-in". The first
 sign-in of a user matching the admin rule revokes the bootstrap token. You
-may instead put the IdP in the configuration (`idp.*`); the Admin page is
+may instead put the IdP in the configuration (`idp.*`); the Sign-in page is
 then read-only and no bootstrap token is needed
 (handbook [authentication](../docs/handbook/authentication.md)).
 
@@ -189,8 +189,9 @@ environment.
 - **Logs**: JSON lines on stdout/stderr; mission tokens appear by prefix
   only, configured secrets are redacted. `VAUBAAN_LOG_LEVEL=debug` for more.
 - **Retention**: `retention_days` (default 90) purges the **audit trail**
-  only, at boot and then hourly. Session events, decided requests and
-  approvals are not purged and stay for the life of the store.
+  and the session history of the same age (timeline events, the counters of
+  periods that are over), at boot and then hourly. What the current period is
+  computed from is kept; decided requests and approvals are not purged.
 - **Data**: everything is in `/data` (`gateway.db` and its WAL files). Back
   it up with a volume snapshot or SQLite's `VACUUM INTO` (`store.backupTo()`
   in the [store handbook](../docs/handbook/store.md#backup); there is no
@@ -236,8 +237,8 @@ environment.
   tokens 15 minutes, refresh tokens 30 days, client registration
   `operator-approved` with loopback-only clients (CLI agents) approved
   automatically, Client ID Metadata Documents off. The `oauth.*` keys
-  (`VAUBAAN_OAUTH_*`) change them; an operator approves or disables clients on
-  Administration → OAuth clients. Nothing to configure on the proxy.
+  (`VAUBAAN_OAUTH_*`) change them; an administrator approves or disables clients on
+  Settings → Administration → Registered apps. Nothing to configure on the proxy.
 
 ## Community telemetry (optional)
 
@@ -245,11 +246,13 @@ Off at installation, and the only SaaS dependency of the product. When an
 operator opts in, the instance reports, per call a plugin executed, six
 fields: plugin, plugin version, gateway version, tool, outcome, error class.
 Never arguments or their hash, resource refs, mission or user identifiers,
-an instance identifier or an address. Administration → Telemetry shows the
+an instance identifier or an address. Settings → Administration → Telemetry
+shows the
 exact payload before anything is enabled.
 
-- **Decide from the interface**: leave `telemetry.enabled` unset; an operator
-  toggles it on Administration → Telemetry (stored in the database, audited).
+- **Decide from the interface**: leave `telemetry.enabled` unset; an
+  administrator toggles it on Settings → Administration → Telemetry (stored in
+  the database, audited).
 - **Decide from the configuration**: set `telemetry.enabled` to `true` or
   `false`; the page becomes read-only. `false` guarantees nothing is sent.
 - **The collector URL**: the built-in default is a **placeholder** — the
@@ -260,8 +263,9 @@ exact payload before anything is enabled.
   public key as the `apikey` query parameter when it needs one.
 - **Outbound traffic**: only then, `POST` batches to that URL (at most every
   60 seconds) and one `GET` of the public statistics every six hours, which
-  feeds the "validated by the community" badge on the Connections pages. A
-  firewall that blocks them costs nothing but the reports and the badge.
+  feeds the "validated by the community" tag on the page of an account and in
+  Reference. A firewall that blocks them costs nothing but the reports and
+  the tag.
 
 `deploy/collector/` holds the collector itself — a SQL schema for a dedicated
 Supabase project and its [README](collector/README.md) (what is stored, the

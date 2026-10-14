@@ -2,7 +2,7 @@
 title: Known limitations — what has not been done, and what is not there
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - apps/gateway/src/server/execution/tools.ts
   - apps/gateway/src/server/execution/scope-caps.ts
@@ -66,14 +66,15 @@ change that removes it.
 
 ## Not enforced, or enforced more coarsely than one would expect
 
-- **Scope caps are not enforced.** The execution door has no cap stage: a
-  catalog declares only the rate ceiling the gateway enforces, and a mission
-  bounds a risk with its quota, its rate limit and its gate (ADR
+- **Scope caps are not enforced.** The execution door has no cap stage: a catalog declares only the rate ceiling the gateway enforces, and a mission
+  bounds a permission (a risk of the catalog) with its limits — the quota and
+  the rate limit — and its gate ("ask me first") (ADR
   [scope-caps-not-enforced-in-v5-0](../decisions/scope-caps-not-enforced-in-v5-0.md)). →
   [execution-door, "Scope caps: not enforced"](execution-door.md#scope-caps-not-enforced-scope-capsts)
 - **`tools/list` is per provider, not per tool.** Every tool of a
-  non-experimental provider for which the mission holds a connection and at
-  least one accepted risk is listed; a listed tool whose own risk the mission does not accept is refused
+  non-experimental provider for which the mission holds an account (a
+  connection) and at least one permission (an accepted risk) is listed; a
+  listed tool whose own permission the mission does not hold is refused
   `risk-not-accepted` when called. →
   [execution-door, "Discovery and catalog"](execution-door.md#discovery-and-catalog-toolsts)
 - **Railway: the logs of a named deployment, and the continuation of an agent
@@ -87,8 +88,8 @@ change that removes it.
   gateway classifies the call on the mission's project and requires the
   `agent-action`, `deploy` and both variable risks, but it cannot see or limit
   what that agent then does (threat model, accepted risk A18). → [railway, "Classification"](providers/railway.md#classification)
-- **An administrative act and its audit entry are two writes.** A member
-  removed, a token revoked or issued, a mission rotated or revoked: the store
+- **An administrative act and its audit entry are two writes.** A teammate
+  removed, a key revoked or issued, a key replaced or a mission stopped: the store
   commits the act, then the entry is written. If that second write fails, the
   request fails, the act stands, and a retry finds nothing left to do and
   records nothing. Calls are not concerned: a call's entry is written before
@@ -111,13 +112,14 @@ change that removes it.
 
 ## Not built
 
-- **No tool moves an account to another issuer.** A user is the pair (issuer,
+- **No tool moves a person to another issuer.** A user is the pair (issuer,
   subject): after a change of identity provider the same people arrive as new
-  accounts, and the earlier ones keep their connections and missions,
-  unreachable, until somebody edits the store. →
+  users, and the earlier ones keep their accounts and missions, unreachable,
+  until somebody edits the store. →
   [authentication, "A user is (issuer, subject)"](authentication.md#a-user-is-issuer-subject)
 - **No deprovisioning feed from the identity provider.** A user removed there
-  keeps their account here until an operator deactivates it. →
+  stays active here until an administrator deactivates them (Settings →
+  People). →
   [authentication, "Deactivating a user"](authentication.md#deactivating-a-user)
 - **The demo is not a deployment.** `npm run demo` signs anybody in as anybody
   without a password, answers every provider from memory, binds the loopback

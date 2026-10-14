@@ -125,8 +125,8 @@ is kept `deprecated` because ids are never deleted),
    credentials → OAuth client ID**, type _Web application_. Enable the
    **Gmail API** on the project and configure the OAuth consent screen
    (internal user type for a Workspace organisation).
-2. Authorised redirect URI: the instance callback the gateway shows on the
-   Connect page.
+2. Authorised redirect URI: the instance callback,
+   `<public_url>/connections/callback/gmail`.
 3. Copy the client id and secret into the instance configuration under the
    Gmail provider app (`appConfig.client_id` / `appConfig.client_secret`).
 
@@ -145,6 +145,6 @@ standard `refresh_token` grant the host performs from the spec.
 ## Development
 
 ```
-npx vitest run plugins/gmail       # 406 tests, no network
+npx vitest run plugins/gmail       # 407 tests, no network
 npx tsc -p plugins/gmail/tsconfig.json --noEmit
 ```

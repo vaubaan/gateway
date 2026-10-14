@@ -8,7 +8,6 @@ import {
   AgentLabel,
   Avatar,
   AvatarStack,
-  Badge,
   Button,
   ButtonLink,
   Dot,
@@ -445,8 +444,6 @@ export function MarkSections() {
               <EnvTag env={null} />
               <Tag>read only</Tag>
               <Tag mono>GH</Tag>
-              <Badge>neutral badge</Badge>
-              <Badge tone="warning">warning badge</Badge>
             </Line>
           )}
         </Specimen>

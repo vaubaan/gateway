@@ -52,7 +52,8 @@ npm run demo      # builds when the sources changed, then serves the whole inter
 
 The demo is the real application with a simulated identity provider (an
 account picker, no password), simulated providers and seeded data: sign in as
-Alice and click through connections, missions, requests and the audit log.
+Alice and click through Now, Waiting for you, Missions, Accounts, Activity
+and Reference.
 Nothing leaves your machine, and the data is deleted when you stop it with
 `Ctrl-C`. `DEMO_PORT=<port>` changes the port. Use Chrome or Firefox. Details:
 [`docs/handbook/demo-mode.md`](docs/handbook/demo-mode.md).

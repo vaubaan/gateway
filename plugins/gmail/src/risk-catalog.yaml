@@ -133,7 +133,7 @@ risks:
       owner declared sensitive is escalated. Guard rail for structurally
       private correspondence (payroll, legal, HR, invoices). The labels of a
       thread are unknown before the fetch, so on a mailbox that declares
-      sensitive labels every thread fetch touches this risk, and so does
+      sensitive labels every thread fetch needs this permission, and so does
       every search that does not exclude each of them with `-label:<name>`.
     matches: 'gmail.mailbox.sensitive-label[**].R'
     vector:
@@ -171,7 +171,7 @@ risks:
     label: 'Create / modify a draft (any recipient)'
     reason: >-
       Baseline write of a draft, whatever its recipients ; the exfiltration
-      axis is carried by the `draft-to-zone-*` risk emitted alongside. Drafts
+      axis is carried by the `draft-to-zone-*` permission needed alongside. Drafts
       are reversible (delete) and never sent by this plugin.
     matches:
       - 'gmail.mailbox.draft.W'
@@ -217,7 +217,7 @@ risks:
     label: 'Create / modify a draft to pre-approved external contacts (allowlist)'
     reason: >-
       A draft to pre-approved external contacts (CRM-like). Limited risk while
-      unsent ; if a `send_draft` tool is ever wrapped, this risk gates it
+      unsent ; if a `send_draft` tool is ever wrapped, this permission covers it
       naturally.
     matches: 'gmail.mailbox.to-zone[allowlist].W'
     vector:
@@ -233,8 +233,8 @@ risks:
     reason: >-
       A draft to an arbitrary external address : the cardinal exfiltration
       vector once sent, and even unsent its existence can leak intentions.
-      Never acceptable : the classifier refuses such a draft before any risk
-      is evaluated, so accepting this risk grants nothing. The id is kept
+      Never acceptable : the classifier refuses such a draft before any permission
+      is evaluated, so holding this one grants nothing. The id is kept
       (ids are never deleted) and marked deprecated so no new mission is
       offered it.
     matches: 'gmail.mailbox.to-zone[external-unbounded].W'
@@ -255,7 +255,7 @@ risks:
       Mailbox organisation on one identified thread or message. UI-level and
       reversible (re-label). `TRASH` and `SPAM` are refused by the classifier
       (a deletion is not a label write) ; a label that is, or may be, one the
-      owner declared sensitive also touches the fallback write risk.
+      owner declared sensitive also needs the fallback write permission.
     matches: 'gmail.mailbox.thread[**].label.W'
     vector:
       reversibility: reversible
@@ -290,7 +290,7 @@ risks:
       removing a label the owner declared sensitive, or a user label the
       classifier cannot tell apart from one (`sensitive-label[..].W`). If the
       plugin ever surfaces `send_message`, `delete_message` or
-      `create_filter`, they land here until a dedicated risk is added —
+      `create_filter`, they land here until a dedicated permission is added —
       fail-loud by design. Never offered in a preset.
     matches: 'gmail.[**].W'
     fallback: true
@@ -341,7 +341,7 @@ presets:
 
   - id: developer
     label: Developer
-    description: Experimental — read-only triage plus drafts to self, colleagues and allowlisted contacts and single-thread labelling ; bulk reads need approval.
+    description: Experimental — read-only triage plus drafts to self, colleagues and allowlisted contacts and single-thread labelling ; bulk reads ask first.
     entries:
       - risk_id: gmail.read-mailbox
         quota: 5000

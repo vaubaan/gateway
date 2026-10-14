@@ -60,7 +60,7 @@ risks:
       Reads the transactional history. No card number leaves Stripe, but
       amounts, dates and descriptions per customer reveal the commercial
       trajectory. Distinct from read-customer-pii so anonymised statistics
-      can be accepted without identities.
+      can be allowed without identities.
     matches:
       - 'stripe.account[**].mode[**].customer[**].R'
       - 'stripe.account[**].mode[**].customer[**].subscription[**].R'
@@ -265,7 +265,7 @@ risks:
     reason: >-
       Sends funds from the Stripe balance to the external account on file.
       Cancellable only while pending, then irreversible ; the amount is
-      bounded by the balance, not by a budget. In test mode no money moves.
+      bounded by the balance, not by a limit of the mission. In test mode no money moves.
     matches: 'stripe.account[**].mode[**].payout[**].W'
     acceptable_in_envs: [test, live]
     vector:
@@ -443,7 +443,7 @@ presets:
 
   - id: finance-operator
     label: Finance operator
-    description: Live-mode billing operations ; refunds, payouts, cancellations, voids and deletions need approval.
+    description: Live-mode billing operations ; refunds, payouts, cancellations, voids and deletions ask first.
     entries:
       - risk_id: stripe[live].read-catalog
         quota: 2000

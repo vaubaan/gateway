@@ -68,7 +68,7 @@ public key, and collects four non-secret fields:
 Setting up a host:
 
 ```sh
-# 1. On the target, as the login user, append the public key the UI shows :
+# 1. On the target, as the login user, append the public key the interface shows :
 echo 'ssh-ed25519 AAAA… vaubaan-gateway' >> ~/.ssh/authorized_keys
 # 2. From a machine that already trusts the host, read its ed25519 fingerprint :
 ssh-keyscan -t ed25519 vps-1.example.com 2>/dev/null | ssh-keygen -lf -
@@ -97,7 +97,7 @@ single resource:
               hostname: 'vps-1', kernel: 'Linux 6.8.0-45-generic', machine: 'x86_64' } }
 ```
 
-The owner then labels it `dev`, `staging` or `prod` in the UI. **The label is
+The owner then labels it `dev`, `staging` or `prod` on the account's page (Accounts). **The label is
 what qualifies the write risks** (`ssh[prod].exec-write`): the default
 `resourceEnvResolver` reads it from the `host[<ref>]` segment of every slice,
 so no plugin hook is needed. An unlabelled host cannot be written to through
@@ -112,11 +112,11 @@ Risks (ids stable, never renamed): `exec-read`, `exec-read-secret-files`,
 ¹ env-scoped: `acceptable_in_envs: [dev, staging, prod]`; `exec-write`,
 `exec-destructive` and `exec-service-control` carry a `vector_overrides.prod`.
 
-| Preset      | Intent                                                                                                        | Approval-gated by default                                                                                             |
-| ----------- | ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `read-only` | Inspect: logs, processes, disk, services, files outside credential paths.                                     | —                                                                                                                     |
-| `developer` | One token per code project: reads, file and process writes on `dev` and `staging`, service restarts on `dev`. | `ssh[staging].exec-service-control`. No prod, no packages, no destructive, no sudo, no credential files.              |
-| `operator`  | Everything on every labelled host.                                                                            | Credential-file reads; every `prod` entry; destructive, package, service and sudo on `staging` (all `auto` on `dev`). |
+| Preset      | Intent                                                                                                          | Approval-gated by default                                                                                             |
+| ----------- | --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `read-only` | Inspect: logs, processes, disk, services, files outside credential paths.                                       | —                                                                                                                     |
+| `developer` | One mission per code project: reads, file and process writes on `dev` and `staging`, service restarts on `dev`. | `ssh[staging].exec-service-control`. No prod, no packages, no destructive, no sudo, no credential files.              |
+| `operator`  | Everything on every labelled host.                                                                              | Credential-file reads; every `prod` entry; destructive, package, service and sudo on `staging` (all `auto` on `dev`). |
 
 Budgets are per period; see the YAML for the numbers. Presets are UI sugar;
 the persisted mission policy is always the explicit enumeration. No preset
@@ -198,7 +198,7 @@ npx vitest run plugins/ssh
 
 | Suite                      | Tests | What it pins                                                                                                                                                                                                                                                                                                                                                          |
 | -------------------------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `plugin.test.ts`           | 299   | The SDK kit (`assertPluginWellFormed`, `assertPresetsValid`, `assertNoWildcard`, `assertCatalogCoverage`), the classifier, **the three presets evaluated through the policy engine** (what each allows, gates and refuses per host label), the lexer, the allow-list, the detectors, the credential spec, `execute` / `discoverResources` over a fake `SshTransport`. |
+| `plugin.test.ts`           | 300   | The SDK kit (`assertPluginWellFormed`, `assertPresetsValid`, `assertNoWildcard`, `assertCatalogCoverage`), the classifier, **the three presets evaluated through the policy engine** (what each allows, gates and refuses per host label), the lexer, the allow-list, the detectors, the credential spec, `execute` / `discoverResources` over a fake `SshTransport`. |
 | `adversarial.test.ts`      | 181   | Command lines written to be read as milder than what the shell runs — quoting, comments, redirections, wrappers, interpreters, paths — each with its exact slices.                                                                                                                                                                                                    |
 | `classify.test.ts`         | 90    | One scenario per command line and the credential-path table.                                                                                                                                                                                                                                                                                                          |
 | `host-key-pinning.test.ts` | 37    | The real `ssh2Transport` against an in-process `ssh2.Server` on `127.0.0.1` (ephemeral port, closed after each test): a missing, malformed or mismatched pin is refused before authentication, proven from the server's side.                                                                                                                                         |

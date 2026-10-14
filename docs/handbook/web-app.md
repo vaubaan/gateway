@@ -36,7 +36,6 @@ tracks:
   - apps/gateway/tests/integration/now/
   - apps/gateway/src/components/auth/principal.ts
   - apps/gateway/src/components/connections/
-  - apps/gateway/src/components/risk/
   - apps/gateway/src/server/providers/
   - apps/gateway/src/server/oauth-as/pages.ts
   - apps/gateway/src/app/admin/bootstrap/page.tsx
@@ -75,8 +74,8 @@ endpoints behind them, and the agent-facing MCP door from the same process.
   are all `dynamic = 'force-dynamic'`, and render HTML. No page loads its data
   from the browser.
 - **Client components are the exception** (`'use client'`): the mission
-  creation form with its preset panel and its Custom editor, the mission actions, the gate control
-  of the mission page (`GateControl`), its "Members and tokens" section (`TeamSection`), the bootstrap kit view, the "Give access" dialog
+  creation form with its preset panel and its permission editor ("Edit the permissions one by one"), the mission actions, the "ask me first" control
+  of the mission page (`GateControl`), its "People and keys" section (`TeamSection`), the setup kit view, the "Give access" dialog
   (`GiveAccessDialog`), the confirmations of the account page (`RemoveAccess`, `TransferOwnership`,
   `RevokeConnection`, `CloseOrphanedMission`), `LocalDate` and the time of an activity line (`When`), the body of
   a service's reference (`ServiceView` and its sections), the gallery of
@@ -87,7 +86,7 @@ endpoints behind them, and the agent-facing MCP door from the same process.
   `fetch` calls from the browser are the mission form (`POST /api/missions`,
   `POST /api/missions/preview`), the mission actions
   (`POST /api/missions/<id>/rotate|revoke`), the gate control
-  (`POST /api/missions/<id>/gate`) and the "Members and tokens" section of the
+  (`POST /api/missions/<id>/gate`) and the "People and keys" section of the
   mission page (`POST /api/missions/<id>/members`, `…/members/<userId>/remove`,
   `…/tokens`, `…/tokens/mine`, `…/tokens/<tokenId>/revoke`).
 - **Everything that decides lives under `src/server/`**, host-agnostic (it
@@ -185,7 +184,7 @@ only.
   admin sign-in; an administrator → `<AdminShell principal instance>`, the
   application shell with the local navigation of Settings
   ([The shell](#the-shell--componentsshell)); a signed-in person who is not one
-  → the "Not an operator" explanation in a `Container`, followed by the build
+  → the "You do not administer this gateway" explanation in a `Container`, followed by the build
   footer and no navigation. Rules in [authentication](authentication.md).
   `/admin/bootstrap` is outside it.
 
@@ -255,7 +254,7 @@ authority is recomputed on every request.
   `PageSearchParams` and `takeNotice`.
 - `adminDecision()` is the undecorated answer behind `requireOperator()`
   (`{ root, decision }`): the `admin/(guarded)` layout uses it to render the
-  shell or the "Not an operator" explanation without redirecting.
+  shell or the "You do not administer this gateway" explanation without redirecting.
 - A `route.ts` under `(app)` calls no helper: it delegates to a handler of its
   module — `src/server/connections/handlers.ts` (connect, callback, discover,
   revoke, resource edit, transfer), `src/server/shares/handlers.ts` (share,
@@ -367,8 +366,8 @@ administrator a link to Administration.
 reports as `gateway_version`; `dev` for an unstamped build. Every page a human
 reads carries it:
 
-- the shell, for the application and for Administration, and the "Not an
-  operator" explanation of the Administration layout;
+- the shell, for the application and for Administration, and the "You do not
+  administer this gateway" explanation of the Administration layout;
 - `/login`, `/admin/bootstrap` (outside every layout) and the root
   `not-found.tsx`, through the `footer` of `AuthPage`;
 - the pages of the authorization endpoint — the consent screen and its
@@ -599,18 +598,18 @@ A control a page shows or hides follows a rule the server enforces. That rule
 is written once, next to the act it guards, and the page reads it from the
 view it already loads. A page never spells the condition again.
 
-| Rule                                                           | Stated in                                                    | Read by the page as                                                                                                                                                    |
-| -------------------------------------------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| a revoked or unowned connection takes no owner act (spec §2.3) | `ownerActRefusal(connection)` (`connections/service.ts`)     | `ShareContext.unshareable` (the Share dialog prints `SHARE_ERROR_MESSAGES[unshareable]`; the connection page hides Share, the actions of each share row and Reconnect) |
-| the same, for a transfer                                       | `ConnectionService.transferTargets` returns no group         | the Ownership card shows when a target is listed                                                                                                                       |
-| the gates of a revoked or orphaned mission are not edited      | `gateEditBlockedBy(mission)` (`missions/mission-service.ts`) | `MissionDetail.gates_editable`                                                                                                                                         |
-| a group without member is not named owner                      | `ConnectionService.reassignTargets()`                        | the group list of Admin → Connections                                                                                                                                  |
+| Rule                                                           | Stated in                                                    | Read by the page as                                                                                                                                                                    |
+| -------------------------------------------------------------- | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| a revoked or unowned connection takes no owner act (spec §2.3) | `ownerActRefusal(connection)` (`connections/service.ts`)     | `ShareContext.unshareable` (the "Give access" dialog prints `SHARE_ERROR_MESSAGES[unshareable]`; the account page hides "Give access", the actions of each access row and "Reconnect") |
+| the same, for a transfer                                       | `ConnectionService.transferTargets` returns no group         | the transfer of ownership is offered when a target is listed                                                                                                                           |
+| the gates of a revoked or orphaned mission are not edited      | `gateEditBlockedBy(mission)` (`missions/mission-service.ts`) | `MissionDetail.gates_editable`                                                                                                                                                         |
+| a group without member is not named owner                      | `ConnectionService.reassignTargets()`                        | the team list of Settings → Accounts without owner                                                                                                                                     |
 
 `share`, `transfer`, the reconnection, `setGate` and `reassign` refuse on the
 same functions, and `tests/integration/authority/rules-read-by-pages.test.ts`
 asserts, on one state, what the reader says and what the act then answers.
-The statuses a page still tests itself (`revoked`, `unowned` on the connection
-page) choose a banner or a read-only field: what is displayed, not what is
+The statuses a page still tests itself (`revoked`, `unowned` on the account
+page) choose a note or a read-only field: what is displayed, not what is
 allowed.
 
 ## The design system — `components/ui/`
@@ -633,19 +632,18 @@ each one is in its file header and on the gallery.
 
 **Lists and tables**
 
-| Export                                      | What it is                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Rows`, `Row`                               | a `<ul>` of quiet rows: `lead` (a mark), `title` (a link with `href`), `description`, `aside` (at most one thing), `end` (an action or a short fact), `muted`                                                                                                                                                                                                                                                                                     |
-| `DataTable`, `Column`                       | a typed table: `columns` (`id`, `header`, `cell`, `align`, `nowrap`, `width`, `detail`), `rows` or `groups`, `rowKey`, a required `caption` (not drawn), `actions` (shown on hover and on focus), `rowTone` (`bad`, `warn`, `quiet`), `rowDetail`, `headless`, `density`, `empty`. **Five columns by default, seven with details**: `checkColumnBudget` throws beyond that; `columnBudget={6}` is the documented exception of the activity record |
-| `Table`, `Thead`, `Tbody`, `Tr`, `Th`, `Td` | the bare elements with the same look, for the pages written before the redesign                                                                                                                                                                                                                                                                                                                                                                   |
-| `Meter`, `meterState`, `NEAR_LIMIT`         | `used`, `limit`, `threshold` (a share of the limit, default 0.6): below it a dash (`placeholder="none"` renders nothing) that still says the figure to assistive technology; near it an amber bar; at the limit a red one and "Limit reached". `threshold={0}` always draws. `format="percent"`, `label`                                                                                                                                          |
+| Export                              | What it is                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Rows`, `Row`                       | a `<ul>` of quiet rows: `lead` (a mark), `title` (a link with `href`), `description`, `aside` (at most one thing), `end` (an action or a short fact), `muted`                                                                                                                                                                                                                                                                                     |
+| `DataTable`, `Column`               | a typed table: `columns` (`id`, `header`, `cell`, `align`, `nowrap`, `width`, `detail`), `rows` or `groups`, `rowKey`, a required `caption` (not drawn), `actions` (shown on hover and on focus), `rowTone` (`bad`, `warn`, `quiet`), `rowDetail`, `headless`, `density`, `empty`. **Five columns by default, seven with details**: `checkColumnBudget` throws beyond that; `columnBudget={6}` is the documented exception of the activity record |
+| `Meter`, `meterState`, `NEAR_LIMIT` | `used`, `limit`, `threshold` (a share of the limit, default 0.6): below it a dash (`placeholder="none"` renders nothing) that still says the figure to assistive technology; near it an amber bar; at the limit a red one and "Limit reached". `threshold={0}` always draws. `format="percent"`, `label`                                                                                                                                          |
 
 **Marks**
 
 | Export                                         | What it is                                                                                                                                                                                                                            |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `StatusMark`, `Dot`, `Tag`, `EnvTag`           | a pill with a dot for an exception (`tone`: `neutral`, `info`, `ok`, `warn`, `bad`); the dot alone; a squared tag for a fact that is not a state; an environment label (`null` → "no label", dashed)                                  |
-| `Badge`, `BadgeTone`, `toneOfBadge`            | the inline label of the earlier pages, drawn as a tag; its tone names (`success`, `warning`, `danger`) map to the new ones                                                                                                            |
+| `BadgeTone`, `toneOfBadge`                     | the tone names of the first interface (`success`, `warning`, `danger`) and their mapping to the new ones; `Callout` still accepts them                                                                                                |
 | `Avatar`, `AvatarStack`, `KeyHolder`           | a person (round), a machine key (`kind="machine"`: dashed square, no hue), a team; three sizes; the hue comes from the name (`hueOf`), the letters from `initialsOf`; the name and its qualifiers                                     |
 | `ServiceMark`, `KeyMark`, `AgentLabel`, `Mono` | the two letters of a service (from its display name, never from a list of services); a masked key in mono; the label an agent gave itself; an identifier in mono that wraps between its words                                         |
 | `SeverityChip`, `GateMark`, `WhyCells`         | one severity word; "runs freely" / "ask me first" / "not included" with a dot; the six cells of the risk model in words                                                                                                               |
@@ -662,7 +660,7 @@ each one is in its file header and on the gallery.
 | `InboxFrame`, `InboxList`, `InboxItem`                                                                      | the inbox: a list of links (`who`, `title`, `context`, `meta`; `current` is a fill and `aria-current`) and one item open beside it; one column under 900 px                                                                                                                                                                                                                                                                                 |
 | `RequestStatement`, `CallBox`, `ArgList`, `FactColumns`, `DecideBar`, `ContextColumns`, `Feed`, `FeedEvent` | one open request: who asks then the statement at the size of a title (with the `status` of a closed one); "Exactly what it sent" (the one quiet fill; each argument by its name, never truncated); labelled facts side by side; the answers with one quieter `aside`; context in two columns; a short timeline whose mark carries its word                                                                                                  |
 | `EmptyState`, `Lede`, `ModelDiagram`, `StepMark`, `CheckMark`, `Skeleton`                                   | one sentence and one action; the paragraph and the drawn model of a first run; the lead of a step row and of a checklist row; the shape of what is loading                                                                                                                                                                                                                                                                                  |
-| `Callout`, `Banner`                                                                                         | a note with an optional `title`, a `tone`, an optional `action`; `role="note"`. `Banner` is the same component under the name the earlier pages import                                                                                                                                                                                                                                                                                      |
+| `Callout`                                                                                                   | a note with an optional `title`, a `tone`, an optional `action`; `role="note"`                                                                                                                                                                                                                                                                                                                                                              |
 
 **Actions, overlays, details, forms**
 
@@ -710,7 +708,7 @@ function.
 
 `(app)/design/` renders every component in every state: `page.tsx`
 (`requirePrincipal()`, any session) and a client gallery (`gallery.tsx`,
-five files of sections — `sections-waiting.tsx` holds the running list, the
+six files of sections — `sections-waiting.tsx` holds the running list, the
 inbox and the open request, `sections-missions.tsx` the components added with
 the mission pages —, `specimen.tsx`). A `Specimen` draws its content twice,
 on an island with `data-theme="light"` and on one with `data-theme="dark"`, so
@@ -719,34 +717,23 @@ value on it is invented. It is linked from Settings, and it is what a page is
 compared with in review. Adding a component, a variant or a state means adding
 its specimen.
 
-### Legacy primitives
+### Removed with the last page that used them
 
-Kept for the pages written before the redesign, restyled through the tokens,
-and removed with the last page that imports them:
-
-- `Slug` — a name with the glyph of its kind and a visually hidden word for
-  it (`data-kind`, `data-kind-label`); it carries no colour of its own any
-  more. A redesigned page uses `Mono` and `KeyMark` and says the kind in
-  words.
-- `Glyph`, `GlyphName` — the twelve-pixel glyph set of the kinds, plus `help`,
-  `chevron`, `warning`, `info`, `key`, `flask`, `archive`, `user`.
-- `KindLegend`, `ITEM_KINDS`, `ITEM_KIND_WORDS`, `ItemKind` (`kinds.ts`) — the
-  list of kinds and the legend of their glyphs (the reference pages).
-- `Help`, `HelpButton`, `useHelp` — one line and a "More" button
-  (`vaubaan:help:<id>`). A redesigned page uses a one-sentence lede and
-  `Disclosure`.
+The primitives of the first interface are gone: `Slug`, `Glyph`, `KindLegend`
+and the list of kinds (`kinds.ts`), `Help`, the `Badge` label, `Banner`, the
+bare `Table` elements, and the "Kept for older pages" section of the gallery.
+A page prints an identifier with `Mono` or `KeyMark` and says the kind in
+words, gives one sentence of lede and puts the rest behind a `Disclosure`,
+and builds a table with `DataTable`. `Callout` takes no `icon` any more: its
+mark follows its tone.
 
 ### Display helpers
 
-Shared by the pages that used to carry a copy each:
+Shared by the pages that used to carry a copy each (how a risk was explained
+before the redesign — `components/risk/` — is deleted: a permission is a
+`PermissionRow`, a `PermissionTable`, a `PermissionList`
+(`components/connections/`) or its id in `Mono`):
 
-- `components/risk/RiskExplain.tsx` (`RiskExplain`, `VectorStrip`,
-  `VectorLegend`, `RiskIdLink`, `RiskClassTag`, `RiskReason`, `RiskMarkers`,
-  `RiskMarkerNotes`) and `components/risk/RiskBadges.tsx` (`SeverityBadge`,
-  `GateBadge`): how a risk was explained before the redesign. No page imports
-  them any more — a permission is a `PermissionRow`, a `PermissionTable`, a
-  `PermissionList` (`components/connections/`) or its id in `Mono` — and only
-  `tests/unit/app/risk-explain.test.tsx` renders them;
 - `app/(app)/missions/message-of.ts`: `messageOf(body, status)`, the `message`
   of a JSON refusal of the mission API or "The instance answered `<status>`."
   (the "ask me first" switch, the acts of a mission page, the mission form);
@@ -813,7 +800,7 @@ hand-written page, and a plugin added to the registry has its page.
 | `presetReferenceOf(preset, risks)`     | a preset against the whole catalog: lines without asking, lines under approval, entries not included                                                                     |
 | `riskExplainer(registry)`              | `(riskId) → CatalogRisk \| null`, for the pages that list a persisted policy                                                                                             |
 | `planesOfPatterns`, `planesOfToolName` | `planes.ts`: the planes a catalog entry or a tool is filed under (below)                                                                                                 |
-| `riskPlanesOf(model, catalog)`         | `planes.ts`: per catalog entry its planes, or `null` for a model with one plane; what the Custom editor's plane filter reads                                             |
+| `riskPlanesOf(model, catalog)`         | `planes.ts`: per catalog entry its planes, or `null` for a model with one plane; what the plane filter of the permission editor of "New mission" reads                   |
 
 A `RiskReference` also names the presets that include it (`presets`: id, label,
 anchor), the tools the plugin declares for it (`declared_tools`, from
@@ -929,7 +916,7 @@ only when its name contains the name of such an entity, the longest name
 winning. Whatever names none goes to `other` (`OTHER_PLANE`): on Supabase the
 two catch-all risks (`read-data`, `uncategorized-write`) and the tools whose
 name says nothing of a plane (`get_project`, `execute_sql`, the
-`*_function` tools…). The same map feeds the plane filter of the Custom editor
+`*_function` tools…). The same map feeds the plane filter of the permission editor
 ([missions](missions.md)).
 
 `src/server/providers/links.ts` (browser-safe) is the only place that builds
@@ -1049,8 +1036,6 @@ Unit files under `apps/gateway/tests/unit/app/` run without a browser
 - `field.test.tsx` renders `Field` and `CredentialFieldInputs`: label bound by
   `for`/`id`, group role without `htmlFor`, unique ids when two lists share a
   page.
-- `risk-explain.test.tsx` renders `Slug`, `RiskIdLink`, `KindLegend`,
-  `VectorStrip`, `RiskExplain`, `Help` and `Callout` to static markup.
 - `build-footer.test.tsx` renders the footer (given stamps, the stamps of the
   build, `dev`), and `tests/unit/structural/version-single-source.test.ts`
   checks that the build stamps the version of the root `package.json`.

@@ -65,11 +65,11 @@ apps/gateway/migrations/0004_connection_resource_curation.sql
 apps/gateway/src/lib/connections/session.ts  Next glue: currentActor(), takeNotice()
 apps/gateway/src/components/
   shell/AppShell.tsx                 the shell: AppShell (the side navigation) and AdminShell (the same, with the local navigation of Settings)
-  connections/parts.tsx              NoticeBanner, StateBadge, ExperimentalBadge, CredentialFieldInputs
+  connections/parts.tsx              NoticeBanner, AccountState, ExperimentalBadge, CredentialFieldInputs
   connections/RevokeConnection.tsx   client: type-to-confirm, then a plain form POST
 apps/gateway/src/app/(app)/accounts/
   page.tsx                           /accounts
-  new/page.tsx                       /accounts/new            "Connect a provider"
+  new/page.tsx                       /accounts/new            "Connect an account"
   new/[provider]/page.tsx            /accounts/new/<provider>  (?connection=<id> = reconnect)
   [id]/page.tsx                      /accounts/<id>
   connect/[provider]/route.ts        POST /accounts/connect/<provider>
@@ -84,17 +84,17 @@ apps/gateway/src/app/(app)/accounts/
   [id]/shares/route.ts               POST /accounts/<id>/shares            → root.shares.handlers.share
   [id]/shares/[shareId]/revoke/route.ts  POST /accounts/<id>/shares/<shareId>/revoke → root.shares.handlers.revoke
 apps/gateway/src/app/admin/(guarded)/connections/
-  page.tsx                           /admin/connections   ownerless connections (handbook authority)
+  page.tsx                           /admin/connections   "Accounts without owner" (handbook authority)
   [id]/reassign/route.ts             POST /admin/connections/<id>/reassign    → connections.handlers.reassign (handbook authority)
 apps/gateway/src/app/admin/(guarded)/provider-apps/
-  page.tsx                           /admin/provider-apps
+  page.tsx                           /admin/provider-apps   "Company apps"
   [provider]/route.ts                POST /admin/provider-apps/<provider>
 ```
 
 Route handlers are one-line adapters over `root.connections.handlers` (the
 two share routes over `root.shares.handlers`); pages
 call `currentActor()` / `requireOperator()` and render. `currentActor()` answers
-`null` for the bootstrap operator, and every Connections page then renders
+`null` for the bootstrap operator, and every page under `/accounts` then renders
 `NeedsUser` (`@/components/auth/NeedsUser`): a connection belongs to an
 identified user. Everything that decides
 is under `server/` and is tested without Next.
@@ -103,7 +103,7 @@ is under `server/` and is tested without Next.
 
 `compose/shipped-plugins.ts` imports the plugins the image ships and builds
 the registry (`buildShippedRegistry`, the default `RootDeps.buildRegistry`).
-The connect picker, Admin → Provider apps, the store's catalog index and the
+The connect picker, Settings → Company apps, the store's catalog index and the
 tool list all derive from that registry. Adding a provider = one import and
 one entry in `SHIPPED_PLUGINS`, plus the dependency in
 `apps/gateway/package.json` (from which `next.config.ts` derives
@@ -158,16 +158,19 @@ installVerification }`. The secret values are never returned.
   it lives in the store whatever the source of the fields, and `clear(id)`
   removes it.
 
-The page `/admin/provider-apps` shows one card per provider that needs an
-app: state badge (`configured`, `not configured`, `incomplete: …`, `set by
-the mounted configuration`), the URL to register at the provider
+The page `/admin/provider-apps` (**Company apps**, in Settings) lists one row
+per provider that needs an app: the service and what is registered
+("registered", with the tag "set in the mounted configuration" for a
+file-sourced app; "not registered"; "Incomplete: … missing"), and a
+"Register" or "Edit" link that opens the form of that service under its row
+(`?app=<provider id>`). The form shows the URL to register at the provider
 (`ConnectionService.callbackUrl(id)` = `<public_url>/connections/callback/<id>`
 — OAuth redirect URI; for an installed app, the callback URL of its user
 authorization when installations are verified, its setup URL otherwise),
 the fields
 (`CredentialFieldInputs`: secrets as password inputs, PEM-like secrets as a
 textarea, never pre-filled; its required `idPrefix` binds each label to its
-input and must be unique on the page, so each provider's list gets its own), Save, and Remove for store-sourced settings.
+input and must be unique on the page, so each provider's list gets its own), Save, Remove for store-sourced settings, and Cancel.
 `POST /admin/provider-apps/<provider>` (`handlers.saveProviderApp`) goes
 through `guardMutation(request, deps, 'operator')` (origin, session, admin
 rule; the bootstrap operator may use it), answers 400 to a body that is not a
@@ -194,14 +197,14 @@ and `provider`) and the operator still gets the notice of the saved change,
 as for the IdP settings.
 
 An installed app also shows how its installations are bound to the
-connecting user: the badge `installations verified`, or — for a plugin
-without `userVerification` — the badge `installations refused:
-unverifiable` and a warning banner with its own form (outside
+connecting user: "· installations verified" after "registered", or — for a
+plugin without `userVerification` — the mark "Cannot verify installations"
+and a warning note with its own form (outside
 the fields' fieldset, so it works for a file-sourced provider too) whose
 button posts `action=accept-unverified` / `action=refuse-unverified` to the
 same endpoint. Accepting is audited (`config-changed`), logged at `warn`
-and answered with a warning notice; the badge then reads `unverified
-installations accepted`. No shipped plugin needs it
+and answered with a warning notice; the mark then reads "Unverified installations
+accepted". No shipped plugin needs it
 (`shipped-providers.test.ts` fails if one does).
 
 ## The connect driver
@@ -236,7 +239,7 @@ app-install  start    no userVerification and not accepted ──▶ installatio
 api-key      start    readCredentialFields(spec.fields, form)  ──▶ invalid-input
                       finalize(discovery: required)
 ssh-key      start    readCredentialFields(); generateEd25519KeyPair('vaubaan-gateway')
-                      finalize(discovery: deferred)   metadata.public_key shown on the detail page
+                      finalize(discovery: deferred)   metadata.public_key shown on the page of the account
 ```
 
 - **Single-use state** (`pending.ts`). The `state` is 32 random bytes and is
@@ -587,7 +590,7 @@ single-process only`: rotating refresh tokens are single use, a hosted
 ## Resources
 
 `plugin.discoverResources(ctx)` runs at connect time (see the policy
-table) and on the owner's "Refresh discovery"
+table) and on the owner's "Refresh"
 (`ConnectionService.discover` → `POST /accounts/<id>/discover`), with a
 30 s timeout. On `UpstreamAuthError` the broker refreshes once and the
 discovery is retried; a second rejection leaves the connection `expired`
@@ -798,7 +801,7 @@ Unit, co-located (`src/server/connections/*.test.ts`,
 - `mapping.test.ts` (3) — the summary, the owner's name, a vanished owner.
 - `pending.test.ts` (7), `input.test.ts` (23), `codec-and-keypair.test.ts`
   (12, the generated key is parsed and used by `ssh2`),
-  `shipped-providers.test.ts` (5, the real plugins through the driver; no
+  `shipped-providers.test.ts` (7, the real plugins through the driver; no
   shipped `app-install` plugin is unverifiable),
   `provider-apps/service.test.ts` (15).
 
@@ -842,13 +845,14 @@ ordinary reassignment are in `tests/integration/authority/ownership.test.ts`
 (handbook [authority](authority.md)).
 
 Not automated: a browser run against real providers
-([e2e-tests](../tests/e2e-tests.md#connect-a-provider), "Manual checks
-by feature" → "Connect a provider").
+([e2e-tests](../tests/e2e-tests.md#manual-checks-by-feature), "Manual checks
+by feature", the section on connecting).
 
 ## How to debug
 
-- **A provider is missing from "Connect a provider"** — its company app is
-  not complete. `/admin/provider-apps` shows `incomplete: <fields>`; with a
+- **A service cannot be picked under "Connect an account"** (its card is
+  dashed and says who to ask) — its company app is not complete. Settings →
+  Company apps (`/admin/provider-apps`) shows "Incomplete: <fields> missing"; with a
   `providers.<id>` block in the mounted configuration the page is
   read-only and the block must carry every required field.
 - **`state-invalid` after consent** — the flow took more than 10 minutes,
@@ -876,16 +880,17 @@ by feature" → "Connect a provider").
 - **`token-exchange-failed` on an installation** — wrong `client_id` /
   `client_secret` of the app (`incorrect_client_credentials`), or the code
   expired (`bad_verification_code`; GitHub codes live ten minutes).
-- **A provider vanished from "Connect a provider" after an upgrade** — its
-  app lacks the fields verification needs (`incomplete: client_id,
-client_secret` on `/admin/provider-apps`), or its plugin cannot verify
+- **A service can no longer be picked under "Connect an account" after an
+  upgrade** — its app lacks the fields verification needs ("Incomplete:
+  client_id, client_secret missing" on `/admin/provider-apps`), or its plugin cannot verify
   installations and nobody accepted that.
-- **Connected but "resource discovery failed"** — the connection exists;
-  the message is the plugin's. Fix the cause and use "Refresh discovery".
+- **"Connected, but looking for what it reaches failed"** — the connection
+  exists; the second line of the notice is the plugin's message. Fix the cause
+  and use "Refresh" on the page of the account.
   The log line is `resource discovery failed` (component `connections`).
 - **A connection turned `expired`** — log line `credential refresh
 rejected` with `detail` (the provider's error) and `marked_expired`.
-  Reconnect from the detail page; the id and the missions are kept.
+  "Reconnect" on the page of the account; the id and the missions are kept.
 - **Calls fail but the connection stays `active`** —
   `ProviderUnreachableError`: the token endpoint answered 5xx, timed out,
   or the provider app configuration was removed (`ProviderAppNotConfigured`
@@ -894,8 +899,8 @@ rejected` with `detail` (the provider's error) and `marked_expired`.
   `syncDiscoveredResources`, the only resource sync of the repository; check
   whether the plugin started returning `env` (`env_source = 'plugin'` then
   wins).
-- **`ssh-key`: discovery refused** — the public key shown on the detail
-  page is not in `authorized_keys` of the login user, or the host key does
+- **`ssh-key`: discovery refused** — the public key shown on the page of the
+  account is not in `authorized_keys` of the login user, or the host key does
   not match the pinned fingerprint (the plugin's message says which).
 
 ## Extension

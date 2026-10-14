@@ -1,48 +1,60 @@
 # Vaubaan Agent Bootstrap
 
-> Self-contained reference for an agent (or any MCP client) that was handed a
-> **mission token** and must work through a Vaubaan Gateway instance.
+> Self-contained reference for an agent (or any MCP client) that was handed
+> the **key of a mission** and must work through a Vaubaan Gateway instance.
 >
-> This page is generic. The human who issued your mission also received a
-> **bootstrap kit** with the exact values for _your_ mission (instance URL,
-> connections, resource refs, accepted risks, budget). When the kit and this
-> page differ, the kit wins.
+> This page is generic. The human who created your mission also received a
+> **setup kit** with the exact values for _your_ mission (instance URL,
+> accounts, resource refs, permissions, limits). When the kit and this page
+> differ, the kit wins.
+>
+> **Two sets of words.** The interface people use says _account_,
+> _permission_, _limit_, _key_, _teammate_. The protocol you speak keeps its
+> names, and so do the fields, codes, tool names and variables on this page:
+> `connections` (accounts), `risk_id` / `RiskId` (a permission, by its id),
+> `quota` and `rate_limit` (limits), `gate` (`auto`: runs freely; `approval`:
+> asks first), `token` (a key), `member` (a teammate), `named` (a machine
+> key). When you talk to a human, use the first set; when you read or write
+> JSON, the second.
 
 ---
 
 ## 1. What you have
 
-A **mission token** (`vbn_live_<prefix>_<secret>`), normally in the
+A **mission key** (`vbn_live_<prefix>_<secret>`), normally in the
 environment variable `VAUBAAN_MISSION_TOKEN`. It identifies exactly one
-**mission** — a named objective a human issued — and exactly one **holder**:
-the person who generated the token for themselves (a _member_ of the mission),
-or a machine the mission creator named (a _named_ token). Every call you make
-is recorded under that holder's name. A mission carries:
+**mission** — a named objective a human created — and exactly one **holder**:
+the person who generated the key for themselves (a _teammate_ on the mission;
+`member` in the protocol), or a machine the mission creator named (a _machine
+key_; `named` in the protocol). Every call you make is recorded under that
+holder's name. A mission carries:
 
-- **connections** — the cloud providers you may reach (GitHub, Supabase,
-  Vercel…), authenticated by the company, never by you;
-- **resources** — within each connection, the repositories, projects or
+- **accounts** — the company's accounts at the cloud services you may reach
+  (GitHub, Supabase, Vercel…), connected by the company, never by you;
+- **resources** — within each account, the repositories, projects or
   databases you may touch, by ref. Anything else is refused;
-- **accepted risks** — a closed list of `RiskId`s
-  (`github.read-code`, `supabase[staging].bulk-row-write`). A call that
-  touches a risk outside the list is refused;
-- a **budget** per accepted risk — a _quota_ (actions per period) and a
-  _rate limit_ (actions per short window) — and a **gate**: `auto`, or
-  `approval` when a human must approve each action;
-- an optional **period** after which quotas reload, and an optional expiry.
+- **permissions** — a closed list, each named by its id (a `RiskId`:
+  `github.read-code`, `supabase[staging].bulk-row-write`). A call that
+  needs a permission outside the list is refused;
+- **limits** per permission — how many actions per period (`quota`) and how
+  many per short window (`rate_limit`) — and whether it **runs freely**
+  (`gate: auto`) or **asks the mission creator first**, each time
+  (`gate: approval`);
+- an optional **period** after which the limits reset, and an optional
+  expiry.
 
-You hold **no provider credential** and must not look for one. The gateway
-mints a short-lived upstream credential for each call and never shows it to
-you.
+You hold **no credential of those services** and must not look for one. The
+gateway mints a short-lived upstream credential for each call and never shows
+it to you.
 
-Treat the token like a password: never print it, never commit it, never send
+Treat the key like a password: never print it, never commit it, never send
 it anywhere but the instance's MCP endpoint.
 
 ## 2. Endpoint and auth
 
 |              |                                                |
 | ------------ | ---------------------------------------------- |
-| Endpoint     | `<instance URL>/mcp` (from the bootstrap kit)  |
+| Endpoint     | `<instance URL>/mcp` (from the setup kit)      |
 | Protocol     | MCP over HTTP, JSON-RPC 2.0, `POST`            |
 | Auth         | `Authorization: Bearer $VAUBAAN_MISSION_TOKEN` |
 | Content-Type | `application/json`                             |
@@ -74,34 +86,36 @@ curl -sS "<instance URL>/mcp" \
 
 ## 3. Discovery
 
-`tools/list` returns only the tools that at least one accepted risk of your
-mission makes potentially callable. A listed tool can still be refused at
-call time on its arguments (a resource outside the mission, a risk the
-arguments reach, an exhausted quota).
+`tools/list` returns the tools of every service on which your mission holds
+an account and at least one permission. The list is per service, not per
+tool: a listed tool can still be refused at call time on its arguments (a
+resource outside the mission, a permission the mission does not hold, a limit
+reached).
 
-Tool names are prefixed by provider (`github__…`, `supabase__…`). Cite
-resources by the refs of your bootstrap kit (`owner/repo`, a project ref):
-they are the only refs the mission knows.
+Tool names are prefixed by service (`github__…`, `supabase__…`). Cite
+resources by the refs of your setup kit (`owner/repo`, a project ref): they
+are the only refs the mission knows.
 
-## 4. One budget, however many agents or tokens
+## 4. One set of limits, however many agents or keys
 
-Sub-agents use the **same** MCP configuration and the **same** token. Every
-allowed call decrements the same counters: multiplying agents does not
-multiply the budget. A refused call consumes nothing.
+Sub-agents use the **same** MCP configuration and the **same** key. Every
+allowed call counts against the same limits: multiplying agents does not
+multiply them. A refused call counts for nothing.
 
 **Other holders.** Several people, and machines the creator named, may work on
-one mission, each with their own token. They share the mission's resources,
-its accepted risks and its **one** budget: what another holder spends is spent
-for you too. Requests (claims, approvals) are answered by the mission creator
-alone, whoever holds the token that caused them.
+one mission, each with their own key. They share the mission's resources, its
+permissions and its **one** set of limits: what another holder uses is used
+for you too. What an agent asks — more room after a limit, a yes before an
+action — is answered by the mission creator alone, whoever holds the key that
+asked.
 
 **Handing the mission to sub-agents.** An orchestrator gives each sub-agent
 the MCP configuration of §2 as is: same endpoint, same
-`VAUBAAN_MISSION_TOKEN`. A token belongs to its holder, not to an agent: there
-is no token per agent and nothing to request for a new one.
+`VAUBAAN_MISSION_TOKEN`. A key belongs to its holder, not to an agent: there
+is no key per agent and nothing to request for a new one.
 
-**Agent labels.** So that the mission's session and the audit tell who did
-what, each agent names itself:
+**Agent labels.** So that the activity of the mission tells who did what,
+each agent names itself:
 
 - a sub-agent started with its own copy of the configuration adds one header
   next to `Authorization`:
@@ -121,16 +135,16 @@ what, each agent names itself:
 A label is 1 to 64 characters: letters, digits and `.` `_` `-` `:` `/` `@`
 `+`, starting with a letter or a digit. Anything else is ignored: the call is
 served, unlabelled. A label is attribution only: it changes nothing about
-what is allowed or counted, it reserves no share of the budget, and it is not
+what is allowed or counted, it reserves no share of the limits, and it is not
 an identity — never put a secret in it. The identity of a call is the holder
-of its token, which nothing you send can change.
+of its key, which nothing you send can change.
 
 `GET <instance URL>/mcp/catalog`, with the same `Authorization` header,
-returns whose token you are using (`token.holder`: an email, or the name of a
-named token) and who created the mission (`mission.creator`), the tools of the
+returns whose key you are using (`token.holder`: an email, or the name of a
+machine key) and who created the mission (`mission.creator`), the tools of the
 instance and which ones your mission can call, the resource refs and
-environment labels you may cite, and what is left of each risk's quota in the
-current period.
+environment labels you may cite, and what is left of each permission's limit
+in the current period.
 
 ## 5. When a call is refused
 
@@ -138,48 +152,48 @@ A refusal is a JSON-RPC error (code `-32603`) whose `data` is the refusal:
 its `code`, the fields of that code and a `hint`. Read the hint, then act
 according to the code:
 
-| Code                      | What happened                                                                                                              | What you do                                                                                                                |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `risk-not-accepted`       | The call touches risks the mission did not accept.                                                                         | Do not look for another way to the same effect. Tell the human which risks are missing (`missing_risks`).                  |
-| `budget-exhausted`        | The quota of a risk is spent for the period.                                                                               | Stop that kind of action. Hand `claim_url` to the human; continue with work that does not need it. Do not retry in a loop. |
-| `approval-required`       | One or more risks of the call are gated: a human approves each action. `risk_ids` lists them; one request covers the call. | Nothing was executed. Hand `approval_url` to the human, wait, then replay the call with **exactly** the same arguments.    |
-| `resource-not-in-mission` | The arguments cite a resource outside the mission.                                                                         | Use one of the refs in `allowed_resources`, or ask the human to have the resource added.                                   |
-| `rate-limited`            | Too many actions on a risk in a short window.                                                                              | Wait `retry_after_seconds`, retry once. The quota was not consumed.                                                        |
-| `connection-unavailable`  | The provider connection is expired or revoked.                                                                             | Nothing you can do fixes it. Tell the human who owns the connection (`owner`).                                             |
-| `mission-inactive`        | The mission is expired, orphaned or revoked.                                                                               | Stop calling with this token and report to the human.                                                                      |
-| `wrong-credential-kind`   | The token was presented on the wrong door.                                                                                 | A mission token only opens the execution endpoint (`/mcp`).                                                                |
+| Code                      | What happened                                                                                                                            | What you do                                                                                                                           |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `risk-not-accepted`       | The mission does not hold a permission this call needs.                                                                                  | Do not look for another way to the same effect. Tell the human which permissions are missing (`missing_risks`).                       |
+| `budget-exhausted`        | The limit of a permission is reached for the period.                                                                                     | Stop that kind of action. Hand `claim_url` to the human; continue with work that does not need it. Do not retry in a loop.            |
+| `approval-required`       | The mission creator asked to be asked first for one or more permissions of the call. `risk_ids` lists them; one request covers the call. | Nothing was executed. Hand `approval_url` to the human, wait for their yes, then replay the call with **exactly** the same arguments. |
+| `resource-not-in-mission` | The arguments cite a resource outside the mission.                                                                                       | Use one of the refs in `allowed_resources`, or ask the human to have the resource added.                                              |
+| `rate-limited`            | Too many actions on a permission in a short window.                                                                                      | Wait `retry_after_seconds`, retry once. Nothing was counted against the limit.                                                        |
+| `connection-unavailable`  | The account behind the call needs reconnecting.                                                                                          | Nothing you can do fixes it. Tell the human who owns the account (`owner`).                                                           |
+| `mission-inactive`        | The mission is expired, without an owner (`orphaned`) or stopped (`revoked`).                                                            | Stop calling with this key and report to the human.                                                                                   |
+| `wrong-credential-kind`   | The key was presented on the wrong door.                                                                                                 | A mission key only opens the execution endpoint (`/mcp`).                                                                             |
 
-**Never work around a refusal.** No other tool, no other token, no direct
-access to the provider, no splitting of an action to slip under a limit.
+**Never work around a refusal.** No other tool, no other key, no direct
+access to the service, no splitting of an action to slip under a limit.
 When a refusal carries a URL (`claim_url`, `approval_url`), give that URL to
 the human as is: only the mission's creator, signed in to the instance, can
-answer it.
+answer it. They also find it under "Waiting for you".
 
-A request opened before a mission was orphaned can be granted only until it
-expires. After that, your next refused call opens a new one: hand the new URL
-to the human.
+A request opened before a mission lost its owner can be answered only until
+it expires. After that, your next refused call opens a new one: hand the new
+URL to the human.
 
-**When the token itself stops working.** An HTTP 401 whose `error.data.reason`
-is set means this token authenticated before and no longer does. It is not a
+**When the key itself stops working.** An HTTP 401 whose `error.data.reason`
+is set means this key authenticated before and no longer does. It is not a
 refusal and says nothing about the mission, which may be running for its other
 holders:
 
-| Reason               | What happened                                    | What you do                                            |
-| -------------------- | ------------------------------------------------ | ------------------------------------------------------ |
-| `token-rotated`      | The holder generated a newer token.              | Ask the human who gave you this token for the new one. |
-| `token-revoked`      | The holder, or the mission creator, revoked it.  | Stop, and tell the human.                              |
-| `holder-removed`     | The holder is no longer a member of the mission. | Stop, and tell the human.                              |
-| `holder-deactivated` | The holder was deactivated on this instance.     | Stop, and tell the human.                              |
+| Reason               | What happened                                    | What you do                                          |
+| -------------------- | ------------------------------------------------ | ---------------------------------------------------- |
+| `token-rotated`      | The holder replaced this key.                    | Ask the human who gave you this key for the new one. |
+| `token-revoked`      | The holder, or the mission creator, revoked it.  | Stop, and tell the human.                            |
+| `holder-removed`     | The holder was removed from the mission.         | Stop, and tell the human.                            |
+| `holder-deactivated` | The holder is no longer active on this instance. | Stop, and tell the human.                            |
 
-Never look for another token to continue.
+Never look for another key to continue.
 
 ## 6. Proposing a mission
 
 You cannot enlarge your own mission. You can _propose_ one: a JSON draft the
-human pastes into **Missions → New mission → Paste an agent's proposal**.
-The instance checks it against the human's authority, loads what passes into
-the form and lists what does not; nothing is issued until the human clicks
-Issue.
+human pastes into **Missions → New mission → Paste an agent’s proposal**.
+The instance checks it against what the human may allow, loads what passes
+into the form and lists what does not; nothing exists until the human reads
+the list of permissions and confirms **Create mission**.
 
 ```json
 {
@@ -208,72 +222,75 @@ Issue.
 }
 ```
 
-Rules of a draft:
+Rules of a draft (the field names are the protocol's):
 
-- a connection is named by `provider` (when the human holds exactly one
-  connection of that provider) or by `connection_id`;
+- an account is named by `provider` (when the human can use exactly one
+  account of that service) or by `connection_id`;
 - `resources` is `{ "scope": "all" }` or a selection by `resource_refs`;
-- `preset` alone accepts the plugin's preset as is; `policy` accepts exactly
-  the risks it lists, and a risk whose `quota` or `rate_limit` is omitted
+- `preset` alone takes the service's preset as is; `policy` holds exactly
+  the permissions it lists, and one whose `quota` or `rate_limit` is omitted
   takes the preset's values for it;
-- every accepted risk needs a quota and a rate limit: there is no infinite
-  budget, and no wildcard — a risk is always named by its explicit id;
-- an env-qualified risk (`supabase[staging].…`) needs a selected resource
-  carrying that environment label;
-- ask for the least that does the job. A narrow proposal is approved faster.
+- every permission needs a `quota` and a `rate_limit`: there is no unlimited
+  permission, and no wildcard — a permission is always named by its explicit
+  id (`risk_id`);
+- a permission held per environment (`supabase[staging].…`) needs a selected
+  resource carrying that environment label;
+- ask for the least that does the job. A narrow proposal is accepted faster.
 
 ## 7. The management door
 
 An instance has a **second MCP server**, `<instance URL>/mcp/manage`, for an
-agent that acts **on behalf of a user** instead of executing a mission. It
-is how an agent prepares a mission by itself, without the paste of §6.
+agent that acts **on behalf of a person** instead of executing a mission. It
+is how an agent prepares a mission by itself, without the paste of §6. The
+interface calls such an agent a **connected app**.
 
 - **Endpoint**: `<instance URL>/mcp/manage`.
 - **Auth**: OAuth, the standard authorization of MCP servers. Your MCP client
-  discovers the server, registers itself and opens the user's browser; the
-  user signs in and consents.
+  discovers the server, registers itself and opens the person's browser; the
+  person signs in and consents.
 - **Token**: a short-lived **delegated token** your client renews by itself.
-  The door is opened by that token and never by a mission token, which it
+  The door is opened by that token and never by a mission key, which it
   refuses (`wrong-credential-kind`).
 
 In Claude Code: `claude mcp add --transport http vaubaan-manage <instance URL>/mcp/manage`,
 then `/mcp` → `vaubaan-manage` → Authenticate.
 
-Its tools, always within the authority of the user who consented:
+Its tools, always within what the person who consented may allow:
 
-| Tool                   | What it does                                                           |
-| ---------------------- | ---------------------------------------------------------------------- |
-| `list_my_connections`  | connections owned or shared: acceptable `RiskId`s, resources, presets  |
-| `get_catalog`          | one provider's risks as explicit ids, and its presets entry by entry   |
-| `list_my_missions`     | the user's missions: state, policy, what is left of each quota         |
-| `preview_policy`       | checks a draft (the format of §6) and lists what exceeds the authority |
-| `issue_mission`        | issues the mission; returns the token once, and the bootstrap kit      |
-| `rotate_mission_token` | a new token for an active mission; the previous one stops working      |
-| `revoke_mission`       | ends a mission for good                                                |
+| Tool                   | What it does                                                                            |
+| ---------------------- | --------------------------------------------------------------------------------------- |
+| `list_my_connections`  | the accounts the person owns or was given access to: permission ids, resources, presets |
+| `get_catalog`          | one service's permissions as explicit ids, and its presets entry by entry               |
+| `list_my_missions`     | the person's missions: state, permissions, what is left of each limit                   |
+| `preview_policy`       | checks a draft (the format of §6) and lists what the person may not allow               |
+| `issue_mission`        | creates the mission; returns its key once, and the setup kit                            |
+| `rotate_mission_token` | replaces the key of a running mission; the previous key stops working at once           |
+| `revoke_mission`       | stops a mission for good                                                                |
 
-How to compose a policy that passes the first time:
+How to compose a draft that passes the first time:
 
-1. `list_my_connections`, then `get_catalog` for each provider the task
+1. `list_my_connections`, then `get_catalog` for each service the task
    needs.
-2. Start from **one preset per connection** and trim it to the task. Name
-   every risk by its explicit id; there is no wildcard.
-3. Give every risk a quota and a rate limit (the preset supplies them).
-4. Accept an env-qualified id (`supabase[prod].…`) only when a selected
+2. Start from **one preset per account** and trim it to the task. Name every
+   permission by its explicit id; there is no wildcard.
+3. Give every permission a `quota` and a `rate_limit` (the preset supplies
+   them).
+4. Take an id held per environment (`supabase[prod].…`) only when a selected
    resource carries that label.
 5. `preview_policy` until it answers `ok: true`, then `issue_mission` with
    the same draft.
 
 What the door changes and what it does not:
 
-- the **user is the creator** of every mission issued there. It appears
-  under their name, marked as issued by your client, in their Missions and
-  Delegations pages and in the audit;
-- a draft that exceeds the user's authority is refused whole, with the list
-  of what is not covered. That list cannot be obtained here;
-- the door can **never** answer a request (claim or approval), open a gate,
-  extend a budget, reset a period, connect a provider, share or revoke a
-  connection, or call a provider tool. These stay with the human, in the web
-  interface;
-- so a delegation is not a way around a refusal of §5: hand the URL to the
-  human. Issuing yourself a wider mission to get past a refusal is visible
-  to the user and will cost you the delegation.
+- the **person is the creator** of every mission created there. It appears
+  under their name, marked as prepared by your client, in their Missions, in
+  Settings → Connected apps and in Activity;
+- a draft that exceeds what the person may allow is refused whole, with the
+  list of what is not covered. More cannot be obtained here;
+- the door can **never** answer a request (more room after a limit, a yes
+  before an action), let a permission run freely, raise a limit, reset a
+  count, connect an account, give access to one or disconnect it, or call a
+  tool of a service. These stay with the human, in the web interface;
+- so being a connected app is not a way around a refusal of §5: hand the URL
+  to the human. Creating yourself a wider mission to get past a refusal is
+  visible to the person and will cost you their consent.

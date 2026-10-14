@@ -53,7 +53,7 @@ apps/gateway/src/server/
     handlers.ts                    POST /api/admin/telemetry
   config/telemetry-default.ts      the single default URL of the code base (placeholder)
 apps/gateway/src/app/
-  admin/(guarded)/telemetry/page.tsx   Admin → Telemetry
+  admin/(guarded)/telemetry/page.tsx   Settings → Telemetry (/admin/telemetry)
   api/admin/telemetry/route.ts         one-line adapter over the handler
 apps/gateway/src/components/telemetry/ValidationBadge.tsx
 deploy/collector/                  schema.sql + README.md (no cloud resource is created by the repo)
@@ -244,7 +244,8 @@ administrator reads is produced by the code that sends. A note explains the
 ## The validation badge
 
 `PluginStatsReader.statusFor(pluginId)` (`stats.ts`) backs
-`<ValidationBadge>` on `/accounts` and `/accounts/<id>`:
+`<ValidationBadge>` on the reference (`/reference`, `/reference/<id>`) and in
+the details of an account (`/accounts/<id>`, behind "Show details"):
 
 - active only when the client's state is `sending`; otherwise `null` and no
   request — an instance that does not contribute never contacts the collector;
@@ -265,7 +266,7 @@ collector (`plugin_validation_thresholds()`).
 
 ```yaml
 telemetry:
-  enabled: true # optional: leave unset to decide from Admin → Telemetry
+  enabled: true # optional: leave unset to decide from Settings → Telemetry
   collector_url: https://collector.example.net/rest/v1/plugin_reports?apikey=<publishable key>
 ```
 
@@ -273,13 +274,13 @@ or `VAUBAAN_TELEMETRY_COLLECTOR_URL` / `VAUBAAN_TELEMETRY_ENABLED`. The URL
 must be https. The last path segment is the reports resource; `plugin_stats`
 is read beside it. To run your own collector, apply
 `deploy/collector/schema.sql` to a Postgres exposed by PostgREST (a Supabase
-project) — see its README. To never send anything whatever the Admin page
-says, set `telemetry.enabled: false`.
+project) — see its README. To never send anything whatever
+Settings → Telemetry says, set `telemetry.enabled: false`.
 
 ## How to debug
 
-- **"Enabled" but nothing arrives** → Admin → Telemetry, "Sending": `no — no
-collector is configured` means the URL is still the placeholder (boot log
+- **On, but nothing arrives** → Settings → Telemetry, "Sending": "no: no
+  collector is configured" (and the note "On, but nothing is sent") means the URL is still the placeholder (boot log
   line `telemetry` has `collector: "placeholder (nothing is sent)"`; one
   `warn` appears at the first report). Appending a key or a slash to the
   default URL does not make it a collector: it is compared by origin and path.
@@ -291,8 +292,9 @@ collector refused a batch; it was dropped` with the status: 401/403 = wrong
   or missing key, 400 = the collector's constraints are older than the
   gateway's vocabulary — apply the current `schema.sql`), or the queue
   overflowed.
-- **The toggle is missing** → the configuration sets `telemetry.enabled`.
-- **No badge** → expected unless telemetry is sending and the collector has a
+- **The button that turns it on or off is missing** → the configuration sets
+  `telemetry.enabled`; the page says "Set in the mounted configuration".
+- **No validation tag** → expected unless telemetry is sending and the collector has a
   row for that exact plugin version; `debug` log `telemetry: plugin
 statistics unavailable` names a failure.
 - **A tool is never reported** → it is not in the plugin's `tools`, or the

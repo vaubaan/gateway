@@ -5,16 +5,7 @@
  * columns are marked `detail` and stay hidden until the person asks for them
  * through a `DetailScope` ("Show details", remembered per page) — the detailed
  * level may go to seven. A table that needs more than that is two tables.
- *
- * `Table`, `Thead`, `Tbody`, `Tr`, `Th`, `Td` are the bare elements with the
- * same look, for a layout `DataTable` does not cover.
  */
-import type {
-  HTMLAttributes,
-  TableHTMLAttributes,
-  TdHTMLAttributes,
-  ThHTMLAttributes,
-} from 'react';
 
 import styles from './Table.module.css';
 
@@ -202,25 +193,4 @@ export function DataTable<Row>({
       </table>
     </div>
   );
-}
-
-// ── The bare elements ────────────────────────────────────────────────────────
-
-export function Table(props: TableHTMLAttributes<HTMLTableElement>) {
-  return <table {...props} className={[styles.table, props.className ?? ''].join(' ')} />;
-}
-export function Thead(props: HTMLAttributes<HTMLTableSectionElement>) {
-  return <thead {...props} />;
-}
-export function Tbody(props: HTMLAttributes<HTMLTableSectionElement>) {
-  return <tbody {...props} />;
-}
-export function Tr(props: HTMLAttributes<HTMLTableRowElement>) {
-  return <tr {...props} />;
-}
-export function Th(props: ThHTMLAttributes<HTMLTableCellElement>) {
-  return <th {...props} />;
-}
-export function Td(props: TdHTMLAttributes<HTMLTableCellElement>) {
-  return <td {...props} />;
 }

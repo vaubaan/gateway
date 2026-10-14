@@ -2,7 +2,7 @@
 title: GitHub provider plugin
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - plugins/github/src/index.ts
   - plugins/github/src/risk-catalog.yaml
@@ -33,7 +33,7 @@ in git history.
 
 ## What one connection is
 
-A **GitHub App installation** on the company's organisation. The operator
+A **GitHub App installation** on the company's organisation. An administrator
 registers the App once, with "Request user authorization (OAuth) during
 installation" enabled, and gives the instance five app-config keys
 (`app_id`, `private_key`, `app_slug`, `client_id`, `client_secret`); a user
@@ -284,9 +284,9 @@ plugins. `branch-protection-write` is in no preset.
 
 ## Tests
 
-`npx vitest run plugins/github` — 585 tests, no network:
+`npx vitest run plugins/github` — 587 tests, no network:
 
-- `plugin.test.ts` (14): kit assertions, coverage with samples per tool
+- `plugin.test.ts` (16): kit assertions, coverage with samples per tool
   (the 14 named risks touched, `fallbackHits` empty), the fallback catching
   a write on an unconventional branch and a merge into a non-protected one,
   preset invariants, credential spec, resource check.

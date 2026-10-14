@@ -2,7 +2,7 @@
 title: Plugin SDK
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - packages/plugin-sdk/src/
   - packages/plugin-sdk/tests/
@@ -74,7 +74,7 @@ packages/plugin-sdk/
   tests/
     fixtures/acme/      a tiny valid plugin (risk-catalog.yaml + acme-plugin.ts) used by the tests
     unit/               catalog-loader (31), catalog-path (4), env-of (8), registry (11),
-                        define-plugin (26), testing-kit (14), streaming (9), arguments (10),
+                        define-plugin (32), testing-kit (14), identifiers-kit (9), streaming (9), arguments (10),
                         slices (21)
 ```
 
@@ -918,6 +918,6 @@ fallback: true on it`** — add the flag to the catch-all entry; the kit's
   [`providers/README.md`](./providers/README.md) (index of the
   per-provider handbooks).
 - Guide: [`plugins/README.md`](../../plugins/README.md).
-- Tests: `npx vitest run packages/plugin-sdk plugins/_template` — 159 tests;
+- Tests: `npx vitest run packages/plugin-sdk plugins/_template` — 175 tests;
   `apps/gateway/tests/integration/standalone-plugin-catalogs.test.ts` after
   a `next build`.

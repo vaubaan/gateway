@@ -41,10 +41,10 @@ function json(status: number, body: unknown): Response {
 const REFUSALS = {
   field: 'message',
   noSession: 'Sign in first.',
-  forbidden: 'A mission is worked on by identified users; sign in through the identity provider.',
+  forbidden: 'A mission is worked on by identified people; sign in through the identity provider.',
 } as const;
 
-const NOT_FOUND = { error: 'not-found', message: 'No such mission, member or token among yours.' };
+const NOT_FOUND = { error: 'not-found', message: 'No such mission, teammate or key among yours.' };
 
 /** One string field of a JSON body and nothing else; `null` when the body is not that. */
 async function fieldOf(request: Request, name: string): Promise<string | null> {
@@ -63,7 +63,7 @@ async function fieldOf(request: Request, name: string): Promise<string | null> {
 function inactive(state: string): Response {
   return json(409, {
     error: 'mission-inactive',
-    message: `The mission is ${state}; no token can be generated for it and nobody can be added to it.`,
+    message: `The mission is ${state}; no key can be generated for it and nobody can be added to it.`,
   });
 }
 
@@ -103,12 +103,12 @@ export function createTeamHandlers(deps: TeamHandlerDeps): TeamHandlers {
           return json(422, {
             error: 'user-not-found',
             message:
-              'No active user of this instance has this email. A user exists here once they have signed in.',
+              'Nobody active on this gateway has this email. A person exists here once they have signed in.',
           });
         case 'already-member':
           return json(409, {
             error: 'already-member',
-            message: 'This user is already on the mission.',
+            message: 'This person is already on the mission.',
           });
       }
     },
@@ -149,7 +149,7 @@ export function createTeamHandlers(deps: TeamHandlerDeps): TeamHandlers {
           return json(409, {
             error: 'name-taken',
             message:
-              'A working token of this mission already has this name. Revoke it first, or choose another name.',
+              'A working machine key of this mission already has this name. Revoke it first, or choose another name.',
           });
       }
     },

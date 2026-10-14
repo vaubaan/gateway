@@ -195,8 +195,9 @@ provisional until the `mission-presets-default-values` ADR.
 
 1. In the Supabase dashboard, open your organization → **OAuth Apps**
    (`https://supabase.com/dashboard/org/<slug>/apps`) and create an app.
-2. Set the redirect URL to the callback the instance shows on its
-   Connections page (it is derived from the instance `public_url`).
+2. Set the redirect URL to the callback the instance shows in
+   Settings → Administration → Company apps (it is derived from the
+   instance `public_url`).
 3. Pick the scopes the company is ready to grant the gateway. The plugin
    needs `database:read` for the read-only tools, `database:write` for
    migrations, `secrets:read` for the data-plane tools (it reads the
@@ -204,7 +205,7 @@ provisional until the `mission-presets-default-values` ADR.
    `auth`, `storage`, `edge_functions`, `environment`, `organizations` and
    `projects` scopes for the corresponding tools and for discovery.
 4. Enter the **client id** and **client secret** in the instance
-   configuration (Admin → Provider apps). The host uses them for the
+   configuration (Settings → Administration → Company apps). The host uses them for the
    authorization-code flow and for refresh ; the plugin reads neither, and
    nothing from the environment.
 
@@ -222,7 +223,7 @@ returns one `Resource` per project : `ref` = project ref, `displayName` =
 `<organization> / <project>`, `metadata` = organization, region, status.
 The Management API returns the whole list (no paging) ; the plugin caps it
 at `MAX_DISCOVERED_PROJECTS` (200) and warns through the logger. The owner
-labels each project's `env` on the Connections page.
+labels each project's `env` on the account's page (Accounts).
 
 ## Tests
 
@@ -238,5 +239,5 @@ resolution and the body built from declared arguments only ;
 `mission-evaluation.test.ts` runs the engine's `evaluateCall` on the real
 catalog (unlabelled project, bulk writes on prod, each preset) ;
 `identifier-injection.test.ts` feeds hostile values to every identifier
-position of `classify` and `execute`. 1613 tests ; none ever reaches
+position of `classify` and `execute`. 1740 tests ; none ever reaches
 Supabase.

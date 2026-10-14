@@ -176,7 +176,7 @@ risks:
     reason: >-
       POST /emails/batch sends up to 100 emails in one call. Bulk
       amplification whatever the recipient zone — the classifier also emits
-      the zone slice, so both risks must be accepted. A distinct marker so the
+      the zone slice, so both permissions must be held. A distinct marker so the
       creator consents to bulk sending explicitly.
     matches: 'resend.domain[*].recipient-count[batch].W'
     vector:
@@ -269,7 +269,7 @@ risks:
       action — potentially thousands of real emails, irreversibly, at a cost
       that scales with the segment. The plugin re-reads the broadcast
       upstream and refuses to send one that targets another segment than the
-      one named. The highest-risk operation of this provider.
+      one named. The highest-risk operation of this service.
     matches: 'resend.segment[*].broadcast[*].send.W'
     vector:
       reversibility: irreversible
@@ -304,7 +304,7 @@ risks:
       Posture shift : adding a domain widens what the account can send from
       ; removing one breaks delivery for every sender on it ; tracking and
       TLS settings change what recipients see. DNS must be configured
-      outside Resend. Suggested gate : approval.
+      outside Resend. Suggested : ask first.
     matches:
       - 'resend.domain.W'
       - 'resend.domain[*].W'
@@ -336,7 +336,7 @@ risks:
   - id: resend.uncategorized-write
     label: 'Uncategorized Resend write'
     reason: >-
-      Catch-all for a write no named risk covers. If Resend adds a surface
+      Catch-all for a write no named permission covers. If Resend adds a surface
       (webhooks, API keys, templates) and Vaubaan wraps it before the catalog
       is updated, calls land here — fail-loud by design. Never offered in a
       preset.
@@ -376,7 +376,7 @@ presets:
 
   - id: developer
     label: Developer
-    description: One mission per code project — transactional sends to internal and allow-listed recipients, generous budgets ; no bulk, no PII, no domain change.
+    description: One mission per code project — transactional sends to internal and allow-listed recipients, generous limits ; no bulk, no PII, no domain change.
     entries:
       - risk_id: resend.read-email-status
         quota: 5000
@@ -401,7 +401,7 @@ presets:
 
   - id: marketing-operator
     label: Marketing operator
-    description: Contacts, segments and campaigns ; broadcast sends, batch sends and segment deletion need approval. No domain change.
+    description: Contacts, segments and campaigns ; broadcast sends, batch sends and segment deletion ask first. No domain change.
     entries:
       - risk_id: resend.read-email-status
         quota: 2000
@@ -454,7 +454,7 @@ presets:
 
   - id: domain-admin
     label: Domain admin
-    description: Provision sending domains — read and verify freely, every domain mutation needs approval. No send.
+    description: Provision sending domains — read and verify freely, every domain mutation asks first. No send.
     entries:
       - risk_id: resend.read-domains
         quota: 2000

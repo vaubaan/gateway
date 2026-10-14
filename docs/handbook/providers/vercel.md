@@ -2,7 +2,7 @@
 title: Vercel provider — plugin and risk model
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - plugins/vercel/src/index.ts
   - plugins/vercel/src/classify.ts
@@ -390,8 +390,8 @@ not a path-safe identifier`): no call could name it.
 
 ## References
 
-- Code: `plugins/vercel/src/`, tests `plugins/vercel/tests/unit/` (622 tests:
-  48 `plugin.test.ts` — the undeclared arguments on `classify` and `execute`
+- Code: `plugins/vercel/src/`, tests `plugins/vercel/tests/unit/` (623 tests:
+  49 `plugin.test.ts` — the undeclared arguments on `classify` and `execute`
   and the three answers of `vercelEnvOf` among them —, 43 `classify.test.ts`, 55 `risk-catalog.test.ts`,
   99 `team-pin.test.ts`, 50 `binding.test.ts`, 11 `firewall.test.ts`,
   315 `identifier-injection.test.ts` — dot segments, separators and encoded

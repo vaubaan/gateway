@@ -2,7 +2,7 @@
 title: Resend provider — modelling and runtime (v5 plugin)
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - plugins/resend/src/index.ts
   - plugins/resend/src/resources.ts
@@ -298,9 +298,9 @@ resource with no environment label`) — a recipient is in no zone list of
 
 ## Tests
 
-`npx vitest run plugins/resend` — 232 : `plugin.test.ts` (kit with
+`npx vitest run plugins/resend` — 233 : `plugin.test.ts` (kit with
 `fallbackHits` empty, cross-cutting classifier rules, execute and its
-forwarded fields, discovery, credential, presets ; 43), `classify.test.ts`
+forwarded fields, discovery, credential, presets ; 44), `classify.test.ts`
 (a scenario per tool on `classifyResend` except the segment and membership
 tools, which `plugin.test.ts` covers ; envelope headers, attachments,
 identifiers ; 64), `risk-catalog.test.ts` (counts, invariants and

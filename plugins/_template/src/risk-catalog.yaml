@@ -83,7 +83,7 @@ risks:
     label: 'Uncategorized write'
     reason: >-
       Catch-all for writes without a dedicated entry. A mission creator
-      accepting it accepts the writes this catalog has not reviewed.
+      who includes it allows the writes this catalog has not reviewed.
     matches: 'template.**.W'
     fallback: true
     vector:
@@ -106,7 +106,7 @@ presets:
 
   - id: developer
     label: Developer
-    description: Read everywhere ; write and delete on staging freely, on prod with approval.
+    description: Read everywhere ; write and delete on staging freely, on prod asking first.
     entries:
       - risk_id: template.read-widgets
         quota: 5000

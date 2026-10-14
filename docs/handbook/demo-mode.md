@@ -1,8 +1,8 @@
 ---
-title: Demo mode — the whole interface in a browser, with a simulated identity provider and simulated providers
+title: Demo mode — the whole interface in a browser, with a simulated identity provider and simulated services
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - apps/gateway/tests/demo/
   - apps/gateway/tests/integration/demo/
@@ -10,12 +10,12 @@ tracks:
   - packages/plugin-sdk/src/catalog-path.ts
 ---
 
-# Demo mode — the whole interface in a browser, with a simulated identity provider and simulated providers
+# Demo mode — the whole interface in a browser, with a simulated identity provider and simulated services
 
 `npm run demo` starts the real application on `http://localhost:3210`, signed
-into through a demo identity provider, connected to simulated providers and
+into through a demo identity provider, connected to simulated services and
 already filled with data, so that somebody can click through every page
-without registering an OIDC client or a provider app. Nothing leaves the
+without registering an OIDC client or a company app at a service. Nothing leaves the
 machine. Decision: [local-demo-mode](../decisions/local-demo-mode.md).
 Neighbours: [authentication](authentication.md) (the sign-in that runs
 unchanged), [connections](connections.md) (the connect flows),
@@ -36,10 +36,10 @@ anybody, without a password. It is a development tool, never deployed: see
 
 ```console
 $ npm run demo
-DEMO — simulated identity provider and providers, no data leaves this machine
+DEMO — simulated identity provider and services, no data leaves this machine
 Building the web application…
   … building the composition root
-  … seeding people, connections, missions and calls
+  … seeding people, accounts, missions and calls
   … starting the web application
 
 Open        http://localhost:3210
@@ -63,9 +63,14 @@ Open        http://localhost:3210
 - **Stop.** `Ctrl-C`. The data directory is deleted unless `DEMO_KEEP=1`.
   Every run starts from the same seeded state.
 
-The command prints a tour: the URL, the accounts, the tokens of three seeded
-missions and of the named token "CI runner", with
-ready-made `curl` commands, and the list below with this run's request URLs.
+The command prints a tour: the URL, the people who can sign in, the keys of
+three seeded missions and the machine key "CI runner" (as `export` lines: the
+variable names keep the protocol's word, `VAUBAAN_…_TOKEN`), ready-made `curl`
+commands, and the list below with this run's request URLs. The text is in the
+words of the interface — account, access, permission, limit, key, teammate,
+team, administrator; the handbooks of each feature name the same things by
+their protocol names (connection, share, risk, budget, mission token, member,
+group, operator).
 
 ### Starting it
 
@@ -94,20 +99,21 @@ no stamp and is rebuilt once. The stamp lives in the build directory, so it
 goes away with the build. The digest is taken before the build starts: a
 file edited while it runs makes the next start build again.
 
-## Accounts
+## People
 
 No password. The sign-in page of the application redirects to the demo
-identity provider, which shows an account picker.
+identity provider, which shows a picker of three people (`people.ts`: the
+`tagline` is printed on the picker, `sees` in the tour).
 
-| Account | Who                                 | Sees                                                                                                                                                   |
-| ------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Alice   | owner and operator                  | her connections, missions in every state, two open requests, a share received from Carol, the audit of the whole instance, the Admin pages             |
-| Bob     | teammate (share beneficiary)        | no connection of his own, one share received from Alice, one mission issued within it, and Alice's "Ship the billing page" shared with him as a member |
-| Carol   | member of the "GitHub admins" group | the GitHub connection owned by that group, her own Stripe connection (test and live as two resources), whose test mode she shares to Alice             |
+| Person | Who                             | Sees                                                                                                                                                                                                        |
+| ------ | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Alice  | account owner and administrator | everything: her accounts, missions in every state, two requests waiting for her, an account Carol gave her access to, the Activity of the whole gateway and the administration under Settings               |
+| Bob    | teammate (was given access)     | no account of his own, one account Alice gave him access to (Accounts, "Shared with you"), one mission he created within it, and a mission of Alice he works on as a teammate (Missions, "Shared with you") |
+| Carol  | in the team GitHub admins       | the GitHub account owned by the team "GitHub admins", which she co-owns as one of its people, and her own Stripe account (test and live as two resources), on which she gave Alice access                   |
 
-Alice is the operator because the demo's admin rule lists her email. To
-switch account, open your name at the foot of the side navigation and "Sign
-out": it returns to the picker.
+Alice administers the gateway because the demo's admin rule lists her email.
+To sign in as someone else, open your name at the foot of the side navigation
+and "Sign out": it returns to the picker.
 
 ## What is seeded
 
@@ -115,17 +121,17 @@ Created by `seed.ts` through the application's own code paths (see
 [How it is built](#how-it-is-built)), so every state is one the application
 can reach by itself.
 
-| For   | What                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Alice | **Connections**: "Acme product repositories" (GitHub, four repositories); "Acme platform repositories" (GitHub, transferred to the local group "GitHub admins"); "Acme cache" (Upstash Redis, databases labelled `prod` and `staging`); "Acme transactional mail" (Resend, the staging domain labelled, the production domain and the segment left without a label: the mission form and the share dialog warn about it); "Acme DNS" (Cloudflare)                                                                                                                                                                                                                                            |
-|       | **A share** of "Acme product repositories" to Bob, restricted to five risks                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-|       | **Missions**: "Ship the billing page" (active, GitHub + Redis, a session of calls under the agent labels `planner` and `coder`, one refused call; **a team**: Bob is a member and has generated his own token, and a named token "CI runner" exists, each with calls of its own); "Nightly dependency audit" (quota spent, **open claim**); "Release 2.4 hotfix" (the `release-manager` preset, **open approval request** for a merge, with its arguments); "Migration dry-run (finished)" (expired); "Spike: move the status page DNS" (revoked); "Fix the flaky checkout test" (issued by the delegated client "Claude Code (demo)"); "Tour: a tiny quota to exhaust" (fresh, three reads) |
-|       | **A delegation** to "Claude Code (demo)", a client registered through dynamic registration                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| Bob   | "Review the docs pull requests", issued within the share, with two calls; member of Alice's "Ship the billing page" ("Shared with me"), with his own token                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| Carol | "Acme billing" (Stripe, test and live), its test mode shared to Alice                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| Admin | local groups "GitHub admins" (Alice, Carol) and "Contractors" (Bob), next to the IdP group `engineering`; the GitHub App as provider app; telemetry off and locked by the configuration                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| For      | What                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Alice    | **Accounts**: "Acme product repositories" (GitHub, four repositories); "Acme platform repositories" (GitHub, transferred to the team "GitHub admins"); "Acme cache" (Upstash Redis, databases labelled `prod` and `staging`); "Acme transactional mail" (Resend, the staging domain labelled, the production domain and the segment left without a label: the Accounts list says how many resources have none); "Acme DNS" (Cloudflare)                                                                                                                                                                                                                                                                      |
+|          | **An access** given to Bob on "Acme product repositories", limited to five permissions                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+|          | **Missions**: "Ship the billing page" (running, GitHub + Redis, calls under the agent labels `planner` and `coder`, one refused call; **a team**: Bob is a teammate and has generated his own key, and a machine key "CI runner" exists, each with calls of its own); "Nightly dependency audit" (a limit reached, **a request waiting**: a claim); "Release 2.4 hotfix" (the `release-manager` preset, **a request waiting**: an approval for a merge, with its arguments); "Migration dry-run (finished)" (expired); "Spike: move the status page DNS" (stopped); "Fix the flaky checkout test" (prepared by the connected app "Claude Code (demo)"); "Tour: a tiny quota to exhaust" (fresh, three reads) |
+|          | **A connected app**, "Claude Code (demo)", a client registered through dynamic registration                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Bob      | "Review the docs pull requests", created within the access Alice gave him, with two calls; teammate on Alice's "Ship the billing page" (Missions, "Shared with you"), with his own key                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Carol    | "Acme billing" (Stripe, test and live), on whose test mode she gave Alice access                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Settings | the local teams "GitHub admins" (Alice, Carol) and "Contractors" (Bob), next to the identity provider's group `engineering`; the GitHub App as company app; telemetry off and locked by the configuration                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
-Audit entries are the ones those acts and calls wrote.
+What Activity shows is what those acts and calls wrote.
 
 ## The tour
 
@@ -135,9 +141,10 @@ The list the command prints (`tour.ts`), without the values of the run
 1. **Sign in as Alice.** Missions lists the seeded missions in every state:
    running, waiting for you (a limit reached, a yes to give), expired,
    stopped, prepared by an agent.
-2. **Connect a provider**: Connections → Connect a provider.
+2. **Connect an account**: Accounts → Connect an account, then pick a
+   service.
 
-   | Provider   | What to type                                              |
+   | Service    | What to type                                              |
    | ---------- | --------------------------------------------------------- |
    | Stripe     | test key `sk_test_demo`, live key `sk_live_demo`          |
    | Cloudflare | API token `demo-cloudflare-token-0123456789`              |
@@ -146,13 +153,14 @@ The list the command prints (`tour.ts`), without the values of the run
    | Vercel     | token `demo-vercel-token`, team id `team_demo`            |
    | GitHub     | opens a simulated installation page: pick an organisation |
 
-   Any value of the right shape is accepted. Supabase and Railway connect
-   through an OAuth app the demo does not configure: the picker says so.
+   Any value of the right shape is accepted; each field says its shape.
+   Supabase and Railway need a company app the demo does not register: the
+   picker says so.
 
-3. **Read what a provider is**: Providers → GitHub. What the plugin connects
-   to, then four tabs: its presets side by side against the risks, each risk
-   with the reason it is a risk and its six-cell profile, its data model, its
-   tools. Supabase adds a plane control (db, storage, auth, functions).
+3. **Read what a service allows**: Reference → GitHub. Its permissions
+   compared across its presets ("why?" unfolds the reason and the six words
+   behind a severity), its tools, how it is modelled. Supabase adds a filter
+   by part (db, storage, auth, functions).
 4. **Create a mission on one screen**: Missions → New mission. Include an
    account and pick a preset: it says what it yields here, and the rail says
    what the mission will be able to do. **Edit the permissions one by one**
@@ -160,19 +168,20 @@ The list the command prints (`tour.ts`), without the values of the run
    mission** lists every permission with its limit before anything exists.
 5. **Read what follows the creation**: the key (shown once), then the kit —
    the MCP client configuration, the instructions for the agent, a `curl`.
-6. **Call `tools/list` on `/mcp`** with a mission token: the kit's own
+6. **Call `tools/list` on `/mcp`** with the key of a mission: the kit's own
    command, or the one the tour prints for the seeded mission "Ship the
    billing page" (`$VAUBAAN_MISSION_TOKEN`).
-7. **Exhaust a quota.** The mission "Tour: a tiny quota to exhaust" allows
+7. **Reach a limit.** The mission "Tour: a tiny quota to exhaust" allows
    three file reads: the printed loop reads a file four times with
    `$VAUBAAN_QUOTA_TOKEN`, and the last answer is a refusal
-   `budget-exhausted` carrying a `claim_url`. Open it as Alice (or Requests),
-   grant a reset or an extension, run the loop again. An older claim is
-   already waiting; the tour prints its URL.
-8. **Approve the pending action**: Requests shows a merge of pull request
-   #128 with its arguments (the tour prints the request's URL). Approve it,
-   then replay the call with exactly the same arguments (the printed `curl`,
-   `$VAUBAAN_APPROVAL_TOKEN`).
+   `budget-exhausted` carrying a `claim_url`. Open it as Alice (or "Waiting
+   for you"), reset the count or give back some calls, run the loop again. An
+   older request of the same kind is already waiting; the tour prints its
+   URL.
+8. **Approve the pending action**: "Waiting for you" shows a merge of pull
+   request #128 with its arguments (the tour prints the request's URL).
+   Approve it, then replay the call with exactly the same arguments (the
+   printed `curl`, `$VAUBAAN_APPROVAL_TOKEN`).
 9. **Give access to Bob**: Accounts → "Acme product repositories" → Give
    access. Bob already holds one ("Who has access"); sign out, sign in as
    Bob: Accounts → "Shared with you", and his mission.
@@ -180,33 +189,37 @@ The list the command prints (`tour.ts`), without the values of the run
     as Bob, his mission is stopped and every call with its key is refused.
     **Give access again** as Alice: the dialog names the mission it brings
     back — same key, same limits.
-11. **Work on a mission as a team.** Alice added Bob as a member of "Ship the
-    billing page" and created the named token "CI runner". Sign in as Bob:
-    Missions → "Shared with you" → that mission. He reads it and cannot
+11. **Work on a mission as a team.** Alice added Bob as a teammate on "Ship
+    the billing page" and created the machine key "CI runner". Sign in as
+    Bob: Missions → "Shared with you" → that mission. He reads it and cannot
     change it. Behind "···", **Replace my key**: the dialog says his current
     key stops at once; his new key is shown once, to him, with the kit; Alice
     never sees it. Copy the export line of the dialog, then ask the gateway
     whose key it is
     (`curl …/mcp/catalog` with `$VAUBAAN_MISSION_TOKEN`, printed by the
     tour): the answer reads
-    `"token": { "kind": "member", "holder": "bob@…" }`. The machine's token
-    (`$VAUBAAN_CI_TOKEN`) answers with its name. Sign in as Alice: "People
-    and keys" lists Bob and "CI runner" with what each key did today;
-    "Everything this mission did" has "Who called", and each call of the
-    timeline names its holder. Remove Bob (you type his address): his key is
-    refused at once (401, reason `holder-removed`), the others keep working.
-12. **Audit**: every call and every administrative act, with filters
-    (mission, token holder, agent label, decision). On a mission,
-    "Everything this mission did" shows the calls of the current period per
-    key holder and per agent label (`planner`, `coder`).
-13. **Admin**, as Alice (she is the operator): Identity provider, Provider
-    apps (the GitHub App), Groups ("GitHub admins", "Contractors"),
-    Connections without owner, OAuth clients ("Claude Code (demo)"),
-    Telemetry (off).
-14. **Sign in as Carol**: she sees the GitHub connection owned by the group
+    `"token": { "kind": "member", "holder": "bob@…" }` (the protocol's
+    names). The machine key (`$VAUBAAN_CI_TOKEN`) answers with its name. Sign
+    in as Alice: "People and keys" lists Bob and "CI runner" with what each
+    key did today; "Everything this mission did" has "Who called", and each
+    call of the timeline names its holder. Remove Bob (you type his address):
+    his key is refused at once (401, reason `holder-removed`), the others
+    keep working.
+12. **Activity**: every call and every change a person made, with filters
+    (period, mission, account, decision, key holder, agent). "detail" on a
+    line shows the key, the permissions touched and what is left. On a
+    mission, "Everything this mission did" shows the calls of the current
+    period per key holder and per agent label (`planner`, `coder`).
+13. **Settings**, as Alice (she administers the gateway): Connected apps
+    ("Claude Code (demo)"); under Administration, Setup (a checklist of what
+    is left), Sign-in, Company apps (the GitHub App), People, Teams ("GitHub
+    admins", "Contractors"), Accounts without owner, Telemetry (off),
+    Registered apps. Settings also holds the theme (System, Light, Dark) and
+    the interface reference (`/design`).
+14. **Sign in as Carol**: she sees the GitHub account owned by the team
     "GitHub admins", which Alice transferred to it, and her own Stripe
-    account (test and live mode as two resources), whose test mode she shares
-    to Alice.
+    account (test and live mode as two resources), on which she gave Alice
+    access to the test mode.
 
 ## How it is built
 
@@ -218,7 +231,7 @@ apps/gateway/tests/demo/
   demo-instance.ts   startDemo(): listener, configuration, composition root, seed, Next
   demo-idp.ts        DemoIdp (FakeIdp over HTTP under /__demo/idp), the account picker, demoPage()
   providers.ts       createDemoProviders(): the one `fetch` of every provider request
-  people.ts          Alice, Bob, Carol; the names of the local groups
+  people.ts          Alice, Bob, Carol, and what the picker and the tour say of each; the names of the local groups
   seed.ts            seedDemo(): what the instance contains on first load
   tour.ts            the banner and the printed tour
 apps/gateway/tests/integration/demo/
@@ -282,7 +295,7 @@ authorization request (`FakeIdp.authorize`) and redirects to the callback with
 a code bound to that person's claims (`sub`, `email`, `name`,
 `groups: ['engineering']`).
 
-### The simulated providers
+### The simulated services
 
 `createDemoProviders()` returns one `fetch` built on the SDK's `mockFetch`
 with routes for GitHub (the user verification of an installation, installation
@@ -291,7 +304,7 @@ common tools), Stripe, Cloudflare DNS, Resend, Upstash Redis and Vercel. Every U
 read off the plugin that calls it (credential spec, exported API base). A
 request no route answers throws `DemoProviderError` — "demo mode: no simulated
 answer for `<METHOD> <URL>` — nothing was sent to the real provider" — which
-the page shows as the provider's error and the command writes on stderr.
+the page shows as the service's error and the command writes on stderr.
 Adding an endpoint is one route in `providers.ts`.
 
 GitHub's connect flow sends the browser to GitHub's installation page. The
@@ -349,8 +362,9 @@ services, and writes nothing to the store directly:
 - the expired mission is issued with an expiry two seconds ahead, and the seed
   ends after that instant.
 
-`SeedSummary` carries what the tour prints (three tokens of Alice's missions,
-the named token of the team mission, the two request URLs, the names).
+`SeedSummary` carries what the tour prints (the keys of three of Alice's
+missions, the machine key of the team mission, the two request URLs, the
+names).
 
 ## Safety
 
@@ -362,7 +376,7 @@ the named token of the team mission, the two request URLs, the names).
 | Nothing leaves the machine         | provider calls go to `providers.ts`; the SSH plugin is not registered; telemetry and client-document fetches refuse; the command also replaces the global `fetch` with one that refuses any host but the loopback, and disables Next's own telemetry | `providers.ts`, `main.ts`           |
 | Not reachable from the network     | the listener binds `127.0.0.1`                                                                                                                                                                                                                       | `demo-instance.ts`                  |
 | No lasting secret, no lasting data | master key, bootstrap token, GitHub App key pair, IdP signing key and client secrets are generated per run and kept in memory; the SQLite file is in a `mkdtemp` directory deleted on exit                                                           | `demo-smoke.test.ts` (deletion)     |
-| Said on every surface              | the banner "DEMO — simulated identity provider and providers, no data leaves this machine" is printed at start and shown on the picker and the installation page                                                                                     | `demo-smoke.test.ts`                |
+| Said on every surface              | the banner "DEMO — simulated identity provider and services, no data leaves this machine" is printed at start and shown on the picker and the installation page                                                                                      | `demo-smoke.test.ts`                |
 
 The first line needed a fix outside the demo: the plugins' computed catalog
 path made Next trace the whole `apps/gateway` directory into the standalone
@@ -419,11 +433,11 @@ naming the application sources and the plugins).
   projects; a tool the simulation has no answer for returns
   `{ "simulated": true }` with its name.
 - Supabase, Railway and Gmail need a company app, which the demo does
-  not register; registering one in Admin → Provider apps does not make the
-  provider real, the code exchange is still refused. SSH is absent.
-- **The Administration overview says "build dev" while the page footer shows
-  the stamped version.** The footer is rendered by the built application,
-  where the version and the commit were frozen at build time; the overview
+  not register; registering one in Settings → Company apps does not make the
+  service real, the code exchange is still refused. SSH is absent.
+- **Settings → Setup gives `dev` as the version while the page footer shows
+  the stamped one.** The footer is rendered by the built application,
+  where the version and the commit were frozen at build time; the Setup page
   reads the build of the composition root, and the demo composes the root in
   its own process, outside the built application, where nothing is stamped.
   Whatever else reads the root's build says `dev` in the demo for the same
@@ -431,8 +445,8 @@ naming the application sources and the plugins).
   instance started from the image has one process and one stamp.
 - The build stamp sees the build inputs listed above and nothing else: a
   change to a file outside them does not trigger a build.
-- The identity provider settings are read-only in Admin, as with a mounted
-  configuration.
+- The identity provider settings are read-only in Settings → Sign-in, as with
+  a mounted configuration.
 
 ## References
 

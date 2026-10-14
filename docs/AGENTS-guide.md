@@ -78,6 +78,14 @@ linked.
   are explicit lists of `RiskId`. No wildcard, no sentinel, no reference to
   a preset in anything stored. "Select all" in the interface records the
   list as it is at that moment.
+- **Two sets of words.** The spec, the code, the API, the catalogs and the
+  database say connection, share, risk, gate, budget, mission token, request,
+  delegation, member, operator, group. The interface, and what is written
+  for the people who use it, says account, access, permission, runs freely /
+  ask me first, limits, key, Waiting for you, connected app, teammate,
+  administrator, team. `apps/gateway/src/lib/vocabulary.ts` is the one
+  bridge; never rename a protocol name, never print one as prose on a page
+  (ADR [interface-redesign-vocabulary-and-design-system](decisions/interface-redesign-vocabulary-and-design-system.md)).
 - **Nothing hard-coded.** No URL, secret or project reference in code. Configuration comes from the environment or the mounted
   file, through the configuration module; a missing key stops startup with
   a message naming it ([configuration](handbook/configuration.md)).
@@ -112,14 +120,15 @@ linked.
 ```
 apps/gateway/                    the deployable (@vaubaan/gateway-app)
   src/app/                       pages and route handlers (Next.js App Router)
-    (app)/                       signed-in pages: connections, shares, missions,
-                                 requests, delegations, audit, providers
+    (app)/                       signed-in pages: the home (Now), waiting, missions,
+                                 accounts, activity, reference, settings, design
     (public)/                    sign-in
-    admin/                       operator pages
+    admin/                       the administration (under Settings in the interface)
     mcp/                         the two MCP doors (/mcp, /mcp/manage)
     oauth/, .well-known/         the authorization server of the management door
     api/, auth/, r/              form handlers, sign-in callback, request links
-  src/components/                shared interface components; ui/ holds the primitives
+  src/components/                shared interface components; ui/ is the design system
+  src/lib/vocabulary.ts          the words a person reads, keyed by the protocol's names
   src/styles/tokens.css          the design tokens
   src/server/                    everything that is not a page
     config/ compose/             configuration, composition root
@@ -131,6 +140,7 @@ apps/gateway/                    the deployable (@vaubaan/gateway-app)
     requests/                    claims and approvals
     management/ oauth-as/        the management door and its authorization server
     audit/ telemetry/            audit search and retention, opt-in reports
+    now/                         the read model of the home
     http/ logging/ rate-limit/   shared plumbing
   tests/                         unit, integration, e2e (Playwright), demo, manual
 packages/

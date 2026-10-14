@@ -5,12 +5,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import {
-  eventDetailLines,
-  eventView,
-  SESSION_EVENTS_PAGE_SIZE,
-  type SessionEventView,
-} from '../../../src/server/audit';
+import { eventView, SESSION_EVENTS_PAGE_SIZE } from '../../../src/server/audit';
 import type { MissionRecord } from '../../../src/server/store/types';
 import {
   ARGUMENT_MARKER,
@@ -519,8 +514,6 @@ describe('mission session view', () => {
   });
 
   it('says until when a gate is open, and what each approval and gate event did', async () => {
-    const lines = (event: SessionEventView | undefined, requestOpen = false) =>
-      event ? eventDetailLines(event, { requestOpen }) : null;
     const merge = (args: Record<string, unknown>) =>
       seedCall(rig, mission, { tool: 'github__merge_pull_request', risks: [MERGE], args });
     const asked = async (args: Record<string, unknown>) => {
@@ -538,27 +531,16 @@ describe('mission session view', () => {
     let v = await view();
     expect(v.events.map((e) => e.kind)).toEqual(['call-refused', 'request']);
     expect(v.events[0]).toMatchObject({ request_id: one, request_kind: 'approval' });
-    // While the request is open the page links to it: no "closed" line.
-    expect(lines(v.events[0], true)).toEqual([]);
-    expect(lines(v.events[1], true)).toEqual([
-      { text: 'approval request asked', at: null, mono: false },
-    ]);
+    expect(v.events[1]).toMatchObject({ request_id: one, request_state: null });
     expect((await requests.decideApproval(rig.seeded.ada, one, { resolution: 'grant' })).ok).toBe(
       true,
     );
     v = await view();
     expect(v.events[0]).toMatchObject({ kind: 'approval', request_id: one });
-    expect(lines(v.events[0])).toEqual([
-      { text: 'one call approved, usable until', at: v.events[0]?.expires_at, mono: false },
-    ]);
     expect(v.events[0]?.expires_at).not.toBeNull();
-    expect(lines(v.events[1])).toEqual([
-      { text: 'approval request (closed)', at: null, mono: false },
-    ]);
     expect((await merge({ pull: 1 })).result.outcome).toBe('allowed');
     v = await view();
     expect(v.events[0]).toMatchObject({ kind: 'call-allowed', approvals_consumed: 1 });
-    expect(lines(v.events[0])).toEqual([{ text: 'approval consumed', at: null, mono: false }]);
 
     // 2. Another call asks; the creator refuses it.
     const two = await asked({ pull: 2 });
@@ -567,9 +549,6 @@ describe('mission session view', () => {
     );
     v = await view();
     expect(v.events[0]).toMatchObject({ kind: 'request', request_state: 'refused' });
-    expect(lines(v.events[0])).toEqual([
-      { text: 'approval request refused by the creator', at: null, mono: false },
-    ]);
 
     // 3. A third asks; the creator opens the gate for the rest of the period. The risk
     //    still reads `approval`, and says until when calls pass.
@@ -582,30 +561,30 @@ describe('mission session view', () => {
     const periodEnd = v.state.kind === 'active' ? v.state.period.end : null;
     expect(periodEnd).not.toBeNull();
     expect(await gateOf()).toMatchObject({ gate: 'approval', gate_open_until: periodEnd });
-    expect(v.events[0]).toMatchObject({ kind: 'gate-opened', risk_ids: [MERGE] });
-    expect(lines(v.events[0])).toEqual([{ text: 'gate open until', at: periodEnd, mono: false }]);
+    expect(v.events[0]).toMatchObject({
+      kind: 'gate-opened',
+      risk_ids: [MERGE],
+      gate_open_until: periodEnd,
+    });
 
     // 4. An edit of the gate on the mission ends the opening; the timeline says both gates.
     await rig.root.missions.service.setGate(rig.seeded.ada, mission.id, MERGE, 'auto');
     await rig.root.missions.service.setGate(rig.seeded.ada, mission.id, MERGE, 'approval');
     v = await view();
     expect(await gateOf()).toMatchObject({ gate: 'approval', gate_open_until: null });
-    expect(v.events.slice(0, 2).map((e) => lines(e))).toEqual([
-      [{ text: 'gate set to approval (was auto)', at: null, mono: false }],
-      [{ text: 'gate set to auto (was approval)', at: null, mono: false }],
+    expect(v.events.slice(0, 2).map((e) => [e.kind, e.gate, e.gate_before])).toEqual([
+      ['gate-changed', 'approval', 'auto'],
+      ['gate-changed', 'auto', 'approval'],
     ]);
 
     // 5. Rotation and revocation say what they did to the tokens.
     await rig.root.missions.service.rotate(rig.seeded.ada, mission.id);
     await rig.root.missions.service.revoke(rig.seeded.ada, mission.id);
     v = await view();
-    expect(lines(v.events[0])).toEqual([{ text: '1 token revoked', at: null, mono: false }]);
+    expect(v.events[0]).toMatchObject({ kind: 'revocation', tokens_revoked: 1 });
     // The rotation names the new token, whose it is, and the one it replaced.
-    expect(lines(v.events[1])).toEqual([
-      { text: `token ${v.events[1]?.token_prefix}…`, at: null, mono: true },
-      { text: 'member ada@example.com', at: null, mono: false },
-      { text: `replaces ${v.events[1]?.replaced_prefix}…`, at: null, mono: true },
-    ]);
+    expect(v.events[1]).toMatchObject({ kind: 'rotation' });
+    expect(v.events[1]?.token_prefix).toMatch(/^[A-Za-z0-9]{8}$/);
     expect(v.events[1]?.replaced_prefix).toMatch(/^[A-Za-z0-9]{8}$/);
     expect(v.events[1]?.holder).toEqual({
       kind: 'member',

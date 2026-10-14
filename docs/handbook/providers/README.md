@@ -2,7 +2,7 @@
 title: Provider plugin handbooks — index
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - plugins/*/src/risk-catalog.yaml
   - plugins/*/src/index.ts
@@ -56,7 +56,7 @@ lists, and the environment of a call is the label of the resource it
 touches (or what the plugin's `envOf` derives). **An unlabelled resource
 cannot run env-scoped operations**: the call is refused with
 `risk-not-accepted`, whatever the mission accepted, until the owner labels
-the resource on the connection page.
+the resource on the account's page (Accounts).
 
 The v4 modelling notes of Railway and SSH (French) are archived as legacy in
 [`railway-ssh.md`](../legacy/railway-ssh.md); both plugins have their own
@@ -92,7 +92,8 @@ and never by analogy with another provider.
 | SSH                                                   | `ssh-key`     | no                                                                                                            | —                                                                                                                                                                                                                                                                                                                                                                                         | remove the connection's public key from `authorized_keys` on the host                                                                                                                                                 |
 
 Each plugin carries its "by hand" sentence (`manualRevocation`), shown in
-the revoke dialog and on the revoked connection. A structural test
+the "Disconnect this account…" dialog and on the page of the disconnected
+account. A structural test
 (`shipped-providers.test.ts`) pins this table: the providers that declare
 an endpoint, the endpoint and its shape; adding one changes the test and
 this table in the same commit.

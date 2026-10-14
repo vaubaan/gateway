@@ -41,7 +41,7 @@ guard), the [store](store.md) (`store.delegations`), the
 
 The page has two halves. **The authorization server**:
 discovery, clients, consent, tokens, revocation, the admission gate of the
-door, the Delegations page. **The door's tools** (section
+door, the "Connected apps" page of Settings. **The door's tools** (section
 [The door's tools](#the-doors-tools)): what an admitted agent can read,
 preview, issue, rotate and revoke, and what the door is structurally unable
 to do.
@@ -301,7 +301,7 @@ only to name the kind of a bearer it refuses, answers such a token as an
 unknown bearer (401) instead of `wrong-credential-kind`; it refuses it either
 way.
 
-`ClientRegistry.decide(actor, id, decision)` — Administration → OAuth clients
+`ClientRegistry.decide(actor, id, decision)` — Administration → Registered apps
 — records the decision and writes `oauth-client-approved` or
 `oauth-client-disabled` (object `oauth-client`). **Disabling revokes every
 delegation the client holds**: the decision, the delegations and their
@@ -545,7 +545,7 @@ dependency of `EndDelegationDeps` and `TokenServiceDeps`) and passes them to
 `recordDelegationEnded`. When that read fails, the revocation and its entry
 stand: `could not list the missions of a delegation revoked for a replay` is
 logged at `error` and the entry carries no `missions_to_review` key — absent,
-not empty. Nothing is stored for the list: the Delegations page derives it
+not empty. Nothing is stored for the list: the "Connected apps" page derives it
 again at every read (`DelegationView.replayed`, `toReview`), so it shrinks as
 the user revokes missions or they expire.
 
@@ -735,7 +735,8 @@ of the call. The same rule is held a second time by
 `delegation` option names another delegation than the mission's), so the door
 cannot reach a wider rotation through its one `rotate` port. `revoke_mission`
 keeps reaching every mission of the user: ending a mission enlarges nothing.
-The human rotates any of their missions on the mission's page.
+The human replaces the key of any of their missions on the mission's page
+("Replace my key").
 
 **Inputs** are Zod schemas, advertised as JSON Schema by `tools/list` and
 validated by the SDK before the method runs; unknown keys are refused
@@ -891,7 +892,7 @@ a real selection of resources is the same function on the whole catalog.
   migration `0001`); **the creator is the user** (`creator_user_id`);
 - the `mission-issued`, `mission-rotated` and `mission-revoked` entries carry
   `user_id` = the user and `delegated_client_id` = the client's public id
-  (spec §8); the Audit page prints "through client …";
+  (spec §8); Activity prints "through an app `<client id>`" on such a line;
 - `MissionOverview.issuedVia` (`delegation_id`, `client_id`, `client_name`)
   is read at every listing by `MissionsRepo.issuersOf` — a join from the
   mission to its delegation to its client. Nothing is copied onto the
@@ -949,7 +950,9 @@ none of the root's modules, services or repositories
 order of the calls and the rules of a policy. The bootstrap kit's instruction
 block ends with "The management door" (`managementDoorSection`,
 `missions/bootstrap-kit.ts`), and `/agent-bootstrap.md` has §7 with the tools
-and how to compose a policy that passes.
+and how to compose a draft that passes the first time; both are written in the
+interface's words (connected app, account, permission, key) around the tool
+names and the fields, which keep the protocol's.
 
 ## The three credentials, tested
 
@@ -966,7 +969,7 @@ with a real mission token, a real delegated token and a real web session:
   mission, revoking a delegation, answering a consent → 401);
 - a delegated token cannot answer a request, even next to the creator's
   cookie (`requests.handlers.decide` → 403 `wrong-credential-kind`), nor open
-  `/r/<id>` or the inbox.
+  `/r/<id>` or `/waiting`.
 
 ## Store (`store/repositories/delegations.ts`, migration `0006`)
 
@@ -1091,7 +1094,8 @@ claude mcp add --transport http vaubaan-manage <public_url>/mcp/manage
 ```
 
 The browser opens on the instance: sign in, read the consent screen, click
-Authorize. The Delegations page then lists the client.
+Authorize. Settings → Connected apps (`/settings/connected-apps`) then lists
+the app.
 
 By hand, with `curl` (a public client and a loopback redirect):
 
@@ -1119,9 +1123,9 @@ curl -s -X POST "$BASE/oauth/token" -d grant_type=authorization_code -d client_i
   the client forget its registration and connect again.
 - **"Invalid authorization request" page.** The `redirect_uri` is not one the
   client registered. Compare with `SELECT uri FROM oauth_client_redirect_uris`.
-- **"Waiting for an operator".** The client's redirect URIs are not all on
+- **"Waiting for an administrator".** The client's redirect URIs are not all on
   the loopback interface, or `auto_approve_loopback` is false: approve it
-  under Administration → OAuth clients.
+  under Settings → Administration → Registered apps (`/admin/oauth-clients`).
 - **`invalid_grant` at the first exchange.** The code is 60 seconds old, was
   already used, or the verifier does not match. The log line `oauth request
 refused` carries the error code and the client id; the description in the
@@ -1132,9 +1136,9 @@ refused` carries the error code and the client id; the description in the
   replaced, or the token leaked. `delegated tokens issued` lines with
   `reuse_window: true` just before tell the first case. The audit entry `delegation-revoked` carries the reason; the log
   has `delegation revoked` at `warn`. The missions the delegation issued were
-  not revoked: the entry (`after.missions_to_review`) and the banner on the
-  Delegations page list the ones still running, for the user to revoke or to
-  rotate on each mission's page. A client authorized again holds a new
+  not revoked: the entry (`after.missions_to_review`) and the red note above
+  the list of "Connected apps" name the ones still running, for the user to
+  stop or to replace the key of, on each mission's page. A client authorized again holds a new
   delegation and cannot rotate them.
 - **`server_error` (500) at the token endpoint.** A write failed and the grant
   was rolled back: the log has `oauth request failed unexpectedly` with the
@@ -1146,7 +1150,7 @@ refused` carries the error code and the client id; the description in the
 - **An agent is refused 401 at the door with a token that has not expired.**
   Its client is no longer `approved`: the policy was tightened, an operator
   disabled it, or its metadata document added a non-loopback redirect URI.
-  Administration → OAuth clients shows the status and who decided.
+  Administration → Registered apps shows the status and who decided.
 - **`wrong-credential-kind` at `/mcp/manage`.** The agent is configured with
   its mission token on the management URL; the hint names the right door.
 - **A tool answers `draft-refused`.** `error.uncovered` lists, per
@@ -1163,7 +1167,7 @@ refused` carries the error code and the client id; the description in the
   this delegation did not issue it: the user issued it in the interface,
   another client did, or an earlier authorization of the same client did
   (`issued_via.this_client` true, `this_delegation` false in
-  `list_my_missions`). The user rotates it on the mission's page; the client
+  `list_my_missions`). The user replaces its key on the mission's page; the client
   may revoke it or issue a new one.
 - **A tool answers `Output validation error …`.** The answer departed from the
   schema the tool advertises, and the SDK replaced it — after the tool ran:
@@ -1321,9 +1325,9 @@ entry).
 
 Browser (`tests/e2e/v5/delegate-agent.spec.ts`): consent in a real browser,
 then the agent reads the authority, previews, issues, uses the mission token
-on `/mcp`; the user sees the mission marked delegated on Missions, the
-mission page and the Delegations card, revokes the delegation, keeps the
-mission. A second test: the page is part of Settings ("Connected apps" is current in its
+on `/mcp`; the user sees the mission marked "prepared by … for you" on Missions and
+on the mission page, finds the app under Connected apps, disconnects it, keeps
+the mission. A second test: the page is part of Settings ("Connected apps" is current in its
 local navigation), and an empty page
 says how to authorize an agent.
 

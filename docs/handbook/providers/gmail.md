@@ -2,7 +2,7 @@
 title: Gmail provider — experimental plugin on the v5 SDK
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - plugins/gmail/src/
   - plugins/gmail/tests/unit/
@@ -197,7 +197,7 @@ and `sensitive_labels` on the resource (`GMAIL_METADATA_KEYS`).
 
 ## Tests
 
-`npx vitest run plugins/gmail` — 406 tests : `plugin.test.ts` (26 : SDK kit,
+`npx vitest run plugins/gmail` — 407 tests : `plugin.test.ts` (27 : SDK kit,
 experimental shape, coverage through a tool-exposing variant, mailbox
 selection, credential spec, absence of a plugin refresh, discovery and execute
 against `mockFetch`, presets), `risk-catalog.test.ts` (45 : loaded catalog

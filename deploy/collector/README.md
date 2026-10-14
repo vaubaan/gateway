@@ -2,7 +2,7 @@
 title: Community telemetry collector
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - deploy/collector/schema.sql
   - packages/telemetry/src/report.ts
@@ -97,7 +97,8 @@ Readable by anyone holding the project's publishable key:
 | `validated`      | both thresholds are met for this row                                |
 
 A gateway reads the rows whose `tool` is null for the plugins it registers
-and shows the status of the version it runs on each connection. It does so
+and shows the status of the version it runs on the page of each account and
+in Reference. It does so
 only while its own telemetry is enabled, caches the answer for six hours and
 shows nothing when the collector does not answer.
 

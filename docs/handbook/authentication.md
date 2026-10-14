@@ -83,7 +83,7 @@ apps/gateway/src/app/
   api/auth/bootstrap/route.ts            POST /api/auth/bootstrap
   api/admin/identity-provider/route.ts   POST /api/admin/identity-provider
   admin/bootstrap/page.tsx               /admin/bootstrap (outside the guard)
-  admin/(guarded)/layout.tsx             the shell with the local navigation of Settings, or the "Not an operator" page — not the boundary
+  admin/(guarded)/layout.tsx             the shell with the local navigation of Settings, or "You do not administer this gateway" — not the boundary
   admin/(guarded)/page.tsx               /admin
   admin/(guarded)/identity-provider/page.tsx
   admin/(guarded)/users/page.tsx         /admin/users
@@ -97,7 +97,7 @@ The route handlers are one-line adapters over `root.auth.handlers` (and
 call `currentPrincipal()`, under `/admin` `requireOperator()`, and under
 `(app)` `currentUser()` (an identified user; `null` for the bootstrap
 operator, for whom the page renders `NeedsUser`) or `requirePrincipal()` (any
-session, the Audit page), and render.
+session: Activity, the reference, Settings), and render.
 Everything that decides lives under `server/auth` and `server/users` and is
 tested without Next.
 
@@ -125,8 +125,8 @@ The **admin rule** is `InstanceConfig.admin` (`admin.group` and/or
 `admin.emails`, required by the loader): `isOperator({ email, groupNames },
 rule)` is true for a member of the named IdP group or a listed email
 (lower-cased compare). Only groups the IdP claimed count (`groups.source =
-'idp'`): membership of a local group, kept by an operator in Administration →
-Groups ([authority](authority.md)), never makes anyone an operator, and a
+'idp'`): membership of a local group, kept by an operator in Settings →
+Teams (`/admin/groups`, [authority](authority.md)), never makes anyone an operator, and a
 local group cannot take the rule's name. It is evaluated by
 `currentAuthority()` from the user's
 rows in `group_members` on **every** `authenticate()`, never from the session
@@ -148,7 +148,7 @@ status nor passes the domain filter.
 `source`:
 
 - `file` — `InstanceConfig.idp` is set (`idp.*` / `VAUBAAN_IDP_*`). It wins;
-  the Admin page is read-only (`readOnly`), `save()` refuses.
+  the Sign-in page of Settings is read-only (`readOnly`), `save()` refuses.
 - `store` — the operator saved the settings from `/admin/identity-provider`.
   Keys in `instance_config`: `idp.issuer`, `idp.client_id`,
   `idp.client_secret` (**sealed** by the `Encryptor`, associated data
@@ -479,8 +479,8 @@ rendered without its layout. So:
 - each route handler under it authorizes in its host-agnostic handler
   (`guardMutation(…, 'operator')`) and answers 401/403 JSON bodies;
 - the guarded layout renders the Administration shell (`AdminShell`), the
-  same 401 redirect and the "Not an operator" page that names the admin
-  rule, which is what a non-operator sees on a normal navigation.
+  same 401 redirect and the note "You do not administer this gateway", which
+  names the admin rule and is what a non-operator sees on a normal navigation.
 
 `tests/unit/app/admin-guard.test.ts` discovers every `page.tsx` and
 `route.ts` under `(guarded)`, so a page added without the guard fails it.
@@ -489,7 +489,8 @@ rendered without its layout. So:
 
 The instance keeps no directory: a user exists once they have signed in, and
 the identity provider decides who may sign in. An operator ends a user's
-standing on the instance itself, without the IdP, from Administration → Users
+standing on the instance itself, without the IdP, from Settings → People
+(`/admin/users`)
 (ADR [operator-deactivates-a-user](../decisions/operator-deactivates-a-user.md)).
 `UserAdminService` (`server/users/service.ts`, `root.users.service`) does not
 authorize: its two handlers do (`guardMutation(…, 'operator')`), and pass the

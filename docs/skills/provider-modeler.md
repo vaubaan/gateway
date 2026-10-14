@@ -2,7 +2,7 @@
 title: Provider modeler — modelling a new provider plugin
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - plugins/README.md
   - plugins/_template/src/
@@ -106,6 +106,12 @@ The numbers on the right are the steps of the kit.
      `approval` gates the call;
    - an environment-dependent risk is one entry with `acceptable_in_envs`,
      never two ids;
+   - `label`, `reason` and a preset's `description` are shown verbatim in
+     Reference and in the dialogs of a mission, where a risk is called a
+     permission, a gate "runs freely" or "ask me first" and a budget
+     "limits": a sentence that addresses the reader about the product uses
+     those words, a sentence about the provider keeps the provider's; ids,
+     keys and structure keep the contract's names;
    - `presets:` is mandatory. Every entry is an explicit risk id of this
      catalog (env-qualified where the risk is env-scoped) with a numeric
      `quota`, a `rate_limit` and a `gate`. **Never a wildcard or a sentinel,

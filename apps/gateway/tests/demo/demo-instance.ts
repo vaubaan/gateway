@@ -302,7 +302,7 @@ export async function startDemo(options: DemoOptions): Promise<RunningDemo> {
       throw new Error('another composition root already exists in this process');
     }
 
-    progress('seeding people, connections, missions and calls');
+    progress('seeding people, accounts, missions and calls');
     const seeded = await seedDemo({ root, idp, providers });
     rateLimiter.seeding = false;
 

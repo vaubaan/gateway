@@ -8,10 +8,9 @@
  * - `Dot` — the dot alone, next to a word that already says the state.
  * - `Tag` — a small squared label for a fact that is not a state: an
  *   environment (`staging`, `prod`), a short code.
- * - `Badge` — the neutral inline label older pages use; same tones as before.
+ * - `BadgeTone`, `toneOfBadge` — the tone names of the first interface
+ *   (`success`, `warning`, `danger`), which `Callout` still accepts.
  */
-import type { CSSProperties } from 'react';
-
 import type { Tone } from '@/lib/vocabulary';
 
 import styles from './Badge.module.css';
@@ -108,32 +107,4 @@ export function Tag({
 export function EnvTag({ env }: { env: string | null | undefined }) {
   if (!env) return <Tag dashed>no label</Tag>;
   return <Tag tone={ENVIRONMENT_TONE[env.toLowerCase()] ?? 'neutral'}>{env}</Tag>;
-}
-
-export function Badge({
-  tone = 'neutral',
-  children,
-  mono = false,
-  style,
-  className,
-}: {
-  tone?: BadgeTone;
-  children: React.ReactNode;
-  mono?: boolean;
-  style?: CSSProperties;
-  className?: string;
-}) {
-  const classes = [
-    styles.tag,
-    styles[`tag_${TONE_OF_BADGE[tone]}`],
-    mono ? styles.mono : '',
-    className ?? '',
-  ]
-    .filter(Boolean)
-    .join(' ');
-  return (
-    <span className={classes} style={style}>
-      {children}
-    </span>
-  );
 }

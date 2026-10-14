@@ -108,12 +108,12 @@ Presets are default suggestions copied into a mission policy at issuance;
 1. Railway → Workspace → **Developer → Auth apps → New app**
    (`https://railway.com/workspace/developer/apps/new`). Name it after your
    gateway instance. Leave **Device Flow off**.
-2. Redirect URI: the instance callback the gateway shows on the Connect
-   page (Railway requires `https://`; for loopback use `https://127.0.0.1`,
+2. Redirect URI: the instance callback the gateway shows in
+   Settings → Administration → Company apps (Railway requires `https://`; for loopback use `https://127.0.0.1`,
    never `localhost`).
 3. Copy `client_id` and `client_secret` into the instance configuration
-   under the Railway provider app (Admin → Provider apps, or the mounted
-   config file). The host uses them for the authorization-code flow and
+   under the Railway provider app (Settings → Administration → Company apps, or the
+   mounted config file). The host uses them for the authorization-code flow and
    for refresh; the plugin reads neither.
 
 The gateway then runs the authorization-code flow declared by
@@ -128,7 +128,7 @@ after an `UpstreamAuthError`.
 ## Development
 
 ```
-npx vitest run plugins/railway     # 427 tests, no network
+npx vitest run plugins/railway     # 406 tests, no network
 npx tsc -p plugins/railway/tsconfig.json --noEmit
 ```
 
