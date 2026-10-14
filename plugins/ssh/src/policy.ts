@@ -250,6 +250,7 @@ const GREP_RECURSIVE = new Set([
 const GREP_PATTERN_OPTIONS = new Set(['e', 'f', 'regexp', 'file']);
 /** The one tree a recursive `grep` may walk and stay a plain read. */
 const isLogPath = (arg: string): boolean =>
+  // nosemgrep: detect-redos -- segments are joined by a literal `/` the segment class excludes: linear
   /^\/var\/log(?:\/[\w.@+-]+)*\/?$/.test(arg) && !arg.split('/').includes('..');
 
 const PGREP: OptionSpec = {

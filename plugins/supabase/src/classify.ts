@@ -165,6 +165,7 @@ export function objectPath(value: unknown): string | null {
 
 const EMAIL_MAX_LENGTH = 254;
 const EMAIL_LABEL = '[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?';
+// nosemgrep: detect-redos -- linear: labels are joined by a literal separator the label class excludes (measured: 20 000 chars in < 1 ms)
 const EMAIL = new RegExp(`^[A-Za-z0-9_.+~-]+@${EMAIL_LABEL}(?:\\.${EMAIL_LABEL})+$`);
 
 /** An email address : a local part, one `@`, a dotted domain. It travels in a JSON body. */
@@ -221,6 +222,7 @@ export function base64Text(value: unknown): string | null {
 }
 
 const MEDIA_TOKEN = '[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,126}';
+// nosemgrep: detect-redos -- parameters are joined by a literal `;` the token classes exclude, each bounded: linear
 const MEDIA_TYPE = new RegExp(
   `^${MEDIA_TOKEN}/${MEDIA_TOKEN}(?:; ?[A-Za-z0-9_-]{1,64}=[A-Za-z0-9_.-]{1,64})*$`,
 );

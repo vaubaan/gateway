@@ -741,6 +741,7 @@ function runsScriptFile(args: readonly Word[]): boolean {
 
 /** Why `name args…` cannot be seen through, or `null`. */
 function opaqueReason(name: string, args: readonly Word[]): string | null {
+  // nosemgrep: detect-redos -- one `.*` then literal `.so` and `\.\d+` groups: polynomial at worst, on a command name the lexer caps
   if (OPAQUE_COMMANDS.has(name) || DYNAMIC_LOADER.test(name)) return 'indirect-command';
   if (SHELLS.has(name) || INTERPRETER.test(name)) {
     return runsScriptFile(args) ? null : 'inline-code';

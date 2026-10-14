@@ -33,6 +33,7 @@ const BARE_NAME_CHARS = /^[a-zA-Z0-9_/-]+$/;
 export const BRACKET_IDENT_CHAR_CLASS = '[a-zA-Z0-9_./~-]';
 /** Inside-bracket ident-or-glob : ident chars plus `*` for glob patterns.
  *  Used for both single ident and list entries. */
+// nosemgrep: detect-redos -- one character class or a literal star, repeated: no overlap, linear
 const BRACKET_IDENT_OR_GLOB = new RegExp(`^(?:${BRACKET_IDENT_CHAR_CLASS}|\\*)+$`);
 
 export class SliceParseError extends Error {

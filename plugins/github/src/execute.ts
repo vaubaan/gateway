@@ -286,6 +286,7 @@ function octokitLog(logger: PluginLogger | undefined): OctokitLog {
     (level: 'debug' | 'info' | 'warn' | 'error') =>
     (...parts: unknown[]) => {
       if (!logger) return;
+      // nosemgrep: unsafe-dynamic-method -- level is one of the four literals of the closure above
       logger[level](parts.map(String).join(' '), { source: 'octokit' });
     };
   return { debug: to('debug'), info: to('info'), warn: to('warn'), error: to('error') };

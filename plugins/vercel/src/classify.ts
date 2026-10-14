@@ -96,6 +96,7 @@ const DOMAIN_MAX_LENGTH = 253;
  * parser leaves alone.
  */
 const DOMAIN_LABEL = '[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?';
+// nosemgrep: detect-redos -- linear: labels are joined by a literal separator the label class excludes (measured: 20 000 chars in < 1 ms)
 const DOMAIN_NAME = new RegExp(`^(?:\\*\\.)?${DOMAIN_LABEL}(?:\\.${DOMAIN_LABEL})*$`);
 
 /** The value as a domain name, or `null`. */

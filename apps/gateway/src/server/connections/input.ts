@@ -47,6 +47,7 @@ export function readCredentialFields(
       invalid[field.name] = 'too-long';
       continue;
     }
+    // nosemgrep: detect-non-literal-regexp -- pattern is a plugin's credential-field declaration (code shipped in the image), not input
     if (field.pattern && !new RegExp(field.pattern).test(raw)) {
       problems.push(`${field.label} does not have the expected format`);
       invalid[field.name] = 'format';

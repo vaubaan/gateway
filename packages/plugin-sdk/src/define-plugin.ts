@@ -728,6 +728,7 @@ function levelIssues(
 function isRegExpSource(source: string): boolean {
   if (source.length === 0) return false;
   try {
+    // nosemgrep: detect-non-literal-regexp -- validates that a plugin's declared pattern compiles; nothing is matched here
     new RegExp(source);
     return true;
   } catch {

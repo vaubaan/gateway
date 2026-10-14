@@ -180,6 +180,7 @@ const INACTIVE_MISSION_REASON: Readonly<
 export function checkMissionActive(ctx: MissionContext, now: Date): Refusal | null {
   const { status, expires_at } = ctx.mission;
   if (status !== 'active') {
+    // nosemgrep: unsafe-dynamic-method -- status is a closed MissionStatus union and the table is total over it
     return refuse.missionInactive({ status, reason: INACTIVE_MISSION_REASON[status](expires_at) });
   }
   if (expires_at === null) return null;
@@ -474,6 +475,7 @@ export function auditReason(reason: string, args: unknown): string {
     values.length === 0
       ? reason
       : reason.replace(
+          // nosemgrep: detect-non-literal-regexp -- an alternation of escaped literals, no quantifier: linear
           new RegExp(
             values.map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'),
             'g',

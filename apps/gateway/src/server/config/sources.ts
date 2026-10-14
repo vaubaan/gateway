@@ -609,6 +609,7 @@ export function getPath(tree: RawTree, path: string): unknown {
   let node: unknown = tree;
   for (const part of path.split('.')) {
     if (!isPlainObject(node)) return undefined;
+    // nosemgrep: prototype-pollution-loop -- read-only walk of the operator's configuration tree; nothing is assigned
     node = node[part];
   }
   return node;
