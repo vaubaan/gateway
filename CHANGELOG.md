@@ -216,6 +216,9 @@ names, and the notes about them do too.
   links GitHub's comparison. Refused, with a sentence: atomic pushes, push options,
   signed pushes, more than 50 refs, a pack over `git.max_pack_mb` (default 200),
   a push GitHub cannot compare in full (300 files or 250 commits per ref), Git LFS.
+  What a push brings is reviewed from the nearest branch it was built on, so a new
+  branch off a line of work that diverged from the default branch is not refused for
+  the size of that divergence.
   New configuration keys `git.max_pack_mb` and `git.request_timeout` (default
   10 minutes). The setup kit has a fourth step (git's configuration and the
   remotes), the mission page a "Git" block (can, asks first, cannot), the GitHub

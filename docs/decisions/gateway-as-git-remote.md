@@ -193,6 +193,48 @@ could overwrite a push that landed in between. Force and delete therefore go
 through receive-pack, whose expected old value GitHub checks atomically;
 create and fast-forward keep the REST writes, which are safe without it.
 
+### D4 ter. The base of the review: what no branch already holds
+
+A push brings the commits of `new` that no branch at GitHub already holds,
+and only those are reviewed. Comparing a new branch with the default branch,
+as the first version did, measured the distance between two lines of work
+rather than the push: on the dogfood repository, whose default branch (`main`,
+v4) diverged from `v5` by thousands of files, a branch with one commit on top
+of `v5` was refused as too large to review.
+
+The base is chosen among the nearest **existing branch heads** in `new`'s
+history: the repository's branch heads come from GitHub's upload-pack
+advertisement, `new`'s history from `GET commits?sha=<new>` (newest first, at
+most 3 pages of 100), the first 3 heads met are compared with `new`, and the
+comparison that brings the fewest commits is reviewed — the commits and files
+of `base..new`, every commit of it read for workflow changes. A create with no
+branch in reach is compared with the default branch, as before. An update is
+compared from `old`; when `old..new` brings more than one commit (a merge of a
+moved branch, a rebase onto it), the nearest branch heads other than `old` are
+compared too and the narrowest range is kept. A force-push also compares
+`new...old`, what the rewrite takes back, as before.
+
+Why a base the gateway picks cannot hide anything:
+
+- the review covers every commit of `base..new` — every commit reachable from
+  `new` and not from `base`;
+- `base` is a branch head at GitHub at the time of the review, so every commit
+  it leaves out is held by that branch at GitHub already: it came through the
+  gateway (reviewed then), through a tool call (classified then), or from a
+  person, outside any mission;
+- the candidates are `refs/heads/*` only, as GitHub lists them: a push waiting
+  for an approval lives under a temporary ref and is never a base, so a branch
+  built on it is reviewed for the pending commits too (test "a pending push is
+  never a base");
+- the history's order rests on commit dates, which an agent can forge; a
+  forged date can only make the search miss a base, and the review then
+  starts from the default branch or from `old` — a larger range, never a
+  smaller one.
+
+The cost is two GitHub requests and up to three comparisons for a create, and
+for an update that brings more than one commit; one commit on top of `old` is
+reviewed from `old` alone.
+
 ### D4 bis. The capabilities the door advertises
 
 | Capability              | Advertised                | Why                                                                                                                                                          |
