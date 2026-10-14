@@ -175,7 +175,7 @@ export function demoPage(title: string, body: string): string {
 </style>
 </head>
 <body>
-<div class="banner">DEMO — simulated identity provider and providers, no data leaves this machine</div>
+<div class="banner">DEMO — simulated identity provider and services, no data leaves this machine</div>
 <main>
 ${body}
 </main>

@@ -7,7 +7,7 @@ import { DEMO_PEOPLE } from './people';
 import { SMALL_QUOTA, type SeedSummary } from './seed';
 
 export const DEMO_BANNER =
-  'DEMO — simulated identity provider and providers, no data leaves this machine';
+  'DEMO — simulated identity provider and services, no data leaves this machine';
 
 export interface TourInput {
   readonly origin: string;

@@ -2,7 +2,7 @@
 title: Missions — authority, issuance, presets, resources, members and tokens, bootstrap kit
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - apps/gateway/src/server/authority/
   - apps/gateway/src/server/missions/
@@ -14,7 +14,7 @@ tracks:
   - apps/gateway/src/app/api/missions/
   - apps/gateway/src/app/agent-bootstrap.md/
   - apps/gateway/src/components/shell/AppShell.tsx
-  - apps/gateway/src/components/risk/
+  
   - apps/gateway/src/server/providers/
   - apps/gateway/tests/integration/missions/
   - apps/gateway/tests/e2e/v5/issue-mission.spec.ts
@@ -83,7 +83,7 @@ apps/gateway/src/server/missions/
   mission-service.ts     MissionService: issuanceContext / preview / issue / draftFrom / duplicate /
                          rotate / revoke / setGate / verifyToken / provenToken / access / list / get /
                          stateOf / stateAfterRefusal / kitOf; gateEditBlockedBy(), tokenHolderOf()
-  orphan-reason.ts       explainOrphan() — the sentences of the orphaned banner on /missions/<id>          (pure)
+  orphan-reason.ts       explainOrphan() — the sentences of the note of an orphaned mission on /missions/<id> (pure)
   handlers.ts            Request → Response handlers of /api/missions/**
   index.ts               createMissionsModule(deps) → root.missions; server-only barrel
   testing.ts             ACME_CATALOG, acmeConnection(), seedConnection(), catalogEnvs() — tests only
@@ -420,10 +420,12 @@ actor and the creator. `MissionOverview.issuedVia` (`MissionIssuer`:
 delegated mission, read through `store.missions.issuersOf`: by `get` for any
 reader, by `list` for the missions the reader created only (a mission shared
 with a member is listed with `issuedVia: null`);
-it is `null` for a mission issued in the interface. `/missions` marks such a
-mission with a `delegated` badge and the client's name; `/missions/<id>` adds
-an "Issued by" line with the client id, a link to `/delegations#<delegation_id>`
-and the reminder that the name is the one the application gave itself.
+it is `null` for a mission issued in the interface. `/missions` writes
+"prepared by `<client name>` for you" under the name of such a mission;
+`/missions/<id>` adds one sentence (`data-testid="issued-via"`): "Prepared for
+you by `<client name>`, a connected app" — a link to
+`/settings/connected-apps#<delegation_id>` — with the client id and the
+reminder that the name is what the app said about itself.
 `duplicate` also takes `overrides` for `name`,
 `period` and `expires_at`, and answers `not-found` for a mission that is not
 the creator's.
@@ -439,10 +441,10 @@ thing:
 
 - `MissionService.get` (`detailConnections`) lists, per connection, the stored
   ids that are not stale — an empty list for a connection that had no resource
-  at issuance, whatever it discovered since; the page then shows "no resource
-  (account-level tools only)";
-- the bootstrap kit (issuance, rotation, revisited page) is built from that same
-  list, so the agent is never told it may touch a resource the door refuses
+  at issuance, whatever it discovered since; the page then shows "the account
+  itself, no resource";
+- the bootstrap kit ("Setup kit" on the pages: issuance, rotation, revisited page)
+  is built from that same list, so the agent is never told it may touch a resource the door refuses
   with `resource-not-in-mission`.
 
 A hidden resource selected on purpose stays reached (hiding is a listing
@@ -459,7 +461,8 @@ preference of the owner); a stale one is dropped by all three.
   _it_ is issued, while the source keeps reaching none.
 - **`rotate`** — creator only; the mission must be `active` and unexpired
   (`deriveMissionState`); the **creator's own** token becomes `rotated` and
-  every other holder's token is untouched ("Members and tokens" below); audit
+  every other holder's token is untouched ("Members and tokens" below; "Replace
+  my key" on the mission page); audit
   `mission-rotated`; a `rotation` session event when the session exists.
   A mission revoked while the hash was computed is caught by the insert
   (`TokenNotIssuableError`): the answer is `inactive` with
@@ -548,8 +551,10 @@ store's names are its contract, so consumers alias them (`…Record`).
 
 ## Members and tokens — `MissionTeamService` (`team-service.ts`)
 
-Spec §0 "Mission member", "Mission token"; §7.9 bis "Work on a mission as a
-team". ADR
+What the mission page shows as **People and keys**: a member is a _teammate_
+there, a member token a _key_, a named token a _machine key_ (the words are in
+`lib/vocabulary.ts`; this section keeps the protocol's). Spec §0 "Mission
+member", "Mission token"; §7.9 bis "Work on a mission as a team". ADR
 [mission-members-and-per-holder-tokens](../decisions/mission-members-and-per-holder-tokens.md).
 Built by the module as `root.missions.team`.
 
@@ -589,7 +594,7 @@ operator, so its audit entries are the record.
 **What a member can and cannot do.** A member reads the mission, its session
 and its team, and manages their own token. They cannot edit the mission, its
 gates, its members or its named tokens, nor see or answer its requests:
-`MissionService` mutations and `RequestService` (`own`, the inbox) know the
+`MissionService` mutations and `RequestService` (`own`, `inbox`) know the
 creator only, and the team service answers `not-found` to a member for the
 creator's acts (`tests/integration/missions/team.test.ts` tries each and
 compares the store before and after). `MissionDetail.gates_editable` is
@@ -1126,18 +1131,17 @@ it waits), "approved", "runs freely", "set to “ask me first”", "limits reset
 "limit raised", "given more time", "key generated", "key replaced", "key
 revoked", "mission stopped" — with its detail lines (the refusal code in
 mono, an instant the page prints in the reader's time zone, a masked key). A
-kind a later version wrote is printed as it is stored. `eventDetailLines`
-(`server/audit`) is the earlier wording of the same events and is no longer
-read by a page.
+kind a later version wrote is printed as it is stored. The server holds no
+wording of these events: the page words the typed fields of
+`SessionEventView`.
 
-### How a risk is explained elsewhere (`components/risk/RiskExplain.tsx`)
+### What a permission row reads from the catalog
 
-The mission pages no longer use it: a permission is a `PermissionRow` there.
-No page uses it any more (the "Give access" dialog and the reference were
-redesigned too); the file still exports `RiskExplain`, `VectorStrip`, `VectorLegend`, `RiskIdLink`,
-`RiskClassTag`, `RiskReason`, `RiskMarkers`, `RiskMarkerNotes`.
+A permission is a `PermissionRow` on every page (`components/ui`); the
+explanation components of the first interface (`components/risk/`) were
+deleted with the last page that imported them.
 
-`CatalogRisk` carries what both need: `vector` (resolved for the id's
+`CatalogRisk` carries what a row needs: `vector` (resolved for the id's
 environment) and `kind` (`read` when every pattern of the entry ends in `.R`,
 `destructive` when the vector says `irreversible`, else `write`). `kind` only
 groups a list; like the severity, nothing is decided from it. The mission
@@ -1196,10 +1200,12 @@ the only path this file writes down; the management endpoint is built from
 /agent-bootstrap.md` (`app/agent-bootstrap.md/route.ts`, static, public,
 cached five minutes) serves `content.md`, the generic companion of the kit
 (no instance URL in it); five tests check that it documents every refusal
-code, the management door, sub-agents and the agent label, that a token has
-one holder and what a stopped token means, and that it names no instance.
-That page still uses the earlier words (token, risk, budget): it was not part
-of the redesign of the mission pages.
+code, the management door, sub-agents and the agent label, that a key has
+one holder and what a stopped key means, and that it names no instance.
+Like the kit, the page is written in the interface's words (key, permission,
+limit, account, teammate, machine key, connected app) around the protocol's
+names, and opens with a note that maps the two sets; its §4 is "One set of
+limits, however many agents or keys".
 
 On the pages the kit is `KitSteps` (`bootstrap-kit-view.tsx`): four numbered
 steps — "Put the key in the agent's environment", "Point the agent at the
@@ -1225,10 +1231,10 @@ and resources are read through the store repositories only
 
 ## Tests
 
-Unit, beside the code (186): `authority/authority-service.test.ts` (20),
+Unit, beside the code (165): `authority/authority-service.test.ts` (20),
 `missions/preview.test.ts` (44), `catalog-view.test.ts` (21), `summary.test.ts`
 (8), `bootstrap-kit.test.ts` (16), `orphan-reason.test.ts` (4), `token.test.ts`
-(8, with the draft schema), `app/(app)/missions/new/form-state.test.ts` (40),
+(10, with the draft schema), `app/(app)/missions/new/form-state.test.ts` (40),
 `app/(app)/missions/message-of.test.ts` (2: the sentence a mission page shows
 for a refusal of the mission API).
 
@@ -1236,8 +1242,8 @@ Also beside the code: `missions/token-name.test.ts` (23: what a name may be)
 and `store/membership.test.ts` (12: each membership, and who is on the
 mission).
 
-Integration, `tests/integration/missions/` (89) on the real root over
-`:memory:`: `team.test.ts` (27: members added, offered, removed and added
+Integration, `tests/integration/missions/` (95) on the real root over
+`:memory:`: `team.test.ts` (28: members added, offered, removed and added
 again; a member's own token generated, rotated, revoked; named tokens; the
 mission revoked; the session events; each thing a member cannot do, with the
 store compared before and after; requests not seen and not answered; the
@@ -1282,8 +1288,8 @@ specs share are in `tests/e2e/v5/mission-pages.ts`.
 ## How to debug
 
 - **A resource is missing from the list, or cannot be ticked** — hidden
-  resources are listed unticked; a disabled one is stale: refresh discovery on
-  the Connections page.
+  resources are listed unticked; a disabled one is stale: use "Refresh" on the account's page
+  (`/accounts/<id>`).
 - **`connection-unknown` for a connection that exists** — the user is not its
   owner (or no longer a member of the owner group), the connection is `revoked`,
   or its provider has no registered plugin (`root.registry.ids`).
@@ -1294,20 +1300,22 @@ specs share are in `tests/e2e/v5/mission-pages.ts`.
 - **Calls are refused `risk-not-accepted` on one resource only** — read the
   preview's `notices`: the resource has no environment label, or a label the
   catalog does not know; env-scoped risks can never be touched on it. Label it
-  on the Connections page. The line of the notice on the creation screen
+  on the account's page. The line of the notice on the creation screen
   (`noticeHeadline` in `mission-form.tsx`) and the notice's own message name
   the resource as its owner named it; its ref is in `resource_refs` and on
-  the connection's page.
-- **A preset fills fewer risks than it lists** — the preset's counts say "N
-  entries of the preset left out here"; spread its lists out ("Show what it
-  allows, with quotas") and read "In the preset, left out here": each entry
-  with its reason — outside the authority, or needing a resource labelled with
-  an environment nobody labelled (Connections page).
+  the account's page.
+- **A preset fills fewer risks than it lists** — under the preset's counts
+  a line says "N permissions of the preset left out here: …" with the reasons
+  (`describeSkipped`): outside what the person may allow, or needing a
+  selected resource labelled with an environment nobody labelled (the
+  account's page). A preset that would yield nothing has a dashed chip that
+  says why.
 - **`unknown-risk` on `provider.name` of an env-scoped risk** — an explicit
   policy must say `provider[env].name`.
-- **Issue stays disabled** — the list under the bottom bar names every blocker;
-  an empty quota field is `missing-budget`.
-- **A mission shows `orphaned`** — the banner on its page gives the cause; it is
+- **"Create mission" stays disabled** — the list at the foot of the rail
+  (`data-testid="issues"`) names every blocker; an empty limit field is
+  `missing-budget`.
+- **A mission shows `orphaned`** ("Needs an owner") — the note on its page gives the cause; it is
   computed on that page load, so reload after the owner shared again or after a new
   sign-in. Nothing in the `missions` table says `orphaned`: the row is `active`.
   [authority](authority.md), "How to debug".
@@ -1315,18 +1323,18 @@ specs share are in `tests/e2e/v5/mission-pages.ts`.
   generated a newer one; `retired/revoked`: it was revoked on its own, or the
   mission was; `retired/holder-removed` / `holder-deactivated`: its member is
   no longer a member, or no longer an active user; `unknown`: wrong instance,
-  truncated secret, or not a `vbn_live_` key. The mission page's "Members and
-  tokens" lists the tokens that work now.
+  truncated secret, or not a `vbn_live_` key. The mission page's "People and
+  keys" lists the keys that work now.
 - **A member does not see the mission** — `access` wants `membershipOf` to
   answer `member`: a current row in `mission_members` (`removed_at IS NULL`)
   and `users.status = 'active'`.
-- **"No token can be generated now"** — the mission does not serve calls
+- **"No key can be made now: the mission does not serve calls."** — the mission does not serve calls
   (revoked, expired, orphaned): `generateToken` and `createNamedToken` answer
   `mission-inactive`. Revoking a token and removing a member still work.
 - **`generateToken` answers 404 to somebody who was reading the mission a
   moment ago** — they were removed or deactivated while the token was being
   hashed: the store refused the insert (`holder-not-a-member`).
-- **A gate button shows on an expired mission** — by design: its gates stay
+- **The "ask me first" switch shows on an expired mission** — by design: its gates stay
   editable, and `approval` asked again there closes an opening of the current
   period.
 - **A `mission-token-revoked` entry with `reason: 'member-removed'` right
