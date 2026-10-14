@@ -6,6 +6,7 @@
 
 export const LOGIN_ERROR_CODES = [
   'idp-not-configured',
+  'provider-unknown',
   'discovery-failed',
   'login-expired',
   'state-mismatch',
@@ -13,6 +14,7 @@ export const LOGIN_ERROR_CODES = [
   'claims-missing',
   'email-not-verified',
   'email-domain-not-allowed',
+  'not-invited',
   'groups-overage',
   'groups-unavailable',
   'account-deactivated',
@@ -28,6 +30,8 @@ export function isLoginErrorCode(raw: string): raw is LoginErrorCode {
 /** What the login page says for each code. One sentence, no IdP detail. */
 export const LOGIN_ERROR_MESSAGES: Readonly<Record<LoginErrorCode, string>> = {
   'idp-not-configured': 'No identity provider is configured on this gateway yet.',
+  'provider-unknown':
+    'This sign-in provider is not offered by this gateway (any more). Choose one of the providers below.',
   'discovery-failed':
     'The identity provider could not be reached. Try again or contact the administrator of this gateway.',
   'login-expired': 'The sign-in attempt expired. Start again.',
@@ -36,7 +40,10 @@ export const LOGIN_ERROR_MESSAGES: Readonly<Record<LoginErrorCode, string>> = {
   'claims-missing': 'The identity provider did not return the claims this gateway requires.',
   'email-not-verified':
     'The identity provider has not verified this email address. Verify it there, then sign in again.',
-  'email-domain-not-allowed': 'This email domain is not allowed on this gateway.',
+  'email-domain-not-allowed':
+    'This email domain is not allowed on this gateway, and the address is not invited. Ask an administrator to invite it.',
+  'not-invited':
+    'This address is not invited to this gateway. Ask an administrator to invite it, then sign in again.',
   'groups-overage':
     'Your account belongs to more groups than the identity provider puts in a sign-in token, so this gateway cannot read them and refuses the sign-in rather than ignore them. Ask the administrator: the groups claim must be limited to the groups assigned to this application.',
   'groups-unavailable':

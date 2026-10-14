@@ -24,6 +24,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SESSION_COOKIE } from '../../../src/server/auth';
 import { budgetMissionOf } from '../../../src/server/budget';
 import { completeLogin } from '../../../src/server/auth/login';
+import { resolveAdminRule } from '../../../src/server/auth/admin-rule';
 import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
 import { memoryStoreDeps } from '../../../src/server/compose/testing';
 import { loadInstanceConfig } from '../../../src/server/config';
@@ -890,7 +891,6 @@ const RULES: Readonly<Record<string, Rule>> = {
       completeLogin(
         {
           store: rig.root.store,
-          adminRule: rig.root.config.admin,
           bootstrap: rig.root.auth.bootstrap,
           logger: silentLogger,
         },
@@ -898,9 +898,11 @@ const RULES: Readonly<Record<string, Rule>> = {
           issuer: 'http://idp.test',
           subject: 'idp|ops',
           email: OPERATOR_EMAIL,
+          emailVerified: null,
           displayName: 'Ops',
           groups: [],
         },
+        { providerId: 'idp', adminRule: resolveAdminRule(rig.root.config.admin, ['idp']) },
       ),
     writes: {
       act: 'config-changed',

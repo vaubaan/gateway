@@ -22,6 +22,7 @@ import { createConnectionsRepo, type ConnectionsRepo } from './repositories/conn
 import type { RepoContext } from './repositories/context.ts';
 import { createDelegationsRepo, type DelegationsRepo } from './repositories/delegations.ts';
 import { createGroupsRepo, type GroupsRepo } from './repositories/groups.ts';
+import { createInvitationsRepo, type InvitationsRepo } from './repositories/invitations.ts';
 import { createMissionsRepo, type MissionsRepo } from './repositories/missions.ts';
 import { createRequestsRepo, type RequestsRepo } from './repositories/requests.ts';
 import { createSessionsRepo, type SessionsRepo } from './repositories/sessions.ts';
@@ -48,6 +49,8 @@ export interface Store {
   readonly kind: StoreKind;
   readonly users: UsersRepo;
   readonly groups: GroupsRepo;
+  /** The addresses an administrator invited to sign in (migration 0014). */
+  readonly invitations: InvitationsRepo;
   readonly connections: ConnectionsRepo;
   readonly shares: SharesRepo;
   readonly missions: MissionsRepo;
@@ -98,6 +101,7 @@ export function openStore(options: StoreOptions): Store {
     kind: options.path === MEMORY_PATH ? 'memory' : 'sqlite',
     users: createUsersRepo(ctx),
     groups: createGroupsRepo(ctx),
+    invitations: createInvitationsRepo(ctx),
     connections: createConnectionsRepo(ctx),
     shares: createSharesRepo(ctx),
     missions: createMissionsRepo(ctx),
@@ -167,6 +171,7 @@ export type { AuditAppender, AuditEntry, AuditWriter } from './audit-writer.ts';
 export * from './types.ts';
 export type { UpsertUserInput, UsersRepo } from './repositories/users.ts';
 export type { GroupsRepo } from './repositories/groups.ts';
+export type { InvitationRecord, InvitationsRepo } from './repositories/invitations.ts';
 export type {
   ConnectionFilter,
   ConnectionsRepo,

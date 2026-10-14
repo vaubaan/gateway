@@ -16,6 +16,7 @@
 import * as oidc from 'openid-client';
 
 import { errorMessage } from '../config/errors';
+import { LEGACY_PROVIDER_ID } from '../config/sign-in';
 import type { IdpConfig } from '../config/types';
 import type { RawClaims } from './claims';
 import { LoginError } from './errors';
@@ -72,14 +73,28 @@ export interface OidcRelyingParty {
   finish(callbackUrl: URL, checks: LoginChecks): Promise<FinishedLogin>;
 }
 
+/** What discovery and the code grant need of a provider. */
+export type RelyingPartySettings = Pick<IdpConfig, 'issuer' | 'clientId' | 'clientSecret'>;
+
 export interface RelyingPartyFactory {
-  for(settings: IdpConfig): OidcRelyingParty;
-  /** The redirect URI registered at the IdP: `<public_url><CALLBACK_PATH>`. */
+  /** `redirectUri`: the provider's callback (default: the single provider's, `redirectUri`). */
+  for(settings: RelyingPartySettings, redirectUri?: URL): OidcRelyingParty;
+  /** The redirect URI of the single provider `idp`: `<public_url><CALLBACK_PATH>`. */
   readonly redirectUri: URL;
 }
 
-export function callbackUrl(publicUrl: URL): URL {
-  return new URL(`${publicUrl.pathname.replace(/\/$/, '')}${CALLBACK_PATH}`, publicUrl.origin);
+/**
+ * The callback of a sign-in provider: `<public_url>/auth/callback/<id>`, and for the
+ * provider `idp` the address an identity provider already has registered,
+ * `<public_url>/auth/callback`. Without an id: that legacy address.
+ */
+export function callbackUrl(publicUrl: URL, providerId?: string): URL {
+  const base = `${publicUrl.pathname.replace(/\/$/, '')}${CALLBACK_PATH}`;
+  const path =
+    providerId === undefined || providerId === LEGACY_PROVIDER_ID
+      ? base
+      : `${base}/${encodeURIComponent(providerId)}`;
+  return new URL(path, publicUrl.origin);
 }
 
 export function createRelyingPartyFactory(options: RelyingPartyOptions): RelyingPartyFactory {
@@ -87,11 +102,11 @@ export function createRelyingPartyFactory(options: RelyingPartyOptions): Relying
   // single-process only — a discovery cache; every replica rediscovers for itself.
   const configurations = new Map<string, Promise<oidc.Configuration>>();
 
-  function cacheKey(settings: IdpConfig): string {
+  function cacheKey(settings: RelyingPartySettings): string {
     return `${settings.issuer.href}\u0000${settings.clientId}\u0000${settings.clientSecret}`;
   }
 
-  function configurationFor(settings: IdpConfig): Promise<oidc.Configuration> {
+  function configurationFor(settings: RelyingPartySettings): Promise<oidc.Configuration> {
     const key = cacheKey(settings);
     let pending = configurations.get(key);
     if (!pending) {
@@ -106,7 +121,7 @@ export function createRelyingPartyFactory(options: RelyingPartyOptions): Relying
 
   return {
     redirectUri,
-    for(settings) {
+    for(settings, providerRedirectUri = redirectUri) {
       return {
         async describe() {
           const config = await configurationFor(settings);
@@ -124,7 +139,7 @@ export function createRelyingPartyFactory(options: RelyingPartyOptions): Relying
           const state = oidc.randomState();
           const nonce = oidc.randomNonce();
           const redirectTo = oidc.buildAuthorizationUrl(config, {
-            redirect_uri: redirectUri.href,
+            redirect_uri: providerRedirectUri.href,
             scope: scopesFor(config),
             code_challenge: codeChallenge,
             code_challenge_method: 'S256',
@@ -169,7 +184,7 @@ export function createRelyingPartyFactory(options: RelyingPartyOptions): Relying
 }
 
 async function discover(
-  settings: IdpConfig,
+  settings: RelyingPartySettings,
   options: RelyingPartyOptions,
 ): Promise<oidc.Configuration> {
   const metadata: Partial<oidc.ClientMetadata> = {

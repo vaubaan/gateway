@@ -5,7 +5,7 @@ import {
   READ,
   type AuthorityRig,
 } from '../../../tests/integration/authority/support';
-import { currentAuthority } from '../auth';
+import { currentAuthority, resolveAdminRule } from '../auth';
 import { findActiveUserByEmail } from '../authority';
 import { GROUP_NAME_MAX_LENGTH } from './service';
 
@@ -67,13 +67,16 @@ describe('GroupService — local groups kept by the operator', () => {
       // A local group that carries the admin rule's name (created before the rule named it).
       const local = await store.groups.getOrCreate(ADMIN_GROUP, 'local');
       await store.groups.addMember(local.id, rig.bob.id);
-      expect(await currentAuthority(store, rig.bob, config.admin)).toMatchObject({
+      const rule = resolveAdminRule(config.admin, ['idp']);
+      expect(await currentAuthority(store, rig.bob, rule)).toMatchObject({
         isOperator: false,
         groups: [{ name: ADMIN_GROUP, source: 'local' }],
       });
       // The same name claimed by the IdP is what the rule means.
-      store.db.prepare("UPDATE groups SET source = 'idp' WHERE id = ?").run(local.id);
-      expect((await currentAuthority(store, rig.bob, config.admin)).isOperator).toBe(true);
+      store.db
+        .prepare("UPDATE groups SET source = 'idp', provider = 'idp' WHERE id = ?")
+        .run(local.id);
+      expect((await currentAuthority(store, rig.bob, rule)).isOperator).toBe(true);
     });
   });
 

@@ -747,6 +747,8 @@ export const ACT_WORDS = {
   'oauth-client-disabled': 'disabled an app',
   'user-deactivated': 'deactivated a person',
   'user-reactivated': 'reactivated a person',
+  'invitation-added': 'invited an address',
+  'invitation-removed': 'removed an invitation',
   'config-changed': 'changed the configuration',
 } as const;
 
@@ -767,7 +769,7 @@ export const SETTINGS_PAGES = {
   },
   signIn: {
     title: 'Sign-in',
-    lede: 'People sign in through your company’s identity provider; no password is stored here.',
+    lede: 'The providers people sign in through. No password is stored here, and one person signing in through two providers is two people.',
   },
   companyApps: {
     title: 'Company apps',
@@ -811,6 +813,9 @@ export const SETTINGS_ACTIONS = {
   testSignIn: 'Test the sign-in',
   addTeam: 'Add a local team',
   addMember: 'Add',
+  addSignInProvider: 'Add a sign-in provider',
+  addProvider: 'Add the provider',
+  invite: 'Invite',
 } as const;
 
 /** Where a value comes from, when a page shows it and cannot change it. */

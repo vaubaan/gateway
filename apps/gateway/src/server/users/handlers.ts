@@ -5,6 +5,8 @@
  *
  *   POST /admin/users/<id>/deactivate    the user holds nothing from now on
  *   POST /admin/users/<id>/reactivate    the user may sign in again
+ *   POST /admin/users/invitations         invite an address (form field `email`)
+ *   POST /admin/users/invitations/remove  remove an invitation (form field `email`)
  *
  * Operator only, origin-checked (spec §6): the Administration layout does not
  * cover route handlers, so each handler authorizes by itself.
@@ -17,9 +19,11 @@ import {
   type Authenticator,
   type Principal,
 } from '../auth';
+import { notAFormResponse, readForm } from '../auth/handlers';
 import { createNoticeRedirect, type Notice, type NoticeStore } from '../connections';
 import type { Logger } from '../logging';
 import { USER_ADMIN_ERROR_MESSAGES, UserAdminError } from './errors';
+import type { InvitationService } from './invitations';
 import type { UserAdminActor, UserAdminService } from './service';
 
 export const USERS_PAGE = '/admin/users';
@@ -28,6 +32,7 @@ export interface UserAdminHandlerDeps {
   readonly publicUrl: URL;
   readonly authenticator: Authenticator;
   readonly users: UserAdminService;
+  readonly invitations: InvitationService;
   readonly notices: NoticeStore;
   readonly logger: Logger;
 }
@@ -35,6 +40,8 @@ export interface UserAdminHandlerDeps {
 export interface UserAdminHandlers {
   deactivate(request: Request, userId: string): Promise<Response>;
   reactivate(request: Request, userId: string): Promise<Response>;
+  invite(request: Request): Promise<Response>;
+  removeInvitation(request: Request): Promise<Response>;
 }
 
 const plural = (count: number, one: string, many: string): string => (count === 1 ? one : many);
@@ -82,7 +89,57 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
     return redirectWithNotice(principal.sessionId, USERS_PAGE, notice);
   }
 
+  /** The `email` field of a form mutation, or the response that refuses the body. */
+  async function emailOf(request: Request): Promise<string | Response> {
+    const form = await readForm(request);
+    if (!form) return notAFormResponse();
+    const value = form.get('email');
+    return typeof value === 'string' ? value : '';
+  }
+
   return {
+    async invite(request) {
+      const principal = await operatorOf(request);
+      if (principal instanceof Response) return principal;
+      const email = await emailOf(request);
+      if (email instanceof Response) return email;
+      let notice: Notice;
+      try {
+        const invited = await deps.invitations.invite(auditActorId(principal), email);
+        notice = {
+          tone: 'success',
+          title: `${invited} invited`,
+          lines: [
+            'They can sign in through any provider of this gateway that verified this address. Nothing was sent: tell them where to sign in.',
+          ],
+        };
+      } catch (err) {
+        notice = failure(err, 'Not invited');
+      }
+      return redirectWithNotice(principal.sessionId, USERS_PAGE, notice);
+    },
+
+    async removeInvitation(request) {
+      const principal = await operatorOf(request);
+      if (principal instanceof Response) return principal;
+      const email = await emailOf(request);
+      if (email instanceof Response) return email;
+      let notice: Notice;
+      try {
+        const removed = await deps.invitations.remove(auditActorId(principal), email);
+        notice = {
+          tone: 'success',
+          title: `Invitation of ${removed} removed`,
+          lines: [
+            'Their next sign-in is refused unless an allowed domain admits them. A session already open runs to its end; deactivate the person to stop it now.',
+          ],
+        };
+      } catch (err) {
+        notice = failure(err, 'Not removed');
+      }
+      return redirectWithNotice(principal.sessionId, USERS_PAGE, notice);
+    },
+
     deactivate(request, userId) {
       return act(request, 'Not deactivated', async (actor) => {
         const done = await deps.users.deactivate(actor, userId);

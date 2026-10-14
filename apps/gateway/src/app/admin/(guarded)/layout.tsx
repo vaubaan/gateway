@@ -62,7 +62,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
 function describeRule(group: string | null, emailCount: number): string {
   const parts: string[] = [];
-  if (group) parts.push(`the identity-provider group "${group}"`);
+  if (group) parts.push(`the group "${group}" of its sign-in provider`);
   if (emailCount > 0) parts.push(`${emailCount} listed ${emailCount === 1 ? 'email' : 'emails'}`);
   return parts.join(' or ');
 }

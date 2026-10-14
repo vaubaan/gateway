@@ -51,6 +51,13 @@ export interface UsersRepo {
    * not removed (nothing was written).
    */
   reactivate(id: string): Promise<UserRecord | null>;
+  /**
+   * Ends every web session of the users recorded under `issuer` (with or without a
+   * trailing slash): `sessions_ended_at` = now, the status untouched. A sign-in
+   * provider was removed; its users' next request finds no session. Returns how
+   * many users were concerned.
+   */
+  endSessionsOfIssuer(issuer: string): Promise<number>;
 }
 
 interface UserRow {
@@ -144,6 +151,9 @@ export function createUsersRepo(ctx: RepoContext): UsersRepo {
   const remove = db.prepare<[string, string, string]>(
     `UPDATE users SET status = 'removed', removed_at = ?, sessions_ended_at = ? WHERE id = ?`,
   );
+  const endSessions = db.prepare<[string, string, string]>(
+    'UPDATE users SET sessions_ended_at = ? WHERE issuer = ? OR issuer = ?',
+  );
   const restore = db.prepare<[string]>(
     `UPDATE users SET status = 'active', removed_at = NULL WHERE id = ? AND status = 'removed'`,
   );
@@ -163,6 +173,13 @@ export function createUsersRepo(ctx: RepoContext): UsersRepo {
         now,
       );
       return toRecord(requireRow(byIdentityKey.get(key), 'user', input.subject));
+    },
+    async endSessionsOfIssuer(issuer) {
+      const bare = issuer.replace(/\/+$/, '');
+      return withImmediateTransaction(
+        db,
+        () => endSessions.run(nowIso(ctx), bare, `${bare}/`).changes,
+      );
     },
     async getById(id) {
       const row = getUserRow(ctx, id);

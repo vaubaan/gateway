@@ -191,6 +191,7 @@ function logConfigurationSummary(
     source: configFile ? `file ${configFile} over environment` : 'environment',
     public_url: config.publicUrl.origin,
     idp: config.idp ? config.idp.issuer.origin : 'not configured',
+    sign_in: config.signIn.map((provider) => `${provider.id} (${provider.kind})`),
     admin_rule: config.admin.group ? 'group' : `emails (${config.admin.emails.length})`,
     providers: [...config.providers.keys()],
     telemetry: !config.telemetry.enabledSetByConfig

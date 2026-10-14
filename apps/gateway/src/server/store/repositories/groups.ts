@@ -5,8 +5,19 @@ import { nowIso, parseEnum, placeholders, requireRow, type RepoContext } from '.
 import { GROUP_SOURCES } from './enums.ts';
 import { userColumns, userRowToRecord, type UserRow } from './users.ts';
 
+/**
+ * The provider an IdP-sourced group is created for when none is named: the one
+ * provider an instance had before several existed (`LEGACY_PROVIDER_ID`).
+ */
+const DEFAULT_IDP_PROVIDER = 'idp';
+
 export interface GroupsRepo {
-  getOrCreate(name: string, source: GroupSource): Promise<GroupRecord>;
+  /**
+   * The group of that name, created when absent. An IdP-sourced group is created for
+   * `provider` (default: the single provider of earlier versions, `idp`); a local one
+   * for none.
+   */
+  getOrCreate(name: string, source: GroupSource, provider?: string): Promise<GroupRecord>;
   /**
    * Creates a local group (operator-kept). Returns `null` when the name is already held,
    * by a local group or by one the IdP claimed: a name designates one group.
@@ -22,9 +33,15 @@ export interface GroupsRepo {
    * transaction: groups that do not exist yet are created (source `idp`), the
    * memberships the list no longer names are removed, and a failure leaves
    * everything as it was. Local groups are never touched: a name held by a
-   * local group is skipped and returned in `skipped`.
+   * local group is skipped and returned in `skipped`, and so is a name held by a
+   * group another sign-in provider claimed — a group belongs to its provider.
+   * `provider` is the sign-in provider of the user (default `idp`).
    */
-  syncIdpMemberships(userId: string, names: readonly string[]): Promise<{ skipped: string[] }>;
+  syncIdpMemberships(
+    userId: string,
+    names: readonly string[],
+    provider?: string,
+  ): Promise<{ skipped: string[] }>;
   /** Idempotent. `true` when the membership was added, `false` when it already existed. */
   addMember(groupId: string, userId: string): Promise<boolean>;
   removeMember(groupId: string, userId: string): Promise<boolean>;
@@ -44,10 +61,11 @@ interface GroupRow {
   id: string;
   name: string;
   source: string;
+  provider: string | null;
   created_at: string;
 }
 
-const COLUMNS = 'id, name, source, created_at';
+const COLUMNS = 'id, name, source, provider, created_at';
 const USER_COLUMNS = userColumns('u');
 
 function toRecord(row: GroupRow): GroupRecord {
@@ -55,6 +73,7 @@ function toRecord(row: GroupRow): GroupRecord {
     id: row.id,
     name: row.name,
     source: parseEnum(GROUP_SOURCES, row.source, 'groups.source'),
+    provider: row.provider,
     createdAt: row.created_at,
   };
 }
@@ -65,8 +84,8 @@ export function createGroupsRepo(ctx: RepoContext): GroupsRepo {
   const byName = db.prepare<[string], GroupRow>(`SELECT ${COLUMNS} FROM groups WHERE name = ?`);
   const all = db.prepare<[], GroupRow>(`SELECT ${COLUMNS} FROM groups ORDER BY name`);
   // Creation is one statement, so two sign-ins claiming the same new group cannot collide.
-  const insertIfAbsent = db.prepare<[string, string, string, string]>(
-    `INSERT INTO groups (id, name, source, created_at) VALUES (?, ?, ?, ?)
+  const insertIfAbsent = db.prepare<[string, string, string, string | null, string]>(
+    `INSERT INTO groups (id, name, source, provider, created_at) VALUES (?, ?, ?, ?, ?)
      ON CONFLICT (name) DO NOTHING`,
   );
   const addMemberStmt = db.prepare<[string, string, string]>(
@@ -84,7 +103,7 @@ export function createGroupsRepo(ctx: RepoContext): GroupsRepo {
     'SELECT COUNT(*) AS n FROM group_members WHERE group_id = ?',
   );
   const ofUser = db.prepare<[string], GroupRow>(
-    `SELECT g.id, g.name, g.source, g.created_at FROM group_members gm
+    `SELECT g.id, g.name, g.source, g.provider, g.created_at FROM group_members gm
      JOIN groups g ON g.id = gm.group_id WHERE gm.user_id = ? ORDER BY g.name`,
   );
 
@@ -94,29 +113,34 @@ export function createGroupsRepo(ctx: RepoContext): GroupsRepo {
     return toRecord(row);
   }
 
-  function getOrCreateSync(name: string, source: GroupSource, now: string): GroupRecord {
-    insertIfAbsent.run(ctx.newId(), name, source, now);
+  function getOrCreateSync(
+    name: string,
+    source: GroupSource,
+    provider: string | null,
+    now: string,
+  ): GroupRecord {
+    insertIfAbsent.run(ctx.newId(), name, source, source === 'idp' ? provider : null, now);
     return toRecord(requireRow(byName.get(name), 'group', name));
   }
 
   return {
-    async getOrCreate(name, source) {
+    async getOrCreate(name, source, provider = DEFAULT_IDP_PROVIDER) {
       const now = nowIso(ctx);
-      return withImmediateTransaction(db, () => getOrCreateSync(name, source, now));
+      return withImmediateTransaction(db, () => getOrCreateSync(name, source, provider, now));
     },
     async createLocal(name) {
       const id = ctx.newId();
-      const created = insertIfAbsent.run(id, name, 'local', nowIso(ctx)).changes > 0;
+      const created = insertIfAbsent.run(id, name, 'local', null, nowIso(ctx)).changes > 0;
       return created ? requireGroup(id) : null;
     },
-    async syncIdpMemberships(userId, names) {
+    async syncIdpMemberships(userId, names, provider = DEFAULT_IDP_PROVIDER) {
       const now = nowIso(ctx);
       return withImmediateTransaction(db, () => {
         const skipped: string[] = [];
         const kept: string[] = [];
         for (const name of new Set(names)) {
-          const group = getOrCreateSync(name, 'idp', now);
-          if (group.source !== 'idp') {
+          const group = getOrCreateSync(name, 'idp', provider, now);
+          if (group.source !== 'idp' || group.provider !== provider) {
             skipped.push(name);
             continue;
           }

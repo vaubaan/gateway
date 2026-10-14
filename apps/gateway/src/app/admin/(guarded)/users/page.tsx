@@ -6,6 +6,12 @@
  * identity provider: no sign-in, no session, no key, connected apps
  * disconnected; their missions stop for want of an owner. The act is asked
  * first, with what it stops.
+ *
+ * Each person says the sign-in provider they signed in through: one person
+ * signing in through two providers is two people here, and the gateway never
+ * joins them. Under the list, the invitations: the addresses administrators
+ * allowed to sign in (spec §0 "Invitation"), with "Invite" and "Remove" (asked
+ * first: it stops the next sign-ins, not an open session).
  */
 import styles from '@/components/settings/settings.module.css';
 import { NoticeBanner } from '@/components/connections/parts';
@@ -15,7 +21,10 @@ import {
   ConfirmSubmit,
   DataTable,
   EmptyState,
+  Field,
   Hint,
+  Input,
+  Mono,
   PageHeader,
   Section,
   type Column,
@@ -31,7 +40,8 @@ import {
   shortDate,
 } from '@/lib/vocabulary';
 import { isOperator } from '@/server/auth';
-import { USERS_PAGE, type UserView } from '@/server/users';
+import { issuerKey } from '@/server/config';
+import { USERS_PAGE, type InvitationView, type UserView } from '@/server/users';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,7 +59,16 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
   const { root, principal } = await requireOperator();
   const params = await searchParams;
   const notice = await takeNotice(root, principal.sessionId, params);
-  const users = await root.users.service.list();
+  const [users, invitations, providers, rule] = await Promise.all([
+    root.users.service.list(),
+    root.users.invitations.list(),
+    root.auth.providers.views(),
+    root.auth.providers.adminRule(),
+  ]);
+  const providerOf = (view: UserView): string => {
+    const key = view.user.issuer === null ? null : issuerKey(view.user.issuer);
+    return providers.find((p) => issuerKey(p.issuer) === key)?.name ?? 'a removed provider';
+  };
   const self = principal.kind === 'user' ? principal.user.id : null;
   const now = new Date();
   const nameOf = (view: UserView) => view.user.displayName ?? view.user.email;
@@ -61,8 +80,7 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
       cell: (view) => {
         const active = view.user.status === 'active';
         const administrator =
-          active &&
-          isOperator({ email: view.user.email, groupNames: view.groups }, root.config.admin);
+          active && isOperator({ email: view.user.email, groups: view.groupRecords }, rule);
         const words = qualifiers([
           view.user.id === self && ROLE_WORDS.you,
           administrator && ROLE_WORDS.admin,
@@ -80,6 +98,11 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
           </span>
         );
       },
+    },
+    {
+      id: 'provider',
+      header: 'Signed in with',
+      cell: (view) => <span className={styles.quiet}>{providerOf(view)}</span>,
     },
     {
       id: 'teams',
@@ -107,6 +130,29 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
             deactivated{view.user.removedAt ? ` ${shortDate(view.user.removedAt, now)}` : ''}
           </span>
         ),
+    },
+  ];
+
+  const invitationColumns: readonly Column<InvitationView>[] = [
+    { id: 'email', header: 'Address', cell: (invitation) => <Mono>{invitation.email}</Mono> },
+    {
+      id: 'by',
+      header: 'Invited by',
+      cell: (invitation) => <span className={styles.quiet}>{invitation.invitedBy ?? '—'}</span>,
+    },
+    {
+      id: 'when',
+      header: 'When',
+      nowrap: true,
+      cell: (invitation) => (
+        <span className={styles.quiet}>{shortDate(invitation.createdAt, now)}</span>
+      ),
+    },
+    {
+      id: 'state',
+      header: 'Signed in',
+      nowrap: true,
+      cell: (invitation) => (invitation.signedIn ? 'yes' : <span className={styles.quiet}>not yet</span>),
     },
   ];
 
@@ -169,9 +215,64 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
           />
         )}
         <Hint>
-          The identity provider decides who may sign in; a person appears here once they have. You
-          cannot deactivate yourself: another administrator can.
+          A person appears here once they have signed in. One person who signs in through two
+          providers is two people here: the gateway never joins accounts by email. You cannot
+          deactivate yourself: another administrator can.
         </Hint>
+      </Section>
+
+      <Section
+        title="Invitations"
+        note="Addresses allowed to sign in through any provider that verified them. Nothing is sent."
+        testId="invitations"
+      >
+        <form method="post" action={`${USERS_PAGE}/invitations`} className={styles.lineForm}>
+          <Field label="Email address" htmlFor="invite-email">
+            <Input
+              id="invite-email"
+              name="email"
+              type="email"
+              required
+              autoComplete="off"
+              placeholder="name@example.com"
+            />
+          </Field>
+          <Button type="submit">{SETTINGS_ACTIONS.invite}</Button>
+        </form>
+        {invitations.length === 0 ? (
+          <Hint>
+            Nobody is invited. Only allowed domains and the administrators’ emails are admitted on
+            a provider where anyone can open an account.
+          </Hint>
+        ) : (
+          <DataTable
+            caption="Invited addresses"
+            columns={invitationColumns}
+            rows={invitations}
+            rowKey={(invitation) => invitation.email}
+            actions={(invitation) => (
+              <ConfirmSubmit
+                action={`${USERS_PAGE}/invitations/remove`}
+                fields={{ email: invitation.email }}
+                label={SETTINGS_ACTIONS.remove}
+                ariaLabel={`Remove the invitation of ${invitation.email}`}
+                variant="danger"
+                tone="danger"
+                title={`Remove the invitation of ${invitation.email}?`}
+                consequence={
+                  <>
+                    Their next sign-in is refused unless an allowed domain of the provider admits
+                    them. A session already open runs to its end, at most 8 hours; their account,
+                    missions and keys stay. To stop them at once, deactivate them above.
+                  </>
+                }
+                confirmLabel={SETTINGS_ACTIONS.remove}
+                testId={`remove-invitation-${invitation.email}`}
+              />
+            )}
+            testId="invitation-list"
+          />
+        )}
       </Section>
     </>
   );

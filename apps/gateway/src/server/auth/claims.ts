@@ -38,6 +38,13 @@ export interface IdentityClaims {
   readonly subject: string;
   /** Lower-cased. */
   readonly email: string;
+  /**
+   * Whether the provider says it verified the email: `true` when it says so, `null`
+   * when it says nothing (many company directories never send the claim). An
+   * explicit `false` never gets this far (`email-not-verified`). An open provider is
+   * admitted on `true` only (`admission.ts`).
+   */
+  readonly emailVerified: true | null;
   readonly displayName: string | null;
   /** Distinct, trimmed, in claim order. Empty when the IdP sends none. */
   readonly groups: readonly string[];
@@ -161,6 +168,7 @@ export function mapClaims(
     issuer,
     subject,
     email: email.toLowerCase(),
+    emailVerified: saysTrue(raw[EMAIL_VERIFIED_CLAIM]) ? true : null,
     displayName: nonEmptyString(raw.name),
     groups: parseGroupsClaim(raw[mapping.groups]),
   };

@@ -1,6 +1,8 @@
 /**
- * `/login` — the entry of the interface: one button for the identity provider
- * of the company, and the closed error codes of a failed attempt.
+ * `/login` — the entry of the interface: one button per sign-in provider (links
+ * to `/auth/login/<id>`, carrying where to go after), the way to the bootstrap
+ * page while the install token is valid, and the closed error codes of a failed
+ * attempt.
  *
  * A person who is signed in has nothing to read here: the page sends them to
  * the home ("Now"), and the sign-in it starts returns there too. The card
@@ -21,7 +23,13 @@ import { BuildFooter } from '@/components/shell/BuildFooter';
 import { Avatar, Button, ButtonLink, Callout, StatusMark } from '@/components/ui';
 import { currentPrincipal } from '@/lib/auth/session';
 import { ACTIONS, ROLE_WORDS, ROUTES } from '@/lib/vocabulary';
-import { isLoginErrorCode, LOGIN_ERROR_MESSAGES, type Principal } from '@/server/auth';
+import {
+  isLoginErrorCode,
+  LOGIN_ERROR_MESSAGES,
+  safeReturnTo,
+  signInStartPath,
+  type Principal,
+} from '@/server/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -93,9 +101,11 @@ export default async function LoginPage({ searchParams }: Props) {
   const failed = errorCode !== null && isLoginErrorCode(errorCode);
   // Signed in: the home, not a card about being signed in.
   if (principal?.kind === 'user' && !failed) redirect(ROUTES.home);
-  const idp = await root.auth.idp.current();
+  const providers = await root.auth.providers.views();
   const bootstrap = await root.auth.bootstrap.state();
   const instance = root.config.publicUrl.host;
+  // Where the sign-in lands: the address that sent the person here, else the home.
+  const returnTo = safeReturnTo(first(params.return_to), root.config.publicUrl, ROUTES.home);
 
   return (
     <AuthPage instance={instance} footer={<BuildFooter />}>
@@ -104,7 +114,9 @@ export default async function LoginPage({ searchParams }: Props) {
           ? principal.kind === 'user'
             ? 'The attempt below failed; the session you already had is still open.'
             : 'This session sets the gateway up; it is not a person’s.'
-          : 'This gateway signs you in through the identity provider of your company. Nobody has a password here.'}
+          : providers.length > 1
+            ? 'Choose how you sign in. Nobody has a password here.'
+            : 'This gateway signs you in through a provider you already have an account at. Nobody has a password here.'}
       </AuthHeading>
 
       {errorCode && isLoginErrorCode(errorCode) && (
@@ -117,13 +129,24 @@ export default async function LoginPage({ searchParams }: Props) {
 
       {principal ? (
         <SignedIn principal={principal} />
-      ) : idp ? (
-        <form method="get" action="/auth/login" className={styles.act}>
-          <input type="hidden" name="return_to" value={ROUTES.home} />
-          <Button type="submit" variant="primary" size="lg">
-            Continue with {idp.settings.issuer.hostname}
-          </Button>
-        </form>
+      ) : providers.length > 0 ? (
+        <div className={styles.act} data-testid="sign-in-providers">
+          {providers.map((provider, index) => (
+            <ButtonLink
+              key={provider.id}
+              href={`${signInStartPath(provider.id)}?return_to=${encodeURIComponent(returnTo)}`}
+              variant={index === 0 ? 'primary' : 'secondary'}
+              size="lg"
+            >
+              Continue with {provider.name}
+            </ButtonLink>
+          ))}
+          {bootstrap.status === 'active' && (
+            <Link href="/admin/bootstrap" data-testid="bootstrap-link">
+              Set up this gateway with the install token
+            </Link>
+          )}
+        </div>
       ) : (
         <div className={styles.block}>
           <Callout

@@ -63,8 +63,11 @@ export interface MemberAddition {
 export interface GroupServiceDeps {
   readonly store: Pick<Store, 'groups' | 'users' | 'connections'>;
   readonly membership: Pick<MembershipSettler, 'watch'>;
-  /** The IdP group of the admin rule, if any: never the name of a local group. */
-  readonly adminGroup: string | null;
+  /**
+   * The admin rule's group as written and its bare name (`reservedGroupNames`):
+   * never the name of a local group.
+   */
+  readonly reservedNames: readonly string[];
   readonly audit: AuditWriter;
   readonly clock: Clock;
   readonly logger: Logger;
@@ -99,7 +102,7 @@ export class GroupService {
     if (name === '' || name.length > GROUP_NAME_MAX_LENGTH || CONTROL_CHARACTERS.test(name)) {
       throw new GroupError('name-invalid');
     }
-    if (this.deps.adminGroup !== null && name === this.deps.adminGroup) {
+    if (this.deps.reservedNames.includes(name)) {
       throw new GroupError('name-reserved');
     }
     const group = await this.deps.store.groups.createLocal(name);

@@ -13,6 +13,8 @@ import { Authenticator } from './authenticator';
 import { BootstrapService } from './bootstrap';
 import { createAuthHandlers, type AuthHandlers } from './handlers';
 import { IdpSettingsService } from './idp-settings';
+import { createSignInFlows, type SignInFlows } from './sign-in-flows';
+import { SignInProvidersService } from './sign-in-providers';
 import type { LoginDeps } from './login';
 import {
   createRelyingPartyFactory,
@@ -22,7 +24,11 @@ import {
 import { SessionService } from './session-service';
 
 export interface OidcOptions {
-  /** Routes the relying party's outbound HTTP (corporate proxy; in-process IdP in tests). */
+  /**
+   * Routes the outbound HTTP of every sign-in — OpenID Connect discovery, tokens and
+   * userinfo, GitHub's token endpoint and API (corporate proxy; in-process providers
+   * in tests).
+   */
   readonly fetch?: CustomFetch;
   /** Tests only: accept an `http://` issuer. */
   readonly allowInsecureIssuer?: boolean;
@@ -41,7 +47,11 @@ export interface AuthModuleDeps {
 
 export interface AuthModule {
   readonly sessions: SessionService;
+  /** The single-provider settings saved from the interface (the provider `idp`). */
   readonly idp: IdpSettingsService;
+  /** Every sign-in provider: the configuration's and the ones saved in Settings → Sign-in. */
+  readonly providers: SignInProvidersService;
+  readonly flows: SignInFlows;
   readonly bootstrap: BootstrapService;
   readonly relyingParties: RelyingPartyFactory;
   readonly authenticator: Authenticator;
@@ -61,17 +71,37 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
     fetch: deps.oidc?.fetch,
     allowInsecureRequests: deps.oidc?.allowInsecureIssuer,
   });
-  const authenticator = new Authenticator(sessions, deps.store, deps.config.admin, bootstrap);
+  const providers = new SignInProvidersService(
+    deps.config,
+    deps.config.admin,
+    idp,
+    deps.store.config,
+    clock,
+    { allowInsecureIssuer: deps.oidc?.allowInsecureIssuer },
+  );
+  const flows = createSignInFlows({
+    publicUrl: deps.config.publicUrl,
+    relyingParties,
+    fetch: deps.oidc?.fetch,
+  });
+  const authenticator = new Authenticator(
+    sessions,
+    deps.store,
+    deps.config.admin,
+    bootstrap,
+    providers,
+  );
   const handlers = createAuthHandlers({
     publicUrl: deps.config.publicUrl,
     sessions,
-    idp,
+    providers,
+    flows,
     bootstrap,
-    relyingParties,
     authenticator,
+    store: deps.store,
+    adminEmails: deps.config.admin.emails,
     login: {
       store: deps.store,
-      adminRule: deps.config.admin,
       bootstrap,
       logger,
       clock,
@@ -81,10 +111,28 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
     logger,
     clock,
   });
-  return { sessions, idp, bootstrap, relyingParties, authenticator, handlers };
+  return { sessions, idp, providers, flows, bootstrap, relyingParties, authenticator, handlers };
 }
 
-export { describeAdminRule, isOperator, type AdminRuleSubject } from './admin-rule';
+export {
+  describeAdminRule,
+  isOperator,
+  resolveAdminRule,
+  type AdminRuleSubject,
+  type ResolvedAdminRule,
+} from './admin-rule';
+export { admit, type AdmissionContext, type AdmissionReason } from './admission';
+export { GithubSignIn, readableTeams } from './github';
+export { createSignInFlows, type FinishedSignIn, type SignInFlow, type SignInFlows } from './sign-in-flows';
+export {
+  signInAuditObjectId,
+  signInProviderAuditView,
+  SignInProvidersService,
+  type EffectiveSignInProvider,
+  type SaveMode,
+  type SignInProviderInput,
+  type SignInProviderView,
+} from './sign-in-providers';
 export {
   auditActorId,
   Authenticator,
@@ -129,7 +177,10 @@ export {
   BOOTSTRAP_PAGE,
   IDP_PAGE,
   LOGIN_PAGE,
+  NEW_SIGN_IN_PROVIDER_PAGE,
   safeReturnTo,
+  signInProviderPage,
+  signInStartPath,
   statusResponse,
   type AuthHandlers,
 } from './handlers';
@@ -147,12 +198,14 @@ export {
   currentAuthority,
   syncIdpGroups,
   type Authority,
+  type LoginContext,
   type LoginOutcome,
 } from './login';
 export { forbiddenOriginResponse, isSameOrigin, requestOrigin } from './origin';
 export {
   CALLBACK_PATH,
   callbackUrl,
+  type RelyingPartySettings,
   createRelyingPartyFactory,
   type CustomFetch,
   type OidcRelyingParty,

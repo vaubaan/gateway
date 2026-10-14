@@ -14,6 +14,7 @@ import type { DelegationService } from '../oauth-as';
 import type { Store } from '../store';
 import { systemClock, type Clock } from '../store/clock';
 import { createUserAdminHandlers, type UserAdminHandlers } from './handlers';
+import { InvitationService } from './invitations';
 import { UserAdminService } from './service';
 
 export interface UsersModuleDeps {
@@ -30,6 +31,8 @@ export interface UsersModuleDeps {
 
 export interface UsersModule {
   readonly service: UserAdminService;
+  /** The addresses administrators invited to sign in. */
+  readonly invitations: InvitationService;
   readonly handlers: UserAdminHandlers;
 }
 
@@ -44,14 +47,21 @@ export function createUsersModule(deps: UsersModuleDeps): UsersModule {
     clock: deps.clock ?? systemClock,
     logger,
   });
+  const invitations = new InvitationService({
+    store: deps.store,
+    audit: deps.store.auditWriter,
+    clock: deps.clock ?? systemClock,
+    logger,
+  });
   const handlers = createUserAdminHandlers({
     publicUrl: deps.config.publicUrl,
     authenticator: deps.authenticator,
     users: service,
+    invitations,
     notices: deps.connections.notices,
     logger,
   });
-  return { service, handlers };
+  return { service, invitations, handlers };
 }
 
 export {
@@ -61,6 +71,12 @@ export {
   type UserAdminErrorCode,
 } from './errors';
 export { createUserAdminHandlers, USERS_PAGE, type UserAdminHandlers } from './handlers';
+export {
+  INVITATIONS_OBJECT_ID,
+  InvitationService,
+  normalizeInvitedEmail,
+  type InvitationView,
+} from './invitations';
 export {
   UserAdminService,
   type Deactivation,

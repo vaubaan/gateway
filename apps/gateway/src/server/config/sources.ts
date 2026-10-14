@@ -41,8 +41,9 @@ export type KeyKind = 'string' | 'secret' | 'list' | 'int' | 'bool' | 'secret-ma
 export type KeyFormat = 'url' | 'duration' | 'enum';
 
 /**
- * When a key must be set: always, once the `idp` block exists, or as long as
- * it does not.
+ * When a key must be set: always, once the `idp` block exists (`with-idp`), or as
+ * long as the configuration sets no sign-in provider at all — neither `idp.*` nor
+ * any `sign_in.<id>.*` (`without-idp`).
  */
 export type KeyRequirement = 'always' | 'with-idp' | 'without-idp';
 
@@ -69,6 +70,30 @@ export interface KeySpec {
 
 export const CONFIG_FILE_ENV = 'VAUBAAN_CONFIG_FILE';
 export const PROVIDER_ENV_PREFIX = 'VAUBAAN_PROVIDER_';
+export const SIGN_IN_ENV_PREFIX = 'VAUBAAN_SIGN_IN_';
+
+/**
+ * The fields of one sign-in provider (`sign_in.<id>.<field>`), with the suffix of
+ * its environment variable (`VAUBAAN_SIGN_IN_<ID>_<SUFFIX>`) and how that variable
+ * is read. One table: the loader, the env reader and the handbook's row derive from it.
+ */
+export const SIGN_IN_FIELDS = [
+  { field: 'kind', env: 'KIND', kind: 'string' },
+  { field: 'name', env: 'NAME', kind: 'string' },
+  { field: 'issuer', env: 'ISSUER', kind: 'string' },
+  { field: 'client_id', env: 'CLIENT_ID', kind: 'string' },
+  { field: 'client_secret', env: 'CLIENT_SECRET', kind: 'secret' },
+  { field: 'claims.sub', env: 'CLAIM_SUB', kind: 'string' },
+  { field: 'claims.email', env: 'CLAIM_EMAIL', kind: 'string' },
+  { field: 'claims.groups', env: 'CLAIM_GROUPS', kind: 'string' },
+  { field: 'allowed_email_domains', env: 'ALLOWED_EMAIL_DOMAINS', kind: 'list' },
+  { field: 'invitation_only', env: 'INVITATION_ONLY', kind: 'bool' },
+] as const satisfies readonly {
+  readonly field: string;
+  readonly env: string;
+  readonly kind: 'string' | 'secret' | 'list' | 'bool';
+}[];
+export type SignInField = (typeof SIGN_IN_FIELDS)[number]['field'];
 
 const KEY_TABLE = [
   {
@@ -114,6 +139,12 @@ const KEY_TABLE = [
   { path: 'idp.claims.email', env: 'VAUBAAN_IDP_CLAIM_EMAIL', kind: 'string', default: 'email' },
   { path: 'idp.claims.groups', env: 'VAUBAAN_IDP_CLAIM_GROUPS', kind: 'string', default: 'groups' },
   { path: 'idp.allowed_email_domains', env: 'VAUBAAN_IDP_ALLOWED_EMAIL_DOMAINS', kind: 'list' },
+  {
+    path: 'idp.invitation_only',
+    env: 'VAUBAAN_IDP_INVITATION_ONLY',
+    kind: 'bool',
+    default: false,
+  },
   { path: 'admin.group', env: 'VAUBAAN_ADMIN_GROUP', kind: 'string' },
   { path: 'admin.emails', env: 'VAUBAAN_ADMIN_EMAILS', kind: 'list' },
   {
@@ -250,6 +281,14 @@ const SECRET_PROVIDER_FIELDS: ReadonlySet<ProviderAppField> = new Set([
 
 /** Environment variable names that set a given YAML path (for error messages). */
 export function envNamesFor(path: string): string[] {
+  const signInMatch = /^sign_in\.([^.]+)\.(.+)$/.exec(path);
+  if (signInMatch) {
+    const [, id = '', field = ''] = signInMatch;
+    const spec = SIGN_IN_FIELDS.find((f) => f.field === field);
+    if (!spec) return [];
+    const name = signInEnvName(id, spec.env);
+    return spec.kind === 'secret' ? [name, `${name}_FILE`] : [name];
+  }
   const providerMatch = /^providers\.([^.]+)\.([^.]+)$/.exec(path);
   if (providerMatch) {
     const [, id, field] = providerMatch;
@@ -270,6 +309,11 @@ export function providerEnvName(providerId: string, field: string): string {
   return `${PROVIDER_ENV_PREFIX}${providerId.toUpperCase().replace(/-/g, '_')}_${field.toUpperCase()}`;
 }
 
+/** `VAUBAAN_SIGN_IN_<ID>_<SUFFIX>`: a hyphen of the provider id becomes an underscore. */
+export function signInEnvName(providerId: string, suffix: string): string {
+  return `${SIGN_IN_ENV_PREFIX}${providerId.toUpperCase().replace(/-/g, '_')}_${suffix}`;
+}
+
 /* ------------------------------------------------------------------------ */
 /* Environment source                                                        */
 /* ------------------------------------------------------------------------ */
@@ -286,6 +330,7 @@ export function readEnvSource(
     if (value !== undefined) setPath(tree, spec.path, value);
   }
   readProviderEnv(ctx, tree);
+  readSignInEnv(ctx, tree);
   return tree;
 }
 
@@ -369,6 +414,68 @@ function readProviderEnv(ctx: SourceContext, tree: RawTree): void {
 }
 
 const FIELDS_LONGEST_FIRST = [...PROVIDER_APP_FIELDS].sort((a, b) => b.length - a.length);
+
+/**
+ * `VAUBAAN_SIGN_IN_<ID>_<FIELD>[_FILE]` → `sign_in.<id>.<field>`. As for provider
+ * apps, the field is matched as a suffix so that an id with a hyphen
+ * (`acme-entra` → `ACME_ENTRA`) parses unambiguously.
+ */
+function readSignInEnv(ctx: SourceContext, tree: RawTree): void {
+  const seen = new Set<string>();
+  for (const name of Object.keys(ctx.env).sort()) {
+    if (!name.startsWith(SIGN_IN_ENV_PREFIX) || ctx.env[name] === undefined) continue;
+    const base = name.endsWith('_FILE') ? name.slice(0, -'_FILE'.length) : name;
+    if (seen.has(base)) continue;
+    seen.add(base);
+    const parsed = parseSignInEnvName(base);
+    if (!parsed) {
+      ctx.issues.add(
+        'sign_in',
+        `${name} does not end with a known sign-in provider field (${SIGN_IN_FIELDS.map((f) => f.env).join(', ')})`,
+        [name],
+      );
+      continue;
+    }
+    const path = `sign_in.${parsed.providerId}.${parsed.spec.field}`;
+    let value: unknown;
+    switch (parsed.spec.kind) {
+      case 'secret':
+        value = readEnvSecret(ctx, base, path);
+        break;
+      case 'list':
+        value = ctx.env[base] === undefined ? undefined : splitList(ctx.env[base] ?? '');
+        break;
+      case 'bool': {
+        const raw = ctx.env[base] ?? '';
+        value = parseBool(raw);
+        if (value === undefined) ctx.issues.add(path, `expected true or false, got "${raw}"`, [base]);
+        break;
+      }
+      case 'string':
+        value = ctx.env[base];
+        break;
+    }
+    if (value !== undefined) setPath(tree, path, value);
+  }
+}
+
+const SIGN_IN_FIELDS_LONGEST_FIRST = [...SIGN_IN_FIELDS].sort((a, b) => b.env.length - a.env.length);
+
+/**
+ * `VAUBAAN_SIGN_IN_ACME_ENTRA_CLIENT_ID` → `{ providerId: 'acme-entra', spec: client_id }`;
+ * `null` when the name does not end with a known field or has no id part.
+ */
+export function parseSignInEnvName(
+  name: string,
+): { providerId: string; spec: (typeof SIGN_IN_FIELDS)[number] } | null {
+  if (!name.startsWith(SIGN_IN_ENV_PREFIX)) return null;
+  const rest = name.slice(SIGN_IN_ENV_PREFIX.length);
+  const spec = SIGN_IN_FIELDS_LONGEST_FIRST.find((f) => rest.endsWith(`_${f.env}`));
+  if (!spec) return null;
+  const idPart = rest.slice(0, -(spec.env.length + 1));
+  if (idPart.length === 0) return null;
+  return { providerId: idPart.toLowerCase().replace(/_/g, '-'), spec };
+}
 
 /**
  * `VAUBAAN_PROVIDER_CLOUDFLARE_DNS_CLIENT_SECRET` → `{ providerId: 'cloudflare-dns',

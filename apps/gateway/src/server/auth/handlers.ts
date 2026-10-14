@@ -3,11 +3,15 @@
  * (`Request → Response`, never `next`). The Next route handlers under
  * `src/app/**` are one-line adapters over these.
  *
- *   GET  /auth/login?return_to=   start an OIDC sign-in (redirect to the IdP)
- *   GET  /auth/callback           finish it (code → session cookie)
- *   POST /logout                  destroy the session (origin-checked)
- *   POST /api/auth/bootstrap      sign in with the bootstrap token (origin-checked)
- *   POST /api/admin/identity-provider  save the IdP settings (operator, origin-checked)
+ *   GET  /auth/login?return_to=          the one provider, or the sign-in page to choose
+ *   GET  /auth/login/<id>?return_to=     start a sign-in with provider <id>
+ *   GET  /auth/callback                  finish a sign-in of the provider `idp`
+ *   GET  /auth/callback/<id>             finish a sign-in of provider <id>
+ *   POST /logout                         destroy the session (origin-checked)
+ *   POST /api/auth/bootstrap             sign in with the bootstrap token (origin-checked)
+ *   POST /api/admin/identity-provider    save a sign-in provider (operator, origin-checked)
+ *   POST /api/admin/sign-in-providers    the same, under the name of the page
+ *   POST /api/admin/sign-in-providers/<id>/remove   remove one (operator, origin-checked)
  *
  * Every redirect target is a same-origin path; every error reaches the
  * browser as a closed `LoginErrorCode` in the query string, the detail
@@ -15,26 +19,44 @@
  */
 import type { AuditWriter } from '@vaubaan/gateway-core';
 
-import type { IdpConfig } from '../config/types';
+import { LEGACY_PROVIDER_ID } from '../config/sign-in';
 import { resolveReturnTo } from '../http/return-to';
 import type { Logger } from '../logging';
+import type { Store } from '../store';
 import type { Clock } from '../store/clock';
 import { toIso } from '../store/clock';
+import { admit } from './admission';
 import { auditActorId, type Authenticator } from './authenticator';
 import type { BootstrapService } from './bootstrap';
-import { assertEmailDomainAllowed, mapClaims } from './claims';
 import { IdpSettingsError, LoginError, type LoginErrorCode } from './errors';
 import { guardMutation, OPERATOR_REFUSALS, refusalResponse } from './guard';
-import { IDP_CONFIG_OBJECT_ID, type IdpSettingsService, splitList } from './idp-settings';
+import { splitList } from './idp-settings';
 import { completeLogin, type LoginDeps } from './login';
 import { forbiddenOriginResponse, isSameOrigin } from './origin';
-import { callbackUrl, type RelyingPartyFactory } from './relying-party';
 import type { SessionService } from './session-service';
+import type { SignInFlows } from './sign-in-flows';
+import {
+  signInAuditObjectId,
+  signInProviderAuditView,
+  type SaveMode,
+  type SignInProvidersService,
+} from './sign-in-providers';
 
 export const LOGIN_PAGE = '/login';
 export const ADMIN_PAGE = '/admin';
 export const BOOTSTRAP_PAGE = '/admin/bootstrap';
+/** Settings → Sign-in: the list of providers. */
 export const IDP_PAGE = '/admin/identity-provider';
+/** The form to add a provider (`?kind=oidc|github`). */
+export const NEW_SIGN_IN_PROVIDER_PAGE = `${IDP_PAGE}/new`;
+/** The page of one provider saved in Settings. */
+export function signInProviderPage(id: string): string {
+  return `${IDP_PAGE}/${encodeURIComponent(id)}`;
+}
+/** The address that starts a sign-in with one provider. */
+export function signInStartPath(id: string): string {
+  return `/auth/login/${encodeURIComponent(id)}`;
+}
 const RETURN_TO_PARAM = 'return_to';
 const SEE_OTHER = 303;
 const BAD_REQUEST = 400;
@@ -42,22 +64,29 @@ const BAD_REQUEST = 400;
 export interface AuthHandlerDeps {
   readonly publicUrl: URL;
   readonly sessions: SessionService;
-  readonly idp: IdpSettingsService;
+  readonly providers: SignInProvidersService;
+  readonly flows: SignInFlows;
   readonly bootstrap: BootstrapService;
-  readonly relyingParties: RelyingPartyFactory;
   readonly authenticator: Authenticator;
   readonly login: LoginDeps;
+  readonly store: Pick<Store, 'invitations' | 'users'>;
+  /** The admin rule's emails, lower-cased: always admitted (they are named by the configuration). */
+  readonly adminEmails: readonly string[];
   readonly audit: AuditWriter;
   readonly logger: Logger;
   readonly clock: Clock;
 }
 
 export interface AuthHandlers {
-  loginStart(request: Request): Promise<Response>;
-  loginCallback(request: Request): Promise<Response>;
+  /** `providerId` from the path; absent on `/auth/login`. */
+  loginStart(request: Request, providerId?: string): Promise<Response>;
+  /** `providerId` from the path; absent on `/auth/callback` (the provider `idp`). */
+  loginCallback(request: Request, providerId?: string): Promise<Response>;
   logout(request: Request): Promise<Response>;
   bootstrapLogin(request: Request): Promise<Response>;
+  /** Saves a sign-in provider from the Settings form (the single-provider form included). */
   saveIdpSettings(request: Request): Promise<Response>;
+  removeSignInProvider(request: Request, providerId: string): Promise<Response>;
 }
 
 export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
@@ -73,17 +102,57 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
     return redirect(`${LOGIN_PAGE}?error=${code}`, extraHeaders);
   }
 
+  async function writeAudit(
+    actor: string,
+    objectId: string,
+    before: unknown,
+    after: unknown,
+  ): Promise<void> {
+    try {
+      await deps.audit.write({
+        kind: 'admin',
+        ts: toIso(deps.clock.now()),
+        user_id: actor,
+        act: 'config-changed',
+        object: { type: 'instance-config', id: objectId },
+        before,
+        after,
+        delegated_client_id: null,
+      });
+    } catch (err) {
+      // The change is committed; a missing entry must at least be loud.
+      logger.error('audit entry not written for a saved configuration change', {
+        actor,
+        object: objectId,
+        err,
+      });
+    }
+  }
+
   return {
-    async loginStart(request) {
-      const current = await deps.idp.current();
-      if (!current) return loginError('idp-not-configured');
+    async loginStart(request, providerId) {
       const returnTo = safeReturnTo(
         new URL(request.url).searchParams.get(RETURN_TO_PARAM),
         deps.publicUrl,
       );
+      let id = providerId;
+      if (id === undefined) {
+        const views = await deps.providers.views();
+        if (views.length === 0) return loginError('idp-not-configured');
+        const [only] = views;
+        if (views.length > 1 || !only) {
+          // Several providers: the person chooses on the sign-in page, which keeps where to go.
+          return redirect(`${LOGIN_PAGE}?${RETURN_TO_PARAM}=${encodeURIComponent(returnTo)}`);
+        }
+        id = only.id;
+      }
       try {
-        const started = await deps.relyingParties.for(current.settings).start();
+        const effective = await deps.providers.resolve(id);
+        if (!effective) return loginError('provider-unknown');
+        const rule = await deps.providers.adminRule();
+        const started = await deps.flows.for(effective.provider, rule.group).start();
         const pending = await deps.sessions.createPending({
+          providerId: effective.provider.id,
           state: started.state,
           nonce: started.nonce,
           codeVerifier: started.codeVerifier,
@@ -95,32 +164,47 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
       }
     },
 
-    async loginCallback(request) {
+    async loginCallback(request, providerId = LEGACY_PROVIDER_ID) {
       const clearPending = deps.sessions.clearPendingCookie();
       const pending = await deps.sessions.takePending(request.headers);
       if (!pending) return loginError('login-expired', { 'Set-Cookie': clearPending });
-      const current = await deps.idp.current();
-      if (!current) return loginError('idp-not-configured', { 'Set-Cookie': clearPending });
+      // The attempt was started for one provider: the callback of another never completes it.
+      if (pending.providerId !== providerId) {
+        logger.warn('sign-in failed', {
+          code: 'state-mismatch',
+          detail: `a callback of provider '${providerId}' for an attempt started with '${pending.providerId}'`,
+        });
+        return loginError('state-mismatch', { 'Set-Cookie': clearPending });
+      }
+      const effective = await deps.providers.resolve(providerId);
+      if (!effective) return loginError('provider-unknown', { 'Set-Cookie': clearPending });
+      const provider = effective.provider;
 
-      // The callback URL the IdP redirected to is the public one (TLS terminator in
+      // The callback URL the provider redirected to is the public one (TLS terminator in
       // front); only the query string is taken from the request.
-      const url = callbackUrl(deps.publicUrl);
+      const url = deps.flows.callbackUrl(provider.id);
       url.search = new URL(request.url).search;
       try {
-        const finished = await deps.relyingParties.for(current.settings).finish(url, pending);
+        const rule = await deps.providers.adminRule();
+        const finished = await deps.flows.for(provider, rule.group).finish(url, pending);
         for (const warning of finished.warnings) logger.warn('sign-in warning', { warning });
-        const identity = mapClaims(finished.claims, current.settings.claims, {
-          userinfoFailed: finished.userinfoFailed,
+        const identity = finished.identity;
+        const admission = await admit(identity, provider, {
+          isInvited: async (email) => (await deps.store.invitations.get(email)) !== null,
+          adminEmails: deps.adminEmails,
         });
-        assertEmailDomainAllowed(identity.email, current.settings.allowedEmailDomains);
-        const outcome = await completeLogin(deps.login, identity);
+        const outcome = await completeLogin(deps.login, identity, {
+          providerId: provider.id,
+          adminRule: rule,
+        });
         // A sign-in replaces the session the browser already had, it does not add one.
         await deps.sessions.destroy(request.headers);
         const session = await deps.sessions.create({
           kind: 'user',
           userId: outcome.user.id,
-          login: { email: identity.email, groups: identity.groups },
+          login: { email: identity.email, groups: identity.groups, provider: provider.id },
         });
+        logger.info('sign-in admitted', { provider: provider.id, admission });
         // Validated again where it becomes a `Location`: a pending sign-in stored by
         // an older build cannot leave the instance.
         const location = safeReturnTo(pending.returnTo, deps.publicUrl);
@@ -164,41 +248,104 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
 
       const form = await readForm(request);
       if (!form) return notAFormResponse();
-      const before = await deps.idp.stored();
+      // The single-provider form of earlier versions sends no id: it edits `idp`.
+      const id = stringField(form, 'provider_id') || LEGACY_PROVIDER_ID;
+      const kind = stringField(form, 'kind') || 'oidc';
+      const requested = stringField(form, 'mode');
+      const mode: SaveMode =
+        requested === 'create' || requested === 'update'
+          ? requested
+          : (await deps.providers.view(id))
+            ? 'update'
+            : 'create';
+      const admission = stringField(form, 'admission');
+      const input = {
+        id,
+        kind,
+        name: stringField(form, 'name'),
+        issuer: stringField(form, 'issuer'),
+        clientId: stringField(form, 'client_id'),
+        clientSecret: stringField(form, 'client_secret') || null,
+        claims: {
+          sub: stringField(form, 'claim_sub') || 'sub',
+          email: stringField(form, 'claim_email') || 'email',
+          groups: stringField(form, 'claim_groups') || 'groups',
+        },
+        // The page's three admission rules (`admission`); the single-provider form sends
+        // the domains and `invitation_only` alone.
+        allowedEmailDomains:
+          admission === 'everyone' || admission === 'invited'
+            ? []
+            : splitList(stringField(form, 'allowed_email_domains')),
+        invitationOnly: admission
+          ? admission === 'invited'
+          : stringField(form, 'invitation_only') === 'true',
+      };
       try {
-        const saved = await deps.idp.save({
-          issuer: stringField(form, 'issuer'),
-          clientId: stringField(form, 'client_id'),
-          clientSecret: stringField(form, 'client_secret') || null,
-          claims: {
-            sub: stringField(form, 'claim_sub'),
-            email: stringField(form, 'claim_email'),
-            groups: stringField(form, 'claim_groups'),
-          },
-          allowedEmailDomains: splitList(stringField(form, 'allowed_email_domains')),
-        });
+        const { saved, before } = await deps.providers.save(input, mode);
         const actor = auditActorId(guard.principal);
-        try {
-          await deps.audit.write({
-            kind: 'admin',
-            ts: toIso(deps.clock.now()),
-            user_id: actor,
-            act: 'config-changed',
-            object: { type: 'instance-config', id: IDP_CONFIG_OBJECT_ID },
-            before: before ? idpAuditView(before) : null,
-            after: idpAuditView(saved),
-            delegated_client_id: null,
-          });
-        } catch (err) {
-          // The settings are committed; a missing entry must at least be loud.
-          logger.error('audit entry not written for a saved configuration change', {
-            actor,
-            object: IDP_CONFIG_OBJECT_ID,
-            err,
-          });
+        await writeAudit(
+          actor,
+          signInAuditObjectId(saved.id),
+          before ? signInProviderAuditView(before) : null,
+          signInProviderAuditView(saved),
+        );
+        logger.info('sign-in provider saved', {
+          provider: saved.id,
+          kind: saved.kind,
+          issuer: saved.issuer.origin,
+        });
+        return redirect(`${IDP_PAGE}?saved=${encodeURIComponent(saved.id)}`);
+      } catch (err) {
+        if (err instanceof IdpSettingsError) {
+          const params = new URLSearchParams();
+          for (const p of err.problems) params.append('problem', p);
+          if (mode === 'update') return redirect(`${signInProviderPage(id)}?${params.toString()}`);
+          // A refused new provider comes back as it was typed — never the secret.
+          params.set('kind', kind);
+          params.set('id', id);
+          for (const field of [
+            'name',
+            'issuer',
+            'client_id',
+            'claim_sub',
+            'claim_email',
+            'claim_groups',
+            'allowed_email_domains',
+            'invitation_only',
+            'admission',
+          ]) {
+            const value = stringField(form, field);
+            if (value) params.set(field, value);
+          }
+          // The single-provider form has no page of its own for a new provider: back to the list.
+          const page = stringField(form, 'provider_id') ? NEW_SIGN_IN_PROVIDER_PAGE : IDP_PAGE;
+          return redirect(`${page}?${params.toString()}`);
         }
-        logger.info('identity provider settings saved', { issuer: saved.issuer.origin });
-        return redirect(`${IDP_PAGE}?saved=1`);
+        throw err;
+      }
+    },
+
+    async removeSignInProvider(request, providerId) {
+      const guard = await guardMutation(request, deps, 'operator');
+      if (!guard.ok) return refusalResponse(guard, OPERATOR_REFUSALS);
+      try {
+        const removed = await deps.providers.remove(providerId);
+        // Its users can no longer sign in; what they had open ends now. Their missions,
+        // keys and connected apps follow the rules of a deactivation: they stop only
+        // when an administrator deactivates them (handbook authentication).
+        const ended = await deps.store.users.endSessionsOfIssuer(removed.issuer.href);
+        const actor = auditActorId(guard.principal);
+        await writeAudit(
+          actor,
+          signInAuditObjectId(removed.id),
+          { ...signInProviderAuditView(removed), users: ended },
+          null,
+        );
+        logger.warn('sign-in provider removed', { provider: removed.id, users: ended });
+        return redirect(
+          `${IDP_PAGE}?removed=${encodeURIComponent(removed.id)}&people=${ended}`,
+        );
       } catch (err) {
         if (err instanceof IdpSettingsError) {
           const params = new URLSearchParams();
@@ -230,28 +377,19 @@ export function safeReturnTo(raw: string | null, publicUrl: URL, fallback = LOGI
   return resolveReturnTo(raw, publicUrl) ?? fallback;
 }
 
-/** What an administrative audit entry records of the IdP settings: never the client secret. */
-function idpAuditView(
-  settings: Pick<IdpConfig, 'issuer' | 'clientId' | 'claims' | 'allowedEmailDomains'>,
-): Record<string, unknown> {
-  return {
-    issuer: settings.issuer.href,
-    client_id: settings.clientId,
-    claims: settings.claims,
-    allowed_email_domains: settings.allowedEmailDomains,
-  };
-}
-
 /**
  * Where the Administration surface sends a visitor with no session: the
  * bootstrap page while the token is the only way in, the sign-in otherwise.
  */
 export async function adminSignInPage(auth: {
   readonly bootstrap: Pick<BootstrapService, 'state'>;
-  readonly idp: Pick<IdpSettingsService, 'current'>;
+  readonly providers: Pick<SignInProvidersService, 'views'>;
 }): Promise<string> {
-  const [bootstrap, idp] = await Promise.all([auth.bootstrap.state(), auth.idp.current()]);
-  return bootstrap.status === 'active' && !idp ? BOOTSTRAP_PAGE : LOGIN_PAGE;
+  const [bootstrap, providers] = await Promise.all([
+    auth.bootstrap.state(),
+    auth.providers.views(),
+  ]);
+  return bootstrap.status === 'active' && providers.length === 0 ? BOOTSTRAP_PAGE : LOGIN_PAGE;
 }
 
 /** The form body of a mutation, or `null` when the body is not a form. */

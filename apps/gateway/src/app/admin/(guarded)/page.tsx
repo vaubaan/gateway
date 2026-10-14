@@ -65,7 +65,7 @@ function ruleWords(admin: InstanceConfig['admin']): React.ReactNode {
   if (admin.group !== null) {
     parts.push(
       <span key="group">
-        everyone in the identity-provider group <Mono>{admin.group}</Mono>
+        everyone in the group <Mono>{admin.group}</Mono> of its sign-in provider
       </span>,
     );
   }
@@ -88,8 +88,9 @@ function ruleWords(admin: InstanceConfig['admin']): React.ReactNode {
 
 export default async function SetupPage() {
   const { root } = await requireOperator();
-  const [idp, bootstrap, apps, ownerless, clients, telemetry, users] = await Promise.all([
-    root.auth.idp.current(),
+  const [providers, rule, bootstrap, apps, ownerless, clients, telemetry, users] = await Promise.all([
+    root.auth.providers.views(),
+    root.auth.providers.adminRule(),
     root.auth.bootstrap.state(),
     root.providerApps.list(),
     root.connections.service.listOwnerless(),
@@ -106,7 +107,7 @@ export default async function SetupPage() {
   const administrators = users.filter(
     (view) =>
       view.user.status === 'active' &&
-      isOperator({ email: view.user.email, groupNames: view.groups }, root.config.admin),
+      isOperator({ email: view.user.email, groups: view.groupRecords }, rule),
   );
   const host = root.config.publicUrl.host;
 
@@ -114,12 +115,17 @@ export default async function SetupPage() {
     {
       key: 'sign-in',
       counted: true,
-      state: idp ? 'done' : 'todo',
-      title: idp ? `Sign-in through ${idp.settings.issuer.hostname}` : 'Sign-in',
-      description: idp
-        ? 'People and teams come from your identity provider. No password is stored here.'
-        : 'Nobody can sign in yet: connect your identity provider (any OpenID Connect provider).',
-      action: idp ? undefined : { label: 'Set up sign-in', href: ADMIN_PAGES.signIn },
+      state: providers.length > 0 ? 'done' : 'todo',
+      title:
+        providers.length > 0
+          ? `Sign-in through ${listOf(providers.map((provider) => provider.name))}`
+          : 'Sign-in',
+      description:
+        providers.length > 0
+          ? 'People sign in through these providers; teams come from your directory. No password is stored here.'
+          : 'Nobody can sign in yet: add your company’s directory (OpenID Connect) or GitHub.',
+      action:
+        providers.length > 0 ? undefined : { label: 'Set up sign-in', href: ADMIN_PAGES.signIn },
     },
     {
       key: 'address',

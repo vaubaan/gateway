@@ -156,6 +156,7 @@ describe('IdpSettingsService', () => {
       clientSecret: 'file-secret',
       claims: DEFAULT_CLAIM_MAPPING,
       allowedEmailDomains: [],
+      invitationOnly: false,
     };
     const s = new IdpSettingsService(fromFile, t.store.config);
     expect(s.readOnly).toBe(true);
