@@ -353,7 +353,7 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/railway/tests/unit/plugin.test.ts`                                                                |        31 |
 | `plugins/railway/tests/unit/policy.test.ts`                                                                |        39 |
 | `plugins/railway/tests/unit/risk-catalog.test.ts`                                                          |        19 |
-| `plugins/railway/tests/unit/token.test.ts`                                                                 |         5 |
+| `plugins/railway/tests/unit/token.test.ts`                                                                 |        15 |
 | `plugins/resend/tests/unit/addresses.test.ts`                                                              |        13 |
 | `plugins/resend/tests/unit/classify.test.ts`                                                               |        64 |
 | `plugins/resend/tests/unit/data-model.test.ts`                                                             |         6 |
@@ -401,7 +401,7 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/vercel/tests/unit/team-pin.test.ts`                                                               |        99 |
 | `scripts/audit-gate.test.mjs`                                                                              |        29 |
 | `scripts/release-lib.test.mjs`                                                                             |        50 |
-| **TOTAL** (`npx vitest run --reporter=json`, 2026-10-14, with a build; 311 files; 10358 passed, 1 skipped) | **10359** |
+| **TOTAL** (`npx vitest run --reporter=json`, 2026-10-14, with a build; 311 files; 10368 passed, 1 skipped) | **10369** |
 
 The table is generated from the JSON report of one run of the whole suite
 (`npx vitest run --reporter=json`). A count is the number of tests the file
