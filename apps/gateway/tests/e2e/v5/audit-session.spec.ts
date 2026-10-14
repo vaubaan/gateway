@@ -203,9 +203,9 @@ test('a day of calls: the mission, its activity, then the record of the mission'
     );
   expect(line).toHaveLength(4);
   expect(new Set(line).size).toBe(1);
-  await expect(page.getByLabel(/^Key holder/)).toBeHidden();
+  await expect(page.getByLabel(/^Who/)).toBeHidden();
   await page.getByRole('button', { name: 'More filters' }).click();
-  await expect(page.getByLabel(/^Key holder/)).toBeVisible();
+  await expect(page.getByLabel(/^Who/)).toBeVisible();
   // The page does not scroll sideways at this width.
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1280);
 

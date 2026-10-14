@@ -74,6 +74,7 @@ import { riskReferencePath } from '@/server/providers/links';
 import { riskExplainer } from '@/server/providers/reference';
 
 import styles from './activity.module.css';
+import { changeLines, type ChangeNames } from './change-lines';
 import { When } from './when';
 
 export const dynamic = 'force-dynamic';
@@ -169,7 +170,7 @@ function Who({ entry }: { entry: AuditEntryView }) {
   }
   if (!entry.token) {
     return (
-      <span className={styles.quiet} title="Recorded before keys had a holder">
+      <span className={styles.quiet} title="Recorded before a call said whose key it used">
         {ACTIVITY_WORDS.notAttributed}
       </span>
     );
@@ -411,8 +412,9 @@ function CallDetail({ entry, explain }: { entry: AuditCallView; explain: Explain
   );
 }
 
-function AdminDetail({ entry }: { entry: AuditAdminView }) {
+function AdminDetail({ entry, names }: { entry: AuditAdminView; names: ChangeNames }) {
   const hasState = entry.before !== null || entry.after !== null;
+  const lines = changeLines(entry.before, entry.after, names, entry.object.type);
   return (
     <>
       <KeyValue
@@ -438,13 +440,37 @@ function AdminDetail({ entry }: { entry: AuditAdminView }) {
               entry.actor.label
             ),
           },
+          // What changed, in words: the account by its name, each permission with its limits.
+          ...lines.map((line) => ({
+            term: line.label,
+            value: (
+              <span data-testid="change-line">
+                {line.value}
+                {line.was !== undefined && <span className={styles.quiet}> · was {line.was}</span>}
+                {line.id && (
+                  <>
+                    {' '}
+                    <Mono quiet>{line.id}</Mono>
+                  </>
+                )}
+              </span>
+            ),
+          })),
         ]}
       />
       {hasState && (
         <div className={styles.state}>
-          <CodeBlock label="Before and after" copy={false}>
-            {JSON.stringify({ before: entry.before, after: entry.after }, null, 2)}
-          </CodeBlock>
+          {/* The record as it is stored, in the protocol's names: one click away. */}
+          <Disclosure
+            id="activity:raw-record"
+            show="Show the raw record"
+            hide="Hide the raw record"
+            testId="change-raw"
+          >
+            <CodeBlock label="Before and after" copy={false}>
+              {JSON.stringify({ before: entry.before, after: entry.after }, null, 2)}
+            </CodeBlock>
+          </Disclosure>
         </div>
       )}
     </>
@@ -462,6 +488,14 @@ export default async function ActivityPage({ searchParams }: Props) {
     root.audit.query.filterOptions(principal),
   ]);
   const explain = riskExplainer(root.registry);
+  // The one change a person opened is printed in words: the names behind its ids.
+  const openedChange = page.entries.find(
+    (entry): entry is AuditAdminView => entry.kind === 'admin' && entry.id === opened,
+  );
+  const changeNames: ChangeNames = {
+    ids: openedChange ? await root.audit.query.changeNames(openedChange) : {},
+    permission: (riskId) => explain(riskId)?.label ?? null,
+  };
   const now = new Date();
   const { ranges, current } = periods(raw, now);
   const you = principal.kind === 'user' ? principal.user.email : null;
@@ -649,7 +683,7 @@ export default async function ActivityPage({ searchParams }: Props) {
               />
             </Field>
             <Field
-              label="Key holder"
+              label="Who"
               shape="an email, or the name of a machine key"
               htmlFor="activity-holder"
             >
@@ -736,7 +770,7 @@ export default async function ActivityPage({ searchParams }: Props) {
                 {entry.kind === 'call' ? (
                   <CallDetail entry={entry} explain={explain} />
                 ) : (
-                  <AdminDetail entry={entry} />
+                  <AdminDetail entry={entry} names={changeNames} />
                 )}
               </div>
             ) : null

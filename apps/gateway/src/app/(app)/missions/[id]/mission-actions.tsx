@@ -397,7 +397,7 @@ export function MissionActsProvider({
               {act.token.holder.kind === 'member'
                 ? act.token.mine
                   ? 'You can generate a new key afterwards.'
-                  : 'Its holder stays on the mission and can generate a new key.'
+                  : 'The person stays on the mission and can generate a new key.'
                 : 'A machine key cannot be brought back: create a new one for the machine.'}
             </>
           }
@@ -429,8 +429,8 @@ export function MissionActsProvider({
           body={
             <>
               Every key of the mission stops working at once
-              {team.tokens.length > 1 ? `, for all ${team.tokens.length} holders` : ''}: each call
-              is refused from now on. This cannot be undone. To continue the work, duplicate the
+              {team.tokens.length > 1 ? ` — all ${team.tokens.length} of them` : ''}: each call is
+              refused from now on. This cannot be undone. To continue the work, duplicate the
               mission: the copy gets its own key.
             </>
           }

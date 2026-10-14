@@ -443,7 +443,7 @@ presets:
 
   - id: finance-operator
     label: Finance operator
-    description: Live-mode billing operations ; refunds, payouts, cancellations, voids and deletions ask first.
+    description: Live-mode billing operations; refunds, payouts, cancellations, voids and deletions ask first.
     entries:
       - risk_id: stripe[live].read-catalog
         quota: 2000

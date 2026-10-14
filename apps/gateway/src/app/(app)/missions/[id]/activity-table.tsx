@@ -54,7 +54,7 @@ export function ActivityTable({
       nowrap: true,
       cell: (event) => (
         <span className={styles.quietText}>
-          <LocalDate ts={event.ts} />
+          <LocalDate ts={event.ts} seconds />
         </span>
       ),
     },

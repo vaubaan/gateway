@@ -54,7 +54,7 @@ function TeamDetail({ view }: { view: GroupView }) {
       {members.length === 0 ? (
         <p className={styles.quiet}>Nobody is in this team.</p>
       ) : (
-        <ul className={styles.members} aria-label={`Members of ${group.name}`}>
+        <ul className={styles.members} aria-label={`People of ${group.name}`}>
           {members.map((member) => (
             <li key={member.id} className={styles.member}>
               <span className={styles.inline}>
@@ -162,7 +162,7 @@ export default async function TeamsPage({ searchParams }: { searchParams: PageSe
     },
     {
       id: 'members',
-      header: 'Members',
+      header: 'People',
       cell: (view) =>
         view.members.length === 0 ? (
           view.ownedConnections > 0 ? (

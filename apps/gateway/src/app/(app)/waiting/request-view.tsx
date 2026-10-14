@@ -80,7 +80,7 @@ import type { RiskId } from '@vaubaan/shared';
 import { eventWords } from './event-words';
 import { LimitAnswer, type LimitChoice } from './limit-answer';
 import { LocalTime } from './local-time';
-import { whoOf } from './parts';
+import { CallHeadline, whoOf } from './parts';
 import styles from './waiting.module.css';
 
 /** How many events "What led here" shows before "Mission activity" takes over. */
@@ -588,7 +588,12 @@ function ApprovalBody({
         }
         status={<StateMark request={request} />}
       >
-        {gates.map((gate) => gate.label).join(' and ')}
+        {/* What the agent wants to do; the permission it needs is two blocks below. */}
+        {request.call ? (
+          <CallHeadline call={request.call} />
+        ) : (
+          gates.map((gate) => gate.label).join(' and ')
+        )}
       </RequestStatement>
       <ApprovalOutcome view={view} now={now} />
       <Notices view={view} decided={decided} problem={problem} />
@@ -924,8 +929,12 @@ function ClaimBody({
             leaveLabel={period.end ? 'Leave it until the reset' : 'Leave it'}
           />
           <Hint>
-            Your answer is written to the activity. Leaving it does not stop the mission. To change
-            the limit for good, <Link href={missionPath(mission.id)}>edit the mission</Link>.
+            Your answer is written to the activity. Leaving it does not stop the mission. The limits
+            of a mission are set when it is created: for another limit from now on,{' '}
+            <Link href={`${ROUTES.newMission}?from=${mission.id}`} data-testid="claim-duplicate">
+              duplicate the mission
+            </Link>{' '}
+            with the limit you want.
           </Hint>
         </section>
       )}

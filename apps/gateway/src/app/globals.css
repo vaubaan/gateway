@@ -148,3 +148,8 @@ hr {
   white-space: nowrap;
   border: 0;
 }
+
+/* A reference a person may quote (`owner/repo`) is not broken across two lines. */
+.vbn-nowrap {
+  white-space: nowrap;
+}

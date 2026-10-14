@@ -222,7 +222,7 @@ presets:
 
   - id: developer
     label: Developer
-    description: One mission per code project — deploy, redeploy and manage variables on non-production environments freely ; read logs ; production deploys and variable writes ask first.
+    description: One mission per code project — deploy, redeploy and manage variables on non-production environments freely; read logs; production deploys and variable writes ask first.
     entries:
       - risk_id: railway.read-account
         quota: 1000

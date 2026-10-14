@@ -68,3 +68,29 @@
     padding: 0 var(--space-1) 0 0;
   }
 }
+
+/* A phone: one labelled row of chips per group — a run-on line of words is
+   not a navigation. The label sits above its row; each entry is a target a
+   finger can hit. */
+@media (max-width: 640px) {
+  .subnav {
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  .group {
+    gap: 6px;
+  }
+  .groupLabel {
+    flex-basis: 100%;
+    padding: 0;
+  }
+  .item {
+    min-height: var(--control-lg);
+    padding: 0 var(--space-3);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-full);
+  }
+  .itemOn {
+    border-color: var(--ink);
+  }
+}

@@ -36,6 +36,7 @@ import {
 } from './credential.ts';
 import { sshDataModel } from './data-model.ts';
 import { createSshRuntime, DISCOVERY_PROBE, hostResource } from './execute.ts';
+import { sshToolTitles } from './tool-titles.ts';
 import { DEFAULT_TIMEOUT_S, MAX_TIMEOUT_S, SSH_EXEC, sshTools } from './tools.ts';
 import {
   MAX_READY_TIMEOUT_MS,
@@ -69,6 +70,7 @@ export function createSshPlugin(options: SshRuntimeOptions = {}): ProviderPlugin
     docsUrl:
       'https://github.com/sbw-vaubaan/vaubaan-gateway/blob/main/docs/handbook/providers/ssh.md',
     tools: sshTools,
+    toolTitles: sshToolTitles,
     dataModel: sshDataModel,
     catalog: sshCatalog.catalog,
     credential: sshCredential,

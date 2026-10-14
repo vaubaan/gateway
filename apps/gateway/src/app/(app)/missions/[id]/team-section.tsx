@@ -125,7 +125,7 @@ export function TeamSection({
   const columns: Column<HolderRow>[] = [
     {
       id: 'holder',
-      header: 'Holder',
+      header: 'Who',
       // The same place on every mission, whatever the names: the eye finds the second column.
       width: '34%',
       cell: (row) => (

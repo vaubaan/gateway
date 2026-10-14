@@ -37,6 +37,23 @@
   top: var(--space-2);
   right: var(--space-2);
 }
+/* A phone: the button sits above the block instead of over its first line,
+   and the line scrolls under nothing. */
+@media (max-width: 640px) {
+  .block {
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: flex-end;
+    gap: var(--space-1);
+  }
+  .pre {
+    align-self: stretch;
+    padding-right: 14px;
+  }
+  .copy {
+    position: static;
+  }
+}
 .tone_key {
   color: var(--code-key);
 }

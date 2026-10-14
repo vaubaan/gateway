@@ -183,8 +183,28 @@ names, and the notes about them do too.
   and Settings, choose among System, Light and Dark. The choice is kept in a cookie
   (`vaubaan_theme`, a display preference and nothing else) so that a page never
   flashes in the other theme while loading.
-- **An interface reference at `/design`** (linked from Settings): every component of
-  the interface in every state, in both themes, with invented data.
+- **An interface reference at `/design`** (listed in Settings for administrators;
+  reachable by its address for anyone signed in): every component of the interface in
+  every state, in both themes, with invented data.
+- **The interface on a phone.** The navigation is a bar at the bottom of the screen
+  with a word under each icon — Now, Waiting, Missions, Accounts, and "More" for
+  Activity, Reference and Settings. A table is drawn as rows of labelled lines instead
+  of a grid, the actions of a row are always visible (nothing depends on hovering), a
+  dialog never exceeds the screen, and no page scrolls sideways.
+- **An approval says what the agent wants to do.** A request that waits for your yes
+  is headed by what the tool does and the resource the call resolves to — "Merge a
+  pull request · acme-org/app" — on Now, in "Waiting for you" and on the mission; the
+  permission it needs, its severity and the exact arguments are right below. A plugin
+  gives each tool a few words (`toolTitles`, optional: a tool without them is headed
+  by its name); `tools/list` is unchanged.
+- **One form for dates.** "14 Oct", "14 Oct, 01:48", on 24 hours and in your time zone,
+  whatever the language of your browser.
+- **A change in the activity is read in words**: the account by its name, each
+  permission with its limits, what a value was before. The stored record is one click
+  away ("Show the raw record").
+- **Signing in lands on Now**, and a form that refused a key comes back with what you
+  typed, the field in error marked and its expected shape said again — a key itself is
+  never kept: you type it again.
 
 - **The execution door.** `POST /mcp` takes a mission token: `tools/list` shows the tools
   of the providers the mission holds a connection and an accepted risk for; `tools/call`

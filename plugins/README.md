@@ -351,6 +351,18 @@ whole argument surface of the tool: an argument is declared there before
 the classifier or the executor may use it (see "Only declared arguments"
 below).
 
+**Say what each tool does in a few words** (`toolTitles`, keyed by tool name:
+`templateToolTitles` in the template's `tools.ts`, a `tool-titles.ts` of its
+own in the larger plugins). When a call asks a person first, the interface
+heads the request with the title and the resource the call resolves to —
+"Delete a widget · acme-staging" — so that the person reads what the agent
+wants to do rather than the name of a permission. A verb and its object,
+sentence case, no final period, 60 characters at most (`definePlugin` checks
+it). It is for people only: `tools/list` does not carry it, the description
+stays what an agent reads. Optional in the contract; a tool without a title
+is headed by its name, and every tool of a plugin shipped with the gateway
+has one.
+
 **Classifier.** `classify(tool, args, resources)` returns
 `{ slices: Slice[] }` or `{ denied: string }`. `resources` are the mission's
 resources on this connection. This is the security-critical file: the gateway

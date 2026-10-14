@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   cleanName,
+  echoOfForm,
   editableMetadataKeys,
   parseEnvLabel,
   parseListValue,
@@ -30,6 +31,33 @@ describe('readCredentialFields', () => {
       'Team ID does not have the expected format',
     ]);
     expect(read.problems.join(' ')).not.toContain('nope-SECRET');
+    // The same problems by field, for a form that marks the field itself.
+    expect(read.invalid).toEqual({ token: 'required', team_id: 'format' });
+  });
+});
+
+describe('echoOfForm — what a refused form is drawn with again', () => {
+  it('keeps the name and the non-secret values, and never a secret', () => {
+    const echo = echoOfForm(
+      API_KEY_SPEC.fields,
+      { token: 'tok-SECRET-VALUE', team_id: 'not-a-team', note: '  for the audit  ' },
+      '  Acme   sandbox ',
+    );
+    expect(echo).toEqual({
+      name: 'Acme sandbox',
+      // A value in error is kept too: the person corrects it instead of typing it again.
+      values: { team_id: 'not-a-team', note: 'for the audit' },
+      invalid: { team_id: 'format' },
+    });
+    expect(JSON.stringify(echo)).not.toContain('tok-SECRET-VALUE');
+  });
+
+  it('says which field is missing, and keeps nothing of a field left blank', () => {
+    expect(echoOfForm(API_KEY_SPEC.fields, { team_id: 'team_abc' }, null)).toEqual({
+      name: '',
+      values: { team_id: 'team_abc' },
+      invalid: { token: 'required' },
+    });
   });
 });
 

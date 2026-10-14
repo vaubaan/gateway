@@ -17,6 +17,7 @@ import { catalogPathNextTo, definePlugin, loadCatalogFile } from '@vaubaan/plugi
 import { classifyStripe } from './classify.ts';
 import { stripeDataModel } from './data-model.ts';
 import { discoverStripeResources, executeStripe } from './execute.ts';
+import { stripeToolTitles } from './tool-titles.ts';
 import { stripeTools } from './tools.ts';
 
 // The YAML sits next to this module ; `catalogPathNextTo` keeps the path a
@@ -41,6 +42,7 @@ export const stripePlugin = definePlugin({
   docsUrl:
     'https://github.com/sbw-vaubaan/vaubaan-gateway/blob/main/docs/handbook/providers/stripe.md',
   tools: stripeTools,
+  toolTitles: stripeToolTitles,
   dataModel: stripeDataModel,
   catalog: stripeCatalog.catalog,
   credential: {

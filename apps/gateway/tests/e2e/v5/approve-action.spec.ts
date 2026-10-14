@@ -185,7 +185,13 @@ test('a gated action of the developer preset: refused, approved by its creator o
   await hedy.goto('/');
   const waiting = hedy.getByTestId('now-waiting');
   await expect(waiting).toContainText(MISSION);
-  await expect(waiting).toContainText(TOOL);
+  // The head of the row is what the agent wants to do and on what — the plugin's words for
+  // the tool, the resource the call resolved to — and the permission it needs comes after.
+  await expect(waiting.getByTestId('call-headline')).toHaveText(
+    'Write a file on a branch · acme/app',
+  );
+  await expect(waiting).toContainText('needs “Modify a GitHub Actions workflow');
+  await expect(waiting).toContainText('An agent with your key, on');
   await expect(waiting.getByRole('button', { name: /Approve/ })).toHaveCount(0);
   expect(await hedy.content()).not.toContain(MARKER);
   await snap(hedy, 'approval-on-now');
@@ -417,6 +423,10 @@ test('a call that touches two gated risks asks once: one request, one approval, 
     .getByTestId('waiting-list')
     .getByRole('link', { name: /Develop behind two gates/ });
   await expect(inboxItem).toHaveCount(1);
+  // One head for the call; the permissions it needs on the line under it.
+  await expect(inboxItem.getByTestId('call-headline')).toHaveText(
+    'Write a file on a branch · acme/app',
+  );
   await expect(inboxItem).toContainText('and 1 more');
   await snap(hedy, 'approval-inbox-two-gated-risks');
 

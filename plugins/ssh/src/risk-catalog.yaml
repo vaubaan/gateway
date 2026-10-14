@@ -231,7 +231,7 @@ presets:
 
   - id: developer
     label: Developer
-    description: One mission per code project — reads everywhere, file and process operations on dev and staging hosts, service restarts on dev ; nothing destructive, no packages, no sudo, no prod.
+    description: One mission per code project — reads everywhere, file and process operations on dev and staging hosts, service restarts on dev; nothing destructive, no packages, no sudo, no prod.
     entries:
       - risk_id: ssh.exec-read
         quota: 5000
@@ -256,7 +256,7 @@ presets:
 
   - id: operator
     label: Operator
-    description: Everything on every labelled host ; credential-file reads, destructive commands, package changes, service control and sudo asking first outside dev ; every prod write asking first.
+    description: Everything on every labelled host; credential-file reads, destructive commands, package changes, service control and sudo asking first outside dev; every prod write asking first.
     entries:
       - risk_id: ssh.exec-read
         quota: 10000

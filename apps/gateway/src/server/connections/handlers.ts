@@ -45,6 +45,7 @@ import {
 } from '../provider-apps';
 import { toIso, type Clock } from '../store/clock';
 import { CONNECT_ERROR_MESSAGES, ConnectError, errorMessage } from './errors';
+import { echoOfForm } from './input';
 import type { Notice, NoticeStore } from './pending';
 import { providerGrantReport } from './provider-grant';
 import {
@@ -266,12 +267,13 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
       const form = await readForm(request);
       if (!form) return notAFormResponse();
       const reconnectId = stringField(form, 'connection_id') || null;
+      const typed = prefixedFields(form, FIELD_PREFIX);
       try {
         const result = await deps.connections.start(who.actor, providerId, {
           displayName: stringField(form, 'name'),
           returnTo: stringField(form, 'return_to') || null,
           reconnectId,
-          fields: prefixedFields(form, FIELD_PREFIX),
+          fields: typed,
         });
         if (result.kind === 'redirect') return redirect(result.url);
         return await redirectWithNotice(
@@ -281,12 +283,28 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
         );
       } catch (err) {
         const unknownProvider = err instanceof ConnectError && err.code === 'provider-unknown';
+        // Back to the same form: the account being reconnected and the page to
+        // return to afterwards stay in its address.
+        const query = new URLSearchParams();
+        if (reconnectId) query.set('connection', reconnectId);
+        const returnTo = stringField(form, 'return_to');
+        if (returnTo) query.set('return_to', returnTo);
         const back = unknownProvider
           ? NEW_CONNECTION_PATH
           : `${NEW_CONNECTION_PATH}/${encodeURIComponent(providerId)}${
-              reconnectId ? `?connection=${encodeURIComponent(reconnectId)}` : ''
+              query.size > 0 ? `?${query.toString()}` : ''
             }`;
-        return redirectWithNotice(who.principal, back, failureNotice(err, 'Not connected'));
+        // The form comes back as it was typed, the field in error marked: the
+        // name and the non-secret values only — a key is never kept.
+        const provider = unknownProvider ? null : await deps.connections.provider(providerId);
+        const notice = failureNotice(err, 'Not connected');
+        return redirectWithNotice(
+          who.principal,
+          back,
+          provider
+            ? { ...notice, form: echoOfForm(provider.fields, typed, stringField(form, 'name')) }
+            : notice,
+        );
       }
     },
 

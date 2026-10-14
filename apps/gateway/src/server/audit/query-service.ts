@@ -107,8 +107,8 @@ export interface AuditAdminView {
     /**
      * The name of the object when it still exists (`objectLabel`): a mission or
      * group name, a connection's display name, a client's declared name, "the
-     * connection → who it is shared with" for a share, "claim on <mission>" for
-     * a request. `null` for an object that is gone, and for `instance-config`,
+     * connection → who it is shared with" for a share, "the limit of <mission>"
+     * or "a call of <mission>" for a request. `null` for an object that is gone, and for `instance-config`,
      * whose id is its name.
      */
     readonly label: string | null;
@@ -285,6 +285,57 @@ export class AuditQueryService {
   }
 
   /**
+   * The names behind the ids a change holds in its `before` and `after`, for the
+   * page that prints the change in words: an account by its name, a resource by
+   * its display name, a person by their email, a team by its name. Keyed by id;
+   * an id whose object is gone is absent (the page then prints the id).
+   *
+   * Read-only, and it reveals nothing the entry does not: it takes an entry this
+   * service returned to the reader — the ids are already in what they read — and
+   * names them. Called for the one line a person opened, not for a page of lines.
+   */
+  async changeNames(entry: AuditAdminView): Promise<Readonly<Record<string, string>>> {
+    const names = new NameCache(this.deps.store);
+    const found: Record<string, string> = {};
+    const put = (id: unknown, name: string | null | undefined): void => {
+      if (typeof id === 'string' && name) found[id] = name;
+    };
+    const visit = async (value: unknown): Promise<void> => {
+      if (Array.isArray(value)) {
+        for (const item of value) await visit(item);
+        return;
+      }
+      if (typeof value !== 'object' || value === null) return;
+      const record = value as Readonly<Record<string, unknown>>;
+      // `{ kind: 'user' | 'group', id }`: an owner, or whom an access was given to.
+      if (typeof record.id === 'string' && (record.kind === 'user' || record.kind === 'group')) {
+        put(
+          record.id,
+          record.kind === 'user' ? await names.email(record.id) : await names.group(record.id),
+        );
+      }
+      for (const [key, inner] of Object.entries(record)) {
+        if (key === 'connection_id' && typeof inner === 'string') {
+          put(inner, (await names.connection(inner)).display_name);
+        } else if (key === 'resource_id' && typeof inner === 'string') {
+          put(inner, await names.resource(inner));
+        } else if (key === 'resource_ids' && Array.isArray(inner)) {
+          for (const id of inner) {
+            if (typeof id === 'string') put(id, await names.resource(id));
+          }
+        } else if ((key === 'user_id' || key === 'member_user_id') && typeof inner === 'string') {
+          put(inner, await names.email(inner));
+        } else {
+          await visit(inner);
+        }
+      }
+    };
+    await visit(entry.before);
+    await visit(entry.after);
+    return found;
+  }
+
+  /**
    * The user filter as typed: an email address or a user id. An unknown value
    * yields no entry, exactly like a known user with none, so the filter does
    * not reveal who has an account.
@@ -376,6 +427,14 @@ class NameCache {
     );
   }
 
+  /** A resource of an account, as its owner named it; else its ref. */
+  resource(id: string): Promise<string | null> {
+    return memo(this.labels, `resource:${id}`, async () => {
+      const resource = await this.store.connections.getResource(id);
+      return resource ? resource.displayName || resource.ref : null;
+    });
+  }
+
   /** The declared name of an OAuth client, by its row id (`oauth_clients.id`). */
   client(id: string): Promise<string | null> {
     return memo(
@@ -399,14 +458,19 @@ class NameCache {
     });
   }
 
-  /** "claim on <mission>", "approval request on <mission>". */
+  /**
+   * What a person answered, in the words of the pages: "the limit of
+   * <mission>" (a claim: a limit that was reached), "a call of <mission>" (an
+   * approval request: a call that asked first). The protocol's kinds stay in
+   * the record itself (`object.type`, the act).
+   */
   request(id: string): Promise<string | null> {
     return memo(this.labels, `request:${id}`, async () => {
       const request = await this.store.requests.getById(id);
       if (!request) return null;
-      const kind = request.kind === 'approval' ? 'approval request' : request.kind;
+      const what = request.kind === 'approval' ? 'a call of' : 'the limit of';
       const mission = (await this.mission(request.missionId)).name;
-      return `${kind} on ${mission ?? request.missionId}`;
+      return `${what} ${mission ?? request.missionId}`;
     });
   }
 

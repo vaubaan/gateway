@@ -12,6 +12,7 @@
 import { randomBytes } from 'node:crypto';
 
 import type { SessionStore } from '../compose/ports';
+import type { FormEcho } from './input';
 import { newState } from './oauth2';
 
 const MINUTE_MS = 60_000;
@@ -80,6 +81,12 @@ export interface Notice {
   readonly tone: NoticeTone;
   readonly title: string;
   readonly lines: readonly string[];
+  /**
+   * A refused form, to draw it again as it was typed and mark the field in
+   * error (`echoOfForm`): the name and the non-secret values only. Kept as
+   * long as the notice — read once, by the session it was written for.
+   */
+  readonly form?: FormEcho;
 }
 
 interface StoredNotice extends Notice {
@@ -107,6 +114,11 @@ export class NoticeStore {
     const stored = (await this.store.get(`notice:${id}`)) as StoredNotice | null;
     if (!stored || stored.owner !== owner) return null;
     await this.store.delete(`notice:${id}`);
-    return { tone: stored.tone, title: stored.title, lines: stored.lines };
+    return {
+      tone: stored.tone,
+      title: stored.title,
+      lines: stored.lines,
+      ...(stored.form ? { form: stored.form } : {}),
+    };
   }
 }

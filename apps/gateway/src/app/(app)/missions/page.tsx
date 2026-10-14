@@ -93,8 +93,17 @@ function columnsFor(shared: boolean, now: Date): Column<ListedMission>[] {
       header: 'Your key',
       detail: true,
       nowrap: true,
-      cell: ({ token }) =>
-        token ? <KeyMark>{maskedToken(token.prefix)}</KeyMark> : KEY_WORDS.notGenerated,
+      cell: ({ token, state }) =>
+        // A key that works is shown masked; otherwise the cell says why there is none.
+        state.kind === 'revoked' ? (
+          KEY_WORDS.revoked
+        ) : token ? (
+          <KeyMark>{maskedToken(token.prefix)}</KeyMark>
+        ) : state.kind === 'expired' ? (
+          KEY_WORDS.noneMade
+        ) : (
+          KEY_WORDS.notGenerated
+        ),
     },
     {
       id: 'created',

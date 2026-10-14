@@ -41,7 +41,12 @@
 .callout {
   margin-bottom: var(--space-4);
 }
+/* A wide table scrolls inside this box. `position: relative` makes it the
+   containing block of what the table hides for assistive technology
+   (absolutely positioned): without it those escape the box and the whole page
+   scrolls sideways on a phone. */
 .scroll {
+  position: relative;
   max-width: 100%;
   overflow-x: auto;
 }

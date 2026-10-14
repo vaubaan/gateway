@@ -168,7 +168,7 @@ export default async function MissionSessionPage({ params, searchParams }: Props
   );
 
   const holderColumns: Column<HolderActivity>[] = [
-    { id: 'holder', header: 'Key holder', cell: (a) => <HolderName holder={a.holder} /> },
+    { id: 'holder', header: 'Who', cell: (a) => <HolderName holder={a.holder} /> },
     { id: 'allowed', header: 'Allowed', align: 'right', cell: (a) => a.allowed },
     { id: 'refused', header: 'Refused', align: 'right', cell: (a) => a.refused },
     {

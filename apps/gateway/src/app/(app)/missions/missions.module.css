@@ -143,6 +143,21 @@
   font-size: var(--text-sm);
   text-align: right;
 }
+/* A phone: the title, then its hint under it — not a 120 px column beside it. */
+@media (max-width: 640px) {
+  .kitHead {
+    flex-wrap: wrap;
+  }
+  .kitTitle {
+    flex: 1;
+    min-width: 0;
+  }
+  .kitHint {
+    flex-basis: 100%;
+    margin-left: 30px;
+    text-align: left;
+  }
+}
 /* The instructions are long: they scroll in place, the kit stays one screen. */
 .kitStep pre {
   max-height: 232px;

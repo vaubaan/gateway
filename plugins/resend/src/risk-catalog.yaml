@@ -376,7 +376,7 @@ presets:
 
   - id: developer
     label: Developer
-    description: One mission per code project — transactional sends to internal and allow-listed recipients, generous limits ; no bulk, no PII, no domain change.
+    description: One mission per code project — transactional sends to internal and allow-listed recipients, generous limits; no bulk, no PII, no domain change.
     entries:
       - risk_id: resend.read-email-status
         quota: 5000
@@ -401,7 +401,7 @@ presets:
 
   - id: marketing-operator
     label: Marketing operator
-    description: Contacts, segments and campaigns ; broadcast sends, batch sends and segment deletion ask first. No domain change.
+    description: Contacts, segments and campaigns; broadcast sends, batch sends and segment deletion ask first. No domain change.
     entries:
       - risk_id: resend.read-email-status
         quota: 2000

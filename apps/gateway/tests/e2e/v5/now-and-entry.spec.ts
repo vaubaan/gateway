@@ -54,13 +54,60 @@ test('the sign-in names the gateway, offers one way in, and leads to the one hom
   await expect(page.getByTestId('login-error')).toHaveCount(0);
 
   await page.getByRole('button', { name: /^Continue with / }).click();
-  // Signed in from the sign-in page itself: who is signed in, and the way to the home.
+  // Signed in from the sign-in page itself: the home, with no card in between.
+  await expect(page).toHaveURL(new RegExp(`^${PUBLIC_URL}/$`));
+  await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(`Welcome, Nora`);
+  await expect(page.getByText('You are signed in')).toHaveCount(0);
+  await snap(page, 'login-lands-on-now');
+
+  // A signed-in person has nothing to read on the sign-in page: it sends them home.
+  await page.goto('/login');
+  await expect(page).toHaveURL(new RegExp(`^${PUBLIC_URL}/$`));
+  // A failed attempt while a session exists says why, and that the session is still open.
+  await page.goto('/login?error=login-expired');
+  await expect(page).toHaveURL(/\/login\?error=login-expired$/);
+  await expect(page.getByTestId('login-error')).toContainText('The sign-in attempt expired');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('You are signed in');
   await expect(page.getByTestId('signed-in-as')).toContainText(NEWCOMER.name);
   await expect(page.getByTestId('signed-in-as')).toContainText(NEWCOMER.email);
+  // The security sentence the first screen used to open with is gone.
+  await expect(page.getByRole('main')).not.toContainText('recomputed from your teams');
   await snap(page, 'login-signed-in');
   await page.getByRole('link', { name: 'Open the gateway' }).click();
   await expect(page).toHaveURL(new RegExp(`^${PUBLIC_URL}/$`));
+});
+
+test('a form that refuses a key keeps what was typed, marks the field and says its shape again', async ({
+  page,
+}) => {
+  await signIn(page);
+  await page.goto('/accounts/new/stripe');
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Connect a Stripe account');
+  const name = page.getByLabel(/^Name/);
+  const testKey = page.getByLabel(/^Test-mode key/);
+  await name.fill('Acme billing sandbox');
+  await testKey.fill('not-a-stripe-key');
+  await page.getByRole('button', { name: 'Connect', exact: true }).click();
+
+  // Back on the same form, with why at the top…
+  await expect(page).toHaveURL(/\/accounts\/new\/stripe\?notice=/);
+  await expect(page.getByTestId('notice')).toContainText('Not connected');
+  // …what was typed still there — except the key, which is never kept…
+  await expect(name).toHaveValue('Acme billing sandbox');
+  await expect(testKey).toHaveValue('');
+  expect(await page.content()).not.toContain('not-a-stripe-key');
+  // …the field in error marked, and the shape it expects said again under it.
+  await expect(testKey).toHaveAttribute('aria-invalid', 'true');
+  await expect(page.getByLabel(/^Live-mode key/)).not.toHaveAttribute('aria-invalid', 'true');
+  const why = page.getByRole('alert').filter({ hasText: 'expected shape' });
+  await expect(why).toContainText('starts with sk_test_ or rk_test_');
+  await expect(why).toContainText('A secret is never kept: type it again.');
+  await snap(page, 'connect-form-refused');
+  // The note of a refusal is read once: a reload shows the plain form again.
+  await page.reload();
+  await expect(page.getByTestId('notice')).toHaveCount(0);
+  await expect(testKey).not.toHaveAttribute('aria-invalid', 'true');
 });
 
 test('a first run says what the product is, draws the model and leads to the first account', async ({

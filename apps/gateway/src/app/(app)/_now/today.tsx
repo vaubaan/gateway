@@ -1,26 +1,14 @@
 'use client';
 
 /**
- * The date and time of the page, in the reader's own words: "Tuesday 13
- * October, 11:02". The server does not know the reader's time zone, so it
- * renders the UTC instant and the browser replaces it after hydration.
+ * The date and time of the page, said once and in full: "Tuesday 13 October,
+ * 11:02", in the form `lib/dates` writes whatever the browser's locale. The
+ * server does not know the reader's time zone, so it renders the UTC instant
+ * and says so; the browser replaces it after hydration.
  */
 import { useEffect, useState } from 'react';
 
-function utcText(at: string): string {
-  return `${at.slice(0, 16).replace('T', ' ')} UTC`;
-}
-
-function localText(at: string): string {
-  const date = new Date(at);
-  const day = date.toLocaleDateString(undefined, {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  });
-  const time = date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-  return `${day}, ${time}`;
-}
+import { formatToday } from '@/lib/dates';
 
 export function Today({ at }: { at: string }) {
   const [local, setLocal] = useState(false);
@@ -29,7 +17,7 @@ export function Today({ at }: { at: string }) {
   }, []);
   return (
     <time dateTime={at} suppressHydrationWarning data-testid="now-date">
-      {local ? localText(at) : utcText(at)}
+      {local ? formatToday(at, { zone: 'local' }) : `${formatToday(at)} UTC`}
     </time>
   );
 }

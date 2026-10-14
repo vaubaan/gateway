@@ -208,7 +208,7 @@ describe('mission session view', () => {
     ]);
   });
 
-  it('lists open requests by link only: no tool, no fingerprint, no argument', async () => {
+  it('lists open requests by what the activity already says — the tool, the resource — and never a fingerprint or an argument', async () => {
     const approval = await seedCall(rig, mission, {
       tool: 'github__merge_pull_request',
       risks: [MERGE],
@@ -233,8 +233,19 @@ describe('mission session view', () => {
       'id',
       'kind',
       'path',
+      'resource_ref',
       'risk_id',
+      'tool',
     ]);
+    // An approval names its tool, as the refused call's line of the timeline does; a
+    // claim names none (it is about a permission, not about one call).
+    const byKind = new Map(v.open_requests.map((r) => [r.kind, r]));
+    expect(byKind.get('approval')?.tool).toBe('github__merge_pull_request');
+    expect(byKind.get('claim')).toMatchObject({ tool: null, resource_ref: null });
+    // The fingerprint binds the approval to the arguments: it is not in the view.
+    const stored = await rig.root.store.requests.getById(approval.result.request_id ?? '');
+    expect(stored?.fingerprint).toMatch(/^[0-9a-f]{64}$/);
+    expect(JSON.stringify(v.open_requests)).not.toContain(stored?.fingerprint ?? 'x');
     // The refusal the agent received carries the forwarded URL of the same request.
     expect(approval.result.refusal).toMatchObject({
       approval_url: `${rig.root.config.publicUrl.origin}/r/${approval.result.request_id}`,

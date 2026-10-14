@@ -4,7 +4,9 @@
  *
  * It holds the theme and leads to the other pages of Settings: connected apps
  * (`/settings/connected-apps`) and, for an administrator, the administration
- * (`/admin/**`). Open to every session: whoever installs the gateway
+ * (`/admin/**`) and the interface reference (`/design`, a component gallery:
+ * reachable by its address for anyone signed in, listed here for
+ * administrators only). Open to every session: whoever installs the gateway
  * configures it from here too.
  */
 import { SettingsFrame } from '@/components/shell/AppShell';
@@ -43,15 +45,6 @@ export default async function SettingsPage() {
               </ButtonLink>
             }
           />
-          <Row
-            title={PAGES.design.title}
-            description={PAGES.design.lede}
-            end={
-              <ButtonLink href={ROUTES.design} size="sm">
-                Open
-              </ButtonLink>
-            }
-          />
         </Rows>
       </Section>
 
@@ -69,6 +62,18 @@ export default async function SettingsPage() {
                   Open
                 </ButtonLink>
               }
+            />
+            {/* The component gallery is a tool of whoever maintains the gateway:
+                listed for administrators only; the page itself stays open by its address. */}
+            <Row
+              title={PAGES.design.title}
+              description={PAGES.design.lede}
+              end={
+                <ButtonLink href={ROUTES.design} size="sm">
+                  Open
+                </ButtonLink>
+              }
+              testId="settings-interface-reference"
             />
           </Rows>
         </Section>

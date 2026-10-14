@@ -8,6 +8,7 @@ tracks:
   - apps/gateway/src/app/r/
   - apps/gateway/src/app/api/requests/
   - apps/gateway/src/app/(app)/waiting/
+  - apps/gateway/src/server/providers/tool-titles.ts
   - apps/gateway/src/server/http/document.ts
   - apps/gateway/tests/unit/app/now-and-waiting.test.tsx
   - apps/gateway/tests/integration/now/
@@ -187,9 +188,10 @@ await requests.sweep(); // expires overdue open requests; returns how many
 ```
 
 `RequestSummary` = `{ id, kind, state, risk_id, risk_label, created_at,
-expires_at, decided_at, decision, url, mission: { id, name }, tool }`. `tool`
-is the tool of an approval request's call (`null` for a claim); the summary
-never carries arguments. `state` is always `effectiveState(request, now)`. `risk_label` comes from the plugin's
+expires_at, decided_at, decision, url, mission: { id, name }, tool, call }`. `tool`
+is the tool of an approval request's call (`null` for a claim); `call` is what
+a page heads the request with ([below](#what-a-page-heads-a-request-with));
+the summary never carries arguments. `state` is always `effectiveState(request, now)`. `risk_label` comes from the plugin's
 catalog through the registry (`enumerateCatalog`), the id itself when the
 plugin or the entry is gone.
 
@@ -201,6 +203,35 @@ the policy), `other_risks`, `events` (the last `SESSION_EVENTS_SHOWN` = 20
 session events, most recent first, each with a one-line `summary` from
 `describeEvent`) and `options` (empty once the request is not open). For an
 approval request it returns an `ApprovalView` ([Approvals](#approvals)).
+
+### What a page heads a request with
+
+A person decides on what the agent wants to do, not on the name of a
+permission. The head of an approval request is therefore composed from what
+the gateway already knows of the call — nothing is written per request, and
+no plugin contract is required
+([ADR](../decisions/interface-fixes-after-the-visual-review.md)):
+
+`RequestSummary.call` = `RequestCall { tool, title, resource }` for an
+approval request, `null` for a claim (a limit is about a permission, not about
+one call).
+
+| Field      | Where it comes from                                                                                                                                                                                                                                                                                                                    |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tool`     | the request row                                                                                                                                                                                                                                                                                                                        |
+| `title`    | what the tool does in a few words, as its plugin declares it — `ProviderPlugin.toolTitles` ("Merge a pull request"), read through the registry by `toolTitleOf` (`server/providers/tool-titles.ts`). `null` when the plugin gives none: the page then prints the tool's name in mono                                                   |
+| `resource` | the resource the refused call resolved to: `resource_ref` of the audit entry the pipeline wrote for it (`audit.latestCall` by mission, tool, fingerprint and `approval-required` — `resourceOf`). `null` when the call names none or the entry is gone, and on the reads that do not look it up (`answered`, the answer to a decision) |
+
+`CallHeadline` (`waiting/parts.tsx`, `data-testid="call-headline"`) draws it:
+"Merge a pull request · acme-org/app". The home, the inbox, the request page
+and the banner of the mission use it; the permission the call needs, its
+severity and the exact arguments stay right below, where they were. A request
+recorded without its call falls back on the permission's label.
+
+The teammate of a mission reads the same head on its page: the open requests
+of the session view carry the `tool` and the `resource_ref` of an approval
+([audit](audit.md), `open_requests`) — what the refused call's line of the
+activity already tells them — and never the arguments or their fingerprint.
 
 ### Who asked, and what waits (`asker.ts`, `waiting()`, `answered()`)
 
@@ -453,7 +484,7 @@ code are printed as the protocol spells them, with `Mono`.
   (`data-testid="waiting-empty"`), what was answered in the last 24 hours,
   and where to go. Otherwise the list (`WaitingList`,
   `data-testid="waiting-list"`: one link per open request — the mark of who
-  asks, the permission or "Daily limit reached on …", the mission and who,
+  asks, what the agent wants to do (`CallHeadline`) or "Daily limit reached on …", the mission and who,
   how long ago and when it ends by itself) and the **oldest request open
   beside it**, rendered by the same `RequestView` as its own address. The
   entry "Waiting for you" of the side navigation carries `OpenRequestCount`
@@ -501,7 +532,12 @@ it, for both kinds:
    fields of the chosen answer are posted — the radios sit outside the form,
    the endpoint refuses any field it does not expect — and a date is sent as
    the instant the person meant in their own time zone. "Extend the mission"
-   is not offered on a mission that has no end date (`no-expiry`).
+   is not offered on a mission that has no end date (`no-expiry`). The note
+   under the answers says what is true of a limit: it is set when the mission
+   is created and no page edits it afterwards, so "for another limit from now
+   on, duplicate the mission with the limit you want" — a link to
+   `/missions/new?from=<id>` (`data-testid="claim-duplicate"`), the "Duplicate"
+   of the mission's menu.
 
 Then context, never a condition to answer: "What led here" (`request-events`:
 the last six session events worded by `eventWords`, a link to the mission's
@@ -777,8 +813,9 @@ show `open until <period end>` from the same derivation.
 ### The page
 
 `/waiting/<id>` for an approval request is `RequestView` with the approval
-body ([Pages](#pages)): who asks and the mission, the permission(s) as the
-statement, the tool and the arguments each by its name — a string as it was
+body ([Pages](#pages)): who asks and the mission, what the agent wants to do
+as the statement ("Merge a pull request · acme-org/app", `CallHeadline`), the
+tool and the arguments each by its name — a string as it was
 sent, anything else as JSON; "Erased when the request was closed; only their
 fingerprint remains." once it is not open —, the permission it needs with its
 gate now and its severity, the room left, what each answer does, the three

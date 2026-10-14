@@ -20,6 +20,7 @@ import {
   discoverCloudflareDnsResources,
   executeCloudflareDns,
 } from './execute.ts';
+import { cloudflareDnsToolTitles } from './tool-titles.ts';
 import { cloudflareDnsTools } from './tools.ts';
 
 // The YAML sits next to this module ; `catalogPathNextTo` keeps the path a
@@ -40,6 +41,7 @@ export const cloudflareDnsPlugin = definePlugin({
   docsUrl:
     'https://github.com/sbw-vaubaan/vaubaan-gateway/blob/main/docs/handbook/providers/cloudflare-dns.md',
   tools: cloudflareDnsTools,
+  toolTitles: cloudflareDnsToolTitles,
   dataModel: cloudflareDnsDataModel,
   catalog: cloudflareDnsCatalog.catalog,
   credential: {

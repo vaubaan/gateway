@@ -7,6 +7,9 @@
  *
  * A field says the shape it expects before the person types (its placeholder
  * and the line under it are the plugin's); the how-to is folded by default.
+ * A form the server refused comes back as it was typed — the name and the
+ * non-secret values, never a key — with the field in error marked and the
+ * shape said again under it (`Notice.form`).
  */
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -135,6 +138,8 @@ export default async function ConnectOneAccountPage({
   const provider = await service.provider(providerId);
   if (!provider) notFound();
   const notice = await takeNotice(root, principal.sessionId, query);
+  // A refused form comes back as it was typed (never a secret), its field in error marked.
+  const typed = notice?.form;
 
   const reconnectId = firstParam(query.connection);
   let reconnect: ConnectionDetail | null = null;
@@ -231,13 +236,15 @@ export default async function ConnectOneAccountPage({
                 maxLength={MAX_NAME_LENGTH}
                 placeholder={name}
                 autoComplete="off"
+                defaultValue={typed?.name ?? ''}
               />
             </Field>
           )}
           <CredentialFieldInputs
             idPrefix="credential"
             fields={provider.fields}
-            values={reconnect?.fields}
+            values={{ ...reconnect?.fields, ...typed?.values }}
+            invalid={typed?.invalid}
           />
           <div className={styles.formActions}>
             <Button type="submit" variant="primary">

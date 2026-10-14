@@ -95,13 +95,102 @@ test('the navigation collapses to its icons in a narrow window and keeps its nam
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(900);
   await snap(page, 'shell-collapsed-900');
 
-  // A phone: the navigation is a bar above the page.
+  // No "More" in a window that has room for the seven entries.
+  await expect(page.getByTestId('nav-more')).toBeHidden();
+});
+
+/** Nothing of the page is wider than the window: no sideways scroll. */
+async function expectNoSidewaysScroll(page: Page): Promise<void> {
+  const { scroll, client } = await page.evaluate(() => ({
+    scroll: document.documentElement.scrollWidth,
+    client: document.documentElement.clientWidth,
+  }));
+  expect(scroll, page.url()).toBeLessThanOrEqual(client);
+}
+
+test('on a phone the navigation is a bar of icons WITH their words, and no page scrolls sideways', async ({
+  page,
+}) => {
+  await signIn(page);
   await page.setViewportSize({ width: 390, height: 780 });
-  const bar = await page.locator('aside').boundingBox();
+  const nav = page.getByRole('navigation', { name: 'Main' });
+
+  // A bar at the bottom of the screen, as wide as the screen.
+  const bar = await nav.boundingBox();
   expect(bar?.width).toBe(390);
-  expect(bar?.height).toBeLessThan(64);
+  expect((bar?.y ?? 0) + (bar?.height ?? 0)).toBe(780);
+  expect(bar?.height).toBeLessThanOrEqual(64);
+
+  // Four entries and "More", each an icon and a word a finger can read: the word is drawn.
+  const drawn = async (text: string) => {
+    const word = nav.getByText(text, { exact: true }).first();
+    await expect(word).toBeVisible();
+    const box = await word.boundingBox();
+    expect(box?.width, text).toBeGreaterThan(10);
+    expect(box?.height, text).toBeGreaterThanOrEqual(12);
+  };
+  for (const word of ['Now', 'Waiting', 'Missions', 'Accounts', 'More']) await drawn(word);
+  // The short word is a drawing: the link keeps its full name.
   await expect(nav.getByRole('link', { name: 'Waiting for you' })).toBeVisible();
+  await expect(nav.getByRole('link', { name: 'Now' })).toHaveAttribute('aria-current', 'page');
+  // The entries the bar has no room for are not drawn until asked for.
+  await expect(nav.getByRole('link', { name: 'Activity' })).toBeHidden();
+  await expect(nav.getByRole('link', { name: 'Settings' })).toBeHidden();
   await snap(page, 'shell-phone-390');
+
+  // "More" opens them in a sheet above the bar, by touch or by keyboard.
+  const more = page.getByTestId('nav-more');
+  await expect(more).toHaveAttribute('aria-expanded', 'false');
+  await more.focus();
+  await page.keyboard.press('Enter');
+  await expect(more).toHaveAttribute('aria-expanded', 'true');
+  const sheet = page.getByTestId('nav-sheet');
+  await expect(sheet.getByRole('link')).toHaveText(['Activity', 'Reference', 'Settings']);
+  const sheetBox = await sheet.boundingBox();
+  expect((sheetBox?.y ?? 0) + (sheetBox?.height ?? 0)).toBeLessThanOrEqual(bar?.y ?? 0);
+  await snap(page, 'shell-phone-390-more');
+  // Escape closes it and gives the focus back.
+  await page.keyboard.press('Escape');
+  await expect(sheet).toBeHidden();
+  await expect(more).toBeFocused();
+
+  // Going somewhere through the sheet closes it, and "More" is then the current entry.
+  await more.click();
+  await sheet.getByRole('link', { name: 'Settings' }).click();
+  await expect(page).toHaveURL(/\/settings$/);
+  await expect(page.getByRole('heading', { name: 'Settings', level: 1 })).toBeVisible();
+  await expect(sheet).toBeHidden();
+  await expect(more).toHaveClass(/navLinkOn/);
+  // The local navigation of Settings is rows of chips, not a run-on line.
+  const chip = page.getByRole('navigation', { name: 'Settings' }).getByRole('link').first();
+  expect((await chip.boundingBox())?.height).toBeGreaterThanOrEqual(32);
+  await expectNoSidewaysScroll(page);
+
+  // The page ends above the bar: its last line is not under it.
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  const footer = await page.getByTestId('build-footer').boundingBox();
+  const barNow = await nav.boundingBox();
+  expect((footer?.y ?? 0) + (footer?.height ?? 0)).toBeLessThanOrEqual((barNow?.y ?? 0) + 1);
+
+  // No page of the navigation scrolls sideways at 390 px — the reference of a service,
+  // whose comparison table scrolls inside its own box, included.
+  for (const path of [
+    '/',
+    '/waiting',
+    '/missions',
+    '/missions/new',
+    '/accounts',
+    '/accounts/new',
+    '/activity',
+    '/reference',
+    '/reference/github',
+    '/settings/connected-apps',
+  ]) {
+    await page.goto(path);
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await expectNoSidewaysScroll(page);
+  }
+  await snap(page, 'reference-phone-390');
 });
 
 test('the theme has three states, is kept across a reload and is rendered by the server', async ({
@@ -213,6 +302,20 @@ test('Settings leads a person to their own pages and an administrator to the gat
   const local = page.getByRole('navigation', { name: 'Settings' });
   await expect(local.getByRole('link')).toHaveText(['Preferences', 'Connected apps']);
   await expect(page.getByText('Administration')).toHaveCount(0);
+  // The component gallery is not offered to someone who does not administer…
+  await expect(page.getByTestId('settings-interface-reference')).toHaveCount(0);
+  await expect(page.getByRole('main')).not.toContainText('Interface reference');
+  // …and Administration, opened by its address, says so inside the same shell.
+  await page.goto('/admin');
+  const refused = page.getByTestId('not-administrator');
+  await expect(refused).toContainText('You do not administer this gateway');
+  await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link')).toHaveCount(7);
+  await expect(page.getByTestId('user-menu')).toBeVisible();
+  await expect(page.getByTestId('build-footer')).toBeVisible();
+  await snap(page, 'not-administrator');
+  await refused.getByRole('link', { name: 'Go to Now' }).click();
+  await expect(page).toHaveURL(new RegExp(`^${PUBLIC_URL}/$`));
+  await page.goto('/settings');
   await local.getByRole('link', { name: 'Connected apps' }).click();
   await expect(page).toHaveURL(/\/settings\/connected-apps$/);
   await expect(page.getByRole('heading', { name: 'Connected apps', level: 1 })).toBeVisible();
@@ -241,6 +344,10 @@ test('Settings leads a person to their own pages and an administrator to the gat
     'Telemetry',
     'Registered apps',
   ]);
+  // An administrator is offered the interface reference, under Administration.
+  await expect(ops.getByTestId('settings-interface-reference')).toContainText(
+    'Interface reference',
+  );
   await admin.getByRole('link', { name: 'People' }).click();
   await expect(ops).toHaveURL(/\/admin\/users$/);
   const main = ops.getByRole('navigation', { name: 'Main' });
@@ -271,6 +378,9 @@ test('Settings leads a person to their own pages and an administrator to the gat
   // What is left names the service, and its button leads to the form that fixes it.
   const apps = checklist.getByTestId('setup-company-apps');
   await expect(apps).toContainText('nobody can connect');
+  // The one thing left to do carries the page's one primary action.
+  await expect(checklist.locator('a[class*="primary"]')).toHaveCount(1);
+  await expect(apps.locator('a[class*="primary"]')).toHaveText(/^Register /);
   await apps.getByRole('link', { name: /^Register / }).click();
   await expect(ops).toHaveURL(/\/admin\/provider-apps\?app=/);
   await expect(ops.getByRole('heading', { name: 'Company apps', level: 1 })).toBeVisible();

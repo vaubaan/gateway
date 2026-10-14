@@ -77,6 +77,11 @@ function summary(overrides: Partial<RequestSummary> = {}): RequestSummary {
     url: 'https://gateway.example.com/r/req-approval',
     mission: { id: 'mission-billing', name: 'Ship the billing page' },
     tool: 'github__merge_pull_request',
+    call: {
+      tool: 'github__merge_pull_request',
+      title: 'Merge a pull request',
+      resource: 'acme-org/app',
+    },
     ...overrides,
   };
 }
@@ -280,13 +285,23 @@ describe('the words of a limit, a delay and who asks', () => {
 
   it('names who asks: a person, the reader, a machine key, or nobody known', () => {
     const base = { holder: null, machine: false, you: false, agent: null };
-    expect(asker({ ...base, holder: 'Carol', agent: 'codex' })).toBe('Carol · codex');
-    expect(asker({ ...base, holder: 'Alice', you: true, agent: 'codex' })).toBe('You · codex');
-    expect(asker({ ...base, holder: 'nightly', machine: true })).toBe('machine key nightly');
+    // The agent first, then whose key it used: never "You · codex", which reads as if
+    // the person were the one asking.
+    expect(asker({ ...base, holder: 'Carol', agent: 'codex' })).toBe('codex, with Carol’s key');
+    expect(asker({ ...base, holder: 'Alice', you: true, agent: 'codex' })).toBe(
+      'codex, with your key',
+    );
+    expect(asker({ ...base, holder: 'Alice', you: true })).toBe('An agent with your key');
+    expect(asker({ ...base, holder: 'nightly', machine: true })).toBe(
+      'An agent with the machine key nightly',
+    );
+    expect(asker({ ...base, machine: true })).toBe('An agent with a machine key');
     expect(asker({ ...base, agent: 'codex' })).toBe('codex');
     expect(asker(base)).toBe('An agent');
-    expect(whoOf(CAROL, VIEWER)).toMatchObject({ words: 'Carol · codex', you: false });
-    expect(whoOf({ ...CAROL, user_id: VIEWER }, VIEWER)).toMatchObject({ words: 'You · codex' });
+    expect(whoOf(CAROL, VIEWER)).toMatchObject({ words: 'codex, with Carol’s key', you: false });
+    expect(whoOf({ ...CAROL, user_id: VIEWER }, VIEWER)).toMatchObject({
+      words: 'codex, with your key',
+    });
     expect(whoOf(NIGHTLY, VIEWER)).toMatchObject({ machine: true, name: 'nightly' });
     expect(whoOf(null, VIEWER)).toMatchObject({ words: 'An agent', name: 'agent' });
   });
@@ -398,13 +413,15 @@ describe('the page of an approval', () => {
       'Carol’s key',
       'Ship the billing page',
       'wants to',
-      'Merge to a protected branch',
+      // The head says what the agent wants to do and on what; the permission comes below.
+      'Merge a pull request · acme-org/app',
       'Exactly what it sent',
       'github__merge_pull_request',
       'pull_number',
       '418',
       'Permission it needs',
       'ask me first',
+      'Merge to a protected branch',
       'high',
       MERGE,
       'Room left after this',
@@ -454,7 +471,9 @@ describe('the page of an approval', () => {
         },
       }),
     );
-    expect(text(html)).toContain('Merge to a protected branch and Edit a workflow');
+    // One head for the call, then each permission it needs.
+    expect(text(html)).toContain('Merge a pull request · acme-org/app');
+    inOrder(text(html), ['Permissions it needs', 'Merge to a protected branch', 'Edit a workflow']);
     expect(text(html)).toContain('one answer for the 2');
     expect(text(html)).toContain('One yes covers the 2 permissions this call needs.');
     // A limit already reached is said before the person answers.
@@ -729,13 +748,20 @@ describe('the home, when something waits', () => {
     expect(html).not.toContain(ARGUMENT);
   });
 
-  it('says who asks, on which mission, with which tool, and what is left', () => {
-    expect(text(html)).toContain('Carol · codex on Ship the billing page');
-    expect(text(html)).toContain('github__merge_pull_request');
-    expect(text(html)).toContain('you asked to be asked first');
-    expect(text(html)).toContain('50 of 50 left today');
+  it('heads an approval with what the agent wants to do, then who asks, the permission and what is left', () => {
+    inOrder(text(html), [
+      'Merge a pull request · acme-org/app',
+      'codex, with Carol’s key, on Ship the billing page',
+      'needs “Merge to a protected branch”',
+      'you asked to be asked first',
+      '50 of 50 left today',
+    ]);
+    // The head is the plugin's title of the tool, not the name of the permission.
+    expect(html).toMatch(
+      /data-testid="call-headline"[^>]*>Merge a pull request[^<]*<span class="vbn-nowrap">acme-org\/app/,
+    );
     expect(text(html)).toContain('5,000 of 5,000');
-    expect(text(html)).toContain('machine key nightly is stopped on it');
+    expect(text(html)).toContain('An agent with the machine key nightly · stopped on it');
   });
 
   it('draws one figure per mission: a meter near a limit, the exception in words', () => {
@@ -874,9 +900,33 @@ describe('the first run', () => {
 });
 
 describe('the titles of what waits', () => {
-  it('an approval is named by its permission, a limit by its mission and its period', () => {
-    expect(titleOf(waitingItem(approval()))).toBe('Merge to a protected branch');
+  const rendered = (node: React.ReactNode) => text(renderToStaticMarkup(<>{node}</>));
+
+  it('an approval is named by what the agent wants to do, a limit by its mission and its period', () => {
+    expect(rendered(titleOf(waitingItem(approval())))).toBe('Merge a pull request · acme-org/app');
+    expect(rendered(shortTitleOf(waitingItem(approval())))).toBe(
+      'Merge a pull request · acme-org/app',
+    );
     expect(titleOf(waitingItem(claim()))).toBe('Nightly dependency audit reached its daily limit');
     expect(shortTitleOf(waitingItem(claim()))).toBe('Daily limit reached on Read code');
+  });
+
+  it('a tool without a title is named as the protocol spells it; a call without a resource names none', () => {
+    const untitled = waitingItem(
+      approval({
+        request: summary({
+          call: { tool: 'github__merge_pull_request', title: null, resource: null },
+        }),
+      }),
+    );
+    const html = renderToStaticMarkup(<>{titleOf(untitled)}</>);
+    expect(text(html)).toBe('github__merge_pull_request');
+    // In mono: an id a person may need to quote.
+    expect(html).toMatch(/<code[^>]*>github__merge_pull_request<\/code>|class="[^"]*mono/i);
+  });
+
+  it('a request recorded without its call falls back on the permission', () => {
+    const item = waitingItem(approval({ request: summary({ call: null }) }));
+    expect(titleOf(item)).toBe('Merge to a protected branch');
   });
 });

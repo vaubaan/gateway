@@ -106,7 +106,7 @@ presets:
 
   - id: developer
     label: Developer
-    description: Read everywhere ; write and delete on staging freely, on prod asking first.
+    description: Read everywhere; write and delete on staging freely, on prod asking first.
     entries:
       - risk_id: template.read-widgets
         quota: 5000

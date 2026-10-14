@@ -30,6 +30,7 @@ import {
   discoverRailwayResources,
   executeRailway,
 } from './execute.ts';
+import { railwayToolTitles } from './tool-titles.ts';
 import { RAILWAY_TOOL_PREFIX, railwayTools, toUpstreamName } from './tools.ts';
 
 // The YAML sits next to this module ; `catalogPathNextTo` keeps the path a
@@ -49,6 +50,7 @@ export const railwayPlugin = definePlugin({
   docsUrl:
     'https://github.com/sbw-vaubaan/vaubaan-gateway/blob/main/docs/handbook/providers/railway.md',
   tools: railwayTools,
+  toolTitles: railwayToolTitles,
   dataModel: railwayDataModel,
   catalog: railwayCatalog.catalog,
   credential: railwayCredentialSpec,

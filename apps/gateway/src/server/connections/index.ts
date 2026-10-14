@@ -124,11 +124,14 @@ export {
 } from './install-verification';
 export {
   cleanName,
+  echoOfForm,
   editableMetadataKeys,
   parseEnvLabel,
   parseListValue,
   readCredentialFields,
   resolveReturnTo,
+  type FieldProblem,
+  type FormEcho,
 } from './input';
 export {
   buildAuthorizationUrl,

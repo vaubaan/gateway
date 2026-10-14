@@ -7,7 +7,12 @@ import type { CredentialField } from '@vaubaan/plugin-sdk';
 
 import { Callout, Field, Input, StatusMark, Tag, Textarea, type Tone } from '@/components/ui';
 import { ACCOUNT_STATES, ACCOUNT_WORDS } from '@/lib/vocabulary';
-import { FIELD_PREFIX, type Notice, type NoticeTone } from '@/server/connections';
+import {
+  FIELD_PREFIX,
+  type FieldProblem,
+  type Notice,
+  type NoticeTone,
+} from '@/server/connections';
 import type { ConnectionStatus } from '@/server/store';
 
 import styles from './account.module.css';
@@ -87,17 +92,38 @@ export function credentialFieldId(idPrefix: string, fieldName: string): string {
   return `${idPrefix}-${fieldName}`;
 }
 
+/**
+ * What a field in error says under itself: what is wrong, the shape again —
+ * the sentence a person needs is beside the field, not only at the top of the
+ * page — and, for a secret, that it was not kept and is typed again.
+ */
+export function fieldErrorWords(field: CredentialField, problem: FieldProblem): string {
+  const shape = shapeOfPattern(field.pattern);
+  const what =
+    problem === 'required'
+      ? 'This is needed.'
+      : problem === 'too-long'
+        ? 'This is too long.'
+        : shape
+          ? `This does not have the expected shape: it ${shape}.`
+          : 'This does not have the expected shape.';
+  return field.secret ? `${what} A secret is never kept: type it again.` : what;
+}
+
 export function CredentialFieldInputs({
   idPrefix,
   fields,
   values = {},
   secretsSet = [],
+  invalid = {},
   disabled = false,
 }: {
   idPrefix: string;
   fields: readonly CredentialField[];
   values?: Readonly<Record<string, string>>;
   secretsSet?: readonly string[];
+  /** The fields a refused form got wrong: each is marked and says why under itself. */
+  invalid?: Readonly<Record<string, FieldProblem>>;
   disabled?: boolean;
 }) {
   return (
@@ -109,6 +135,7 @@ export function CredentialFieldInputs({
           .filter(Boolean)
           .join(' ');
         const id = credentialFieldId(idPrefix, field.name);
+        const problem = invalid[field.name];
         const common = {
           id,
           name: `${FIELD_PREFIX}${field.name}`,
@@ -126,6 +153,7 @@ export function CredentialFieldInputs({
             shape={shapeOfPattern(field.pattern) ?? undefined}
             optional={field.required === false}
             hint={hint || undefined}
+            error={problem ? fieldErrorWords(field, problem) : undefined}
           >
             {isMultiline(field) ? (
               <Textarea {...common} rows={4} mono />

@@ -17,6 +17,7 @@ import { catalogPathNextTo, definePlugin, loadCatalogFile } from '@vaubaan/plugi
 import { classifyResend } from './classify.ts';
 import { resendDataModel } from './data-model.ts';
 import { discoverResendResources, executeResend } from './execute.ts';
+import { resendToolTitles } from './tool-titles.ts';
 import { resendTools } from './tools.ts';
 
 // The YAML sits next to this module ; `catalogPathNextTo` keeps the path a
@@ -36,6 +37,7 @@ export const resendPlugin = definePlugin({
   docsUrl:
     'https://github.com/sbw-vaubaan/vaubaan-gateway/blob/main/docs/handbook/providers/resend.md',
   tools: resendTools,
+  toolTitles: resendToolTitles,
   dataModel: resendDataModel,
   catalog: resendCatalog.catalog,
   credential: {

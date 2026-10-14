@@ -405,6 +405,33 @@ describe('connections: provider app, connect, resources, revoke', () => {
     ]);
   });
 
+  it('a refused form comes back as it was typed — never the secret — with the field in error named', async () => {
+    const alice = await signIn('alice@example.com');
+    const refused = await root.connections.handlers.connect(
+      post('/accounts/connect/keyco', alice, {
+        name: 'Acme sandbox',
+        'field.token': API_KEY,
+        'field.team_id': 'not a team id',
+        return_to: '/missions/new',
+      }),
+      'keyco',
+    );
+    // Back on the same form, and still on the way to where the person came from.
+    const back = location(refused);
+    expect(back.pathname).toBe('/accounts/new/keyco');
+    expect(back.searchParams.get('return_to')).toBe('/missions/new');
+    const notice = await noticeOf(refused, alice);
+    expect(notice).toMatchObject({ tone: 'danger', title: 'Not connected' });
+    expect(notice?.form).toEqual({
+      name: 'Acme sandbox',
+      values: { team_id: 'not a team id' },
+      invalid: { team_id: 'format' },
+    });
+    // The key was typed; it is in nothing that is kept between the two requests.
+    expect(JSON.stringify(notice)).not.toContain(API_KEY);
+    expect(await root.store.connections.list()).toEqual([]);
+  });
+
   it('stores an API key and an SSH private key encrypted, and marks plugin-set labels', async () => {
     const alice = await signIn('alice@example.com');
     const handlers = root.connections.handlers;

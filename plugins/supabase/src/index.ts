@@ -16,6 +16,7 @@ import { classifySupabase, SUPABASE_CLASSIFIED_TOOLS, SUPABASE_TOOL_PLANES } fro
 import { supabaseCredential } from './credential.ts';
 import { supabaseDataModel } from './data-model.ts';
 import { discoverSupabaseResources, executeSupabase } from './execute.ts';
+import { supabaseToolTitles } from './tool-titles.ts';
 import { supabaseTools } from './tools.ts';
 
 // The YAML sits next to this module ; `catalogPathNextTo` keeps the path a
@@ -35,6 +36,7 @@ export const supabasePlugin = definePlugin({
   docsUrl:
     'https://github.com/sbw-vaubaan/vaubaan-gateway/blob/main/docs/handbook/providers/supabase.md',
   tools: supabaseTools,
+  toolTitles: supabaseToolTitles,
   dataModel: supabaseDataModel,
   catalog: supabaseCatalog.catalog,
   credential: supabaseCredential,
