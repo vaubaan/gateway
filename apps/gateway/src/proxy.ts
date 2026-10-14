@@ -15,7 +15,7 @@ import { ownsItsPolicy, publishedHttps, securityHeaders } from './server/http/se
 const NONCE_BYTES = 16;
 
 /**
- * Every path but the git remote's (`/git/…`, spec §4.1 bis). Next clones and
+ * Every path but the git remote's (`/git/…`, spec §4.1 ter). Next clones and
  * buffers the body of every request the proxy runs on, up to
  * `proxyClientMaxBodySize`, and truncates what is beyond: the pack of a push
  * would be held in memory and cut. The git remote answers no browser, so it

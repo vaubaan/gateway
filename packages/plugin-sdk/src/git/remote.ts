@@ -2,7 +2,7 @@
  * `GitRemoteCapability` — what a plugin declares so that the instance can be
  * its agents' git remote (`https://<instance>/git/<repository>.git`).
  *
- * Spec : docs/spec/vaubaan-gateway.md §4.1 bis "Git remote" (the second door
+ * Spec : docs/spec/vaubaan-gateway.md §4.1 ter "Git remote" (the second door
  *        of the execution surface), §2.4.
  * ADR  : docs/decisions/gateway-as-git-remote.md.
  * Handbook : docs/handbook/git-remote.md.

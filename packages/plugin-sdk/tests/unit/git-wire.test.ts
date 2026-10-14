@@ -1,5 +1,5 @@
 /**
- * The git wire primitives of the SDK (spec vaubaan-gateway §4.1 bis; ADR
+ * The git wire primitives of the SDK (spec vaubaan-gateway §4.1 ter; ADR
  * gateway-as-git-remote): pkt-line framing, the command list of a push, the
  * report-status and the ref advertisement. The command list is what an agent
  * controls byte for byte: it is read strictly, and a seeded fuzz checks that

@@ -88,7 +88,7 @@ export interface GatewayRoot {
   readonly budget: SessionService;
   /** The execution MCP door: `/mcp`, `/mcp/catalog`, the call pipeline. */
   readonly execution: ExecutionModule;
-  /** The git remote: `/git/**`, the second door of the execution surface (spec §4.1 bis). */
+  /** The git remote: `/git/**`, the second door of the execution surface (spec §4.1 ter). */
   readonly git: GitModule;
   /** Community telemetry: the pipeline's sink, the operator's toggle, the validation status. */
   readonly telemetry: TelemetryModule;

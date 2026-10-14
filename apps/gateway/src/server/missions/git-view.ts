@@ -1,5 +1,5 @@
 /**
- * The "Git" block of a mission page (spec §4.1 bis, §4.4): where the agent's
+ * The "Git" block of a mission page (spec §4.1 ter, §4.4): where the agent's
  * git remote is and what git may do with it under this mission. Pure.
  *
  * What each permission means for git is the plugin's declaration

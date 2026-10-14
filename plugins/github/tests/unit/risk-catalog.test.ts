@@ -207,7 +207,7 @@ const gitPush = (...updates: ReturnType<typeof gitUpdate>[]) => ({
   updates,
 });
 
-/** The git remote's two tools (spec §4.1 bis) : never MCP tools, classified the same way. */
+/** The git remote's two tools (spec §4.1 ter) : never MCP tools, classified the same way. */
 const GIT: readonly Row[] = [
   ['git_fetch', 'refs', { repository: 'acme/app', step: 'refs' }, ['read-code']],
   ['git_fetch', 'pack', { repository: 'acme/app', step: 'pack' }, ['read-code']],

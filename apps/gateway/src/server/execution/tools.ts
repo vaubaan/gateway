@@ -69,7 +69,7 @@ export interface CatalogResource {
   readonly env: string | null;
   readonly display_name: string;
   /**
-   * The repository's remote on this instance (spec §4.1 bis), for a resource
+   * The repository's remote on this instance (spec §4.1 ter), for a resource
    * of the provider whose git remote the instance is: `git clone` it with the
    * mission key as the password. Absent otherwise.
    */

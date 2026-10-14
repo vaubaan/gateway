@@ -1,5 +1,5 @@
 /**
- * `/git/**` — the git remote (spec §4.1 bis). Thin Next adapter over the
+ * `/git/**` — the git remote (spec §4.1 ter). Thin Next adapter over the
  * host-agnostic door (`server/git/door.ts`). The proxy (`src/proxy.ts`) does
  * not run on this path: it would buffer the pack of a push in memory.
  */

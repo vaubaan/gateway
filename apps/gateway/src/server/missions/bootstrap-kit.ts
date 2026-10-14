@@ -13,7 +13,7 @@
  *      token itself stops working, and a short "management door" section — the other MCP door of the instance,
  *      which this token does not open;
  *   4. when the mission holds an account of the provider the instance is the
- *      git remote of (spec §4.1 bis): git's configuration — a credential
+ *      git remote of (spec §4.1 ter): git's configuration — a credential
  *      helper that reads the variable (never `store` or `cache`, never the
  *      key in a URL) and the recommended `insteadOf` rewrite of the
  *      provider's URLs — and the remote of each repository;

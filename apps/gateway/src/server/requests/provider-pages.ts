@@ -1,6 +1,6 @@
 /**
  * Pages of the provider that show what a waiting call would do, for the
- * person who answers it (spec §4.1 bis; ADR gateway-as-git-remote D5): for a
+ * person who answers it (spec §4.1 ter; ADR gateway-as-git-remote D5): for a
  * git push, the provider's comparison of each pushed ref, readable because
  * the pushed commits stay under a temporary ref while the request is open.
  * Derived from the plugin (`gitRemote.compareUrl`) and the arguments in

@@ -1,5 +1,5 @@
 /**
- * A push through the git remote (spec §4.1 bis; ADR gateway-as-git-remote D4–D6).
+ * A push through the git remote (spec §4.1 ter; ADR gateway-as-git-remote D4–D6).
  *
  *   1. read    the command list, bounded; the pack stays in the stream
  *   2. precheck with the updates as git sent them (fast-forward assumed, no

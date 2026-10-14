@@ -102,7 +102,7 @@ export function toolUnavailableOn(
 }
 
 /**
- * A tool belongs to one door (spec §4.1 bis): the two tools of a plugin's git
+ * A tool belongs to one door (spec §4.1 ter): the two tools of a plugin's git
  * remote are decided only for calls that came through `/git/`, whose
  * arguments the host built from the push itself; every other tool only for
  * calls that came over MCP. The reason of the mismatch, or `null`.

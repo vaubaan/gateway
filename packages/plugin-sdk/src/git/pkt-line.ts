@@ -1,7 +1,7 @@
 /**
  * pkt-line — the framing of git's wire protocol (gitprotocol-common(5)).
  *
- * Spec : docs/spec/vaubaan-gateway.md §4.1 bis "Git remote" (the second door
+ * Spec : docs/spec/vaubaan-gateway.md §4.1 ter "Git remote" (the second door
  *        of the execution surface).
  * ADR  : docs/decisions/gateway-as-git-remote.md.
  *

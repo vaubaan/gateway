@@ -1,5 +1,5 @@
 /**
- * The gateway as the agent's git remote, end to end (spec §4.1 bis, §4.4;
+ * The gateway as the agent's git remote, end to end (spec §4.1 ter, §4.4;
  * ADR gateway-as-git-remote): the built server, the real `git` client, a
  * GitHub stand-in serving a real bare repository (`E2E_GIT`), the approval
  * answered in a browser.

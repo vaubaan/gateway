@@ -1,4 +1,4 @@
--- Migration 0015 — temporary refs a push created at the provider (spec §4.1 bis "Git
+-- Migration 0015 — temporary refs a push created at the provider (spec §4.1 ter "Git
 -- remote"; ADR gateway-as-git-remote D5).
 --
 -- A push through the git remote stores its pack at the provider under temporary refs

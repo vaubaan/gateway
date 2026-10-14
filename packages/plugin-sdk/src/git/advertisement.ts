@@ -3,7 +3,7 @@
  * (gitprotocol-http(5) "Smart Clients", gitprotocol-pack(5) "Reference
  * Discovery") : what `GET <repo>/info/refs?service=git-receive-pack` answers.
  *
- * Spec : docs/spec/vaubaan-gateway.md §4.1 bis "Git remote".
+ * Spec : docs/spec/vaubaan-gateway.md §4.1 ter "Git remote".
  * ADR  : docs/decisions/gateway-as-git-remote.md.
  *
  * The host's git door reads the upstream advertisement of a push and writes

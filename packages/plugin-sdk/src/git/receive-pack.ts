@@ -3,7 +3,7 @@
  * it (gitprotocol-pack(5) "Reference Update Request and Packfile Transfer",
  * "Report Status" ; gitprotocol-http(5) "Smart Service git-receive-pack").
  *
- * Spec : docs/spec/vaubaan-gateway.md §4.1 bis "Git remote".
+ * Spec : docs/spec/vaubaan-gateway.md §4.1 ter "Git remote".
  * ADR  : docs/decisions/gateway-as-git-remote.md.
  *
  * Shared by the host's git door (which reads the agent's command list and

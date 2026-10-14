@@ -1,5 +1,5 @@
 /**
- * The git remote end to end with the real `git` client (spec §4.1 bis, §10;
+ * The git remote end to end with the real `git` client (spec §4.1 ter, §10;
  * ADR gateway-as-git-remote): clone, fetch, push, refusals, approval and
  * replay, limits, keys, audit and budget. GitHub is `FakeGithubHost` — the
  * real `git http-backend` and a compare API computed from the same

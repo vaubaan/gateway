@@ -61,6 +61,10 @@ are not entities: `branch[X].merge-into`, `branch[X].propose-to[Y]`,
 | `github.branch-protection-write`  | `update_branch_protection` (posture shift)                                                    |
 | `github.mint-install-token-clone` | `mint_install_token` with `purpose=clone`                                                     |
 | `github.mint-install-token-push`  | `mint_install_token` with `purpose=push`                                                      |
+| `github.git-push`                 | every ref a push through the git remote moves (leaf `push`), beside the branch's own risk     |
+| `github.force-push`               | a non-fast-forward update of a branch through the git remote (leaf `force`)                   |
+| `github.branch-delete`            | a branch deleted through the git remote (leaf `delete`); the branch's own risk counts too     |
+| `github.tag-write`                | a tag pushed or deleted through the git remote; overlaps `create-release` on `tag[**].W`      |
 | `github.uncategorized-write`      | fallback `github.**.W` — counts only when no specific entry matched the write                 |
 
 A write on `main` touches `merge-protected`; a write on `feature/x`
@@ -109,16 +113,51 @@ through the same kind of check.
 
 ## Presets
 
-| Preset            | Grants                                                                                                                                 | Approval gates                                        |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| `read-only`       | `read-code`, `read-meta`                                                                                                               | —                                                     |
-| `developer`       | reads, `search-global`, `feature-branch-write`, `bulk-file-write`, `create-pr`, `comment-write`, `workflow-write-via-file`, both mints | `workflow-write-via-file`, `mint-install-token-push`  |
-| `release-manager` | reads, `feature-branch-write`, `create-pr`, `comment-write`, `merge-protected`, `create-release`, `delete-release`                     | `merge-protected`, `create-release`, `delete-release` |
+| Preset            | Grants                                                                                                                                               | Approval gates                                                     |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `read-only`       | `read-code`, `read-meta`                                                                                                                             | —                                                                  |
+| `developer`       | reads, `search-global`, `feature-branch-write`, `bulk-file-write`, `create-pr`, `comment-write`, `workflow-write-via-file`, `git-push`, `force-push` | `workflow-write-via-file`, `force-push`                            |
+| `release-manager` | reads, `feature-branch-write`, `create-pr`, `comment-write`, `merge-protected`, `create-release`, `delete-release`, `git-push`, `tag-write`          | `merge-protected`, `create-release`, `delete-release`, `tag-write` |
 
 `developer` is the "one mission per code repository" preset: it never merges
 into a protected branch and never touches branch protection. No preset
 grants `branch-protection-write`; the creator adds it explicitly.
 Presets are UI sugar — the persisted policy is always the explicit list.
+Since catalog v6 no preset holds a `mint-install-token-*` risk: git goes
+through the gateway's git remote, and a creator adds a mint risk by hand
+when a sandbox truly needs a raw token (it leaves the gateway; ADR
+[gateway-as-git-remote](../../docs/decisions/gateway-as-git-remote.md)).
+
+## Git remote
+
+The plugin declares the instance as its agents' git remote
+(`githubGitRemote`, `src/git-remote.ts`): `https://<instance>/git/<owner>/<repo>.git`,
+the mission key as the password. Two tools that are not MCP tools are
+decided and audited like any call:
+
+| Tool                | When                                    | Arguments (built by the host)                                                               |
+| ------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `github__git_fetch` | the object transfer of a clone or fetch | `{ repository, step: 'pack' }` — risk `read-code`                                           |
+| `github__git_push`  | one push, every ref of it               | `{ repository, updates[] }`, each `{ ref, old, new, kind, commits, files, workflow_files }` |
+
+- **Upstream credential**: an installation token for the one repository,
+  `contents: read` to fetch, `contents: write` (+ `workflows: write` when
+  the installation holds it) to push; or the token of a token connection
+  (`api-key`, field `token`).
+- **Review** (`review`): each ref's value is read at GitHub (`GET git/ref`) —
+  a client's `old` that differs is refused as stale — then the compare API
+  gives fast-forward or not, commits, changed paths and workflow files
+  (anything under `.github/workflows/`). Over 300 files or 250 commits the
+  push is refused: split it. A workflow change without `workflows: write`
+  is refused by the permission's name (`permission-check.ts`).
+- **Moves** (`execute` of `github__git_push`), per ref, reported per ref:
+  `POST git/refs`, `PATCH git/refs/<ref>` `force: false` for a
+  fast-forward, `force: true` only for an accepted `force-push` after the
+  ref is read again, `DELETE` likewise.
+- **Interface words**: `insteadOf` (`https://github.com/`, rewritten to the
+  instance by the setup kit) and `abilities` (what each risk means for git,
+  sorted on the mission page), `compareUrl` (GitHub's comparison, linked
+  from a waiting push).
 
 ## Credential: the company's GitHub App
 

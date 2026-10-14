@@ -1,5 +1,5 @@
 /**
- * The git remote (spec §4.1 bis; ADR gateway-as-git-remote): the second door
+ * The git remote (spec §4.1 ter; ADR gateway-as-git-remote): the second door
  * of the execution surface. Built by the composition root after the execution
  * module, from its admission (one instance), its decision stages and its
  * audit writer; the upstream stage of its pipeline relays fetches and hands

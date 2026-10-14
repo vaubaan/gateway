@@ -1,5 +1,5 @@
 /**
- * The git remote's limits and edges (spec §4.1 bis; ADR gateway-as-git-remote
+ * The git remote's limits and edges (spec §4.1 ter; ADR gateway-as-git-remote
  * D1, D5, D6, D10): the pack cap, the budget, keys that stopped working, an
  * expired mission, a token connection, the sweeper of temporary refs, the
  * catalog's remote URL, and the one admission both doors share.

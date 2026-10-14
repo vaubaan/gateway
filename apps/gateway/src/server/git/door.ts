@@ -1,5 +1,5 @@
 /**
- * The git remote — the second door of the execution surface (spec §4.1 bis;
+ * The git remote — the second door of the execution surface (spec §4.1 ter;
  * ADR gateway-as-git-remote). Host-agnostic `Request → Response`;
  * `src/app/git/[...path]/route.ts` is a one-line adapter.
  *

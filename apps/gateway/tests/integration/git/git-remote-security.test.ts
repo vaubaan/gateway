@@ -1,5 +1,5 @@
 /**
- * The git remote against a hostile client (spec §4.1 bis; ADR
+ * The git remote against a hostile client (spec §4.1 ter; ADR
  * gateway-as-git-remote D4): every ref of a multi-ref push is decided (cf.
  * CVE-2025-54583, a proxy that checked only the first), the client's old ids
  * are claims checked against GitHub, ref names with tricks, duplicates,

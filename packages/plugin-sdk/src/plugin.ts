@@ -164,7 +164,7 @@ export interface ProviderPlugin {
   readonly experimental?: boolean;
 
   /**
-   * The instance as this provider's git remote (spec vaubaan-gateway §4.1 bis) :
+   * The instance as this provider's git remote (spec vaubaan-gateway §4.1 ter) :
    * `git clone` / `git push` against `https://<instance>/git/<repository>.git`
    * with the mission key as the password, decided and audited like a tool
    * call. Absent for a provider whose agents have no git to speak. At most

@@ -1,6 +1,6 @@
 /**
  * Admission of a mission key — the part of a request both doors of the
- * execution surface share (spec §4.1, §4.1 bis, §6): the MCP door (`/mcp`,
+ * execution surface share (spec §4.1, §4.1 ter, §6): the MCP door (`/mcp`,
  * `/mcp/catalog`) and the git remote (`/git/**`). One instance, built by the
  * MCP door and handed to the git door, so the two cannot drift: the same
  * verifier, the same 401 reasons, the same `wrong-credential-kind`, the same

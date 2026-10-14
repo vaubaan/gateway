@@ -224,7 +224,7 @@ export interface ClientOrigin {
 
 /**
  * The door a call came through : the MCP execution endpoint, or the git
- * remote (spec §4.1 bis). A tool belongs to exactly one of them ; the
+ * remote (spec §4.1 ter). A tool belongs to exactly one of them ; the
  * resource stage refuses a tool presented at the other door.
  */
 export const CALL_CHANNELS = ['mcp', 'git'] as const;

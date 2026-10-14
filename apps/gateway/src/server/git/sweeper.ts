@@ -1,6 +1,6 @@
 /**
  * Sweeper of the temporary refs a push left at the provider while it waited
- * for an approval (spec §4.1 bis; ADR gateway-as-git-remote D5; migration
+ * for an approval (spec §4.1 ter; ADR gateway-as-git-remote D5; migration
  * 0015). Once the request has expired, nobody will read the diff any more:
  * the refs are deleted at the provider (compare-and-swap on what they point
  * at) and their rows dropped.

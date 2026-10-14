@@ -2,7 +2,7 @@
  * The two tools of the GitHub git remote, and the one reader of their
  * arguments that `classify` and `execute` share.
  *
- * Spec : docs/spec/vaubaan-gateway.md §4.1 bis "Git remote" ;
+ * Spec : docs/spec/vaubaan-gateway.md §4.1 ter "Git remote" ;
  *        docs/spec/gateway-risk-model.md §7.
  * ADR  : docs/decisions/gateway-as-git-remote.md.
  *

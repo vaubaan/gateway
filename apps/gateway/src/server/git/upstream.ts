@@ -1,5 +1,5 @@
 /**
- * The provider side of the git remote, as the host drives it (spec §4.1 bis,
+ * The provider side of the git remote, as the host drives it (spec §4.1 ter,
  * §2.4): the connection's credential decrypted in memory, handed to the
  * plugin's `gitRemote.upstream`, presented to the provider, released. The
  * agent's key never goes upstream; the provider's credential never goes back.

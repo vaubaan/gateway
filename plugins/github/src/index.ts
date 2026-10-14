@@ -49,7 +49,7 @@ export const githubPlugin = definePlugin({
       readOnlyRiskIds: ['github.mint-install-token-clone'],
     },
   ],
-  // The instance as the agents' git remote (spec §4.1 bis) : clone, fetch and push
+  // The instance as the agents' git remote (spec §4.1 ter) : clone, fetch and push
   // with the mission key as the password, every push decided ref by ref.
   gitRemote: githubGitRemote,
   tools: githubTools,

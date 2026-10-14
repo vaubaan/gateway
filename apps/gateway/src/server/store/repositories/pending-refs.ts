@@ -1,5 +1,5 @@
 /**
- * Temporary refs a push created at the provider (spec §4.1 bis "Git remote";
+ * Temporary refs a push created at the provider (spec §4.1 ter "Git remote";
  * migration 0015; ADR gateway-as-git-remote D5). The git door records each
  * one before the pack leaves, with the request's deadline, and drops the row
  * once the ref is deleted; a push answered `approval-required` moves the

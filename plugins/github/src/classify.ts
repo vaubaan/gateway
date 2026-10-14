@@ -78,7 +78,7 @@ export function classifyGithub(
 }
 
 /**
- * The slices of a git fetch or push (spec §4.1 bis ; catalog v6).
+ * The slices of a git fetch or push (spec §4.1 ter ; catalog v6).
  *
  *   fetch                    repo[R].branch.R, repo[R].tag.R           (read-code)
  *   push, every ref          <ref>.push.W                              (git-push)

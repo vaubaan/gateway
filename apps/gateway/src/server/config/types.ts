@@ -185,7 +185,7 @@ export interface InstanceConfig {
   /** Surface rate limit of the execution door: requests per minute, per mission (spec §6). */
   readonly mcp: { readonly rateLimitPerMinute: number };
   /**
-   * The git remote (spec §4.1 bis): the largest push accepted, in bytes, and
+   * The git remote (spec §4.1 ter): the largest push accepted, in bytes, and
    * how long one git request may last, in seconds. Both fail closed.
    */
   readonly git: { readonly maxPackBytes: number; readonly requestTimeoutSeconds: number };

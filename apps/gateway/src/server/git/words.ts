@@ -1,5 +1,5 @@
 /**
- * What git prints when the gateway says no (spec §4.1 bis; ADR
+ * What git prints when the gateway says no (spec §4.1 ter; ADR
  * gateway-as-git-remote D7). Two shapes per refusal:
  *
  *   - one line, for `ng <ref> <line>` (git shows `! [remote rejected] <ref>

@@ -1,5 +1,5 @@
 /**
- * The URL grammar of the git remote (spec §4.1 bis): what a path under
+ * The URL grammar of the git remote (spec §4.1 ter): what a path under
  * `/git/` asks for. Pure.
  *
  *   /git/<repository>[.git]/info/refs?service=git-upload-pack|git-receive-pack
