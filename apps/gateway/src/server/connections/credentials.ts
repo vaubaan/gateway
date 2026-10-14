@@ -179,11 +179,15 @@ export class CredentialBroker {
       if (!registered) return null;
       const sealed = await this.deps.connections.getCredential(connectionId);
       if (sealed === null) return null;
+      const credential = parseSecret(sealed);
       return {
         connection,
         plugin: registered.plugin,
-        credential: parseSecret(sealed),
-        appConfig: await this.deps.providerApps.pluginAppConfig(connection.provider),
+        credential,
+        appConfig: await this.deps.providerApps.pluginAppConfigFor(
+          connection.provider,
+          credential.kind,
+        ),
       };
     } catch (err) {
       this.deps.logger.warn('credential not readable for the provider-side revocation', {
@@ -283,11 +287,16 @@ export class CredentialBroker {
     if (!registered) throw new ConnectionUnavailableError(connectionId, 'missing');
     const sealed = await this.deps.connections.getCredential(connectionId);
     if (sealed === null) throw new ConnectionUnavailableError(connectionId, connection.status);
+    const credential = parseSecret(sealed);
     return {
       connection,
       plugin: registered.plugin,
-      credential: parseSecret(sealed),
-      appConfig: await this.deps.providerApps.pluginAppConfig(connection.provider),
+      credential,
+      // A pasted token never depends on the company app's settings.
+      appConfig: await this.deps.providerApps.pluginAppConfigFor(
+        connection.provider,
+        credential.kind,
+      ),
     };
   }
 

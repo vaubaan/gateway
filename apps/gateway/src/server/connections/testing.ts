@@ -110,6 +110,10 @@ export const SSH_KEY_SPEC: SshKeyCredentialSpec = {
 export interface FixturePluginOptions {
   readonly id: string;
   readonly credential: CredentialSpec;
+  /** Other ways the fixture connects (a token beside its app). */
+  readonly alternativeCredentials?: readonly CredentialSpec[];
+  /** Tool titles, keyed by tool name. */
+  readonly toolTitles?: Readonly<Record<string, string>>;
   readonly displayName?: string;
   readonly experimental?: boolean;
   readonly discoverResources?: (ctx: ConnectionContext) => Promise<readonly Resource[]>;
@@ -201,6 +205,10 @@ export function fixturePlugin(options: FixturePluginOptions): ProviderPlugin {
       ],
     },
     credential: options.credential,
+    ...(options.alternativeCredentials
+      ? { alternativeCredentials: options.alternativeCredentials }
+      : {}),
+    ...(options.toolTitles ? { toolTitles: options.toolTitles } : {}),
     classify(_tool, args) {
       const space = typeof args.space === 'string' ? args.space : null;
       if (!space) return { denied: 'space: argument missing' };

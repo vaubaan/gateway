@@ -24,6 +24,7 @@ import type {
   PluginRegistry,
   ProviderAppConfig,
 } from '@vaubaan/plugin-sdk';
+import type { CredentialKind } from '@vaubaan/shared';
 
 import {
   PROVIDER_APP_FIELD_PROPERTY,
@@ -222,6 +223,19 @@ export class ProviderAppsService {
     if (appConfigFieldsOfPlugin(plugin).length === 0) return {};
     const { [CLIENT_SECRET_FIELD]: _clientSecret, ...rest } = await this.hostAppConfig(providerId);
     return rest;
+  }
+
+  /**
+   * The `appConfig` a plugin receives for a connection made with this kind of
+   * credential: the company app's record (`pluginAppConfig`) when the kind is
+   * the one the app serves, `{}` otherwise. A token pasted by hand works
+   * whether or not the company registered an app, so its connection never
+   * depends on the app's settings (ADR token-connections-beside-the-integration-app).
+   */
+  async pluginAppConfigFor(providerId: string, kind: CredentialKind): Promise<ProviderAppConfig> {
+    const { plugin } = this.registry.require(providerId);
+    if (appSpecOfPlugin(plugin).kind !== kind) return {};
+    return this.pluginAppConfig(providerId);
   }
 
   /**

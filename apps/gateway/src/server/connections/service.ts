@@ -570,7 +570,7 @@ export class ConnectionService {
     try {
       check = await spec.verify({
         credential: secret,
-        appConfig: await this.deps.providerApps.pluginAppConfig(plugin.id),
+        appConfig: await this.deps.providerApps.pluginAppConfigFor(plugin.id, secret.kind),
         fetch: this.deps.fetch,
         signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
       });
@@ -873,7 +873,7 @@ export class ConnectionService {
     try {
       const resources = await this.discoverWith(plugin, {
         credential: secret,
-        appConfig: await this.deps.providerApps.pluginAppConfig(plugin.id),
+        appConfig: await this.deps.providerApps.pluginAppConfigFor(plugin.id, secret.kind),
         fetch: this.deps.fetch,
       });
       return { resources, error: null };
