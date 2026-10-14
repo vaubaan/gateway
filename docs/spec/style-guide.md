@@ -321,16 +321,14 @@ How a page looks is judged by eye, against the gallery, at 1440×900 and
 
 Stated so that nobody takes a rule for a fact:
 
-- **The pages keep their earlier bodies** until each is redesigned: they sit in
-  the new shell and read the new tokens, but their content, their words and
-  their local style sheets are the earlier ones (uppercase labels, more than
-  five columns, "active" in green, help paragraphs). The home shows the missions
-  list.
-- **Earlier components remain** for those pages: a name with the glyph of its
-  kind, a legend of kinds, a one-line help with "More". They carry no colour of
-  their own any more and go with the last page that uses them.
+- **Every page was rebuilt on the design system** (Now and Waiting for you;
+  the mission pages; Accounts, Reference, Activity, Settings and the
+  administration). The components of the first interface — a name with the
+  glyph of its kind, a legend of kinds, a one-line help with "More", the
+  earlier badge, banner and bare table — are deleted.
 - **Raw lengths remain** in the style sheets of those pages and, in the design
   system, for the dimensions of marks and a few hairline adjustments.
-- **The consent pages of the authorization endpoint** are separate documents
-  with their own minimal styles and do not use the tokens.
-- **The spec of the gateway** (§4.2) still names pages in the earlier words.
+- **The consent pages of the authorization endpoint and the refusals of a
+  forwarded request URL** are separate documents sent under a content policy
+  that loads nothing: they cannot read the token sheet and repeat the tokens
+  they need, value for value, in both themes. A test keeps the two equal.

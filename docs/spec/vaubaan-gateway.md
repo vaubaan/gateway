@@ -27,6 +27,41 @@ status: draft
 
 Twenty-eight terms, distinct and not interchangeable.
 
+**Words.** The terms below are the names of the domain and of the protocol:
+MCP tool names, refusal codes, `RiskId`s, catalog files, API fields, database
+columns and configuration keys spell them this way, and so does this spec
+wherever it states a rule (§2, §3, §4.1, §4.3, §5, §6, §8 to §11). The
+interface speaks to people in other words. §4.2, §4.4 and §7 describe what a
+person sees and does, and use the interface's; a reader of the API, of a
+refusal or of the database finds the same thing under the protocol's name:
+
+| The interface says                               | The protocol and this spec say                                    |
+| ------------------------------------------------ | ----------------------------------------------------------------- |
+| account                                          | connection                                                        |
+| access — "Who has access", "Give access"         | share; the list of permissions an access holds is its restriction |
+| "Shared with you"                                | shares received; missions one is a member of                      |
+| permission (its id stays visible, in mono)       | risk, `RiskId`                                                    |
+| limits, per period and per minute                | budget: quota and rate limit                                      |
+| runs freely / ask me first                       | gate `auto` / `approval`                                          |
+| key, your key                                    | mission token, member token                                       |
+| machine key                                      | named token                                                       |
+| Replace key                                      | rotate                                                            |
+| Waiting for you (a yes to give, a limit reached) | request: approval request, claim; the request inbox               |
+| connected app                                    | delegation, held by an OAuth client                               |
+| Activity                                         | audit; the session of a mission                                   |
+| teammate                                         | mission member                                                    |
+| team                                             | group                                                             |
+| administrator                                    | operator                                                          |
+| service; company app; Reference                  | provider; provider app; the reference of each plugin              |
+| stopped; without an owner; needs reconnecting    | `revoked`; `orphaned`, `unowned`; `expired` (of a connection)     |
+| setup kit                                        | bootstrap kit                                                     |
+| mission, preset, resource, environment           | the same                                                          |
+
+The page paths follow the interface's words (`/accounts`, `/waiting`,
+`/activity`, `/reference`, `/settings`); the paths that belong to a protocol do
+not move (the two MCP doors, the request URL a refusal carries, the callback a
+company registered at a provider).
+
 **Deployment**
 
 - **Instance** — one deployment of the gateway, owned and operated by a
@@ -685,63 +720,129 @@ client admitted automatically) is checked at every use of a delegated
 token, not only at consent: disabling a client stops its delegations at
 the next request.
 
-A user sees their delegations in the interface, with the client holding
-each one, the date its absolute lifetime ends, and the missions it
-issued, and may revoke them in one click.
+A user sees their delegations in the interface (§4.2, "Connected apps"),
+with the client holding each one, the date its absolute lifetime ends, and
+the missions it issued, and may revoke each of them; the revocation is asked
+first.
 
 ### 4.2 Human surface
 
-A web interface served by the instance itself, behind the IdP. Cardinal
-pages:
+A web interface served by the instance itself, behind the IdP, in the
+interface's words (§0, "Words"). One navigation of seven entries — Now,
+Waiting for you, Missions, Accounts, Activity, Reference, Settings — and one
+home. A page is offered an act only when the instance would take it, and the
+instance checks again when the act arrives.
 
-- **Connections** — my connections, their state, their resources with
-  environment labels (edit, refresh discovery), their shares. A "Connect
-  a provider" button that starts the provider's authorization flow with
-  the apps registered by the operator. A "Share" button that opens the
-  checklist of catalog `RiskId` with "select all"; before confirming, the
-  dialog lists the orphaned missions the share would bring back.
-- **Shares received** — what others entrusted to me, and the exact
-  restriction.
+- **Now** — the home, and the only one. It has three forms. _Something
+  waits_: what my missions ask of me comes first — each request with who
+  asks, on which mission, the tool and the room left — then the missions that
+  are running, one line each, a limit being drawn only when it is near or
+  reached; then a line of counts that lead elsewhere. _Nothing waits_: one
+  sentence that says so and how many missions are running; what is running is
+  one click away, and the page remembers the click. _First run_, for someone
+  who created no mission: what the product is, the model in one drawing, and
+  the steps — an account, a first mission, the kit; an administrator reads
+  first what is left to set up on the instance; what colleagues shared with
+  me is listed. **A yes is never given from the home**: an approval request
+  leads to its own page; a refusal, which runs nothing, may be given from the
+  row.
+- **Waiting for you** — the request inbox: the requests awaiting me as
+  creator, the oldest open beside the list; one sentence when nothing waits.
+  Each request also has its own page, at the URL the executor hands over,
+  read in this order: who asks and on which mission, the call — the tool and,
+  for an approval, **the arguments in clear** —, the permission and its
+  severity, the room left, what each answer does, then the answers. **A yes
+  is given on this page only**, where the exact call is shown. To an approval
+  request: approve this call, let the permission run freely until the limits
+  reset, or refuse. To a limit that was reached: reset the count, give back
+  some calls, extend the mission, or leave it until the reset; these answers
+  are about the claimed permission alone (§3.4), and a limit is changed for
+  good by creating another mission, never from a request. A request that is
+  no longer open shows what became of it; anyone but the creator reads one
+  sentence and nothing of the request.
 - **Missions** — the missions I created and those shared with me as a
-  member, their state per risk, their session. On a mission: its
-  members and tokens (the creator adds or removes members and creates
-  named tokens; a member generates, rotates or revokes their own token).
-  Creation, in this order and on one screen: name (or "duplicate mission
-  X", or "paste an agent's proposal"); connections and, within each, the
-  resources (all by default) and the policy, **Preset or Custom per
-  connection**: a preset shows what it allows, what waits for my
-  approval and what it leaves out; Custom opens every risk I hold, each
-  with its budget and gate, within my authority; a three-line summary of
-  what the mission can do, cannot do, and in what quantity; period,
-  expiry. After issuance: the **bootstrap kit** (§4.4). The screen must
-  stay usable for a mission on three connections without scrolling
-  through a wall of checkboxes.
-- **Mission session** — event timeline, counters per risk and per
-  period, gate per risk, open requests, and calls per token holder.
-- **Request inbox** — claims and approval requests awaiting me as
-  creator, with the action's detail for approvals. Each request also has
-  its own page, at the URL the executor hands over.
-- **Delegations** — the agents authorized to manage my missions, what
-  they issued, and their revocation.
-- **Audit** — search by mission, user, connection, tool, decision,
-  agent label, token holder, kind of entry (call or administrative act)
-  and period. **Who reads what:** a user reads the entries of the missions
-  they created, of the missions shared with them as a member, and of the
-  connections they own; an operator reads every entry of the instance,
-  calls included. **Nobody reads arguments there**: the audit never holds
-  them, and the fingerprint that stands for them is shown only to who
-  answers for the call — the creator of its mission, an owner of its
-  connection — never to a member or to an operator as such.
-- **Providers** — the reference of each shipped plugin, for any
-  signed-in user: what it connects to, its data model, its risk catalog
-  with the reason and the vector of each risk, its presets with
-  everything they contain, its tools. Every risk shown elsewhere links
+  teammate: what each is for, its state in words, what it allows, when it
+  ends; a mission that waits for my answer says so on its row, and a mission
+  a connected app prepared names the app. **Creating**, on one screen: a name
+  (or a copy of one of my missions, or an agent's proposal pasted in); the
+  accounts and, within each, the resources (all by default) and a **preset**
+  — each saying what it yields within what I may allow, and why when it
+  would allow nothing — or the permissions **one by one**, each with its
+  limits and whether it asks me first, one click from any preset; how often
+  the limits reset and when the mission ends; beside the form, a summary of
+  what the mission can do, what asks first and what it cannot do. **Creating
+  confirms the explicit list**: before anything exists, a dialog lists every
+  permission, by account, with its limits and whether it asks first; that
+  list is what is created and what the instance checks again. Then the key,
+  shown once, with the **setup kit** (§4.4). **On a mission**: its state; a
+  **waiting request is visible on its mission** — with the way to answer for
+  the creator, and whose answer it waits for a teammate —; what it can do,
+  what asks first and what it cannot; its **people and keys**, with what each
+  key did in the current period (the creator adds and removes teammates and
+  makes machine keys; a teammate generates, replaces and revokes their own
+  key); its permissions with what was used and what is left, where the
+  creator changes "ask me first"; its activity. **Replace key asks first**
+  and states the one consequence: **the old key stops working at once** —
+  there is no grace period. Stopping a mission, removing a teammate and
+  revoking a key cannot be undone and are confirmed by typing a name. The
+  screen of creation must stay usable for a mission on three accounts
+  without scrolling through a wall of checkboxes.
+- **The activity of a mission** — its session: what waits, who called in the
+  current period per key holder and per agent label, the timeline of its
+  events, and, on demand, what each permission used and the counters of
+  earlier periods. A key holder is authenticated; an agent label is what a
+  caller said of itself, and the page says so.
+- **Accounts** — the accounts I can use: **mine**, alone or through a team
+  that owns them, with their state; **"Shared with you"**, the accounts a
+  colleague gave me access to and the exact permissions each access holds;
+  and the services I can connect ("Connect an account" starts the service's
+  own authorization flow with the apps the administrator registered, or asks
+  for the key the service issues; a field says the shape it expects). **On
+  an account**, for its owners only: **who has access** and up to what;
+  its resources with their environment labels (edit, refresh discovery);
+  **the missions that use it and who created them, whoever created them** —
+  because removing an access or disconnecting stops missions, and each
+  confirmation says how many. An owner reads there the name, the creator and
+  the state of such a mission and nothing else of it; the mission's own page
+  stays its creator's and its teammates'. **"Give access" is a dialog** over
+  the account: a person or a team, then the checklist of permissions with
+  "select all", each with its severity and its reason one click away; before
+  confirming, the dialog lists the missions without an owner that the access
+  would bring back. Removing an access, handing the account to a team and
+  disconnecting it are asked first; an owner may close a mission that
+  stopped for want of an owner on their account.
+- **Reference** — what an agent can do on each shipped plugin's service, for
+  any signed-in user and read-only, in **three tabs**: **Permissions** — one
+  table, the permissions against the presets, each cell the limits a preset
+  gives and whether it asks first; a permission unfolds its reason, the six
+  dimensions behind its severity, what it covers and the tools declared for
+  it —; **Tools**; and **How it is modelled** (the data model and where the
+  environment of a call comes from). Every permission shown elsewhere links
   to its entry here.
-- **Administration** (operator) — identity provider, provider apps,
-  users (deactivate, reactivate), local groups, connections without an
-  owner (reassign), the OAuth clients of the management door, telemetry.
-  The public URL, the retention and the other keys of §4.3 are set in the
-  instance configuration and shown in the interface, not edited there.
+- **Activity** — the audit record: one line per call and per change a person
+  made, newest first, with filters by period, mission, account, tool,
+  decision, person, key holder, agent label and kind of entry. **Each line
+  has a detail**, reachable by its own address: the key used, the
+  permissions touched and what is left, what the agent was told. **Who reads
+  what:** a user reads the entries of the missions they created, of the
+  missions shared with them as a teammate, and of the accounts they own; an
+  administrator reads every entry of the instance, calls included. **Nobody
+  reads arguments there**: the audit never holds them, and the fingerprint
+  that stands for them is shown only to who answers for the call — the
+  creator of its mission, an owner of its account — never to a teammate or
+  to an administrator as such.
+- **Settings** — for everyone: the theme, and **Connected apps**, the agents
+  I allowed to prepare missions in my name: until when each consent runs,
+  the missions each prepared, and its disconnection, asked first. For an
+  administrator, **Administration**: a setup checklist of what the instance
+  still needs; sign-in (the identity provider); company apps (the apps
+  registered at each service); people (deactivate, reactivate); teams (the
+  local ones are kept here); accounts without owner (name a new owner — the
+  administrator's only act on an account); registered apps (the OAuth
+  clients of the management door: approve, disable); telemetry. Acts that
+  stop, remove or hand over something are asked first. The public URL, the
+  retention and the other keys of §4.3 are set in the instance configuration
+  and shown in the interface, not edited there.
 
 Styling follows [style-guide](./style-guide.md).
 
@@ -773,18 +874,23 @@ Anything missing makes startup fail with a message naming the variable.
 ### 4.4 Bootstrap kit after issuance
 
 Inherited from v4 §12.4, adapted: after a mission is issued, the
-interface shows three numbered snippets to copy, and a verification
-command.
+interface shows its key, then three numbered snippets to copy and a
+verification command — the "setup kit" of the interface. The prose around
+the snippets is in the interface's words; the commands, the variable name,
+the MCP tool names, the refusal codes and the fields keep the protocol's.
 
 1. The environment variable carrying the mission token. The secret is
-   revealed once; the revisited page shows a prefix and a "Rotate"
-   button.
+   revealed once; the revisited kit shows its masked form, and the mission
+   page offers "Replace key" (§4.2).
 2. The client's MCP configuration (instance URL, authorization header by
    reference to the variable).
-3. An instruction block for the agent: connections carried, resource
-   refs, accepted risks, budget, and what to do on each structured
-   refusal (in particular: hand the request URL to the human, never try
-   to work around it).
+3. An instruction block for the agent: whose key it holds, connections
+   carried, resource refs, accepted risks, budget, what to do on each
+   structured refusal (in particular: hand the request URL to the human,
+   never try to work around it) and when the key itself stops working.
+
+A generic page served by the instance without authentication documents the
+same for any agent, with no value of any mission.
 
 ## 5. Composition
 
@@ -885,34 +991,37 @@ the interface with the bootstrap token, fills in the IdP, signs in
 through the IdP, and revokes the bootstrap token. They then register one
 app per provider in use and enter its secrets.
 
-### 7.2 Connect a provider
+### 7.2 Connect an account
 
-A user clicks "Connect", is sent to the provider, consents, comes back to
-the instance. The connection is created, encrypted, under their name.
-The plugin discovers its resources; the owner labels their environments.
-They are its owner. They may then transfer ownership to a group they
-belong to; every member of the group becomes a full owner, and so will
-members who join the group later.
+A user opens Accounts, picks a service under "Connect an account", is sent
+to the service, consents, comes back to the instance (or pastes the key the
+service issued). The connection — the account — is created, encrypted, under
+their name. The plugin discovers its resources; the owner labels their
+environments. They are its owner. They may then hand it to a team they
+belong to; every member of the team becomes a full owner, and so will
+members who join it later.
 
-### 7.3 Share
+### 7.3 Give access
 
-The owner picks a target (user or group), ticks the risks, confirms. The
-target sees the share under "Shares received" and may issue missions
-within that bound.
+On the account, the owner opens "Give access", picks a person or a team,
+ticks the permissions, confirms: this is a share. The target sees the
+account under "Shared with you" and may create missions within that bound.
 
-When the share would ground orphaned missions again — they would serve
-calls at once, with the token their agent still holds — the dialog lists
-those missions, each with the person who issued it, and the share is made
+When the access would ground orphaned missions again — they would serve
+calls at once, with the key their agent still holds — the dialog lists
+those missions, each with the person who created it, and the access is given
 only once the owner has confirmed that list.
 
-### 7.4 Issue a mission
+### 7.4 Create a mission
 
-The creator names the mission, picks its connections and, within each,
-the resources it may touch, picks one preset per connection, reads the
-summary, unfolds the detail only if something needs adjusting within
-their authority, sets period and expiry. A mission has no expiry unless
-its creator gives it one: the form's default is "never". The token is
-revealed once. The bootstrap kit is displayed.
+The creator names the mission, picks its accounts and, within each, the
+resources it may touch, picks one preset per account, reads the summary,
+opens the permissions one by one only if something needs adjusting within
+what they may allow, sets how often the limits reset and when the mission
+ends. A mission has no expiry unless its creator gives it one: the form's
+default is "never". Before the mission exists, the creator reads and
+confirms the explicit list of its permissions with their limits. The key is
+revealed once. The setup kit is displayed.
 
 ### 7.5 Execute
 
@@ -924,22 +1033,26 @@ produces an event and an audit entry.
 
 A call touches a risk at zero quota. The `budget-exhausted` refusal
 carries the claim URL. The human steering the agent opens it, or forwards
-it to the creator. The creator authenticates, sees the session, decides.
-The agent replays.
+it to the creator, who also finds it under "Waiting for you", on the home
+and on the mission. The creator authenticates, sees what was used and what
+is left, decides. The agent replays.
 
 ### 7.7 Approve an action
 
 A call touches a risk gated `approval`. The `approval-required` refusal
-carries the request URL. The creator sees it in their inbox, reads the
-tool and the arguments, grants. The agent replays the same call; it
+carries the request URL. The creator sees it under "Waiting for you",
+opens the request, reads the tool and the arguments there, grants. The
+agent replays the same call; it
 passes and consumes the approval. If the agent changes the arguments, a
 new request.
 
 ### 7.8 Revoke and rotate
 
-The creator revokes a mission or rotates its token without changing the
-mission. The owner revokes a share or a connection; the missions that
-depend on it become `orphaned` and refuse everything, with the reason.
+The creator stops a mission (a revocation, for good) or replaces its key
+(a rotation) without changing the mission; replacing asks first, and the
+old key stops at once. The owner removes an access or disconnects an
+account; the missions that depend on it become `orphaned` and refuse
+everything, with the reason, and the confirmation says how many.
 When a connection is revoked, the owner is told what became of the
 access granted at the provider: withdrawn there too, or theirs to remove
 by hand, with the place to do it.
@@ -953,13 +1066,14 @@ budget is shared.
 
 ### 7.9 bis Work on a mission as a team
 
-The creator adds colleagues as members of the mission. Each signs in,
-finds the mission under the missions shared with them, and generates
-their own token, shown once, with the bootstrap kit. Every call is then
-attributed to its holder in the session and the audit. For a machine
-with no account, the creator creates a named token. Any token is revoked
-on its own, by its holder or by the creator. Requests still go to the
-creator, who alone answers them.
+The creator adds colleagues as members of the mission — teammates. Each
+signs in, finds the mission under "Shared with you", and generates their
+own key, shown once, with the setup kit. Every call is then attributed to
+its holder in the session and the audit. For a machine with no account, the
+creator creates a named token — a machine key. Any key is revoked on its
+own, by its holder or by the creator. Requests still go to the creator, who
+alone answers them; a teammate sees on the mission that it waits, and for
+whose answer.
 
 ### 7.10 Have an agent prepare a mission
 
@@ -968,9 +1082,10 @@ sends them to the instance, they authenticate through the IdP, consent,
 and the agent receives a delegated token. The agent reads the user's
 authority and the catalog, composes a policy from the task described,
 previews it, fixes what exceeds, issues the mission. The user sees it
-appear under their name, marked as delegated. The agent, or another one,
-executes the mission with the mission token received. The requests that
-follow land in the user's inbox, and only they answer them.
+appear under their name, marked as prepared by that connected app. The
+agent, or another one, executes the mission with the mission token
+received. The requests that follow wait for the user, and only they answer
+them.
 
 ## 8. Audit
 
@@ -1023,7 +1138,8 @@ automated suite. Trust comes from usage.
 - **Public aggregation**: success rate per `(plugin, version, tool)`,
   number of reporting instances. A plugin is **deemed validated** above a
   success threshold and a minimum number of reports, both published. The
-  instance's interface shows this status on each connection.
+  instance's interface shows this status in the details of each account and
+  in the reference of its service.
 - The collector is hosted by the open source project, insert-only and
   anonymous; its shape is an infrastructure decision, not part of this
   spec.
@@ -1115,7 +1231,16 @@ automated suite. Trust comes from usage.
 - A connection's owner is a principal, user or group; a mission always
   has a user creator.
 - Presets are shipped by plugins, one per connection at issuance, UI
-  sugar only; the persisted policy is always explicit.
+  sugar only; the persisted policy is always explicit, and the creator
+  confirms that explicit list before the mission exists.
+- The interface has its own words for people (§0, "Words"); the protocol's
+  names do not change (ADR
+  [interface-redesign-vocabulary-and-design-system](../decisions/interface-redesign-vocabulary-and-design-system.md)).
+  Replacing a key has no grace period (ADR
+  [mission-pages-confirm-the-explicit-list-and-ask-before-a-key-stops](../decisions/mission-pages-confirm-the-explicit-list-and-ask-before-a-key-stops.md)).
+  An owner of a connection reads the missions that carry it and who holds
+  it, by name (ADR
+  [owner-reads-missions-and-holders-of-a-connection](../decisions/owner-reads-missions-and-holders-of-a-connection.md)).
 - Resources belong to the connection, labelled with an environment by
   the owner; a mission selects a subset per connection (all by default)
   and is refused outside it.
@@ -1149,8 +1274,9 @@ overturn. A question an ADR settled is in §11.1.
 - **Transitive sharing.** May a beneficiary re-share a connection to a
   third party within their restriction? v1 assumption: no, only the
   owner shares.
-- **Notifying the creator.** In v1 the request inbox in the interface is
-  enough, plus the URL the executor hands over. Is an optional outbound
+- **Notifying the creator.** In v1 "Waiting for you" in the interface — on
+  the home, on the mission and in the navigation's count — is enough, plus
+  the URL the executor hands over. Is an optional outbound
   channel needed (webhook, mail through the company's server)? Operator
   decision, ADR if added.
 - **Gate in shares.** May a share's restriction impose `approval` on some
@@ -1182,5 +1308,6 @@ overturn. A question an ADR settled is in §11.1.
 
 ---
 
-_Date: 2026-10-12. Author: rpelissier + Claude (drafting). Status: draft
-v5 for review._
+_Date: 2026-10-12; §0 "Words", §4.2, §4.4 and §7 aligned with the redesigned
+interface on 2026-10-14. Author: rpelissier + Claude (drafting). Status:
+draft v5 for review._
