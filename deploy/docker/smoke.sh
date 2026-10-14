@@ -10,6 +10,10 @@
 # 5. non-root                  -> the process runs as uid 10001
 # 6. no env file shipped       -> the standalone output carries no apps/gateway/.env*
 # 7. no test file shipped      -> no test, spec, fixture or demo tree of this repository in the image
+# 8. security headers          -> every page answers with the headers the application owns
+# 9. started as root           -> on a root-owned volume, the entrypoint gives /data to uid 10001
+#                                 and the server runs as 10001 with no capability (Railway's
+#                                 RAILWAY_RUN_UID=0)
 #
 # Optional expectations, set by the release pipeline (.github/workflows/release.yml),
 # which knows what it built:
@@ -26,10 +30,15 @@ FAIL_FAST_TIMEOUT_SECONDS=60
 IMAGE="${1:?usage: smoke.sh <image>}"
 PORT="${SMOKE_PORT:-3999}"
 NAME="vaubaan-smoke-$$"
+ROOT_NAME="vaubaan-smoke-root-$$"
+VOLUME="vaubaan-smoke-data-$$"
 MASTER_KEY="$(head -c 32 /dev/urandom | base64 | tr -d '\n')"
 BOOTSTRAP="smoke-$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
 
-cleanup() { docker rm -f "$NAME" >/dev/null 2>&1 || true; }
+cleanup() {
+  docker rm -f "$NAME" "$ROOT_NAME" >/dev/null 2>&1 || true
+  docker volume rm -f "$VOLUME" >/dev/null 2>&1 || true
+}
 trap cleanup EXIT
 
 fail() { printf 'SMOKE FAIL: %b\n' "$*" >&2; exit 1; }
@@ -143,5 +152,49 @@ tests_shipped="$(docker exec "$NAME" sh -c '
     -print' | head -n 20)"
 [ -z "$tests_shipped" ] || fail "test files shipped inside the image:\n$tests_shipped"
 pass "no test, spec, fixture or demo file inside the image (${searched} files searched)"
+
+# 8. Security headers, set by the application itself (not by a proxy).
+headers="$(curl -fsS -D - -o /dev/null "http://127.0.0.1:${PORT}/login")" || fail "/login did not answer"
+for expected in \
+  "content-security-policy: default-src 'self'; script-src 'self' 'nonce-" \
+  "frame-ancestors 'none'" \
+  "x-frame-options: DENY" \
+  "x-content-type-options: nosniff" \
+  "referrer-policy: same-origin" \
+  "permissions-policy: " \
+  "strict-transport-security: max-age=31536000"; do
+  grep -qiF -- "$expected" <<<"$headers" || fail "/login is missing the header part: $expected\n$headers"
+done
+pass "/login carries the security headers (CSP with a nonce, framing, nosniff, referrer, permissions, HSTS)"
+
+# 9. Started as root on a root-owned volume (RAILWAY_RUN_UID=0): the entrypoint
+#    gives /data to vaubaan and the server runs as 10001 without capabilities.
+docker volume create "$VOLUME" >/dev/null
+docker run --rm --user 0 --entrypoint sh -v "$VOLUME:/data" "$IMAGE" \
+  -c 'chown -R 0:0 /data && touch /data/left-by-root' >/dev/null
+docker run -d --name "$ROOT_NAME" --user 0 -v "$VOLUME:/data" \
+  -e VAUBAAN_PUBLIC_URL=https://gateway.example.com \
+  -e VAUBAAN_STORE_PATH=/data/gateway.db \
+  -e VAUBAAN_MASTER_KEY="$MASTER_KEY" \
+  -e VAUBAAN_ADMIN_EMAILS=ops@example.com \
+  -e VAUBAAN_BOOTSTRAP_TOKEN="$BOOTSTRAP" \
+  "$IMAGE" >/dev/null
+for _ in $(seq 1 30); do
+  if docker exec "$ROOT_NAME" node -e "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" 2>/dev/null; then
+    break
+  fi
+  if [ "$(docker inspect -f '{{.State.Running}}' "$ROOT_NAME")" != "true" ]; then
+    docker logs "$ROOT_NAME" >&2 || true
+    fail "the container started as root stopped before /healthz answered"
+  fi
+  sleep 1
+done
+uid="$(docker exec "$ROOT_NAME" awk '/^Uid:/{print $2}' /proc/1/status)"
+[ "$uid" = "10001" ] || fail "started as root, the server runs as uid $uid, expected 10001"
+caps="$(docker exec "$ROOT_NAME" awk '/^CapEff:/{print $2}' /proc/1/status)"
+[ "$caps" = "0000000000000000" ] || fail "started as root, the server keeps capabilities $caps"
+owner="$(docker exec "$ROOT_NAME" stat -c %u /data /data/left-by-root /data/gateway.db | sort -u)"
+[ "$owner" = "10001" ] || fail "started as root, /data is not owned by 10001: $owner"
+pass "started as root on a root-owned volume: /data given to 10001, server runs as 10001 with no capability"
 
 echo "SMOKE PASSED"

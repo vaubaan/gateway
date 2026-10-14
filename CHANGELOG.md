@@ -29,6 +29,23 @@ names, and the notes about them do too.
 **Upgrade notes** — only for an instance that already runs a build made from the
 `v5` branch:
 
+- **A sign-in provider anyone can hold an account at needs an admission rule.**
+  Schema migration `0014` applies at start. If `idp.issuer` is
+  `https://accounts.google.com` or a Microsoft multi-tenant or personal-accounts
+  issuer and `idp.allowed_email_domains` is empty, the instance no longer starts:
+  it admitted anyone with such an account. Set the domains, or
+  `idp.invitation_only: true` and invite people on Settings → People. Everything
+  else about `idp.*` is unchanged, its callback included (`/auth/callback`). An
+  address of `admin.emails` outside the allowed domains is now admitted.
+- **The gateway sets its own security headers.** If your reverse proxy adds
+  `Content-Security-Policy`, `X-Frame-Options`, `X-Content-Type-Options`,
+  `Referrer-Policy`, `Permissions-Policy` or `Strict-Transport-Security`, remove
+  them (the reference `deploy/caddy/Caddyfile` no longer sets any): a browser
+  enforces two policies together.
+- **`admin.group` names its provider once there are several.** With one provider
+  the bare group name keeps working; to add a second provider, write it
+  `<provider>:<group>` (`idp:gateway-admins` for the provider of `idp.*`).
+
 - **Page addresses follow new words; old links keep working.** Accounts are under
   `/accounts`, what waits for you under `/waiting`, the activity record under
   `/activity`, the reference of each service under `/reference`, settings under
@@ -174,6 +191,36 @@ names, and the notes about them do too.
   affected; trying again once the identity provider answers is the remedy.
 
 ### Added
+
+- **Several sign-in providers on one instance**, OpenID Connect and GitHub: a
+  company directory (Entra ID, Google Workspace, Okta, Keycloak) and people who
+  sign in with their own account (personal Google or Microsoft, GitHub), at once.
+  Configured as `sign_in.<id>.*` (`VAUBAAN_SIGN_IN_<ID>_<FIELD>`) beside `idp.*`, or
+  added, edited, tested and removed on Settings → Sign-in (audited, the secret never
+  shown back; a provider of the configuration is read-only there). The sign-in page
+  shows one button per provider; each has its callback,
+  `<public_url>/auth/callback/<id>`. A sign-in started with one provider is never
+  completed by another's response. **Identities never merge by email**: one person
+  through two providers is two people, and the People page says so.
+- **GitHub sign-in** (an OAuth App, with state and PKCE): the person is GitHub's
+  numeric user id, their email the primary address GitHub verified; `read:org` is
+  asked only when the admin rule names a team (`github:<org>/<team>`). A GitHub
+  Enterprise Server works through its base URL.
+- **Invitations**: administrators invite and remove email addresses on Settings →
+  People (audited). A sign-in is admitted on a verified address in the provider's
+  allowed domains, on the invitation list or in `admin.emails`; a company
+  directory without domains admits everyone it signs in, a provider where anyone
+  can hold an account never does.
+- **Removing a sign-in provider** ends its people's sessions at once and stops
+  their sign-in; their missions and connected apps run until an administrator
+  deactivates them.
+- **Security headers set by the gateway itself** on every response: a
+  Content-Security-Policy that admits only the gateway's scripts (a nonce per
+  response) and forbids framing, `X-Frame-Options`, `nosniff`, a same-origin
+  referrer policy, a permissions policy granting no device, and HSTS.
+- **Railway**: `deploy/railway.md`, and an image entrypoint that, started as root
+  on a root-owned volume (`RAILWAY_RUN_UID=0`), gives `/data` to the gateway's user
+  and runs the server as that user, without capabilities.
 
 - **Change limits.** The creator of a mission raises or lowers, per permission it
   holds, the limit per period and the calls per minute, from the mission page

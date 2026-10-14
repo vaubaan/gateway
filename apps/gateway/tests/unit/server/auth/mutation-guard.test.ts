@@ -269,6 +269,22 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
   'users.handlers.reactivate': form('operator', 303, (rig, headers) =>
     rig.root.users.handlers.reactivate(post('/admin/users/none/reactivate', headers, {}), 'none'),
   ),
+  'users.handlers.invite': form('operator', 303, (rig, headers) =>
+    rig.root.users.handlers.invite(
+      post('/admin/users/invitations', headers, { email: 'guest@example.org' }),
+    ),
+  ),
+  'users.handlers.removeInvitation': form('operator', 303, (rig, headers) =>
+    rig.root.users.handlers.removeInvitation(
+      post('/admin/users/invitations/remove', headers, { email: 'nobody@example.org' }),
+    ),
+  ),
+  'auth.handlers.removeSignInProvider': form('operator', 303, (rig, headers) =>
+    rig.root.auth.handlers.removeSignInProvider(
+      post('/api/admin/sign-in-providers/none/remove', headers, {}),
+      'none',
+    ),
+  ),
   'connections.handlers.saveProviderApp': form('operator', 303, (rig, headers) =>
     rig.root.connections.handlers.saveProviderApp(
       post('/admin/provider-apps/github', headers, { action: 'clear' }),

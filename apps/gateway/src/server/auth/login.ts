@@ -9,12 +9,12 @@
  * refusal comes before anything is written (no row refreshed, no group
  * synced, no bootstrap revocation).
  */
-import type { AdminRule } from '../config/types';
+import { LEGACY_PROVIDER_ID } from '../config/sign-in';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
 import { systemClock, toIso, type Clock } from '../store/clock';
 import type { GroupRecord, UserRecord } from '../store/types';
-import { isOperator } from './admin-rule';
+import { isOperator, type ResolvedAdminRule } from './admin-rule';
 import type { BootstrapService } from './bootstrap';
 import type { IdentityClaims } from './claims';
 import { LoginError } from './errors';
@@ -32,7 +32,6 @@ export interface LoginOutcome extends Authority {
 
 export interface LoginDeps {
   readonly store: Store;
-  readonly adminRule: AdminRule;
   readonly bootstrap: BootstrapService;
   readonly logger: Logger;
   readonly clock?: Clock;
@@ -55,15 +54,15 @@ export type MembershipsChanged = () => Promise<void>;
 export async function currentAuthority(
   store: Store,
   user: UserRecord,
-  adminRule: AdminRule,
+  adminRule: ResolvedAdminRule,
 ): Promise<Authority> {
   const groups = await store.groups.groupsOf(user.id);
-  // The admin rule names an IdP group: only a membership the IdP claimed counts. A local
-  // group, kept by an operator in Administration, never makes anyone an operator.
-  const claimed = groups.filter((g) => g.source === 'idp').map((g) => g.name);
+  // The admin rule names a group of one sign-in provider: only a membership that
+  // provider claimed counts (`isOperator`). A local group, kept by an operator in
+  // Administration, never makes anyone an operator.
   return {
     groups,
-    isOperator: isOperator({ email: user.email, groupNames: claimed }, adminRule),
+    isOperator: isOperator({ email: user.email, groups }, adminRule),
   };
 }
 
@@ -79,21 +78,36 @@ export async function syncIdpGroups(
   userId: string,
   claimedNames: readonly string[],
   logger: Logger,
+  providerId: string = LEGACY_PROVIDER_ID,
 ): Promise<void> {
-  const { skipped } = await store.groups.syncIdpMemberships(userId, claimedNames);
+  const { skipped } = await store.groups.syncIdpMemberships(userId, claimedNames, providerId);
   for (const name of skipped) {
-    logger.warn('IdP group claim collides with a local group; claim ignored', { group: name });
+    logger.warn(
+      'group claim collides with a local group or a group of another sign-in provider; claim ignored',
+      { group: name, provider: providerId },
+    );
   }
+}
+
+/** What the sign-in knows besides the identity: which provider, the admin rule against the providers now. */
+export interface LoginContext {
+  readonly providerId: string;
+  readonly adminRule: ResolvedAdminRule;
 }
 
 export async function completeLogin(
   deps: LoginDeps,
   claims: IdentityClaims,
+  context: LoginContext,
 ): Promise<LoginOutcome> {
   // Accounts from before the store recorded an issuer belong to the identity provider
-  // the instance was using: the first validated sign-in after the upgrade names it,
-  // for all of them, before any is looked up (migration 0011).
-  const bound = await deps.store.users.bindUnboundTo(claims.issuer);
+  // the instance was using — the single provider, `idp`: its first validated sign-in
+  // after the upgrade names it, for all of them, before any is looked up (migration
+  // 0011). A sign-in through any other provider binds nothing.
+  const bound =
+    context.providerId === LEGACY_PROVIDER_ID
+      ? await deps.store.users.bindUnboundTo(claims.issuer)
+      : 0;
   if (bound > 0) {
     deps.logger.warn('existing accounts bound to the identity provider of this sign-in', {
       issuer: claims.issuer,
@@ -135,13 +149,13 @@ export async function completeLogin(
   } catch (err) {
     settleFailed(err);
   }
-  await syncIdpGroups(deps.store, user.id, claims.groups, deps.logger);
+  await syncIdpGroups(deps.store, user.id, claims.groups, deps.logger, context.providerId);
   try {
     await membershipsChanged?.();
   } catch (err) {
     settleFailed(err);
   }
-  const authority = await currentAuthority(deps.store, user, deps.adminRule);
+  const authority = await currentAuthority(deps.store, user, context.adminRule);
 
   let bootstrapRevoked = false;
   if (authority.isOperator && (await deps.bootstrap.state()).status === 'active') {
@@ -164,6 +178,7 @@ export async function completeLogin(
   }
   deps.logger.info('user signed in', {
     user_id: user.id,
+    provider: context.providerId,
     groups: authority.groups.length,
     operator: authority.isOperator,
   });

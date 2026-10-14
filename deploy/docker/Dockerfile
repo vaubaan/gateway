@@ -68,6 +68,11 @@ RUN groupadd --system --gid 10001 vaubaan \
 COPY --from=build --chown=vaubaan:vaubaan /app/apps/gateway/.next/standalone ./
 COPY --from=build --chown=vaubaan:vaubaan /app/apps/gateway/.next/static ./apps/gateway/.next/static
 COPY --from=build --chown=vaubaan:vaubaan /app/apps/gateway/public ./apps/gateway/public
+# Started as root (a platform whose volume is root-owned, e.g. Railway with
+# RAILWAY_RUN_UID=0), it gives /data to vaubaan and drops to it; otherwise it
+# execs the server as is (deploy/docker/entrypoint.sh).
+COPY deploy/docker/entrypoint.sh /usr/local/bin/vaubaan-entrypoint
+RUN chmod 0755 /usr/local/bin/vaubaan-entrypoint
 USER vaubaan
 # No VOLUME instruction: /data is mounted by the deployment (Compose volume, a
 # platform volume such as Railway's, which refuses VOLUME, or `docker run -v`).
@@ -78,4 +83,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD ["node", "-e", "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
 # Configuration: VAUBAAN_* environment variables and/or VAUBAAN_CONFIG_FILE
 # (see deploy/config/). Missing keys stop the process with a named error.
+ENTRYPOINT ["/usr/local/bin/vaubaan-entrypoint"]
 CMD ["node", "apps/gateway/server.js"]

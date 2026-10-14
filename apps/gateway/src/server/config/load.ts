@@ -8,6 +8,19 @@
 import { KEY_BYTES } from '../crypto/aead';
 import { isTrustedProxyEntry } from '../http/client-ip';
 import { parseDuration } from './duration';
+import {
+  admissionProblem,
+  adminGroupProblem,
+  GITHUB_DOT_COM,
+  isSignInKind,
+  isSignInProviderId,
+  issuerKey,
+  LEGACY_PROVIDER_ID,
+  legacyProviderOf,
+  normalizeEmailDomains,
+  SIGN_IN_KINDS,
+  type SignInProvider,
+} from './sign-in';
 import { ConfigError, IssueList } from './errors';
 import { type EnvSource, type FileReader, defaultFileReader } from './secret-refs';
 import {
@@ -20,6 +33,7 @@ import {
   mergeTrees,
   readEnvSource,
   readFileSource,
+  SIGN_IN_ENV_PREFIX,
 } from './sources';
 import {
   type AdminRule,
@@ -212,9 +226,11 @@ function validate(raw: RawTree, issues: IssueList): InstanceConfig | null {
   const storePath = r.string('store.path', { required: isKeyRequired(keySpec('store.path')) });
   const encryption = readEncryption(r);
   const idp = readIdp(r);
-  const admin = readAdmin(r);
+  const signIn = readSignIn(r);
+  const signInProviders = checkSignInProviders(r, idp, signIn);
+  const admin = readAdmin(r, signInProviders);
   const providers = readProviders(r);
-  const bootstrapToken = readBootstrapToken(r, idp);
+  const bootstrapToken = readBootstrapToken(r, signInProviders.length > 0);
 
   const telemetryEnabled = r.bool(keySpec('telemetry.enabled'));
   // A null or mistyped value is not a decision: only a boolean pins the toggle.
@@ -241,6 +257,7 @@ function validate(raw: RawTree, issues: IssueList): InstanceConfig | null {
     store: { path: storePath },
     encryption,
     idp,
+    signIn,
     admin,
     providers,
     bootstrapToken,
@@ -288,9 +305,9 @@ function readTrustedProxies(r: Reader): string[] {
   return trustedProxies;
 }
 
-/** Required while no IdP is configured; long enough to resist guessing. */
-function readBootstrapToken(r: Reader, idp: IdpConfig | null): string | null {
-  const required = isKeyRequired(keySpec('bootstrap_token'), idp !== null);
+/** Required while the configuration sets no sign-in provider; long enough to resist guessing. */
+function readBootstrapToken(r: Reader, hasSignInProvider: boolean): string | null {
+  const required = isKeyRequired(keySpec('bootstrap_token'), hasSignInProvider);
   const bootstrapToken = r.string('bootstrap_token', { required }) ?? null;
   if (bootstrapToken !== null && bootstrapToken.length < MIN_BOOTSTRAP_TOKEN_LENGTH) {
     r.issues.add(
@@ -467,11 +484,164 @@ function readIdp(r: Reader): IdpConfig | null {
     groups: r.text(keySpec('idp.claims.groups')),
   };
   const allowedEmailDomains = r.stringList('idp.allowed_email_domains').map((d) => d.toLowerCase());
+  const invitationOnly = r.bool(keySpec('idp.invitation_only'));
   if (!issuer || !clientId || !clientSecret) return null;
-  return { issuer, clientId, clientSecret, claims, allowedEmailDomains };
+  return { issuer, clientId, clientSecret, claims, allowedEmailDomains, invitationOnly };
 }
 
-function readAdmin(r: Reader): AdminRule | null {
+/**
+ * `sign_in.<id>.*`: one provider per id, in the order of the tree (the file's keys,
+ * then the environment's). Every problem is named by its key.
+ */
+function readSignIn(r: Reader): SignInProvider[] {
+  const block = r.tree('sign_in');
+  if (!block) return [];
+  const out: SignInProvider[] = [];
+  for (const [id, value] of Object.entries(block)) {
+    const base = `sign_in.${id}`;
+    if (!isSignInProviderId(id)) {
+      r.issues.add(
+        base,
+        'a sign-in provider id is a lower-case letter, then letters, digits or hyphens (at most 32)',
+        [`${SIGN_IN_ENV_PREFIX}<ID>_<FIELD>`],
+      );
+      continue;
+    }
+    if (!isPlainObject(value)) {
+      r.issues.add(base, `expected a mapping of sign-in provider fields, got ${typeName(value)}`);
+      continue;
+    }
+    const provider = readSignInProvider(r, id, base);
+    if (provider) out.push(provider);
+  }
+  return out;
+}
+
+function readSignInProvider(r: Reader, id: string, base: string): SignInProvider | null {
+  const before = r.issues.items.length;
+  const kind = r.string(`${base}.kind`, { required: true });
+  if (kind !== undefined && !isSignInKind(kind)) {
+    r.issues.add(
+      `${base}.kind`,
+      `expected one of ${SIGN_IN_KINDS.join(', ')}, got "${kind}"`,
+      envNamesFor(`${base}.kind`),
+    );
+  }
+  const clientId = r.string(`${base}.client_id`, { required: true });
+  const clientSecret = r.string(`${base}.client_secret`, { required: true });
+  const allowedEmailDomains = normalizeDomainsAt(r, `${base}.allowed_email_domains`);
+  const invitationOnly = r.bool({ path: `${base}.invitation_only`, default: false });
+  if (kind === 'github') {
+    if (r.has(`${base}.claims`)) {
+      r.issues.add(
+        `${base}.claims`,
+        'a GitHub provider has no claim mapping: the subject is the numeric user id and the email the primary verified address',
+      );
+    }
+    const issuer = r.url(`${base}.issuer`, { fallback: GITHUB_DOT_COM, https: true });
+    const name = r.string(`${base}.name`, { fallback: 'GitHub' }) ?? 'GitHub';
+    if (issuer && (issuer.search || issuer.hash)) {
+      r.issues.add(
+        `${base}.issuer`,
+        'must not carry a query string or fragment',
+        envNamesFor(`${base}.issuer`),
+      );
+    }
+    if (r.issues.items.length > before || !issuer || !clientId || !clientSecret) return null;
+    return { kind, id, name, issuer, clientId, clientSecret, allowedEmailDomains, invitationOnly };
+  }
+  const issuer = r.url(`${base}.issuer`, { required: kind === 'oidc', https: true });
+  if (issuer && (issuer.search || issuer.hash)) {
+    r.issues.add(
+      `${base}.issuer`,
+      'must not carry a query string or fragment',
+      envNamesFor(`${base}.issuer`),
+    );
+  }
+  const claims = {
+    sub: r.string(`${base}.claims.sub`, { fallback: 'sub' }) ?? 'sub',
+    email: r.string(`${base}.claims.email`, { fallback: 'email' }) ?? 'email',
+    groups: r.string(`${base}.claims.groups`, { fallback: 'groups' }) ?? 'groups',
+  };
+  const name = r.string(`${base}.name`, { fallback: issuer?.hostname ?? id }) ?? id;
+  if (kind !== 'oidc' || r.issues.items.length > before || !issuer || !clientId || !clientSecret) {
+    return null;
+  }
+  return {
+    kind,
+    id,
+    name,
+    issuer,
+    clientId,
+    clientSecret,
+    claims,
+    allowedEmailDomains,
+    invitationOnly,
+  };
+}
+
+function normalizeDomainsAt(r: Reader, path: string): string[] {
+  const problems: string[] = [];
+  const domains = normalizeEmailDomains(r.stringList(path), problems);
+  for (const problem of problems) r.issues.add(path, problem, envNamesFor(path));
+  return domains;
+}
+
+/**
+ * The rules across the providers the configuration sets: one id each (`idp.*` is
+ * the provider `idp`), one issuer each (a user is (issuer, subject): two providers
+ * of one issuer would be one population with two admission rules), and an
+ * admission rule for every open provider.
+ */
+function checkSignInProviders(
+  r: Reader,
+  idp: IdpConfig | null,
+  signIn: readonly SignInProvider[],
+): SignInProvider[] {
+  const all = [...(idp ? [legacyProviderOf(idp)] : []), ...signIn];
+  const issuers = new Map<string, string>();
+  for (const provider of all) {
+    const path = provider.id === LEGACY_PROVIDER_ID && idp ? 'idp' : `sign_in.${provider.id}`;
+    if (
+      provider.id === LEGACY_PROVIDER_ID &&
+      idp &&
+      signIn.some((p) => p.id === LEGACY_PROVIDER_ID)
+    ) {
+      r.issues.add(
+        'sign_in.idp',
+        "the id 'idp' is the provider the idp.* keys describe; set one or the other",
+      );
+    }
+    const key = issuerKey(provider.issuer);
+    const other = issuers.get(key);
+    if (other !== undefined && other !== provider.id) {
+      r.issues.add(
+        `${path}.issuer`,
+        `providers '${other}' and '${provider.id}' have the same issuer ${key}: a user is (issuer, subject), so they would be one population with two admission rules`,
+        envNamesFor(`${path}.issuer`),
+      );
+    }
+    issuers.set(key, provider.id);
+    const problem = admissionProblem(provider);
+    if (problem) {
+      r.issues.add(
+        provider.id === LEGACY_PROVIDER_ID && idp
+          ? 'idp.allowed_email_domains'
+          : `${path}.allowed_email_domains`,
+        problem,
+        provider.id === LEGACY_PROVIDER_ID && idp
+          ? [...envNamesFor('idp.allowed_email_domains'), ...envNamesFor('idp.invitation_only')]
+          : [
+              ...envNamesFor(`${path}.allowed_email_domains`),
+              ...envNamesFor(`${path}.invitation_only`),
+            ],
+      );
+    }
+  }
+  return all;
+}
+
+function readAdmin(r: Reader, signInProviders: readonly SignInProvider[]): AdminRule | null {
   const group = r.string('admin.group') ?? null;
   const emails = r.stringList('admin.emails').map((e) => e.toLowerCase());
   for (const email of emails) {
@@ -483,6 +653,14 @@ function readAdmin(r: Reader): AdminRule | null {
       );
     }
   }
+  const groupProblem =
+    signInProviders.length > 1
+      ? adminGroupProblem(
+          group,
+          signInProviders.map((p) => p.id),
+        )
+      : null;
+  if (groupProblem) r.issues.add('admin.group', groupProblem, envNamesFor('admin.group'));
   if (group === null && emails.length === 0) {
     r.issues.add(
       'admin',

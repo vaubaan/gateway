@@ -21,7 +21,11 @@ export function nowDepsOf(root: GatewayRoot): NowDeps {
 }
 
 export function setupDepsOf(root: GatewayRoot): SetupDeps {
-  return { idp: root.auth.idp, providerApps: root.providerApps, telemetry: root.telemetry };
+  return {
+    providers: root.auth.providers,
+    providerApps: root.providerApps,
+    telemetry: root.telemetry,
+  };
 }
 
 export { byLastActivity, nearestLimit, type LimitLine } from './derive';

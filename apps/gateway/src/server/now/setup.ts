@@ -9,13 +9,13 @@ import type { ProviderAppsService } from '../provider-apps';
 import type { TelemetryModule } from '../telemetry';
 
 export interface SetupDeps {
-  readonly idp: Pick<AuthModule['idp'], 'current'>;
+  readonly providers: Pick<AuthModule['providers'], 'views'>;
   readonly providerApps: Pick<ProviderAppsService, 'list'>;
   readonly telemetry: Pick<TelemetryModule, 'overview'>;
 }
 
 export interface SetupView {
-  /** The host of the identity provider people sign in through; `null` until one is configured. */
+  /** The sign-in providers people sign in through, by name ("GitHub, Acme"); `null` until one is configured. */
   readonly sign_in: string | null;
   /** The services that need an app of the company before anyone can connect an account. */
   readonly company_apps: {
@@ -30,11 +30,11 @@ export interface SetupView {
 }
 
 export async function readSetup(deps: SetupDeps): Promise<SetupView> {
-  const idp = await deps.idp.current();
+  const providers = await deps.providers.views();
   const apps = (await deps.providerApps.list()).filter((app) => app.needsApp);
   const { state } = await deps.telemetry.overview();
   return {
-    sign_in: idp ? idp.settings.issuer.hostname : null,
+    sign_in: providers.length > 0 ? providers.map((provider) => provider.name).join(', ') : null,
     company_apps: {
       registered: apps.filter((app) => app.configured).map((app) => app.displayName),
       missing: apps.filter((app) => !app.configured).map((app) => app.displayName),

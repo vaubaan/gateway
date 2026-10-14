@@ -41,7 +41,9 @@ test('the sign-in names the gateway, offers one way in, and leads to the one hom
     `Sign in to ${new URL(PUBLIC_URL).host}`,
   );
   await expect(page.getByRole('main')).toContainText('Nobody has a password here.');
-  await expect(page.getByRole('button')).toHaveText([/^Continue with /]);
+  await expect(
+    page.getByTestId('sign-in-providers').getByRole('link', { name: /^Continue with / }),
+  ).toHaveCount(1);
   await expect(page.getByTestId('build-footer')).toBeVisible();
   // No shell around it: the page is a column of its own.
   await expect(page.getByRole('navigation', { name: 'Main' })).toHaveCount(0);
@@ -53,7 +55,7 @@ test('the sign-in names the gateway, offers one way in, and leads to the one hom
   await page.goto('/login?error=not-a-code');
   await expect(page.getByTestId('login-error')).toHaveCount(0);
 
-  await page.getByRole('button', { name: /^Continue with / }).click();
+  await page.getByRole('link', { name: /^Continue with / }).click();
   // Signed in from the sign-in page itself: the home, with no card in between.
   await expect(page).toHaveURL(new RegExp(`^${PUBLIC_URL}/$`));
   await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible();

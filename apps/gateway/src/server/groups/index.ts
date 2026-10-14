@@ -6,6 +6,7 @@
  */
 import type { Authenticator } from '../auth/authenticator';
 import type { MembershipSettler } from '../authority';
+import { reservedGroupNames } from '../config/sign-in';
 import type { InstanceConfig } from '../config/types';
 import type { ConnectionsModule } from '../connections';
 import type { Logger } from '../logging';
@@ -34,7 +35,7 @@ export function createGroupsModule(deps: GroupsModuleDeps): GroupsModule {
   const service = new GroupService({
     store: deps.store,
     membership: deps.membership,
-    adminGroup: deps.config.admin.group,
+    reservedNames: reservedGroupNames(deps.config.admin.group),
     audit: deps.store.auditWriter,
     clock: deps.clock ?? systemClock,
     logger,

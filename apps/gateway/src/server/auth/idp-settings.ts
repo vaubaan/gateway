@@ -8,6 +8,7 @@
  * store, the client secret sealed by the `Encryptor` under
  * `instance_config:idp.client_secret`.
  */
+import { admissionProblem, LEGACY_PROVIDER_ID, normalizeEmailDomains } from '../config/sign-in';
 import type { IdpClaimMapping, IdpConfig } from '../config/types';
 import type { ConfigRepo } from '../store/repositories/config';
 import { IdpSettingsError } from './errors';
@@ -20,6 +21,7 @@ export const IDP_CONFIG_KEYS = {
   claimEmail: 'idp.claims.email',
   claimGroups: 'idp.claims.groups',
   allowedEmailDomains: 'idp.allowed_email_domains',
+  invitationOnly: 'idp.invitation_only',
 } as const;
 
 /** The object id of the IdP settings in an administrative audit entry. */
@@ -46,6 +48,8 @@ export interface IdpSettingsInput {
   readonly clientSecret: string | null;
   readonly claims: IdpClaimMapping;
   readonly allowedEmailDomains: readonly string[];
+  /** Only invited addresses and the admin emails are admitted. Absent: false. */
+  readonly invitationOnly?: boolean;
 }
 
 export interface IdpSettingsOptions {
@@ -105,7 +109,18 @@ export class IdpSettingsService {
       );
     }
     const claims = normalizeClaims(input.claims, problems);
-    const allowedEmailDomains = normalizeDomains(input.allowedEmailDomains, problems);
+    const allowedEmailDomains = normalizeEmailDomains(input.allowedEmailDomains, problems);
+    const invitationOnly = input.invitationOnly === true;
+    if (issuer) {
+      const admission = admissionProblem({
+        id: LEGACY_PROVIDER_ID,
+        kind: 'oidc',
+        issuer,
+        allowedEmailDomains,
+        invitationOnly,
+      });
+      if (admission) problems.push(admission);
+    }
     if (problems.length > 0 || !issuer || !clientSecret) throw new IdpSettingsError(problems);
 
     // One transaction: never the issuer of one IdP with the secret or the
@@ -122,8 +137,9 @@ export class IdpSettingsService {
         key: IDP_CONFIG_KEYS.allowedEmailDomains,
         value: JSON.stringify(allowedEmailDomains),
       },
+      { kind: 'value', key: IDP_CONFIG_KEYS.invitationOnly, value: String(invitationOnly) },
     ]);
-    return { issuer, clientId, clientSecret, claims, allowedEmailDomains };
+    return { issuer, clientId, clientSecret, claims, allowedEmailDomains, invitationOnly };
   }
 
   private async readStored(): Promise<IdpConfig | null> {
@@ -133,11 +149,12 @@ export class IdpSettingsService {
       this.config.getSecret(IDP_CONFIG_KEYS.clientSecret),
     ]);
     if (!issuerRaw || !clientId || !clientSecret) return null;
-    const [sub, email, groups, domainsRaw] = await Promise.all([
+    const [sub, email, groups, domainsRaw, invitationOnlyRaw] = await Promise.all([
       this.config.get(IDP_CONFIG_KEYS.claimSub),
       this.config.get(IDP_CONFIG_KEYS.claimEmail),
       this.config.get(IDP_CONFIG_KEYS.claimGroups),
       this.config.get(IDP_CONFIG_KEYS.allowedEmailDomains),
+      this.config.get(IDP_CONFIG_KEYS.invitationOnly),
     ]);
     return {
       issuer: new URL(issuerRaw),
@@ -149,6 +166,7 @@ export class IdpSettingsService {
         groups: groups ?? DEFAULT_CLAIM_MAPPING.groups,
       },
       allowedEmailDomains: parseDomainsJson(domainsRaw),
+      invitationOnly: invitationOnlyRaw === 'true',
     };
   }
 }
@@ -185,20 +203,6 @@ function normalizeClaims(claims: IdpClaimMapping, problems: string[]): IdpClaimM
   const out = { sub: claims.sub.trim(), email: claims.email.trim(), groups: claims.groups.trim() };
   for (const [name, value] of Object.entries(out)) {
     if (value.length === 0) problems.push(`claim name for '${name}' is required`);
-  }
-  return out;
-}
-
-function normalizeDomains(domains: readonly string[], problems: string[]): string[] {
-  const out: string[] = [];
-  for (const raw of domains) {
-    const domain = raw.trim().toLowerCase();
-    if (domain.length === 0) continue;
-    if (domain.includes('@') || /\s/.test(domain)) {
-      problems.push(`'${domain}' is not a domain name`);
-      continue;
-    }
-    if (!out.includes(domain)) out.push(domain);
   }
   return out;
 }

@@ -7,6 +7,9 @@ export const USER_ADMIN_ERROR_CODES = [
   'already-deactivated',
   'not-deactivated',
   'cannot-deactivate-self',
+  'invitation-email-invalid',
+  'invitation-exists',
+  'invitation-not-found',
 ] as const;
 
 export type UserAdminErrorCode = (typeof USER_ADMIN_ERROR_CODES)[number];
@@ -17,6 +20,9 @@ export const USER_ADMIN_ERROR_MESSAGES: Readonly<Record<UserAdminErrorCode, stri
   'not-deactivated': 'This person is active; there is nothing to reactivate.',
   'cannot-deactivate-self':
     'You cannot deactivate yourself: you would lose the session this very act needs. Ask another administrator.',
+  'invitation-email-invalid': 'This is not an email address; nothing was invited.',
+  'invitation-exists': 'This address is already invited; nothing was changed.',
+  'invitation-not-found': 'This address is not invited; nothing was removed.',
 };
 
 const STATUS_BY_CODE: Readonly<Record<UserAdminErrorCode, number>> = {
@@ -24,6 +30,9 @@ const STATUS_BY_CODE: Readonly<Record<UserAdminErrorCode, number>> = {
   'already-deactivated': 409,
   'not-deactivated': 409,
   'cannot-deactivate-self': 409,
+  'invitation-email-invalid': 400,
+  'invitation-exists': 409,
+  'invitation-not-found': 404,
 };
 
 export class UserAdminError extends Error {

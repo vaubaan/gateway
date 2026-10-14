@@ -9,6 +9,16 @@ export const PUBLIC_URL = 'https://gateway.e2e.test';
 /** The simulated identity provider (the in-process `FakeIdp`). */
 export const IDP_ISSUER = 'https://idp.e2e.test';
 /**
+ * The simulated GitHub of the sign-in spec (the in-process `FakeGithub`, laid out
+ * as a GitHub Enterprise Server). It is a sign-in provider only while that spec
+ * adds it.
+ */
+export const GITHUB_SIGN_IN_BASE = 'https://github.e2e.test';
+export const GITHUB_SIGN_IN_CLIENT = {
+  clientId: 'Ov23liE2eSignIn',
+  clientSecret: 'e2e-github-sign-in-secret',
+} as const;
+/**
  * Test-only control endpoints of the launcher. They are served by the launcher's
  * own listener, on the port after the app's (`controlUrl`): the app's port
  * belongs to the standalone server the image ships, which the launcher starts

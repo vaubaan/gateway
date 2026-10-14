@@ -169,6 +169,11 @@ export type AdminAct =
   | 'user-deactivated'
   /** An operator let a deactivated user sign in again. Object: the user. */
   | 'user-reactivated'
+  /** An administrator allowed an email address to sign in (spec §0 "Invitation").
+   *  Object: `instance-config` / `invitations`; `after.email` is the address. */
+  | 'invitation-added'
+  /** An administrator removed an address from the invitation list; `before.email`. */
+  | 'invitation-removed'
   | 'config-changed';
 
 export type AdminObjectType =

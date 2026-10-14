@@ -102,6 +102,8 @@ export const ADMIN_ACTS = membersOf<AdminAct>({
   'oauth-client-disabled': true,
   'user-deactivated': true,
   'user-reactivated': true,
+  'invitation-added': true,
+  'invitation-removed': true,
   'config-changed': true,
 });
 

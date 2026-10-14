@@ -5,8 +5,8 @@
  * it can be revoked by deleting the row and never carries claims the browser
  * could read. Two record kinds live in the same store under distinct key
  * prefixes: `session:<id>` (a signed-in user, or the bootstrap operator) and
- * `login:<id>` (an OIDC attempt in flight: state, nonce, PKCE verifier,
- * return path). TTLs are absolute (no sliding window): a session ends
+ * `login:<id>` (a sign-in attempt in flight: its provider, state, nonce, PKCE
+ * verifier, return path). TTLs are absolute (no sliding window): a session ends
  * `SESSION_TTL_MS` after sign-in whatever the activity (spec §6 "web sessions
  * are short").
  *
@@ -34,7 +34,12 @@ export interface UserSessionRecord {
   readonly userId: string;
   readonly createdAt: string;
   /** What the IdP said at sign-in, for the UI ("test login" result); authority is NOT read from it. */
-  readonly login: { readonly email: string; readonly groups: readonly string[] };
+  readonly login: {
+    readonly email: string;
+    readonly groups: readonly string[];
+    /** The sign-in provider's id; absent on a session from before several providers. */
+    readonly provider?: string;
+  };
 }
 
 export interface BootstrapSessionRecord {
@@ -45,7 +50,13 @@ export interface BootstrapSessionRecord {
 export type WebSessionRecord = UserSessionRecord | BootstrapSessionRecord;
 
 export interface PendingLogin {
+  /**
+   * The sign-in provider the attempt was started for. The callback of another
+   * provider never completes it (`state-mismatch`).
+   */
+  readonly providerId: string;
   readonly state: string;
+  /** OpenID Connect only; a GitHub attempt carries none (empty string). */
   readonly nonce: string;
   readonly codeVerifier: string;
   /** Same-origin path to land on after sign-in. */
@@ -81,12 +92,18 @@ export function isWebSessionRecord(value: unknown): value is WebSessionRecord {
   if (value.kind === 'bootstrap') return true;
   if (value.kind !== 'user' || typeof value.userId !== 'string') return false;
   const { login } = value;
-  return isObject(login) && typeof login.email === 'string' && isStringArray(login.groups);
+  return (
+    isObject(login) &&
+    typeof login.email === 'string' &&
+    isStringArray(login.groups) &&
+    (login.provider === undefined || typeof login.provider === 'string')
+  );
 }
 
 export function isPendingLogin(value: unknown): value is PendingLogin {
   return (
     isObject(value) &&
+    typeof value.providerId === 'string' &&
     typeof value.state === 'string' &&
     typeof value.nonce === 'string' &&
     typeof value.codeVerifier === 'string' &&

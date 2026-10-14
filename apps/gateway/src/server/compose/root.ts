@@ -35,6 +35,7 @@ import {
   type ExecutionModule,
 } from '../execution';
 import { createGroupsModule, type GroupsModule } from '../groups';
+import { publishHttps } from '../http/security-headers';
 import { createLogger, createRedactor, type Logger, type LoggerOptions } from '../logging';
 import { ProviderAppsService } from '../provider-apps';
 import { createMissionsModule, type MissionsModule } from '../missions';
@@ -136,6 +137,8 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
   }).child({ component: 'gateway' });
   const build = deps.build ?? buildInfoFromEnv();
   logConfigurationSummary(logger, config, configFile);
+  // The proxy sends HSTS when the public URL is https (`server/http/security-headers.ts`).
+  publishHttps(config.publicUrl.protocol === 'https:');
 
   const encryptor = await createEncryptor(config.encryption);
 
@@ -191,6 +194,7 @@ function logConfigurationSummary(
     source: configFile ? `file ${configFile} over environment` : 'environment',
     public_url: config.publicUrl.origin,
     idp: config.idp ? config.idp.issuer.origin : 'not configured',
+    sign_in: config.signIn.map((provider) => `${provider.id} (${provider.kind})`),
     admin_rule: config.admin.group ? 'group' : `emails (${config.admin.emails.length})`,
     providers: [...config.providers.keys()],
     telemetry: !config.telemetry.enabledSetByConfig

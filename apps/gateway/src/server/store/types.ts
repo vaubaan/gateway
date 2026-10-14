@@ -76,6 +76,11 @@ export interface GroupRecord {
   readonly id: string;
   readonly name: string;
   readonly source: GroupSource;
+  /**
+   * The sign-in provider that claims an IdP-sourced group (its id); `null` for a local
+   * group. A group of provider A never counts for a user of provider B (migration 0014).
+   */
+  readonly provider: string | null;
   readonly createdAt: Iso;
 }
 

@@ -7,10 +7,15 @@ export {
   CONFIG_FILE_ENV,
   KEYS,
   PROVIDER_ENV_PREFIX,
+  SIGN_IN_ENV_PREFIX,
+  SIGN_IN_FIELDS,
   envNamesFor,
   parseProviderEnvName,
+  parseSignInEnvName,
   providerEnvName,
+  signInEnvName,
 } from './sources';
+export * from './sign-in';
 export {
   CLIENT_REGISTRATION_POLICIES,
   LOG_LEVELS,

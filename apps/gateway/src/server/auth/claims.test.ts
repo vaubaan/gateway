@@ -32,6 +32,7 @@ describe('mapClaims', () => {
       issuer: ISS,
       subject: 'idp|1',
       email: 'ada@example.com',
+      emailVerified: null,
       displayName: 'Ada',
       groups: ['dev'],
     });
@@ -47,6 +48,7 @@ describe('mapClaims', () => {
       issuer: ISS,
       subject: 'o-1',
       email: 'x@y.z',
+      emailVerified: null,
       displayName: null,
       groups: ['a', 'b'],
     });

@@ -152,6 +152,7 @@ function demoConfig(origin: string, storePath: string, idp: DemoIdp, providers: 
           clientSecret: idp.clientSecret,
           claims: { sub: 'sub', email: 'email', groups: 'groups' },
           allowedEmailDomains: [],
+          invitationOnly: false,
         },
       },
     };

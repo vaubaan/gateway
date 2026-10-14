@@ -24,6 +24,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SESSION_COOKIE } from '../../../src/server/auth';
 import { budgetMissionOf } from '../../../src/server/budget';
 import { completeLogin } from '../../../src/server/auth/login';
+import { resolveAdminRule } from '../../../src/server/auth/admin-rule';
 import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
 import { memoryStoreDeps } from '../../../src/server/compose/testing';
 import { loadInstanceConfig } from '../../../src/server/config';
@@ -935,6 +936,100 @@ const RULES: Readonly<Record<string, Rule>> = {
       actor: 'operator',
     },
   },
+  'SignInProvidersService.views': READ,
+  'SignInProvidersService.view': READ,
+  'SignInProvidersService.resolve': READ,
+  'SignInProvidersService.ofIssuer': READ,
+  'SignInProvidersService.adminRule': READ,
+  'SignInProvidersService.isReadOnly': READ,
+  'SignInProvidersService.save': {
+    kind: 'mutation',
+    target: (root) => root.auth.providers,
+    drive: async (rig) =>
+      rig.root.auth.handlers.saveIdpSettings(
+        await rig.operatorPost('/api/admin/sign-in-providers', {
+          mode: 'create',
+          provider_id: 'github',
+          kind: 'github',
+          client_id: 'Ov23liAuditTest',
+          client_secret: 'github-sign-in-secret',
+          admission: 'invited',
+        }),
+      ),
+    writes: {
+      act: 'config-changed',
+      object: 'instance-config',
+      objectId: 'sign-in:github',
+      actor: 'operator',
+    },
+  },
+  'SignInProvidersService.remove': {
+    kind: 'mutation',
+    target: (root) => root.auth.providers,
+    prepare: (rig) =>
+      rig.root.auth.providers.save(
+        {
+          id: 'github',
+          kind: 'github',
+          name: '',
+          issuer: '',
+          clientId: 'Ov23liAuditTest',
+          clientSecret: 'github-sign-in-secret',
+          allowedEmailDomains: [],
+          invitationOnly: true,
+        },
+        'create',
+      ),
+    drive: async (rig) =>
+      rig.root.auth.handlers.removeSignInProvider(
+        await rig.operatorPost('/api/admin/sign-in-providers/github/remove', {}),
+        'github',
+      ),
+    writes: {
+      act: 'config-changed',
+      object: 'instance-config',
+      objectId: 'sign-in:github',
+      actor: 'operator',
+    },
+  },
+  'GithubSignIn.start': exempt(
+    'a sign-in attempt: only the pending login is written, a session-state record',
+  ),
+  'GithubSignIn.finish': exempt(
+    'reads the identity from GitHub; what the sign-in writes is completeLogin’s, audited there',
+  ),
+  'GithubSignIn.scopes': READ,
+  'InvitationService.list': READ,
+  'InvitationService.isInvited': READ,
+  'InvitationService.invite': {
+    kind: 'mutation',
+    target: (root) => root.users.invitations,
+    drive: async (rig) =>
+      rig.root.users.handlers.invite(
+        await rig.operatorPost('/admin/users/invitations', { email: 'guest@example.org' }),
+      ),
+    writes: {
+      act: 'invitation-added',
+      object: 'instance-config',
+      objectId: 'invitations',
+      actor: 'operator',
+    },
+  },
+  'InvitationService.remove': {
+    kind: 'mutation',
+    target: (root) => root.users.invitations,
+    prepare: (rig) => rig.root.users.invitations.invite(rig.operator.id, 'guest@example.org'),
+    drive: async (rig) =>
+      rig.root.users.handlers.removeInvitation(
+        await rig.operatorPost('/admin/users/invitations/remove', { email: 'guest@example.org' }),
+      ),
+    writes: {
+      act: 'invitation-removed',
+      object: 'instance-config',
+      objectId: 'invitations',
+      actor: 'operator',
+    },
+  },
   'BootstrapService.state': READ,
   'BootstrapService.verify': READ,
   'BootstrapService.revoke': {
@@ -945,7 +1040,6 @@ const RULES: Readonly<Record<string, Rule>> = {
       completeLogin(
         {
           store: rig.root.store,
-          adminRule: rig.root.config.admin,
           bootstrap: rig.root.auth.bootstrap,
           logger: silentLogger,
         },
@@ -953,9 +1047,11 @@ const RULES: Readonly<Record<string, Rule>> = {
           issuer: 'http://idp.test',
           subject: 'idp|ops',
           email: OPERATOR_EMAIL,
+          emailVerified: null,
           displayName: 'Ops',
           groups: [],
         },
+        { providerId: 'idp', adminRule: resolveAdminRule(rig.root.config.admin, ['idp']) },
       ),
     writes: {
       act: 'config-changed',
@@ -1183,6 +1279,8 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'config-changed',
       'config-changed',
       'config-changed',
+      'config-changed',
+      'config-changed',
       'connection-created',
       'connection-created',
       'connection-reassigned',
@@ -1196,6 +1294,8 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'group-created',
       'group-member-added',
       'group-member-removed',
+      'invitation-added',
+      'invitation-removed',
       'limits-changed',
       'mission-issued',
       'mission-issued',

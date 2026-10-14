@@ -75,18 +75,59 @@
 #     sub: sub
 #     email: email
 #     groups: groups
-#   # Only users whose email domain is listed may sign in. Default: any.
+#   # Only users whose email domain is listed (or who are invited) may sign
+#   # in. Default: everyone the directory signs in — refused for an issuer
+#   # where anyone can open an account (personal Google or Microsoft).
 #   # env: VAUBAAN_IDP_ALLOWED_EMAIL_DOMAINS (comma-separated)
 #   allowed_email_domains:
 #     - example.com
+#   # Admit invited addresses (Settings → People) and the admin emails only,
+#   # instead of domains. Default false.
+#   # env: VAUBAAN_IDP_INVITATION_ONLY
+#   invitation_only: false
+
+# More sign-in providers, keyed by an id of your choice (lower-case letters,
+# digits, hyphens). Each is a button on the sign-in page; its callback is
+# <public_url>/auth/callback/<id>. A person signing in through two providers is
+# two users: accounts are never joined by email. Providers can also be added in
+# Settings → Sign-in.
+# env: VAUBAAN_SIGN_IN_<ID>_<FIELD>, e.g. VAUBAAN_SIGN_IN_GITHUB_CLIENT_ID
+# sign_in:
+#   github:
+#     # oidc or github.
+#     kind: github
+#     # What the button says. Default: GitHub, or the issuer's host.
+#     name: GitHub
+#     # GitHub: only for a GitHub Enterprise Server (default github.com).
+#     # issuer: https://github.example.com
+#     # Of the OAuth App registered at GitHub with the callback above.
+#     client_id: Ov23liExample
+#     client_secret: ${file:/run/secrets/github_sign_in_secret}
+#     # Anyone can hold a GitHub account: allowed domains or invitation only.
+#     invitation_only: true
+#   partners:
+#     kind: oidc
+#     name: Partner Entra ID
+#     issuer: https://login.example.com/tenant/v2.0
+#     client_id: vaubaan-gateway
+#     client_secret: ${PARTNER_IDP_CLIENT_SECRET}
+#     claims:
+#       sub: sub
+#       email: email
+#       groups: groups
+#     allowed_email_domains:
+#       - partner.example.com
 
 # REQUIRED (one of the two). Who is operator once bootstrap_token is revoked:
-# members of an IdP group, and/or an explicit list of emails.
+# members of a group of a named sign-in provider (<provider-id>:<group>; a
+# GitHub group is a team, org/team; a bare name is accepted while one provider is
+# configured), and/or an explicit list of emails (matched on the verified
+# address of a user of any provider, and always admitted to sign in).
 # Example values: anyone your IdP places in the group named here is an
 # operator, so uncomment `group` only with the name of a group you control.
 # admin:
 #   # env: VAUBAAN_ADMIN_GROUP
-#   group: gateway-admins
+#   group: idp:gateway-admins
 #   # env: VAUBAAN_ADMIN_EMAILS (comma-separated)
 #   emails:
 #     - ops@example.com
@@ -121,7 +162,7 @@
 #     client_id: ${RAILWAY_CLIENT_ID}
 #     client_secret: ${RAILWAY_CLIENT_SECRET}
 
-# REQUIRED while idp is not configured. At least 32 characters; lets the
+# REQUIRED while no sign-in provider is configured. At least 32 characters; lets the
 # operator sign in at /admin/bootstrap and configure the IdP from the Admin
 # page. Revoked automatically (flag in the database) after the first operator
 # signs in through the IdP; harmless to leave set afterwards.

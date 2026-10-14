@@ -1,28 +1,38 @@
 /**
- * `/admin/identity-provider` — Sign-in: the company's identity provider
- * (issuer, client id, client secret — sealed in `instance_config`, never
- * echoed —, claim mapping, allowed email domains), and a test that runs the
- * real sign-in and comes back here with the claims the provider returned.
- * Read-only when the mounted configuration sets it (the file wins).
+ * `/admin/identity-provider` — Settings → Sign-in: the sign-in providers of the
+ * gateway (spec §4.2; ADR sign-in-providers-admission-and-admin-rule). One row
+ * each: its name and id, its kind, who it admits, how many people signed in
+ * through it. A provider saved here is edited (`/admin/identity-provider/<id>`),
+ * tested (the real sign-in, coming back here with what it returned) and removed
+ * (asked first, with the people it concerns); one set by the mounted
+ * configuration is shown read-only. "Add a sign-in provider" opens the form.
  */
 import styles from '@/components/settings/settings.module.css';
 import {
-  Button,
+  ButtonLink,
   Callout,
-  CodeBlock,
-  Field,
+  ConfirmSubmit,
+  DataTable,
+  EmptyState,
   Hint,
-  Input,
   KeyValue,
   Mono,
   PageHeader,
   Section,
-  StatusMark,
   Tag,
+  type Column,
 } from '@/components/ui';
 import { requireOperator } from '@/lib/auth/session';
 import { CONFIG_WORDS, SETTINGS_ACTIONS, SETTINGS_PAGES } from '@/lib/vocabulary';
-import { DEFAULT_CLAIM_MAPPING } from '@/server/auth';
+import {
+  describeAdminRule,
+  IDP_PAGE,
+  NEW_SIGN_IN_PROVIDER_PAGE,
+  signInProviderPage,
+  signInStartPath,
+  type SignInProviderView,
+} from '@/server/auth';
+import { isOpenProvider, issuerKey } from '@/server/config';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,41 +40,107 @@ interface Props {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-const RETURN_AFTER_TEST = '/admin/identity-provider?tested=1';
+function first(value: string | string[] | undefined): string | null {
+  return Array.isArray(value) ? (value[0] ?? null) : (value ?? null);
+}
+
+const KIND_WORDS = { oidc: 'OpenID Connect', github: 'GitHub' } as const;
+
+/** Who a provider admits, in words. */
+function admits(provider: SignInProviderView): string {
+  if (provider.invitationOnly) return 'invited people only';
+  if (provider.allowedEmailDomains.length > 0) {
+    return `${provider.allowedEmailDomains.join(', ')}, and invited people`;
+  }
+  return 'everyone the directory signs in';
+}
+
+interface Row {
+  readonly provider: SignInProviderView;
+  readonly people: number;
+}
 
 export default async function SignInSettingsPage({ searchParams }: Props) {
   const { root, principal } = await requireOperator();
   const params = await searchParams;
   const problems = ([] as string[]).concat(params.problem ?? []);
-  const saved = params.saved === '1';
-  const tested = params.tested === '1';
-  const idp = root.auth.idp;
-  const current = await idp.current();
-  const stored = await idp.stored();
-  const redirectUri = root.auth.relyingParties.redirectUri.href;
-  const values = current?.settings ?? null;
-  const claims = values?.claims ?? DEFAULT_CLAIM_MAPPING;
+  const saved = first(params.saved);
+  const removed = first(params.removed);
+  const removedPeople = Number(first(params.people) ?? '0');
+  const tested = first(params.tested);
+  const providers = await root.auth.providers.views();
+  const rule = await root.auth.providers.adminRule();
+  const users = await root.store.users.list();
+  const rows: Row[] = providers.map((provider) => ({
+    provider,
+    people: users.filter(
+      (user) => user.issuer !== null && issuerKey(user.issuer) === issuerKey(provider.issuer),
+    ).length,
+  }));
+
+  const columns: readonly Column<Row>[] = [
+    {
+      id: 'provider',
+      header: 'Provider',
+      cell: ({ provider }) => (
+        <span className={styles.namedText}>
+          <span>
+            <span className={styles.name}>{provider.name}</span> <Mono>{provider.id}</Mono>
+          </span>
+          <span className={styles.sub}>{issuerKey(provider.issuer)}</span>
+        </span>
+      ),
+    },
+    {
+      id: 'kind',
+      header: 'Kind',
+      nowrap: true,
+      cell: ({ provider }) => (
+        <span className={styles.inline}>
+          {KIND_WORDS[provider.kind]}
+          {isOpenProvider(provider) && <Tag>open to anyone</Tag>}
+        </span>
+      ),
+    },
+    { id: 'admits', header: 'Admits', cell: ({ provider }) => admits(provider) },
+    {
+      id: 'people',
+      header: 'People',
+      align: 'right',
+      cell: ({ people }) => <span className={styles.quiet}>{people}</span>,
+    },
+  ];
 
   return (
     <>
       <PageHeader
         title={SETTINGS_PAGES.signIn.title}
         lede={SETTINGS_PAGES.signIn.lede}
-        status={
-          !current ? (
-            <StatusMark tone="warn">Not set up</StatusMark>
-          ) : current.source === 'file' ? (
-            <Tag>{CONFIG_WORDS.file}</Tag>
-          ) : undefined
+        primary={
+          <ButtonLink href={`${NEW_SIGN_IN_PROVIDER_PAGE}?kind=oidc`} variant="primary">
+            {SETTINGS_ACTIONS.addSignInProvider}
+          </ButtonLink>
         }
+        secondary={[
+          <ButtonLink key="github" href={`${NEW_SIGN_IN_PROVIDER_PAGE}?kind=github`}>
+            Add GitHub
+          </ButtonLink>,
+        ]}
       />
 
-      {(saved || problems.length > 0 || (tested && principal.kind === 'user')) && (
+      {(saved || removed || problems.length > 0 || (tested && principal.kind === 'user')) && (
         <div className={styles.notes}>
           {saved && (
             <Callout tone="ok" title="Saved" testId="idp-saved">
               The client secret is encrypted at rest. Use “{SETTINGS_ACTIONS.testSignIn}” to check
               the settings; the first sign-in of an administrator revokes the install token.
+            </Callout>
+          )}
+          {removed && (
+            <Callout tone="ok" title={`Provider ${removed} removed`} testId="idp-removed">
+              {removedPeople === 0
+                ? 'Nobody had signed in through it.'
+                : `${removedPeople} ${removedPeople === 1 ? 'person' : 'people'} signed in through it: their sessions are over and they can no longer sign in. Their missions and connected apps keep running until you deactivate them on People.`}
             </Callout>
           )}
           {problems.length > 0 && (
@@ -77,9 +153,10 @@ export default async function SignInSettingsPage({ searchParams }: Props) {
             </Callout>
           )}
           {tested && principal.kind === 'user' && (
-            <Callout tone="info" title="What the identity provider returned" testId="idp-tested">
+            <Callout tone="info" title="What the provider returned" testId="idp-tested">
               <KeyValue
                 items={[
+                  { term: 'Provider', value: <Mono>{principal.providerId ?? tested}</Mono> },
                   { term: 'Email', value: principal.login.email },
                   {
                     term: 'Teams',
@@ -107,128 +184,88 @@ export default async function SignInSettingsPage({ searchParams }: Props) {
         </div>
       )}
 
-      <Section
-        title="Identity provider"
-        note="Any OpenID Connect provider: Entra ID, Google, Keycloak, Okta…"
-        first
-      >
-        <form method="post" action="/api/admin/identity-provider" className={styles.form}>
-          <fieldset disabled={idp.readOnly} className={styles.fieldset}>
-            <Field
-              label="Issuer URL"
-              shape="https, as the provider prints it"
-              htmlFor="idp-issuer"
-              hint="Discovery runs against <issuer>/.well-known/openid-configuration."
-            >
-              <Input
-                id="idp-issuer"
-                name="issuer"
-                type="url"
-                required
-                defaultValue={values?.issuer.href ?? ''}
-                placeholder="https://login.example.com/realms/acme"
-                mono
-              />
-            </Field>
-            <Field label="Client ID" htmlFor="idp-client-id">
-              <Input
-                id="idp-client-id"
-                name="client_id"
-                required
-                defaultValue={values?.clientId ?? ''}
-                autoComplete="off"
-                mono
-              />
-            </Field>
-            <Field
-              label="Client secret"
-              htmlFor="idp-client-secret"
-              hint={
-                stored?.hasClientSecret
-                  ? 'A secret is stored; leave blank to keep it. It is asked again when the issuer changes.'
-                  : 'Stored encrypted with the master key; never shown again.'
-              }
-            >
-              <Input
-                id="idp-client-secret"
-                name="client_secret"
-                type="password"
-                autoComplete="new-password"
-                required={!stored?.hasClientSecret}
-                mono
-              />
-            </Field>
-            <Field
-              label="Claim names"
-              shape="subject, email, teams"
-              hint="As they appear in the ID token or userinfo. Entra ID sends team ids, not names, unless the app is configured for names."
-            >
-              <div className={styles.claims}>
-                <Input
-                  name="claim_sub"
-                  required
-                  defaultValue={claims.sub}
-                  aria-label="Subject claim"
-                  mono
-                />
-                <Input
-                  name="claim_email"
-                  required
-                  defaultValue={claims.email}
-                  aria-label="Email claim"
-                  mono
-                />
-                <Input
-                  name="claim_groups"
-                  required
-                  defaultValue={claims.groups}
-                  aria-label="Groups claim"
-                  mono
-                />
-              </div>
-            </Field>
-            <Field
-              label="Allowed email domains"
-              shape="separated by spaces or commas"
-              optional
-              htmlFor="idp-allowed-email-domains"
-              hint="Empty: anyone the identity provider authenticates."
-            >
-              <Input
-                id="idp-allowed-email-domains"
-                name="allowed_email_domains"
-                defaultValue={values?.allowedEmailDomains.join(' ') ?? ''}
-                placeholder="example.com"
-              />
-            </Field>
-            <div className={styles.formActions}>
-              <Button type="submit" variant="primary" disabled={idp.readOnly}>
-                {SETTINGS_ACTIONS.save}
-              </Button>
-              {idp.readOnly && <span className={styles.formHint}>{CONFIG_WORDS.fileReadOnly}</span>}
-            </div>
-          </fieldset>
-        </form>
+      <Section first>
+        {rows.length === 0 ? (
+          <EmptyState
+            title="Nobody can sign in yet: no sign-in provider is set up."
+            action={
+              <ButtonLink href={`${NEW_SIGN_IN_PROVIDER_PAGE}?kind=oidc`} variant="primary">
+                {SETTINGS_ACTIONS.addSignInProvider}
+              </ButtonLink>
+            }
+            testId="no-sign-in-provider"
+          >
+            Your company’s directory through OpenID Connect (Entra ID, Google Workspace, Okta,
+            Keycloak), or GitHub for people who sign in with their own account.
+          </EmptyState>
+        ) : (
+          <DataTable
+            caption="The providers people sign in through"
+            columns={columns}
+            rows={rows}
+            rowKey={({ provider }) => provider.id}
+            actions={({ provider, people }) => (
+              <span className={styles.inline}>
+                <ButtonLink
+                  href={`${signInStartPath(provider.id)}?return_to=${encodeURIComponent(`${IDP_PAGE}?tested=${provider.id}`)}`}
+                  size="sm"
+                  aria-label={`${SETTINGS_ACTIONS.testSignIn} through ${provider.name}`}
+                  // A plain link: a prefetch of /auth/login would start a sign-in.
+                  external
+                >
+                  Test
+                </ButtonLink>
+                {provider.source === 'file' ? (
+                  <Tag>{CONFIG_WORDS.file}</Tag>
+                ) : (
+                  <>
+                    <ButtonLink
+                      href={signInProviderPage(provider.id)}
+                      size="sm"
+                      aria-label={`${SETTINGS_ACTIONS.edit} ${provider.name}`}
+                    >
+                      {SETTINGS_ACTIONS.edit}
+                    </ButtonLink>
+                    <ConfirmSubmit
+                      action={`/api/admin/sign-in-providers/${encodeURIComponent(provider.id)}/remove`}
+                      label={SETTINGS_ACTIONS.remove}
+                      ariaLabel={`${SETTINGS_ACTIONS.remove} ${provider.name}`}
+                      variant="danger"
+                      tone="danger"
+                      title={`Remove ${provider.name}?`}
+                      consequence={
+                        people === 0 ? (
+                          <>
+                            Nobody has signed in through it yet. Nobody can sign in through it
+                            after.
+                          </>
+                        ) : (
+                          <>
+                            {people} {people === 1 ? 'person has' : 'people have'} signed in through
+                            it. At once they can no longer sign in, and their open sessions end.
+                            Their missions, keys and connected apps keep running, as for anyone the
+                            provider no longer vouches for: deactivate them on People to stop those.
+                            Added again later with the same address, the provider gives them back
+                            the same accounts.
+                          </>
+                        )
+                      }
+                      confirmLabel={SETTINGS_ACTIONS.remove}
+                      testId={`remove-provider-${provider.id}`}
+                    />
+                  </>
+                )}
+              </span>
+            )}
+            testId="sign-in-providers"
+          />
+        )}
+        <Hint>
+          Administrators: {describeAdminRule(rule) || 'nobody yet'}. A provider where anyone can
+          open an account — GitHub, personal Google or Microsoft accounts — admits only allowed
+          domains and invited people; the gateway never joins two accounts of one person.
+        </Hint>
       </Section>
-
-      <Section title="Redirect address to register at the provider">
-        <div className={styles.block}>
-          <CodeBlock label="Redirect URI">{redirectUri}</CodeBlock>
-        </div>
-      </Section>
-
-      {current && (
-        <Section title={SETTINGS_ACTIONS.testSignIn}>
-          <Hint>
-            Runs the real sign-in through <Mono>{current.settings.issuer.hostname}</Mono> and comes
-            back here with what it returned. Your session is replaced by the one it grants.
-          </Hint>
-          <form method="get" action="/auth/login" className={styles.formActions}>
-            <input type="hidden" name="return_to" value={RETURN_AFTER_TEST} />
-            <Button type="submit">{SETTINGS_ACTIONS.testSignIn}</Button>
-          </form>
-        </Section>
-      )}
     </>
   );
 }

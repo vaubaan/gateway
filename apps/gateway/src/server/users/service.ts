@@ -50,7 +50,7 @@ import type { MissionTeamService } from '../missions';
 import type { DelegationService } from '../oauth-as';
 import type { Store } from '../store';
 import { toIso, type Clock } from '../store/clock';
-import type { UserRecord } from '../store/types';
+import type { GroupRecord, UserRecord } from '../store/types';
 import { UserAdminError } from './errors';
 
 /** Who acts: the audit actor, and their own user id (`null` for the bootstrap operator). */
@@ -63,6 +63,8 @@ export interface UserView {
   readonly user: UserRecord;
   /** Names of the groups the user belongs to now, local and IdP-sourced. */
   readonly groups: readonly string[];
+  /** The same groups as records: the admin rule reads their source and provider. */
+  readonly groupRecords: readonly GroupRecord[];
 }
 
 export interface Deactivation {
@@ -103,7 +105,7 @@ export class UserAdminService {
     const views: UserView[] = [];
     for (const user of await this.deps.store.users.list()) {
       const groups = await this.deps.store.groups.groupsOf(user.id);
-      views.push({ user, groups: groups.map((group) => group.name) });
+      views.push({ user, groups: groups.map((group) => group.name), groupRecords: groups });
     }
     return views;
   }

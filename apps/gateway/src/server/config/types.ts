@@ -6,6 +6,8 @@
  * object (or a slice of it) through the composition root.
  */
 
+import type { SignInProvider } from './sign-in';
+
 export const LOG_LEVELS = ['debug', 'info', 'warn', 'error'] as const;
 export type LogLevel = (typeof LOG_LEVELS)[number];
 
@@ -27,8 +29,10 @@ export interface IdpConfig {
   readonly clientId: string;
   readonly clientSecret: string;
   readonly claims: IdpClaimMapping;
-  /** Empty list means "any domain the IdP authenticates". */
+  /** Empty list means "any domain the IdP authenticates" (a company directory only). */
   readonly allowedEmailDomains: readonly string[];
+  /** Only invited addresses and the admin emails are admitted (`idp.invitation_only`). */
+  readonly invitationOnly: boolean;
 }
 
 /**
@@ -36,7 +40,11 @@ export interface IdpConfig {
  * revoked. At least one of the two members is non-empty.
  */
 export interface AdminRule {
-  /** IdP group name whose members are operators, or `null`. */
+  /**
+   * The group whose members are operators, as written: `<provider>:<group>`, or a
+   * bare group name while one sign-in provider is configured (`resolveAdminGroup`,
+   * `sign-in.ts`). `null` when the rule lists emails only.
+   */
   readonly group: string | null;
   /** Explicit list of operator emails (lower-cased). */
   readonly emails: readonly string[];
@@ -155,8 +163,17 @@ export interface InstanceConfig {
   readonly trustedProxies: readonly string[];
   readonly store: { readonly path: string };
   readonly encryption: EncryptionConfig;
-  /** `null` until the IdP is configured; the bootstrap token is then required. */
+  /**
+   * The single-provider keys (`idp.*`): the provider `idp` (`LEGACY_PROVIDER_ID`),
+   * `null` when they are absent.
+   */
   readonly idp: IdpConfig | null;
+  /**
+   * The sign-in providers of the `sign_in.<id>.*` keys, in the order of the file then
+   * the environment. Together with `idp` they are the providers the configuration
+   * sets (`fileSignInProviders`); with none, the bootstrap token is required.
+   */
+  readonly signIn: readonly SignInProvider[];
   readonly admin: AdminRule;
   /** Provider apps keyed by plugin id. Ids are validated against the registry by the root. */
   readonly providers: ReadonlyMap<string, ProviderAppConfig>;
@@ -176,6 +193,7 @@ export interface InstanceConfig {
 export function secretValues(config: InstanceConfig): string[] {
   const out: string[] = [];
   if (config.idp) out.push(config.idp.clientSecret);
+  for (const provider of config.signIn) out.push(provider.clientSecret);
   if (config.bootstrapToken) out.push(config.bootstrapToken);
   for (const app of config.providers.values()) {
     if (app.clientSecret) out.push(app.clientSecret);

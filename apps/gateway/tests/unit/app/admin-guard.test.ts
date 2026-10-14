@@ -132,6 +132,8 @@ describe('the Administration surface authorizes in every page and route', () => 
         'connections/page.tsx',
         'groups/page.tsx',
         'identity-provider/page.tsx',
+        'identity-provider/new/page.tsx',
+        'identity-provider/[id]/page.tsx',
         'oauth-clients/page.tsx',
         'page.tsx',
         'provider-apps/page.tsx',
@@ -142,7 +144,12 @@ describe('the Administration surface authorizes in every page and route', () => 
     expect(ROUTES.length).toBeGreaterThan(0);
   });
 
-  describe.each(PAGES)('page $name', ({ path }) => {
+  /** The params a page with a dynamic segment renders for: the provider `idp` saved by `configureIdp`. */
+  const PAGE_PARAMS: Readonly<Record<string, Record<string, string>>> = {
+    'identity-provider/[id]/page.tsx': { id: 'idp' },
+  };
+
+  describe.each(PAGES)('page $name', ({ path, name }) => {
     it('calls requireOperator() and never reads the bare decision', () => {
       const source = readFileSync(path, 'utf8');
       expect(source).toMatch(/await requireOperator\(\)/);
@@ -173,7 +180,7 @@ describe('the Administration surface authorizes in every page and route', () => 
     it('renders for an operator', async () => {
       await configureIdp();
       await signInUser('ops', [ADMIN_GROUP]);
-      const outcome = await renderPage(path);
+      const outcome = await renderPage(path, PAGE_PARAMS[name] ?? {});
       expect(outcome.kind).toBe('returned');
     });
   });

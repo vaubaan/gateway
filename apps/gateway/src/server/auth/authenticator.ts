@@ -6,11 +6,14 @@
  */
 import { BOOTSTRAP_ACTOR_ID } from '@vaubaan/gateway-core';
 
+import { issuerKey } from '../config/sign-in';
 import type { AdminRule } from '../config/types';
 import type { Store } from '../store';
 import type { GroupRecord, UserRecord } from '../store/types';
+import { resolveAdminRule } from './admin-rule';
 import type { BootstrapService } from './bootstrap';
 import { currentAuthority } from './login';
+import type { SignInProvidersService } from './sign-in-providers';
 import type { SessionService, UserSessionRecord } from './session-service';
 
 export interface UserPrincipal {
@@ -19,6 +22,8 @@ export interface UserPrincipal {
   readonly user: UserRecord;
   readonly groups: readonly GroupRecord[];
   readonly isOperator: boolean;
+  /** The sign-in provider the user's issuer belongs to; `null` when none is configured any more. */
+  readonly providerId: string | null;
   /** The claims seen at sign-in (display only). */
   readonly login: UserSessionRecord['login'];
 }
@@ -58,6 +63,7 @@ export class Authenticator {
     private readonly store: Store,
     private readonly adminRule: AdminRule,
     private readonly bootstrap: BootstrapService,
+    private readonly providers: Pick<SignInProvidersService, 'views'>,
   ) {}
 
   async authenticate(headers: Headers): Promise<Principal | null> {
@@ -76,8 +82,24 @@ export class Authenticator {
       await this.sessions.destroyById(session.id);
       return null;
     }
-    const authority = await currentAuthority(this.store, user, this.adminRule);
-    return { kind: 'user', sessionId: session.id, user, ...authority, login: session.record.login };
+    // A provider removed in Settings ended its users' sessions (`sessions_ended_at`,
+    // above); the provider is looked up for the admin rule and for display.
+    const providers = await this.providers.views();
+    const key = user.issuer === null ? null : issuerKey(user.issuer);
+    const provider = providers.find((p) => issuerKey(p.issuer) === key) ?? null;
+    const rule = resolveAdminRule(
+      this.adminRule,
+      providers.map((p) => p.id),
+    );
+    const authority = await currentAuthority(this.store, user, rule);
+    return {
+      kind: 'user',
+      sessionId: session.id,
+      user,
+      ...authority,
+      providerId: provider?.id ?? null,
+      login: session.record.login,
+    };
   }
 
   /**

@@ -51,11 +51,11 @@ describe('composition root over the embedded SQLite store', () => {
 
     expect(existsSync(path)).toBe(true);
     expect(root.store.kind).toBe('sqlite');
-    expect(root.store.schemaVersion).toBe(13);
+    expect(root.store.schemaVersion).toBe(14);
     expect(
       root.store.db.prepare<[], { n: number }>('SELECT COUNT(*) AS n FROM schema_migrations').get()
         ?.n,
-    ).toBe(13);
+    ).toBe(14);
     await expect(root.store.ping()).resolves.toBeUndefined();
     expect(root.registry.size).toBe(SHIPPED_PLUGINS.length);
 
@@ -68,7 +68,7 @@ describe('composition root over the embedded SQLite store', () => {
 
     const log = lines.join('\n');
     expect(log).toContain('"msg":"store opened"');
-    expect(log).toContain('"schema_version":13');
+    expect(log).toContain('"schema_version":14');
     expect(log).toContain('"msg":"composition root ready"');
   });
 
@@ -89,12 +89,12 @@ describe('composition root over the embedded SQLite store', () => {
 
     // Same master key (validEnv is stable per process), same file: the secret opens.
     const second = await boot(path);
-    expect(second.store.schemaVersion).toBe(13);
+    expect(second.store.schemaVersion).toBe(14);
     expect(
       second.store.db
         .prepare<[], { n: number }>('SELECT COUNT(*) AS n FROM schema_migrations')
         .get()?.n,
-    ).toBe(13);
+    ).toBe(14);
     await expect(second.store.config.getSecret('idp.client_secret')).resolves.toBe('s3cret-value');
   });
 
