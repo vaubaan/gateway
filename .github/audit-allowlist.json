@@ -1,19 +1,4 @@
 {
   "$comment": "Advisories of `npm audit --omit=dev` that were looked at and do not apply to what this repository ships. Read by scripts/audit-gate.mjs (CI job `audit`). Each entry: the GHSA id, the package the advisory is about, why it does not apply here, the day it was reviewed and the day by which it must be looked at again (the gate fails after it). Cadence and procedure: docs/workflow/coding-workflow.md, \"Dependency audit\".",
-  "advisories": [
-    {
-      "id": "GHSA-vfj7-8cjw-p6xm",
-      "package": "braces",
-      "reason": "Reached only through the optional private development dependency @sbw-vaubaan/harness (fast-glob > micromatch), a documentation tool run by maintainers on their own files. It is absent from CI installs without the registry token and from the image (not traced into the standalone output; deploy/docker/smoke.sh).",
-      "reviewed": "2026-10-13",
-      "review_by": "2027-01-13"
-    },
-    {
-      "id": "GHSA-hp3w-g68c-fv3c",
-      "package": "sprintf-js",
-      "reason": "Reached only through the optional private development dependency @sbw-vaubaan/harness (gray-matter > js-yaml > argparse), a documentation tool run by maintainers on their own files. It is absent from CI installs without the registry token and from the image.",
-      "reviewed": "2026-10-13",
-      "review_by": "2027-01-13"
-    }
-  ]
+  "advisories": []
 }

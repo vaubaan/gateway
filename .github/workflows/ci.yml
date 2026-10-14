@@ -18,9 +18,6 @@ concurrency:
   cancel-in-progress: true
 
 # Dependencies are installed with `npm ci`: exactly the lockfile, or a failure.
-# @sbw-vaubaan/harness is an optionalDependency served from a private registry;
-# npm skips it when NPM_READ_TOKEN is absent (see CONTRIBUTING.md), with `npm ci`
-# as with `npm install`.
 #
 # Actions are pinned by commit, as in release.yml: a tag can be moved, a commit
 # cannot. The comment after each pin names the release it is.

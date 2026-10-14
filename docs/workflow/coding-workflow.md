@@ -128,10 +128,8 @@ and `workflow_call` — the release pipeline calls this file as its gates
 group per workflow and ref with `cancel-in-progress` (`github.workflow` is
 the caller's name in a called run, so a release and the CI of the same ref
 never cancel each other); `permissions: contents: read`. Single Linux runner,
-Node 22, `npm ci --no-audit --no-fund`: exactly the lockfile, or a failure
-(`@sbw-vaubaan/harness` is an optional dependency from a private registry
-that npm skips without `NPM_READ_TOKEN`, with `npm ci` as with
-`npm install`; see `CONTRIBUTING.md`). Every action is pinned by commit, as
+Node 22, `npm ci --no-audit --no-fund`: exactly the lockfile, or a failure.
+Every action is pinned by commit, as
 in `release.yml`, with the release it is in a comment: a tag can be moved, a
 commit cannot.
 
@@ -235,8 +233,7 @@ for the prebuilt `argon2` and `better-sqlite3` addons). The runner stage copies 
 standalone output, runs as uid 10001, exposes `PORT` (3000), declares the
 `/data` volume and a `HEALTHCHECK` on `/healthz`. Build arguments:
 `NODE_IMAGE` (base image reference, tag and digest; see `deploy/README.md`),
-`GIT_COMMIT_SHA`. The `deps` stage runs `npm ci` (the
-optional private dependency is skipped without `NPM_READ_TOKEN`), as the
+`GIT_COMMIT_SHA`. The `deps` stage runs `npm ci`, as the
 CI jobs do. `.dockerignore` keeps `.git`, docs, test
 artefacts, every `.env*` file except `.env.example` and every `*.pem` out of
 the build context. Operator

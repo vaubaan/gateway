@@ -39,11 +39,6 @@ npm run ci        # the gate: type-check, lint, format check, build, tests
 `npm run ci` takes a few minutes and must be green before you change
 anything; if it is not, that is a bug worth reporting.
 
-The install skips one optional dependency, `@sbw-vaubaan/harness`, when you
-have no access to its private registry. That is expected: it is the
-maintainers' agent tooling and it is not needed to build, test or run the
-gateway.
-
 ## Look at the product
 
 ```bash

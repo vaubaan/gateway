@@ -38,6 +38,7 @@ BUILD_PROGRESS.md
 # Harness (injected per-session, never committed — cf. spec coding-agent-harness §11)
 .harness-overrides/
 .harness-manifest.json
+.harness/
 .claude/
 .codex/
 .opencode/

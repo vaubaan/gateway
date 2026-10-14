@@ -102,6 +102,10 @@ template), tool configuration (`package.json`, `tsconfig.base.json`,
 
 ### Private tooling dependency
 
+> Replaced on 2026-10-14 by
+> [the public harness dev dependency](./public-harness-dev-dependency.md):
+> the harness is now `@vaubaan/harness` on the public registry.
+
 `@sbw-vaubaan/harness` stays **only** in `optionalDependencies`. It is
 served from GitHub Packages through the `@sbw-vaubaan` scope line in
 `.npmrc`. Verified at P0.1: a fresh clone with no `NPM_READ_TOKEN`, an
