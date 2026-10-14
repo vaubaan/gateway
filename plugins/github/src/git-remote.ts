@@ -58,6 +58,7 @@ import {
   missingPermissionSentence,
 } from './permission-check.ts';
 import { INSTALLATION_TOKEN_EXPIRY_MARGIN_SECONDS } from './token-cache.ts';
+import { githubTokenOf } from './token.ts';
 
 /**
  * Installation-token permissions per git access, most first: the first set
@@ -81,8 +82,6 @@ export const COMPARE_MAX_COMMITS = 250;
 
 /** The user name GitHub expects with an installation token over HTTP. */
 const TOKEN_USER = 'x-access-token';
-/** The credential field of a token connection (the `api-key` kind). */
-export const TOKEN_CONNECTION_FIELD = 'token';
 const MS_PER_SECOND = 1000;
 const CACHE_SECONDS = 50 * 60;
 
@@ -117,13 +116,8 @@ async function gitGrant(
   target: RepoTarget,
   access: GitAccess,
 ): Promise<GitGrant> {
-  if (ctx.credential.kind === 'api-key') {
-    const token = ctx.credential.fields[TOKEN_CONNECTION_FIELD];
-    if (typeof token !== 'string' || token.length === 0) {
-      throw new ExecutorRefusal('this GitHub account holds no token the git remote can use');
-    }
-    return { token, permissions: {} };
-  }
+  // A token connection (ADR token-connections-beside-the-integration-app).
+  if (ctx.credential.kind === 'api-key') return { token: githubTokenOf(ctx), permissions: {} };
   expectCredentialKind('github', ctx.credential, 'app-install');
   const key = `git-token:${target.repo}:${access}`;
   const cache = ctx.credentialCache;

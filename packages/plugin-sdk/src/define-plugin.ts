@@ -392,7 +392,8 @@ function oneSpecIssues(plugin: ProviderPlugin, spec: CredentialSpec, at: string)
   const own = kindSpecIssues(spec, plugin);
   const issues = at === 'credential' ? own : own.map((i) => i.replace(/^credential/, at));
   if (!isRecord(spec) || typeof spec.kind !== 'string') return issues;
-  const tools = new Set(isList(plugin.tools) ? plugin.tools.map((t) => t?.name) : []);
+  // The git remote's tools need permissions on a token too.
+  const tools = declaredToolNames(plugin);
   issues.push(...unavailableToolsIssues(spec.unavailableTools, tools, at));
   if (
     spec.manualRevocation !== undefined &&
