@@ -628,6 +628,9 @@ write …)`), instead of GitHub's bare 403. The push token of
 
 ### Changed
 
+- **The Docker build no longer takes a `NODE_IMAGE` argument**: the base image is
+  written, version and digest, on the first `FROM` line, so that Dependabot can propose
+  its refresh. To build on another base, edit that line.
 - **Licence.** Changed from proprietary to **Apache-2.0**. The last release of the
   earlier hosted product is tag `v4-final`.
 - **One instance per company, on your network (breaking).** The gateway is a single
@@ -683,6 +686,23 @@ write …)`), instead of GitHub's bare 403. The push token of
 
 ### Security
 
+- **Every change and every release passes supply-chain checks.** A secret scan of the
+  whole history on every push, static analysis (Semgrep: pinned community security rules
+  and rules of this codebase), a vulnerability scan of the image that fails on a known
+  HIGH or CRITICAL with a fix — also on each architecture of a release before it is
+  pushed —, registry signatures of the installed packages, a lockfile that downloads
+  only from the npm registry with an integrity hash, and weekly dependency updates that
+  wait several days before adopting a version. Every tool is pinned by checksum or
+  digest. Operators: nothing to do.
+- **The image ships no package manager.** `npm`, `npx`, `corepack` and `yarn` are removed
+  from the runner stage: the gateway never runs them, and their dependencies carried
+  known vulnerabilities.
+- **A release verifies its own attestation before it is published**, the way an operator
+  does; `deploy/README.md` documents the identity to check (`gh attestation verify` or
+  `cosign`) and how to run the verified digest.
+- **The configuration loader cannot be crashed by its file.** A YAML alias used inside
+  its own anchor, a `__proto__` key and a duration too long to count in seconds are now
+  named issues (exit 78), not a crash at boot.
 - **A glob can no longer stall the instance.** SSH: a path glob in an agent's command
   line (`cat ~/.ssh/****…*z`) was matched as a regular expression whose backtracking
   grew exponentially with the stars — two dozen stars held the single process for
