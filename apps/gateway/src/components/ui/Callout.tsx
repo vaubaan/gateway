@@ -7,7 +7,8 @@
  *
  * `neutral` — a fact worth setting apart; `info` — where to go next;
  * `warn` — needs you; `bad` — stopped, refused, failed; `ok` — done (rare:
- * the absence of a problem needs no box).
+ * the absence of a problem needs no box), drawn in the accent with a check:
+ * green is for checklist ticks only (style guide, "Colour").
  */
 import type { Tone } from '@/lib/vocabulary';
 

@@ -51,10 +51,11 @@
   border-color: var(--accent-line);
   background: var(--accent-soft);
 }
+/* Done is not an exception: the accent, never green (green is for checklist ticks only). */
 .tone_ok {
-  --tone: var(--ok);
-  border-color: var(--ok-line);
-  background: var(--ok-soft);
+  --tone: var(--accent);
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
 }
 .tone_warn {
   --tone: var(--warn);
