@@ -798,9 +798,11 @@ agent needs git and its mission token, nothing else.
   one decision, one request to the creator when gated, one audit entry;
   if one ref is refused, every ref of the push is. The values the client
   claims for the refs are checked against the provider: a push based on
-  stale information is refused. Every commit the push brings is reviewed,
-  not only the net change: a CI workflow changed and changed back inside
-  one push still asks for the permission to change workflows. A push its
+  stale information is refused. What a push brings is what no branch at the
+  provider already holds — a new branch is not measured against a default
+  branch it never came from — and every commit of it is reviewed, not only
+  the net change: a CI workflow changed and changed back inside one push
+  still asks for the permission to change workflows. A push its
   mission, its permissions or its limits refuse is refused before its
   content leaves for the provider.
 - **How it works**: the pack is streamed to the provider under temporary
