@@ -105,6 +105,8 @@ names, and the notes about them do too.
   period, the gates opened in it and the credits granted in it are never purged. **The
   first start of this image deletes that history on an existing instance**: raise
   `retention_days` before you upgrade if you want to keep more than 90 days of it.
+  The retention is 90 days unless `retention_days` says otherwise (instance
+  configuration); a new instance starts empty, so nothing is deleted on its first day.
 - **The plugin test kit proves "what is executed is what was classified" by running
   the plugin.** `assertIdentifiersRefused` feeds hostile identifiers to every string
   argument of a plugin's samples, through `classify` and through `execute`; every
@@ -157,12 +159,38 @@ names, and the notes about them do too.
   `bulk-row-write` on top of the schema write. `supabase.row-write-one` is
   deprecated: it matches no call and grants nothing; missions and shares that name
   it keep working.
+- **Supabase's "Staging developer" preset no longer reads the managed schemas.**
+  `supabase[staging].read-managed-schemas` (the `auth`, `vault`, `storage` internals
+  through SQL) is ticked on purpose now; missions already created keep the explicit list
+  they were created with. Plugin `@vaubaan/plugin-supabase` 4.1.0, catalog 5.
+- **Every catalog whose wording changed has a new `catalog_version`** (dated
+  2026-10-14): cloudflare-dns 3, github 5, gmail 4, railway 4, resend 4, ssh 4, stripe
+  5, supabase 5, upstash-redis 6, vercel 3. No id, vector, limit or gate moved.
+- **A replaced machine key is answered `token-rotated`**, as a replaced personal key
+  is (it was `token-revoked`, since the page revoked it before making a new one).
 - **A sign-in can now be refused with `groups-unavailable`.** When the ID token
   carries no groups claim and the userinfo request fails, the sign-in is refused
   instead of signing the user in with no group. Sessions already open are not
   affected; trying again once the identity provider answers is the remedy.
 
 ### Added
+
+- **Change limits.** The creator of a mission raises or lowers, per permission it
+  holds, the limit per period and the calls per minute, from the mission page
+  ("Change limits", then a confirmation listing each change). It applies from the
+  next call, in the current period: what was used stays used, and a limit under it
+  stops the permission until the reset. A change is capped exactly as a creation is
+  (what you may allow on the account, the service's own ceilings), never adds or
+  removes a permission, never touches the period or "ask me first", and is one line
+  of the activity with the limits before and after. A connected app cannot do it.
+  The limit-reached page now leads there ("change the limit") instead of to a copy of
+  the mission. `POST /api/missions/<id>/limits`.
+- **Leave a mission.** A teammate leaves a mission from its "···" menu, after typing
+  its name; their key stops at once (`holder-removed`) and the mission is no longer
+  theirs to see. The creator stops a mission instead. `POST /api/missions/<id>/leave`.
+- **Replace key on a machine key is one act.** The old key is retired and the new one
+  issued together, so there is no moment without a key or with two.
+  `POST /api/missions/<id>/tokens/<tokenId>/replace`.
 
 - **A redesigned interface, and one vocabulary.** A short side navigation: Now, Waiting
   for you (with the count of what waits), Missions, Accounts, Activity, Reference, then

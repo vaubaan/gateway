@@ -91,7 +91,7 @@ this table says where each requirement lives, and what is not written yet.
 | Suite                                                                                                     |    Tests |
 | --------------------------------------------------------------------------------------------------------- | -------: |
 | `apps/gateway/src/app/(app)/activity/change-lines.test.ts`                                                |        7 |
-| `apps/gateway/src/app/(app)/missions/[id]/session/event-words.test.ts`                                    |        8 |
+| `apps/gateway/src/app/(app)/missions/[id]/session/event-words.test.ts`                                    |        9 |
 | `apps/gateway/src/app/(app)/missions/message-of.test.ts`                                                  |        2 |
 | `apps/gateway/src/app/(app)/missions/mission-view.test.ts`                                                |       12 |
 | `apps/gateway/src/app/(app)/missions/new/form-state.test.ts`                                              |       40 |
@@ -170,7 +170,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/telemetry/outcome.test.ts`                                                       |       30 |
 | `apps/gateway/src/server/telemetry/settings.test.ts`                                                      |        7 |
 | `apps/gateway/src/server/telemetry/stats.test.ts`                                                         |       11 |
-| `apps/gateway/tests/integration/audit/admin-mutations.test.ts`                                            |       52 |
+| `apps/gateway/tests/integration/audit/admin-mutations.test.ts`                                            |       55 |
 | `apps/gateway/tests/integration/audit/audit-query.test.ts`                                                |       35 |
 | `apps/gateway/tests/integration/audit/events-agent-label.test.ts`                                         |        3 |
 | `apps/gateway/tests/integration/audit/mission-session.test.ts`                                            |       21 |
@@ -207,10 +207,11 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/management/management-door.test.ts`                                       |       34 |
 | `apps/gateway/tests/integration/management/output-schemas.test.ts`                                        |        9 |
 | `apps/gateway/tests/integration/missions/gate.test.ts`                                                    |       20 |
+| `apps/gateway/tests/integration/missions/limits.test.ts`                                                  |       21 |
 | `apps/gateway/tests/integration/missions/mission-handlers.test.ts`                                        |        8 |
 | `apps/gateway/tests/integration/missions/mission-lifecycle.test.ts`                                       |       33 |
 | `apps/gateway/tests/integration/missions/team-interleaving.test.ts`                                       |        6 |
-| `apps/gateway/tests/integration/missions/team.test.ts`                                                    |       28 |
+| `apps/gateway/tests/integration/missions/team.test.ts`                                                    |       34 |
 | `apps/gateway/tests/integration/now/now.test.ts`                                                          |       12 |
 | `apps/gateway/tests/integration/oauth-as/credential-separation.test.ts`                                   |       19 |
 | `apps/gateway/tests/integration/oauth-as/http-surface.test.ts`                                            |       66 |
@@ -230,7 +231,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/store/corrupt-rows.test.ts`                                               |       14 |
 | `apps/gateway/tests/integration/store/delegations.test.ts`                                                |       20 |
 | `apps/gateway/tests/integration/store/identities.test.ts`                                                 |       11 |
-| `apps/gateway/tests/integration/store/missions.test.ts`                                                   |       18 |
+| `apps/gateway/tests/integration/store/missions.test.ts`                                                   |       21 |
 | `apps/gateway/tests/integration/store/oauth-clients.test.ts`                                              |       16 |
 | `apps/gateway/tests/integration/store/ownership-and-orphans.test.ts`                                      |       13 |
 | `apps/gateway/tests/integration/store/request-covers-the-call-migration.test.ts`                          |        1 |
@@ -249,9 +250,11 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/app/field.test.tsx`                                                              |        8 |
 | `apps/gateway/tests/unit/app/now-and-waiting.test.tsx`                                                    |       30 |
 | `apps/gateway/tests/unit/app/shell-and-vocabulary.test.ts`                                                |       23 |
-| `apps/gateway/tests/unit/server/auth/mutation-guard.test.ts`                                              |      287 |
+| `apps/gateway/tests/unit/components/success-tone.test.ts`                                                 |        2 |
+| `apps/gateway/tests/unit/server/auth/mutation-guard.test.ts`                                              |      314 |
 | `apps/gateway/tests/unit/server/budget/decide.test.ts`                                                    |       20 |
 | `apps/gateway/tests/unit/server/budget/gates.test.ts`                                                     |        9 |
+| `apps/gateway/tests/unit/server/budget/live-policy.test.ts`                                               |        3 |
 | `apps/gateway/tests/unit/server/budget/mission-state.test.ts`                                             |        7 |
 | `apps/gateway/tests/unit/server/budget/period.test.ts`                                                    |        8 |
 | `apps/gateway/tests/unit/server/connections/provider-app-handler.test.ts`                                 |        4 |
@@ -265,7 +268,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/structural/example-config-providers.test.ts`                                     |       10 |
 | `apps/gateway/tests/unit/structural/index.test.ts`                                                        |      100 |
 | `apps/gateway/tests/unit/structural/no-arguments-in-logs.test.ts`                                         |        3 |
-| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`                                          |      411 |
+| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`                                          |      415 |
 | `apps/gateway/tests/unit/structural/persisted-enumerations.test.ts`                                       |       10 |
 | `apps/gateway/tests/unit/structural/plugin-identifier-tests.test.ts`                                      |       25 |
 | `apps/gateway/tests/unit/structural/shipped-presets.test.ts`                                              |       41 |
@@ -2204,6 +2207,26 @@ connections and resources seeded through the repositories (36):
   operator; 400 with the fields named; 422 with the preview; preview of an
   agent's proposal (provider and refs resolved, nothing written); rotate
   200 / 404 / 409; revoke 404 for someone else's mission.
+- **`tests/integration/missions/limits.test.ts`** (21) — **a mission's limits
+  changed after issuance** (ADR [[mission-limits-editable-after-issuance]]): the
+  quota and the rate move up and down and nothing else of the mission moves; at
+  once for the current period (used calls stay used, a quota under them
+  exhausts the risk, raised again the room is what is left, the next period
+  starts at zero under the new limit); **the race** — a call carrying the
+  mission loaded before the change is decided with the new limit, and ten calls
+  in flight while the quota drops to two let exactly two through (the same for
+  a rate); one `limits-changed` entry with before and after, one session event
+  per risk that moved, nothing for values already stored; never a risk outside
+  the policy, an empty or repeated list, a quota or a rate issuance refuses; **a
+  raise above the catalog ceiling is refused with the very issue a creation
+  gets**; the creator only (a teammate, an operator, another user: not found);
+  an orphaned or stopped mission is not changed, an expired one is; the route:
+  200, 400 for a window, a gate, a period or a malformed line, 404, 409, 422,
+  403 cross-origin. With it: `tests/unit/server/budget/live-policy.test.ts` (3,
+  the limits a decision uses), `store/missions.test.ts` (`setLimits` in one
+  transaction, nothing written for an unknown risk; the decision reads the
+  stored limits), `server/management/hard-deny.test.ts` (the door holds no
+  `setLimits`, no tool name says "limit").
 
 ### Mission members and per-holder tokens
 
@@ -2218,7 +2241,15 @@ connections and resources seeded through the repositories (36):
   what is refused with the rule stated (empty, too long, leading punctuation,
   an email, a slash, a colon, a line break, markup, non-ASCII, anything that
   is not text), and never a name with an `@`.
-- **`tests/integration/missions/team.test.ts`** (28) — on the real root:
+- **`tests/integration/missions/team.test.ts`** (34) — on the real root:
+  - **leaving and replacing**: a teammate leaves — their key is answered
+    `holder-removed`, the mission is gone for them, one `mission-member-left`
+    entry in their name; one with no key leaves too, the creator cannot
+    (`creator-cannot-leave`), a stranger is told nothing; **a machine key is
+    replaced in one act** (the old one `rotated`, one working key of the name,
+    one `mission-rotated` entry, a second replace finds it replaced already);
+    only the creator, only a working machine key, only on a mission that
+    serves; the two routes (200 with the new secret, 409, 404, 403);
   - **members**: the creator is a member by construction; adding a user makes
     the mission appear in their list as `member` with the creator's email;
     candidates are the active users not on the mission, for the creator only;

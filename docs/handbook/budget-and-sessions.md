@@ -230,7 +230,13 @@ const result = await service.recordCall({
    touched risk is gated `approval`, seals the arguments with
    `requests.prepareArguments` (the encryptor is asynchronous, the transaction is not);
 2. runs `sessions.decideAndDecrement({ missionId, riskIds, periodStart })`; inside the
-   transaction: peeks the rate windows of the touched risks, derives the gates opened for
+   transaction: replaces the quota and the rate of each touched risk of the caller's
+   `mission.policy` by the values the store holds now (`ctx.limits` → `livePolicy`; the
+   accepted risks and the gates stay the caller's), so a limit the creator changed after
+   the mission was loaded is the one that decides — no call decided after the change
+   commits passes above it (ADR
+   [mission-limits-editable-after-issuance](../decisions/mission-limits-editable-after-issuance.md));
+   then peeks the rate windows of the touched risks, derives the gates opened for
    the period (`ctx.riskEvents` → `openedGatesOf`), looks up the usable approvals of
    the call (`ctx.findApprovals({ tool, fingerprint })`) and reads which of the gated
    risks still closed each one covers — one that covers them all is preferred —, calls
@@ -414,8 +420,9 @@ approval-required, concurrent burst); an operator diagnostic may run it on a liv
 
 ## What the store gained
 
-`DecideContext` (`store/repositories/sessions.ts`) has three non-consuming,
-in-transaction lookups: `findApprovals({ tool, fingerprint })`
+`DecideContext` (`store/repositories/sessions.ts`) carries `limits`, the quota, rate and
+window of the touched risks read from `mission_policy` in the transaction (a Postgres port
+reads them `FOR SHARE`), and has three non-consuming, in-transaction lookups: `findApprovals({ tool, fingerprint })`
 (`findApprovalsSync`, `approvals.ts`: every usable approval of the call, soonest-expiring
 first, each with the risks it covers), `findOpenRequest(lookup)` (`findOpenRequestSync`,
 `requests.ts`; `state = 'open' AND expires_at > now`; a claim by its risk, an approval

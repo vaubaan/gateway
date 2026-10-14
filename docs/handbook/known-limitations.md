@@ -125,3 +125,13 @@ change that removes it.
   without a password, answers every provider from memory, binds the loopback
   interface and deletes its data on exit; it refuses to start in a production
   environment and is not in the image. → [demo-mode, "Safety"](demo-mode.md#safety)
+
+## Kept until the next major version
+
+- **The argon2id check of legacy tokens stays until the next major version.** A
+  mission token stored by an earlier build as an argon2id hash is still checked
+  the slow way, behind its own throttle, until its first use moves it to its
+  SHA-256 digest; a token never used again never moves. The path, its throttle
+  and the native `argon2` addon the image carries go only with the next major
+  version (owner's decision of 2026-10-14). →
+  [ADR mission-token-sha256-digest, D5](../decisions/mission-token-sha256-digest.md)
