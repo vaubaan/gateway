@@ -1116,6 +1116,8 @@ export const MISSION_ACTIONS = {
   editOneByOne: 'Edit the permissions one by one',
   hideEditor: 'Hide the permissions',
   change: 'Change',
+  changeLimits: 'Change limits',
+  leave: 'Leave the mission',
 } as const;
 
 /** Sentences the mission pages share. */

@@ -506,6 +506,11 @@ describe('missions: members and per-holder tokens', () => {
           s.missions.service.setGate(u, m, READ, 'approval'),
       ],
       [
+        'change its limits',
+        (s: GatewayRoot, m: string, u: UserRecord) =>
+          s.missions.service.setLimits(u, m, [{ risk_id: READ, quota: 999, rate_limit_max: 1 }]),
+      ],
+      [
         'rotate the creator’s token',
         (s: GatewayRoot, m: string, u: UserRecord) => s.missions.service.rotate(u, m),
       ],

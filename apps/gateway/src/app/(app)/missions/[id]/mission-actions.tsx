@@ -503,11 +503,14 @@ export function MissionMenu({
   missionId,
   duplicable,
   stoppable,
+  limitsHref = null,
 }: {
   missionId: string;
   /** The reader created the mission: a copy of it is theirs to make. */
   duplicable: boolean;
   stoppable: boolean;
+  /** Where the creator changes the limits; `null` when the server would not take it. */
+  limitsHref?: string | null;
 }) {
   const acts = useMissionActs();
   const { team } = acts;
@@ -529,6 +532,7 @@ export function MissionMenu({
       {team.issuable && !mine && (
         <MenuItem onSelect={acts.generateMine}>{MISSION_ACTIONS.generateKey}</MenuItem>
       )}
+      {limitsHref && <MenuItem href={limitsHref}>{MISSION_ACTIONS.changeLimits}</MenuItem>}
       {duplicable && (
         <MenuItem href={`${ROUTES.newMission}?from=${encodeURIComponent(missionId)}`}>
           {MISSION_ACTIONS.duplicate}

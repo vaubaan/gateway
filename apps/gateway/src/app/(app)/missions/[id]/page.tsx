@@ -8,7 +8,8 @@
  *   3. Can / Asks first / Cannot, and the one limit that is near;
  *   4. people and keys, with what each key did in the current period;
  *   5. permissions and usage — the explicit list, one click away — where the
- *      creator changes "ask me first";
+ *      creator changes "ask me first", and "Change limits", which opens the same
+ *      table in edit mode for the limits only (`?edit=limits`);
  *   6. activity: a line of counts, the last calls one click away, the whole
  *      record on the mission's activity page.
  *
@@ -45,6 +46,7 @@ import {
   asksFirst,
   count,
   expiresOn,
+  limitColumn,
   limitsResetEvery,
   listed,
   MISSION_ACTIONS,
@@ -54,6 +56,7 @@ import {
   SECTIONS,
   shortDate,
   TERMS,
+  until,
   waitingFor,
   WAITING,
 } from '@/lib/vocabulary';
@@ -63,12 +66,14 @@ import { riskExplainer } from '@/server/providers/reference';
 import { toolTitleOf } from '@/server/providers/tool-titles';
 import type { RequestCall } from '@/server/requests';
 import { inboxRequestPath } from '@/server/requests/url';
+import { parseRiskId } from '@vaubaan/shared';
 
 import { CallHeadline } from '../../waiting/parts';
 
 import styles from '../missions.module.css';
 import { allowLines, createdBy, missionMark, nearestLimit } from '../mission-view';
 import { ActivityTable } from './activity-table';
+import { LimitsEditor, type LimitGroup } from './limits-editor';
 import { ActButton, GenerateKeyButton, MissionActsProvider, MissionMenu } from './mission-actions';
 import { PermissionsUsage } from './permissions-usage';
 import { TeamSection, type HolderCalls } from './team-section';
@@ -80,7 +85,11 @@ const LAST_EVENTS = 8;
 
 interface Props {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ edit?: string | string[] }>;
 }
+
+/** The query that opens the permission table in edit mode for the limits. */
+const EDIT_LIMITS = 'limits';
 
 /** What waits on this mission, as the banner shows it. */
 interface Waiting {
@@ -94,7 +103,7 @@ interface Waiting {
   readonly path: string | null;
 }
 
-export default async function MissionPage({ params }: Props) {
+export default async function MissionPage({ params, searchParams }: Props) {
   const session = await currentUser();
   if (!session) return <NeedsUser />;
   const { id } = await params;
@@ -103,6 +112,8 @@ export default async function MissionPage({ params }: Props) {
   if (!detail) notFound();
   const { mission, state, orphan, issuedVia } = detail;
   const isCreator = detail.role === 'creator';
+  const editingLimits =
+    isCreator && detail.limits_editable && (await searchParams).edit === EDIT_LIMITS;
   const now = new Date();
   const [team, activity, inbox] = await Promise.all([
     root.missions.team.team(user, id),
@@ -159,6 +170,35 @@ export default async function MissionPage({ params }: Props) {
   const lines = allowLines(detail.policy, notIncluded);
   const near = state.kind === 'active' ? nearestLimit(detail.policy) : null;
   const explain = riskExplainer(root.registry);
+  const missionPath = `${ROUTES.missions}/${mission.id}`;
+  const limitGroups: LimitGroup[] = editingLimits
+    ? detail.connections
+        .map((connection) => ({
+          key: connection.id,
+          title: `${connection.provider_label} · ${connection.display_name}`,
+          note:
+            connection.resources.length === 0
+              ? 'the account itself, no resource'
+              : listed(
+                  connection.resources.map((r) => r.display_name || r.ref),
+                  3,
+                ),
+          rows: detail.policy
+            .filter((entry) => parseRiskId(entry.risk_id)?.provider === connection.provider)
+            .map((entry) => ({
+              risk_id: entry.risk_id,
+              label: entry.label,
+              level: entry.level ?? 'low',
+              env: explain(entry.risk_id)?.env ?? null,
+              quota: entry.quota,
+              rate_max: entry.rate_limit.max,
+              rate_window_seconds: entry.rate_limit.window_seconds,
+              gate: entry.gate,
+              used: entry.remaining === null ? null : entry.quota - entry.remaining,
+            })),
+        }))
+        .filter((group) => group.rows.length > 0)
+    : [];
 
   const calls: HolderCalls[] = activity.holder_activity.flatMap((entry) =>
     entry.holder
@@ -289,7 +329,18 @@ export default async function MissionPage({ params }: Props) {
               ? [secondary[0]]
               : undefined
         }
-        more={<MissionMenu missionId={mission.id} duplicable={isCreator} stoppable={stoppable} />}
+        more={
+          <MissionMenu
+            missionId={mission.id}
+            duplicable={isCreator}
+            stoppable={stoppable}
+            limitsHref={
+              isCreator && detail.limits_editable
+                ? `${missionPath}?edit=${EDIT_LIMITS}#permissions`
+                : null
+            }
+          />
+        }
       />
 
       {!isCreator && (
@@ -390,26 +441,55 @@ export default async function MissionPage({ params }: Props) {
         title={SECTIONS.permissionsAndUsage}
         count={detail.policy.length}
         note={
-          isCreator && detail.gates_editable
-            ? 'The explicit list this mission carries. You choose what asks you first.'
-            : 'The explicit list this mission carries.'
+          editingLimits ? (
+            'Change a limit up or down. What was used stays used.'
+          ) : isCreator && detail.limits_editable ? (
+            <ButtonLink
+              href={`${missionPath}?edit=${EDIT_LIMITS}#permissions`}
+              size="sm"
+              data-testid="change-limits"
+            >
+              {MISSION_ACTIONS.changeLimits}
+            </ButtonLink>
+          ) : (
+            'The explicit list this mission carries.'
+          )
         }
         testId="mission-permissions"
       >
-        <Disclosure
-          id={`mission:${mission.id}:permissions`}
-          show={`All ${count(detail.policy.length, TERMS.risk)}, with what was used`}
-          hide="Hide the permissions"
-          testId="permissions-disclosure"
-        >
-          <PermissionsUsage
-            detail={detail}
-            explain={explain}
-            periodSeconds={periodSeconds}
-            editable={isCreator && detail.gates_editable}
+        {editingLimits ? (
+          <LimitsEditor
+            missionId={mission.id}
+            missionName={mission.name}
+            groups={limitGroups}
+            limitLabel={limitColumn(periodSeconds)}
+            periodWord={period}
+            resetWords={
+              state.kind === 'active' && state.period.end
+                ? `until the limits reset (${until(state.period.end, now)})`
+                : null
+            }
+            missionPath={missionPath}
           />
-          <Hint>Not in this mission, therefore refused with the reason: {lines.cannot}</Hint>
-        </Disclosure>
+        ) : (
+          <Disclosure
+            id={`mission:${mission.id}:permissions`}
+            show={`All ${count(detail.policy.length, TERMS.risk)}, with what was used`}
+            hide="Hide the permissions"
+            testId="permissions-disclosure"
+          >
+            <PermissionsUsage
+              detail={detail}
+              explain={explain}
+              periodSeconds={periodSeconds}
+              editable={isCreator && detail.gates_editable}
+            />
+            <Hint>Not in this mission, therefore refused with the reason: {lines.cannot}</Hint>
+            {isCreator && detail.gates_editable && (
+              <Hint>You choose here what asks you first.</Hint>
+            )}
+          </Disclosure>
+        )}
       </Section>
 
       <Section

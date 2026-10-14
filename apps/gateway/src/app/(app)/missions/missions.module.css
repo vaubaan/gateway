@@ -485,3 +485,23 @@ p.railRefused {
     text-align: left;
   }
 }
+
+/* "Change limits": the actions under the table, the list of the confirmation. */
+.limitsActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin-top: var(--space-3);
+}
+.limitChanges {
+  margin: 0 0 var(--space-2);
+  padding-left: var(--space-4);
+}
+.limitChanges li + li {
+  margin-top: var(--space-1);
+}
+.limitChanges code {
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+}
