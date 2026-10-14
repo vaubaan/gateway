@@ -41,6 +41,8 @@ import {
 } from './call.ts';
 import { installationTokenFor } from './credential.ts';
 import { githubTokenOf, MINT_NEEDS_THE_APP } from './token.ts';
+import { isGitTool } from './git-call.ts';
+import { executeGit } from './git-remote.ts';
 import { dispatchGithubTool, type OctokitLike } from './octokit-dispatch.ts';
 import {
   assertAppPermissions,
@@ -76,6 +78,7 @@ export function executeGithub(
   tool: string,
   args: Readonly<Record<string, unknown>>,
 ): Promise<McpToolResult> {
+  if (isGitTool(tool)) return declining(() => executeGit(ctx, tool, args));
   return declining(() => executeRead(ctx, tool, args));
 }
 

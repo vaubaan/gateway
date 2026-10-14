@@ -222,9 +222,19 @@ export interface ClientOrigin {
   readonly user_agent: string | null;
 }
 
+/**
+ * The door a call came through : the MCP execution endpoint, or the git
+ * remote (spec §4.1 bis). A tool belongs to exactly one of them ; the
+ * resource stage refuses a tool presented at the other door.
+ */
+export const CALL_CHANNELS = ['mcp', 'git'] as const;
+export type CallChannel = (typeof CALL_CHANNELS)[number];
+
 export interface CallRequest {
   readonly tool: string;
   readonly args: Record<string, unknown>;
+  /** The door the call came through ; absent means `mcp`. */
+  readonly channel?: CallChannel;
   /** Optional free-form attribution (spec §0 "Mission token"). */
   readonly agent_label: string | null;
   readonly client: ClientOrigin;
@@ -592,6 +602,43 @@ export class CallPipeline {
     if (isOutcome(decided)) return decided;
 
     return this.forward(ctx, call, targeted.target, decided);
+  }
+
+  /**
+   * Would the call pass the mission, resource and risk checks? Runs those
+   * stages without the budget, without executing and without writing
+   * anything : the git door asks it before it stores a pack at the provider,
+   * so that a push the mission can never make is refused before any byte
+   * leaves. A `false` answer is not a refusal : the door then runs `execute`
+   * on the same call, which refuses it and writes the audit entry. A stage
+   * that throws answers `false` for the same reason.
+   */
+  async precheck(ctx: MissionContext, call: CallRequest): Promise<boolean> {
+    const now = this.now();
+    if (unfaithfulArgument(call.args)) return false;
+    if (checkMissionActive(ctx, now)) return false;
+    try {
+      const resolved = await this.deps.resources.resolve(ctx, call);
+      if (!resolved.ok) return false;
+      if (checkConnectionAvailable(resolved.target.connection)) return false;
+      const verdict = await this.deps.risks.evaluate(ctx, call, resolved.target);
+      return verdict.kind === 'allow';
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * A call the door refuses on grounds no stage decides — a git push larger
+   * than the configured cap, one the provider cannot review, a request that
+   * breaks the protocol. `reason` is built by the host (it names limits and
+   * refs, never an argument value the caller sent) ; it goes to the caller
+   * and is stored as it is. One audit entry, `refused` with no code, like a
+   * structural rejection ; the mission is not consulted and nothing is
+   * counted.
+   */
+  async reject(ctx: MissionContext, call: CallRequest, reason: string): Promise<CallOutcome> {
+    return this.rejected(this.baseEntry(ctx, call, this.now()), reason, HOST_BUILT);
   }
 
   /** Resource resolution, then connection availability. */

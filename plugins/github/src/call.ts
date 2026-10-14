@@ -138,6 +138,11 @@ export function revision(value: unknown): string | null {
   return wellFormed ? value : null;
 }
 
+/** GitHub recognizes workflow files at `.github/workflows/*.yml` and `.yaml`. */
+export function isWorkflowPath(path: string): boolean {
+  return /^\.github\/workflows\/[^/]+\.(yml|yaml)$/i.test(path);
+}
+
 /** A name git accepts for a ref : a revision without revision operators. */
 function refName(value: unknown): string | null {
   const name = revision(value);

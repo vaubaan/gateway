@@ -82,6 +82,12 @@ export class PluginRegistry {
       // prefix rule (checked per plugin) is a bijection on ids.
       for (const tool of plugin.tools) byToolName.set(tool.name, registered);
     }
+    const gitRemotes = [...byId.values()].filter((r) => r.plugin.gitRemote !== undefined);
+    if (gitRemotes.length > 1) {
+      issues.push(
+        `only one plugin may declare a git remote (the /git/ path is shared): ${gitRemotes.map((r) => r.plugin.id).join(', ')}`,
+      );
+    }
     if (issues.length > 0) throw new PluginRegistryError(issues);
     this.byId = byId;
     this.byToolName = byToolName;
@@ -127,6 +133,15 @@ export class PluginRegistry {
     const split = splitToolName(toolName);
     if (!split) return null;
     return this.byId.get(split.providerId) ?? null;
+  }
+
+  /**
+   * The plugin whose provider the instance is the git remote of
+   * (`ProviderPlugin.gitRemote`), or `null` when no registered plugin
+   * declares one. At most one does (checked at construction).
+   */
+  gitRemote(): RegisteredPlugin | null {
+    return this.all().find((r) => r.plugin.gitRemote !== undefined) ?? null;
   }
 
   /** The indexed catalog of a provider. */
