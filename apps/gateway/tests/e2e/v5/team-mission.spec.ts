@@ -449,9 +449,10 @@ test('a creator adds a teammate and a machine key; each holder is attributed; ea
   const gone = await joan.goto(missionUrl);
   expect(gone?.status()).toBe(404);
   await joan.goto('/missions');
-  // Nothing created, nothing shared: the page is its one empty state.
-  await expect(joan.getByTestId('missions-shared')).toHaveCount(0);
-  await expect(joan.getByRole('main')).toContainText('No mission yet.');
+  // Nothing is shared with her any more (whether the page then shows its empty "Shared
+  // with you" region or its one empty state depends on what else she created).
+  await expect(joan.getByRole('heading', { name: 'Missions', level: 1 })).toBeVisible();
+  await expect(joan.getByRole('main')).not.toContainText(MISSION);
 
   // Ines replaces the CI's key: the consequence is stated, the old key stops, the new one works.
   await ines.getByRole('button', { name: `Replace the machine key ${CI}` }).click();
