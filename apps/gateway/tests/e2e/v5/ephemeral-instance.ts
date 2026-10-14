@@ -50,6 +50,7 @@ import { fileURLToPath } from 'node:url';
 
 import { GITHUB_APP_PERMISSIONS, githubCredential } from '@vaubaan/plugin-github';
 import { defaultPermissionChoice, type AppManifestRegistration } from '@vaubaan/plugin-sdk';
+import { RAILWAY_GRAPHQL_URL } from '@vaubaan/plugin-railway';
 import { SUPABASE_API_BASE } from '@vaubaan/plugin-supabase';
 import { mockFetch, type MockFetch } from '@vaubaan/plugin-sdk/testing';
 
@@ -185,6 +186,50 @@ const CREATED_APP = {
 /** The one project the mocked Supabase lists. */
 const MOCK_SUPABASE_PROJECT = 'abcdefghijklmnopqrst';
 
+/** The one project, and its workspace, the mocked Railway shows a workspace token. */
+const MOCK_RAILWAY = {
+  workspace: 'vaubaan',
+  project: { id: '00000000-0000-4000-8000-00000000e2e1', name: 'gateway' },
+  environment: { id: '00000000-0000-4000-8000-00000000e2e2', name: 'production' },
+} as const;
+
+/**
+ * Railway's GraphQL API as a workspace token sees it, per operation name: no
+ * `me` (no user behind the token), the projects of its one workspace.
+ */
+function railwayAnswerFor(query: string): unknown {
+  const operation = /query (\w+)/.exec(query)?.[1];
+  const notAuthorized = { data: null, errors: [{ message: 'Not Authorized' }] };
+  const { project, environment } = MOCK_RAILWAY;
+  switch (operation) {
+    case 'vaubaanTokenReach':
+      return { data: { projects: { edges: [{ node: { id: project.id, name: project.name } }] } } };
+    case 'vaubaanTokenWorkspace':
+      return {
+        data: { projects: { edges: [{ node: { workspace: { name: MOCK_RAILWAY.workspace } } }] } },
+      };
+    case 'vaubaanProjects':
+      return {
+        data: {
+          projects: {
+            edges: [
+              {
+                node: {
+                  ...project,
+                  environments: { edges: [{ node: environment }] },
+                  services: { edges: [] },
+                },
+              },
+            ],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          },
+        },
+      };
+    default:
+      return notAuthorized;
+  }
+}
+
 const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
@@ -266,6 +311,13 @@ function mockedGithub(): MockFetch {
           content: Buffer.from('# mocked file\n').toString('base64'),
         };
       },
+    },
+    // Railway, for the account connected with a pasted workspace token (no
+    // Railway app is registered here): the token's check and discovery.
+    {
+      method: 'POST',
+      url: RAILWAY_GRAPHQL_URL,
+      respond: (call) => railwayAnswerFor((call.json as { query?: string }).query ?? ''),
     },
     // Supabase, for the account connected with a pasted personal access token
     // (no Supabase app is registered here): the token's check and discovery.

@@ -11,6 +11,9 @@
  *   - GitHub has its company app: the app is the way offered, and "Use a
  *     token instead" is one click away; a classic token is refused by its
  *     shape before GitHub is asked.
+ *   - Railway has no company app: a workspace token is the way offered, the
+ *     account token second; the token pasted is checked at the mocked
+ *     Railway and the account page names its workspace.
  *
  * `E2E_V5_PK_SHOTS` names a folder: the connect pages are captured there at
  * 1440×900 and 390 px wide, light and dark (design review).
@@ -18,6 +21,7 @@
 import { randomBytes } from 'node:crypto';
 
 import { expect, test, type Page } from '@playwright/test';
+import { RAILWAY_GRAPHQL_URL } from '@vaubaan/plugin-railway';
 
 import { routeToInstance, signInAs, upstreamLog } from './browser';
 import { E2E_USER } from './instance';
@@ -137,4 +141,38 @@ test('GitHub with its company app: the app first, a token one click away, a clas
     'true',
   );
   expect(await page.content()).not.toContain(classic);
+});
+
+test('Railway without a company app: a workspace token, checked, named by its workspace', async ({
+  page,
+  request,
+}) => {
+  await signIn(page);
+  await page.goto('/accounts/new');
+  const card = page.getByTestId('service-railway');
+  await expect(card).toContainText('paste: workspace token');
+  await card.click();
+
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Connect a Railway account$/);
+  const guide = page.getByTestId('token-guide');
+  await expect(guide).toContainText('a workspace token reaches that workspace only');
+  await expect(guide).toContainText('An account token, created with No workspace selected');
+  await expect(guide).toContainText('A project token is not accepted');
+  // Every tool runs with a token: nothing is listed as needing the app.
+  await expect(page.getByTestId('token-unavailable')).toHaveCount(0);
+  await captureAll(page, 'connect-railway-token');
+
+  const token = randomBytes(16).toString('hex');
+  await page.getByLabel(/Workspace token/).fill(token);
+  await page.getByRole('button', { name: 'Check and connect' }).click();
+
+  await expect(page).toHaveURL(/\/accounts\/[^/]+$/);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Railway$/);
+  await page.getByRole('button', { name: 'Show details' }).click();
+  await expect(page.getByTestId('account-facts')).toContainText('acts as the vaubaan workspace');
+  expect(await page.content()).not.toContain(token);
+  await expect(page.getByText('gateway', { exact: true })).toBeVisible();
+
+  const log = await upstreamLog(request);
+  expect(log.calls.some((c) => c.url === RAILWAY_GRAPHQL_URL)).toBe(true);
 });
