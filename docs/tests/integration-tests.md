@@ -215,6 +215,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/execution/streaming.test.ts`                                               |        13 |
 | `apps/gateway/tests/integration/execution/team-door.test.ts`                                               |        11 |
 | `apps/gateway/tests/integration/git/git-remote-limits.test.ts`                                             |        10 |
+| `apps/gateway/tests/integration/git/git-remote-review.test.ts`                                             |        13 |
 | `apps/gateway/tests/integration/git/git-remote-security.test.ts`                                           |        37 |
 | `apps/gateway/tests/integration/git/git-remote.test.ts`                                                    |        14 |
 | `apps/gateway/tests/integration/management/hard-deny.test.ts`                                              |         6 |
@@ -273,6 +274,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/server/budget/mission-state.test.ts`                                              |         7 |
 | `apps/gateway/tests/unit/server/budget/period.test.ts`                                                     |         8 |
 | `apps/gateway/tests/unit/server/connections/provider-app-handler.test.ts`                                  |         4 |
+| `apps/gateway/tests/unit/server/git/command-list.test.ts`                                                  |         3 |
 | `apps/gateway/tests/unit/server/rate-limit/sliding-window.test.ts`                                         |         8 |
 | `apps/gateway/tests/unit/server/store/db.test.ts`                                                          |         2 |
 | `apps/gateway/tests/unit/server/store/ids.test.ts`                                                         |         6 |
@@ -283,7 +285,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/structural/example-config-providers.test.ts`                                      |        10 |
 | `apps/gateway/tests/unit/structural/index.test.ts`                                                         |       100 |
 | `apps/gateway/tests/unit/structural/no-arguments-in-logs.test.ts`                                          |         3 |
-| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`                                           |       453 |
+| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`                                           |       461 |
 | `apps/gateway/tests/unit/structural/persisted-enumerations.test.ts`                                        |        10 |
 | `apps/gateway/tests/unit/structural/plugin-identifier-tests.test.ts`                                       |        25 |
 | `apps/gateway/tests/unit/structural/shipped-presets.test.ts`                                               |        41 |
@@ -305,7 +307,7 @@ this table says where each requirement lives, and what is not written yet.
 | `packages/plugin-sdk/tests/unit/catalog-path.test.ts`                                                      |         4 |
 | `packages/plugin-sdk/tests/unit/define-plugin.test.ts`                                                     |        33 |
 | `packages/plugin-sdk/tests/unit/env-of.test.ts`                                                            |         8 |
-| `packages/plugin-sdk/tests/unit/git-wire.test.ts`                                                          |        20 |
+| `packages/plugin-sdk/tests/unit/git-wire.test.ts`                                                          |        32 |
 | `packages/plugin-sdk/tests/unit/identifiers-kit.test.ts`                                                   |         9 |
 | `packages/plugin-sdk/tests/unit/registry.test.ts`                                                          |        11 |
 | `packages/plugin-sdk/tests/unit/slices.test.ts`                                                            |        21 |
@@ -336,6 +338,7 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/github/tests/unit/classify.test.ts`                                                               |        69 |
 | `plugins/github/tests/unit/data-model.test.ts`                                                             |         1 |
 | `plugins/github/tests/unit/execute.test.ts`                                                                |        25 |
+| `plugins/github/tests/unit/git-moves.test.ts`                                                              |         6 |
 | `plugins/github/tests/unit/injection.test.ts`                                                              |       415 |
 | `plugins/github/tests/unit/plugin.test.ts`                                                                 |        17 |
 | `plugins/github/tests/unit/risk-catalog.test.ts`                                                           |        71 |
@@ -401,7 +404,7 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/vercel/tests/unit/team-pin.test.ts`                                                               |        99 |
 | `scripts/audit-gate.test.mjs`                                                                              |        29 |
 | `scripts/release-lib.test.mjs`                                                                             |        50 |
-| **TOTAL** (`npx vitest run --reporter=json`, 2026-10-14, with a build; 311 files; 10368 passed, 1 skipped) | **10369** |
+| **TOTAL** (`npx vitest run --reporter=json`, 2026-10-14, with a build; 314 files; 10410 passed, 1 skipped) | **10411** |
 
 The table is generated from the JSON report of one run of the whole suite
 (`npx vitest run --reporter=json`). A count is the number of tests the file

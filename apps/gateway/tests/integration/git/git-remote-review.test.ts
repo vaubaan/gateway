@@ -305,7 +305,7 @@ describe('F8 — a v2 request head names exactly one command', () => {
       ...args.map((a) => pktLine(`${a}\n`)),
       flushPkt(),
     ]);
-  const post = (body: Uint8Array) =>
+  const post = (body: Uint8Array<ArrayBuffer>) =>
     fetch(`${rig.remote()}/git-upload-pack`, {
       method: 'POST',
       headers: {
