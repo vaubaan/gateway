@@ -23,3 +23,17 @@ export {
   type ProviderAppSource,
   type ProviderAppStatus,
 } from './service';
+export { registrationKey, type AppRegistrationRecord } from './service';
+export {
+  AppRegistrationError,
+  AppRegistrationService,
+  REGISTRATION_ERROR_CODES,
+  REGISTRATION_TTL_MS,
+  registrationMessage,
+  registrationReturnPath,
+  type AppRegistrationDeps,
+  type PendingRegistrationView,
+  type RegistrationActor,
+  type RegistrationChoice,
+  type RegistrationErrorCode,
+} from './registration';

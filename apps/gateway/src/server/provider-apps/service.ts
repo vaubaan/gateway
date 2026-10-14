@@ -231,6 +231,66 @@ export class ProviderAppsService {
     providerId: string,
     input: Readonly<Record<string, string>>,
   ): Promise<ProviderAppStatus> {
+    // One transaction: never the client id of one app with the secret of another.
+    await this.config.apply(await this.fieldWrites(providerId, input));
+    return this.status(providerId);
+  }
+
+  /**
+   * Saves an app the provider created from the Administration page, every
+   * field at once, with what the page shows of it afterwards — in one
+   * transaction. Refused, like `save`, when the mounted configuration sets
+   * the provider; and when any field is already stored: replacing an app is
+   * the form's job, with its confirmation.
+   */
+  async saveRegistered(
+    providerId: string,
+    appConfig: Readonly<Record<string, string>>,
+    registration: Omit<AppRegistrationRecord, 'values'>,
+  ): Promise<ProviderAppStatus> {
+    const before = await this.status(providerId);
+    if (before.source !== 'none') {
+      throw new ProviderAppError([
+        `${before.displayName} already has a company app; replace it from its form`,
+      ]);
+    }
+    const writes = await this.fieldWrites(providerId, appConfig);
+    const record: AppRegistrationRecord = {
+      ...registration,
+      values: nonSecretValues(before.fields, appConfig),
+    };
+    writes.push({
+      kind: 'value',
+      key: registrationKey(providerId),
+      value: JSON.stringify(record),
+    });
+    await this.config.apply(writes);
+    return this.status(providerId);
+  }
+
+  /**
+   * What the page shows of an app created from it — `null` when none was,
+   * or when its fields were changed by hand since (the record would describe
+   * another app).
+   */
+  async registration(providerId: string): Promise<AppRegistrationRecord | null> {
+    if (this.isReadOnly(providerId)) return null;
+    const raw = await this.config.get(registrationKey(providerId));
+    if (!raw) return null;
+    const record = parseRegistration(raw);
+    if (!record) return null;
+    const current = await this.status(providerId);
+    const same = Object.entries(record.values).every(
+      ([name, value]) => current.values[name] === value,
+    );
+    return same && current.configured ? record : null;
+  }
+
+  /** The writes of one save: validated, a blank secret keeping the stored one. */
+  private async fieldWrites(
+    providerId: string,
+    input: Readonly<Record<string, string>>,
+  ): Promise<ConfigWrite[]> {
     const { plugin } = this.registry.require(providerId);
     const fields = appConfigFieldsOf(plugin.credential);
     if (fields.length === 0) {
@@ -268,10 +328,7 @@ export class ProviderAppsService {
       );
     }
     if (problems.length > 0) throw new ProviderAppError(problems);
-
-    // One transaction: never the client id of one app with the secret of another.
-    await this.config.apply(writes);
-    return this.status(providerId);
+    return writes;
   }
 
   /**
@@ -307,6 +364,69 @@ export class ProviderAppsService {
     const key = providerAppKey(providerId, field.name);
     return field.secret ? this.config.getSecret(key) : this.config.get(key);
   }
+}
+
+/**
+ * An app created from the Administration page, as the provider described it:
+ * what the page shows afterwards. Never a secret. `values` are the non-secret
+ * fields as they were stored, to tell when the form replaced the app since.
+ */
+export interface AppRegistrationRecord {
+  readonly name: string;
+  readonly slug: string;
+  readonly ownerLogin: string;
+  readonly ownerKind: 'organization' | 'personal';
+  readonly htmlUrl: string;
+  /** What the provider answered the app holds, permission → access. */
+  readonly permissions: Readonly<Record<string, string>>;
+  /** Audit actor id of the administrator who created it. */
+  readonly createdBy: string;
+  readonly createdAt: string;
+  readonly values: Readonly<Record<string, string>>;
+}
+
+const REGISTRATION_FIELD = 'registered';
+
+/** Under the provider's prefix, so that `clear` removes it with the fields. */
+export function registrationKey(providerId: string): string {
+  return providerAppKey(providerId, REGISTRATION_FIELD);
+}
+
+function nonSecretValues(
+  fields: readonly CredentialField[],
+  values: Readonly<Record<string, string>>,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const field of fields) {
+    const value = values[field.name];
+    if (!field.secret && value) out[field.name] = value.trim();
+  }
+  return out;
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.values(value).every((v) => typeof v === 'string')
+  );
+}
+
+function parseRegistration(raw: string): AppRegistrationRecord | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== 'object' || parsed === null) return null;
+  const r = parsed as Record<string, unknown>;
+  const strings = ['name', 'slug', 'ownerLogin', 'htmlUrl', 'createdBy', 'createdAt'] as const;
+  if (!strings.every((key) => typeof r[key] === 'string')) return null;
+  if (r.ownerKind !== 'organization' && r.ownerKind !== 'personal') return null;
+  if (!isStringRecord(r.permissions) || !isStringRecord(r.values)) return null;
+  return r as unknown as AppRegistrationRecord;
 }
 
 function missingFields(

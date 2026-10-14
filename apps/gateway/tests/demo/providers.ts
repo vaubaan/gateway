@@ -30,7 +30,8 @@
 import { generateKeyPairSync, randomBytes } from 'node:crypto';
 
 import { CLOUDFLARE_API_BASE } from '@vaubaan/plugin-cloudflare-dns';
-import { githubCredential } from '@vaubaan/plugin-github';
+import { GITHUB_APP_PERMISSIONS, githubCredential } from '@vaubaan/plugin-github';
+import { defaultPermissionChoice } from '@vaubaan/plugin-sdk';
 import { RESEND_API_BASE } from '@vaubaan/plugin-resend';
 import { mockFetch, type MockRoute, type RecordedCall } from '@vaubaan/plugin-sdk/testing';
 import { STRIPE_API_BASE } from '@vaubaan/plugin-stripe';
@@ -196,7 +197,8 @@ function githubRoutes(installationTokens: ReadonlyMap<string, DemoInstallation>)
         respond: () => ({
           token: tokenOf(installation),
           expires_at: new Date(Date.now() + 3_600_000).toISOString(),
-          permissions: { contents: 'write', metadata: 'read', pull_requests: 'write' },
+          // The demo's App holds what the tools need (its default permissions).
+          permissions: defaultPermissionChoice(GITHUB_APP_PERMISSIONS),
           repositories: installation.repositories.map((fullName, index) => ({
             id: index + 1,
             name: fullName.split('/')[1],

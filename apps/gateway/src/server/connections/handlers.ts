@@ -12,6 +12,9 @@
  *   POST /connections/<id>/resources/<resourceId>    owner edits on a resource
  *   POST /admin/provider-apps/<provider>             save / clear the company app, accept or
  *                                                    refuse unverified installations (operator)
+ *   POST /admin/provider-apps/<provider>/create      start creating the company app from the
+ *                                                    provider's manifest flow (operator)
+ *   GET  /admin/provider-apps/<provider>/created     the provider's redirect back (operator)
  *
  * Every mutation requires a web session and passes the origin check (spec
  * §6). The callback is a top-level GET from the provider: it carries no
@@ -39,6 +42,8 @@ import { notAFormResponse, readForm } from '../auth/handlers';
 import { resolveReturnTo } from '../http/return-to';
 import type { Logger } from '../logging';
 import {
+  AppRegistrationError,
+  type AppRegistrationService,
   ProviderAppError,
   type ProviderAppsService,
   type ProviderAppStatus,
@@ -58,6 +63,19 @@ import {
 
 export const NEW_CONNECTION_PATH = `${CONNECTIONS_PATH}/new`;
 export const PROVIDER_APPS_PAGE = '/admin/provider-apps';
+/** Form inputs carrying the access chosen for one app permission are named `permission.<name>`. */
+export const APP_PERMISSION_PREFIX = 'permission.';
+
+/** The page that posts the manifest to the provider, for the flow `state` names. */
+export function appRegistrationConfirmPath(providerId: string, state: string): string {
+  return `${PROVIDER_APPS_PAGE}/${encodeURIComponent(providerId)}/confirm?state=${encodeURIComponent(state)}`;
+}
+
+/** The Company apps page with the line of one service open. */
+export function providerAppPath(providerId: string): string {
+  const id = encodeURIComponent(providerId);
+  return `${PROVIDER_APPS_PAGE}?app=${id}#${id}`;
+}
 /** Administration → Connections: the connections that have no owner left. */
 export const OWNERLESS_CONNECTIONS_PAGE = '/admin/connections';
 export const NOTICE_PARAM = 'notice';
@@ -84,6 +102,8 @@ export interface ConnectionHandlerDeps {
   /** Tells a provider this instance does not know from a failure of its app settings. */
   readonly registry: Pick<PluginRegistry, 'has'>;
   readonly providerApps: ProviderAppsService;
+  /** Creating a company app from the provider's manifest flow. */
+  readonly registration: AppRegistrationService;
   readonly notices: NoticeStore;
   readonly audit: AuditWriter;
   readonly logger: Logger;
@@ -99,6 +119,8 @@ export interface ConnectionHandlers {
   reassign(request: Request, connectionId: string): Promise<Response>;
   updateResource(request: Request, connectionId: string, resourceId: string): Promise<Response>;
   saveProviderApp(request: Request, providerId: string): Promise<Response>;
+  startAppRegistration(request: Request, providerId: string): Promise<Response>;
+  completeAppRegistration(request: Request, providerId: string): Promise<Response>;
 }
 
 export function createConnectionHandlers(deps: ConnectionHandlerDeps): ConnectionHandlers {
@@ -493,6 +515,79 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
           });
         }
         throw err;
+      }
+    },
+
+    async startAppRegistration(request, providerId) {
+      const guard = await guardMutation(request, deps, 'operator');
+      if (!guard.ok) return refusalResponse(guard, OPERATOR_REFUSALS);
+      const form = await readForm(request);
+      if (!form) return notAFormResponse();
+      if (!deps.registry.has(providerId)) {
+        return redirectWithNotice(guard.principal, PROVIDER_APPS_PAGE, {
+          tone: 'danger',
+          title: 'Not created',
+          lines: [CONNECT_ERROR_MESSAGES['provider-unknown']],
+        });
+      }
+      try {
+        const { state } = await deps.registration.start(
+          { sessionId: guard.principal.sessionId, actorId: auditActorId(guard.principal) },
+          providerId,
+          {
+            ownerKind: stringField(form, 'owner_kind'),
+            ownerLogin: stringField(form, 'owner_login'),
+            name: stringField(form, 'name'),
+            permissions: prefixedFields(form, APP_PERMISSION_PREFIX),
+          },
+        );
+        return redirect(appRegistrationConfirmPath(providerId, state));
+      } catch (err) {
+        if (!(err instanceof AppRegistrationError)) throw err;
+        return redirectWithNotice(guard.principal, providerAppPath(providerId), {
+          tone: 'danger',
+          title: 'The app was not created',
+          lines: err.problems,
+        });
+      }
+    },
+
+    async completeAppRegistration(request, providerId) {
+      // A top-level GET from the provider: no `Origin`. Its protection is the
+      // single-use state bound to the administrator's session.
+      const guard = await guardSession(request, deps, 'operator');
+      if (!guard.ok) {
+        return redirect(guard.reason === 'no-session' ? LOGIN_PAGE : PROVIDER_APPS_PAGE);
+      }
+      const back = providerAppPath(providerId);
+      try {
+        const app = await deps.registration.complete(
+          guard.principal.sessionId,
+          providerId,
+          new URL(request.url).searchParams,
+        );
+        return await redirectWithNotice(guard.principal, back, {
+          tone: 'success',
+          title: `${app.name} is created`,
+          lines: [
+            `It belongs to ${app.ownerLogin} at the service; its key and secret are stored encrypted in this gateway and are never shown.`,
+            'Next: install it on your repositories.',
+          ],
+        });
+      } catch (err) {
+        if (!(err instanceof AppRegistrationError)) {
+          logger.error('company app: unexpected failure', { detail: errorMessage(err) });
+          return redirectWithNotice(guard.principal, back, {
+            tone: 'danger',
+            title: 'The app was not created',
+            lines: ['An unexpected error occurred. The log of the gateway has the detail.'],
+          });
+        }
+        return redirectWithNotice(guard.principal, back, {
+          tone: 'danger',
+          title: 'The app was not created',
+          lines: err.problems,
+        });
       }
     },
   };

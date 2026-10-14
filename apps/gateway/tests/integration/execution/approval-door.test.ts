@@ -11,7 +11,8 @@
  */
 import { generateKeyPairSync } from 'node:crypto';
 
-import { githubPlugin } from '@vaubaan/plugin-github';
+import { GITHUB_APP_PERMISSIONS, githubPlugin } from '@vaubaan/plugin-github';
+import { defaultPermissionChoice } from '@vaubaan/plugin-sdk';
 import { mockFetch, type MockFetch } from '@vaubaan/plugin-sdk/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -61,7 +62,8 @@ async function openRig(): Promise<Rig> {
       body: {
         token: 'ghs_installation_token_never_returned',
         expires_at: new Date(Date.now() + 3_600_000).toISOString(),
-        permissions: { contents: 'write' },
+        // An App created with the default permissions (what the tools need).
+        permissions: defaultPermissionChoice(GITHUB_APP_PERMISSIONS),
       },
     },
     {

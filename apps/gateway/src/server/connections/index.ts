@@ -12,7 +12,7 @@ import type { MissionGrounds } from '../authority';
 import type { RateLimiter, SessionStore } from '../compose/ports';
 import type { InstanceConfig } from '../config/types';
 import type { Logger } from '../logging';
-import type { ProviderAppsService } from '../provider-apps';
+import { AppRegistrationService, type ProviderAppsService } from '../provider-apps';
 import type { Store } from '../store';
 import { systemClock, type Clock } from '../store/clock';
 import { CredentialBroker } from './credentials';
@@ -41,6 +41,8 @@ export interface ConnectionsModule {
   /** Decrypted credentials and their refresh — the hook the execution door calls. */
   readonly credentials: CredentialBroker;
   readonly notices: NoticeStore;
+  /** Creating a company app from the provider's manifest flow (Administration → Company apps). */
+  readonly registration: AppRegistrationService;
   readonly handlers: ConnectionHandlers;
 }
 
@@ -71,18 +73,30 @@ export function createConnectionsModule(deps: ConnectionsModuleDeps): Connection
     logger,
   });
   const notices = new NoticeStore(deps.sessions);
+  const registration = new AppRegistrationService({
+    registry: deps.registry,
+    providerApps: deps.providerApps,
+    sessions: deps.sessions,
+    publicUrl: deps.config.publicUrl,
+    callbackUrl: (providerId) => service.callbackUrl(providerId),
+    audit: deps.store.auditWriter,
+    fetch: outbound,
+    clock,
+    logger,
+  });
   const handlers = createConnectionHandlers({
     publicUrl: deps.config.publicUrl,
     authenticator: deps.authenticator,
     connections: service,
     registry: deps.registry,
     providerApps: deps.providerApps,
+    registration,
     notices,
     audit: deps.store.auditWriter,
     logger,
     clock,
   });
-  return { service, credentials, notices, handlers };
+  return { service, credentials, notices, registration, handlers };
 }
 
 export {
@@ -103,6 +117,8 @@ export {
 } from './errors';
 export {
   ACCEPT_UNVERIFIED_ACTION,
+  APP_PERMISSION_PREFIX,
+  appRegistrationConfirmPath,
   actorOf,
   connectionPath,
   FIELD_PREFIX,
@@ -111,6 +127,7 @@ export {
   NOTICE_PARAM,
   OWNERLESS_CONNECTIONS_PAGE,
   PROVIDER_APPS_PAGE,
+  providerAppPath,
   REFUSE_UNVERIFIED_ACTION,
   type ConnectionHandlers,
 } from './handlers';
