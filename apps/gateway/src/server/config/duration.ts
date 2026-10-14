@@ -11,5 +11,8 @@ export function parseDuration(value: string): number | null {
   const amount = Number(match[1]);
   const unit = UNIT_SECONDS[match[2] ?? ''];
   if (!Number.isSafeInteger(amount) || amount <= 0 || unit === undefined) return null;
-  return amount * unit;
+  // `300000000000d` is digits and a unit, but not a number of seconds this
+  // process can count exactly (found by the property tests of the loader).
+  const seconds = amount * unit;
+  return Number.isSafeInteger(seconds) ? seconds : null;
 }

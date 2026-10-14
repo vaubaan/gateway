@@ -397,7 +397,8 @@ How to read it:
   the format of an entry.
 - **Types**: a `duration` is a whole number greater than 0 followed by one
   unit, `s`, `m`, `h` or `d` (`30s`, `10m`, `24h`, `7d`), with no upper bound
-  unless one is written; a `list` is a YAML sequence, or comma-separated in
+  unless one is written — but a number of seconds past 2^53 (`300000000000d`)
+  is not a duration; a `list` is a YAML sequence, or comma-separated in
   the variable; a `secret` also accepts the `_FILE` variable shown, which
   names a file holding the value; a `secret map` is a YAML mapping.
 - **Consumed by**: the module that reads the value from `InstanceConfig`,
@@ -405,7 +406,10 @@ How to read it:
 
 Not in the tree: `VAUBAAN_CONFIG_FILE` (path of the YAML; unset means
 environment only; set but unreadable, not valid YAML or not a mapping is an
-error), and the listener variables `PORT` / `HOSTNAME` read by Next's
+error, and so is a key named `__proto__` or a YAML alias used inside its own
+anchor, `a: &x [*x]` — each named as an issue of its key, never a crash at
+boot; `apps/gateway/src/server/config/load.property.test.ts` feeds the
+loader generated files and environments to hold that), and the listener variables `PORT` / `HOSTNAME` read by Next's
 standalone `server.js`.
 
 In an environment variable a boolean accepts `true`/`false`, `1`/`0`,
