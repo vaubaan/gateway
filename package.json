@@ -16,8 +16,8 @@
   ],
   "scripts": {
     "type-check": "npm run --workspaces --if-present type-check",
-    "lint": "eslint . --max-warnings=0",
-    "lint:fix": "eslint . --fix",
+    "lint": "node --max-old-space-size=6144 node_modules/eslint/bin/eslint.js . --max-warnings=0",
+    "lint:fix": "node --max-old-space-size=6144 node_modules/eslint/bin/eslint.js . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "build": "npm run --workspaces --if-present build",
@@ -41,6 +41,7 @@
     "@vaubaan/harness": "^1.4.0",
     "eslint": "9.39.4",
     "eslint-config-prettier": "10.1.8",
+    "fast-check": "4.10.2",
     "globals": "17.6.0",
     "husky": "^9.1.7",
     "lint-staged": "17.6.0",

@@ -4,17 +4,16 @@
 # ADR: docs/decisions/docker-image-and-config-format.md
 # Handbook: docs/handbook/configuration.md, deploy/README.md
 
-# Pinned by version and by digest (multi-architecture index). One argument on
-# purpose: when a digest is present the registry ignores the tag, so a
-# separate version argument could be overridden without any effect. Bump the
-# tag and the digest together (deploy/README.md, "What the image contains").
-ARG NODE_IMAGE=node:22.23.3-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
-
 # ---------------------------------------------------------------------------
 # base: debian-slim so the prebuilt native addons (argon2, better-sqlite3,
 # ssh2's optional cpu-features) load against glibc without a compiler.
+# Pinned by version and by digest (multi-architecture index); every other stage
+# starts from this one. Written on the FROM line itself, not through an ARG,
+# so that Dependabot proposes the bumps (it does not read ARG values). When a
+# digest is present the registry ignores the tag: bump both together
+# (deploy/README.md, "What the image contains").
 # ---------------------------------------------------------------------------
-FROM ${NODE_IMAGE} AS base
+FROM node:22.23.3-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS base
 ENV NEXT_TELEMETRY_DISABLED=1 \
     NPM_CONFIG_UPDATE_NOTIFIER=false
 WORKDIR /app
@@ -39,7 +38,6 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends python3 make g++ ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=manifests /manifests ./
-# The optional private dependency is skipped when NPM_READ_TOKEN is unset.
 RUN npm ci --no-audit --no-fund
 
 # ---------------------------------------------------------------------------
@@ -61,7 +59,13 @@ FROM base AS runner
 ENV NODE_ENV=production \
     PORT=3000 \
     HOSTNAME=0.0.0.0
-RUN groupadd --system --gid 10001 vaubaan \
+# The running gateway needs node and nothing else: the package managers of the
+# base image (npm, npx, corepack, yarn) are removed. They are never run in the
+# container, and they carried most of what the image scan reported
+# (scripts/image-scan.sh): a vulnerable dependency of npm is not shipped.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-v* \
+      /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg \
+ && groupadd --system --gid 10001 vaubaan \
  && useradd --system --uid 10001 --gid vaubaan --home-dir /app --shell /usr/sbin/nologin vaubaan \
  && mkdir -p /data /config \
  && chown vaubaan:vaubaan /data

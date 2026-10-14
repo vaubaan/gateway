@@ -21,3 +21,4 @@ export * from './refusal.ts';
 export * from './domain.ts';
 export * from './session-events.ts';
 export * from './data-model.ts';
+export * from './wildcard.ts';

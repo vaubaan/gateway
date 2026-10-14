@@ -67,6 +67,7 @@ export function parseAddress(value: unknown): EmailAddress | null {
   const trimmed = value.trim();
   const angle = ANGLE_FORM.exec(trimmed);
   const bare = (angle ? angle[1]! : trimmed).trim();
+  // nosemgrep: detect-redos -- linear: labels are joined by a literal separator the label class excludes (measured: 20 000 chars in < 1 ms)
   if (!ADDRESS.test(bare)) return null;
   const address = bare.toLowerCase();
   return { address, domain: address.slice(address.lastIndexOf('@') + 1) };

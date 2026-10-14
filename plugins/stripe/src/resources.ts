@@ -127,6 +127,7 @@ export function modeOf(resource: Resource): StripeMode | null {
 
 /** Does a pasted key belong to the mode its field claims ? (`sk_live_…`, `rk_test_…`) */
 export function keyMatchesMode(key: string, mode: StripeMode): boolean {
+  // nosemgrep: detect-non-literal-regexp -- mode is the closed union `test | live`
   return new RegExp(`^(sk|rk)_${mode}_[A-Za-z0-9]+$`).test(key);
 }
 

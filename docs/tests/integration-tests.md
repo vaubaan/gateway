@@ -7,6 +7,7 @@ tracks:
   - vitest.config.ts
   - scripts/release-lib.test.mjs
   - scripts/audit-gate.test.mjs
+  - scripts/lockfile-gate.test.mjs
   - packages/policy-engine/tests/
   - packages/plugin-sdk/tests/
   - plugins/_template/tests/
@@ -115,6 +116,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/compose/compose.test.ts`                                                          |        17 |
 | `apps/gateway/src/server/config/duration.test.ts`                                                          |         2 |
 | `apps/gateway/src/server/config/keys-doc.test.ts`                                                          |        39 |
+| `apps/gateway/src/server/config/load.property.test.ts`                                                     |         6 |
 | `apps/gateway/src/server/config/load.test.ts`                                                              |        54 |
 | `apps/gateway/src/server/config/sign-in.test.ts`                                                           |        15 |
 | `apps/gateway/src/server/connections/codec-and-keypair.test.ts`                                            |        12 |
@@ -133,6 +135,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/groups/service.test.ts`                                                           |        15 |
 | `apps/gateway/src/server/http/client-ip.test.ts`                                                           |        11 |
 | `apps/gateway/src/server/http/document.test.ts`                                                            |         6 |
+| `apps/gateway/src/server/http/doors.property.test.ts`                                                      |         7 |
 | `apps/gateway/src/server/http/healthz.test.ts`                                                             |         4 |
 | `apps/gateway/src/server/http/security-headers.test.ts`                                                    |         6 |
 | `apps/gateway/src/server/logging/logging.test.ts`                                                          |         6 |
@@ -283,9 +286,9 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/structural/base-images-pinned.test.ts`                                            |         5 |
 | `apps/gateway/tests/unit/structural/catalog-caps-enforced.test.ts`                                         |        12 |
 | `apps/gateway/tests/unit/structural/example-config-providers.test.ts`                                      |        10 |
-| `apps/gateway/tests/unit/structural/index.test.ts`                                                         |       100 |
+| `apps/gateway/tests/unit/structural/index.test.ts`                                                         |       102 |
 | `apps/gateway/tests/unit/structural/no-arguments-in-logs.test.ts`                                          |         3 |
-| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`                                           |       461 |
+| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`                                           |       466 |
 | `apps/gateway/tests/unit/structural/persisted-enumerations.test.ts`                                        |        10 |
 | `apps/gateway/tests/unit/structural/plugin-identifier-tests.test.ts`                                       |        25 |
 | `apps/gateway/tests/unit/structural/shipped-presets.test.ts`                                               |        41 |
@@ -307,6 +310,7 @@ this table says where each requirement lives, and what is not written yet.
 | `packages/plugin-sdk/tests/unit/catalog-path.test.ts`                                                      |         4 |
 | `packages/plugin-sdk/tests/unit/define-plugin.test.ts`                                                     |        33 |
 | `packages/plugin-sdk/tests/unit/env-of.test.ts`                                                            |         8 |
+| `packages/plugin-sdk/tests/unit/git-wire.property.test.ts`                                                 |         4 |
 | `packages/plugin-sdk/tests/unit/git-wire.test.ts`                                                          |        32 |
 | `packages/plugin-sdk/tests/unit/identifiers-kit.test.ts`                                                   |         9 |
 | `packages/plugin-sdk/tests/unit/registry.test.ts`                                                          |        11 |
@@ -319,12 +323,13 @@ this table says where each requirement lives, and what is not written yet.
 | `packages/policy-engine/tests/unit/risk-policy.test.ts`                                                    |         9 |
 | `packages/policy-engine/tests/unit/risk-runtime.test.ts`                                                   |        33 |
 | `packages/policy-engine/tests/unit/slice-dsl.test.ts`                                                      |        23 |
-| `packages/policy-engine/tests/unit/slice-matcher.test.ts`                                                  |        29 |
+| `packages/policy-engine/tests/unit/slice-matcher.test.ts`                                                  |        35 |
 | `packages/shared/src/api-key.test.ts`                                                                      |        12 |
 | `packages/shared/src/data-model.test.ts`                                                                   |         4 |
 | `packages/shared/src/mcp.test.ts`                                                                          |        10 |
 | `packages/shared/src/risk-id.test.ts`                                                                      |        20 |
 | `packages/shared/src/session-events.test.ts`                                                               |        30 |
+| `packages/shared/src/wildcard.test.ts`                                                                     |        18 |
 | `packages/telemetry/src/client.test.ts`                                                                    |        24 |
 | `packages/telemetry/src/queue.test.ts`                                                                     |        12 |
 | `packages/telemetry/src/report.test.ts`                                                                    |        24 |
@@ -365,11 +370,12 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/resend/tests/unit/plugin.test.ts`                                                                 |        44 |
 | `plugins/resend/tests/unit/risk-catalog.test.ts`                                                           |        33 |
 | `plugins/ssh/tests/unit/adversarial.test.ts`                                                               |       181 |
-| `plugins/ssh/tests/unit/classify.test.ts`                                                                  |        90 |
+| `plugins/ssh/tests/unit/classify.test.ts`                                                                  |        95 |
 | `plugins/ssh/tests/unit/data-model.test.ts`                                                                |         2 |
 | `plugins/ssh/tests/unit/host-key-pinning.test.ts`                                                          |        37 |
 | `plugins/ssh/tests/unit/injection.test.ts`                                                                 |        87 |
 | `plugins/ssh/tests/unit/plugin.test.ts`                                                                    |       300 |
+| `plugins/ssh/tests/unit/shell.property.test.ts`                                                            |         3 |
 | `plugins/stripe/tests/unit/classify.test.ts`                                                               |        48 |
 | `plugins/stripe/tests/unit/data-model.test.ts`                                                             |         8 |
 | `plugins/stripe/tests/unit/execute.test.ts`                                                                |        23 |
@@ -385,6 +391,7 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/supabase/tests/unit/plugin.test.ts`                                                               |        23 |
 | `plugins/supabase/tests/unit/query-sql.test.ts`                                                            |       118 |
 | `plugins/supabase/tests/unit/risk-catalog.test.ts`                                                         |        46 |
+| `plugins/supabase/tests/unit/sql.property.test.ts`                                                         |         3 |
 | `plugins/supabase/tests/unit/token.test.ts`                                                                |         5 |
 | `plugins/upstash-redis/tests/unit/classify.test.ts`                                                        |        31 |
 | `plugins/upstash-redis/tests/unit/command-table.test.ts`                                                   |       105 |
@@ -403,13 +410,14 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/vercel/tests/unit/risk-catalog.test.ts`                                                           |        55 |
 | `plugins/vercel/tests/unit/team-pin.test.ts`                                                               |        99 |
 | `scripts/audit-gate.test.mjs`                                                                              |        29 |
+| `scripts/lockfile-gate.test.mjs`                                                                           |        12 |
 | `scripts/release-lib.test.mjs`                                                                             |        50 |
-| **TOTAL** (`npx vitest run --reporter=json`, 2026-10-14, with a build; 314 files; 10410 passed, 1 skipped) | **10411** |
+| **TOTAL** (`npx vitest run --reporter=json`, 2026-10-14, with a build; 321 files; 10481 passed, 1 skipped) | **10482** |
 
 The table is generated from the JSON report of one run of the whole suite
 (`npx vitest run --reporter=json`). A count is the number of tests the file
 declares, `it.each` expanded, **skipped tests included**: the TOTAL is the
-report's number of tests, of which 10315 ran and 1 was skipped in that
+report's number of tests, of which 10481 ran and 1 was skipped in that
 run, made with a build (as `npm run ci` does). The one skipped whatever the
 build is the latency measurement of the authority re-check
 (`door-latency.bench.test.ts`, run with `VAUBAAN_BENCH=1`). Without a build 27
@@ -4103,7 +4111,8 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
   [[plugin-identifiers-one-grammar-for-classify-and-execute]]; the proofs
   themselves are the plugins' own suites).
 - **`base-images-pinned.test.ts`** (5) — the Dockerfile builds every stage
-  from the one `NODE_IMAGE`, pinned by full version and digest; **nothing
+  from the one base image of its first `FROM` line (no `ARG` in a `FROM`),
+  pinned by full version and digest; **nothing
   else runs in the build**: no `# syntax=` frontend unless pinned the same
   way (the file declares none), and every `COPY --from=` / `--mount=…from=`
   names a stage of the file, never an image; the Compose
@@ -4129,6 +4138,65 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
   malformed ones, a duplicate id and another shape; **the allowlist the
   repository ships** is valid, gives no entry more than about a quarter, and
   is what `ci.yml` runs.
+
+## Scenarios — Parsers of untrusted input (property-based)
+
+> Covers: spec §6 (what reaches the gateway from an agent or a client);
+> ADR [[supply-chain-and-ci-security-checks]] (D7). fast-check, seeded:
+> the same seed (`PROPERTY_SEED`) and 300 cases per property on every run,
+> so CI is deterministic and the five files take about half a second. A
+> failure prints its seed and its shrunk counter-example; replay or explore
+> with `FC_SEED=<seed> FC_RUNS=<n> npx vitest run <file>`
+> (`propertyRuns()`, `@vaubaan/plugin-sdk/testing`). Each file was also run
+> once with 20 000 to 30 000 cases and other seeds before it was committed.
+
+- **`plugins/supabase/tests/unit/sql.property.test.ts`** (3) — on SQL-shaped
+  text (quotes, `--` and `/* */` comments, dollar quoting, `E''`,
+  backslashes, managed schema names) and arbitrary strings: `tokenise`,
+  `readQuerySql` and `readMigrationSql` **never throw**, and an unrecognised
+  migration takes every class; **what follows a statement boundary is never
+  lost**: any text, then a newline, `;` and `select * from auth.users`, is
+  never an application read, and the same with `create role` always takes
+  `db-role`.
+- **`plugins/ssh/tests/unit/shell.property.test.ts`** (3) — on shell-shaped
+  text (quotes, `$( )`, `${ }`, backquotes, separators, redirections,
+  heredoc markers, globs, braces, control characters) and arbitrary strings:
+  the lexer and the classifier **never throw**; **a destructive command
+  after `;` is never hidden** by what precedes it (`rm -rf` after any such
+  prefix always carries `destructive.W`; `#` and the backslash are left out
+  of the prefix, since they really do change what the shell runs); a word
+  in single quotes is lexed as exactly its literal, with no bare character.
+- **`apps/gateway/src/server/http/doors.property.test.ts`** (7) — what the
+  doors read before authentication: `parseBearer` returns a non-empty part
+  of the header or throws `AuthError`, nothing else, and reads back
+  `Bearer <token>` in any case of the scheme; the git door's `bearerOf`
+  never throws and reads the password of `Basic` and the token of `Bearer`;
+  `parseAgentLabel` returns a trimmed, bounded label of the documented
+  shape, and a refusal never carries the value; `X-Forwarded-For` yields
+  `unknown` or an address that is a hop of the header and never a trusted
+  proxy, and a header that is not a list does not throw; `parseGitPath`
+  cuts or ignores any path.
+- **`packages/plugin-sdk/tests/unit/git-wire.property.test.ts`** (4) —
+  pkt-lines read back as they were encoded; arbitrary bytes given to
+  `parsePktLines`, `parseAdvertisement` and `parseReceivePackResult` are
+  read or refused with `PktLineError` / `GitProtocolError`, nothing else; a
+  push command is parsed (never two zero ids, never an empty ref) or
+  refused with `GitProtocolError`; an oversized payload is never encoded.
+- **`apps/gateway/src/server/config/load.property.test.ts`** (6) — any YAML
+  file (generated trees with known and unknown keys, `__proto__`,
+  `constructor`, secret references, aliases; arbitrary text) and any
+  environment value of a set of variables (prototype-shaped provider ids
+  included) **end in a configuration or a `ConfigError`**, never another
+  error, and pollute no prototype; a duration is a positive safe integer
+  of seconds or `null`. The three counter-examples of the first run are
+  kept as cases: an alias inside its own anchor (`a: &x [*x]`), a
+  `__proto__` key, `300000000000d`.
+- **`scripts/lockfile-gate.test.mjs`** (12, example-based) — the lockfile
+  gate passes the repository's lockfile, registry entries scoped, nested
+  and aliased, workspaces and their links; refuses another host, plain
+  http, a git URL, a lookalike host, a tarball of another package, a
+  missing or non-sha512 integrity, an entry without `resolved`, a link or a
+  workspace outside the repository, and a lockfile without `packages`.
 
 ## Out of scope for these tests
 

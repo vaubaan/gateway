@@ -32,6 +32,11 @@ const ALLOWED: Record<string, string> = {
     'public sign-in providers by address: github.com, and the issuers anyone can hold an account at (ADR sign-in-providers-admission-and-admin-rule)',
   'deploy/config/gateway.example.yaml': 'documented placeholders',
   'deploy/config/.env.example': 'documented placeholders',
+  'scripts/fetch-tool.sh':
+    'the release archives of the pinned security tools, each checked against its SHA-256 before it runs',
+  'scripts/lockfile-gate.mjs':
+    'the one registry a lockfile entry may download from: the rule the gate enforces',
+  'scripts/lockfile-gate.test.mjs': 'tarball URLs, allowed and refused, of the lockfile gate tests',
 };
 
 const TEST_FILE = /\.test\.tsx?$|\/testing\.ts$/;
@@ -41,11 +46,12 @@ const SOURCE =
 const FORBIDDEN: Array<{ name: string; pattern: RegExp }> = [
   // Any literal URL with a real-looking host. Hosts reserved for documentation
   // (example.com/net/org, localhost, 127.0.0.1, 0.0.0.0) and schema/spec
-  // registries used by tooling are fine.
+  // registries used by tooling are fine, and so is GitHub Actions' OIDC
+  // issuer, the fixed identity an operator checks a release signature against.
   {
     name: 'literal URL',
     pattern:
-      /https?:\/\/(?!(?:[a-z0-9-]+\.)*example\.(?:com|net|org)\b|localhost\b|127\.0\.0\.1\b|0\.0\.0\.0\b|\[::1\]|json\.schemastore\.org|docs\.docker\.com|github\.com\/[a-z-]+\/[a-z-]+\/(?:blob|tree|issues|discussions)|ghcr\.io\/\$\{)[a-z0-9.-]+\.[a-z]{2,}(?::\d+)?(?:\/|\b)/i,
+      /https?:\/\/(?!(?:[a-z0-9-]+\.)*example\.(?:com|net|org)\b|localhost\b|127\.0\.0\.1\b|0\.0\.0\.0\b|\[::1\]|json\.schemastore\.org|docs\.docker\.com|token\.actions\.githubusercontent\.com\b|github\.com\/[a-z-]+\/[a-z-]+\/(?:blob|tree|issues|discussions)|ghcr\.io\/\$\{)[a-z0-9.-]+\.[a-z]{2,}(?::\d+)?(?:\/|\b)/i,
   },
   { name: 'Supabase project ref URL', pattern: /[a-z]{20}\.supabase\.co/ },
   { name: 'GitHub token', pattern: /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}/ },

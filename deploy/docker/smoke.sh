@@ -129,6 +129,12 @@ pass "better-sqlite3 loads inside the image (in-memory query ran)"
 [ "$(docker exec "$NAME" id -u)" = "10001" ] || fail "process is not running as uid 10001"
 pass "process runs as non-root"
 
+# 5b. No package manager: the runner stage removes npm, npx, corepack and yarn,
+#     which the gateway never runs and whose dependencies the image scan flags.
+managers="$(docker exec "$NAME" sh -c 'for m in npm npx corepack yarn yarnpkg; do command -v "$m"; done; ls -d /usr/local/lib/node_modules/npm /opt/yarn-v* 2>/dev/null' || true)"
+[ -z "$managers" ] || fail "a package manager is shipped inside the image: $managers"
+pass "no package manager inside the image"
+
 # 6. No env file shipped: Next copies apps/gateway/.env* into the standalone
 #    output, so the build context must have excluded them.
 shipped="$(docker exec "$NAME" sh -c 'ls apps/gateway/.env* 2>/dev/null' || true)"

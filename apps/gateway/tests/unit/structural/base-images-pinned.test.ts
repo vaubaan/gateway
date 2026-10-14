@@ -20,11 +20,12 @@ const read = (path: string): string => readFileSync(resolve(REPO, path), 'utf8')
 /** `name:1.2.3-flavour@sha256:<64 hex>`: a full version, never `latest`, never a bare major. */
 const PINNED = /^([a-z0-9./-]+):(\d+\.\d+\.\d+(?:-[a-z0-9.-]+)?)@sha256:[0-9a-f]{64}$/;
 
+/** The image of the first stage, `base`, which every other stage starts from. */
 function dockerfileBase(): string {
   const dockerfile = read('deploy/docker/Dockerfile');
-  const arg = /^ARG NODE_IMAGE=(\S+)$/m.exec(dockerfile)?.[1];
-  if (!arg) throw new Error('deploy/docker/Dockerfile declares no ARG NODE_IMAGE');
-  return arg;
+  const base = /^FROM\s+(\S+)\s+AS\s+base$/m.exec(dockerfile)?.[1];
+  if (!base) throw new Error('deploy/docker/Dockerfile has no `FROM <image> AS base` stage');
+  return base;
 }
 
 /** Every `image:` of the Compose file that is pulled (the gateway's own image is built). */
@@ -35,18 +36,19 @@ function composeImages(): string[] {
 }
 
 describe('base images are pinned by version and digest', () => {
-  it('the Dockerfile builds every stage from the one pinned NODE_IMAGE', () => {
+  it('the Dockerfile builds every stage from the one pinned base image', () => {
     const dockerfile = read('deploy/docker/Dockerfile');
     expect(dockerfileBase()).toMatch(PINNED);
     const froms = [...dockerfile.matchAll(/^FROM\s+(\S+)/gm)].map((match) => match[1]);
-    expect(froms.length).toBeGreaterThan(0);
-    // Each stage starts from the argument or from a stage of this file: no second image.
+    expect(froms.length).toBeGreaterThan(1);
+    // The first stage names the image; each other one starts from a stage of this
+    // file: no second image, and no ARG that a build could point elsewhere.
+    expect(froms[0]).toBe(dockerfileBase());
     const stages = new Set(
       [...dockerfile.matchAll(/^FROM\s+\S+\s+AS\s+(\S+)/gm)].map((match) => match[1]),
     );
-    for (const from of froms) {
-      expect(from === '${NODE_IMAGE}' || stages.has(from), from).toBe(true);
-    }
+    for (const from of froms.slice(1)) expect(stages.has(from), from).toBe(true);
+    expect(dockerfile).not.toMatch(/^FROM\s+\S*\$/m);
   });
 
   it('nothing else runs in the build: no unpinned frontend, no image copied from', () => {

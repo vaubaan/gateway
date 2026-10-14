@@ -21,6 +21,8 @@ export default tseslint.config(
       '**/test-results/**',
       '**/.turbo/**',
       '**/.cache/**',
+      // Test cases of the Semgrep rules: written to break them (scripts/sast.sh).
+      '.semgrep/**',
       '.build/**',
       // Config files don't go through type-aware linting (no tsconfig include).
       'eslint.config.js',
@@ -41,11 +43,7 @@ export default tseslint.config(
       globals: { ...globals.node, ...globals.browser },
       parserOptions: {
         projectService: {
-          allowDefaultProject: [
-            '*.config.{js,cjs,mjs,ts}',
-            '*.config.*.{js,cjs,mjs,ts}',
-            'scripts/*.mjs',
-          ],
+          allowDefaultProject: ['*.config.{js,cjs,mjs,ts}', '*.config.*.{js,cjs,mjs,ts}'],
           defaultProject: 'tsconfig.json',
         },
         tsconfigRootDir: import.meta.dirname,

@@ -434,6 +434,7 @@ function ownerOf(
   if (choice.ownerKind !== 'organization') return { problem: 'Choose who owns the app.' };
   const login = choice.ownerLogin.trim();
   if (login.length === 0) return { problem: 'The organisation’s name is required.' };
+  // nosemgrep: detect-non-literal-regexp -- pattern is a plugin's app-manifest constant, not input
   if (!new RegExp(manifest.ownerLoginPattern).test(login)) {
     return { problem: `“${login.slice(0, 60)}” is not an organisation name the service accepts.` };
   }

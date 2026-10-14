@@ -679,6 +679,13 @@ const report = assertCatalogCoverage(plugin, {
 // report.risksTouched / report.risksUntouched / report.fallbackHits / report.toolsChecked / report.samplesChecked
 ```
 
+`propertyRuns()` (`testing/property.ts`) gives the `{ seed, numRuns }` of
+the property-based tests of the parsers that read untrusted input (the SQL
+and shell readers of the plugins, the git wire): a fixed seed and 300 cases
+unless `FC_SEED` / `FC_RUNS` say otherwise, so a failure replays. It imports
+nothing from fast-check (a root dev dependency), so the kit adds no
+dependency to a plugin that does not use it.
+
 `assertPresetsValid` is `presetIssues` plus `presetWildcardIssues` — the
 preset half of the wildcard rule called as a function, not filtered out of
 `wildcardIssues` by the wording of its messages. Budgets are part of
@@ -812,6 +819,12 @@ metadata? }`, `ConnectionResource`, `Credential` (encrypted envelope),
   JSON-RPC types.
 - `data-model.ts` — `DataModel`, `DataModelPlane`, `DataModelEntity`,
   `DataModelCardinality`, `validateDataModel` (run by `definePlugin`).
+- `wildcard.ts` — `matchWildcard(tokens, text)` with `WildcardToken`
+  (`char`, `one`, `any`), `wildcardLiteral`, `WILDCARD_ONE`, `WILDCARD_ANY`:
+  glob matching without a regular expression, linear in practice. Re-exported
+  by the SDK; a plugin that matches a glob from its arguments uses it rather
+  than building a `RegExp` (the SSH classifier does), and the slice matcher
+  of `policy-engine` reads bracket globs with it.
 
 The quarantined v4 row types (`legacy-v4.ts`: `ProviderBinding`,
 `ProviderAdmin`, `Token`, `TokenContext`…) were deleted with the v4

@@ -96,6 +96,40 @@ A classification you think is too strict, or a risk whose description is
 wrong without letting anything through, is not a vulnerability: use the
 "Catalog correction" issue.
 
+## What the project checks
+
+Every instance runs the same image and the same dependencies, so the
+project's own supply chain is checked on every change. What runs, when,
+and how a finding is triaged: [`docs/workflow/coding-workflow.md`](docs/workflow/coding-workflow.md#security-checks);
+why these tools: ADR
+[supply-chain-and-ci-security-checks](docs/decisions/supply-chain-and-ci-security-checks.md).
+
+- **Secrets**: the whole git history is scanned (gitleaks) on every push of
+  every branch. A secret that was committed is revoked at its issuer; the
+  history is not rewritten.
+- **Code**: static analysis (Semgrep, community security rules at a pinned
+  commit plus rules of this codebase) on every pull request and every push
+  to the integration branches; property-based tests on the parsers that
+  read what an agent or a client sends (SQL, shell, headers, the git wire,
+  the configuration).
+- **Dependencies**: `npm audit` against a reviewed allowlist, registry
+  signatures and provenance (`npm audit signatures`), a lockfile that only
+  downloads from the npm registry with an integrity hash, and weekly
+  updates that wait a cooldown of several days before a new version is
+  adopted.
+- **Image**: scanned with Trivy before every merge and before every release
+  (a known vulnerability with a fix fails it), no package manager shipped,
+  base image pinned by digest.
+- **Release**: the image carries an SBOM and a signed build-provenance
+  attestation that the release pipeline verifies before it publishes;
+  verify it yourself before you run it:
+  [`deploy/README.md`](deploy/README.md#released-images).
+
+Every tool is pinned by checksum or digest; no scanner runs as a
+third-party GitHub Action. A finding of these tools that you believe we
+missed is welcome as a report — with its impact on an instance (see Scope:
+findings without a demonstrated impact are out of scope).
+
 ## Trust model
 
 1. **One instance, one company, one trust domain.** Whoever operates the

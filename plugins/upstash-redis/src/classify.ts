@@ -523,6 +523,7 @@ export function redisCommandClass(command: readonly string[]): RedisCommandClass
   const verb = verbOf(command);
   const cls = COMMAND_CLASS.get(verb);
   if (cls === undefined) return 'arbitrary';
+  // nosemgrep: unsafe-dynamic-method -- verb is in COMMAND_CLASS (checked above), upper-cased; the table is an own-property literal
   if (cls === 'write' && ESCALATIONS[verb]?.(command) === true) return 'delete';
   return cls;
 }

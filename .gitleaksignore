@@ -1,0 +1,5 @@
+# Findings of the full-history scan that exist only in deleted v4 files and
+# were reviewed as not secrets (.gitleaks.toml explains the format).
+
+# A TypeScript field name (auth_sealed_blob: SealedBlobV1Wire), not a value.
+bfe907674aca8d6af6d080a1e87ef8a4ba1d0cdc:packages/web/src/lib/validation/secret-managers.ts:generic-api-key:46

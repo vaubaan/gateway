@@ -32,6 +32,7 @@ const LINE_OF: { readonly [C in Refusal['code']]: (r: Extract<Refusal, { code: C
 };
 
 export function refusalLine(refusal: Refusal): string {
+  // nosemgrep: unsafe-dynamic-method -- refusal.code is the closed RefusalCode union and LINE_OF is total over it
   const line = (LINE_OF[refusal.code] as (r: Refusal) => string)(refusal);
   return oneLine(line);
 }

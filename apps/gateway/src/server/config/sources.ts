@@ -560,24 +560,57 @@ export function readFileSource(
     ]);
     return { tree: {}, path };
   }
-  return { tree: resolveTree(ctx, parsed, ''), path };
+  return { tree: resolveTree(ctx, parsed, '', new Set([parsed])), path };
 }
 
-function resolveTree(ctx: SourceContext, node: RawTree, prefix: string): RawTree {
+/**
+ * The nodes being resolved, from the root down: a YAML alias used inside its
+ * own anchor (`a: &x [*x]`) parses to a value that contains itself, which
+ * would recurse until the stack overflows. It is reported as an issue of its
+ * key instead (found by the property tests of the loader).
+ */
+type Ancestors = ReadonlySet<object>;
+
+function resolveTree(
+  ctx: SourceContext,
+  node: RawTree,
+  prefix: string,
+  ancestors: Ancestors,
+): RawTree {
   const out: RawTree = {};
   for (const [key, value] of Object.entries(node)) {
     const path = prefix ? `${prefix}.${key}` : key;
-    out[key] = resolveValue(ctx, value, path);
+    // Assigned, `__proto__` would replace the prototype of `out` instead of
+    // adding a key (a value with no prototype then breaks every message that
+    // quotes it). No configuration key has that name.
+    if (key === '__proto__') {
+      ctx.issues.add(path, 'is not a configuration key', [CONFIG_FILE_ENV]);
+      continue;
+    }
+    out[key] = resolveValue(ctx, value, path, ancestors);
   }
   return out;
 }
 
-function resolveValue(ctx: SourceContext, value: unknown, path: string): unknown {
+function resolveValue(
+  ctx: SourceContext,
+  value: unknown,
+  path: string,
+  ancestors: Ancestors,
+): unknown {
   if (typeof value === 'string') return resolveRefs(ctx, value, path);
-  if (Array.isArray(value)) {
-    return value.map((item, i) => resolveValue(ctx, item, `${path}[${i}]`));
+  if (typeof value !== 'object' || value === null) return value;
+  if (ancestors.has(value)) {
+    ctx.issues.add(path, 'refers to itself (a YAML alias inside its own anchor)', [
+      CONFIG_FILE_ENV,
+    ]);
+    return undefined;
   }
-  if (isPlainObject(value)) return resolveTree(ctx, value, path);
+  const inside = new Set(ancestors).add(value);
+  if (Array.isArray(value)) {
+    return value.map((item, i) => resolveValue(ctx, item, `${path}[${i}]`, inside));
+  }
+  if (isPlainObject(value)) return resolveTree(ctx, value, path, inside);
   return value;
 }
 
@@ -609,6 +642,7 @@ export function getPath(tree: RawTree, path: string): unknown {
   let node: unknown = tree;
   for (const part of path.split('.')) {
     if (!isPlainObject(node)) return undefined;
+    // nosemgrep: prototype-pollution-loop -- read-only walk of the operator's configuration tree; nothing is assigned
     node = node[part];
   }
   return node;

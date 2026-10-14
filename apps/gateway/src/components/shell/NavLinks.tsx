@@ -108,6 +108,7 @@ export function NavLinks({ items }: { items: readonly NavItem[] }) {
     const on = item.key === current;
     return (
       <Link
+        // nosemgrep: react-href-var -- href comes from the static navigation table of this file, never from input
         href={item.href}
         className={classes(styles.navLink, on && styles.navLinkOn, extra)}
         aria-current={on ? 'page' : undefined}

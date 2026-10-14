@@ -58,11 +58,13 @@ export function formatRiskId(parts: {
 
 /** True iff `raw` matches the RiskId grammar (either form). */
 export function isRiskId(raw: string): boolean {
+  // nosemgrep: detect-redos -- segments are joined by a literal `-` or `.` the segment class excludes: linear
   return RISK_ID_PATTERN.test(raw);
 }
 
 /** True iff `raw` is a well-formed provider id. */
 export function isProviderId(raw: string): boolean {
+  // nosemgrep: detect-redos -- segments are joined by a literal `-` the segment class excludes: linear
   return PROVIDER_ID_PATTERN.test(raw);
 }
 

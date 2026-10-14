@@ -1,0 +1,13 @@
+{
+  "//": "Type-aware linting of the plain-Node scripts as one program (eslint.config.js). Not type-checked: checkJs is off; the scripts are tested by their *.test.mjs.",
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowJs": true,
+    "checkJs": false,
+    "declaration": false,
+    "declarationMap": false,
+    "types": ["node"]
+  },
+  "include": ["*.mjs"]
+}

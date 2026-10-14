@@ -12,6 +12,7 @@ tracks:
   - packages/policy-engine/src/budget.ts
   - packages/policy-engine/src/risk-runtime.ts
   - packages/policy-engine/src/qualify.ts
+  - packages/shared/src/wildcard.ts
   - packages/policy-engine/tests/unit/
   - packages/policy-engine/package.json
 ---
@@ -131,7 +132,12 @@ Segment-by-segment matching; `[**]` consumes zero or more segments with
 backtracking; the in-bracket glob `*` expands over `BRACKET_IDENT_CHAR_CLASS`
 (exported by `slice-dsl.ts`, `[a-zA-Z0-9_./~-]`), the same class the parser
 accepts, so `branch[release-*]` matches `release-1.2` and `file[*]` matches
-`a.ts`: a pattern never accepts less than an identifier may contain.
+`a.ts`: a pattern never accepts less than an identifier may contain. The glob
+is never turned into a regular expression: a value with a character outside
+the class is refused, then `matchWildcard` (`@vaubaan/shared/wildcard`, a
+two-pointer matcher, linear in practice) reads `*` as one character followed
+by any number. A regex read `a*a*a*…` with exponential backtracking, and a
+policy can arrive through the management door (found by Semgrep, 2026-10-14).
 Glob × glob `intersects` is exact for globs with one `*` each (literal
 prefixes and suffixes must extend one another) and fails closed (`true`)
 when both sides carry several `*`; `covers` uses the same split (a glob

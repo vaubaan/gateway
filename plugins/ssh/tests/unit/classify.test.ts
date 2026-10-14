@@ -264,3 +264,24 @@ describe('looksLikeSecretFileRead — direct unit tests', () => {
     expect(looksLikeSecretFileRead(cmd)).toBe(expected);
   });
 });
+
+describe('looksLikeSecretFileRead — globs cannot stall the instance', () => {
+  // Found by Semgrep (detect-non-literal-regexp): the glob of a path segment
+  // used to become a regex, and `cat *…*z` with 22 stars took 48 s to answer
+  // on one core — every other call of the instance waiting behind it.
+  test('a glob of thousands of stars is answered at once, with the same reading', () => {
+    const started = performance.now();
+    expect(looksLikeSecretFileRead(`cat ~/.ssh/${'*'.repeat(4000)}z`)).toBe(true);
+    expect(looksLikeSecretFileRead(`cat /tmp/${'*?'.repeat(2000)}q`)).toBe(false);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
+  test.each([
+    ['cat ~/id_*', true],
+    ['cat /srv/*.pem', true],
+    ['cat /srv/app/??_rsa', true],
+    ['cat /srv/app/*.txt', false],
+  ])('looksLikeSecretFileRead(%j) === %s', (cmd, expected) => {
+    expect(looksLikeSecretFileRead(cmd)).toBe(expected);
+  });
+});
