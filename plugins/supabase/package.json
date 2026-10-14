@@ -1,6 +1,6 @@
 {
   "name": "@vaubaan/plugin-supabase",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "private": true,
   "type": "module",
   "description": "Vaubaan Gateway provider plugin for Supabase — Postgres, storage, auth and edge functions through the Management API",

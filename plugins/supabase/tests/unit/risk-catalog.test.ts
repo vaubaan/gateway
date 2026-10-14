@@ -41,8 +41,8 @@ const patternsOf = (e: RiskEntry): readonly string[] =>
 describe('risk-catalog.yaml — loaded shape', () => {
   test('declares provider `supabase`, a version and a date', () => {
     expect(CATALOG.provider).toBe('supabase');
-    expect(CATALOG.catalog_version).toBe(4);
-    expect(CATALOG.catalog_date).toBe('2026-10-13');
+    expect(CATALOG.catalog_version).toBe(5);
+    expect(CATALOG.catalog_date).toBe('2026-10-14');
   });
 
   test('exposes 25 named risks plus the fallback', () => {
@@ -359,16 +359,13 @@ describe('risk-catalog.yaml — decision-level spot checks', () => {
     expect(run('select * from vault.decrypted_secrets;')).not.toContain('supabase.auth.read-users');
   });
 
-  test('no read-only preset carries read-managed-schemas', () => {
+  test('no shipped preset carries read-managed-schemas: a person ticks it on purpose', () => {
     for (const preset of CATALOG.presets ?? []) {
       const ids = preset.entries.map((e) => e.risk_id);
-      const writes = ids.some((id) => /write|deploy|generate-link/.test(id));
-      if (!writes) {
-        expect(
-          ids.filter((id) => id.endsWith('.read-managed-schemas')),
-          preset.id,
-        ).toEqual([]);
-      }
+      expect(
+        ids.filter((id) => id.endsWith('.read-managed-schemas')),
+        preset.id,
+      ).toEqual([]);
     }
     expect(
       (CATALOG.presets ?? [])
