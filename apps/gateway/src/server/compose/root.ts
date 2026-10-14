@@ -34,6 +34,7 @@ import {
   type DelegatedTokenResolver,
   type ExecutionModule,
 } from '../execution';
+import { createGitModule, type GitModule } from '../git';
 import { createGroupsModule, type GroupsModule } from '../groups';
 import { publishHttps } from '../http/security-headers';
 import { createLogger, createRedactor, type Logger, type LoggerOptions } from '../logging';
@@ -87,6 +88,8 @@ export interface GatewayRoot {
   readonly budget: SessionService;
   /** The execution MCP door: `/mcp`, `/mcp/catalog`, the call pipeline. */
   readonly execution: ExecutionModule;
+  /** The git remote: `/git/**`, the second door of the execution surface (spec §4.1 bis). */
+  readonly git: GitModule;
   /** Community telemetry: the pipeline's sink, the operator's toggle, the validation status. */
   readonly telemetry: TelemetryModule;
   /** Authorization server of the management door: clients, consent, delegated tokens. */
@@ -263,6 +266,7 @@ type RootModules = Pick<
   | 'audit'
   | 'budget'
   | 'execution'
+  | 'git'
   | 'telemetry'
   | 'oauth'
   | 'users'
@@ -432,6 +436,16 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     delegations: deps.delegatedTokens ?? oauth.verifier,
     telemetry: telemetry.sink,
   });
+  // The git remote shares the execution door's admission, stages and audit.
+  const git = createGitModule({
+    config,
+    store,
+    registry,
+    execution,
+    connections,
+    logger,
+  });
+  opened.push(() => git.sweeper.stop());
   // The door is handed ports, not modules: see `compose/management.ts`.
   const management = wireManagementDoor({
     config,
@@ -458,6 +472,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     audit,
     budget,
     execution,
+    git,
     telemetry,
     oauth,
     users,

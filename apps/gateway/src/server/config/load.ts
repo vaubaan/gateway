@@ -53,6 +53,9 @@ import {
   isProviderAppField,
 } from './types';
 
+/** `git.max_pack_mb` is in mebibytes. */
+const BYTES_PER_MEGABYTE = 1024 * 1024;
+
 /** The master key is the AEAD key: one size, defined by the crypto module. */
 export const MASTER_KEY_BYTES = KEY_BYTES;
 // Defaults and bounds are those of the key table (`KEYS` in `sources.ts`).
@@ -245,6 +248,8 @@ function validate(raw: RawTree, issues: IssueList): InstanceConfig | null {
   const requestExpiry = r.duration(keySpec('requests.expiry'));
   const approvalExpiry = r.duration(keySpec('approvals.expiry'));
   const mcpRateLimit = r.int(keySpec('mcp.rate_limit_per_minute'));
+  const gitMaxPackMb = r.int(keySpec('git.max_pack_mb'));
+  const gitRequestTimeout = r.duration(keySpec('git.request_timeout'));
   const oauth = readOAuth(r);
   const level = readLogLevel(r);
 
@@ -270,6 +275,10 @@ function validate(raw: RawTree, issues: IssueList): InstanceConfig | null {
     requests: { expirySeconds: requestExpiry },
     approvals: { expirySeconds: approvalExpiry },
     mcp: { rateLimitPerMinute: mcpRateLimit },
+    git: {
+      maxPackBytes: gitMaxPackMb * BYTES_PER_MEGABYTE,
+      requestTimeoutSeconds: gitRequestTimeout,
+    },
     oauth,
     log: { level },
   };

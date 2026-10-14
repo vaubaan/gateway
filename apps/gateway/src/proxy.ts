@@ -14,6 +14,17 @@ import { ownsItsPolicy, publishedHttps, securityHeaders } from './server/http/se
 
 const NONCE_BYTES = 16;
 
+/**
+ * Every path but the git remote's (`/git/…`, spec §4.1 bis). Next clones and
+ * buffers the body of every request the proxy runs on, up to
+ * `proxyClientMaxBodySize`, and truncates what is beyond: the pack of a push
+ * would be held in memory and cut. The git remote answers no browser, so it
+ * needs none of the headers set here. A literal: Next reads it at build time.
+ */
+export const config = {
+  matcher: ['/((?!git/).*)'],
+};
+
 export function proxy(request: NextRequest): NextResponse {
   if (ownsItsPolicy(request.nextUrl.pathname)) return NextResponse.next();
   const nonce = randomBytes(NONCE_BYTES).toString('base64');

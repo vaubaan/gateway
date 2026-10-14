@@ -23,6 +23,7 @@ import type { RepoContext } from './repositories/context.ts';
 import { createDelegationsRepo, type DelegationsRepo } from './repositories/delegations.ts';
 import { createGroupsRepo, type GroupsRepo } from './repositories/groups.ts';
 import { createInvitationsRepo, type InvitationsRepo } from './repositories/invitations.ts';
+import { createPendingRefsRepo, type PendingRefsRepo } from './repositories/pending-refs.ts';
 import { createMissionsRepo, type MissionsRepo } from './repositories/missions.ts';
 import { createRequestsRepo, type RequestsRepo } from './repositories/requests.ts';
 import { createSessionsRepo, type SessionsRepo } from './repositories/sessions.ts';
@@ -51,6 +52,8 @@ export interface Store {
   readonly groups: GroupsRepo;
   /** The addresses an administrator invited to sign in (migration 0014). */
   readonly invitations: InvitationsRepo;
+  /** Temporary refs of pushes waiting for an approval (migration 0015). */
+  readonly pendingRefs: PendingRefsRepo;
   readonly connections: ConnectionsRepo;
   readonly shares: SharesRepo;
   readonly missions: MissionsRepo;
@@ -102,6 +105,7 @@ export function openStore(options: StoreOptions): Store {
     users: createUsersRepo(ctx),
     groups: createGroupsRepo(ctx),
     invitations: createInvitationsRepo(ctx),
+    pendingRefs: createPendingRefsRepo(ctx),
     connections: createConnectionsRepo(ctx),
     shares: createSharesRepo(ctx),
     missions: createMissionsRepo(ctx),
@@ -172,6 +176,11 @@ export * from './types.ts';
 export type { UpsertUserInput, UsersRepo } from './repositories/users.ts';
 export type { GroupsRepo } from './repositories/groups.ts';
 export type { InvitationRecord, InvitationsRepo } from './repositories/invitations.ts';
+export type {
+  NewPendingRef,
+  PendingRefRecord,
+  PendingRefsRepo,
+} from './repositories/pending-refs.ts';
 export type {
   ConnectionFilter,
   ConnectionsRepo,
