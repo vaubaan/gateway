@@ -46,11 +46,12 @@ const SOURCE =
 const FORBIDDEN: Array<{ name: string; pattern: RegExp }> = [
   // Any literal URL with a real-looking host. Hosts reserved for documentation
   // (example.com/net/org, localhost, 127.0.0.1, 0.0.0.0) and schema/spec
-  // registries used by tooling are fine.
+  // registries used by tooling are fine, and so is GitHub Actions' OIDC
+  // issuer, the fixed identity an operator checks a release signature against.
   {
     name: 'literal URL',
     pattern:
-      /https?:\/\/(?!(?:[a-z0-9-]+\.)*example\.(?:com|net|org)\b|localhost\b|127\.0\.0\.1\b|0\.0\.0\.0\b|\[::1\]|json\.schemastore\.org|docs\.docker\.com|github\.com\/[a-z-]+\/[a-z-]+\/(?:blob|tree|issues|discussions)|ghcr\.io\/\$\{)[a-z0-9.-]+\.[a-z]{2,}(?::\d+)?(?:\/|\b)/i,
+      /https?:\/\/(?!(?:[a-z0-9-]+\.)*example\.(?:com|net|org)\b|localhost\b|127\.0\.0\.1\b|0\.0\.0\.0\b|\[::1\]|json\.schemastore\.org|docs\.docker\.com|token\.actions\.githubusercontent\.com\b|github\.com\/[a-z-]+\/[a-z-]+\/(?:blob|tree|issues|discussions)|ghcr\.io\/\$\{)[a-z0-9.-]+\.[a-z]{2,}(?::\d+)?(?:\/|\b)/i,
   },
   { name: 'Supabase project ref URL', pattern: /[a-z]{20}\.supabase\.co/ },
   { name: 'GitHub token', pattern: /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}/ },

@@ -145,11 +145,39 @@ gh attestation verify oci://ghcr.io/vaubaan/gateway:2.1.3 \
 A zero exit code means the image is the one that tag built; anything else,
 do not run it. The command needs a recent GitHub CLI (`gh attestation`),
 signed in. Attestations exist for releases published while the repository
-is public, or private on GitHub Enterprise Cloud.
+is public, or private on GitHub Enterprise Cloud. The release pipeline runs
+this same verification on the digest right after it signs it, and publishes
+no release when it fails.
+
+The expected identity, whatever the tool: the certificate was issued by
+GitHub Actions' OIDC provider to **the `release.yml` workflow of this
+repository, running on a `v2.*` tag**. Without the GitHub CLI, Sigstore's
+`cosign` (2.4 or later, which reads the bundle the pipeline stores next to
+the image) checks the same thing:
+
+```bash
+cosign verify-attestation \
+  --new-bundle-format \
+  --type slsaprovenance1 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github\.com/vaubaan/gateway/\.github/workflows/release\.yml@refs/tags/v2\.' \
+  ghcr.io/vaubaan/gateway:2.1.3 > /dev/null && echo verified
+```
+
+Then **run the digest you verified**, not the tag: `docker buildx
+imagetools inspect ghcr.io/vaubaan/gateway:2.1.3` prints it (`Digest:`), and
+`image: ghcr.io/vaubaan/gateway@sha256:<digest>` in the Compose file pins it.
+A tag can be moved; a digest cannot.
 
 **Bill of materials.** Each GitHub release carries the SBOM of the image
-(SPDX JSON, one file per architecture). The image also carries BuildKit's
-own SBOM and provenance:
+(SPDX JSON, one file per architecture): every Debian and npm package in the
+image, with its version. Feed it to your own scanner to follow new
+advisories after the release — for instance
+`trivy sbom vaubaan-gateway-2.1.3-linux-amd64.spdx.json` or
+`grype sbom:vaubaan-gateway-2.1.3-linux-amd64.spdx.json`. Every release was
+scanned before it was published (no HIGH or CRITICAL vulnerability with a
+fix, as of that day). The image also carries BuildKit's own SBOM and
+provenance:
 
 ```bash
 docker buildx imagetools inspect ghcr.io/vaubaan/gateway:2.1.3 --format '{{ json .SBOM }}'
