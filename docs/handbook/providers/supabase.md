@@ -383,6 +383,25 @@ organization_name, region, status } }` ; the owner labels `env`. A project
 whose ref is not a host label (`projectRefIdent`) fails discovery : no call
 could name it.
 
+**Revoking the grant at Supabase.** On disconnection the host sends
+`POST https://api.supabase.com/v1/oauth/revoke` (`SUPABASE_OAUTH_REVOKE_URL`,
+format `client-credentials-json`): `Content-Type: application/json`, body
+`{ client_id, client_secret, refresh_token }`, no `Authorization` header; any
+2xx counts as withdrawn. Checked on 2026-10-14 against the Management API's
+OpenAPI document (`https://api.supabase.com/api/v1-json`, operation
+`v1-revoke-token`, "Revoke oauth app authorization and it's corresponding
+tokens"): method `POST`, body `application/json` schema `OAuthRevokeTokenBody`
+with the three fields **required** and `additionalProperties: false`
+(`client_id` a UUID), no `security` on the operation, success `204`, errors
+`401`, `403`, `429`. The implementation matches; nothing was changed. The
+operation is marked **Beta / experimental** by Supabase: a change of it shows
+as `failed` on the disconnected account (the person is told to remove the app
+by hand), never as a silent success. _Fallback, Context7 missing — check by
+hand at the next review_: Context7 (`/supabase/supabase`,
+`/websites/supabase`, `/websites/api_supabase_api_v1`) returned nothing for this
+operation, only the project-level OAuth server's `revokeGrant`, which is a
+different API.
+
 ## Tests
 
 `npx vitest run plugins/supabase` — 1740 tests : `plugin.test.ts` (23 : SDK
