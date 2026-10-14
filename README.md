@@ -56,7 +56,7 @@ Needs Node.js 20 or later and npm 10. Nothing to register, nothing leaves
 your machine: the identity provider and the cloud services are simulated.
 
 ```bash
-git clone https://github.com/sbw-vaubaan/vaubaan-gateway.git
+git clone https://github.com/vaubaan/gateway.git
 cd vaubaan-gateway
 npm ci
 npm run demo

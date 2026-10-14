@@ -52,8 +52,7 @@ export const vercelPlugin = definePlugin({
   summary:
     "One account is one Vercel access token pinned to a team; one resource is one project of that team. The environment is not a label you set: Vercel's own production, preview and development environments are read from each call, so the same project can run freely on preview and ask first on production.",
   manualRevocation: 'Delete the access token in your Vercel account settings, under Tokens.',
-  docsUrl:
-    'https://github.com/sbw-vaubaan/vaubaan-gateway/blob/main/docs/handbook/providers/vercel.md',
+  docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/vercel.md',
   tools: vercelTools,
   toolTitles: vercelToolTitles,
   dataModel: vercelDataModel,

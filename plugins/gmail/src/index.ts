@@ -66,8 +66,7 @@ export const gmailPlugin: ProviderPlugin = definePlugin({
     'Experimental. One account is one Gmail mailbox, which is also its single resource. The plugin models the permissions of reading, drafting and labelling by who the sender or the recipient is, but it executes nothing yet: no tool is offered to agents.',
   manualRevocation:
     "Remove the application's access in the Google Account of the mailbox, under Security, in the list of third-party apps with account access.",
-  docsUrl:
-    'https://github.com/sbw-vaubaan/vaubaan-gateway/blob/main/docs/handbook/providers/gmail.md',
+  docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/gmail.md',
   experimental: true,
   tools: gmailTools,
   dataModel: gmailDataModel,

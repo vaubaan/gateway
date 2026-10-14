@@ -838,7 +838,7 @@ in alphabetical order, with its seven columns (plugin, handbook, planes,
 number of risks "+ fallback", presets, credential kind, notes), and correct
 the count of plugins in the sentence above the table. Optionally set
 `docsUrl` in `definePlugin` to the handbook's address in the repository,
-`https://github.com/sbw-vaubaan/vaubaan-gateway/blob/main/docs/handbook/providers/<id>.md`.
+`https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/<id>.md`.
 
 Hand-written Markdown tables rarely pass the format check; let Prettier
 align them, then check that nothing is left of the scaffold:

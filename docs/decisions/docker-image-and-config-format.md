@@ -145,7 +145,9 @@ in the blob. `scripts/gen-master-key.mjs` prints a key.
 - Four stages: `manifests` (package manifests only, for a cached dependency
   layer), `deps` (`npm ci`), `build` (`next build`, `GIT_COMMIT_SHA` build
   arg), `runner` (standalone output + `.next/static` + `public`).
-- Non-root user `vaubaan` (uid 10001), `VOLUME /data`, `EXPOSE 3000`,
+- Non-root user `vaubaan` (uid 10001), `/data` owned by it (no `VOLUME`
+  instruction since 2026-10-14: some platforms refuse it; the deployment
+  mounts `/data`), `EXPOSE 3000`,
   `HEALTHCHECK` calling `/healthz` with Node's `fetch` (no curl in the
   image), `CMD ["node", "apps/gateway/server.js"]`.
 - `next.config.ts`: `outputFileTracingIncludes` for `argon2/prebuilds` and

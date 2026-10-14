@@ -30,7 +30,7 @@ Security problems are **not** reported in public issues: see
 ## Set up
 
 ```bash
-git clone https://github.com/sbw-vaubaan/vaubaan-gateway.git
+git clone https://github.com/vaubaan/gateway.git
 cd vaubaan-gateway
 npm ci            # installs every workspace
 npm run ci        # the gate: type-check, lint, format check, build, tests

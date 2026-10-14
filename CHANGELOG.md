@@ -448,7 +448,7 @@ names, and the notes about them do too.
   commit are in the footer of every page, the consent screen included; logs are JSON
   lines with token-prefix and secret redaction.
 - **Releases.** Pushing a tag `v2.x.y` is meant to publish the image for `linux/amd64`
-  and `linux/arm64` to `ghcr.io/sbw-vaubaan/vaubaan-gateway` with an SBOM and a signed
+  and `linux/arm64` to `ghcr.io/vaubaan/gateway` with an SBOM and a signed
   build-provenance attestation, and to create the GitHub release from this file. What a
   version number promises — configuration keys, refusal codes, the plugin contract,
   catalog ids — is written in `docs/workflow/coding-workflow.md`; pulling and verifying
@@ -658,4 +658,4 @@ names, and the notes about them do too.
   package with a review date, and an audit that printed nothing is a broken gate, not a
   pass.
 
-[Unreleased]: https://github.com/sbw-vaubaan/vaubaan-gateway/compare/v4-final...HEAD
+[Unreleased]: https://github.com/vaubaan/gateway/compare/v4-final...HEAD

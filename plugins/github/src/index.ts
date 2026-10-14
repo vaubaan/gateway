@@ -35,8 +35,7 @@ export const githubPlugin = definePlugin({
     "One account is one installation of your company's GitHub App on an organisation; one resource is one repository. A mission picks repositories and the permissions it holds on them. GitHub has no environment label: protected branches (main, master, release-*) and working branches (feature/*, fix/*, …) are told apart by two different permissions.",
   manualRevocation:
     "Uninstall your company's GitHub App from the organisation, in the organisation's settings under GitHub Apps, once no other account of this gateway uses that installation. The gateway never uninstalls it: one installation may serve several accounts.",
-  docsUrl:
-    'https://github.com/sbw-vaubaan/vaubaan-gateway/blob/main/docs/handbook/providers/github.md',
+  docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/github.md',
   // The one tool that hands the agent a provider token (spec §2.4) : a short-lived
   // installation token scoped to the mission's repositories, for git itself. The
   // clone token carries `contents:read` only ; the push token writes, so a preset
