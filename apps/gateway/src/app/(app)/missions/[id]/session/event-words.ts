@@ -60,6 +60,7 @@ const KNOWN: Readonly<Record<SessionEventKind, true>> = {
   approval: true,
   'gate-opened': true,
   'gate-changed': true,
+  'limits-changed': true,
   rotation: true,
   revocation: true,
 };
@@ -124,6 +125,19 @@ export function eventWords(
         tone: null,
         lines: event.gate_before
           ? [line(`was “${GATE_WORDS[gateWordOf(event.gate_before)]}”`)]
+          : [],
+      };
+    case 'limits-changed':
+      return {
+        outcome: 'limits changed',
+        tone: null,
+        lines: event.limits
+          ? [
+              line(`${event.limits.quota_before} → ${event.limits.quota} a period`),
+              line(
+                `${event.limits.rate_limit_max_before} → ${event.limits.rate_limit_max} per rate window`,
+              ),
+            ]
           : [],
       };
     case 'reset':

@@ -59,7 +59,7 @@ plugins/cloudflare-dns/src/
   execute.ts                executeCloudflareDns, discoverCloudflareDnsResources, CLOUDFLARE_API_BASE,
                             MAX_DISCOVERED_ZONES, API_TOKEN_FIELD
   data-model.ts             plane `dns`, 10 entities (critical + delete overlays under record)
-  risk-catalog.yaml         11 risks + fallback, 3 presets, catalog_version 2
+  risk-catalog.yaml         11 risks + fallback, 3 presets, catalog_version 3
   index.ts                  definePlugin(...) → cloudflareDnsPlugin (default export)
 ```
 

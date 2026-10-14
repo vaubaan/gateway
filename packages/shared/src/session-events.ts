@@ -154,6 +154,20 @@ export interface GateChangedEventDetails {
 }
 
 /**
+ * The creator changed the limits of one accepted risk on the mission itself:
+ * its quota per period and the number of calls of its rate window. The risk is
+ * the event's own `risk_id` column; one change of several risks is one event per
+ * risk, written in one transaction. The rate window and the gate are not part of
+ * it (a gate edit is `gate-changed`; the window never changes after issuance).
+ */
+export interface LimitsChangedEventDetails {
+  readonly quota: number;
+  readonly quota_before: number;
+  readonly rate_limit_max: number;
+  readonly rate_limit_max_before: number;
+}
+
+/**
  * A token of the mission was issued: a member generated or rotated theirs, or
  * the creator created a named one. `token_prefix` is the new token's.
  */
@@ -189,6 +203,7 @@ export interface SessionEventDetailsByKind {
   readonly approval: ApprovalEventDetails;
   readonly 'gate-opened': GateOpenedEventDetails;
   readonly 'gate-changed': GateChangedEventDetails;
+  readonly 'limits-changed': LimitsChangedEventDetails;
   readonly rotation: RotationEventDetails;
   readonly revocation: RevocationEventDetails;
 }
@@ -325,6 +340,15 @@ function isGateChanged(d: Fields): d is Fields & GateChangedEventDetails {
   return isText(d.gate) && isGate(d.gate) && isText(d.gate_before) && isGate(d.gate_before);
 }
 
+function isLimitsChanged(d: Fields): d is Fields & LimitsChangedEventDetails {
+  return (
+    isCount(d.quota) &&
+    isCount(d.quota_before) &&
+    isCount(d.rate_limit_max) &&
+    isCount(d.rate_limit_max_before)
+  );
+}
+
 function isRotation(d: Fields): d is Fields & RotationEventDetails {
   return isText(d.token_prefix) && hasOptionalHolder(d) && isOptionalText(d.replaced_prefix);
 }
@@ -358,6 +382,8 @@ export function parseEventDetails(kind: string, details: unknown): SessionEventD
       return isGateOpened(details) ? { kind, details } : null;
     case 'gate-changed':
       return isGateChanged(details) ? { kind, details } : null;
+    case 'limits-changed':
+      return isLimitsChanged(details) ? { kind, details } : null;
     case 'rotation':
       return isRotation(details) ? { kind, details } : null;
     case 'revocation':

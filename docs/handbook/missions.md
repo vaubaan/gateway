@@ -19,6 +19,7 @@ tracks:
   - apps/gateway/tests/integration/missions/
   - apps/gateway/tests/e2e/v5/issue-mission.spec.ts
   - apps/gateway/tests/e2e/v5/team-mission.spec.ts
+  - apps/gateway/tests/e2e/v5/change-limits.spec.ts
   - apps/gateway/tests/e2e/v5/mission-pages.ts
   - apps/gateway/migrations/0010_mission_members_and_token_holders.sql
   - apps/gateway/tests/e2e/v5/browser.ts
@@ -579,6 +580,8 @@ member token.
 | `removeMember(user, id, userId)`             | creator                                                                         | marks the row removed and revokes the member's token in **one store transaction**                                                                                                                                               | `mission-member-removed`                                                                       |
 | `generateToken(user, id)`                    | creator, member                                                                 | a new member token for the **caller**; their previous one becomes `rotated`; the mission must serve calls, and the store checks again in the insert; returns the secret and the kit                                             | `mission-token-issued` (first) / `mission-rotated`                                             |
 | `createNamedToken(user, id, name)`           | creator                                                                         | `parseTokenName`; the mission must serve calls; one active token per name (`name-taken`, checked before the hash and again in the insert); returns the secret and the kit                                                       | `mission-token-issued`                                                                         |
+| `replaceNamedToken(user, id, tokenId)`       | creator                                                                         | "Replace key" on a machine key: the store retires it (`rotated`) and inserts the new one of the same name in **one transaction** (`IssueTokenInput.replacing`); `not-replaceable` when it is not a working named token          | `mission-rotated` (`before.token_prefix` the old one)                                          |
+| `leave(user, id)`                            | member (not the creator: `creator-cannot-leave`)                                | the caller's own removal: the same store act as `removeMember` (row removed, token revoked, one transaction); the key is answered `holder-removed` from its next call                                                           | `mission-member-left` (actor: the member)                                                      |
 | `revokeToken(user, id, tokenId)`             | its holder, creator                                                             | one token, on its own; idempotent (`already: true`)                                                                                                                                                                             | `mission-token-revoked` (`by-holder` / `by-creator`)                                           |
 | `revokeTokensOfDeactivated(actorId, userId)` | the users module (a deactivation, and a reactivation before the status returns) | revokes the tokens a user holds on missions they did **not** create                                                                                                                                                             | `mission-token-revoked` (`holder-deactivated`), one each                                       |
 
@@ -593,13 +596,13 @@ actor of a session event is a user and the operator may be the bootstrap
 operator, so its audit entries are the record.
 
 **What a member can and cannot do.** A member reads the mission, its session
-and its team, and manages their own token. They cannot edit the mission, its
+and its team, manages their own token, and may leave the mission. They cannot edit the mission, its
 gates, its members or its named tokens, nor see or answer its requests:
 `MissionService` mutations and `RequestService` (`own`, `inbox`) know the
 creator only, and the team service answers `not-found` to a member for the
 creator's acts (`tests/integration/missions/team.test.ts` tries each and
-compares the store before and after). `MissionDetail.gates_editable` is
-`false` for a member.
+compares the store before and after). `MissionDetail.gates_editable` and
+`limits_editable` are `false` for a member.
 
 **Authority.** A member works under the creator's authority and needs no share
 of the mission's connections (spec §11.2). `orphaned` is still derived from
@@ -734,24 +737,27 @@ session, the audit and the catalog show, and what a filter is typed with.
 
 ## HTTP surface
 
-| Route                           | Handler   | Answers                                                                                                                                                |
-| ------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `POST /api/missions/preview`    | `preview` | 200 `{ preview }`                                                                                                                                      |
-| `POST /api/missions`            | `issue`   | 201 `{ mission, token: { secret, prefix }, kit }` · 422 `{ error: 'refused', preview }`                                                                |
-| `POST /api/missions/:id/rotate` | `rotate`  | 200 `{ mission, token, kit }` · 404 · 409 `mission-inactive`                                                                                           |
-| `POST /api/missions/:id/revoke` | `revoke`  | 200 `{ mission: { id, status } }` · 404                                                                                                                |
-| `POST /api/missions/:id/gate`   | `setGate` | 200 `{ mission: { id }, risk_id, gate, previous, opening_closed }` · 400 `invalid-gate-edit` · 404 · 409 `mission-inactive` · 422 `risk-not-in-policy` |
+| Route                           | Handler     | Answers                                                                                                                                                                       |
+| ------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/missions/preview`    | `preview`   | 200 `{ preview }`                                                                                                                                                             |
+| `POST /api/missions`            | `issue`     | 201 `{ mission, token: { secret, prefix }, kit }` · 422 `{ error: 'refused', preview }`                                                                                       |
+| `POST /api/missions/:id/rotate` | `rotate`    | 200 `{ mission, token, kit }` · 404 · 409 `mission-inactive`                                                                                                                  |
+| `POST /api/missions/:id/revoke` | `revoke`    | 200 `{ mission: { id, status } }` · 404                                                                                                                                       |
+| `POST /api/missions/:id/gate`   | `setGate`   | 200 `{ mission: { id }, risk_id, gate, previous, opening_closed }` · 400 `invalid-gate-edit` · 404 · 409 `mission-inactive` · 422 `risk-not-in-policy`                        |
+| `POST /api/missions/:id/limits` | `setLimits` | 200 `{ mission: { id }, changed: [{ risk_id, before, after }] }` · 400 `invalid-limits-edit` · 404 · 409 `mission-inactive` · 422 `risk-not-in-policy` / `refused` (`issues`) |
 
 The team's routes (`team-handlers.ts`, same guard, merged into
 `root.missions.handlers`):
 
-| Route                                           | Handler            | Answers                                                                                                          |
-| ----------------------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| `POST /api/missions/:id/members`                | `addMember`        | 201 `{ member }` · 400 `invalid-member` · 404 · 409 `already-member` / `mission-inactive` · 422 `user-not-found` |
-| `POST /api/missions/:id/members/:userId/remove` | `removeMember`     | 200 `{ user_id, token_revoked }` · 404                                                                           |
-| `POST /api/missions/:id/tokens/mine`            | `generateToken`    | 200 `{ mission, token: { secret, prefix }, kit, rotated }` · 404 · 409 `mission-inactive`                        |
-| `POST /api/missions/:id/tokens`                 | `createNamedToken` | 201 `{ mission, token, kit, rotated: false }` · 400 `invalid-name` · 404 · 409 `name-taken` / `mission-inactive` |
-| `POST /api/missions/:id/tokens/:tokenId/revoke` | `revokeToken`      | 200 `{ token_id, already }` · 404                                                                                |
+| Route                                            | Handler             | Answers                                                                                                          |
+| ------------------------------------------------ | ------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `POST /api/missions/:id/members`                 | `addMember`         | 201 `{ member }` · 400 `invalid-member` · 404 · 409 `already-member` / `mission-inactive` · 422 `user-not-found` |
+| `POST /api/missions/:id/members/:userId/remove`  | `removeMember`      | 200 `{ user_id, token_revoked }` · 404                                                                           |
+| `POST /api/missions/:id/tokens/mine`             | `generateToken`     | 200 `{ mission, token: { secret, prefix }, kit, rotated }` · 404 · 409 `mission-inactive`                        |
+| `POST /api/missions/:id/tokens`                  | `createNamedToken`  | 201 `{ mission, token, kit, rotated: false }` · 400 `invalid-name` · 404 · 409 `name-taken` / `mission-inactive` |
+| `POST /api/missions/:id/tokens/:tokenId/revoke`  | `revokeToken`       | 200 `{ token_id, already }` · 404                                                                                |
+| `POST /api/missions/:id/tokens/:tokenId/replace` | `replaceNamedToken` | 200 `{ mission, token, kit, rotated: true }` · 404 · 409 `not-replaceable` / `mission-inactive`                  |
+| `POST /api/missions/:id/leave`                   | `leave`             | 200 `{ left: true, token_revoked }` · 404 · 409 `creator-cannot-leave`                                           |
 
 `tokens/mine` answers the caller with their **own** token. The secret of a
 member token is only ever in the answer to the member it belongs to:
@@ -760,7 +766,7 @@ own. No route answers the creator with another member's secret. The 404 and
 the 409 `mission-inactive` of the two token routes are also what a refused
 insert answers ("The token insert checks again" above).
 
-All ten routes of the two tables go through `guardMutation(request, deps, 'user')` (handbook
+All thirteen routes of the two tables go through `guardMutation(request, deps, 'user')` (handbook
 [authentication](authentication.md)): origin check first (403
 `origin-mismatch`), then a **user** session (401 without, 403 for the
 bootstrap operator — a mission always has an identified human behind it), `Cache-Control: no-store`; a body that is not a
@@ -835,6 +841,43 @@ route answers `{ mission: { id }, risk_id, gate, previous, opening_closed }`.
 `MissionService.get()` gives each policy line `gate_open_until`: the end of the period the
 creator opened the gate for, or `null` (always `null` on a mission that is not active);
 the page shows it next to the gate.
+
+## Changing the limits after issuance — `MissionService.setLimits(user, missionId, edits)`
+
+ADR [mission-limits-editable-after-issuance](../decisions/mission-limits-editable-after-issuance.md).
+`edits` is `[{ risk_id, quota, rate_limit_max }]`; the route takes
+`{ limits: [{ risk_id, quota, rate_limit: { max } }] }` and refuses any other key (a
+window, a gate, a period).
+
+- **Only the quota and the calls per rate window move**, for risks already in the
+  policy (`risk-not-in-policy` otherwise, nothing written). The window, the gate, the
+  period, the resources and the tokens stay. An empty list or a risk listed twice is
+  `invalid-limits`.
+- **Judged as at issuance.** The lines whose values move go through
+  `checkPolicyLines(connection, selected, lines)` (`preview.ts`), which runs
+  `classifyLines` and `issuesOf`, the functions a draft's explicit lines go through:
+  the connection's issuance context is rebuilt for the creator now
+  (`issuanceConnection`: authority, catalog rows with their rate ceilings), the
+  selected resources are the ones the mission reaches (`detailConnections`). A refusal
+  is `refused` with the same `PreviewIssue`s, message included, a creation would get.
+  Unchanged lines are not judged again.
+- **Creator only; revoked and orphaned missions are not changed** (`gateEditBlockedBy`,
+  the gates' rule); an expired one is. `MissionDetail.limits_editable` says so to the
+  page. No delegated variant: the management door's `ManagementMissions` does not pick
+  the method.
+- **In one store transaction** (`MissionsRepo.setLimits`): each listed row read, the
+  ones that move updated, `updated_at` touched, one `limits-changed` session event per
+  moved risk (`{ quota, quota_before, rate_limit_max, rate_limit_max_before }`, the risk
+  in the event's `risk_id` column) when the session exists. Values equal to the stored
+  ones write nothing (`changed: []`).
+- **At once, for the current period**: the budget reads the stored limits of the
+  touched risks inside its decision transaction (`DecideContext.limits`,
+  [budget-and-sessions](budget-and-sessions.md)), so no call decided after the change
+  commits uses the old ones. Used calls stay counted; a quota under them leaves the
+  risk exhausted until the reset.
+- **One audit entry**: act `limits-changed`, `before` / `after`
+  `{ limits: [{ risk_id, quota, rate_limit: { max, window_seconds } }] }` for the risks
+  that moved.
 
 ## The mission pages — `app/(app)/missions/`
 
@@ -1068,7 +1111,21 @@ Read by the creator and by the teammates. In the order a person needs it:
    first" — a switch for the creator while `MissionDetail.gates_editable`
    (`GateControl`: it posts to `/api/missions/<id>/gate`, and a toast says
    what changed and that it applies from the next call) — "runs freely until
-   `<date>`" while the creator opened it for the period, and "why?".
+   `<date>`" while the creator opened it for the period, and "why?". For the
+   creator, while `MissionDetail.limits_editable`, the section's note is a
+   **Change limits** button (`data-testid="change-limits"`, also in "···"):
+   it reloads the page with `?edit=limits#permissions`, and the section then
+   shows `LimitsEditor` (`limits-editor.tsx`, a client component) instead of
+   the disclosure — the same permission table (`PermissionTable` `usage`: four columns, the limit in the usage column, so it fits a phone),
+   each row with what was used this period and two fields, the limit per
+   period and the calls per minute (or per the row's own window); no tick, no
+   switch. **Review the change** (disabled while nothing moved or a field is
+   not a whole number of at least 1) opens a `ConfirmDialog` listing each
+   change before → after, saying it applies from the next call and naming the
+   permissions already over their new limit (stopped until the reset). It
+   posts to `/api/missions/<id>/limits`; on success a toast, and the page
+   returns to `#permissions`. A refusal of the server is printed in the
+   dialog.
 6. **Activity** — a line of counts for the period, a link to the activity
    page, and the last eight events one click away (`ActivityTable`).
 
@@ -1091,15 +1148,17 @@ mission's state — never spelled again as a condition of the page.
 | Replace key (a machine's)      | its row                          | the creator, while the mission serves      | `ConfirmDialog`: the current key stops at once                          |
 | Revoke (a machine key)         | its row                          | the creator                                | `DangerConfirm`, typing its name                                        |
 | "Ask me first" on a permission | its row                          | the creator, while `gates_editable`        | no: a switch; a toast confirms                                          |
+| Change limits                  | permissions section, "···"       | the creator, while `limits_editable`       | `ConfirmDialog` listing each change, before → after                     |
+| Leave the mission              | "···"                            | a teammate (never the creator)             | `DangerConfirm`, typing the mission's name                              |
 | Duplicate                      | "···"                            | the creator                                | — (opens "New mission" on a copy)                                       |
 | Stop the mission               | "···"                            | the creator, until it is stopped           | `DangerConfirm`, typing the mission's name; says for how many holders   |
 
 "Replace my key" and "Generate my key" both post to
 `/api/missions/<id>/tokens/mine`, for the creator too. Replacing a machine key
-is two requests — revoke it, then create one of the same name — because the
-gateway has no single act for it; if the second fails the dialog says so and
-the name is free. A teammate has no "leave": they revoke their own key, and
-the creator removes them. An owner of an account closes an orphaned mission
+is one request (`/tokens/<id>/replace`): the old key is retired and the new one
+issued together, so the name is never free. "Leave the mission" posts to
+`/api/missions/<id>/leave`; the teammate's key stops at once and the page goes
+to `/missions`. An owner of an account closes an orphaned mission
 from the account's page ([connections](connections.md)), not from here: they
 cannot read a mission they neither created nor work on.
 

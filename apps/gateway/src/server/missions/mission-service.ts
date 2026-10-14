@@ -29,6 +29,7 @@ import {
   type Gate,
   type Iso8601,
   type MissionPolicyEntry,
+  type RateLimit,
   type RiskId,
   type SessionEventDetails,
 } from '@vaubaan/shared';
@@ -79,10 +80,11 @@ import type {
   MissionDraft,
   MissionIssuer,
   MissionPreview,
+  PreviewIssue,
   ResolvedDraftConnection,
   SeverityLevel,
 } from './model';
-import { previewDraft } from './preview';
+import { checkPolicyLines, previewDraft } from './preview';
 import {
   bearerMatches,
   digestOfBearer,
@@ -229,6 +231,46 @@ export type SetGateResult =
       readonly state: 'revoked' | 'orphaned';
     };
 
+/** The new limits of one accepted risk, as the creator asks for them. */
+export interface LimitEdit {
+  readonly risk_id: RiskId;
+  /** Actions per period. */
+  readonly quota: number;
+  /** Calls per rate window; the window is the one the mission was issued with. */
+  readonly rate_limit_max: number;
+}
+
+/** One risk whose limits moved, before and after. */
+export interface LimitChangeView {
+  readonly risk_id: RiskId;
+  readonly before: { readonly quota: number; readonly rate_limit: RateLimit };
+  readonly after: { readonly quota: number; readonly rate_limit: RateLimit };
+}
+
+export type SetLimitsResult =
+  | {
+      readonly ok: true;
+      readonly mission: MissionRecord;
+      /** The risks whose limits moved; empty when every value asked was already the stored one. */
+      readonly changed: readonly LimitChangeView[];
+    }
+  | { readonly ok: false; readonly reason: 'not-found' }
+  /** No line, or a risk listed twice: the request is not a change of limits. */
+  | { readonly ok: false; readonly reason: 'invalid-limits'; readonly problem: string }
+  /** A change of limits never adds a permission: every risk must be in the policy. */
+  | {
+      readonly ok: false;
+      readonly reason: 'risk-not-in-policy';
+      readonly risk_ids: readonly RiskId[];
+    }
+  /** What issuance would refuse: outside the authority, above the catalog's ceiling, not a whole number. */
+  | { readonly ok: false; readonly reason: 'refused'; readonly issues: readonly PreviewIssue[] }
+  | {
+      readonly ok: false;
+      readonly reason: 'inactive';
+      readonly state: 'revoked' | 'orphaned';
+    };
+
 /**
  * The public part of a verified token: what the execution door needs — the row,
  * the prefix and who it belongs to — never the hash.
@@ -354,6 +396,11 @@ export function gateEditBlockedBy(
 export interface MissionDetail extends MissionOverview {
   /** Whether `setGate` would take an edit now, from this reader. A member edits nothing. */
   readonly gates_editable: boolean;
+  /**
+   * Whether `setLimits` would take a change now, from this reader: the same rule as the
+   * gates (the creator, on a mission that can serve again).
+   */
+  readonly limits_editable: boolean;
   readonly connections: readonly MissionDetailConnection[];
   readonly policy: readonly MissionDetailRisk[];
   readonly period: DraftPeriod;
@@ -897,6 +944,162 @@ export class MissionService {
     };
   }
 
+  /**
+   * The creator changes the limits of accepted risks after issuance (spec §3.2): per
+   * risk already in the mission, its quota per period and its calls per rate window, up
+   * or down. Never a risk added or removed, never the period nor the rate window, never
+   * the gate (that is `setGate`). Creator only, like every mutation of a mission; there
+   * is no delegated variant: the management door is not handed this method.
+   *
+   * A value that moves is judged by issuance's own check of a policy line
+   * (`checkPolicyLines`): inside the creator's authority on the connection NOW, a whole
+   * number of at least one, a rate under the catalog's ceiling. Whatever caps a creation
+   * caps the change; a value that does not move is not judged again.
+   *
+   * The change applies to the current period at once: what was used stays used, and a
+   * quota lowered under it leaves the risk exhausted until the reset. The budget reads
+   * the stored limits inside its decision transaction (`DecideContext.limits`), so no
+   * call decided after the write commits passes above the new limit. One
+   * `limits-changed` audit entry carries every risk that moved, before and after.
+   *
+   * Between the authority check and the write, the creator's authority may go: the
+   * mission then reads `orphaned` and serves nothing, as an issuance racing the same
+   * revocation would.
+   */
+  async setLimits(
+    user: AuthoritySubject,
+    missionId: string,
+    edits: readonly LimitEdit[],
+  ): Promise<SetLimitsResult> {
+    const mission = await this.ownMission(user, missionId);
+    if (!mission) return { ok: false, reason: 'not-found' };
+    const blocked = gateEditBlockedBy(mission);
+    if (blocked) return { ok: false, reason: 'inactive', state: blocked };
+    if (edits.length === 0) {
+      return { ok: false, reason: 'invalid-limits', problem: 'No permission is listed.' };
+    }
+    const ids = edits.map((edit) => edit.risk_id);
+    const twice = [...new Set(ids.filter((id, i) => ids.indexOf(id) !== i))];
+    if (twice.length > 0) {
+      return {
+        ok: false,
+        reason: 'invalid-limits',
+        problem: `Listed more than once: ${twice.join(', ')}.`,
+      };
+    }
+    const stored = new Map(mission.policy.map((entry) => [entry.riskId, entry] as const));
+    const outside = ids.filter((id) => !stored.has(id));
+    if (outside.length > 0) return { ok: false, reason: 'risk-not-in-policy', risk_ids: outside };
+
+    // The lines that move, as issuance would read them: same gate, same window.
+    const moving: MissionPolicyEntry[] = [];
+    for (const edit of edits) {
+      const entry = stored.get(edit.risk_id);
+      if (!entry || (entry.quota === edit.quota && entry.rateLimit === edit.rate_limit_max)) {
+        continue;
+      }
+      moving.push({
+        risk_id: edit.risk_id,
+        quota: edit.quota,
+        rate_limit: { max: edit.rate_limit_max, window_seconds: entry.rateWindowSeconds },
+        gate: entry.gate,
+      });
+    }
+    const issues = await this.limitIssues(user, mission, moving);
+    if (issues.length > 0) return { ok: false, reason: 'refused', issues };
+
+    const written = await this.deps.store.missions.setLimits(
+      mission.id,
+      edits.map((edit) => ({
+        riskId: edit.risk_id,
+        quota: edit.quota,
+        rateLimit: edit.rate_limit_max,
+      })),
+      user.id,
+    );
+    if (!written) return { ok: false, reason: 'risk-not-in-policy', risk_ids: ids };
+    const changed: LimitChangeView[] = written.changes
+      .filter((change) => change.changed)
+      .map((change) => ({
+        risk_id: change.riskId,
+        before: {
+          quota: change.before.quota,
+          rate_limit: { max: change.before.rateLimit, window_seconds: change.rateWindowSeconds },
+        },
+        after: {
+          quota: change.after.quota,
+          rate_limit: { max: change.after.rateLimit, window_seconds: change.rateWindowSeconds },
+        },
+      }));
+    if (changed.length > 0) {
+      await this.deps.store.auditWriter.write({
+        kind: 'admin',
+        ts: toIso(this.deps.clock.now()),
+        user_id: user.id,
+        act: 'limits-changed',
+        object: { type: 'mission', id: mission.id },
+        before: { limits: changed.map((c) => ({ risk_id: c.risk_id, ...c.before })) },
+        after: { limits: changed.map((c) => ({ risk_id: c.risk_id, ...c.after })) },
+        delegated_client_id: null,
+      });
+      this.deps.logger.info('mission limits changed', {
+        mission_id: mission.id,
+        risks: changed.length,
+      });
+    }
+    return { ok: true, mission: written.mission, changed };
+  }
+
+  /**
+   * Why issuance would refuse these lines on the mission's connections now: each line
+   * checked against the creator's authority on the connection of its provider, on the
+   * resources the mission reaches there. Empty when every line passes.
+   */
+  private async limitIssues(
+    user: AuthoritySubject,
+    mission: MissionRecord,
+    lines: readonly MissionPolicyEntry[],
+  ): Promise<PreviewIssue[]> {
+    if (lines.length === 0) return [];
+    const issues: PreviewIssue[] = [];
+    const judged = new Set<RiskId>();
+    const reached = await this.detailConnections(mission);
+    for (const [index, c] of mission.connections.entries()) {
+      const connection = await this.deps.store.connections.getById(c.connectionId);
+      if (!connection) continue;
+      const own = lines.filter(
+        (line) => parseRiskId(line.risk_id)?.provider === connection.provider,
+      );
+      if (own.length === 0) continue;
+      for (const line of own) judged.add(line.risk_id);
+      const context = await this.issuanceConnection(user, connection);
+      if (!context) {
+        issues.push({
+          code: 'exceeds-authority',
+          message: `Outside your authority on "${connection.displayName}": ${own
+            .map((line) => line.risk_id)
+            .join(', ')}.`,
+          risk_ids: own.map((line) => line.risk_id),
+          connection_index: index,
+          connection_id: connection.id,
+        });
+        continue;
+      }
+      const selected = reached.find((r) => r.id === connection.id)?.resources ?? [];
+      issues.push(...checkPolicyLines(context, selected, own, index).issues);
+    }
+    const unplaced = lines.filter((line) => !judged.has(line.risk_id)).map((l) => l.risk_id);
+    if (unplaced.length > 0) {
+      // A risk of a provider none of the mission's connections is for: nothing grounds it.
+      issues.push({
+        code: 'exceeds-authority',
+        message: `No account of this mission carries ${unplaced.join(', ')}.`,
+        risk_ids: unplaced,
+      });
+    }
+    return issues;
+  }
+
   /** Session events exist only once the session does (born on the first call). */
   private async recordEvent(
     missionId: string,
@@ -1090,9 +1293,11 @@ export class MissionService {
         gate_open_until: openUntil.get(entry.risk_id) ?? null,
       };
     });
+    const editable = inspected.role === 'creator' && gateEditBlockedBy(overview.mission) === null;
     return {
       ...overview,
-      gates_editable: inspected.role === 'creator' && gateEditBlockedBy(overview.mission) === null,
+      gates_editable: editable,
+      limits_editable: editable,
       connections,
       policy,
       period: statedPeriodOf(mission),

@@ -144,6 +144,12 @@ function worded(parsed: SessionEventDetails): EventWords {
         tone: 'neutral',
         text: `You set this permission to “${GATE_WORDS[gateWordOf(parsed.details.gate)]}”`,
       };
+    case 'limits-changed':
+      return {
+        ...PLAIN,
+        tone: 'neutral',
+        text: `You changed the limit of this permission from ${parsed.details.quota_before} to ${parsed.details.quota}`,
+      };
     case 'rotation':
       return {
         ...PLAIN,
@@ -171,6 +177,7 @@ const WITHOUT_DETAIL: Readonly<Record<string, Pick<EventWords, 'tone' | 'text'>>
   approval: { tone: 'neutral', text: 'You approved one call' },
   'gate-opened': { tone: 'neutral', text: 'You let a permission run freely until the reset' },
   'gate-changed': { tone: 'neutral', text: 'You changed what a permission asks' },
+  'limits-changed': { tone: 'neutral', text: 'You changed the limits of a permission' },
   rotation: { tone: 'neutral', text: 'A key was replaced' },
   revocation: { tone: 'neutral', text: 'The mission was stopped' },
 };

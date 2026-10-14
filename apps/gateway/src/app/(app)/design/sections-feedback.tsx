@@ -179,7 +179,7 @@ export function StateSections() {
       <GallerySection
         id="callout"
         title="Callout"
-        rule="A note that interrupts on purpose. One filled box per page at most, for the thing that needs the person; never a tinted paragraph of help."
+        rule="A note that interrupts on purpose. One filled box per page at most, for the thing that needs the person; never a tinted paragraph of help. Done is said in the accent, never in green: green is for checklist ticks only."
       >
         <Specimen name="Tones">
           {() => (
@@ -452,7 +452,7 @@ export function OverlaySections() {
       <GallerySection
         id="toast"
         title="Toast"
-        rule="Confirms what the person just did, and leaves. A failure stays until dismissed. Never the only copy of something that matters."
+        rule="Confirms what the person just did, and leaves. A failure stays until dismissed. Never the only copy of something that matters. A success carries the accent, not green."
       >
         <Specimen name="Tones, then live">{() => <ToastSpecimen />}</Specimen>
       </GallerySection>

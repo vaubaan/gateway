@@ -506,6 +506,11 @@ describe('missions: members and per-holder tokens', () => {
           s.missions.service.setGate(u, m, READ, 'approval'),
       ],
       [
+        'change its limits',
+        (s: GatewayRoot, m: string, u: UserRecord) =>
+          s.missions.service.setLimits(u, m, [{ risk_id: READ, quota: 999, rate_limit_max: 1 }]),
+      ],
+      [
         'rotate the creator’s token',
         (s: GatewayRoot, m: string, u: UserRecord) => s.missions.service.rotate(u, m),
       ],
@@ -813,6 +818,154 @@ describe('missions: members and per-holder tokens', () => {
           .status,
       ).toBe(403);
       expect((await root.store.missions.listTokens(mission.id)).length).toBe(1);
+    });
+  });
+  // ── A teammate leaves; a machine key is replaced in one act ─────────────────
+
+  describe('leaving and replacing', () => {
+    const post = (path: string, headers: Headers) =>
+      new Request(`${PUBLIC_URL}/api/missions/${mission.id}${path}`, { method: 'POST', headers });
+
+    it('a teammate leaves: their key is refused at once (holder-removed), the mission is gone for them, one entry', async () => {
+      await addBob();
+      const bobs = await bobToken();
+      expect(await team.leave(bob, mission.id)).toEqual({ ok: true, token_revoked: true });
+      expect(await root.missions.service.verifyToken(bobs.secret)).toMatchObject({
+        outcome: 'retired',
+        reason: 'holder-removed',
+      });
+      expect(await root.missions.service.verifyToken(adaSecret)).toMatchObject({
+        outcome: 'verified',
+      });
+      expect(await root.missions.service.get(bob, mission.id)).toBeNull();
+      const entries = (await root.store.audit.list({ kind: 'admin' })).flatMap((e) =>
+        e.kind === 'admin' && e.act === 'mission-member-left' ? [e] : [],
+      );
+      expect(entries).toMatchObject([
+        {
+          user_id: bob.id,
+          object: { type: 'mission', id: mission.id },
+          before: { member_user_id: bob.id, member_email: bob.email },
+          after: { token_revoked_prefix: bobs.prefix },
+        },
+      ]);
+      // Gone: leaving again is answered as for a mission that does not exist.
+      expect(await team.leave(bob, mission.id)).toEqual({ ok: false, reason: 'not-found' });
+      // The creator may add them again; they then generate a new key.
+      expect((await team.addMember(ada, mission.id, { email: bob.email })).ok).toBe(true);
+    });
+
+    it('a teammate with no key leaves too; the creator cannot leave; a stranger is not told the mission exists', async () => {
+      await addBob();
+      expect(await team.leave(bob, mission.id)).toEqual({ ok: true, token_revoked: false });
+      expect(await team.leave(ada, mission.id)).toEqual({
+        ok: false,
+        reason: 'creator-cannot-leave',
+      });
+      expect(await team.leave(carol, mission.id)).toEqual({ ok: false, reason: 'not-found' });
+      expect(await adminActs()).not.toContain('mission-member-removed');
+    });
+
+    it('replacing a machine key retires it and issues a new one of the same name in one act', async () => {
+      const ci = await team.createNamedToken(ada, mission.id, 'CI runner');
+      if (!ci.ok) throw new Error('expected a machine key');
+      const [row] = (await root.store.missions.listTokens(mission.id)).filter(
+        (t) => t.holder.kind === 'named',
+      );
+      if (!row) throw new Error('expected the machine key row');
+      const replaced = await team.replaceNamedToken(ada, mission.id, row.id);
+      if (!replaced.ok) throw new Error(`replace refused: ${replaced.reason}`);
+      expect(replaced.rotated).toBe(true);
+      expect(replaced.token.secret).not.toBe(ci.token.secret);
+      expect(await root.missions.service.verifyToken(ci.token.secret)).toMatchObject({
+        outcome: 'retired',
+        reason: 'rotated',
+      });
+      expect(await root.missions.service.verifyToken(replaced.token.secret)).toMatchObject({
+        outcome: 'verified',
+        token: { holder: { kind: 'named', name: 'CI runner' } },
+      });
+      // One working key of that name, never zero, never two.
+      const named = (await root.store.missions.listTokens(mission.id)).filter(
+        (t) => t.holder.kind === 'named' && t.status === 'active',
+      );
+      expect(named.map((t) => t.prefix)).toEqual([replaced.token.prefix]);
+      const rotated = (await root.store.audit.list({ kind: 'admin' })).flatMap((e) =>
+        e.kind === 'admin' && e.act === 'mission-rotated' ? [e] : [],
+      );
+      expect(rotated).toMatchObject([
+        {
+          user_id: ada.id,
+          before: { token_prefix: ci.token.prefix },
+          after: { token_prefix: replaced.token.prefix, token_kind: 'named', holder: 'CI runner' },
+        },
+      ]);
+      // The old one is no longer replaceable: a second tab finds it replaced already.
+      expect(await team.replaceNamedToken(ada, mission.id, row.id)).toEqual({
+        ok: false,
+        reason: 'not-replaceable',
+      });
+    });
+
+    it('only the creator replaces, only a working machine key, only on a mission that serves', async () => {
+      await addBob();
+      const ci = await team.createNamedToken(ada, mission.id, 'CI runner');
+      if (!ci.ok) throw new Error('expected a machine key');
+      const tokens = await root.store.missions.listTokens(mission.id);
+      const machine = tokens.find((t) => t.holder.kind === 'named');
+      const adas = tokens.find((t) => t.holder.kind === 'member');
+      if (!machine || !adas) throw new Error('expected both keys');
+      expect(await team.replaceNamedToken(bob, mission.id, machine.id)).toEqual({
+        ok: false,
+        reason: 'not-found',
+      });
+      expect(await team.replaceNamedToken(ada, mission.id, adas.id)).toEqual({
+        ok: false,
+        reason: 'not-replaceable',
+      });
+      expect(await team.replaceNamedToken(ada, mission.id, 'none')).toEqual({
+        ok: false,
+        reason: 'not-found',
+      });
+      await root.missions.service.revoke(ada, mission.id);
+      expect(await team.replaceNamedToken(ada, mission.id, machine.id)).toMatchObject({
+        ok: false,
+      });
+      expect((await root.missions.service.verifyToken(ci.token.secret)).outcome).toBe('retired');
+    });
+
+    it('over HTTP: 200 with the new secret, 409 for the creator leaving, 404 for a stranger', async () => {
+      await addBob();
+      const { handlers } = root.missions;
+      const ci = await team.createNamedToken(ada, mission.id, 'CI runner');
+      if (!ci.ok) throw new Error('expected a machine key');
+      const machine = (await root.store.missions.listTokens(mission.id)).find(
+        (t) => t.holder.kind === 'named',
+      );
+      if (!machine) throw new Error('expected the machine key');
+      const asAda = await sessionHeaders(root, ada);
+      const replaced = await handlers.replaceNamedToken(
+        post(`/tokens/${machine.id}/replace`, asAda),
+        mission.id,
+        machine.id,
+      );
+      expect(replaced.status).toBe(200);
+      expect(replaced.headers.get('cache-control')).toBe('no-store');
+      expect(await replaced.json()).toMatchObject({
+        token: { secret: SECRET_SHAPE },
+        rotated: true,
+      });
+
+      const creatorLeaves = await handlers.leave(post('/leave', asAda), mission.id);
+      expect(creatorLeaves.status).toBe(409);
+      const asCarol = await sessionHeaders(root, carol);
+      expect((await handlers.leave(post('/leave', asCarol), mission.id)).status).toBe(404);
+      const asBob = await sessionHeaders(root, bob);
+      const left = await handlers.leave(post('/leave', asBob), mission.id);
+      expect(left.status).toBe(200);
+      expect(await left.json()).toEqual({ left: true, token_revoked: false });
+      const foreign = await sessionHeaders(root, ada, { origin: 'https://evil.example' });
+      expect((await handlers.leave(post('/leave', foreign), mission.id)).status).toBe(403);
     });
   });
 });

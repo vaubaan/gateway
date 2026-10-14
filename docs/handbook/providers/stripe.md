@@ -54,7 +54,7 @@ plugins/stripe/src/
   classify.ts         classifyStripe — pure, (tool, args, resources) → slices | denied
   execute.ts          executeStripe, discoverStripeResources, STRIPE_API_BASE
   data-model.ts       plane `billing`, 22 entities, `mode` envScopable
-  risk-catalog.yaml   16 risks + fallback, 3 presets, catalog_version 4
+  risk-catalog.yaml   16 risks + fallback, 3 presets, catalog_version 5
   index.ts            definePlugin(...) → stripePlugin (default export)
 ```
 

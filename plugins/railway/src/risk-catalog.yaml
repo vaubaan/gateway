@@ -22,8 +22,8 @@
 # touches into the `environment[...]` segment of the slice.
 
 provider: railway
-catalog_version: 3
-catalog_date: 2026-10-13
+catalog_version: 4
+catalog_date: 2026-10-14
 
 risks:
   # ───── Reads ────────────────────────────────────────────────────────────────

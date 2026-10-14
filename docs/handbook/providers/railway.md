@@ -218,7 +218,7 @@ agent tool itself, which cannot be bound at all (below, and
 
 ## Catalog and presets
 
-`risk-catalog.yaml` (`catalog_version: 3`) keeps the nine v4 risk ids and
+`risk-catalog.yaml` (`catalog_version: 4`) keeps the nine v4 risk ids and
 the fallback. Changes in v5: English labels; `read-variables` becomes
 env-scoped (`acceptable_in_envs: [staging, preview, dev, prod]`), like
 `deploy` and `upsert-variable`; version 3 repoints the pattern of

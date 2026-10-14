@@ -175,7 +175,8 @@ The list the command prints (`tour.ts`), without the values of the run
    three file reads: the printed loop reads a file four times with
    `$VAUBAAN_QUOTA_TOKEN`, and the last answer is a refusal
    `budget-exhausted` carrying a `claim_url`. Open it as Alice (or "Waiting
-   for you"), reset the count or give back some calls, run the loop again. An
+   for you"), reset the count or give back some calls, run the loop again; or
+   follow "change the limit" to raise it on the mission for good. An
    older request of the same kind is already waiting; the tour prints its
    URL.
 8. **Approve the pending action**: "Waiting for you" shows a merge of pull

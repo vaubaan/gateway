@@ -8,6 +8,8 @@
  *   POST /api/missions/:id/tokens/mine              the caller generates or rotates their OWN token
  *   POST /api/missions/:id/tokens                   `{ name }` — the creator creates a named token
  *   POST /api/missions/:id/tokens/:tokenId/revoke   the holder, or the creator, revokes one token
+ *   POST /api/missions/:id/tokens/:tokenId/replace  the creator replaces a machine key, in one act
+ *   POST /api/missions/:id/leave                    a teammate leaves (their token is revoked)
  *
  * Every one is a mutation, and two reveal a secret: valid user session, origin
  * check, `Cache-Control: no-store` (spec §6). The secret of a token is in the
@@ -29,6 +31,8 @@ export interface TeamHandlers {
   generateToken(request: Request, missionId: string): Promise<Response>;
   createNamedToken(request: Request, missionId: string): Promise<Response>;
   revokeToken(request: Request, missionId: string, tokenId: string): Promise<Response>;
+  replaceNamedToken(request: Request, missionId: string, tokenId: string): Promise<Response>;
+  leave(request: Request, missionId: string): Promise<Response>;
 }
 
 function json(status: number, body: unknown): Response {
@@ -160,6 +164,40 @@ export function createTeamHandlers(deps: TeamHandlerDeps): TeamHandlers {
       const result = await deps.team.revokeToken(principal.user, missionId, tokenId);
       if (!result.ok) return json(404, NOT_FOUND);
       return json(200, { token_id: result.token_id, already: result.already });
+    },
+
+    async replaceNamedToken(request, missionId, tokenId) {
+      const principal = await userOf(request);
+      if (principal instanceof Response) return principal;
+      const result = await deps.team.replaceNamedToken(principal.user, missionId, tokenId);
+      if (result.ok) return revealed(200, result);
+      switch (result.reason) {
+        case 'not-found':
+          return json(404, NOT_FOUND);
+        case 'inactive':
+          return inactive(result.state);
+        case 'not-replaceable':
+          return json(409, {
+            error: 'not-replaceable',
+            message:
+              'This is not a working machine key of the mission: it was revoked or replaced already, or it belongs to a person, who replaces it themselves.',
+          });
+      }
+    },
+
+    async leave(request, missionId) {
+      const principal = await userOf(request);
+      if (principal instanceof Response) return principal;
+      const result = await deps.team.leave(principal.user, missionId);
+      if (result.ok) return json(200, { left: true, token_revoked: result.token_revoked });
+      if (result.reason === 'creator-cannot-leave') {
+        return json(409, {
+          error: 'creator-cannot-leave',
+          message:
+            'You created this mission: you cannot leave it. Stop it, if nobody should work on it any more.',
+        });
+      }
+      return json(404, NOT_FOUND);
     },
   };
 }

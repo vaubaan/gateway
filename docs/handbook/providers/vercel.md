@@ -186,7 +186,7 @@ and in the presets, where they grant nothing.
 
 ## 3. Catalog
 
-`src/risk-catalog.yaml`, `catalog_version: 2`, loaded at boot by the SDK (the
+`src/risk-catalog.yaml`, `catalog_version: 3`, loaded at boot by the SDK (the
 v4 `risk-catalog.ts` twin and its sync test are gone). 16 risks + fallback,
 ids unchanged since v4. Two risks are env-scoped —
 `vercel.deploy` and `vercel.env-var-write`, `acceptable_in_envs: [preview,

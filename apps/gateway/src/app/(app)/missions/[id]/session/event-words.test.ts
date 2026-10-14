@@ -23,6 +23,7 @@ function event(kind: string, over: Partial<SessionEventView> = {}): SessionEvent
     gate: null,
     gate_before: null,
     gate_open_until: null,
+    limits: null,
     tokens_revoked: null,
     token_prefix: null,
     replaced_prefix: null,
@@ -36,6 +37,16 @@ function event(kind: string, over: Partial<SessionEventView> = {}): SessionEvent
 const words = (e: SessionEventView, requestOpen = false) => eventWords(e, { requestOpen });
 
 describe('what the activity of a mission says of an event', () => {
+  it('says a change of limits with the values before and after', () => {
+    const changed = words(
+      event('limits-changed', {
+        limits: { quota: 5, quota_before: 20, rate_limit_max: 2, rate_limit_max_before: 10 },
+      }),
+    );
+    expect(changed.outcome).toBe('limits changed');
+    expect(changed.lines.map((l) => l.text)).toEqual(['20 → 5 a period', '10 → 2 per rate window']);
+  });
+
   it('writes an allowed call plainly, and says when it ran after a yes', () => {
     expect(words(event('call-allowed'))).toEqual({ outcome: 'allowed', tone: null, lines: [] });
     expect(words(event('call-allowed', { approvals_consumed: 1 })).lines[0]?.text).toBe(

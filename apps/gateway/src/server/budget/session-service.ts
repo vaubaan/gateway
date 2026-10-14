@@ -21,13 +21,25 @@
  * A call that touches several gated risks drops ONE request listing them all, and the
  * approval its grant produces lets the identical replay through (spec §3.5).
  *
+ * The limits that decide are the ones stored when the transaction runs, not the ones of
+ * the mission the caller loaded: `DecideContext.limits` reads the policy rows of the
+ * touched risks inside the transaction, so a limit the creator lowers is in force for
+ * the very next decision, whatever was loaded before it (`livePolicy`). The accepted
+ * risks and the gates are the caller's: a limits edit changes neither.
+ *
  * The credit an allowed call consumes is never refunded: if the upstream call then
  * fails, the audit keeps `decision: allowed` with `upstream_error` and the counter keeps
  * its increment (spec §3.2 counts allowed calls; see the ADR).
  */
 
 import { refuse, type Refusal } from '@vaubaan/gateway-core';
-import type { CallAllowedEventDetails, Iso8601, RiskId, TokenAttribution } from '@vaubaan/shared';
+import type {
+  CallAllowedEventDetails,
+  Iso8601,
+  MissionPolicy,
+  RiskId,
+  TokenAttribution,
+} from '@vaubaan/shared';
 import { InvariantError } from '../store/errors.ts';
 import type {
   DecideContext,
@@ -36,6 +48,7 @@ import type {
   RequestRecord,
   RequestsRepo,
   SessionsRepo,
+  StoredLimits,
 } from '../store/index.ts';
 import type { PreparedArguments } from '../store/repositories/requests.ts';
 import { rateWindowKey, type SlidingWindows } from '../rate-limit/index.ts';
@@ -121,6 +134,8 @@ interface TransactionOutcome extends DecisionOutcome {
   readonly decision: BudgetOutcome;
   readonly request: RequestRecord | null;
   readonly approvalIds: readonly string[];
+  /** The policy the decision was taken with: the caller's, with the limits read now. */
+  readonly policy: MissionPolicy;
 }
 
 export class SessionService {
@@ -136,13 +151,14 @@ export class SessionService {
     const result = await this.deps.sessions.decideAndDecrement(
       { missionId: mission.id, riskIds: risks, periodStart: period.start },
       (ctx): TransactionOutcome => {
-        const gated = gatedRisks(mission, risks);
+        const live: BudgetMission = { ...mission, policy: livePolicy(mission.policy, ctx.limits) };
+        const gated = gatedRisks(live, risks);
         const openedGates = this.openedGates(ctx, gated, period);
         const decision = decide({
-          policy: mission.policy,
+          policy: live.policy,
           risks_touched: risks,
           counters: ctx.counters,
-          rate_windows: this.probeWindows(mission, risks, now),
+          rate_windows: this.probeWindows(live, risks, now),
           period,
           fingerprint,
           approvals: this.lookupApprovals(
@@ -153,16 +169,17 @@ export class SessionService {
           ),
           opened_gates: openedGates,
         });
+        const decided = { ...input, mission: live };
         return decision.kind === 'allow'
-          ? this.applyAllow(ctx, input, decision, fingerprint, now)
-          : this.applyRefusal(ctx, input, decision, fingerprint, prepared, now);
+          ? this.applyAllow(ctx, decided, decision, fingerprint, now)
+          : this.applyRefusal(ctx, decided, decision, fingerprint, prepared, now);
       },
     );
 
-    const { decision, request, approvalIds } = result.outcome;
+    const { decision, request, approvalIds, policy } = result.outcome;
     if (decision.kind === 'allow') {
       const remaining: Record<RiskId, number> = {};
-      for (const entry of mission.policy) {
+      for (const entry of policy) {
         if (result.counters.has(entry.risk_id)) {
           remaining[entry.risk_id] = entry.quota - (result.counters.get(entry.risk_id) ?? 0);
         }
@@ -294,6 +311,7 @@ export class SessionService {
       decision,
       request: null,
       approvalIds,
+      policy: input.mission.policy,
       event: {
         kind: 'call-allowed',
         details: {
@@ -319,6 +337,7 @@ export class SessionService {
       decision,
       request,
       approvalIds: [],
+      policy: input.mission.policy,
       event: {
         kind: 'call-refused',
         riskId: decision.risk_id,
@@ -422,6 +441,26 @@ export class SessionService {
       }
     }
   }
+}
+
+/**
+ * The caller's policy with the quota and the rate of each risk as stored now
+ * (`DecideContext.limits`). Only the limits move: which risks are accepted and how
+ * each is gated stay what the caller loaded.
+ */
+export function livePolicy(
+  policy: MissionPolicy,
+  limits: ReadonlyMap<RiskId, StoredLimits>,
+): MissionPolicy {
+  return policy.map((entry) => {
+    const stored = limits.get(entry.risk_id);
+    if (!stored) return entry;
+    return {
+      ...entry,
+      quota: stored.quota,
+      rate_limit: { max: stored.rateLimit, window_seconds: stored.rateWindowSeconds },
+    };
+  });
 }
 
 /** The touched risks the mission gates `approval`, in policy order. */

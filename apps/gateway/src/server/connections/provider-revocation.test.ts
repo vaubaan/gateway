@@ -302,9 +302,14 @@ describe('what the person is told', () => {
     const manual = providerGrantReport('Key Co', 'manual', BY_HAND);
     expect(manual).toMatchObject({
       actionNeeded: true,
-      title: 'Remove the access at Key Co by hand',
+      title: 'Still granted at Key Co',
     });
     expect(manual.text).toContain(BY_HAND);
+    // What to do is said once: the plugin's sentence, never a second "remove it" around it.
+    for (const report of [manual, failed]) {
+      const said = `${report.title}. ${report.text}`;
+      expect(said.match(/remove|by hand/gi) ?? [], said).toEqual(['Remove']);
+    }
     // A connection revoked before the gateway asked anything reads the same way.
     expect(providerGrantReport('Key Co', null, null)).toMatchObject({ actionNeeded: true });
     expect(providerGrantReport('Key Co', null, null).text).toContain(DEFAULT_BY_HAND);

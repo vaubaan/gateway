@@ -131,7 +131,7 @@ Things to try
      ${quotaLoopCommand(origin, seeded)}
      The last answer is a refusal "budget-exhausted" carrying a claim_url. Open
      it as Alice (or "Waiting for you"), reset the count or give back some calls, run the loop
-     again. An older request of the same kind is already waiting: ${seeded.openClaimUrl}
+     again; or follow "change the limit" to raise it on the mission for good. An older request of the same kind is already waiting: ${seeded.openClaimUrl}
   8. Approve the pending action: "Waiting for you" shows a merge of pull request #128
      with its arguments (${seeded.openApprovalUrl}).
      Approve it, then replay the call with exactly the same arguments:

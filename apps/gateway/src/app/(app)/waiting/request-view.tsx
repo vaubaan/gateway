@@ -929,12 +929,15 @@ function ClaimBody({
             leaveLabel={period.end ? 'Leave it until the reset' : 'Leave it'}
           />
           <Hint>
-            Your answer is written to the activity. Leaving it does not stop the mission. The limits
-            of a mission are set when it is created: for another limit from now on,{' '}
-            <Link href={`${ROUTES.newMission}?from=${mission.id}`} data-testid="claim-duplicate">
-              duplicate the mission
+            Your answer is written to the activity. Leaving it does not stop the mission. For
+            another limit from now on,{' '}
+            <Link
+              href={`${ROUTES.missions}/${mission.id}?edit=limits#permissions`}
+              data-testid="claim-change-limit"
+            >
+              change the limit
             </Link>{' '}
-            with the limit you want.
+            on the mission.
           </Hint>
         </section>
       )}

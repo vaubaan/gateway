@@ -90,11 +90,12 @@ describe('management door — hard deny, by type', () => {
     expectTypeOf<Extract<Handed | Store['requests'], Forbidden>>().not.toBeNever();
   });
 
-  it('of the mission service the door holds seven methods: no gate edit, no duplication, no token check', () => {
+  it('of the mission service the door holds seven methods: no gate or limits edit, no duplication, no token check', () => {
     expectTypeOf<keyof ManagementMissions>().toEqualTypeOf<
       'issuanceContext' | 'preview' | 'issue' | 'rotate' | 'revoke' | 'list' | 'get'
     >();
     expectTypeOf<ManagementMissions>().not.toHaveProperty('setGate');
+    expectTypeOf<ManagementMissions>().not.toHaveProperty('setLimits');
     expectTypeOf<ManagementMissions>().not.toHaveProperty('duplicate');
     expectTypeOf<ManagementMissions>().not.toHaveProperty('draftFrom');
     expectTypeOf<ManagementMissions>().not.toHaveProperty('verifyToken');
@@ -180,6 +181,7 @@ describe('management door — hard deny, by surface', () => {
     'gate',
     'budget',
     'quota',
+    'limit',
     'extend',
     'reset',
     'period',

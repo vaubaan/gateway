@@ -175,9 +175,11 @@ export type {
 export type { CreateShareInput, SharesRepo } from './repositories/shares.ts';
 export type {
   AddMemberInput,
+  AppliedLimitChange,
   CreateMissionInput,
   IssuedToken,
   IssueTokenInput,
+  LimitChange,
   MissionsRepo,
   RemovedMember,
 } from './repositories/missions.ts';
@@ -190,6 +192,7 @@ export type {
   EventHolder,
   RiskEventQuery,
   SessionsRepo,
+  StoredLimits,
 } from './repositories/sessions.ts';
 export { prepareRequestArguments } from './repositories/requests.ts';
 export type {
