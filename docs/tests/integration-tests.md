@@ -116,6 +116,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/compose/compose.test.ts`                                                          |        17 |
 | `apps/gateway/src/server/config/duration.test.ts`                                                          |         2 |
 | `apps/gateway/src/server/config/keys-doc.test.ts`                                                          |        39 |
+| `apps/gateway/src/server/config/load.property.test.ts`                                                     |         6 |
 | `apps/gateway/src/server/config/load.test.ts`                                                              |        54 |
 | `apps/gateway/src/server/config/sign-in.test.ts`                                                           |        15 |
 | `apps/gateway/src/server/connections/codec-and-keypair.test.ts`                                            |        12 |
@@ -134,6 +135,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/groups/service.test.ts`                                                           |        15 |
 | `apps/gateway/src/server/http/client-ip.test.ts`                                                           |        11 |
 | `apps/gateway/src/server/http/document.test.ts`                                                            |         6 |
+| `apps/gateway/src/server/http/doors.property.test.ts`                                                      |         7 |
 | `apps/gateway/src/server/http/healthz.test.ts`                                                             |         4 |
 | `apps/gateway/src/server/http/security-headers.test.ts`                                                    |         6 |
 | `apps/gateway/src/server/logging/logging.test.ts`                                                          |         6 |
@@ -284,9 +286,9 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/structural/base-images-pinned.test.ts`                                            |         5 |
 | `apps/gateway/tests/unit/structural/catalog-caps-enforced.test.ts`                                         |        12 |
 | `apps/gateway/tests/unit/structural/example-config-providers.test.ts`                                      |        10 |
-| `apps/gateway/tests/unit/structural/index.test.ts`                                                         |       100 |
+| `apps/gateway/tests/unit/structural/index.test.ts`                                                         |       102 |
 | `apps/gateway/tests/unit/structural/no-arguments-in-logs.test.ts`                                          |         3 |
-| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`                                           |       461 |
+| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`                                           |       466 |
 | `apps/gateway/tests/unit/structural/persisted-enumerations.test.ts`                                        |        10 |
 | `apps/gateway/tests/unit/structural/plugin-identifier-tests.test.ts`                                       |        25 |
 | `apps/gateway/tests/unit/structural/shipped-presets.test.ts`                                               |        41 |
@@ -308,6 +310,7 @@ this table says where each requirement lives, and what is not written yet.
 | `packages/plugin-sdk/tests/unit/catalog-path.test.ts`                                                      |         4 |
 | `packages/plugin-sdk/tests/unit/define-plugin.test.ts`                                                     |        33 |
 | `packages/plugin-sdk/tests/unit/env-of.test.ts`                                                            |         8 |
+| `packages/plugin-sdk/tests/unit/git-wire.property.test.ts`                                                 |         4 |
 | `packages/plugin-sdk/tests/unit/git-wire.test.ts`                                                          |        32 |
 | `packages/plugin-sdk/tests/unit/identifiers-kit.test.ts`                                                   |         9 |
 | `packages/plugin-sdk/tests/unit/registry.test.ts`                                                          |        11 |
@@ -320,12 +323,13 @@ this table says where each requirement lives, and what is not written yet.
 | `packages/policy-engine/tests/unit/risk-policy.test.ts`                                                    |         9 |
 | `packages/policy-engine/tests/unit/risk-runtime.test.ts`                                                   |        33 |
 | `packages/policy-engine/tests/unit/slice-dsl.test.ts`                                                      |        23 |
-| `packages/policy-engine/tests/unit/slice-matcher.test.ts`                                                  |        29 |
+| `packages/policy-engine/tests/unit/slice-matcher.test.ts`                                                  |        35 |
 | `packages/shared/src/api-key.test.ts`                                                                      |        12 |
 | `packages/shared/src/data-model.test.ts`                                                                   |         4 |
 | `packages/shared/src/mcp.test.ts`                                                                          |        10 |
 | `packages/shared/src/risk-id.test.ts`                                                                      |        20 |
 | `packages/shared/src/session-events.test.ts`                                                               |        30 |
+| `packages/shared/src/wildcard.test.ts`                                                                     |        18 |
 | `packages/telemetry/src/client.test.ts`                                                                    |        24 |
 | `packages/telemetry/src/queue.test.ts`                                                                     |        12 |
 | `packages/telemetry/src/report.test.ts`                                                                    |        24 |
@@ -366,11 +370,12 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/resend/tests/unit/plugin.test.ts`                                                                 |        44 |
 | `plugins/resend/tests/unit/risk-catalog.test.ts`                                                           |        33 |
 | `plugins/ssh/tests/unit/adversarial.test.ts`                                                               |       181 |
-| `plugins/ssh/tests/unit/classify.test.ts`                                                                  |        90 |
+| `plugins/ssh/tests/unit/classify.test.ts`                                                                  |        95 |
 | `plugins/ssh/tests/unit/data-model.test.ts`                                                                |         2 |
 | `plugins/ssh/tests/unit/host-key-pinning.test.ts`                                                          |        37 |
 | `plugins/ssh/tests/unit/injection.test.ts`                                                                 |        87 |
 | `plugins/ssh/tests/unit/plugin.test.ts`                                                                    |       300 |
+| `plugins/ssh/tests/unit/shell.property.test.ts`                                                            |         3 |
 | `plugins/stripe/tests/unit/classify.test.ts`                                                               |        48 |
 | `plugins/stripe/tests/unit/data-model.test.ts`                                                             |         8 |
 | `plugins/stripe/tests/unit/execute.test.ts`                                                                |        23 |
@@ -386,6 +391,7 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/supabase/tests/unit/plugin.test.ts`                                                               |        23 |
 | `plugins/supabase/tests/unit/query-sql.test.ts`                                                            |       118 |
 | `plugins/supabase/tests/unit/risk-catalog.test.ts`                                                         |        46 |
+| `plugins/supabase/tests/unit/sql.property.test.ts`                                                         |         3 |
 | `plugins/supabase/tests/unit/token.test.ts`                                                                |         5 |
 | `plugins/upstash-redis/tests/unit/classify.test.ts`                                                        |        31 |
 | `plugins/upstash-redis/tests/unit/command-table.test.ts`                                                   |       105 |
@@ -404,13 +410,14 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/vercel/tests/unit/risk-catalog.test.ts`                                                           |        55 |
 | `plugins/vercel/tests/unit/team-pin.test.ts`                                                               |        99 |
 | `scripts/audit-gate.test.mjs`                                                                              |        29 |
+| `scripts/lockfile-gate.test.mjs`                                                                           |        12 |
 | `scripts/release-lib.test.mjs`                                                                             |        50 |
-| **TOTAL** (`npx vitest run --reporter=json`, 2026-10-14, with a build; 314 files; 10410 passed, 1 skipped) | **10411** |
+| **TOTAL** (`npx vitest run --reporter=json`, 2026-10-14, with a build; 321 files; 10481 passed, 1 skipped) | **10482** |
 
 The table is generated from the JSON report of one run of the whole suite
 (`npx vitest run --reporter=json`). A count is the number of tests the file
 declares, `it.each` expanded, **skipped tests included**: the TOTAL is the
-report's number of tests, of which 10315 ran and 1 was skipped in that
+report's number of tests, of which 10481 ran and 1 was skipped in that
 run, made with a build (as `npm run ci` does). The one skipped whatever the
 build is the latency measurement of the authority re-check
 (`door-latency.bench.test.ts`, run with `VAUBAAN_BENCH=1`). Without a build 27
