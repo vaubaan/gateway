@@ -21,6 +21,8 @@ export default tseslint.config(
       '**/test-results/**',
       '**/.turbo/**',
       '**/.cache/**',
+      // Test cases of the Semgrep rules: written to break them (scripts/sast.sh).
+      '.semgrep/**',
       '.build/**',
       // Config files don't go through type-aware linting (no tsconfig include).
       'eslint.config.js',

@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main, v5]
   workflow_dispatch:
+  # Weekly, the security checks only (secrets, sast, audit, the image scan):
+  # a new advisory or a new rule finds what an unchanged tree already ships.
+  # GitHub runs schedules from the default branch only.
+  schedule:
+    - cron: '23 5 * * 1'
   # The release pipeline (release.yml) calls this workflow as its gates, so a
   # release passes exactly what a pull request passes.
   workflow_call:
@@ -26,6 +31,7 @@ permissions:
 
 jobs:
   check:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -34,6 +40,9 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci --no-audit --no-fund
+      # Every installed package carries the registry's signature, and those
+      # that publish a provenance attestation have a valid one.
+      - run: npm audit signatures
       - run: npm run type-check
       - run: npm run lint
       - run: npm run format:check
@@ -54,6 +63,53 @@ jobs:
         with:
           node-version: '22'
       - run: node scripts/audit-gate.mjs
+      # Every lockfile entry downloads from the npm registry, with a
+      # sha512 integrity, the package it names (scripts/lockfile-gate.mjs).
+      - run: node scripts/lockfile-gate.mjs
+      # The workflows themselves: syntax, expressions, and shellcheck on every
+      # `run:` (actionlint, pinned by checksum; shellcheck is on the runner).
+      - name: Workflows are valid
+        run: |
+          actionlint=$(scripts/fetch-tool.sh actionlint "${RUNNER_TEMP}/security-tools")
+          "$actionlint" -color
+
+  # Secret scan of the whole history with gitleaks, pinned by checksum
+  # (scripts/secret-scan.sh, reviewed exceptions in .gitleaks.toml). The other
+  # branches are scanned on every push by secrets.yml.
+  secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - run: scripts/secret-scan.sh
+
+  # Static analysis with Semgrep: the community security rules at a pinned
+  # commit of semgrep/semgrep-rules, and this codebase's rules
+  # (.semgrep/vaubaan.yml, tested first). Semgrep runs from its image pinned by
+  # digest; no account, no registry rules fetched at run time
+  # (scripts/sast.sh). A finding fails the job: fix it, or suppress it on its
+  # line with the reason.
+  sast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SEMGREP_IMAGE: semgrep/semgrep:1.179.0@sha256:93963d9295a366f59e4850127b1550400ee7b388f04fe144e4a1f6325d96e01b
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: semgrep/semgrep-rules
+          ref: 9bbf021d0acffa3095fcffd17b2bc7787eb4796d # develop, 2026-10-08
+          path: .semgrep-rules
+          persist-credentials: false
+      - run: |
+          docker run --rm --network none -v "$PWD:/src" -w /src "$SEMGREP_IMAGE" \
+            scripts/sast.sh /src/.semgrep-rules
 
   # Browser tests against an ephemeral instance (apps/gateway/tests/e2e/v5):
   # the built app on the real composition root with the `:memory:` store, a
@@ -61,6 +117,7 @@ jobs:
   # network beyond the browser download. Includes the cutover smoke
   # (docs/tests/e2e-tests.md).
   e2e:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     needs: check
     timeout-minutes: 20
@@ -85,9 +142,16 @@ jobs:
   # container smoke test: incomplete configuration exits naming the key, a
   # complete one serves /healthz, native addons load, process is non-root.
   # Publishing to a registry is the release pipeline's job (release.yml).
+  #
+  # Then scans the image with Trivy (scripts/image-scan.sh): a HIGH or CRITICAL
+  # vulnerability with a fixed version, in the Debian packages or in the npm
+  # packages the image ships, fails the job. The vulnerability database is
+  # cached for a day.
   docker:
     runs-on: ubuntu-latest
     needs: check
+    if: ${{ !cancelled() && (needs.check.result == 'success' || needs.check.result == 'skipped') }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -103,3 +167,15 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - run: deploy/docker/smoke.sh vaubaan-gateway:ci
+      - name: Day of the vulnerability database
+        id: day
+        run: echo "day=$(date -u +%Y-%m-%d)" >>"$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/trivy-cache
+          key: trivy-db-${{ steps.day.outputs.day }}
+          restore-keys: trivy-db-
+      - name: Image scan
+        env:
+          TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache
+        run: scripts/image-scan.sh vaubaan-gateway:ci

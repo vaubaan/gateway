@@ -32,6 +32,11 @@ const ALLOWED: Record<string, string> = {
     'public sign-in providers by address: github.com, and the issuers anyone can hold an account at (ADR sign-in-providers-admission-and-admin-rule)',
   'deploy/config/gateway.example.yaml': 'documented placeholders',
   'deploy/config/.env.example': 'documented placeholders',
+  'scripts/fetch-tool.sh':
+    'the release archives of the pinned security tools, each checked against its SHA-256 before it runs',
+  'scripts/lockfile-gate.mjs':
+    'the one registry a lockfile entry may download from: the rule the gate enforces',
+  'scripts/lockfile-gate.test.mjs': 'tarball URLs, allowed and refused, of the lockfile gate tests',
 };
 
 const TEST_FILE = /\.test\.tsx?$|\/testing\.ts$/;

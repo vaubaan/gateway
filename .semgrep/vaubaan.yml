@@ -1,0 +1,143 @@
+# Rules specific to this codebase, run by the `sast` job of ci.yml next to the
+# pinned Semgrep community rules. Each rule states the invariant it holds and
+# where the decision is written. A finding is fixed, or suppressed on its line
+# with `// nosemgrep: <rule-id> -- <why>`; a bare `nosemgrep` is not accepted
+# in review. Workflow: docs/workflow/coding-workflow.md ("Security checks").
+rules:
+  - id: vaubaan-no-process-env-in-plugins
+    message: >-
+      A plugin reads no environment variable. Its configuration comes from the
+      context the gateway hands it (ctx.appConfig, ctx.credential), so one
+      source of truth decides what a plugin sees (ADR
+      plugin-contract-and-credential-spec).
+    severity: ERROR
+    languages: [typescript, javascript]
+    paths:
+      include:
+        - /plugins/
+      exclude:
+        - '*.test.ts'
+        - /plugins/*/tests/
+    pattern-either:
+      - pattern: process.env
+      - pattern: process.env.$X
+      - pattern: process.env[$X]
+
+  - id: vaubaan-no-dynamic-code
+    message: >-
+      No code is built from a string at run time (eval, new Function, the
+      string form of setTimeout/setInterval, vm). An argument of an agent
+      must never reach an interpreter of the gateway.
+    severity: ERROR
+    languages: [typescript, javascript]
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: new Function(...)
+      - pattern: Function(...)
+      - pattern: setTimeout("...", ...)
+      - pattern: setInterval("...", ...)
+      - pattern: import 'node:vm'
+      - pattern: import 'vm'
+      - pattern: require('vm')
+      - pattern: require('node:vm')
+
+  - id: vaubaan-child-process-outside-allowed-modules
+    message: >-
+      child_process is allowed only in build and test tooling (next.config.ts,
+      scripts/, tests/). The running gateway and its plugins start no process:
+      a provider is reached over its API, a host over SSH (ssh2).
+    severity: ERROR
+    languages: [typescript, javascript]
+    paths:
+      exclude:
+        - /apps/gateway/next.config.ts
+        - /scripts/
+        - /apps/*/tests/
+        - /packages/*/tests/
+        - /plugins/*/tests/
+        - '*.test.ts'
+        - '*.test.mjs'
+    pattern-either:
+      - pattern: import 'child_process'
+      - pattern: import 'node:child_process'
+      - pattern: require('child_process')
+      - pattern: require('node:child_process')
+      - pattern: import('child_process')
+      - pattern: import('node:child_process')
+
+  - id: vaubaan-encryption-only-in-the-crypto-module
+    message: >-
+      Ciphers and key derivation are used only through the crypto module
+      (apps/gateway/src/server/crypto/: AEAD, per-connection key derivation,
+      key versions). Elsewhere, ask that module for an Encryptor. Hashing,
+      random bytes, timingSafeEqual and key-pair generation stay available
+      (ADR per-org-encryption-app-level, trust-model-clear-at-rest-idp-style).
+    severity: ERROR
+    languages: [typescript, javascript]
+    paths:
+      exclude:
+        - /apps/gateway/src/server/crypto/
+    pattern-either:
+      - pattern: $C.createCipheriv(...)
+      - pattern: $C.createDecipheriv(...)
+      - pattern: createCipheriv(...)
+      - pattern: createDecipheriv(...)
+      - pattern: $C.hkdf(...)
+      - pattern: $C.hkdfSync(...)
+      - pattern: hkdf(...)
+      - pattern: hkdfSync(...)
+      - pattern: $C.pbkdf2(...)
+      - pattern: $C.pbkdf2Sync(...)
+      - pattern: pbkdf2Sync(...)
+      - pattern: $C.scryptSync(...)
+      - pattern: scryptSync(...)
+      - pattern: $C.publicEncrypt(...)
+      - pattern: $C.privateDecrypt(...)
+      - pattern: crypto.subtle.$F(...)
+
+  - id: vaubaan-weak-hash
+    message: >-
+      MD5 and SHA-1 are not used, even for a fingerprint: the audit
+      fingerprint, token digests and checksums are SHA-256.
+    severity: ERROR
+    languages: [typescript, javascript]
+    pattern-either:
+      - pattern: createHash("md5")
+      - pattern: createHash("sha1")
+      - pattern: $C.createHash("md5")
+      - pattern: $C.createHash("sha1")
+
+  - id: vaubaan-secret-bearing-value-logged
+    message: >-
+      A value whose name says it is a secret (token, secret, password,
+      private key, credential, authorization, cookie, master key) is passed to
+      a logger. Logs never carry a secret: log its prefix or its id, never the
+      value (spec §6, handbook audit "Logs").
+    severity: ERROR
+    languages: [typescript, javascript]
+    paths:
+      exclude:
+        - '*.test.ts'
+        - '*.test.mjs'
+        - /apps/*/tests/
+        - /packages/*/tests/
+        - /plugins/*/tests/
+    patterns:
+      - pattern-either:
+          - pattern: '$LOG.$LEVEL(..., {..., $KEY: $VALUE, ...}, ...)'
+          - pattern: $LOG.$LEVEL(..., {..., $KEY, ...}, ...)
+          - pattern: $LOG.$LEVEL(..., `...${$KEY}...`, ...)
+          - pattern: $LOG.$LEVEL(..., $KEY, ...)
+          - pattern: $LOG.$LEVEL(..., $OBJ.$KEY, ...)
+      - metavariable-regex:
+          metavariable: $LEVEL
+          regex: ^(debug|info|warn|error|log|trace|fatal)$
+      - metavariable-regex:
+          metavariable: $LOG
+          regex: (?i)^(console|logger|log|.*Logger|ctx\.logger|this\.logger|deps\.logger)$
+      - metavariable-regex:
+          metavariable: $KEY
+          # An identifier (never a string literal: the message may name a
+          # token) that names a secret, unless it ends with a word that
+          # names something about it rather than the value itself.
+          regex: (?i)^(?![\w$]*(prefix|id|ids|kind|count|length|present|label|name|type|expires|expiry|expires_at|scope|scopes|hash|digest|fingerprint|status|url|error|reason|version|revoked|retired|rotated|refused|generated|issued)$)[a-z_$][\w$]*(token|secret|password|passwd|private_?key|privatekey|credential|authorization|cookie|master_?key|bearer|api_?key)[\w$]*$
