@@ -39,6 +39,7 @@ import type {
 import {
   advertisementType,
   encodeAdvertisement,
+  ExecutorRefusal,
   GIT_TEMPORARY_REF_PREFIX,
   GitProtocolError,
   parseAdvertisement,
@@ -80,7 +81,7 @@ import {
   lfsUnsupported,
   unauthorized,
 } from './wire';
-import { refusalLine, refusalText } from './words';
+import { refusalLine, refusalText, resultText } from './words';
 
 const MS_PER_SECOND = 1000;
 const HTTP_UNAUTHORIZED = 401;
@@ -354,6 +355,7 @@ export class GitDoor {
       }
       return relayedResponse(answer, answer.body);
     } catch (err) {
+      if (err instanceof ExecutorRefusal) return gitText(HTTP_FORBIDDEN, err.message);
       return this.upstreamFailure(scope, err instanceof Error ? err.name : 'Error');
     }
   }
@@ -404,6 +406,8 @@ export class GitDoor {
       }
       body = new Uint8Array(await answer.arrayBuffer());
     } catch (err) {
+      // The plugin declined (the account lacks the permission a push needs).
+      if (err instanceof ExecutorRefusal) return gitText(HTTP_FORBIDDEN, err.message);
       return this.upstreamFailure(scope, err instanceof Error ? err.name : 'Error');
     }
     let upstreamAd;
@@ -587,7 +591,8 @@ function lineOf(outcome: CallOutcome): string {
     case 'failed':
       return outcome.refusal ? refusalLine(outcome.refusal) : outcome.error;
     case 'allowed':
-      return 'allowed';
+      // Allowed and nothing relayed: the plugin declined (its sentence is the result).
+      return resultText(outcome.result) || 'nothing was relayed';
   }
 }
 

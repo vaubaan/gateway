@@ -61,6 +61,13 @@ export interface GitRig extends ExecutionInstance {
     readonly policy?: readonly MissionPolicyEntry[];
     readonly repositories?: readonly string[];
   }): Promise<IssuedMission>;
+  /** Another installation of the company's App, holding only `permissions`, with the two repositories. */
+  installation(
+    installationId: string,
+    permissions: Readonly<Record<string, string>>,
+  ): Promise<ConnectionRecord>;
+  /** A mission on another connection, from a shipped preset. */
+  missionOn(connection: ConnectionRecord, preset: string): Promise<IssuedMission>;
   /** The agent's git: `key` in `VAUBAAN_MISSION_TOKEN`, nothing else configured. */
   git(
     cwd: string,
@@ -140,6 +147,29 @@ export async function openGitRig(options: GitRigOptions = {}): Promise<GitRig> {
       const issued = await instance.root.missions.service.issue(instance.ada, {
         name: 'Develop acme/app with git',
         connections: [connection],
+        period: { kind: 'recurring', length_seconds: 86_400 },
+        expires_at: null,
+      });
+      if (!issued.ok) throw new Error(`issue refused: ${JSON.stringify(issued)}`);
+      return { mission: issued.mission, token: issued.token.secret, prefix: issued.token.prefix };
+    },
+    async installation(installationId, permissions) {
+      host.installations.set(installationId, permissions);
+      const connection = await store.connections.create({
+        provider: 'github',
+        owner: { kind: 'user', id: instance.ada.id },
+        displayName: `acme-${installationId}`,
+        credential: serializeSecret({ kind: 'app-install', installationId, metadata: {} }),
+      });
+      await store.connections.syncDiscoveredResources(connection.id, [
+        { ref: REPOSITORY, displayName: REPOSITORY, env: null },
+      ]);
+      return connection;
+    },
+    async missionOn(connection, preset) {
+      const issued = await instance.root.missions.service.issue(instance.ada, {
+        name: `On ${connection.displayName}`,
+        connections: [{ connection_id: connection.id, preset }],
         period: { kind: 'recurring', length_seconds: 86_400 },
         expires_at: null,
       });

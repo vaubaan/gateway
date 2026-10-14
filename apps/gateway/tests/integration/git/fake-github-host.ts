@@ -53,6 +53,7 @@ export interface MintedToken {
 export function isolatedGitEnv(home: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     PATH: process.env.PATH,
+    NODE_ENV: process.env.NODE_ENV ?? 'test',
     HOME: home,
     GIT_CONFIG_NOSYSTEM: '1',
     GIT_TERMINAL_PROMPT: '0',
@@ -70,6 +71,11 @@ export class FakeGithubHost {
   readonly minted: MintedToken[] = [];
   /** When set, the compare API answers this status (a GitHub outage). */
   compareStatus: number | null = null;
+  /**
+   * What an installation holds, by installation id; absent: everything. A
+   * token asking for more is refused with 422, as GitHub does.
+   */
+  readonly installations = new Map<string, Readonly<Record<string, string>>>();
   private server: Server | null = null;
   private port = 0;
   private next = 1;
@@ -203,12 +209,19 @@ export class FakeGithubHost {
       authorization: headers.get('authorization'),
       gitProtocol: null,
     });
-    const mint = /^\/app\/installations\/[^/]+\/access_tokens$/.exec(url.pathname);
+    const mint = /^\/app\/installations\/([^/]+)\/access_tokens$/.exec(url.pathname);
     if (mint && method === 'POST') {
       const body = JSON.parse(String(init?.body ?? '{}')) as {
         repositories?: string[];
         permissions?: Record<string, string>;
       };
+      const held = this.installations.get(mint[1] ?? '');
+      if (held && !covers(held, body.permissions ?? {})) {
+        return json(
+          { message: 'The permissions requested are not granted to this installation.' },
+          422,
+        );
+      }
       const token = `ghs_fake_${this.next++}`;
       this.minted.push({
         token,
@@ -370,6 +383,16 @@ async function relayCgi(stdout: ReadableStream<Uint8Array>, res: ServerResponse)
     res.write(value);
   }
   res.end();
+}
+
+/** Does `held` cover every permission of `asked` (`write` covers `read`)? */
+function covers(
+  held: Readonly<Record<string, string>>,
+  asked: Readonly<Record<string, string>>,
+): boolean {
+  return Object.entries(asked).every(
+    ([name, access]) => held[name] === access || (access === 'read' && held[name] === 'write'),
+  );
 }
 
 function json(body: unknown, status = 200): Response {

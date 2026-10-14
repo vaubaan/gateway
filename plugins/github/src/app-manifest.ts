@@ -43,6 +43,7 @@ import { GITHUB_APP_CONFIG, GITHUB_WEB_BASE } from './credential-keys.ts';
 
 const WORKFLOW_FILE = 'for a file under .github/workflows/';
 const PUSH_TOKEN = 'to hand a push token';
+const WORKFLOW_PUSH = 'for a git push that changes a file under .github/workflows/';
 
 /**
  * The permissions of the company's GitHub App, lowest level first, each
@@ -76,6 +77,7 @@ export const GITHUB_APP_PERMISSIONS: readonly AppPermission[] = [
           'github__search_code',
           'github__list_releases',
           'github__mint_install_token',
+          'github__git_fetch',
         ],
       },
       {
@@ -90,6 +92,7 @@ export const GITHUB_APP_PERMISSIONS: readonly AppPermission[] = [
           'github__create_release',
           'github__delete_release',
           'github__mint_install_token',
+          'github__git_push',
         ],
         onlyWhen: { github__mint_install_token: PUSH_TOKEN },
       },
@@ -172,11 +175,13 @@ export const GITHUB_APP_PERMISSIONS: readonly AppPermission[] = [
           'github__push_files',
           'github__delete_file',
           'github__mint_install_token',
+          'github__git_push',
         ],
         onlyWhen: {
           github__create_or_update_file: WORKFLOW_FILE,
           github__push_files: WORKFLOW_FILE,
           github__delete_file: WORKFLOW_FILE,
+          github__git_push: WORKFLOW_PUSH,
           github__mint_install_token: `${PUSH_TOKEN} that may change workflows`,
         },
       },

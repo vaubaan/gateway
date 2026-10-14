@@ -5,7 +5,7 @@
  * catalog's remote URL, and the one admission both doors share.
  */
 import { randomBytes } from 'node:crypto';
-import { writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -147,6 +147,48 @@ describe('a token connection (fine-grained personal access token)', () => {
     expect(upstream.every((r) => !(r.authorization ?? '').includes(issued.token.secret))).toBe(
       true,
     );
+  });
+});
+
+describe("the permissions of the company's App (one declaration, app-manifest.ts)", () => {
+  it('an installation without contents: write still clones, and a push is refused by that permission', async () => {
+    const readOnly = await rig.installation('5151', { metadata: 'read', contents: 'read' });
+    const mission = await rig.missionOn(readOnly, 'developer');
+    const dir = rig.workdir();
+    ok(await rig.git(dir, ['clone', '-q', rig.remote(), 'app'], mission.token));
+    const repo = join(dir, 'app');
+    ok(await rig.git(repo, ['checkout', '-q', '-b', 'feature/ro'], null));
+    await commit(repo, 'ro.txt', 'ro');
+    const result = await rig.git(repo, ['push', 'origin', 'feature/ro'], mission.token);
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain(
+      'github__git_push needs the GitHub App permissions Contents (contents: write',
+    );
+    expect(await rig.host.refOf(REPOSITORY, 'refs/heads/feature/ro')).toBeNull();
+  });
+
+  it('an installation without workflows: write pushes code, and refuses a workflow change by name', async () => {
+    const noWorkflows = await rig.installation('6161', { metadata: 'read', contents: 'write' });
+    const mission = await rig.missionOn(noWorkflows, 'developer');
+    const repo = await cloneWith(mission);
+    ok(await rig.git(repo, ['checkout', '-q', '-b', 'feature/code'], null));
+    const sha = await commit(repo, 'code.txt', 'code');
+    ok(await rig.git(repo, ['push', '-q', 'origin', 'feature/code'], mission.token));
+    expect(await rig.host.refOf(REPOSITORY, 'refs/heads/feature/code')).toBe(sha);
+
+    mkdirSync(join(repo, '.github', 'workflows'), { recursive: true });
+    await commit(repo, '.github/workflows/new.yml', 'name: new\non: push\njobs: {}\n');
+    const result = await rig.git(repo, ['push', 'origin', 'feature/code'], mission.token);
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain(
+      'github__git_push needs the GitHub App permission Workflows (workflows: write',
+    );
+    expect(await rig.host.refOf(REPOSITORY, 'refs/heads/feature/code')).toBe(sha);
+    // Refused before the decision: audited, nothing counted.
+    const pushes = (await rig.root.store.audit.list({ missionId: mission.mission.id })).filter(
+      (e): e is AuditCallRecord => e.kind === 'call' && e.tool === 'github__git_push',
+    );
+    expect(pushes.at(-1)).toMatchObject({ decision: 'refused', refusal_code: null });
   });
 });
 

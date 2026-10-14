@@ -56,3 +56,17 @@ export function prefixed(text: string): string {
 export function oneLine(text: string): string {
   return text.replace(/[\p{Cc}\u2028\u2029]+/gu, ' ').trim();
 }
+
+/** The text blocks of a tool result (`McpToolResult.content`), joined. */
+export function resultText(result: unknown): string {
+  if (typeof result !== 'object' || result === null) return '';
+  const content = (result as { content?: unknown }).content;
+  if (!Array.isArray(content)) return '';
+  return content
+    .map((part: unknown) =>
+      typeof part === 'object' && part !== null && (part as { type?: unknown }).type === 'text'
+        ? String((part as { text?: unknown }).text ?? '')
+        : '',
+    )
+    .join('');
+}

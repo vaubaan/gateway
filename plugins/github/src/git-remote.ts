@@ -53,16 +53,29 @@ import { GITHUB_API_BASE, GITHUB_API_HEADERS } from './app-install.ts';
 import { githubRepoRefs, isWorkflowPath, repoFullName, type RepoTarget } from './call.ts';
 import { GITHUB_WEB_BASE, installationTokenFor } from './credential.ts';
 import { GIT_FETCH_TOOL, GIT_PUSH_TOOL, pushedRef, readGitCall, type GitCall } from './git-call.ts';
+import {
+  assertGranted,
+  declineMissingPermissions,
+  gitFetchNeeds,
+  gitPushNeeds,
+  missingPermissionSentence,
+} from './permission-check.ts';
 import { INSTALLATION_TOKEN_EXPIRY_MARGIN_SECONDS } from './token-cache.ts';
 
-/** Installation-token permissions per git access. */
-export const GIT_TOKEN_PERMISSIONS: Readonly<Record<GitAccess, Readonly<Record<string, string>>>> =
-  {
-    read: { contents: 'read' },
-    // A push that adds or changes `.github/workflows/*` is refused by GitHub
-    // without `workflows: write` ; the App itself must hold that permission.
-    write: { contents: 'write', workflows: 'write' },
-  };
+/**
+ * Installation-token permissions per git access, most first: the first set
+ * the installation holds is minted (GitHub answers 422 to a token asking for
+ * a permission the installation lacks). A push token carries
+ * `workflows: write` when the installation holds it — GitHub refuses a push
+ * that changes `.github/workflows/*` without it — and goes without otherwise:
+ * the review then declines such a push by the missing permission's name.
+ */
+export const GIT_TOKEN_PERMISSIONS: Readonly<
+  Record<GitAccess, readonly Readonly<Record<string, string>>[]>
+> = {
+  read: [gitFetchNeeds()],
+  write: [gitPushNeeds([{ workflow_files: ['.github/workflows/'] }]), gitPushNeeds()],
+};
 
 /** GitHub's compare API lists at most this many files ; a longer list is truncated. */
 export const COMPARE_MAX_FILES = 300;
@@ -82,46 +95,70 @@ function repositoryOf(path: string): string | null {
   return repoFullName(path)?.ref ?? null;
 }
 
-interface CachedGitToken {
+/** A credential for one repository and access, and what GitHub said it may do. */
+interface GitGrant {
   readonly token: string;
+  /** The permissions GitHub reported for the token; empty when unknown (a token connection). */
+  readonly permissions: Readonly<Record<string, string>>;
+}
+
+interface CachedGitGrant extends GitGrant {
   readonly expiresAt: string;
 }
 
+/** GitHub's answer to a token asking for a permission the installation does not hold. */
+const UNPROCESSABLE = 422;
+
 /**
- * The secret presented to GitHub for this repository and access. An App
- * connection mints a token scoped to the repository and the access ; a
- * token connection presents its token (GitHub narrows nothing further, the
- * mission's decision is what narrows it).
+ * The credential presented to GitHub for this repository and access. An App
+ * connection mints a token scoped to the repository and the access ; a token
+ * connection presents its token (GitHub narrows nothing further, the
+ * mission's decision is what narrows it, and its permissions are unknown
+ * here: nothing is declined on a guess).
  */
-async function gitPassword(
+async function gitGrant(
   ctx: ExecuteContext,
   target: RepoTarget,
   access: GitAccess,
-): Promise<string> {
+): Promise<GitGrant> {
   if (ctx.credential.kind === 'api-key') {
     const token = ctx.credential.fields[TOKEN_CONNECTION_FIELD];
     if (typeof token !== 'string' || token.length === 0) {
       throw new ExecutorRefusal('this GitHub account holds no token the git remote can use');
     }
-    return token;
+    return { token, permissions: {} };
   }
   expectCredentialKind('github', ctx.credential, 'app-install');
   const key = `git-token:${target.repo}:${access}`;
   const cache = ctx.credentialCache;
   if (cache) {
-    const cached = await cache.get<CachedGitToken>(key);
-    if (cached && secondsLeft(cached.expiresAt) > 0) return cached.token;
+    const cached = await cache.get<CachedGitGrant>(key);
+    if (cached && secondsLeft(cached.expiresAt) > 0) {
+      return { token: cached.token, permissions: cached.permissions ?? {} };
+    }
   }
-  const minted = await installationTokenFor(ctx, {
-    repositories: [target.repo],
-    permissions: GIT_TOKEN_PERMISSIONS[access],
-  });
+  const minted = await mintFirstHeld(ctx, target, access);
+  const grant: GitGrant = { token: minted.token, permissions: minted.permissions ?? {} };
   if (cache) {
     const expiresAt = minted.expiresAt.toISOString();
     const ttl = Math.min(CACHE_SECONDS, secondsLeft(expiresAt));
-    if (ttl > 0) await cache.set<CachedGitToken>(key, { token: minted.token, expiresAt }, ttl);
+    if (ttl > 0) await cache.set<CachedGitGrant>(key, { ...grant, expiresAt }, ttl);
   }
-  return minted.token;
+  return grant;
+}
+
+/** Mint with the first permission set of `access` the installation holds; decline by name when none. */
+async function mintFirstHeld(ctx: ExecuteContext, target: RepoTarget, access: GitAccess) {
+  const sets = GIT_TOKEN_PERMISSIONS[access];
+  for (const permissions of sets) {
+    try {
+      return await installationTokenFor(ctx, { repositories: [target.repo], permissions });
+    } catch (error) {
+      if (!(error instanceof UpstreamHttpError && error.status === UNPROCESSABLE)) throw error;
+    }
+  }
+  const tool = access === 'read' ? GIT_FETCH_TOOL : GIT_PUSH_TOOL;
+  return declineMissingPermissions({ tool }, sets.at(-1) ?? {});
 }
 
 function secondsLeft(expiresAt: string): number {
@@ -142,7 +179,7 @@ async function upstream(
   access: GitAccess,
 ): Promise<GitUpstream> {
   const target = targetOf(repository);
-  const password = await gitPassword(ctx, target, access);
+  const { token: password } = await gitGrant(ctx, target, access);
   return {
     url: `${GITHUB_WEB_BASE}/${target.owner}/${target.repo}.git`,
     authorization: `Basic ${Buffer.from(`${TOKEN_USER}:${password}`).toString('base64')}`,
@@ -183,7 +220,7 @@ class GithubRest {
   ) {}
 
   async get(path: string): Promise<Response> {
-    this.token ??= await gitPassword(this.ctx, this.target, 'read');
+    this.token ??= (await gitGrant(this.ctx, this.target, 'read')).token;
     const res = await this.ctx.fetch(`${GITHUB_API_BASE}${path}`, {
       method: 'GET',
       headers: { ...GITHUB_API_HEADERS, Authorization: `Bearer ${this.token}` },
@@ -299,6 +336,11 @@ async function review(
       workflow_files: files.filter((path) => isWorkflowPath(path)),
     });
   }
+  // The push token's permissions cover what these updates need — a workflow
+  // file needs `workflows: write` — or the push is refused by the permission's name.
+  const { permissions } = await gitGrant(ctx, target, 'write');
+  const missing = missingPermissionSentence(GIT_PUSH_TOOL, gitPushNeeds(reviewed), permissions);
+  if (missing !== null) return { ok: false, reason: missing };
   return { ok: true, updates: reviewed };
 }
 
@@ -336,6 +378,8 @@ export async function executeGit(
       `${GIT_FETCH_TOOL} is relayed by the gateway's git remote, never executed`,
     );
   }
+  const grant = await gitGrant(ctx, call.target, 'write');
+  assertGranted(GIT_PUSH_TOOL, gitPushNeeds(call.updates.map((u) => u.update)), grant.permissions);
   const remote = await upstream(ctx, call.target.ref, 'write');
   const atomic = await advertisesAtomic(ctx, remote);
   const commands = call.updates.map(({ update }) => ({

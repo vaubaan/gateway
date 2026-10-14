@@ -33,6 +33,7 @@ import {
 import {
   concatBytes,
   encodeCommandList,
+  ExecutorRefusal,
   GIT_TEMPORARY_REF_PREFIX,
   GitProtocolError,
   parseReceivePackResult,
@@ -58,7 +59,7 @@ import type { Logger } from '../logging';
 import type { PendingRefsRepo } from '../store';
 import { callUpstream, executeContextFor, type GitTarget, type UpstreamDeps } from './upstream';
 import { errPacket, pushReport, type RefOutcome, type ReportFormat } from './wire';
-import { prefixed, refusalLine, refusalText } from './words';
+import { prefixed, refusalLine, refusalText, resultText } from './words';
 
 /** The command list of a push may not exceed this many bytes (refs, not objects). */
 export const MAX_COMMAND_LIST_BYTES = 1024 * 1024;
@@ -226,6 +227,8 @@ export class Push {
       this.execCtx = await executeContextFor(this.deps, ctx, target, signal);
       this.upstreamWrite = await target.remote.upstream(this.execCtx, target.repository, 'write');
     } catch (err) {
+      // The plugin declined (a permission the account lacks): its sentence, as it is.
+      if (err instanceof ExecutorRefusal) throw new PushStop(err.message, err.message);
       throw new PushStop(
         `the ${target.plugin.displayName} account of this mission could not be used (${errorName(err)}); tell the human`,
         `the provider account could not be used (${errorName(err)})`,
@@ -478,7 +481,7 @@ function messagesOf(refusal: Refusal): string {
 
 /** Per-ref outcome of the push tool's result (`GitPushResult` in its text). */
 function refOutcomes(result: unknown, commands: readonly RefCommand[]): RefOutcome[] {
-  const text = textOf(result);
+  const text = resultText(result);
   let parsed: GitPushResult | null = null;
   try {
     const value: unknown = JSON.parse(text);
@@ -498,19 +501,6 @@ function refOutcomes(result: unknown, commands: readonly RefCommand[]): RefOutco
     if (!u) return { ref: c.ref, error: 'no status reported' };
     return { ref: c.ref, error: u.ok ? null : (u.error ?? 'rejected') };
   });
-}
-
-function textOf(result: unknown): string {
-  if (typeof result !== 'object' || result === null) return '';
-  const content = (result as { content?: unknown }).content;
-  if (!Array.isArray(content)) return '';
-  return content
-    .map((part: unknown) =>
-      typeof part === 'object' && part !== null && (part as { type?: unknown }).type === 'text'
-        ? String((part as { text?: unknown }).text ?? '')
-        : '',
-    )
-    .join('');
 }
 
 /** Delete temporary refs at the provider: compare-and-swap on what they point at. */

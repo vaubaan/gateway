@@ -651,7 +651,8 @@ function appPermissionIssues(permissions: unknown, at: string, plugin: ProviderP
   if (!isList(permissions) || permissions.length === 0) {
     return [`${at}.permissions: expected at least one permission`];
   }
-  const tools = new Set(isList(plugin.tools) ? plugin.tools.map((t) => t.name) : []);
+  // The git remote's tools are decided like any tool, so they need permissions too.
+  const tools = declaredToolNames(plugin);
   const issues: string[] = [];
   const seen = new Set<string>();
   for (const [i, raw] of permissions.entries()) {

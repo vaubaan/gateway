@@ -13,9 +13,11 @@
  */
 
 import { ExecutorRefusal, missingPermissions, unconditionalNeeds } from '@vaubaan/plugin-sdk';
+import type { GitReviewedUpdate } from '@vaubaan/plugin-sdk';
 
 import { GITHUB_APP_PERMISSIONS } from './app-manifest.ts';
 import { MINT_TOOL, type GithubCall } from './call.ts';
+import { GIT_FETCH_TOOL, GIT_PUSH_TOOL } from './git-call.ts';
 
 /** GitHub asks for `workflows` on any change under this directory. */
 const WORKFLOW_DIRECTORY = /^\.github\/workflows\//i;
@@ -65,13 +67,30 @@ export function assertAppPermissions(
   call: GithubCall,
   granted: Readonly<Record<string, string>>,
 ): void {
-  if (Object.keys(granted).length === 0) return;
-  const missing = missingPermissions(GITHUB_APP_PERMISSIONS, needsOf(call), granted);
-  if (missing.length === 0) return;
+  assertGranted(call.tool, needsOf(call), granted);
+}
+
+/** The sentence that declines `tool` when `granted` does not cover `needs`; `null` when it does. */
+export function missingPermissionSentence(
+  tool: string,
+  needs: Readonly<Record<string, string>>,
+  granted: Readonly<Record<string, string>>,
+): string | null {
+  if (Object.keys(granted).length === 0) return null;
+  const missing = missingPermissions(GITHUB_APP_PERMISSIONS, needs, granted);
+  if (missing.length === 0) return null;
   const plural = missing.length > 1 ? 'permissions' : 'permission';
-  throw new ExecutorRefusal(
-    `${call.tool} needs the GitHub App ${plural} ${namesOf(missing)}, which this installation of the company's App does not hold; nothing was sent. ${HOW_TO_ADD}`,
-  );
+  return `${tool} needs the GitHub App ${plural} ${namesOf(missing)}, which this installation of the company's App does not hold; nothing was sent. ${HOW_TO_ADD}`;
+}
+
+/** `assertAppPermissions` for a tool and needs computed elsewhere (the git remote's tools). */
+export function assertGranted(
+  tool: string,
+  needs: Readonly<Record<string, string>>,
+  granted: Readonly<Record<string, string>>,
+): void {
+  const sentence = missingPermissionSentence(tool, needs, granted);
+  if (sentence !== null) throw new ExecutorRefusal(sentence);
 }
 
 /**
@@ -79,13 +98,33 @@ export function assertAppPermissions(
  * cannot do without: the installation lacks at least one of `needs`.
  */
 export function declineMissingPermissions(
-  call: GithubCall,
+  call: { readonly tool: string },
   needs: Readonly<Record<string, string>>,
 ): never {
   const named = namesOf(missingPermissions(GITHUB_APP_PERMISSIONS, needs, {}));
   throw new ExecutorRefusal(
     `${call.tool} needs the GitHub App permissions ${named}; GitHub refused a token with them, so this installation of the company's App lacks at least one. ${HOW_TO_ADD}`,
   );
+}
+
+/** What a fetch through the git remote needs (`contents: read`). */
+export function gitFetchNeeds(): Record<string, string> {
+  return { ...unconditionalNeeds(GITHUB_APP_PERMISSIONS, GIT_FETCH_TOOL) };
+}
+
+/**
+ * What a push through the git remote needs: `contents: write`, and
+ * `workflows: write` when one of its updates changes a workflow file
+ * (GitHub refuses such a push otherwise).
+ */
+export function gitPushNeeds(
+  updates: readonly Pick<GitReviewedUpdate, 'workflow_files'>[] = [],
+): Record<string, string> {
+  const needs: Record<string, string> = {
+    ...unconditionalNeeds(GITHUB_APP_PERMISSIONS, GIT_PUSH_TOOL),
+  };
+  if (updates.some((u) => u.workflow_files.length > 0)) needs.workflows = 'write';
+  return needs;
 }
 
 const HOW_TO_ADD =
