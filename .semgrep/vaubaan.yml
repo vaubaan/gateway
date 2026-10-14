@@ -101,6 +101,12 @@ rules:
       fingerprint, token digests and checksums are SHA-256.
     severity: ERROR
     languages: [typescript, javascript]
+    paths:
+      exclude:
+        # git's own formats: object ids and the pack trailer are SHA-1 by
+        # protocol (gitprotocol-pack(5)); nothing there is a security digest
+        # of ours.
+        - /packages/plugin-sdk/src/git/
     pattern-either:
       - pattern: createHash("md5")
       - pattern: createHash("sha1")

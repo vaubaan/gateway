@@ -11,8 +11,8 @@ playwright-report/
 # The test cases of the custom rules (run by `semgrep --test`, not scanned).
 .semgrep/
 
-# Tests and fixtures: they hold fake secrets and call what production code
-# must not; the custom rules that matter for tests say so themselves.
+# Tests and fixtures are not scanned: they hold fake secrets and call what
+# production code must not (child_process, ciphers); they never ship.
 apps/*/tests/
 packages/*/tests/
 plugins/*/tests/
