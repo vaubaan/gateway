@@ -403,9 +403,14 @@ function guideIssues(
   if (guide.docsUrl !== undefined && !isHttpsUrl(guide.docsUrl)) {
     issues.push(`${at}.docsUrl: expected an https URL when present`);
   }
-  if (!isList(guide.permissions) || guide.permissions.length === 0) {
-    return [...issues, `${at}.permissions: expected at least one permission`];
+  if (!isList(guide.permissions)) {
+    return [
+      ...issues,
+      `${at}.permissions: expected a list (empty when the token carries no choice)`,
+    ];
   }
+  // A provider whose tokens carry no permission choice (Railway) lists none.
+  if (guide.permissions.length === 0) return issues;
   const served = new Set<unknown>();
   guide.permissions.forEach((permission, i) => {
     const where = `${at}.permissions[${i}]`;

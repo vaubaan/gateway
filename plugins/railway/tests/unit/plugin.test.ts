@@ -639,10 +639,17 @@ describe('executeRailway with mockFetch', () => {
       railwayPlugin.execute(
         {
           ...execCtx(never),
-          credential: { kind: 'api-key', fields: { api_key: 'k' }, metadata: {} },
+          // api-key is the pasted account token, a declared way; an SSH key is not.
+          credential: {
+            kind: 'ssh-key',
+            privateKeyPem: 'k',
+            publicKey: 'p',
+            fields: {},
+            metadata: {},
+          },
         },
-        'railway__whoami',
-        {},
+        'railway__list-variables',
+        { projectId: PROJECT_STG, environmentId: ENV_STG },
       ),
     ).rejects.toMatchObject({ name: 'CredentialKindMismatch' });
     expect(never.calls).toHaveLength(0);

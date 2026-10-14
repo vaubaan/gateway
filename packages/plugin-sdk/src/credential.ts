@@ -96,6 +96,8 @@ export interface TokenGuide {
   /**
    * The permissions to grant. Every tool of the plugin that this way of
    * connecting can run is served by at least one of them (`definePlugin`).
+   * Empty when the provider's token carries no permission choice (the steps
+   * then say so).
    */
   readonly permissions: readonly TokenPermission[];
   /** The lifetime to choose at the provider, in days ; `null` when the provider offers no expiry. */
