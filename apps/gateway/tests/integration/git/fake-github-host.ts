@@ -250,6 +250,10 @@ export class FakeGithubHost {
       );
       return json({ full_name: repository, default_branch: head.replace(/^refs\/heads\//, '') });
     }
+    const history = /^\/repos\/([^/]+)\/([^/]+)\/commits$/.exec(url.pathname);
+    if (history && method === 'GET') {
+      return this.commitList(`${history[1]}/${history[2]}`, url.searchParams);
+    }
     const commitRead = /^\/repos\/([^/]+)\/([^/]+)\/commits\/([0-9a-f]{40})$/.exec(url.pathname);
     if (commitRead && method === 'GET') {
       return this.commitFiles(`${commitRead[1]}/${commitRead[2]}`, commitRead[3] ?? '');
@@ -392,6 +396,28 @@ export class FakeGithubHost {
       });
     this.commitReads += 1;
     return json({ sha, files });
+  }
+
+  /** `GET commits?sha=&per_page=&page=`: the commits reachable from `sha`, newest first. */
+  private async commitList(repository: string, query: URLSearchParams): Promise<Response> {
+    const sha = query.get('sha') ?? 'HEAD';
+    const perPage = Number(query.get('per_page') ?? '30');
+    const page = Number(query.get('page') ?? '1');
+    if ((await this.refOf(repository, `${sha}^{commit}`)) === null) {
+      return json({ message: 'Not Found' }, 404);
+    }
+    const out = await this.git(repository, [
+      'rev-list',
+      `--max-count=${perPage}`,
+      `--skip=${(page - 1) * perPage}`,
+      sha,
+    ]);
+    return json(
+      out
+        .split('\n')
+        .filter(Boolean)
+        .map((oid) => ({ sha: oid })),
+    );
   }
 
   /** How many `GET commits/{sha}` the review made. */
