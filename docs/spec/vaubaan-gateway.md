@@ -148,9 +148,9 @@ company registered at a provider).
 - **Mission member** — a user to whom the creator gave access to the
   mission, so that they can work on it under their own name. A member
   uses the mission as it is: same resources, same policy, same budget.
-  They can read it and manage their own token; they cannot change the
-  mission, answer its requests, nor add members. The creator is a member
-  by construction.
+  They can read it, manage their own token and leave it; they cannot
+  change the mission, answer its requests, nor add members. The creator is
+  a member by construction, and does not leave: they revoke the mission.
 - **Mission token** — the Bearer an executor (agent, script, human)
   presents to the gateway. A mission has **one or more** tokens; each
   identifies exactly one mission **and one holder**, so that every call
@@ -511,6 +511,19 @@ The gate has a default value, `auto`.
   severe one, the largest quota).
 - **No infinite budget.** A quota is always a number. The absence of an
   expiry is allowed; the absence of a quota is not.
+- **Changing the limits.** The creator may change, per risk already in
+  the mission, its quota per period and its rate limit, up or down, at any
+  time while the mission is not revoked or orphaned. Never a risk added or
+  removed (that is a new mission), never the period nor the rate window,
+  never on behalf of the creator by a delegation. A change is bounded
+  exactly as an issuance is — the creator's authority on the connection at
+  that instant, the catalog's ceilings, a quota that is a number — and is
+  checked by the same rule. It applies to the current period at once: what
+  was consumed stays consumed, and a quota lowered under it leaves the risk
+  `exhausted` until the next period. The decision of a call and its
+  decrement read the limits in force when they run: no call decided after
+  the change is allowed above the new limit. Every change is one
+  administrative act carrying the limits before and after.
 - **One budget per mission, however many agents or tokens.** An
   orchestrator and its sub-agents present the same token; members each
   present their own; every action decrements the same counters.
@@ -551,7 +564,8 @@ For the claim, raised when a call touches a risk at zero quota:
   claimed risk back to zero for the current period and leaves the other
   risks as they are; "extend the quota" gives back a number of actions
   on that risk, at most what the period consumed on it. A larger quota,
-  or more room on another risk, is a change of the mission.
+  or more room on another risk, is a change of the mission's limits by its
+  creator (§3.2), never an answer to a request.
 - The claim produces an event. The token does not change; the executor
   replays its call.
 - A refused or expired claim does not close the mission: the risk stays
@@ -705,7 +719,8 @@ What the management surface **never exposes**, whatever scope is
 requested:
 
 - answering a request, claim or approval;
-- opening a gate, extending a budget, resetting a period;
+- opening a gate, extending a budget, changing a mission's limits,
+  resetting a period;
 - connecting a provider, sharing, transferring, revoking a connection;
 - executing a provider tool.
 
@@ -757,7 +772,7 @@ instance checks again when the act arrives.
   reset, or refuse. To a limit that was reached: reset the count, give back
   some calls, extend the mission, or leave it until the reset; these answers
   are about the claimed permission alone (§3.4), and a limit is changed for
-  good by creating another mission, never from a request. A request that is
+  good on the mission, never from a request; the page leads there. A request that is
   no longer open shows what became of it; anyone but the creator reads one
   sentence and nothing of the request.
 - **Missions** — the missions I created and those shared with me as a
@@ -780,11 +795,16 @@ instance checks again when the act arrives.
   what asks first and what it cannot; its **people and keys**, with what each
   key did in the current period (the creator adds and removes teammates and
   makes machine keys; a teammate generates, replaces and revokes their own
-  key); its permissions with what was used and what is left, where the
-  creator changes "ask me first"; its activity. **Replace key asks first**
+  key, and may leave the mission); its permissions with what was used and
+  what is left, where the creator changes "ask me first" and, through
+  **Change limits**, the limits — the same table with only the limits
+  editable, then a confirmation listing each change, before and after; its
+  activity. **Replace key asks first**
   and states the one consequence: **the old key stops working at once** —
-  there is no grace period. Stopping a mission, removing a teammate and
-  revoking a key cannot be undone and are confirmed by typing a name. The
+  there is no grace period; replacing a machine key is one act, so the
+  machine is never left without a key nor with two. Stopping a mission,
+  removing a teammate, leaving a mission and revoking a key cannot be undone
+  and are confirmed by typing a name. The
   screen of creation must stay usable for a mission on three accounts
   without scrolling through a wall of checkboxes.
 - **The activity of a mission** — its session: what waits, who called in the
@@ -1035,7 +1055,9 @@ A call touches a risk at zero quota. The `budget-exhausted` refusal
 carries the claim URL. The human steering the agent opens it, or forwards
 it to the creator, who also finds it under "Waiting for you", on the home
 and on the mission. The creator authenticates, sees what was used and what
-is left, decides. The agent replays.
+is left, decides. The agent replays. When the limit itself was wrong, the
+creator changes it on the mission (§3.2) rather than answering again each
+period.
 
 ### 7.7 Approve an action
 
@@ -1071,8 +1093,9 @@ signs in, finds the mission under "Shared with you", and generates their
 own key, shown once, with the setup kit. Every call is then attributed to
 its holder in the session and the audit. For a machine with no account, the
 creator creates a named token — a machine key. Any key is revoked on its
-own, by its holder or by the creator. Requests still go to the creator, who
-alone answers them; a teammate sees on the mission that it waits, and for
+own, by its holder or by the creator. A teammate may leave the mission by
+themselves; their key stops at once, as if the creator had removed them.
+Requests still go to the creator, who alone answers them; a teammate sees on the mission that it waits, and for
 whose answer.
 
 ### 7.10 Have an agent prepare a mission
@@ -1100,8 +1123,9 @@ origin. The detailed shape of the risk-related fields is that
 of [gateway-risk-model](./gateway-risk-model.md) §12.
 
 For an administrative act: timestamp, user, act (connection, share,
-revocation, issuance, extension, reset, approval, rotation, delegation
-granted or revoked, configuration change), object, previous and new
+revocation, issuance, extension, reset, approval, rotation, change of
+limits, a member removed or leaving, delegation granted or revoked,
+configuration change), object, previous and new
 state when meaningful, and, when the act comes from the management
 surface, the identity of the delegated client.
 
