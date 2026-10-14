@@ -60,7 +60,8 @@ catalog whose wording changes takes a new `catalog_version`.
    "identity provider", a preset called "Operator") stays. Ids, keys, structure, vectors,
    limits and gates are untouched. The plugin guide and the provider-modeler skill state
    the rule for new catalogs.
-5. **No `catalog_version` is bumped for this wording.** No id, vector, pattern, limit
+5. **No `catalog_version` is bumped for this wording** (reversed on 2026-10-14, see
+   "Closed after the fact"). No id, vector, pattern, limit
    or gate changed, no test depends on the version, and a version exists to tell
    instances that what a catalog _grants_ was reviewed again.
 6. **Unused code goes with its tests**: the explanation components of the first
@@ -107,7 +108,17 @@ catalog whose wording changes takes a new `catalog_version`.
 - **Keep the legacy primitives "in case".** Nothing imported them; their specimens
   made the gallery show components no page may use.
 
-## Open
+## Closed after the fact (2026-10-14)
 
 - Does a wording-only change of a catalog count as "a reviewed change of the content"
-  for `catalog_version`? Decided here as no, for this step.
+  for `catalog_version`? **Yes** — the product owner's decision of 2026-10-14
+  ([owner-decisions-second-round](owner-decisions-second-round.md)) overrides point 5
+  above. A label, a reason or a preset description is what a person reads before
+  allowing a permission; an instance that cached a catalog must be able to tell that
+  it changed. Every catalog this step reworded took its bump on 2026-10-14:
+  cloudflare-dns 3, github 5, gmail 4, railway 4, resend 4, ssh 4, stripe 5,
+  supabase 5 (bumped once, together with the preset change of the same day),
+  upstash-redis 6, vercel 3. The `_template` catalog stays at 1: it is the starting
+  point of a new plugin, not a shipped catalog. The plugin guide's rule ("a label, a
+  reason") already said so and now applies without exception; plugin versions do not
+  move for a wording change (no tool, risk or preset changed).

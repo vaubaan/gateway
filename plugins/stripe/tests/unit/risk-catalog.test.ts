@@ -16,10 +16,10 @@ import { stripeCatalog } from '../../src/index.ts';
 const { catalog, indexed } = stripeCatalog;
 
 describe('stripe risk-catalog — shape', () => {
-  test('16 named risks + 1 fallback, version 3', () => {
+  test('16 named risks + 1 fallback, version 5', () => {
     expect(catalog.provider).toBe('stripe');
     expect(catalog.risks).toHaveLength(17);
-    expect(catalog.catalog_version).toBe(4);
+    expect(catalog.catalog_version).toBe(5);
     expect(catalog.risks.filter((r) => r.id.startsWith('stripe.uncategorized'))).toHaveLength(1);
   });
 

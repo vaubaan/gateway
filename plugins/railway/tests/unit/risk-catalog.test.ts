@@ -153,8 +153,8 @@ describe('railway risk catalog — shape', () => {
     expect(entry?.vector_overrides).toEqual({ prod: { reversibility: 'costly' } });
   });
 
-  test('catalog_version is 3 : bulk-variables-replace matches the replace marker only', () => {
-    expect(catalog.catalog_version).toBe(3);
+  test('catalog_version is 4 (3 was the replace marker) : bulk-variables-replace matches the replace marker only', () => {
+    expect(catalog.catalog_version).toBe(4);
     const entry = catalog.risks.find((r) => r.id === 'railway.bulk-variables-replace');
     expect(entry?.matches).toBe('railway.project[**].environment[**].service-var-replace.W');
     // Destructive anywhere : not env-scoped, so no label can make it acceptable by default.
