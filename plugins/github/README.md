@@ -11,7 +11,7 @@ Contract: [`docs/handbook/plugin-sdk.md`](../../docs/handbook/plugin-sdk.md),
 ADRs [`plugin-contract-and-credential-spec`](../../docs/decisions/plugin-contract-and-credential-spec.md),
 [`plugin-identifiers-one-grammar-for-classify-and-execute`](../../docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md),
 [`plugin-arguments-closed-surface-and-typed-refusals`](../../docs/decisions/plugin-arguments-closed-surface-and-typed-refusals.md).
-Plugin version 3.0.0, catalog version 4.
+Plugin version 3.1.0, catalog version 4.
 
 ## Layout
 
@@ -177,9 +177,34 @@ to the mission's repositories with the `clone` (`contents:read`) or `push`
 (`contents, pull_requests, workflows: write; metadata: read`) permission
 set — that token leaves the gateway's perimeter.
 
-No personal-access-token path: the plugin contract carries one
-`CredentialSpec` per plugin and an on-prem instance always registers its own
-App.
+## Credential, the other way: a fine-grained personal access token
+
+When no GitHub App is registered — or when a person prefers it — an account
+is connected with a **fine-grained personal access token** pasted by hand
+(`githubTokenCredential`, `src/token.ts`, declared in
+`alternativeCredentials`). Often a shared service account: the gateway still
+decides every call, and Activity says who made it.
+
+1. At GitHub, signed in as the account the agents will act as: Settings →
+   Developer settings → Personal access tokens → Fine-grained tokens →
+   Generate new token. Choose the organisation as resource owner, only the
+   repositories the missions need, an expiry (90 days recommended), and the
+   permissions the connect page lists, derived from `guide.permissions`
+   (Contents, Pull requests, Issues, Actions, Workflows, Administration;
+   Metadata read is added by GitHub).
+2. Paste it on "Connect a GitHub account" ("Use a token instead" when the App
+   is registered). A classic token (`ghp_`) is refused: it reaches every
+   repository of its account.
+3. The gateway checks it (`GET /user`; the expiry header when GitHub sends
+   it), lists the repositories it reaches (`GET /user/repos`), and seals it.
+   Every API tool sends it as the bearer.
+
+`github__mint_install_token` needs the App (it hands out an installation
+token): on a token account it is not listed and is refused before the budget.
+A token GitHub rejects (expired, deleted) turns the account "Needs
+reconnecting". Removing the account deletes nothing at GitHub: delete the
+token on the fine-grained tokens page. ADR
+[`token-connections-beside-the-integration-app`](../../docs/decisions/token-connections-beside-the-integration-app.md).
 
 ## Tests
 

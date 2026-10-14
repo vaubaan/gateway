@@ -6,6 +6,8 @@ partially-superseded-by: pivot-v4-to-v5-on-prem-mission-tokens
 superseded-date: 2026-10-12
 ---
 
+> **The refusal of pasted tokens is superseded on 2026-10-14** by [[token-connections-beside-the-integration-app]]: a token pasted by hand is offered beside the company app.
+>
 > **Partially superseded on 2026-10-12** by [[pivot-v4-to-v5-on-prem-mission-tokens]], which names the parts that survive. Legacy v4 decision; body unchanged.
 
 # Connect Provider via OAuth / App install — jamais de paste-token

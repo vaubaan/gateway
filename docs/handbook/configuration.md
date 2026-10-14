@@ -469,7 +469,15 @@ shipped plugin has. Which fields a provider's app needs is the plugin's
 of that provider and makes Settings → Company apps (`/admin/provider-apps`) read-only for it
 (handbook [connections](connections.md), "Provider apps"); a block that
 lacks a required field does not fail the boot — the provider is shown
-`incomplete` and cannot be connected.
+`incomplete` and cannot be connected through its app.
+
+**A company app is optional for GitHub, Supabase and Railway.** Their
+plugins also accept a token pasted by hand (`alternativeCredentials`; ADR
+[token-connections-beside-the-integration-app](../decisions/token-connections-beside-the-integration-app.md)):
+with no `providers.<id>` block and nothing under Company apps, people connect
+those services with a token, and the instance needs no app secret at all for
+them. Registering the app later adds the app way; both stay offered, and a
+token account never reads the app's settings.
 
 ## Fixed in code (not configurable)
 

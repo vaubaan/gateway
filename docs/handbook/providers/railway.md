@@ -4,6 +4,7 @@ status: current
 date: 2026-10-13
 last_synced: 2026-10-14
 tracks:
+  - plugins/railway/src/token.ts
   - plugins/railway/src/
   - plugins/railway/tests/
   - plugins/railway/README.md
@@ -260,6 +261,32 @@ performs from `tokenUrl`, `clientAuthMethod` and `resourceIndicator`. The
 plugin therefore declares `refreshable: true` and implements no `refresh`
 (the alignment on the v5 SDK removed `refreshRailwayCredential` and `railwayNeedsRefresh`).
 The plugin never persists: the host refreshes and stores the result.
+
+## Connecting with an account token
+
+Beside the OAuth app, `src/token.ts` declares an **account token** ("No
+workspace" at railway.com/account/tokens) pasted by hand, the way offered
+when no Railway app is registered (ADR [token-connections-beside-the-integration-app](../../decisions/token-connections-beside-the-integration-app.md)). Railway documents it as an
+`Authorization: Bearer` for the public GraphQL API; `railwayBearerOf` returns
+it or the OAuth access token.
+
+- **What runs**: discovery and the four GraphQL variable tools. The ten tools
+  rewrapped from Railway's MCP server are `unavailableTools`
+  (`MCP_NEEDS_THE_APP`), derived as "every declared tool that is not a
+  custom one": Railway documents that server for OAuth and CLI sign-in only,
+  and an MCP 401 would expire the connection for every tool.
+- **Check at paste** (`verifyRailwayToken`): `query { me { name email } }` →
+  the email (else the name). A GraphQL error (a project or workspace token
+  has no `me`) or a 401 refuses it. No expiry is exposed.
+- **Discovery with a token**: the personal projects (`projects`), then for
+  each workspace of `me.workspaces` its projects
+  (`projects(workspaceId:)`), without duplicates.
+- **Why not a workspace token**: how it answers `me` and the personal
+  project list is not documented; why not a project token: it is scoped to
+  one environment and refused by the MCP server.
+- **Guide**: no permission choice exists on a Railway token; the steps say so.
+- **Removal**: no deletion endpoint was found; the person deletes the token
+  under Account settings, Tokens.
 
 ## Execution
 

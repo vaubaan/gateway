@@ -4,6 +4,7 @@ status: current
 date: 2026-10-13
 last_synced: 2026-10-14
 tracks:
+  - plugins/github/src/token.ts
   - plugins/github/src/index.ts
   - plugins/github/src/risk-catalog.yaml
   - plugins/github/src/data-model.ts
@@ -153,6 +154,33 @@ for `contents: write` plus `pull_requests` and `workflows` (`MINT_PERMISSIONS`);
 GitHub answers 422 when the installation lacks one, and the mint is retried
 with `contents: write` and `metadata: read` only; a second 422 is declined by
 name.
+
+## Connecting with a fine-grained token
+
+Beside the App, the plugin declares a second way (`alternativeCredentials`,
+`src/token.ts`, ADR [token-connections-beside-the-integration-app](../../decisions/token-connections-beside-the-integration-app.md)): a **fine-grained personal access token** pasted
+by hand, the way offered when no GitHub App is registered. A classic token
+(`ghp_`) is refused by the field's shape (`^github_pat_…`): it reaches every
+repository and organisation of its account with coarse scopes.
+
+- **Check at paste** (`verifyGithubToken`): `GET /user` → the login, kept as
+  the account; the `github-authentication-token-expiration` header, when
+  GitHub sends it (`2026-12-31 00:00:00 UTC`), → the expiry (`expiryOf`; an
+  unreadable value is "not said"). 401 or 403 refuses the token.
+- **Resources**: `GET /user/repos` (bare list, 100 per page, 10 pages at most).
+- **Calls**: every tool sends the token as the bearer; no installation token
+  is minted, nothing is cached. A 401 expires the account (a token cannot be
+  refreshed).
+- **`github__mint_install_token`** is `unavailableTools` for this way
+  (`MINT_NEEDS_THE_APP`: "needs the GitHub App: …"): the host refuses it
+  before the budget and does not list it; `execute` declines it too.
+- **Guide**: the steps of GitHub's "Creating a fine-grained personal access
+  token", and the permissions per tool (Contents, Pull requests, Issues,
+  Actions, Workflows, Administration — the App's own permission names, which
+  fine-grained tokens share). `definePlugin` checks every API tool is served.
+- **Removal**: nothing is sent to GitHub (`/credentials/revoke` is the
+  leak-report endpoint); the person deletes the token under Settings,
+  Developer settings, Personal access tokens, Fine-grained tokens.
 
 ## Files
 

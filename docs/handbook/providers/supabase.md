@@ -4,6 +4,7 @@ status: current
 date: 2026-10-13
 last_synced: 2026-10-14
 tracks:
+  - plugins/supabase/src/token.ts
   - plugins/supabase/src/
   - plugins/supabase/tests/unit/
 ---
@@ -401,6 +402,29 @@ hand at the next review_: Context7 (`/supabase/supabase`,
 `/websites/supabase`, `/websites/api_supabase_api_v1`) returned nothing for this
 operation, only the project-level OAuth server's `revokeGrant`, which is a
 different API.
+
+## Connecting with a personal access token
+
+Beside the OAuth app, `src/token.ts` declares a **personal access token**
+(`sbp_…`) pasted by hand, the way offered when no Supabase app is registered
+(ADR [token-connections-beside-the-integration-app](../../decisions/token-connections-beside-the-integration-app.md)). Every tool runs with it: the Management API takes it as the same
+`Authorization: Bearer` (`supabaseBearerOf` returns the OAuth access token
+or the pasted one), and the data-plane tools read the `service_role` key
+through it as before.
+
+- **Check at paste** (`verifySupabaseToken`): `GET /v1/organizations` → the
+  organisation names, kept as the account ("Acme, Side and 2 more"). Supabase
+  exposes no expiry for a token in what was read: the expiry is the one the
+  person chose. 401 or 403 refuses the token.
+- **Guide**: a scoped token (the guide says so; a classic token, "Legacy" in
+  the dashboard, carries the account's full access), and the dashboard
+  permission names per tool group: Project Settings, API Keys, API Key
+  Secrets (the data-plane tools read the service role key), Database,
+  Migrations, Advisors, Storage Config, Auth Config, Edge Functions, Secrets.
+  Names read in the scoped-token documentation on 2026-10-14; Edge Functions,
+  Secrets and Storage Config were not each confirmed endpoint by endpoint.
+- **Removal**: no endpoint deletes a personal access token; the person
+  deletes it under Account preferences, Access tokens.
 
 ## Tests
 

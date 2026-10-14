@@ -15,6 +15,7 @@ tracks:
   - apps/gateway/src/app/admin/(guarded)/provider-apps/
   - apps/gateway/src/components/connections/
   - apps/gateway/src/components/settings/AppRegistration.tsx
+  - apps/gateway/src/app/(app)/reference/[id]/page.tsx
   - apps/gateway/src/components/shell/AppShell.tsx
   - apps/gateway/src/lib/connections/session.ts
   - apps/gateway/tests/integration/connections/
@@ -31,7 +32,9 @@ discovered and curated, and how the operator registers the provider apps
 §4.3; §6 anti-replay; §7.2). Decisions:
 [connect-driver-and-resource-curation](../decisions/connect-driver-and-resource-curation.md),
 [plugin-contract-and-credential-spec](../decisions/plugin-contract-and-credential-spec.md)
-D2 (the host runs the four flows and the standard refresh). Built on the
+D2 (the host runs the four flows and the standard refresh),
+[token-connections-beside-the-integration-app](../decisions/token-connections-beside-the-integration-app.md)
+(a service connects through the company app or with a token pasted by hand). Built on the
 [plugin SDK](plugin-sdk.md) (`CredentialSpec`, `discoverResources`,
 `experimental`), the [store](store.md) (`connections`,
 `connection_resources`, `instance_config`), the
@@ -69,6 +72,7 @@ apps/gateway/src/lib/connections/session.ts  Next glue: currentActor(), takeNoti
 apps/gateway/src/components/
   shell/AppShell.tsx                 the shell: AppShell (the side navigation) and AdminShell (the same, with the local navigation of Settings)
   connections/parts.tsx              NoticeBanner, AccountState, ExperimentalBadge, CredentialFieldInputs
+  connections/TokenGuide.tsx         steps 1 and 2 of the token way: where to create it, the permissions to tick
   connections/RevokeConnection.tsx   client: type-to-confirm, then a plain form POST
 apps/gateway/src/app/(app)/accounts/
   page.tsx                           /accounts
@@ -285,6 +289,54 @@ as a one-time notice. A created app's line shows `RegisteredAppFacts` — the
 name linking to the app at the service, the owner, the permissions — the
 primary "Install it on your repositories" (`/accounts/new/<id>`: installing
 is connecting an account), and the form behind "Edit its settings by hand".
+
+## Two ways to connect one service
+
+A plugin declares its primary way in `credential` and may add others in
+`alternativeCredentials` (GitHub, Supabase and Railway: a token pasted by
+hand beside the company app). The host reads them only through
+`credentialSpecsOf` / `credentialSpecFor` / `appCredentialSpecOf` of the SDK.
+
+- **What is offered.** `ConnectionService.describe` builds one
+  `ConnectMethod` per declared way (`kind`, `usesApp`, `configured`, the form
+  `fields`, `createUrl`, `label`, the `guide` with each permission's tools as
+  `{ name, title }`, `unavailableTools` with their reasons).
+  `defaultMethod(provider)` is the first way usable now, else the primary;
+  `ConnectableProvider.kind/fields/createUrl` are that way's, and
+  `configured` is true when any way is usable. A way through the app is
+  usable when the app is complete (and its installations verifiable or
+  accepted); a token way always is.
+- **What is run.** `start(…, { method })` (`METHOD_FIELD` of the form)
+  picks the spec: the way asked for (an undeclared kind is `invalid-input`),
+  else the way of the account being reconnected
+  (`connectionCredentialKind(record, primary)`: `metadata.credential_kind`),
+  else the offered way. `complete` takes the spec of the pending flow's kind.
+- **A token is checked before it is stored.** `connectWithApiKey` calls the
+  spec's `verify` (`verifyPasted`): who it acts as and its expiry. An
+  `UpstreamAuthError` or an answer the plugin could not read refuses with
+  `credential-rejected`; a network failure is `provider-unreachable`; an
+  expiry already past is refused with the date. Then the `required` first
+  discovery. Stored in clear: `metadata.account`, `metadata.expires_at`,
+  `credential_expires_at`; the token is sealed with the credential.
+- **Reconnecting another way** keeps the id and the missions; when the kind
+  changes, the old way's metadata (installation id, token account) is
+  dropped except `discovery`.
+- **The app's settings never reach a token connection.**
+  `ProviderAppsService.pluginAppConfigFor(id, kind)` is the `appConfig` the
+  broker and the connect driver hand a plugin: the app record for the kind
+  the app serves, `{}` otherwise. A token account keeps working when the app
+  is incomplete or removed.
+- **Refresh and revocation by kind.** A plugin's `refresh` override serves
+  its primary kind only, the generic grant an `oauth2` credential only: a
+  401 on a token expires the account at once. `canWithdraw(plugin, kind)`:
+  the plugin's `revoke` hook serves its primary kind, an `oauth2`
+  `revocation` an `oauth2` credential; a token is never withdrawn and
+  `providerGrantOf` reads the spec's own `manualRevocation` (where to delete
+  the token).
+- **Tools a way cannot run** (`unavailableTools`): the execution door's
+  resource stage refuses the call before the budget (`toolUnavailableOn`,
+  handbook [execution-door](execution-door.md)), `callableTools` leaves it out
+  of `tools/list`; `MissionConnection.credential_kind` carries the way.
 
 ## The connect driver
 
@@ -763,7 +815,8 @@ patterns are in `lib/vocabulary.ts` (`ACCOUNT_PAGES`, `ACCOUNT_ACTIONS`,
   - **Connect an account**: `ServicePicker`, a grid of `PickCard`s from
     `ConnectionService.providers()` — the mark, the name and how the account
     is connected (`howToConnect`: "sign in at Supabase", "install your
-    company’s GitHub app", "paste: test-mode key and live-mode key"). A
+    company’s GitHub app", "paste: test-mode key and live-mode key"; "· or
+    a token" when a second way is usable now). A
     service whose company app is not registered is dashed and says who to
     ask; for an administrator the card leads to Company apps. The primary
     action of the page jumps to this region.
@@ -771,7 +824,23 @@ patterns are in `lib/vocabulary.ts` (`ACCOUNT_PAGES`, `ACCOUNT_ACTIONS`,
     (`EmptyState`) and the picker follows.
 - **`/accounts/new`** — the same picker on a page of its own, for whoever
   arrives from the mission being written (`?return_to=` is passed on).
-- **`/accounts/new/<provider>`** — the form, on the narrow measure: an
+- **`/accounts/new/<provider>`** — chooses the way first
+  (`?method=<kind>`, else the way of the account reconnected, else
+  `defaultMethod`). The header's secondary action switches to the other way
+  when it is usable ("Use a token instead" / "Connect through your company’s
+  <service> app instead"), keeping `?connection=` and `?return_to=`. A way
+  with a `guide` is three steps (`FormStep`): **1** "Create the token at
+  <service>" (the plugin's steps, the link to its token page, the expiry to
+  choose or "gives these tokens no expiry"), **2** "Permissions to tick" —
+  one row per permission name (`permissionLines`: "read and write" when any
+  of its tools writes, "for" the titles of the tools it serves) and, when the
+  way cannot run some tools, a note naming them and why — **3** "Paste it
+  here", the form, then two sentences: what the gateway does with the token
+  and why a shared service account is fine. Without an app, a hint says so
+  (and, for an administrator, that registering it adds the other way). The
+  words are `TOKEN_CONNECT` (`lib/vocabulary.ts`); the steps, permissions and
+  reasons are the plugin's. For the other ways the form is
+  as follows, on the narrow measure: an
   optional name, then a "Continue to …" button (redirect flows) or the
   declared fields (`CredentialFieldInputs`: `field.<name>` inputs, secrets
   masked). **A field says its shape before the person types**: the label
@@ -835,6 +904,10 @@ patterns are in `lib/vocabulary.ts` (`ACCOUNT_PAGES`, `ACCOUNT_ACTIONS`,
     confirmation that says how many missions stop and what happens at the
     service (`providerGrantForecast`).
   - An SSH account shows its public key in a copyable block above the lists.
+  - A token account: the expiry the service gave is on the header's line
+    ("expires 15 Jan"), a warning appears `TOKEN_EXPIRY_NOTICE_DAYS` (14)
+    ahead, and "Show details" adds "Token: acts as acme-bot · expires …" and
+    the tools the token cannot run, with why.
 - **`/accounts/<id>/share`** — "Give access", a dialog over the same page
   (handbook [authority](authority.md)).
 - **Notices.** A handler never puts a message in a URL: it stores a
@@ -902,7 +975,15 @@ Unit, co-located (`src/server/connections/*.test.ts`,
   return, a malformed code, a refused, unreachable or unreadable exchange
   storing nothing, an app entered by hand meanwhile, what is stored and
   sealed, the audit entry and the logs without a secret, the record dropped
-  when the app is replaced by hand).
+  when the app is replaced by hand),
+  `token-connections.test.ts` (8: the offered way with and without an app,
+  a pasted token checked and stored with its account and expiry and never
+  shown, a rejected or expired token storing nothing, an undeclared way, the
+  app way still needing the app, an app account reconnected with a token on
+  the same id, a token never refreshed, a token revocation asking nothing).
+  `shipped-providers.test.ts` also asserts that GitHub, Supabase and Railway
+  are the services with two ways, and that every shipped token way has a
+  label, a link, a guide, a check and a manual revocation sentence.
 
 Integration: `tests/integration/store/connections-shares.test.ts` (+2: the
 merge rule and the credential state transitions at the repository) and
@@ -942,6 +1023,13 @@ nothing on an owned or a revoked connection; a revocation whose own audit
 entry fails still writes `mission-orphaned`. Transfer, `unowned` and the
 ordinary reassignment are in `tests/integration/authority/ownership.test.ts`
 (handbook [authority](authority.md)).
+
+`tests/integration/connections/token-connect.test.ts` (1), on the real root
+with the real GitHub plugin and GitHub mocked: no app → the token is offered,
+a classic token refused before GitHub is asked, a fine-grained one checked
+and sealed (not in any table), a mission calls `github__list_branches` with
+it, `github__mint_install_token` is not listed and is refused with no credit
+consumed, a 401 expires the account, revoking asks GitHub nothing.
 
 Not automated: a browser run against real providers
 ([e2e-tests](../tests/e2e-tests.md#manual-checks-by-feature), "Manual checks
@@ -1015,6 +1103,11 @@ rejected` with `detail` (the provider's error) and `marked_expired`.
   both. The driver needs no change. A provider that has no such endpoint
   ships without the block and is connectable only once the operator accepts
   unverified installations.
+- **A token way for a service that has an app** — add an `api-key` spec
+  to `alternativeCredentials` with its `label`, `guide` (every tool it can run
+  served by a permission; `definePlugin` checks), `verify`,
+  `unavailableTools` and `manualRevocation`; read `ctx.credential.kind` in
+  `execute` and `discoverResources`. No page or route changes.
 - **A new credential kind** — an ADR first (it changes the plugin
   contract), then: the variant in `credential-codec.ts`, one private method
   of `ConnectionService` with its discovery policy and its one-line case in

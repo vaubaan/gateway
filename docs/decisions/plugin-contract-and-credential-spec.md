@@ -13,6 +13,7 @@ partially-supersedes:
 amended-by:
   - plugin-catalog-path-and-standalone-tracing
   - fallback-risk-only-when-uncategorized
+  - token-connections-beside-the-integration-app
 ---
 
 # Plugin contract, credential spec, presets and the single registry
@@ -62,6 +63,12 @@ amended-by:
 > installations. Decision and alternatives :
 > [[connect-driver-and-resource-curation]], amendment of the same day (D9,
 > D10).
+
+> **Amended on 2026-10-14** by [[token-connections-beside-the-integration-app]]
+> (D2 : a plugin may declare more than one way to connect —
+> `alternativeCredentials`, read with `credentialSpecsOf` ; every spec may name
+> `unavailableTools` and its own `manualRevocation` ; an `api-key` spec may
+> carry `label`, `guide` and `verify`).
 
 ## Context
 

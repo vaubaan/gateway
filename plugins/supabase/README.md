@@ -225,6 +225,20 @@ The Management API returns the whole list (no paging) ; the plugin caps it
 at `MAX_DISCOVERED_PROJECTS` (200) and warns through the logger. The owner
 labels each project's `env` on the account's page (Accounts).
 
+## Credential, the other way: a personal access token
+
+Without a company OAuth app — or beside it — an account is connected with a
+**personal access token** pasted by hand (`supabaseTokenCredential`,
+`src/token.ts`). Create it at https://supabase.com/dashboard/account/tokens,
+as the account the agents will act as (a shared service account is fine),
+**scoped** to the organisation and projects the missions need, with the
+permissions the connect page lists (`guide.permissions`) and an expiry. Every
+tool runs with it. The gateway checks it with `GET /v1/organizations` and
+seals it; Supabase exposes no expiry and no deletion endpoint for these
+tokens, so removing the account tells the person to delete it under Account
+preferences → Access tokens. ADR
+[`token-connections-beside-the-integration-app`](../../docs/decisions/token-connections-beside-the-integration-app.md).
+
 ## Tests
 
 `npx vitest run plugins/supabase` — `plugin.test.ts` runs the SDK kit

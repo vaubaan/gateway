@@ -57,13 +57,17 @@ apps/gateway/src/server/execution/      host-agnostic, never imports `next`
   door.ts             ExecutionDoor: handleMcp(), handleCatalog(); admission, MCP serving
   token-verifier.ts   TokenVerifier — asks the mission service at every call; throttles the argon2id check of legacy tokens
   mission-context.ts  loadMissionContext(), missionResourceOf(), periodOf()
-  resource-stage.ts   createResourceStage(), citedRefs()        → resource-not-in-mission
+  resource-stage.ts   createResourceStage(), citedRefs(), toolUnavailableOn()
+                                                                → resource-not-in-mission; a tool the
+                                                                  connection's way cannot run (a token where the
+                                                                  tool needs the company app: `unavailableTools`)
+                                                                  is a structural refusal, before the budget
   risk-stage.ts       createRiskStage()                         → risk-not-accepted
   scope-caps.ts       ENFORCED_INFRA_LIMIT_KEYS, ENFORCED_CAP_KEYS, unenforcedLimitsOf() — no cap stage; what the catalogs may declare
   upstream-stage.ts   createUpstreamStage()                     → broker, retry ladder, connection-unavailable
   telemetry-sink.ts   TelemetrySink port, NOOP_TELEMETRY_SINK   → the one hook of community telemetry
   credential-cache.ts ConnectionCredentialCache                 — ExecuteContext.credentialCache
-  tools.ts            callableProviders(), callableTools(), buildCatalog()
+  tools.ts            callableProviders(), callableTools() (minus the tools the connection's way cannot run), buildCatalog()
   request-meta.ts     readAgentLabel(), parseAgentLabel(), agentLabelOf(), clientOriginOf() — over ../http/client-ip.ts
   testing.ts          depotPlugin(), executionInstance() — tests only
   execution.test.ts   unit tests of the pure and in-memory parts
