@@ -679,6 +679,13 @@ const report = assertCatalogCoverage(plugin, {
 // report.risksTouched / report.risksUntouched / report.fallbackHits / report.toolsChecked / report.samplesChecked
 ```
 
+`propertyRuns()` (`testing/property.ts`) gives the `{ seed, numRuns }` of
+the property-based tests of the parsers that read untrusted input (the SQL
+and shell readers of the plugins, the git wire): a fixed seed and 300 cases
+unless `FC_SEED` / `FC_RUNS` say otherwise, so a failure replays. It imports
+nothing from fast-check (a root dev dependency), so the kit adds no
+dependency to a plugin that does not use it.
+
 `assertPresetsValid` is `presetIssues` plus `presetWildcardIssues` — the
 preset half of the wildcard rule called as a function, not filtered out of
 `wildcardIssues` by the wording of its messages. Budgets are part of

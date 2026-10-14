@@ -7,6 +7,7 @@ tracks:
   - vitest.config.ts
   - scripts/release-lib.test.mjs
   - scripts/audit-gate.test.mjs
+  - scripts/lockfile-gate.test.mjs
   - packages/policy-engine/tests/
   - packages/plugin-sdk/tests/
   - plugins/_template/tests/
@@ -4130,6 +4131,65 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
   malformed ones, a duplicate id and another shape; **the allowlist the
   repository ships** is valid, gives no entry more than about a quarter, and
   is what `ci.yml` runs.
+
+## Scenarios — Parsers of untrusted input (property-based)
+
+> Covers: spec §6 (what reaches the gateway from an agent or a client);
+> ADR [[supply-chain-and-ci-security-checks]] (D7). fast-check, seeded:
+> the same seed (`PROPERTY_SEED`) and 300 cases per property on every run,
+> so CI is deterministic and the five files take about half a second. A
+> failure prints its seed and its shrunk counter-example; replay or explore
+> with `FC_SEED=<seed> FC_RUNS=<n> npx vitest run <file>`
+> (`propertyRuns()`, `@vaubaan/plugin-sdk/testing`). Each file was also run
+> once with 20 000 to 30 000 cases and other seeds before it was committed.
+
+- **`plugins/supabase/tests/unit/sql.property.test.ts`** (3) — on SQL-shaped
+  text (quotes, `--` and `/* */` comments, dollar quoting, `E''`,
+  backslashes, managed schema names) and arbitrary strings: `tokenise`,
+  `readQuerySql` and `readMigrationSql` **never throw**, and an unrecognised
+  migration takes every class; **what follows a statement boundary is never
+  lost**: any text, then a newline, `;` and `select * from auth.users`, is
+  never an application read, and the same with `create role` always takes
+  `db-role`.
+- **`plugins/ssh/tests/unit/shell.property.test.ts`** (3) — on shell-shaped
+  text (quotes, `$( )`, `${ }`, backquotes, separators, redirections,
+  heredoc markers, globs, braces, control characters) and arbitrary strings:
+  the lexer and the classifier **never throw**; **a destructive command
+  after `;` is never hidden** by what precedes it (`rm -rf` after any such
+  prefix always carries `destructive.W`; `#` and the backslash are left out
+  of the prefix, since they really do change what the shell runs); a word
+  in single quotes is lexed as exactly its literal, with no bare character.
+- **`apps/gateway/src/server/http/doors.property.test.ts`** (7) — what the
+  doors read before authentication: `parseBearer` returns a non-empty part
+  of the header or throws `AuthError`, nothing else, and reads back
+  `Bearer <token>` in any case of the scheme; the git door's `bearerOf`
+  never throws and reads the password of `Basic` and the token of `Bearer`;
+  `parseAgentLabel` returns a trimmed, bounded label of the documented
+  shape, and a refusal never carries the value; `X-Forwarded-For` yields
+  `unknown` or an address that is a hop of the header and never a trusted
+  proxy, and a header that is not a list does not throw; `parseGitPath`
+  cuts or ignores any path.
+- **`packages/plugin-sdk/tests/unit/git-wire.property.test.ts`** (4) —
+  pkt-lines read back as they were encoded; arbitrary bytes given to
+  `parsePktLines`, `parseAdvertisement` and `parseReceivePackResult` are
+  read or refused with `PktLineError` / `GitProtocolError`, nothing else; a
+  push command is parsed (never two zero ids, never an empty ref) or
+  refused with `GitProtocolError`; an oversized payload is never encoded.
+- **`apps/gateway/src/server/config/load.property.test.ts`** (6) — any YAML
+  file (generated trees with known and unknown keys, `__proto__`,
+  `constructor`, secret references, aliases; arbitrary text) and any
+  environment value of a set of variables (prototype-shaped provider ids
+  included) **end in a configuration or a `ConfigError`**, never another
+  error, and pollute no prototype; a duration is a positive safe integer
+  of seconds or `null`. The three counter-examples of the first run are
+  kept as cases: an alias inside its own anchor (`a: &x [*x]`), a
+  `__proto__` key, `300000000000d`.
+- **`scripts/lockfile-gate.test.mjs`** (12, example-based) — the lockfile
+  gate passes the repository's lockfile, registry entries scoped, nested
+  and aliased, workspaces and their links; refuses another host, plain
+  http, a git URL, a lookalike host, a tarball of another package, a
+  missing or non-sha512 integrity, an entry without `resolved`, a link or a
+  workspace outside the repository, and a lockfile without `packages`.
 
 ## Out of scope for these tests
 

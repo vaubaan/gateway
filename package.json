@@ -41,6 +41,7 @@
     "@vaubaan/harness": "^1.4.0",
     "eslint": "9.39.4",
     "eslint-config-prettier": "10.1.8",
+    "fast-check": "4.10.2",
     "globals": "17.6.0",
     "husky": "^9.1.7",
     "lint-staged": "17.6.0",
