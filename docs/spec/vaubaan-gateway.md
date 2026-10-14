@@ -123,8 +123,12 @@ company registered at a provider).
   Supabase, Railway, Stripe, Cloudflare…). Static, described by its risk
   catalog.
 - **Connection** — a provider authenticated into the instance by a user,
-  through the provider's own authorization flow. The connection holds
-  the long-lived credentials, encrypted at rest. It has an **owner**: a
+  through the provider's own authorization flow with the app the company
+  registered there, or — for a provider whose plugin offers it — with a
+  token the user created at the provider and pasted (often on one shared
+  service account per provider: the instance decides who may do what, and
+  the audit says who did). Both ways coexist; neither replaces the other.
+  The connection holds the long-lived credentials, encrypted at rest. It has an **owner**: a
   principal, user or group. By default the user who created it; they may
   transfer ownership to a group they belong to, for instance "GitHub
   admins" for the GitHub connection. Every member of an owner group
@@ -340,25 +344,25 @@ Instance                          (one company, one trust domain)
 
 ### 2.2 Definitions
 
-| Entity             | Short definition                                                                                                                                                                                  |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Instance**       | One deployment, one company. No internal tenant.                                                                                                                                                  |
-| **User**           | Human authenticated by the IdP. May own connections, belong to owner groups, receive shares, create missions.                                                                                     |
-| **Delegation**     | Authorization given by a user to an agent to act on their behalf on the management surface. Produces short-lived delegated tokens. Revocable by the user. Never executes, never answers requests. |
-| **Group**          | Owner of connections or target of shares. Never a mission creator. Membership resolved at each login from the IdP, or kept locally.                                                               |
-| **Connection**     | Provider authenticated by a user through the provider's flow. Holds the credentials. 1 owner, user or group. Several connections possible for one provider (two GitHub accounts).                 |
-| **Resource**       | A thing reachable through a connection, with a ref and an optional environment label. Discovered by the plugin, labelled by the owner.                                                            |
-| **Share**          | `(connection, target, restriction)`. Gives the target the right to accept, in their missions, a subset of the restriction. Revocable by the owner.                                                |
-| **Restriction**    | Enumeration of `RiskId` from the catalog of the connection's provider. Upper bound, never a wildcard.                                                                                             |
-| **Mission**        | Named objective. Carries resources (a subset per connection), `accepted_risks`, budget, period, optional expiry, creator. Leaf of the authority chain: no parent or child mission.                |
-| **Mission member** | User given access to a mission by its creator. Uses it as it is; manages only their own token.                                                                                                    |
-| **Mission token**  | Bearer presented to the gateway. Identifies one mission and one holder (a member, or a name given by the creator). Revealed once when generated. Rotated or revoked on its own.                   |
-| **Budget**         | Per accepted `RiskId`: quota per period, rate limit per sliding window. Mandatory for every accepted risk.                                                                                        |
-| **Session**        | History of the mission. Counters per `RiskId` and per period. Created on the first call, never recreated.                                                                                         |
-| **Event**          | Session entry: allowed call, refused call, request, extension, reset, approval, rotation, revocation.                                                                                             |
-| **Request**        | Claim (reset or extension) or approval request (one precise action), addressed to the creator. States: open, granted, refused, expired.                                                           |
-| **Approval**       | Creator's grant for one action: `(mission, tool, argument fingerprint)`, covering the gated risks of that call. Single-use, short-lived.                                                          |
-| **Audit**          | One entry per call and per administrative act. Append-only.                                                                                                                                       |
+| Entity             | Short definition                                                                                                                                                                                         |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Instance**       | One deployment, one company. No internal tenant.                                                                                                                                                         |
+| **User**           | Human authenticated by the IdP. May own connections, belong to owner groups, receive shares, create missions.                                                                                            |
+| **Delegation**     | Authorization given by a user to an agent to act on their behalf on the management surface. Produces short-lived delegated tokens. Revocable by the user. Never executes, never answers requests.        |
+| **Group**          | Owner of connections or target of shares. Never a mission creator. Membership resolved at each login from the IdP, or kept locally.                                                                      |
+| **Connection**     | Provider authenticated by a user through the provider's flow or with a pasted token. Holds the credentials. 1 owner, user or group. Several connections possible for one provider (two GitHub accounts). |
+| **Resource**       | A thing reachable through a connection, with a ref and an optional environment label. Discovered by the plugin, labelled by the owner.                                                                   |
+| **Share**          | `(connection, target, restriction)`. Gives the target the right to accept, in their missions, a subset of the restriction. Revocable by the owner.                                                       |
+| **Restriction**    | Enumeration of `RiskId` from the catalog of the connection's provider. Upper bound, never a wildcard.                                                                                                    |
+| **Mission**        | Named objective. Carries resources (a subset per connection), `accepted_risks`, budget, period, optional expiry, creator. Leaf of the authority chain: no parent or child mission.                       |
+| **Mission member** | User given access to a mission by its creator. Uses it as it is; manages only their own token.                                                                                                           |
+| **Mission token**  | Bearer presented to the gateway. Identifies one mission and one holder (a member, or a name given by the creator). Revealed once when generated. Rotated or revoked on its own.                          |
+| **Budget**         | Per accepted `RiskId`: quota per period, rate limit per sliding window. Mandatory for every accepted risk.                                                                                               |
+| **Session**        | History of the mission. Counters per `RiskId` and per period. Created on the first call, never recreated.                                                                                                |
+| **Event**          | Session entry: allowed call, refused call, request, extension, reset, approval, rotation, revocation.                                                                                                    |
+| **Request**        | Claim (reset or extension) or approval request (one precise action), addressed to the creator. States: open, granted, refused, expired.                                                                  |
+| **Approval**       | Creator's grant for one action: `(mission, tool, argument fingerprint)`, covering the gated risks of that call. Single-use, short-lived.                                                                 |
+| **Audit**          | One entry per call and per administrative act. Append-only.                                                                                                                                              |
 
 ### 2.3 States
 
@@ -930,7 +934,8 @@ a mounted file, never committing anything:
   the Administration page, or created from that page where the provider
   offers it (§4.2); the instance never uses an app shared with another
   instance, whose key would reach every installation of every company
-  using it;
+  using it. Optional for a provider whose plugin also accepts a pasted
+  token: without the app, people connect that provider with a token;
 - the operator's **bootstrap token**, usable until a sign-in provider
   is configured;
 - the **admin rule**: a group of a named sign-in provider
@@ -988,7 +993,11 @@ same for any agent, with no value of any mission.
 - **Provider plugins** — one per provider. Two responsibilities: classify
   `(tool, arguments) → slices`, execute the tool with an ephemeral
   credential. They also declare how to obtain and refresh a credential
-  from the app registered by the company, how to withdraw the grant at
+  from the app registered by the company — and may declare other ways to
+  connect, such as a token pasted by hand, each with its own form, check,
+  resource discovery, the tools it cannot run, and a guide for the person
+  (where to create it, which permissions to grant, the expiry to choose) —
+  how to withdraw the grant at
   the provider when a connection is revoked (or, failing that, where a
   person removes it by hand), how to discover resources, and ship at
   least one **preset** in their catalog. Contribution process:
@@ -1104,7 +1113,18 @@ secrets by hand.
 
 A user opens Accounts, picks a service under "Connect an account", is sent
 to the service, consents, comes back to the instance (or pastes the key the
-service issued). The connection — the account — is created, encrypted, under
+service issued). When the service offers both, the page offers the company's
+app if it is registered, with "use a token instead" one click away, and the
+token otherwise, with a guide derived from the plugin: where to create it,
+which permissions to grant for the plugin's tools, the expiry to choose, the
+tools a token cannot run, and that a shared service account is fine. A pasted
+token is checked at the service before it is stored (who it acts as, its
+expiry when the service says), is never shown back, and its expiry is shown
+on the account's page ahead of it; a token the service rejects makes the
+account "needs reconnecting". A tool the connection's way cannot run is not
+listed to the agent and is refused before any budget is spent. Removing such
+an account withdraws the grant at the service where the service offers a way
+for that token, and otherwise says where to delete the token there. The connection — the account — is created, encrypted, under
 their name. The plugin discovers its resources; the owner labels their
 environments. They are its owner. They may then hand it to a team they
 belong to; every member of the team becomes a full owner, and so will
