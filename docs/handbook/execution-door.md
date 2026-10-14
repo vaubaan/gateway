@@ -2,7 +2,7 @@
 title: Execution door — /mcp, the call pipeline's stages, the agent label, streaming, the catalog
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - apps/gateway/src/server/execution/
   - apps/gateway/src/server/http/client-ip.ts
@@ -418,7 +418,8 @@ as `production`, or a risk only acceptable in `staging` touched on `prod` —
 **refuses the call** (`risk-not-accepted`; the hint names the risk and the
 environments it is acceptable in). The risk is never dropped from
 `risks_touched`: a broader co-touched risk does not carry the call alone. The
-remedy is the owner's: label the resource on the connection page.
+remedy is the owner's: label the resource on the account's page
+(`/accounts/<id>`).
 
 Two more cases have no environment, and so refuse every env-scoped risk the
 call touches: a slice that cites several resources of the mission whose
@@ -638,8 +639,8 @@ is the pure check (`absent` | `label` | `rejected`).
 (`agent_label`), the session event of the call (`call-allowed` /
 `call-refused` details, written by the budget) and `ExecuteContext.agentLabel`
 (a plugin may forward it to its provider as a trace; none does). Read back by
-the Mission session page (calls per label, timeline filter) and the Audit
-page's label filter ([audit](audit.md)).
+the activity of a mission (`/missions/<id>/session`: calls per label, timeline
+filter) and the agent filter of Activity ([audit](audit.md)).
 
 **What it does not touch.** The pipeline's stages never read it: the mission
 is identified by the token, the counters are keyed by session, risk and
@@ -1195,8 +1196,8 @@ Scenarios in [integration-tests](../tests/integration-tests.md).
 decision stage failed` at `error` with the stage, the tool, the error
   class and the stack frames.
 - **`resource-not-in-mission` for a resource the mission selected** — it went
-  stale: the last discovery no longer returned it (Connections page, "Refresh
-  discovery").
+  stale: the last discovery no longer returned it (the account's page,
+  "Refresh").
 - **A tool is listed, then refused `risk-not-accepted`** — expected: the list
   is per provider.
 - **`connection-unavailable` right after a call that used to work** — the

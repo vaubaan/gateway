@@ -160,7 +160,7 @@ entry matched a write.
 
 ## Tests
 
-`npx vitest run plugins/stripe` — 219 tests: the SDK kit
+`npx vitest run plugins/stripe` — 220 tests: the SDK kit
 (`assertPluginWellFormed`, `assertCatalogCoverage`, `assertNoWildcard`,
 `assertPresetsValid`), the classifier's tool-by-tool security suite
 (`classify.test.ts`), the decision path through the real catalog and the

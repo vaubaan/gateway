@@ -2,7 +2,7 @@
 title: Integration tests
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - vitest.config.ts
   - scripts/release-lib.test.mjs
@@ -97,7 +97,6 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/components/auth/principal.test.ts`                                                      |        2 |
 | `apps/gateway/src/components/connections/shape.test.ts`                                                   |        5 |
 | `apps/gateway/src/server/audit/filters.test.ts`                                                           |       24 |
-| `apps/gateway/src/server/audit/session-event-detail.test.ts`                                              |       10 |
 | `apps/gateway/src/server/auth/admin-rule.test.ts`                                                         |        5 |
 | `apps/gateway/src/server/auth/bootstrap.test.ts`                                                          |        3 |
 | `apps/gateway/src/server/auth/claims.test.ts`                                                             |       22 |
@@ -247,7 +246,6 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/app/design-tokens.test.ts`                                                       |       62 |
 | `apps/gateway/tests/unit/app/field.test.tsx`                                                              |        6 |
 | `apps/gateway/tests/unit/app/now-and-waiting.test.tsx`                                                    |       28 |
-| `apps/gateway/tests/unit/app/risk-explain.test.tsx`                                                       |        9 |
 | `apps/gateway/tests/unit/app/shell-and-vocabulary.test.ts`                                                |       23 |
 | `apps/gateway/tests/unit/server/auth/mutation-guard.test.ts`                                              |      287 |
 | `apps/gateway/tests/unit/server/budget/decide.test.ts`                                                    |       20 |
@@ -265,7 +263,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/structural/example-config-providers.test.ts`                                     |       10 |
 | `apps/gateway/tests/unit/structural/index.test.ts`                                                        |      100 |
 | `apps/gateway/tests/unit/structural/no-arguments-in-logs.test.ts`                                         |        3 |
-| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`                                          |      416 |
+| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`                                          |      408 |
 | `apps/gateway/tests/unit/structural/persisted-enumerations.test.ts`                                       |       10 |
 | `apps/gateway/tests/unit/structural/plugin-identifier-tests.test.ts`                                      |       25 |
 | `apps/gateway/tests/unit/structural/shipped-presets.test.ts`                                              |       41 |
@@ -376,12 +374,12 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/vercel/tests/unit/team-pin.test.ts`                                                              |       99 |
 | `scripts/audit-gate.test.mjs`                                                                             |       29 |
 | `scripts/release-lib.test.mjs`                                                                            |       50 |
-| **TOTAL** (`npx vitest run --reporter=json`, 2026-10-14, with a build; 286 files; 9881 passed, 1 skipped) | **9882** |
+| **TOTAL** (`npx vitest run --reporter=json`, 2026-10-14, with a build; 284 files; 9854 passed, 1 skipped) | **9855** |
 
 The table is generated from the JSON report of one run of the whole suite
 (`npx vitest run --reporter=json`). A count is the number of tests the file
 declares, `it.each` expanded, **skipped tests included**: the TOTAL is the
-report's number of tests, of which 9881 passed and 1 was skipped in that
+report's number of tests, of which 9854 passed and 1 was skipped in that
 run, made with a build (as `npm run ci` does). The one skipped whatever the
 build is the latency measurement of the authority re-check
 (`door-latency.bench.test.ts`, run with `VAUBAAN_BENCH=1`). Without a build 27
@@ -660,6 +658,23 @@ class, never the cheapest one) and that an env-scoped risk is refused on a
 resource without a usable environment label. Counts per plugin are the
 `plugins/<id>` totals of the table above.
 
+Three kinds of suite are not repeated plugin by plugin below. Every plugin
+but the template and SSH has a `risk-catalog.test.ts`: the shipped YAML is
+well formed, every `matches` pattern parses, and sample slices resolve to
+the catalog entry expected. Every plugin but the template has a
+`data-model.test.ts`: the referential integrity of the model its reference
+page draws. And three readers have a suite of their own:
+`plugins/github/tests/unit/token-cache.test.ts` (5: an installation token
+is minted once per repository scope and served from the host's cache, never
+close to its expiry, and `github__mint_install_token` always mints its own),
+`plugins/gmail/tests/unit/q-parser.test.ts` (32: `parseQ` reads the
+operators of a Gmail query and reports what it cannot bound — a
+disjunction, a negation, an unknown operator) and
+`plugins/supabase/tests/unit/query-sql.test.ts` (118: `readQuerySql` says
+whether a query of `supabase__execute_sql` reads a managed schema, and
+answers "unread" — the managed risk is required — for every way of reaching
+one it cannot see through).
+
 **The identifier suite of each plugin** (`injection.test.ts`,
 `identifier-injection.test.ts` or `identifiers.test.ts`; ADR
 [[plugin-identifiers-one-grammar-for-classify-and-execute]]) feeds every
@@ -678,7 +693,7 @@ also assert that **an argument the tool does not declare is refused by
 declines by itself is read through the kit's `refusalText` (an `isError`
 result carrying the sentence, never a thrown provider failure).
 
-**Template** (25) — `plugin.test.ts`: the kit on the scaffold (every named
+**Template** (26) — `plugin.test.ts`: the kit on the scaffold (every named
 risk touched), a classifier case per convention (ref from the arguments,
 single-resource default, ambiguity denied, a workspace outside the mission's
 resources refused by `classify` and by `execute` through the one shared
@@ -687,7 +702,7 @@ as `UpstreamAuthError`, another status as `UpstreamHttpError`), the catalog
 path resolved with
 `catalogPathNextTo` and present on disk.
 
-**GitHub** (585) — `plugin.test.ts` (14): structural kit (26 tools, the 14
+**GitHub** (587) — `plugin.test.ts` (16): structural kit (26 tools, the 14
 named risks touched), the fallback lint, presets `read-only` / `developer` /
 `release-manager`, the `app-install` credential spec with its five app
 settings and the declarative `userVerification` (GitHub token endpoint,
@@ -709,7 +724,7 @@ reaches, more refusals by both sides, the connection.
 `token-cache` (5), `data-model` (1). No `envOf`: the catalog has no
 env-scoped risk.
 
-**Vercel** (622) — `plugin.test.ts` (48): kit (31 tools; every named risk
+**Vercel** (623) — `plugin.test.ts` (49): kit (31 tools; every named risk
 touched but `toolbar-write`, unreachable while the thread tools are
 refused), project resolution against the mission's resources, `vercelEnvOf`
 and the plugin's `envOf` composed with `envResolverFor` (the slice's
@@ -747,7 +762,7 @@ the deployment segment read like `execute` reads it, values that only
 travel in a JSON body or a query, a project ref that is not path-safe
 never used). `data-model` (1).
 
-**Supabase** (1613) — `plugin.test.ts` (22): kit with one sample per tool
+**Supabase** (1740) — `plugin.test.ts` (23): kit with one sample per tool
 (44 tools; `row-write-one` and `auth.bulk-user-write` knowingly unreached),
 presets, `oauth2` credential spec (PKCE, Basic client auth, `refreshable`
 with no plugin `refresh`), `execute` (read-only `execute_sql`) and
@@ -772,7 +787,7 @@ alias spelling), and **the body built from declared arguments only** (five
 real fields of the provider's API that no rule reads are refused and
 nothing is sent; `upload_object` refuses a content that is absent or not
 base64 text before any request and sends the decoded bytes otherwise).
-`mission-evaluation.test.ts` (34): on a project **without an environment
+`mission-evaluation.test.ts` (39): on a project **without an environment
 label** every write and the user listing are refused whatever the mission
 holds, account-scoped reads stay allowed; on **prod**, a migration embedding
 DML, dropping a table or unreadable is refused, a plain DDL migration needs
@@ -785,7 +800,7 @@ naming the target for both sides, legitimate shapes, the query strings and
 SQL text the plugin builds, the project ref as a host label).
 `data-model` (1).
 
-**Railway** (427) — `plugin.test.ts` (30): kit (the nine named risks
+**Railway** (406) — `plugin.test.ts` (31): kit (the nine named risks
 touched, no fallback hit), `classifyRailway` on `Resource[]` (project and
 environment resolution, denials), `oauth2` credential spec (PKCE,
 `resourceIndicator`, `prompt=consent`, no plugin `refresh`), `executeRailway`
@@ -818,7 +833,7 @@ refuses every `serviceId`, a malformed list in the metadata binds nothing.
 id-like argument of any tool is left unbound.
 `data-model` (1).
 
-**SSH** (696) — `plugin.test.ts` (299): kit (every catalog risk touched by
+**SSH** (697) — `plugin.test.ts` (300): kit (every catalog risk touched by
 one `ssh__exec` sample); `classifySsh`: host resolution against the
 mission's resources (single host default, explicit ref, foreign / ambiguous
 / malformed denied), read vs write, `secret-file` marker, `destructive` /
@@ -855,7 +870,7 @@ nothing else (54); the command sent is the command classified (27); a
 character outside the BMP does not hide a glob or a brace (6).
 `classify` (90), `data-model` (2). No test reaches a real host.
 
-**Resend** (232) — `plugin.test.ts` (43): kit (the two deprecated v4 ids
+**Resend** (233) — `plugin.test.ts` (44): kit (the two deprecated v4 ids
 knowingly unreached), the `from` domain as the resource, recipient zones
 (a single send is its zone slice, never a count marker), batch sends,
 domains / segments / contacts, broadcasts verified against the named
@@ -879,7 +894,7 @@ the provider answers. `addresses.test.ts` (13): **a string that could carry
 a second recipient is not an address** (a recipient is classified on the
 address it parses to and sent as the string given). `data-model` (6).
 
-**Upstash Redis** (293) — `plugin.test.ts` (26): kit with one sample per
+**Upstash Redis** (313) — `plugin.test.ts` (27): kit with one sample per
 tool (21 tools, every named risk touched, no fallback hit), presets,
 database resolution against the mission's resources (single-database
 default; ambiguous, missing, foreign or malformed refused; account-level
@@ -899,7 +914,7 @@ class** (the six sets are pairwise disjoint, no deleting command is a plain
 write or a read); `execute` with one command, a pipeline or a
 `MULTI` / `EXEC` body costs the union of its commands; an unknown command
 is arbitrary execution; the dedicated tools cost what the same command
-costs through `execute`. `policy.test.ts` (24): every write is refused on a
+costs through `execute`. `policy.test.ts` (25): every write is refused on a
 database with no label or a label the catalog does not list, reads pass;
 the three presets per environment (`DEL` needs `delete-data` through either
 tool). `classify` (30), `data-model` (1). `execute` (33): the management
@@ -913,7 +928,7 @@ and the four legitimate shapes post to the host. `identifiers.test.ts`
 (42): the grammar of a database ref, the database as a segment of the
 Management API path, Redis keys and command words in the JSON body only.
 
-**Stripe** (219) — `plugin.test.ts` (31): kit (every named risk touched, no
+**Stripe** (220) — `plugin.test.ts` (32): kit (every named risk touched, no
 fallback hit), resource resolution and `modeOf` (ref suffix, metadata; the
 env label is never a source of the mode), argument handling, `execute`
 (form-encoded REST v1) and `discoverResources` (one resource per mode)
@@ -935,7 +950,7 @@ other. `identifiers.test.ts` (59): the grammars, `id` as a segment of the
 request path, identifiers that travel in the query string or the form
 body, `account` as the resource the call runs on. `data-model` (8).
 
-**Cloudflare DNS** (189) — `plugin.test.ts` (50): kit (15 tools, every risk
+**Cloudflare DNS** (190) — `plugin.test.ts` (51): kit (15 tools, every risk
 touched), zone resolution (single zone default, explicit `zone_id`, foreign
 provider denied), record writes with the `critical` / `delete` overlays (an
 under-specified write or deletion is critical by default),
@@ -959,7 +974,7 @@ a slice identifier and never a request, a record `name` and `type` in the
 critical-record verdict, list filters in the query string. `classify`
 (33), `data-model` (9).
 
-**Gmail** (406, experimental) — `plugin.test.ts` (26): kit, the experimental
+**Gmail** (407, experimental) — `plugin.test.ts` (27): kit, the experimental
 shape (`experimental: true`, version below 1.0, no tool exposed), coverage
 through a tool-exposing variant of the plugin
 (`draft-to-zone-external-unbounded` and `bulk-label-write` knowingly
@@ -1351,14 +1366,6 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   reason in place of its count; a key whole in a named box with its copy
   button; the numbered steps of a form and its rail as a complementary
   landmark.
-- **`tests/unit/app/risk-explain.test.tsx`** (9) — static markup of the
-  shared risk components: a `Slug` carries its kind as an attribute, a glyph
-  and a word for assistive technology, is a link when given a target, prints
-  a risk id linked to its catalog entry, and every kind has a legend entry;
-  `VectorStrip` writes the six values and names each axis in full;
-  `RiskExplain` in three lines, the class left out of a list already grouped
-  by class; help rendered closed with its button; a callout with a title, an
-  icon and the role of a note.
 - **`src/components/connections/shape.test.ts`** (5) — `shapeOfPattern`, the
   shape a credential field expects, read from the plugin's pattern and said
   in its label: a literal prefix, a choice of prefixes each written whole
@@ -1366,8 +1373,8 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   digits only; and nothing for a pattern it cannot read whole or that states
   no shape.
 - **`src/components/auth/principal.test.ts`** (2) — `isOperatorPrincipal`,
-  the interface's one statement of who is shown as an operator (the
-  Administration link, the Audit page's sentence): true for the bootstrap
+  the interface's one statement of who is shown as an administrator (the
+  Administration group of Settings, the sentence of Activity): true for the bootstrap
   token and for a user the admin rule matches, false for any other user.
 - **`tests/integration/auth/oidc-login.test.ts`** (22) — the composition
   root over the `:memory:` store with the real `openid-client` relying
@@ -1980,7 +1987,7 @@ Execution door".
 > §3.2 (mandatory budget, presets per plugin), §4.2 "Missions", §4.4, §7.4,
 > §7.8, §10 ("authority" structural tests). Handbook [[missions]].
 
-Unit, co-located (129 with the authority suite):
+Unit, co-located (210 with the authority suite):
 
 - **`src/server/authority/authority-service.test.ts`** (20) — see
   [Authority, shares, groups](#scenarios--authority-shares-groups).
@@ -2070,7 +2077,10 @@ included` equals the catalog; where the environment comes from (Vercel: the
   mission lost its owner can be answered only until it expires); the
   `curl … tools/list` check; masked prefix on a revisited
   page; sub-path of the public URL; `/agent-bootstrap.md` documents every
-  refusal code and names no instance.
+  refusal code, describes the management door (never opened by a mission
+  key), says that a key has one holder, that the limits are one set and what
+  a stopped key means, refers to the key by its variable and names no
+  instance.
 - **`token.test.ts`** (10) — `vbn_live_<8>_<32>`, SHA-256 digest, clear
   prefix; verification against the digest and nothing else; a hash an
   earlier build stored as argon2id still verifies; a hash is never read
@@ -2100,7 +2110,7 @@ included` equals the catalog; where the environment comes from (Vercel: the
   preset's values and loses nothing; `discardsEdits` only after an edit, and
   `backToPreset` restores the preset; `startFromPreset`; **the draft sent is the
   same in both modes and names neither the preset nor the mode**; a loaded
-  draft is a custom policy. **The Custom editor**: `editorRows` lists every
+  draft is a custom policy. **The editor behind "Edit the permissions one by one"**: `editorRows` lists every
   explicit id with why one cannot be ticked; `filterRows` by words and by
   status ("Available to you" is what may be ticked and what is ticked).
 - **`src/app/(app)/missions/mission-view.test.ts`** (12) — what the mission
@@ -2720,7 +2730,7 @@ holds its `deps` and no other field; no file of the module imports a cache,
 a session or the auth module, nor keeps a module-level map; then one
 long-lived instance follows membership changes made in the store at
 issuance, in the web session (whose `login.groups` still lists the group),
-in the owner check of the Share dialog, and at the execution door.
+in the owner check of the "Give access" dialog, and at the execution door.
 **Extended to the `orphaned` state itself (spec §2.3 "never stored
 as a verdict")**: three rounds of leave / join at the door and on the
 creator's page with the `missions` row (`status`, `updated_at`, `closed_at`)
@@ -2755,7 +2765,7 @@ and budget suites build `RequestService` with `alwaysGrounded`.
 > `SessionService.recordCall` (budget scenarios above); these start from its
 > refusal.
 
-Unit, beside the code (`apps/gateway/src/server/requests/`, 87 with
+Unit, beside the code (`apps/gateway/src/server/requests/`, 97 with
 `approval.test.ts`, listed under "Scenarios — Approval gate"):
 
 - **`state.test.ts`** (9) — **state machine**: `open → granted | refused |
@@ -2785,7 +2795,7 @@ expired`, the three terminal for every transition; an open request past
 
 Integration:
 
-- **`tests/integration/requests/request-service.test.ts`** (34, `:memory:`
+- **`tests/integration/requests/request-service.test.ts`** (36, `:memory:`
   store, manual clock) — inbox lists the claim with the URL the refusal
   carried, empty for anyone else, drops an overdue request before any
   sweep; **creator-only access**: another user, an unknown id, **a
@@ -2818,7 +2828,7 @@ Integration:
   carries the mission row of its own transaction.
 - **`tests/integration/requests/request-handlers.test.ts`** (14, real root)
   — **exhaust → refusal URL → no session: sign-in redirect → non-creator
-  403 with one sentence and no detail → creator 303 to the inbox → grants a
+  403 with one sentence and no detail → creator 303 to the request under "Waiting for you" (`/waiting/<id>`) → grants a
   reset → the replay passes**; unknown id and someone else's request are
   the same 403; a co-owner of the connection and the bootstrap operator
   are refused; **the mission token (and any other bearer) is refused on
@@ -2938,7 +2948,7 @@ Unit:
   the same arguments, the delay and "used once".
 
 Integration, `:memory:` store with a manual clock
-(`apps/gateway/tests/integration/requests/approval.test.ts`, 42): the
+(`apps/gateway/tests/integration/requests/approval.test.ts`, 51): the
 executor is `SessionService.recordCall`, the creator is `RequestService`.
 
 - **The refusal** — every field: URL, fingerprint, the request's expiry,
@@ -2953,7 +2963,7 @@ executor is `SessionService.recordCall`, the creator is `RequestService`.
   risks from the audit entry of the refused call, quota / consumed / left and
   the gate of each, the three options, the session events; without an audit
   entry the slices read "not recorded"; anyone else gets `forbidden` from
-  the view and from the three decisions; the inbox names the tool, never the
+  the view and from the three decisions; the list of open requests names the tool, never the
   arguments.
 - **Grant** — **refusal → grant → the identical replay (another key order)
   passes and consumes the approval → the second identical replay is refused
@@ -3066,25 +3076,13 @@ produces them — `SessionService.recordCall` (session, counters, events, reques
 store's audit writer — rather than through the execution door; entries written by the door
 itself are asserted in "Scenarios — Execution door".
 
-- **`apps/gateway/src/server/audit/filters.test.ts`** (20, unit) — **audit filters**: every parameter
+- **`apps/gateway/src/server/audit/filters.test.ts`** (24, unit) — **audit filters**: every parameter
   read and trimmed; first value of a repeated parameter; decision and kind outside their
   closed sets dropped and reported; unreadable or impossible dates dropped; a reversed
   period ignored; a single day is `[00:00, next 00:00)` UTC; oversized value refused;
   cursor round trip and every malformed cursor refused; `auditQueryString`; `scopeOf` for
   a user, an operator and the bootstrap operator; `withoutArguments`; the token holder in a
   query string (`member:<id>` / `named:<name>` round trip, anything else names nobody).
-- **`apps/gateway/src/server/audit/session-event-detail.test.ts`** (10, unit) —
-  `eventDetailLines`, what the session page writes under an event: an
-  allowed call says when it consumed an approval and nothing otherwise; a
-  refused call names the request it pointed to once that request is closed;
-  a request event says whether it was asked, refused or left to expire; an
-  approval says until when the approved call can be replayed; a gate opening
-  says until when, a gate edit says both gates; a reset and a quota
-  extension list what was given back, an expiry extension the new expiry; a
-  rotation shows the token prefix, a revocation how many tokens it retired;
-  a token issued to a holder names the holder and the token it replaced; one
-  token revoked on its own names it and its holder;
-  nothing for malformed details or a kind of a later version.
 - **`audit-query.test.ts`** (35) — **by agent label**: exact and
   case-sensitive, call entries only (no administrative entry), narrowed by
   the other filters, and never a way into someone else's audit (the scope
@@ -3116,7 +3114,10 @@ itself are asserted in "Scenarios — Execution door".
   counts unchanged by the filter; **the calls of one label paged among
   thousands of events of other labels**, in the timeline's order, without
   repeating or skipping; the view says until when a gate is open and what
-  each approval and gate event did. And: creator only (another user, an operator and an unknown
+  each approval and gate event did, as typed fields of the event (`gate`,
+  `gate_before`, `gate_open_until`, `tokens_revoked`, `token_prefix`) — the
+  wording of an event belongs to the page
+  (`app/(app)/missions/[id]/session/event-words.test.ts`). And: creator only (another user, an operator and an unknown
   id get `null`); before the first call (no session, full budget, gate per risk, catalog
   labels); counted / left / exhausted per risk; past periods kept apart and yesterday's
   exhaustion gone; one-off mission; **open requests by link only** (kind, risk, dates,
@@ -3354,7 +3355,7 @@ Unit, beside the code (`apps/gateway/src/server/oauth-as/`):
   management scope may be named); a token opens the door when its scopes
   include the management scope; the first resource that is not the
   management door is named; both refusals are worded from the constants.
-- **`pages.test.ts`** (12) — the consent screen names the client, the user, the
+- **`pages.test.ts`** (13) — the consent screen names the client, the user, the
   scope and where the code goes; says the name is a claim; warns per
   destination kind; posts an opaque id with Deny first; **escapes** a hostile
   name, client id, email and destination; never cached, never framed, no
@@ -3415,7 +3416,7 @@ Unit, beside the code (`apps/gateway/src/server/oauth-as/`):
   ends the delegation, an access token is revoked alone, another client's or
   an unknown token changes nothing; client authentication (public,
   confidential, waiting, disabled; Basic or body, never both); the sweep.
-- **`delegations.test.ts`** (26) — a user's delegations with their client, most
+- **`delegations.test.ts`** (28) — a user's delegations with their client, most
   recent first, with the missions each issued; `idle` when no token is left;
   the date the consent ends, and `expired` past the absolute lifetime with
   nothing written; the state derived in one place;
@@ -3681,19 +3682,20 @@ and `rotateSuccessorOf`; the refresh reuse window is in
 - **`demo-smoke.test.ts`** (17; needs a build) — **the command, as a human
   runs it**: spawns `tests/demo/main.ts` on a port the system picks
   (`DEMO_PORT=0`, `DEMO_SKIP_BUILD=1`) and waits for the printed tour; the
-  tour carries the banner, the three accounts, the `ssh -L` line and the list
+  tour carries the banner, the three people with what each is, the `ssh -L` line and the list
   of things to try; the demo identity provider answers discovery and JWKS
   over HTTP under `/__demo/idp` with a prefixed issuer; an anonymous visitor
   is sent to `/login`; **Alice signs in through the account picker**, the
   redirects of `/auth/login` followed by hand with a cookie jar (authorize →
   picker → `account=alice` → `/auth/callback` → `/missions`, session cookie
-  set); `/missions`, `/accounts`, `/waiting`, `/activity`, `/shares`,
-  `/delegations`, `/admin/provider-apps` and `/admin/groups` answer 200 with
-  one seeded item each; `tools/list` on `/mcp` with the mission token the
+  set); `/missions`, `/accounts` (an owned account, and one under "Shared
+  with you"), `/waiting`, `/activity`, `/settings/connected-apps`,
+  `/admin/provider-apps` and `/admin/groups` answer 200 with one seeded item
+  each; `tools/list` on `/mcp` with the mission token the
   tour prints lists GitHub and Redis tools; **the seeded team**: `/mcp/catalog`
   with the named token the tour prints answers `kind: named`, `holder: CI
 runner` and Alice as creator, and with Alice's own token `kind: member`;
-  the Audit page filtered on each holder lists its calls; **Bob signs in**,
+  Activity filtered on each holder (`/activity?holder=…`) lists its calls; **Bob signs in**,
   finds "Ship the billing page" under "Shared with you" with Alice's email,
   and its page has the teammate's sentence, "Replace my key" and the machine
   key, none of the creator's acts and no secret; `/mcp` without a token is 401;
@@ -3875,8 +3877,7 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
 - **UI rendering** (React components) — static-markup suites only
   (`apps/gateway/tests/unit/app/design-system.test.tsx`, the components of the
   design system; `field.test.tsx`, label binding; `build-footer.test.tsx`, the
-  build stamps; `risk-explain.test.tsx`, the slug, the vector strip, the
-  three-line risk, help and callout); how a component looks is judged on the
+  build stamps); how a component looks is judged on the
   gallery (`/design`), and the pages are walked by Playwright.
 - **Accounting rules** (period arithmetic, quota/rate comparison, gates) —
   "Scenarios — Budget and sessions" tests them against the store's

@@ -111,7 +111,7 @@ with a `vector_overrides.prod` block, qualified as `vercel[prod].deploy` etc.
 | Preset      | Intent                                                                                                               | Approval-gated by default                                                                                     |
 | ----------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `read-only` | Inspect projects, deployments, logs, env-var keys, firewall.                                                         | —                                                                                                             |
-| `developer` | One token per code project: preview/development deploys and env vars, logs, toolbar comments, bypass tokens.         | — (no production configuration at all)                                                                        |
+| `developer` | One mission per code project: preview/development deploys and env vars, logs, toolbar comments, bypass tokens.       | — (no production configuration at all)                                                                        |
 | `operator`  | Developer plus production deploys and env vars, fan-out writes, project settings, domains, firewall, plaintext read. | prod deploy, prod env var, fan-out, project settings, domains, firewall toggle/rules/IP rules, plaintext read |
 
 Budgets are per period; see the YAML for the numbers. Presets are UI sugar;
@@ -156,4 +156,4 @@ carries the credential's team and that no team id comes from the arguments;
 `identifier-injection.test.ts` feeds dot segments, separators and encoded
 forms to every identifier position of `classify` and `execute`;
 `firewall.test.ts` covers the five firewall tools (slices, risks, request
-shapes). 622 tests; none reaches the network.
+shapes). 623 tests; none reaches the network.

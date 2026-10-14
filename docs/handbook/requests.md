@@ -2,7 +2,7 @@
 title: Requests — claims and approval requests, the request URL, the creator's decision, the inbox
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - apps/gateway/src/server/requests/
   - apps/gateway/src/app/r/
@@ -71,7 +71,7 @@ apps/gateway/src/app/
   r/[id]/route.ts                        GET  /r/<id>            → handlers.open
   api/requests/route.ts                  GET  /api/requests      → handlers.inbox
   api/requests/[id]/decide/route.ts      POST /api/requests/<id>/decide → handlers.decide
-  (app)/waiting/page.tsx                /waiting       — the inbox: the list, the oldest request open beside it
+  (app)/waiting/page.tsx                /waiting       — "Waiting for you": the list, the oldest request open beside it
   (app)/waiting/[id]/page.tsx           /waiting/<id>  — one request, the list beside it
   (app)/waiting/frame.tsx               loadInbox(), levelsOf(), WaitingFrame, NothingWaits — what the two pages share
   (app)/waiting/parts.tsx               whoOf(), titleOf(), WaitingDescription, WaitingList — also used by the home
@@ -110,9 +110,9 @@ check, used by every read and every decision: unknown id, another user, a
 and its session, never its requests), a beneficiary of a share on the same
 connection, a co-owner of the connection through its owner group, an
 operator — all get `forbidden`, the same answer whether the request exists
-or not. The inbox (`listOpenForCreator`) and the badge are keyed on the
-creator the same way, so a member's inbox stays empty whichever holder's
-token caused the request. The bootstrap operator is not a user and is
+or not. The list of "Waiting for you" (`listOpenForCreator`) and the count in the
+side navigation are keyed on the creator the same way, so a member's list stays
+empty whichever holder's token caused the request. The bootstrap operator is not a user and is
 refused before the service is asked.
 
 ## `GET /r/<id>` — the gate of the forwarded URL
@@ -146,7 +146,7 @@ or CIDR blocks, IPv4 and IPv6, `node:net` `BlockList`). With no
 `trusted_proxies` configured the header is ignored and every caller shares
 the key `unknown`: the limit is then global to `/r/*` rather than bypassable
 with a forged header, and the instance says so in one warning at boot
-([configuration](configuration.md), "Boot sequence"). Only `/r/*` is limited; the inbox and the decision
+([configuration](configuration.md), "Boot sequence"). Only `/r/*` is limited; `/waiting` and the decision
 endpoint are not, so a flood on the forwarded URL never keeps a signed-in
 creator from answering.
 
@@ -226,7 +226,7 @@ request still in the mission's policy, in the mission's current period), the
 as `inbox` (`listOpenForCreator`), oldest first, and never the arguments of a
 call. `answered(user, since)` lists the requests of the creator's missions
 that are no longer open and were decided — or expired — at or after `since`,
-most recent first: what the inbox counts as answered in the last 24 hours. It
+most recent first: what `/waiting` lists as answered in the last 24 hours. It
 reads `listForCreator` then `listForMission`: no new query.
 
 Both views also carry `mission.period_seconds`, and an `ApprovalView` carries
@@ -312,10 +312,12 @@ it has not selected yet, and passed into the repository.
 
 The executor is told the same thing as the creator. The `mission-inactive`
 refusal of an orphaned mission (`INACTIVE_MISSION_NEXT_STEP.orphaned`,
-`@vaubaan/gateway-core`), the bootstrap kit (`REFUSAL_GUIDANCE`) and
-`/agent-bootstrap.md` end on: "A request opened before the mission was
+`@vaubaan/gateway-core`) ends on: "A request opened before the mission was
 orphaned can be granted only until it expires; after that, your next refused
-call opens a new one."
+call opens a new one." The setup kit (`REFUSAL_GUIDANCE`) and
+`/agent-bootstrap.md` say it in the interface's words: "A request opened
+before the mission lost its owner can be answered only until it expires;
+after that, your next refused call opens a new one."
 
 No resolution edits `mission_policy`: the next period starts from the
 mission's quota. The period is the one current **when the creator decides**
@@ -374,7 +376,8 @@ or expired, the next refused call drops a new one (budget handbook).
 summary and the `request` event of the drop name no holder, and the two
 pages show none. Who caused it is on the refused call's own event
 (`call-refused`: `token_id`, `token_kind`, `holder`, with the `request_id`),
-which the mission's session page shows per holder ([audit](audit.md)); the
+which the activity of the mission (`/missions/<id>/session`) shows per holder
+([audit](audit.md)); the
 one-line `describeEvent` of a call names the tool, the refusal code and the
 agent label only. A `rotation` event reads "A mission token was issued" for
 a holder's first token and "A mission token was rotated" otherwise; a
@@ -446,7 +449,7 @@ it) and `NothingWaits`. The words are `lib/vocabulary.ts`'s (`REQUEST_WORDS`,
 `ANSWERS`, `periodNow`, `until`, `asker`…); a tool, a risk id and a refusal
 code are printed as the protocol spells them, with `Mono`.
 
-- **`/waiting`** — the inbox. With nothing open: one sentence
+- **`/waiting`** — "Waiting for you". With nothing open: one sentence
   (`data-testid="waiting-empty"`), what was answered in the last 24 hours,
   and where to go. Otherwise the list (`WaitingList`,
   `data-testid="waiting-list"`: one link per open request — the mark of who
@@ -454,7 +457,7 @@ code are printed as the protocol spells them, with `Mono`.
   how long ago and when it ends by itself) and the **oldest request open
   beside it**, rendered by the same `RequestView` as its own address. The
   entry "Waiting for you" of the side navigation carries `OpenRequestCount`
-  (`COUNTS` in `components/shell/AppShell.tsx`), a badge with `openCount()`,
+  (`COUNTS` in `components/shell/AppShell.tsx`), the number `openCount()` returns,
   nothing at zero.
 - **`/waiting/<id>`** — one request, the list beside it. A non-creator and an
   unknown id read the header and one note (`data-testid="request-forbidden"`,
@@ -730,7 +733,7 @@ many requests, decisions and replays as gated risks.
   list. `open-gate` opens every listed gate still closed. `refuse` refuses
   the call.
 - **The page** lists each gated risk with its gate, and says that the answer
-  covers them all; the inbox lists them under the request.
+  covers them all; the list of `/waiting` names them under the request.
 
 Rows written by an earlier build name one risk and still mean what they
 said (migration `0013` backfills `risk_ids_json` from `risk_id`): an open
@@ -829,7 +832,7 @@ it once the request is decided.
 ## Tests
 
 - Unit, beside the code: `state.test.ts` (9, with the URL builder),
-  `claim.test.ts` (38), `approval.test.ts` (28: the three options, their
+  `claim.test.ts` (38), `approval.test.ts` (33: the three options, their
   rules per mission state and gate, the sentence of an orphaned mission, the
   parser, `formatDelay`),
   `client-ip.test.ts` (2: the page uses the shared client-address rule,
@@ -837,11 +840,11 @@ it once the request is decided.
   (7), `asker.test.ts` (4), `sweeper.test.ts` (4). The gate openings are
   `tests/unit/server/budget/gates.test.ts` (9).
 - Integration, `tests/integration/requests/`: `request-service.test.ts`
-  (34, `:memory:` store with a manual clock; the mission checked as the store
+  (36, `:memory:` store with a manual clock; the mission checked as the store
   holds it at the decision: two extensions of the expiry, a mission revoked
   since it was read), `request-handlers.test.ts`
   (14, the real root; a delegated token named `delegated-token`, a bearer of
-  no known shape with no `presented`), `approval.test.ts` (42, `:memory:` store with a manual
+  no known shape with no `presented`), `approval.test.ts` (51, `:memory:` store with a manual
   clock: refusal → grant → identical replay → second replay refused; one byte
   or another tool asks again; single use; expiry; whole refusal; erasure read
   from the row on decision and on expiry; the gate opened and bounded to the
@@ -851,9 +854,9 @@ it once the request is decided.
   `tests/integration/budget/pipeline-consistency.test.ts` (credits vs audit)
   and the `listEvents` options in `tests/integration/store/sessions.test.ts`.
 - The store primitives: `tests/integration/store/approval-decisions.test.ts`
-  (17) and `requests-approvals.test.ts`.
+  (20) and `requests-approvals.test.ts`.
 - Through the real door: `tests/integration/execution/approval-door.test.ts`
-  (7: the GitHub plugin's `developer` preset as shipped, a workflow file
+  (8: the GitHub plugin's `developer` preset as shipped, a workflow file
   write approved over `/mcp`).
 - A request on an orphaned mission, on the real root:
   `tests/integration/authority/share-and-orphan.test.ts` — a claim and an
@@ -871,8 +874,7 @@ it once the request is decided.
 - The self-contained 403 and 429: `src/server/http/document.test.ts` (6) and
   the themed 403 in `request-handlers.test.ts`.
 - Browser, `tests/e2e/v5/exhaust-and-claim.spec.ts` (1),
-  `approve-action.spec.ts` (2) and `now-and-entry.spec.ts` (4: the empty
-  inbox, the refusal of the forwarded URL in both themes).
+  `approve-action.spec.ts` (2) and `now-and-entry.spec.ts` (4: nothing waiting, the refusal of the forwarded URL in both themes).
 
 Scenarios in [integration-tests](../tests/integration-tests.md) and
 [e2e-tests](../tests/e2e-tests.md).

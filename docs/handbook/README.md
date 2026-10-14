@@ -2,7 +2,7 @@
 title: Handbook — index
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - docs/handbook/
 ---
@@ -26,7 +26,7 @@ follow can be detected as drift.
 | [configuration](configuration.md)         | Instance configuration, crypto and the composition root: how the process starts from configuration alone.                                                                  |
 | [store](store.md)                         | The embedded SQLite store: one file on the mounted volume, schema and migrations applied at boot, repository interfaces.                                                   |
 | [cutover-from-v4](cutover-from-v4.md)     | The procedure to move the one real user of the v4 SaaS onto a v5 instance and switch v4 off: what to prepare, the checklist, live checks.                                  |
-| [demo-mode](demo-mode.md)                 | `npm run demo`: the real application in a browser with a simulated identity provider, simulated providers and seeded data.                                                 |
+| [demo-mode](demo-mode.md)                 | `npm run demo`: the real application in a browser with a simulated identity provider, simulated services and seeded data.                                                  |
 | [threat-model](threat-model.md)           | What the gateway defends, against whom, with which control, and which test proves the control is still there: the security reading of the spec and of the other handbooks. |
 | [known-limitations](known-limitations.md) | What a reader should know before relying on this version: what has not been done, and what is not there.                                                                   |
 
@@ -35,15 +35,15 @@ Packaging and deployment (image, compose file, reverse proxy) are in
 
 ## Humans
 
-| Handbook                            | What it covers                                                                                                                                                                                  |
-| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [authentication](authentication.md) | How a human gets a session: OIDC sign-in, the web session, the bootstrap token, and how "operator" is decided (the admin rule).                                                                 |
-| [authority](authority.md)           | What a user may accept on a connection right now: owners, shares, local groups, and what follows when it changes (orphaned missions, unowned connections).                                      |
-| [connections](connections.md)       | Connect flows through the company's own provider app, credential storage and refresh, resource discovery and curation, provider apps.                                                           |
-| [missions](missions.md)             | How a connection owner issues a mission (a per-risk budget and gate on selected resources): authority, presets, resources, members and per-holder tokens, the bootstrap kit.                    |
-| [requests](requests.md)             | Claims and approval requests once a refusal dropped them into the creator's inbox: the request URL, who may open it, the decision, events, expiry.                                              |
-| [audit](audit.md)                   | How what happened is made visible: the Audit page's search, the Mission session page, the retention sweeper, administrative entries.                                                            |
-| [web-app](web-app.md)               | The frame of the human surface: route map, layouts, the shell of the application and of Administration, session helpers, UI primitives and type colours; the provider reference (`/reference`). |
+| Handbook                            | What it covers                                                                                                                                                                                                      |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [authentication](authentication.md) | How a human gets a session: OIDC sign-in, the web session, the bootstrap token, and how "operator" is decided (the admin rule).                                                                                     |
+| [authority](authority.md)           | What a user may accept on a connection right now: owners, shares, local groups, and what follows when it changes (orphaned missions, unowned connections).                                                          |
+| [connections](connections.md)       | Connect flows through the company's own provider app, credential storage and refresh, resource discovery and curation, provider apps.                                                                               |
+| [missions](missions.md)             | How a connection owner issues a mission (a per-risk budget and gate on selected resources): authority, presets, resources, members and per-holder tokens, the bootstrap kit, the mission pages.                     |
+| [requests](requests.md)             | Claims and approval requests once a refusal dropped them into the creator's inbox ("Waiting for you"): the request URL, who may open it, the decision, events, expiry.                                              |
+| [audit](audit.md)                   | How what happened is made visible: the search of the Activity page, the activity of one mission, the retention sweeper, administrative entries.                                                                     |
+| [web-app](web-app.md)               | The frame of the human surface: route map, layouts, the shell and its side navigation, session helpers, the words, the themes, the tokens and the design system; the home ("Now") and the reference (`/reference`). |
 
 ## Agents
 
@@ -60,7 +60,7 @@ Packaging and deployment (image, compose file, reverse proxy) are in
 | [gateway-core](gateway-core.md)         | `@vaubaan/gateway-core`, the decision core: typed refusals, the audit entry shape, the mission context, the skeleton of the call pipeline. |
 | [policy-engine](policy-engine.md)       | `@vaubaan/policy-engine`: pure modules around slices and risk catalogs, with no IO and no state.                                           |
 | [plugin-sdk](plugin-sdk.md)             | `@vaubaan/plugin-sdk`: the package a provider plugin is written against, and the single place the gateway learns which providers exist.    |
-| [telemetry](telemetry.md)               | Community telemetry, off at installation: the report, the queue, the toggle, the validation badge.                                         |
+| [telemetry](telemetry.md)               | Community telemetry, off at installation: the report, the queue, the toggle, the validation tag.                                           |
 | [providers/README](providers/README.md) | Index of the provider plugin handbooks and the structure they share.                                                                       |
 
 One handbook per provider plugin (`plugins/<id>`):

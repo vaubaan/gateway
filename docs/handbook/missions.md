@@ -14,7 +14,7 @@ tracks:
   - apps/gateway/src/app/api/missions/
   - apps/gateway/src/app/agent-bootstrap.md/
   - apps/gateway/src/components/shell/AppShell.tsx
-  
+
   - apps/gateway/src/server/providers/
   - apps/gateway/tests/integration/missions/
   - apps/gateway/tests/e2e/v5/issue-mission.spec.ts
@@ -110,9 +110,9 @@ form imports them directly and runs the same decision as the server. The
 The pages live in the `(app)` route group and take its layout: a web
 session gets the `AppShell` (`components/shell/AppShell.tsx`), where "Missions"
 is one of the seven entries of the side navigation (handbook
-[web-app](web-app.md), "The shell"); until the "Now" page lands, the home (`/`)
-shows this list too; a visitor with no session is
-sent to `/login`. The
+[web-app](web-app.md), "The shell"); the home (`/`) is "Now", which lists what
+runs and what waits ([web-app](web-app.md), "The home — Now"); a visitor with
+no session is sent to `/login`. The
 bootstrap operator has a session but is not a user: each page then renders
 `NeedsUser` (a mission always has an identified human behind it).
 
@@ -166,7 +166,8 @@ no longer covered (their ids), says whether the mission can serve again
 (`reversible` is false for a disconnected or missing account) and that its
 keys, its activity and what it counted are kept. The page offers
 "Stop the mission" on every mission that is not revoked yet, an orphaned or
-expired one included; "Rotate token" only on an active one.
+expired one included; "Replace my key" and "Generate my key" only while the
+mission serves calls.
 
 ## The draft
 
@@ -291,8 +292,8 @@ environment from the call (`derives_env`, today Vercel) or when the catalog has
 no env-scoped risk. This is separate from `unresolvable-env`, which refuses an
 env-qualified entry that _no_ selected resource can resolve: a notice is about a
 mission that is issuable and still cannot do, on one resource, what its policy
-suggests. The creation form lists them under the issuance bar and `POST
-/api/missions/preview` returns them.
+suggests. The creation form lists them in the block of the account they concern
+(`noticeHeadline`) and `POST /api/missions/preview` returns them.
 
 **Hidden and stale resources** (handbook [connections](connections.md)).
 `IssuanceResource` carries `hidden` and `stale` (`staleSince !== null`).
@@ -768,10 +769,10 @@ draft is 400 `invalid-draft` with one problem per field (unknown keys refused).
 ## Editing a gate after issuance — `MissionService.setGate(user, missionId, riskId, gate)`
 
 "The creator sets the risk's gate to `approval` at issuance, or later" (spec §3.5). On
-the mission page (`/missions/<id>`) each row of the policy table has one button
-(`gate-control.tsx`, a client component): _Require approval_ on an `auto` risk, _Set to
-auto_ on an `approval` one. It posts `{ risk_id, gate }` to `/api/missions/<id>/gate`
-and reloads the page's data.
+the mission page (`/missions/<id>`), under "Permissions and usage", each permission has
+one switch, "ask me first" (`gate-control.tsx`, a client component): on is `approval`,
+off is `auto` ("runs freely"). It posts `{ risk_id, gate }` to `/api/missions/<id>/gate`,
+says what changed in a toast and reloads the page's data.
 
 - **Only the gate moves.** Accepted risks, quotas, rate limits, resources and the token
   are untouched; the body takes `risk_id` and `gate` and refuses any other key. The risk
@@ -787,7 +788,7 @@ and reloads the page's data.
   stated once, in `gateEditBlockedBy(mission)` (`mission-service.ts`: `revoked`,
   `orphaned` or `null`): `setGate` refuses on it and the mission page reads it as
   `MissionDetail.gates_editable` (for the creator; `false` for a member), so the page
-  shows the gate buttons exactly when the edit would be taken
+  shows the switches exactly when the edit would be taken
   (`tests/integration/authority/rules-read-by-pages.test.ts`).
 - **An expired mission keeps its gates editable.** It refuses every call, but its creator
   can bring it back by extending the expiry (a claim's `extend-expiry`,
@@ -1111,7 +1112,7 @@ free-text field would confirm or deny any address typed.
 
 ### The activity of a mission (`/missions/<id>/session`)
 
-The operator's view of one mission, on the wide measure:
+Everything one mission did, for its creator and its teammates, on the wide measure:
 
 - what waits (`AnswerList`), with "Review and answer" for the creator;
 - **Who called** in the period, per key holder, and **Agents**, per label —

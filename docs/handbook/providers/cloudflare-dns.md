@@ -2,7 +2,7 @@
 title: Cloudflare DNS provider — modelling and runtime (v5 plugin)
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - plugins/cloudflare-dns/src/index.ts
   - plugins/cloudflare-dns/src/resources.ts
@@ -266,7 +266,7 @@ fails discovery ; an absent or `null` `result` is an empty page.
 
 ## Tests
 
-`npx vitest run plugins/cloudflare-dns` — 189 : `plugin.test.ts` (50 : kit,
+`npx vitest run plugins/cloudflare-dns` — 190 : `plugin.test.ts` (51 : kit,
 classifier zone resolution and record writes, the undeclared arguments
 refused by `classify` and by `execute`, execute including the
 update / delete guard and the path-unsafe identifiers, discovery,

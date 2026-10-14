@@ -2,7 +2,7 @@
 title: Supabase provider — plugin on the v5 SDK
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - plugins/supabase/src/
   - plugins/supabase/tests/unit/
@@ -315,7 +315,7 @@ dropped column or a column type change has to be shipped another way, or the
 project is not `prod`.
 The refusal hint names the risk and the environments it is acceptable in ;
 the owner's remedy for an unlabelled project is to label it on the
-Connections page.
+account's page (Accounts).
 
 ### Presets
 
@@ -383,7 +383,7 @@ could name it.
 
 ## Tests
 
-`npx vitest run plugins/supabase` — 1739 tests : `plugin.test.ts` (22 : SDK
+`npx vitest run plugins/supabase` — 1740 tests : `plugin.test.ts` (23 : SDK
 kit with samples per tool and `fallbackHits` empty, presets, credential
 spec, execute and discovery against `mockFetch`), `risk-catalog.test.ts`
 (46 : loaded catalog lint, coverage without the fallback, exact risks of the
@@ -412,8 +412,8 @@ strings and SQL text the plugin builds, the project ref as a host label),
   the tool emits a slice no fine-grained entry covers : add the catalog
   entry rather than accepting the fallback.
 - **Refused with "is touched on a resource with no environment label"** —
-  the project is not labelled : the owner labels it on the Connections
-  page. **"… labelled 'prod', but is acceptable only in [preview,
+  the project is not labelled : the owner labels it on the account's
+  page (Accounts). **"… labelled 'prod', but is acceptable only in [preview,
   staging]"** — a bulk write on prod ; nothing to accept, restrict the
   operation.
 - **A migration asks for `db-role-write`, `extension-write`,

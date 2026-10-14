@@ -148,13 +148,17 @@ describe('the theme of the pages', () => {
 
 describe('message pages', () => {
   it('answer with the status, the title and the sentence, escaped, under the same headers', async () => {
-    const response = messagePage(403, 'Waiting for an operator', 'Ask <an operator> & wait.');
+    const response = messagePage(
+      403,
+      'Waiting for an administrator',
+      'Ask <an administrator> & wait.',
+    );
     expect(response.status).toBe(403);
     expect(response.headers.get('cache-control')).toBe('no-store');
     expect(response.headers.get('x-frame-options')).toBe('DENY');
     const html = await response.text();
-    expect(html).toContain('<h1>Waiting for an operator</h1>');
-    expect(html).toContain('Ask &lt;an operator&gt; &amp; wait.');
+    expect(html).toContain('<h1>Waiting for an administrator</h1>');
+    expect(html).toContain('Ask &lt;an administrator&gt; &amp; wait.');
   });
 });
 

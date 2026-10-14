@@ -2,7 +2,7 @@
 title: Stripe provider — modelling and runtime (v5 plugin)
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - plugins/stripe/src/index.ts
   - plugins/stripe/src/resources.ts
@@ -265,7 +265,7 @@ Discovery refuses a `GET /v1/account` answer without an account id.
 
 ## Tests
 
-`npx vitest run plugins/stripe` — 219 : `plugin.test.ts` (31 : kit,
+`npx vitest run plugins/stripe` — 220 : `plugin.test.ts` (32 : kit,
 resource resolution, execute, discovery, credential, presets),
 `classify.test.ts` (48 : the security suite of `classifyStripe`),
 `policy.test.ts` (30 : classifier + catalog + `evaluateCall` — stronger

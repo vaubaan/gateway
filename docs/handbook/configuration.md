@@ -2,7 +2,7 @@
 title: Instance configuration, crypto and composition root
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - apps/gateway/src/server/config/
   - apps/gateway/src/server/crypto/
@@ -74,7 +74,7 @@ apps/gateway/src/
       return-to.ts              resolveReturnTo(), isLocalPath(): return addresses limited to the public origin
     auth/                       OIDC relying party, web session, bootstrap, admin rule (handbook authentication)
     users/                      the operator's deactivation and reactivation of a user (handbook authentication)
-    provider-apps/              the company's app per provider: file or Admin page (handbook connections)
+    provider-apps/              the company's app per provider: file or Settings → Company apps (handbook connections)
     providers/                  the provider reference pages: links, planes, reference model (handbook web-app)
     connections/                connect flows, resources, credential broker (handbook connections)
     missions/                   issuance, tokens, bootstrap kit (handbook missions)
@@ -83,7 +83,7 @@ apps/gateway/src/
     execution/                  the execution MCP door (handbook execution-door)
     oauth-as/, management/      the authorization server and the management MCP door (handbook management-door)
     telemetry/                  community telemetry: sink, toggle, validation status (handbook telemetry)
-    requests/                   inbox, claim decisions, expiry sweeper (handbook requests)
+    requests/                   the creator's requests ("Waiting for you"), claim decisions, expiry sweeper (handbook requests)
     audit/                      audit search, mission session view, retention sweeper (handbook audit)
     store/                      the embedded SQLite store (handbook store)
 scripts/gen-master-key.mjs      prints 32 random bytes, base64
@@ -172,7 +172,7 @@ deploy/config/                  gateway.example.yaml, .env.example (every key do
      [authority](authority.md));
    - `createRequestsModule()` → `root.requests` (`service`, `handlers`,
      `sweeper`, `requestUrl`; handbook [requests](requests.md)). This starts
-     the inbox's expiry sweeper (an `unref`-ed interval); `root.close()`
+     the requests' expiry sweeper (an `unref`-ed interval); `root.close()`
      stops it before closing the store. The per-IP limit of `/r/*` goes
      through `root.rateLimiter` and reads `trusted_proxies`;
    - `createAuditModule()` → `root.audit` (`query`, `sessions`,
@@ -334,7 +334,7 @@ default or a bound, change `KEYS` and this table together.
 | `admin.emails`                                    | list       | —                                          | —; lower-cased; each entry contains `@`                                                                                                                                      | `VAUBAAN_ADMIN_EMAILS`                                                                                               | `auth/` (the admin rule)                                                                                                                                                                           |
 | `providers.<id>.<field>`                          | string     | —                                          | `client_id`, `client_secret`, `app_id`, `app_slug`, `private_key`; the field is one of these and its value is not empty; the id is a registered plugin (checked by the root) | `VAUBAAN_PROVIDER_<ID>_<FIELD>` (`_FILE` for `client_secret` and `private_key`; `-` in the id ↔ `_` in the variable) | `provider-apps/` (`ProviderAppsService`)                                                                                                                                                           |
 | `bootstrap_token`                                 | secret     | required while `idp` is absent             | at least 32 characters; refused once `bootstrap.revoked_at` is set in the store                                                                                              | `VAUBAAN_BOOTSTRAP_TOKEN`, `VAUBAAN_BOOTSTRAP_TOKEN_FILE`                                                            | `auth/` (`BootstrapService`)                                                                                                                                                                       |
-| `telemetry.enabled`                               | boolean    | `false`                                    | —                                                                                                                                                                            | `VAUBAAN_TELEMETRY_ENABLED`                                                                                          | `telemetry/settings.ts`. Not set: off, and Admin → Telemetry decides; set (true or false): that value, and the Admin toggle is read-only (`TelemetryConfig.enabledSetByConfig`)                    |
+| `telemetry.enabled`                               | boolean    | `false`                                    | —                                                                                                                                                                            | `VAUBAAN_TELEMETRY_ENABLED`                                                                                          | `telemetry/settings.ts`. Not set: off, and Settings → Telemetry decides; set (true or false): that value, and the page is read-only (`TelemetryConfig.enabledSetByConfig`)                         |
 | `telemetry.collector_url`                         | URL        | `https://telemetry.vaubaan.com/v1/reports` | https; a query is allowed (the collector's public key as `?apikey=`)                                                                                                         | `VAUBAAN_TELEMETRY_COLLECTOR_URL`                                                                                    | `telemetry/`. The default is `DEFAULT_TELEMETRY_COLLECTOR_URL`, a placeholder the client refuses to send to                                                                                        |
 | `retention_days`                                  | integer    | `90`                                       | >= 1                                                                                                                                                                         | `VAUBAAN_RETENTION_DAYS`                                                                                             | `audit/retention.ts` (the purge of audit entries, and of the session events and past-period counters of the same age: handbook [audit](audit.md)); shown on the Audit page                         |
 | `requests.expiry`                                 | duration   | `24h`                                      | —                                                                                                                                                                            | `VAUBAAN_REQUEST_EXPIRY`                                                                                             | `budget/session-service.ts`: how long a request to the creator stays answerable, a claim and an approval request alike                                                                             |
@@ -434,7 +434,7 @@ accepted structurally and the root compares ids with the `PluginRegistry`
 (`checkProviderApps`): a configuration error (exit 78) for an id no
 shipped plugin has. Which fields a provider's app needs is the plugin's
 `CredentialSpec`; a `providers.<id>` block is the whole app configuration
-of that provider and makes Admin → Provider apps read-only for it
+of that provider and makes Settings → Company apps (`/admin/provider-apps`) read-only for it
 (handbook [connections](connections.md), "Provider apps"); a block that
 lacks a required field does not fail the boot — the provider is shown
 `incomplete` and cannot be connected.
@@ -549,7 +549,7 @@ Sign-in, connections, missions, audit, store and caches:
 | Shortest and longest recurring period of a mission      | 60 s, 366 days | `MIN_PERIOD_SECONDS`, `MAX_PERIOD_SECONDS`     | `missions/preview.ts`                             |
 | Longest local group name                                | 80 characters  | `GROUP_NAME_MAX_LENGTH`                        | `groups/errors.ts`                                |
 | Retention sweep of the audit (after the one at boot)    | every hour     | `RETENTION_SWEEP_INTERVAL_MS`                  | `audit/retention.ts`                              |
-| Audit page size; session timeline page size             | 50; 100        | `AUDIT_PAGE_SIZE`, `SESSION_EVENTS_PAGE_SIZE`  | `audit/query-service.ts`, `audit/session-view.ts` |
+| Activity page size; session timeline page size          | 50; 100        | `AUDIT_PAGE_SIZE`, `SESSION_EVENTS_PAGE_SIZE`  | `audit/query-service.ts`, `audit/session-view.ts` |
 | SQLite busy timeout                                     | 5 s            | `DEFAULT_BUSY_TIMEOUT_MS`                      | `store/db.ts`                                     |
 | Entries of the in-memory cache                          | 10 000         | `DEFAULT_MAX_ENTRIES`                          | `packages/gateway-core/src/cache.ts`              |
 | Keys after which the sliding-window limiter prunes      | 10 000         | `DEFAULT_PRUNE_THRESHOLD`                      | `rate-limit/sliding-window.ts`                    |
@@ -618,7 +618,7 @@ service and the execution door (rate-limit keys `mission:<id>:risk:<id>`,
 `mission-token:<hash>`, `upstream-credential:<connection>:…`);
 `GatewayRoot.authority`, `GatewayRoot.shares` and `GatewayRoot.groups` are
 the authority, share and local-group modules; `GatewayRoot.users` is
-Administration → Users (the operator's deactivation and reactivation of a
+Settings → People (`/admin/users`: the operator's deactivation and reactivation of a
 user);
 `GatewayRoot.telemetry` is community telemetry (cache key
 `telemetry:plugin-stats`); `GatewayRoot.oauth` is the authorization server

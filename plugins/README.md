@@ -33,9 +33,9 @@ check to run after each file.
 ## Before you start
 
 Set up the repository as [`CONTRIBUTING.md`](../CONTRIBUTING.md) says
-(`npm ci`, then `npm run ci` green). Run `npm run demo` once and issue a
-mission in the interface: the risks, presets, resources and environments you
-are about to write are what that form shows.
+(`npm ci`, then `npm run ci` green). Run `npm run demo` once, create a mission in the interface (Missions → New
+mission) and open Reference: the risks, presets, resources and environments
+you are about to write are what those pages show.
 
 Five words used on every line below:
 
@@ -46,6 +46,12 @@ Five words used on every line below:
 | **Risk**     | A named reason a call may be dangerous, with an id that never changes: `acme.widget-write`. It lists the slice patterns it covers (`matches`). When it depends on the environment, its id is qualified: `acme[prod].widget-write`. |
 | **Preset**   | A ready-made list of risks with a budget for each, offered when a mission is issued. A shortcut of the form only: the mission stores the explicit list.                                                                            |
 | **Mission**  | What an agent works under: a set of resources, and for each accepted risk a quota, a rate limit and a gate (`auto` or `approval`). A call touching a risk the mission did not accept is refused.                                   |
+
+The interface shows these to people under other words: a provider is a
+**service**, a connection an **account**, a risk a **permission**, a gate
+**runs freely** (`auto`) or **ask me first** (`approval`), a quota and a rate
+limit **limits**. The contract — this guide, the YAML, the SDK — keeps the
+names above.
 
 A slice is written `<provider>.<entity>[<id>].<entity>[<id>]….<R|W>`:
 
@@ -95,9 +101,9 @@ in **three** places and derived everywhere else:
 
 Rename the exported symbols too (`templatePlugin` → `acmePlugin`,
 `classifyTemplate` → `classifyAcme`, `TEMPLATE_API_BASE` → `ACME_API_BASE`…)
-and set `displayName`, `description`, `summary` (the paragraph the web
-interface shows on the provider's reference page: what one connection is, what
-one resource is, where the environment comes from) and the API base URL. **Change nothing
+and set `displayName`, `description`, `summary` (the paragraph the interface shows on the provider's page under Reference,
+in the interface's words: what one account is, what one resource is, where
+the environment comes from) and the API base URL. **Change nothing
 else yet**: the workspaces and widgets of the imaginary provider stay until
 you replace them file by file in steps 2 to 8. This lists what is left of
 the scaffold; it must print nothing by the end of step 9:
@@ -256,7 +262,7 @@ risks:
 presets:
   - id: developer
     label: Developer
-    description: One line shown in the issuance form.
+    description: One line shown with the preset in New mission and in Reference.
     entries:
       - risk_id: acme.read-widgets
         quota: 5000 # actions per period, always a number
@@ -281,6 +287,13 @@ Rules, all enforced when the file is loaded (at gateway boot and in tests):
 - **Ids.** `<provider>.<name>`, lowercase with dashes. An id is never renamed
   and never deleted, because missions store it: mark the entry
   `deprecated: true` with `replaced_by: <id>` instead.
+- **Words people read.** `label`, `reason` and a preset's `description` are
+  shown verbatim in Reference and in the dialogs of a mission, where a risk
+  is called a permission, a gate "runs freely" or "ask me first", and a
+  budget "limits". A sentence that addresses the reader about the product
+  uses those words ("a mission must hold this permission too", "production
+  writes ask first"); a sentence that describes the provider keeps the
+  provider's. Ids, keys and structure keep the contract's names.
 - **Overlapping patterns add up.** `widget[**].W` also matches
   `widget[w-7].delete.W`, so a deletion touches `widget-write` **and**
   `widget-delete`: a mission needs both, and one of them gated `approval` is
@@ -467,8 +480,7 @@ credential: {
 In `help`, tell the user the narrowest key that works. The gateway restricts
 what an agent does with the key; it cannot restrict the key itself.
 
-**`oauth2`.** Each company registers its own OAuth app at the provider; the
-operator enters its client id and secret in Admin → Provider apps (the
+**`oauth2`.** Each company registers its own OAuth app at the provider; an administrator enters its client id and secret in Settings → Administration → Company apps (the
 gateway always asks for those two; list anything else you need in
 `appConfigFields`). Set `refreshable: true` when the token endpoint issues
 refresh tokens: the gateway performs the standard `refresh_token` grant
@@ -828,7 +840,8 @@ grep -rniE 'template|widget|example\.com' plugins/acme
 
 A plugin under `plugins/` is tested by `npm run ci` but is not part of the
 gateway until it is registered. One list holds the providers; everything else
-(the connect page, Admin → Provider apps, the tool list) derives from it.
+("Connect an account", Company apps in the administration, Reference, the
+tool list) derives from it.
 
 1. `apps/gateway/package.json`: add `"@vaubaan/plugin-acme": "*"` to
    `dependencies`, then run `npm install`.

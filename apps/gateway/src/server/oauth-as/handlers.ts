@@ -125,7 +125,7 @@ const CORS = { 'Access-Control-Allow-Origin': '*' } as const;
 const USER_REFUSALS: RefusalWording = {
   field: 'message',
   noSession: 'Sign in first.',
-  forbidden: 'A delegation belongs to a user: sign in through the identity provider.',
+  forbidden: 'A connected app belongs to a person: sign in through the identity provider.',
 };
 
 export interface OAuthHandlerDeps {
@@ -326,8 +326,8 @@ export function createOAuthHandlers(deps: OAuthHandlerDeps): OAuthHandlers {
   function bootstrapCannotDelegate(messagePage: MessagePage): Response {
     return messagePage(
       403,
-      'Sign in as a user',
-      'A delegation is given by a user of the instance. The bootstrap operator configures the instance and owns no mission: sign out, then sign in through the identity provider.',
+      'Sign in as yourself',
+      'An application is connected by a person of this gateway. Whoever installs the gateway with the install token configures it and owns no mission: sign out, then sign in through the identity provider.',
     );
   }
 
@@ -409,14 +409,14 @@ export function createOAuthHandlers(deps: OAuthHandlerDeps): OAuthHandlers {
           return messagePage(
             403,
             'Application disabled',
-            `An operator of this instance disabled the application "${view.client.name}". It cannot be given a delegation.`,
+            `An administrator of this gateway disabled the application "${view.client.name}". It cannot be connected.`,
           );
         }
         if (view.status === 'pending') {
           return messagePage(
             403,
-            'Waiting for an operator',
-            `The application "${view.client.name}" is known to this instance but no operator approved it yet. Ask an operator to approve it under Administration, OAuth clients (client id ${view.client.clientId}), then start the connection again from the application.`,
+            'Waiting for an administrator',
+            `The application "${view.client.name}" is known to this gateway but no administrator approved it yet. Ask an administrator to approve it under Settings, Registered apps (client id ${view.client.clientId}), then start the connection again from the application.`,
           );
         }
         let accepted;
@@ -485,7 +485,7 @@ export function createOAuthHandlers(deps: OAuthHandlerDeps): OAuthHandlers {
         return messagePage(
           500,
           'Something went wrong',
-          'The delegation could not be recorded. Nothing was granted: start the connection again from your application.',
+          'The connection of the application could not be recorded. Nothing was granted: start the connection again from your application.',
         );
       }
       switch (outcome.outcome) {
@@ -501,7 +501,7 @@ export function createOAuthHandlers(deps: OAuthHandlerDeps): OAuthHandlers {
           return messagePage(
             403,
             'Application unavailable',
-            'The application can no longer be given a delegation on this instance. Nothing was granted.',
+            'The application can no longer be connected on this gateway. Nothing was granted.',
           );
       }
     },

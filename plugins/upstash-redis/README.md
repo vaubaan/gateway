@@ -162,4 +162,4 @@ resolver): refusal on an unlabelled database, what each preset allows and
 refuses. `risk-catalog.test.ts` lints the loaded catalog and its coverage of
 every tool, `execute.test.ts` pins the request shapes sent upstream and the
 pinned REST endpoint, and `identifiers.test.ts` feeds hostile database refs
-to `classify` and `execute`. 293 tests; none reaches the network.
+to `classify` and `execute`. 313 tests; none reaches the network.

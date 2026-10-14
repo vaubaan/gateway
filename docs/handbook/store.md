@@ -2,7 +2,7 @@
 title: Store — embedded SQLite, schema and migrations, repositories
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - apps/gateway/migrations/
   - apps/gateway/src/server/store/
@@ -424,7 +424,7 @@ per-object advisory lock) for the read and the insert to stay one step.
 
 Reads: `getById(id)` and `list(filter)` with `AuditFilter { missionId?, kind?,
 since?, until?, limit? }` (default limit 1000, ordered by `ts, id`).
-`search(query)` is the Audit page's query (handbook [audit](audit.md)): a
+`search(query)` is the query of the Activity page (`/activity`, handbook [audit](audit.md)): a
 mandatory `AuditScope` (missions created by one user, connections owned by some
 principals, optionally every administrative entry) applied before the filters
 (`missionId`, `userIds`, `connectionId`, `tool`, `decision`, `agentLabel`, `kind`,
@@ -436,7 +436,7 @@ counts a mission's call entries of a span per agent label and per decision, the
 unlabelled calls as `label: null`, busiest first. It is two prepared statements, one for a
 bounded span (`ts < until`) and one for an open span (`until: null`), each a `GROUP BY` with
 `SUM(CASE …)`: no parameter is bound only to be compared with `NULL`, which Postgres cannot
-type. It serves the session page's "calls per agent label" and is never a budget.
+type. It serves the calls per agent label of a mission's activity page (`/missions/<id>/session`) and is never a budget.
 
 `tokenHolderActivity(missionId, { since, until | null })` is the same count per **token
 holder** — `(token_kind, token_holder)`, the calls written before tokens had a holder as
@@ -467,7 +467,8 @@ Spec §0 "Mission member", "Mission token"; ADR
 - **`mission_members(mission_id, user_id, added_by, added_at, removed_at)`**, primary key
   `(mission_id, user_id)`: the users the creator gave access to. The creator has **no row**
   (`missions.creator_user_id` says it; `addMember` refuses them). Removing sets
-  `removed_at`; adding again clears it. Index `mission_members_user` serves "shared with me".
+  `removed_at`; adding again clears it. Index `mission_members_user` serves the
+  missions shared with a user ("Shared with you" on `/missions`).
 - **`mission_tokens`** is rebuilt (a new table, the rows copied, the old one dropped, a
   rename — the holder rule is a CHECK over three columns, which `ADD COLUMN` cannot
   state). New columns: `kind` (`member` | `named`), `holder_user_id` (member tokens),

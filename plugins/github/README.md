@@ -120,7 +120,7 @@ Presets are UI sugar — the persisted policy is always the explicit list.
 
 ## Credential: the company's GitHub App
 
-1. **Register the App** (once, by the operator): GitHub → Settings →
+1. **Register the App** (once, by an administrator): GitHub → Settings →
    Developer settings → GitHub Apps → New GitHub App. Permissions the
    tools need: Contents (read & write), Pull requests (read & write),
    Issues (read & write), Metadata (read), Actions (read), Administration
@@ -129,15 +129,14 @@ Presets are UI sugar — the persisted policy is always the explicit list.
    a **client secret**. Under "Identifying and authorizing users", tick
    **Request user authorization (OAuth) during installation** and set the
    **Callback URL** to the gateway's connection callback
-   (`<public_url>/connections/callback/github`, shown in Administration →
-   Provider apps). With that box ticked GitHub offers no setup URL: the
+   (`<public_url>/connections/callback/github`, shown in Settings → Administration → Company apps). With that box ticked GitHub offers no setup URL: the
    callback URL receives both `code` and `installation_id`. Keep "Expire
    user authorization tokens" on.
 2. **Configure the instance** with the five app-config keys the spec
    declares: `app_id`, `private_key` (PEM, PKCS#1 or PKCS#8; a one-line
    PEM with literal `\n` is accepted), `app_slug`, `client_id` (the
-   App's client ID, not its App ID) and `client_secret`. Missing keys keep
-   the provider out of "Connect a provider".
+   App's client ID, not its App ID) and `client_secret`. Missing keys leave the
+   service unavailable in "Connect an account", which says why.
 3. **Connect**: the host redirects the user to
    `https://github.com/apps/<app_slug>/installations/new`. On the callback
    it exchanges `code` for a user access token
@@ -187,4 +186,4 @@ npx vitest run plugins/github
 - `data-model.test.ts` — data-model integrity.
 - `token-cache.test.ts` — connection-scoped reuse of installation tokens.
 
-585 tests; none reaches GitHub.
+587 tests; none reaches GitHub.

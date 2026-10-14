@@ -14,17 +14,32 @@ The first release of the on-prem gateway. It replaces the earlier hosted product
 migrate, an instance starts empty. The notes below describe what the gateway does;
 "Changed" and "Removed" are written for a reader who knew the hosted product.
 
+**Words.** The interface speaks to people in its own words, and these notes use them
+for what a person sees: an **account** (the protocol's _connection_), an **access**
+(_share_), a **permission** (_risk_, by its `RiskId`), **limits** (_budget_: quota and
+rate limit), **runs freely / ask me first** (_gate_ `auto` / `approval`), a **key** and
+a **machine key** (_mission token_: member token, named token), **Replace key**
+(_rotate_), **Waiting for you** (_requests_: an approval request, a claim), a
+**connected app** (_delegation_), **Activity** (_audit_), a **teammate** and a **team**
+(_mission member_, _group_), an **administrator** (_operator_), a **service** and its
+**company app** (_provider_, _provider app_). MCP tool names, refusal codes, risk ids,
+catalog files, API fields, database columns and configuration keys keep the protocol's
+names, and the notes about them do too.
+
 **Upgrade notes** — only for an instance that already runs a build made from the
 `v5` branch:
 
-- **Page addresses follow new words; old links keep working.** Connections are now
-  under `/accounts`, the request inbox under `/waiting`, the audit under `/activity`,
-  the provider reference under `/reference`, and `/` is the home. Every earlier
-  address answers with a permanent redirect, a form post included. **The callback
-  registered at a provider does not move**: `/connections/callback/<provider>` is still
-  the URL of your GitHub App and of your OAuth apps; change nothing there. `/mcp`,
-  `/mcp/manage`, `/r/<id>`, `/api/**` and `/oauth/**` are unchanged, and so are tool
-  names, refusal codes, risk ids and configuration keys.
+- **Page addresses follow new words; old links keep working.** Accounts are under
+  `/accounts`, what waits for you under `/waiting`, the activity record under
+  `/activity`, the reference of each service under `/reference`, settings under
+  `/settings`, and `/` is the home. What a colleague gave you access to is a region of
+  `/accounts` (it was `/shares`), and connected apps are `/settings/connected-apps` (it
+  was `/delegations`). Every earlier address answers with a permanent redirect, a form
+  post included. **The callback registered at a service does not move**:
+  `/connections/callback/<provider>` is still the URL of your GitHub App and of your
+  OAuth apps; change nothing there. `/mcp`, `/mcp/manage`, `/r/<id>`, `/api/**`,
+  `/oauth/**` and `/admin/**` are unchanged, and so are tool names, refusal codes, risk
+  ids and configuration keys.
 - **Sign in once before you change the identity provider.** Starting the new image
   applies schema migration `0011` (forward-only: an older image refuses to start
   on the migrated database). A user is now identified by the issuer of their
@@ -45,22 +60,23 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
   `serviceId` and `environmentId` and reads the latest deployment, and every
   `railway__railway-agent` call starts a new conversation. The tools no longer list
   the two arguments. The Railway plugin is `4.0.0`.
-- **Railway: refresh the resources of each connection once.** A `serviceId` is
+- **Railway: refresh the resources of each Railway account once.** A `serviceId` is
   checked against the services recorded for the mission's project at discovery; a
   project discovered by an earlier build has none recorded, and a call that names
-  a service is refused until its owner refreshes the connection.
-- **Revoking a connection now withdraws the access at the provider, where the
-  provider allows it.** Schema migration `0012` (forward-only, one nullable column).
-  For Supabase (and the experimental Gmail plugin) the gateway asks the provider to
+  a service is refused until an owner presses "Refresh" on the account's page.
+- **Disconnecting an account now withdraws the authorization at the service, where
+  the service allows it.** Schema migration `0012` (forward-only, one nullable column).
+  For Supabase (and the experimental Gmail plugin) the gateway asks the service to
   revoke the OAuth authorization and tells you whether it confirmed. For every other
-  provider it cannot, and says so before and after: the dialog and the revoked
-  connection's page tell you where to remove the access by hand — uninstall the
-  GitHub App, revoke the app in your Railway account, delete the API key for Vercel,
-  Stripe, Cloudflare, Upstash and Resend, remove the public key for SSH. Connections
-  revoked before this build asked nothing of the provider: their page says to remove
-  the access by hand.
-- **Mission tokens are stored as a SHA-256 digest; tokens you already issued keep
-  working.** Nothing to do, and no schema migration. A token issued by an earlier
+  service it cannot, and says so before and after: the dialog and the page of the
+  disconnected account tell you where to remove it by hand — uninstall the GitHub App,
+  revoke the app in your Railway account, delete the API key for Vercel, Stripe,
+  Cloudflare, Upstash and Resend, remove the public key for SSH. Accounts disconnected
+  before this build asked nothing of the service: their page says to remove the
+  authorization by hand.
+- **Mission keys are stored as a SHA-256 digest; keys you already handed out keep
+  working.** Nothing to do, and no schema migration. A key (a mission token) issued by
+  an earlier
   build is stored as an argon2id hash: it still authenticates with the same Bearer,
   and its first successful call replaces the stored hash by the digest (one `info`
   log line, `mission token moved to its sha256 digest`). Until that first call, and
@@ -68,20 +84,21 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
   (429). **Do not go back to an older image after this one has served calls**: it
   reads argon2id only and would refuse every token that has been moved or issued
   since.
-- **A delegation now ends 90 days after the consent.** An application you authorized
-  on the Delegations page used to stay authorized for as long as it renewed its token.
-  It is now refused 90 days after you consented, whatever it renewed, and sends you to
-  the consent screen again; the missions it issued are untouched. **Delegations
-  granted more than 90 days ago stop at the first renewal after the upgrade.** The
-  page shows the date for each. Operators set another duration with
+- **A connected app now ends 90 days after the consent.** An application you
+  authorized (Settings → Connected apps) used to stay authorized for as long as it
+  renewed its token. It is now refused 90 days after you consented, whatever it renewed,
+  and sends you to the consent screen again; the missions it prepared are untouched.
+  **Consents given more than 90 days ago stop at the first renewal after the upgrade.**
+  The page shows the date for each. Administrators set another duration with
   `oauth.delegation_max_lifetime` (`VAUBAAN_OAUTH_DELEGATION_MAX_LIFETIME`).
-- **One approval request per call.** A call that touches several risks gated
-  `approval` used to ask the creator once per risk, with a refused replay in between.
-  It now drops one request that lists every gated risk; granting it approves the call,
-  and "open the gate" opens the gate of each listed risk. The `approval-required`
-  refusal carries `risk_ids` next to `risk_id`. Schema migration `0013` (forward-only).
-  Requests that are open when you upgrade keep the one risk they named: granting one
-  approves that risk, and a call that needs more gets a new request covering it.
+- **One request per call that asks first.** A call that needs several permissions set
+  to "ask me first" used to ask the creator once per permission, with a refused replay
+  in between. It now drops one request that lists them all; approving it approves the
+  call, and "Let it run freely until the reset" applies to each listed permission. The
+  `approval-required` refusal carries `risk_ids` next to `risk_id`. Schema migration
+  `0013` (forward-only). Requests that are open when you upgrade keep the one permission
+  they named: approving one approves that permission, and a call that needs more gets a
+  new request covering it.
 - **`retention_days` also purges the session history.** The events of a mission's
   timeline older than the retention are deleted with the audit entries of the same age,
   and so are the counters of periods that ended longer ago. The counters of the current
@@ -93,30 +110,31 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
   argument of a plugin's samples, through `classify` and through `execute`; every
   shipped plugin and the template run it, and a plugin whose tests do not is refused.
   A plugin author adds one test to `plugin.test.ts` (see `plugins/README.md`).
-- **A preset never hands a write token without approval.** A plugin now declares which
-  of its token-handing risks are read-only (`TokenHandout.readOnlyRiskIds`); every
+- **A preset never hands a write token without asking first.** A plugin now declares
+  which of its token-handing risks are read-only (`TokenHandout.readOnlyRiskIds`); every
   other one is treated as write, and a plugin whose preset leaves a write one on `auto`
   is refused at load. GitHub is unchanged: the Developer preset still hands the clone
-  token (read-only) automatically and the push token after approval. The provider
-  reference says "hands a read-only token" or "hands a write token".
-- **Two connections of one provider in a mission: the refusal says why.** The rule is unchanged (one connection per provider); the message now names both connections, says that risks and budget are counted per provider, and says to issue a second mission.
-- **An owner of a connection can close the missions orphaned on it.** The connection
-  page lists them (name, who issued it, why) with "Close", which revokes the mission for
-  good. A mission that serves is still its creator's alone.
-- **The Share dialog lists the orphaned missions a share would bring back.** Sharing
-  again to someone whose missions were orphaned restores those missions at once, with
-  the token their agent still holds. The dialog now names them, with who issued each,
-  and makes the share only once you have confirmed that list.
-- **"Reset the period" on a claim resets the claimed risk only.** It used to put every
-  counter of the mission back to zero, so answering a claim on one risk silently
-  reopened any other exhausted risk. Each exhausted risk has its own claim. The quota
-  extension is unchanged: at most what the period consumed on that risk.
-- **The Audit page shows more to two people.** A **member** of a mission now reads
-  that mission's entries (calls, acts, requests) for as long as they are a member.
-  An **operator** now reads every entry of the instance, calls included, where they
-  used to read administrative acts only. Neither is shown arguments — the audit never
-  holds them — nor the fingerprint that stands for them, which stays with the
-  mission's creator and the connection's owners.
+  token (read-only) freely and the push token after the creator's yes. Reference says
+  "hands a read-only token" or "hands a write token".
+- **Two accounts of one service in a mission: the refusal says why.** The rule is unchanged (one account per service); the message now names both accounts, says that permissions and limits are counted per service, and says to create a second mission.
+- **An owner of an account can close the missions that stopped on it for want of an
+  owner.** The account's page lists the missions that use it — name, who created it,
+  its state — and offers "Close" on one that stopped that way, which stops it for good
+  (you type its name). A mission that runs is still its creator's alone.
+- **"Give access" lists the missions an access would bring back.** Giving access
+  again to someone whose missions had stopped restores those missions at once, with the
+  key their agent still holds. The dialog now names them, with who created each, and
+  gives the access only once you have confirmed that list.
+- **"Reset the count" resets the one permission that reached its limit.** It used to
+  put every counter of the mission back to zero, so answering for one permission
+  silently reopened any other that had reached its limit. Each has its own request.
+  "Give back some calls" is unchanged: at most what the period used on that permission.
+- **Activity shows more to two people.** A **teammate** on a mission now reads that
+  mission's entries (calls, changes, requests) for as long as they are on it. An
+  **administrator** now reads every entry of the instance, calls included, where they
+  used to read administrative acts only. Neither is shown arguments — the record never
+  holds them — nor the fingerprint that stands for them, which stays with the mission's
+  creator and the account's owners.
 - **Upstash Redis: a time to live and a move are deletions.** `EXPIRE` with any
   TTL, `SETEX`, `SET … EX`/`PX` (and `upstash_redis__set` with `ex` or `px`),
   `RENAME`, `LMOVE`, `SMOVE` and `RPOPLPUSH` now need `delete-data` next to
@@ -146,17 +164,21 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
 
 ### Added
 
-- **A redesigned frame for the interface, and one vocabulary.** A short side navigation
-  replaces the top bar: Now, Waiting for you (with the count of what waits), Missions,
-  Accounts, Activity, Reference, then Settings, with your name and the theme at its
-  foot; it collapses to its icons in a narrow window. Administration is part of
-  Settings and keeps the same navigation. The interface now says _account_ for a
-  connection, _permission_ for a risk, _key_ and _machine key_ for a mission token and
-  a named token, _limits_ for quotas and rate limits, _runs freely_ / _ask me first_
-  for the gate, _connected app_ for a delegation, _teammate_, _administrator_ and
-  _team_; _mission_ and _preset_ stay. This release delivers the frame, the words of
-  the navigation and the page titles; the content of each page keeps its earlier
-  wording until that page is redesigned.
+- **A redesigned interface, and one vocabulary.** A short side navigation: Now, Waiting
+  for you (with the count of what waits), Missions, Accounts, Activity, Reference, then
+  Settings, with your name and the theme at its foot; it collapses to its icons in a
+  narrow window. Administration is part of Settings and keeps the same navigation.
+  Every page was rebuilt on one design system and says the same words (see "Words"
+  above). A default view shows what you would act on — one primary action, a limit
+  drawn only when it is near, colour for an exception only — and the rest is one click
+  away behind "Show details" and "why?", which a page remembers.
+- **Now, the one home.** What waits for you first, each request with who asks, on which
+  mission and the room left; then what is running, one line per mission; then counts
+  that lead elsewhere. When nothing waits, one sentence says so. Someone who created no
+  mission reads what the product is and the steps to a first account, a first mission
+  and the kit; an administrator reads what is left to set up. A yes is never given from
+  the home: "Review" leads to the request, where the exact call is shown; "Refuse",
+  which runs nothing, is on the row.
 - **Light and dark themes.** Light by default; a toggle at the foot of the navigation,
   and Settings, choose among System, Light and Dark. The choice is kept in a cookie
   (`vaubaan_theme`, a display preference and nothing else) so that a page never
@@ -180,25 +202,31 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
   client whole: a JSON-RPC error whose `data` carries the code, its fields (claim URL,
   approval URL, allowed resources…) and a hint an agent can act on. The gateway never
   holds a call waiting.
-- **Missions.** A connection owner issues a mission on one page: name, connections and
-  resources, a preset or a custom policy per connection, per-risk quota, rate limit and
-  gate, a period and an optional expiry, with a can / cannot / quantities summary. A
-  preset says on the page what it allows without asking, what waits for approval and what
-  it leaves out; **Custom** opens every risk the owner holds, grouped into reads, writes
-  and irreversible writes, with a search box and the reason for what cannot be accepted.
-  What a mission stores is always the explicit list of risks with their budgets, never a
-  preset and never "all". A mission can start from a duplicate or from a JSON proposal an
-  agent wrote. Issuance refuses anything beyond the owner's authority, and the preview
-  warns when a selected resource has no usable environment label.
-- **Mission tokens, members and the bootstrap kit.** A mission has one or more tokens
-  (`vbn_live_…`, stored as a SHA-256 digest), each with one holder. The creator adds
-  colleagues as **members**; each generates their own token, shown once with the
-  bootstrap kit — the creator never sees it — and the creator creates **named tokens**
-  for a CI runner or a shared machine. Every token shares the mission's resources, policy
-  and **one budget**. A member uses the mission as it is and manages only their own
-  token; the creator can revoke any token and remove a member. The kit holds the
-  environment variable, an `.mcp.json` that references it, instructions for each refusal
-  and a `curl` check; `/agent-bootstrap.md` documents the same for any agent.
+- **Missions.** Whoever owns an account or was given access to one creates a mission on
+  one screen: a name; accounts and resources; per account a preset — each says what it
+  yields within what you may allow, and why when it would allow nothing — or "Edit the
+  permissions one by one", every permission you hold with its limit per period, its
+  limit per minute and "ask me first", grouped into reads, writes and writes that cannot
+  be undone, with a search box; how often the limits reset and an optional end. A rail
+  says, as the form changes, what the mission can do, what asks you first and what it
+  cannot. **"Create mission" asks once and lists every permission with its limits**:
+  what a mission stores is always that explicit list, never a preset and never "all". A
+  mission can start from a copy of another ("Start from a mission…", "Duplicate") or
+  from a JSON proposal an agent wrote. Creation refuses anything beyond what its creator
+  may allow, and the preview warns when a selected resource has no usable environment
+  label.
+- **Keys, teammates and the setup kit.** A mission has one or more keys (`vbn_live_…`,
+  stored as a SHA-256 digest), each with one holder. The creator adds colleagues as
+  **teammates**; each generates their own key, shown once with the setup kit — the
+  creator never sees it — and the creator makes **machine keys** for a CI runner or a
+  shared machine. Every key shares the mission's resources, permissions and **one set of
+  limits**. A teammate uses the mission as it is and manages only their own key; the
+  creator can revoke any key and remove a teammate. **"Replace key" asks first and says
+  that the current key stops working at once**; revoking a key, removing a teammate and
+  stopping a mission are confirmed by typing a name. The kit holds the environment
+  variable (`VAUBAAN_MISSION_TOKEN`), an `.mcp.json` that references it, instructions
+  for each refusal and a `curl` check; `/agent-bootstrap.md` documents the same for any
+  agent.
 - **A token that stops says why.** A token that was rotated or revoked, or whose holder
   was removed from the mission or deactivated, is answered HTTP 401 with
   `error.data.reason` (`token-rotated`, `token-revoked`, `holder-removed`,
@@ -208,23 +236,26 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
   their counters in one transaction, or is refused whole. Periods roll over on read; a
   one-off mission has a single open-ended period. The credit of an allowed call is not
   refunded when the provider fails. Rate limiting is in memory, for a single process.
-- **Claims and the request inbox.** The URL a `budget-exhausted` refusal carries,
-  `<public_url>/r/<id>`, asks for a sign-in and lets only the mission's creator through.
-  The creator resets the period, gives back up to what was consumed, extends the expiry,
-  or refuses; the token does not change and the agent replays its call. "Requests" lists
-  what awaits you; unanswered requests expire after `requests.expiry` (24 h by default),
-  on an orphaned mission too.
-- **The approval gate.** A call touching a risk gated `approval` is refused
-  `approval-required` with the URL of an approval request. The creator — and nobody else,
-  operators included — reads the tool, the arguments in clear, the slices touched and
-  what is left of every risk the call counts against, then approves that one action,
-  opens the gate for the rest of the period, or refuses. An approval is bound to the
-  mission, the risk, the tool and the fingerprint of the arguments, is used once and
-  expires after `approvals.expiry` (10 minutes by default). The arguments are kept
-  encrypted while the request is open and erased when it is decided or expires. The
-  creator can switch the gate of an accepted risk between `auto` and `approval` after
-  issuance, on an expired mission too; setting it back to `approval` ends an opening
-  granted earlier in the period.
+- **A limit that was reached, and "Waiting for you".** The URL a `budget-exhausted`
+  refusal carries, `<public_url>/r/<id>`, asks for a sign-in and lets only the mission's
+  creator through. The creator resets the count, gives back up to what was used, extends
+  the mission, or leaves it until the reset; the key does not change and the agent
+  replays its call. "Waiting for you" lists what awaits you, the oldest request open
+  beside the list; the same requests are on the home and on their mission, where a
+  teammate reads whose answer the mission waits for. Unanswered requests expire after
+  `requests.expiry` (24 h by default), on a mission without an owner too.
+- **"Ask me first".** A call that needs a permission set to "ask me first" (the gate
+  `approval`) is refused `approval-required` with the URL of a request. The creator —
+  and nobody else, administrators included — reads who asks, the tool, the arguments in
+  clear, the permission and what is left of every limit the call counts against, then
+  approves that one call, lets the permission run freely until the limits reset, or
+  refuses. A yes is given on the page of the request only. An approval is bound to the
+  mission, the permission, the tool and the fingerprint of the arguments, is used once
+  and expires after `approvals.expiry` (10 minutes by default). The arguments are kept
+  encrypted while the request is open and erased when it is answered or expires. The
+  creator can switch "ask me first" on a permission of the mission after creation, on an
+  expired mission too; switching it back on ends a "run freely until the reset" given
+  earlier in the period.
 - **Agent labels: who did what, when several agents work on one mission.** An agent may
   label its calls with the `X-Vaubaan-Agent` header or, per call, with `_meta.agent`
   (which wins when both are sent). A label is 1 to 64 characters — letters, digits and
@@ -248,12 +279,13 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
   answer a request, open a gate, extend a budget, touch a connection, a share or a group,
   or call a provider tool, and it rotates the token only of the missions it issued.
   Missions issued this way are marked with the application that issued them.
-- **Delegations and OAuth clients.** A user sees the applications they authorized, where
-  each sends its access and the missions it issued, and revokes one in a click.
+- **Connected apps and registered apps.** Under Settings → Connected apps a person sees
+  the applications they authorized, until when each consent runs, where each sends its
+  access and the missions it prepared, and disconnects one after a confirmation.
   `oauth.client_registration.policy` is `open`, `operator-approved` (default) or
-  `closed`; under the default a client that can only return to the user's own machine
-  needs no approval, any other waits for an operator under Administration → OAuth
-  clients, where a client can also be disabled, which revokes its delegations. Client ID
+  `closed`; under the default a client that can only return to the person's own machine
+  needs no approval, any other waits for an administrator under Settings → Registered
+  apps, where an app can also be disabled, which disconnects it from everyone. Client ID
   Metadata Documents are supported and off by default.
 - **Three credentials that never cross.** A mission token opens `/mcp` only, a delegated
   token `/mcp/manage` only, a browser session the interface only; each is refused with
@@ -265,74 +297,86 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
   Sessions are server-side, 8 hours at most, behind a `__Host-` cookie, with an origin
   check on every mutation.
 - **Bootstrap and administration.** `/admin/bootstrap` accepts the configured bootstrap
-  token while no identity provider is set; the first operator sign-in revokes it.
-  Afterwards the operator is whoever matches the admin rule, recomputed on every request.
-  Administration holds the identity provider, the provider apps, local groups, users,
-  OAuth clients, ownerless connections and telemetry.
-- **Connections and resources.** A signed-in user connects a provider through one
-  generic driver for the four credential kinds (`oauth2`, `app-install`, `api-key`,
-  `ssh-key`). A connection is `active`, `expired`, `revoked` or `unowned`; the gateway
-  refreshes OAuth tokens itself, so a plugin never sees the client secret. Plugins
-  discover resources at connect time and on "Refresh discovery"; the owner renames them,
-  labels their environment and hides them, and those edits survive a new discovery.
-- **Provider apps.** Operators register each provider's app under Administration →
-  Provider apps (secrets encrypted in the store) or under `providers.<id>` in the mounted
-  configuration, which wins and makes the page read-only for that provider.
-- **Shares, groups and ownership.** The owner of a connection shares it with a user or a
-  group: a target, then a checklist of the provider's risks. "Select all" ticks today's
-  risks one by one; what is stored is that list, and a risk added to the catalog later
-  is not shared. Several shares of one connection add up. An owner transfers a
-  connection to a group they belong to. When the owner group has no member left the
-  connection is `unowned`: it keeps serving the missions that still have grounds, and
-  the operator names a new owner — their only act on connections.
-- **Orphaned missions, for as long as the authority is missing.** A mission whose creator
-  no longer covers its accepted risks — a share revoked or narrowed, a connection
-  revoked, a group left, the creator deactivated — refuses every call with
-  `mission-inactive` (`orphaned`). The state is computed from the creator's current
-  authority each time it is read: when the authority comes back, the same mission serves
-  again with the same tokens and counters. A revoked connection never comes back. The
-  mission page says why, and the Audit shows the acts that orphaned and restored it.
-- **Operators can deactivate a user** (Administration → Users): no sign-in, sessions
-  ended, delegated applications cut off, the user's missions refused, their tokens on
-  other people's missions revoked, their connections handed back for reassignment —
-  without waiting for the identity provider. Reactivating first closes anything a failed
-  deactivation left open.
-- **Audit search and retention.** `/audit` has ten filters in three groups — what, who
-  and when — among them the mission, the connection, the tool, the decision, the agent
-  label, the token holder and the period; entries are listed newest first. A user sees the
-  entries about their missions and the connections they or their groups own; an operator
-  also sees every administrative entry; nobody sees arguments, only their hash (SHA-256
-  of the canonical JSON, the same value as the approval fingerprint). Every mutation
-  leaves an administrative entry. Entries older than `retention_days` (90 by default)
-  are purged at start and then hourly.
-- **The Mission session page.** Counters per risk and per period with what is left, the
-  gate of each risk, the open requests, the calls of the current period per agent label
-  and per token holder (counts for information: the budget stays per risk and shared),
-  and the event timeline, which can be narrowed to one label or one holder and says what
-  each gate and approval event did.
-- **A provider reference inside the interface.** "Providers" lists the plugins of the
-  instance; each has a page generated from the plugin itself: what it connects to in
-  plain words, then four tabs. **Presets** side by side as a table (one column per
-  preset, one row per risk, each cell the quota, rate limit and gate); **Risks** as
-  compact rows grouped into reads, writes and irreversible writes, each unfolding for
-  its reason, its six-axis profile, whether it is accepted once or per environment and
-  what it matches; **Data model** as an outline; **Tools** as a dense table. A provider
-  whose model has several planes (Supabase: db, storage, auth, functions) gets a plane
-  control that narrows every tab at once. Every risk id shown on a mission, a request, a
-  share or a connection links to its entry.
-- **One way to read a risk, a name and a help text.** On every page a risk is three
-  lines: its label, its id with one line of reason that unfolds, and a six-cell strip for
-  its profile. Risks, presets, tools, data-model planes, resources, connections,
-  missions, people and tokens each have one colour and one glyph, the same everywhere;
-  severity, gates and statuses keep their own marks. Explanatory text is one line with a
-  "More" button, closed by default and remembered per browser.
+  token while no identity provider is set; the first administrator sign-in revokes it.
+  Afterwards an administrator is whoever matches the admin rule, recomputed on every
+  request. Administration is part of Settings: Setup (a checklist of what the gateway
+  still needs), Sign-in, Company apps, People, Teams, Accounts without owner, Telemetry
+  and Registered apps.
+- **Accounts and resources.** A signed-in person connects an account of a service
+  through one generic driver for the four credential kinds (`oauth2`, `app-install`,
+  `api-key`, `ssh-key`); a field that takes a key says the shape it expects. An account
+  (a connection) is `active`, `expired` ("needs reconnecting"), `revoked`
+  ("disconnected") or `unowned` ("needs an owner"); the gateway refreshes OAuth tokens
+  itself, so a plugin never sees the client secret. Plugins discover resources at
+  connect time and on "Refresh"; the owner renames them, labels their environment and
+  hides them, and those edits survive a new discovery. The page of an account says who
+  has access and up to what, what it reaches, and which missions use it.
+- **Company apps.** Administrators register the app the company holds at each service
+  under Settings → Company apps (secrets encrypted in the store) or under
+  `providers.<id>` in the mounted configuration, which wins and makes the page read-only
+  for that service.
+- **Access, teams and ownership.** The owner of an account gives access to a person or
+  a team ("Give access", a dialog over the account): who, then a checklist of the
+  service's permissions. "Select all" ticks today's permissions one by one; what is
+  stored is that list, and a permission added to the catalog later is not part of it.
+  Several accesses to one account add up, and "Shared with you", on Accounts, lists
+  what you were given with the exact permissions. An owner hands an account to a team
+  they belong to. When the owning team has nobody left the account "needs an owner"
+  (`unowned`): it keeps serving the missions that still have grounds, and an
+  administrator names a new owner — their only act on an account. Removing an access,
+  handing an account over and disconnecting it are asked first, with how many missions
+  would stop.
+- **Missions without an owner, for as long as the authority is missing.** A mission
+  whose creator may no longer allow its permissions — an access removed or narrowed, an
+  account disconnected, a team left, the creator deactivated — refuses every call with
+  `mission-inactive` (`orphaned`). The state is computed from what the creator may allow
+  each time it is read: when that comes back, the same mission serves again with the
+  same keys and counters. A disconnected account never comes back. The mission page
+  says why, and Activity shows the acts that stopped and restored it.
+- **Administrators can deactivate a person** (Settings → People): no sign-in, sessions
+  ended, connected apps cut off, the person's missions refused, their keys on other
+  people's missions revoked, their accounts handed back for a new owner — without
+  waiting for the identity provider. The act is asked first, with what it stops.
+  Reactivating first closes anything a failed deactivation left open.
+- **Activity: the audit record, its filters and its retention.** `/activity` lists one
+  line per call, allowed or refused, and per change a person made, newest first, with
+  filters by period, mission, account, tool, decision, person, key holder, agent label
+  and kind of entry. Each line unfolds, at an address of its own, into its detail: the
+  key used, the permissions touched and what is left, what the agent was told. A person
+  sees the entries of the missions they created or work on and of the accounts they or
+  their teams own; an administrator sees every entry; nobody sees arguments, only —
+  for who answers for the call — their fingerprint (SHA-256 of the canonical JSON, the
+  same value an approval is bound to). Every mutation leaves an entry. Entries older
+  than `retention_days` (90 by default) are purged at start and then hourly.
+- **The activity of a mission** ("Everything this mission did"). What waits for an
+  answer, the calls of the current period per key holder and per agent label (counts
+  for information: the limits stay per permission and shared), and the timeline of its
+  events, which can be narrowed to one holder or one label; on demand, what each
+  permission used and the counters of earlier periods.
+- **A reference inside the interface.** "Reference" lists the services of the
+  instance; each has a page generated from its plugin: what an account of it is, in
+  plain words, then three tabs. **Permissions**: one table, the permissions against the
+  presets — a row per permission, grouped into reads, writes and writes that cannot be
+  undone, a column per preset, each cell the limit the preset gives and whether it asks
+  first; "why?" unfolds the reason, the six words behind the severity, whether the
+  permission is held once or per environment and what it covers. **Tools**, as a table.
+  **How it is modelled**, as an outline. A service whose model has several parts
+  (Supabase: db, storage, auth, functions) gets a filter that narrows every tab at once.
+  Every permission shown on a mission, a request, an access or an account links to its
+  entry.
+- **One way to read a permission.** On every page a permission is what it allows in
+  words, its severity as one word, and its id as the protocol spells it, in a monospace
+  face; "why?" unfolds the reason and the six words behind the severity (undo, blast
+  radius, data, cost, visible to, lasts). Nothing is coloured by its kind any more:
+  amber means "needs you", red means "stopped, refused, limit reached". Page help is
+  one sentence under the title.
 - **Streamed tool results.** A plugin whose provider answers progressively can hand the
   parts of its result to the gateway as they arrive (`ExecuteContext.emitPart`,
   `streamToolResult`, `textParts`); an MCP client that sent a progress token receives
   each part as a progress notification, then the complete result. The decision and the
   budget decrement always come before the first byte. No shipped plugin streams yet.
-- **Community telemetry (opt-in).** Off at installation. An operator enables it on
-  Administration → Telemetry, which shows the exact payload first: plugin, plugin
+- **Community telemetry (opt-in).** Off at installation. An administrator enables it
+  under Settings → Telemetry, which shows the exact payload first: plugin, plugin
   version, gateway version, tool, outcome (`success`, `upstream-error`,
   `classification-error`, `execution-error`) and a fixed-vocabulary error class — never
   arguments or their hash, resource refs, mission or user identifiers, an instance
@@ -363,10 +407,10 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
   an image in `deploy/README.md`.
 - **`npm run demo`: the whole interface in your browser, nothing to register.** One
   command starts the real application on `http://localhost:3210` with a demo identity
-  provider (an account picker, no password), simulated GitHub, Stripe, Cloudflare DNS,
-  Resend, Upstash Redis and Vercel, and seeded connections, shares, missions in every
-  state, open requests and audit entries; it prints a tour with ready-made `curl`
-  commands. It builds the application on the first start and again only when the
+  provider (a picker of three people, no password), simulated GitHub, Stripe, Cloudflare
+  DNS, Resend, Upstash Redis and Vercel, and seeded accounts, accesses, missions in
+  every state, requests waiting and activity; it prints a tour, in the interface's
+  words, with ready-made `curl` commands. It builds the application on the first start and again only when the
   sources changed. Development only: it refuses a production environment, is not part
   of the image, binds the loopback interface and deletes its data on exit.
 - **Plugin SDK and test kit.** `@vaubaan/plugin-sdk`: the `ProviderPlugin` contract and
@@ -499,7 +543,7 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
   in — an unlabelled resource, a free-text label, prod for a staging-only risk — is
   refused with `risk-not-accepted`. A call that names several environments, or resources
   of different environments, resolves to none, and an identifier containing `*` is
-  refused instead of being read as a pattern. Owners label resources on the connection
+  refused instead of being read as a pattern. Owners label resources on the account's
   page for env-scoped operations to run.
 - **Every refused call is audited, including the one a failing stage refuses.** When the
   resource, risk or budget stage throws (a classifier bug, a store error) the call is

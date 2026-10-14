@@ -2,7 +2,7 @@
 title: Upstash Redis provider — plugin on the v5 SDK
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - plugins/upstash-redis/src/index.ts
   - plugins/upstash-redis/src/classify.ts
@@ -277,14 +277,14 @@ refresh.
 
 ## 6. Tests
 
-`npx vitest run plugins/upstash-redis` — 293 tests: `plugin.test.ts` (26:
+`npx vitest run plugins/upstash-redis` — 313 tests: `plugin.test.ts` (27:
 SDK kit with samples for every tool, presets, classifier conventions, env
 resolution through `resourceEnvResolver`, credential spec, execute and
-discovery against `mockFetch`), `classify.test.ts` (30: the expected slice
-of every tool, denials), `command-table.test.ts` (88: the adversarial table
+discovery against `mockFetch`), `classify.test.ts` (31: the expected slice
+of every tool, denials), `command-table.test.ts` (105: the adversarial table
 of `execute` — one class per command, deletions in disguise, unreadable
 verbs and commands, pipelines and MULTI / EXEC bodies, the dedicated tools
-against the same command through `execute`), `policy.test.ts` (24: the
+against the same command through `execute`), `policy.test.ts` (25: the
 shipped catalog and presets through `evaluateCall` with the gateway's env
 resolver — refusal on an unlabelled or mislabelled database, what each
 preset allows and refuses), `risk-catalog.test.ts` (49: schema, pattern and
@@ -306,7 +306,7 @@ and command words that stay in the JSON body), `data-model.test.ts` (1).
   holds the database and the risk** — the database has no env label (the
   hint reads "touched on a resource with no environment label") or a label
   outside `development` / `staging` / `prod` (`dev` is not `development`).
-  Label it on the connection page.
+  Label it on the account's page (Accounts).
 - **A `DEL`, an `LPOP`, an `EXPIRE k 60`, a `SET k v EX 60` or a `RENAME`
   is refused with `delete-data` missing** — intended: removing data, now or
   when a time to live elapses, needs `delete-data` whichever tool carries

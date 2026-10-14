@@ -90,7 +90,7 @@ and a mission needs both.
 | `reader`    | `read-widgets`, `auto`.                                                               |
 | `developer` | Reads; `widget-write` and `widget-delete` on staging `auto`, on prod with `approval`. |
 
-Presets are a shortcut of the issuance form: the mission that is saved holds
+Presets are a shortcut of the New mission form: the mission that is saved holds
 the explicit list of risks, never a reference to the preset.
 
 ## Tests

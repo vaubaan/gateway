@@ -2,7 +2,7 @@
 title: Railway provider plugin
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - plugins/railway/src/
   - plugins/railway/tests/
@@ -38,11 +38,11 @@ plugins/railway/
     execute.ts           executeRailway, discoverRailwayResources, executeCall, callUpstream,
                          callGraphql, parseFirstJsonRpcFrame
   tests/unit/
-    plugin.test.ts           kit, classifier on Resource[], credential, execute, discover (30)
+    plugin.test.ts           kit, classifier on Resource[], credential, execute, discover (31)
     classify.test.ts         per-tool slices of classifyRailway (22)
     risk-catalog.test.ts     catalog shape and risksTouchedBy (19)
     policy.test.ts           decisions of the gateway core, preset by preset (39)
-    identifier-injection.test.ts  hostile ids and variable names on classify and execute (316)
+    identifier-injection.test.ts  hostile ids and variable names on classify and execute (294)
     data-model.test.ts       data-model integrity (1)
 ```
 
@@ -82,7 +82,7 @@ Railway project this means:
 
 The refusal is `risk-not-accepted`, its hint names the risk and says the
 resource has no environment label (or which label it has). The remedy is
-the owner's: label the project on the connection page with one of the four
+the owner's: label the project on the account's page (Accounts) with one of the four
 environments. Re-issuing the mission does not help.
 
 One label covers the whole project, whichever Railway environment
@@ -346,7 +346,7 @@ with the upstream message.
 
 ## Tests
 
-`npx vitest run plugins/railway` — 405 tests. `plugin.test.ts` (30)
+`npx vitest run plugins/railway` — 406 tests. `plugin.test.ts` (31)
 runs the kit (`assertPluginWellFormed`, `assertPresetsValid`,
 `assertNoWildcard`, `assertCatalogCoverage` with every risk touched),
 classifier branches on `Resource[]` (including the `environmentId`

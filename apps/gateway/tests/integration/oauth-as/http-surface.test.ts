@@ -264,7 +264,7 @@ describe('authorization server over HTTP', () => {
       const waiting = await browser.navigate(url.href, ADA);
       expect(waiting.status).toBe(403);
       const text = await waiting.text();
-      expect(text).toContain('Waiting for an operator');
+      expect(text).toContain('Waiting for an administrator');
       expect(text).toContain('Hosted agent');
       expect(text).toContain(client.client_id);
       expect(text).not.toContain('name="decision"');
@@ -503,7 +503,7 @@ describe('authorization server over HTTP', () => {
       const response = await signedIn.get(url);
       expect(response.status).toBe(403);
       expect(response.headers.get('location')).toBeNull();
-      expect(await response.text()).toContain('Waiting for an operator');
+      expect(await response.text()).toContain('Waiting for an administrator');
     });
 
     it('refuses the bootstrap operator: a delegation is given by a user', async () => {
@@ -511,7 +511,7 @@ describe('authorization server over HTTP', () => {
       await browser.signInAsBootstrap();
       const response = await browser.get(authorizationUrl(clientId, pkce).href);
       expect(response.status).toBe(403);
-      expect(await response.text()).toContain('Sign in as a user');
+      expect(await response.text()).toContain('Sign in as yourself');
     });
 
     it('answers GET only', async () => {

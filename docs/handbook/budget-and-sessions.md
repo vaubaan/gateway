@@ -2,7 +2,7 @@
 title: Budget and sessions — decision core, session service, rate windows
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - apps/gateway/src/server/budget/
   - apps/gateway/src/server/rate-limit/
@@ -196,7 +196,7 @@ opening:
   the period.
 
 An event whose details do not have the shape of its kind opens nothing
-(`parseEventDetails`). The request page and the mission page show "open until …" from the
+(`parseEventDetails`). The request page and the mission page show "runs freely until …" from the
 same function, so they cannot disagree with the decision. An opened gate skips the gate
 dimension only: quota and rate are checked first, as for every call, and an approval that
 happens to exist for the call is left unconsumed.
@@ -303,8 +303,8 @@ adding a member or a token adds no budget
 of `decide`. An orchestrator and its sub-agents, with different labels or with none, draw
 from the same counters and the same rate windows; a label cannot reserve, split or widen
 a quota, and a label the door rejected is simply `null` here
-([execution-door](execution-door.md), "Agent label"). The Mission session page shows the
-calls of the current period per label next to the counters, as counts of audit entries
+([execution-door](execution-door.md), "Agent label"). The activity of a mission
+(`/missions/<id>/session`) shows the calls of the current period per label next to the counters, as counts of audit entries
 and explicitly not as a budget ([audit](audit.md), "Mission session view").
 
 **Not refunded.** The counter increment commits before the upstream call. An upstream

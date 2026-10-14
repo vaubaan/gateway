@@ -2,7 +2,7 @@
 title: Cutover from the v4 SaaS — what to prepare, the checklist, the live checks
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - deploy/compose.yaml
   - deploy/config/
@@ -62,15 +62,16 @@ instance uses apps the company owns, never the ones the v4 operator held.
     `admin.group: gateway-admins` matches nobody. Either list your email, or
     put the group's object id in `admin.group`.
   - **Google: use `admin.emails`.** Google emits no groups claim.
-- [ ] Decide where the IdP settings live: entered on Administration → Identity
-      provider after signing in with the bootstrap token (stored encrypted), or
-      in the mounted configuration (`idp.*`; the Admin page is then read-only
-      and no bootstrap token is needed).
+- [ ] Decide where the IdP settings live: entered on Settings → Sign-in
+      (`/admin/identity-provider`) after signing in with the bootstrap token
+      (stored encrypted), or in the mounted configuration (`idp.*`; the page is
+      then read-only and no bootstrap token is needed).
 
 ### 1.3 One app per provider that needs one
 
-The URL to register at each provider is shown on Administration → Provider
-apps: `<public_url>/connections/callback/<provider>`.
+The URL to register at each provider is shown on Settings → Company apps
+(`/admin/provider-apps`, in the form of each service):
+`<public_url>/connections/callback/<provider>`.
 
 - [ ] **GitHub — a GitHub App of your own** (Settings → Developer settings →
       GitHub Apps → New GitHub App).
@@ -86,7 +87,7 @@ apps: `<public_url>/connections/callback/<provider>`.
   - Five values go into the instance: `app_id`, `app_slug`, `private_key`
     (PEM), **`client_id`** (the App's client ID, not its App ID) and
     **`client_secret`**. Until the last two are set GitHub is shown
-    `incomplete` and cannot be connected: the gateway refuses to connect an
+    "Incomplete: … missing" and cannot be connected: the gateway refuses to connect an
     installation it cannot bind to the person who installed it.
 - [ ] **Supabase — an OAuth app** in your organization (dashboard →
       organization → OAuth Apps), redirect URL
@@ -103,9 +104,9 @@ apps: `<public_url>/connections/callback/<provider>`.
       Gmail plugin is experimental and exposes **no tool** today: connecting it
       is not part of the acceptance set.
 
-Provider apps can be entered on Administration → Provider apps (stored
-encrypted) or mounted as `providers.<id>.*` / `VAUBAAN_PROVIDER_<ID>_<FIELD>`;
-a mounted block wins for the whole provider and makes its card read-only.
+Provider apps can be entered on Settings → Company apps (stored encrypted) or
+mounted as `providers.<id>.*` / `VAUBAAN_PROVIDER_<ID>_<FIELD>`; a mounted
+block wins for the whole provider and makes its form read-only.
 
 ### 1.4 Keys for the providers that need no app
 
@@ -145,26 +146,27 @@ listed again, as questions, in the [appendix](#appendix--decisions-to-confirm).
   gated `approval`: `github.workflow-write-via-file`,
   `github.mint-install-token-push`, `railway[prod].deploy` and
   `railway[prod].upsert-variable`. A call touching one is refused
-  `approval-required` with a URL; you open it (or find it in **Requests**),
-  read the tool and the arguments, and approve — the agent then replays the
+  `approval-required` with a URL; you open it (or find it under **Waiting for you**), read the tool
+  and the arguments, and approve — the agent then replays the
   same call within ten minutes (`approvals.expiry`). If one of them comes up
-  all day — pushing with a minted token is the likely one — choose "Open the
-  gate for the rest of the period" on the request, or set the gate to `auto`
-  on the mission page; either is a decision to write down in the log
+  all day — pushing with a minted token is the likely one — choose "Let it run freely until the
+  reset" on the request, or switch "ask me first" off for that permission on
+  the mission page (the gate becomes `auto`); either is a decision to write down in the log
   ([requests](requests.md), "Approvals").
 - **Supabase has no `developer` preset.** Its presets are
   `read-only-analyst`, `staging-developer` and `migration-operator`.
-  `staging-developer` writes on resources labelled `staging` only: label your
-  projects' environments on the connection page first, or every write is
+  `staging-developer` writes on resources labelled `staging` only: label your projects' environments on the page of the account (Accounts →
+  the account → Resources → Edit) first, or every write is
   refused `risk-not-accepted`.
 - **Environment labels decide what a preset contains.** An env-qualified
   entry (`supabase[staging].…`, `railway[prod].…`) is issued only when a
   selected resource carries that label (Vercel derives it from the call).
-  Unlabelled resources silently narrow the mission: read the "left out" line
-  under the preset.
+  Unlabelled resources narrow the mission: read the "… of the preset left out
+  here" line under the preset, and a preset that would allow nothing is
+  drawn as unavailable with the reason.
 - **The agent names its resources.** v4 filled `owner` / `repo`, `projectId`,
   `project_ref` in when a token had a single binding; v5 does not. The
-  bootstrap kit's agent instructions list the refs; a call without them is
+  setup kit's agent instructions list the refs; a call without them is
   rejected by the classifier (`Vaubaan rejected the call: …`, no refusal
   code).
 - **The tool list is per provider, not per tool.** Every tool of a provider
@@ -176,10 +178,11 @@ listed again, as questions, in the [appendix](#appendix--decisions-to-confirm).
   GitHub personal-access-token path. Supabase `execute_sql` and the `list_*`
   tools go to the read-only endpoint.
 - **A quota extension is capped at what was consumed** in the period (quota
-  5, consumed 5 → at most 5 more), and "Reset the period" resets the claimed
-  risk only: another exhausted risk has its own claim. A larger quota means a
-  new mission: there is no edit screen,
-  "Duplicate" pre-fills the form, and the duplicate has its own token.
+  5, consumed 5 → at most 5 more: "Give back some calls"), and "Reset the
+  count" resets the claimed risk only: another exhausted risk has its own
+  request. A larger quota means a new mission: there is no edit screen,
+  "Start from a mission…" on New mission pre-fills the form, and the new
+  mission has its own key.
 - **Not built**: the stateless caps of the catalogs (items or bytes per call).
   No shipped catalog declares one any more and the door applies none
   ([scope-caps-not-enforced-in-v5-0](../decisions/scope-caps-not-enforced-in-v5-0.md)).
@@ -198,22 +201,23 @@ Preconditions: section 1 done; v4 untouched and serving.
       disabled). `curl -s <public_url>/healthz` answers `"status":"ok"` with the
       expected version and commit.
 - [ ] **A2 — Identity provider.** Open `/admin/bootstrap` with the bootstrap
-      token; configure the IdP on Administration → Identity provider; "Test
-      login" shows your email and Operator "yes (matches the admin rule)"; sign in through the IdP;
-      `/admin` shows the bootstrap token as revoked.
-- [ ] **A3 — Provider apps.** Enter each app of §1.3 on Administration →
-      Provider apps; every card reads `configured` (GitHub also reads
-      `installations verified`).
-- [ ] **A4 — Connect each provider** of the inventory. Each ends `active`
-      with its resources. **Live checks L1, L2 and L3 happen here** (§4).
-- [ ] **A5 — Label environments** on the connection pages (Supabase and
+      token; configure the IdP on Settings → Sign-in; "Test the sign-in" shows
+      your email and Administrator "yes: you match the rule"; sign in through
+      the IdP; Settings → Setup (`/admin`) shows the install token as revoked.
+- [ ] **A3 — Provider apps.** Enter each app of §1.3 on Settings → Company
+      apps; every row reads "registered" (GitHub also reads "installations
+      verified").
+- [ ] **A4 — Connect each provider** of the inventory (Accounts → Connect an
+      account). Each ends "Connected" (`active`) with its resources. **Live checks L1, L2 and L3 happen here** (§4).
+- [ ] **A5 — Label environments** on the page of each account (Supabase and
       Railway projects: `staging`, `prod`), hide what no mission should see.
 - [ ] **A6 — Issue one mission per code project**: its connections, the
       resources of that project only, the plugin's developer preset
       (`developer` for GitHub, Vercel, Railway; `staging-developer` for
-      Supabase), recurring daily period, **no expiry**. Read the three-line
-      summary and the "left out" lines. Copy the bootstrap kit — the token is
-      shown once.
+      Supabase), recurring daily period, **no expiry**. Read the summary of the rail (Can,
+      Asks you first, Cannot), the "left out here" lines, and the list of
+      permissions "Create mission" asks you to confirm. Copy the setup kit —
+      the key is shown once.
 - [ ] **A7 — Repoint the project.** Export `VAUBAAN_MISSION_TOKEN` where
       Claude Code will read it, replace the v4 server entry of the project's
       `.mcp.json` with the kit's, paste the kit's agent instructions where the
@@ -268,9 +272,8 @@ Only after B. Each line is irreversible.
 
 ### D. After the cutover (no deadline)
 
-- [ ] **D1** — Tighten the missions one by one: narrow the risks, add
-      `approval` on the protected-merge and prod-destructive entries (the gate
-      of an accepted risk is edited on the mission page), move from "one mission per code project" to "one
+- [ ] **D1** — Tighten the missions one by one: narrow the risks, add `approval` on the protected-merge and prod-destructive entries (the "ask
+      me first" switch of a permission, on the mission page), move from "one mission per code project" to "one
       mission per objective". Feed the values that worked into the
       `mission-presets-default-values` ADR.
 
@@ -292,9 +295,10 @@ GitHub returning the `state` the gateway put on the installation URL when
 "Request user authorization (OAuth) during installation" is on.
 
 - Do: connect GitHub on an account where the App is **not** installed yet.
-- Expect: back on `/accounts/<id>` with "Connected" and the repositories.
-- If not: "Not connected: this authorization attempt has expired, was already
-  used…" (`state-invalid`) means GitHub dropped the `state`. Copy the callback
+- Expect: back on `/accounts/<id>` with the notice "Connected" and the
+  repositories.
+- If not: "Not connected", then "This authorization attempt has expired, was
+  already used, or was started by another session. …" (`state-invalid`) means GitHub dropped the `state`. Copy the callback
   URL from the address bar (it holds no secret that outlives a minute) and
   stop: the connect flow needs a host-initiated authorize redirect before
   GitHub can be connected at all.
@@ -305,10 +309,12 @@ GitHub returning the `state` the gateway put on the installation URL when
 For an App already installed on the account, GitHub shows its configure page
 instead of the installation page, and may come back without a `code`.
 
-- Do: revoke the connection made in L1 on the gateway (the App stays
-  installed at GitHub), then connect GitHub again.
+- Do: disconnect the account made in L1 on the gateway ("Disconnect", the
+  last line of its page; the App stays installed at GitHub), then connect
+  GitHub again.
 - Expect: back with "Connected".
-- If not: "Not connected — the provider returned no user authorization". The
+- If not: "Not connected", with "the provider returned no user
+  authorization; …" as its last line. The
   workaround for the day is to uninstall the App at GitHub and connect again
   (L1's path); report it, the same host-initiated redirect fixes both.
 - [ ] Answer: \_\_\_\_
@@ -327,8 +333,8 @@ it was never confirmed against the live API.
 - Do: connect Railway.
 - Expect: the projects are listed as resources. Then, from an agent, one
   `railway__*` read and one variable read.
-- If not: the connection is kept but shows "resource discovery failed" with
-  Railway's answer; the variable tools fail upstream. The mission can still
+- If not: the account is kept and the notice reads "Connected, but looking
+  for what it reaches failed" with Railway's answer; the variable tools fail upstream. The mission can still
   use the tools that go through Railway's MCP server. Report Railway's error
   text.
 - [ ] Answer: \_\_\_\_
@@ -368,7 +374,7 @@ outcome and its evidence stay in one place. Its columns:
 | 1   |            |                        |      |              |                  |           |                     |
 
 Where to read each field: the agent's error (`code`, `hint`, and the fields
-below), or the Audit page filtered by mission and decision `refused`.
+below), or Activity (`/activity`) filtered by mission and by the decision "refused".
 
 | Code                               | Field to copy                    | Expected when…                                                                | Unexpected when…                                                                                           |
 | ---------------------------------- | -------------------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
@@ -476,7 +482,7 @@ cutover; each is a default that can be changed, most in one place.
 | Entra ID groups are object ids: recommend emails, or document the app registration setting? | This page recommends `admin.emails` for Entra.                                                                                                                                                 |
 | A manual "revoke the bootstrap token now" button?                                           | None: the token is revoked by the first IdP sign-in of a user matching the admin rule.                                                                                                         |
 | Refuse `bootstrap_token` once an IdP is configured?                                         | Optional: harmless to leave set, refused once revoked.                                                                                                                                         |
-| Where do non-operators land after sign-in?                                                  | On the page they came from; without one, on `/login`, which shows who is signed in. `/` goes to `/missions`.                                                                                   |
+| Where do non-operators land after sign-in?                                                  | On the page they came from; without one, on `/login`, which shows who is signed in and "Open the gateway". `/` is the home ("Now").                                                            |
 | How are acts done with the bootstrap token audited?                                         | Under the literal actor `bootstrap`.                                                                                                                                                           |
 | OAuth refresh-token replay on the management door                                           | Built: a replayed refresh token or authorization code revokes the delegation, except the token just rotated, accepted once more within `oauth.refresh_reuse_window_seconds` (30 s by default). |
 

@@ -260,10 +260,10 @@ left out.
 
 Groups live in `groups` / `group_members`, told apart by `groups.source`:
 
-| `source` | Created by                            | Members changed by                             |
-| -------- | ------------------------------------- | ---------------------------------------------- |
-| `idp`    | the first sign-in that claims it      | each sign-in (`GroupsRepo.syncIdpMemberships`) |
-| `local`  | the operator, Administration → Groups | the operator only; a sign-in never touches it  |
+| `source` | Created by                       | Members changed by                             |
+| -------- | -------------------------------- | ---------------------------------------------- |
+| `idp`    | the first sign-in that claims it | each sign-in (`GroupsRepo.syncIdpMemberships`) |
+| `local`  | the operator, Settings → Teams   | the operator only; a sign-in never touches it  |
 
 The **merge** is the membership read itself: `GroupsRepo.groupsOf(userId)`
 returns both kinds, and that list is what every authority check uses. A claim
@@ -354,7 +354,8 @@ The admin rule counts **IdP-claimed** groups only (`currentAuthority` in
   and turns `unowned` back to `active` (an `expired` one stays `expired` for
   its new owner to reconnect); entry `connection-reassigned`.
   `ConnectionService.reassignTargets()` lists the groups `reassign` accepts —
-  the ones that have a member — for the form of Administration → Connections.
+  the ones that have a member — for the form of Settings → Accounts without
+  owner (`/admin/connections`).
 - `ownerActRefusal(connection)` (`connections/service.ts`) is the one
   statement of "a revoked or unowned connection takes no owner act":
   `connection-revoked`, `connection-unowned` or `null`. The connection
@@ -512,12 +513,13 @@ mission back.
   connection still has its owner, an `unowned` one has none). Otherwise the
   answer is "not found" — an owner is not told which missions that serve carry
   their connection. A delegated client acts for the creator only.
-- **Where.** `/accounts/<id>` shows the card "Orphaned missions" when
-  `MissionService.orphanedOn(user, connectionId)` lists any: name, who issued
-  it, why (`OrphanCause`), and "Close", which asks for the mission's name
+- **Where.** On `/accounts/<id>`, under "Missions using this account"
+  (`MissionService.onConnection`), an orphaned mission carries "Needs an
+  owner", who created it, and "Close", which asks for the mission's name
   (`CloseOrphanedMission`, client) and posts to `/api/missions/<id>/revoke`.
-  On a revoked connection the card lists every mission the revocation left
-  orphaned.
+  On a disconnected account the list holds every mission the revocation left
+  orphaned. `MissionService.orphanedOn(user, connectionId)` is the same read
+  narrowed to the orphaned ones; no page calls it any more.
 - **Trail.** `mission-revoked` under the owner's name, `before.status:
 'orphaned'`, and `after.closed_as: 'connection-owner'` with the
   `connection_id` they own. The creator's entry carries neither field.
@@ -638,7 +640,7 @@ A page that catches a service error matches it by shape (`isShareError(err,
 | `tests/integration/auth/deactivate-user.test.ts`          | a deactivated user holds nothing: mission `orphaned` with nothing written on it, own connection `unowned` and reassigned by the operator, `mission-restored` on reactivation; what a half-failed deactivation left open is closed before the user is active again, and a reactivation that cannot close it does not happen ([authentication](authentication.md)) |
 | `tests/integration/authority/handlers.test.ts`            | the form posts and their notices                                                                                                                                                                                                                                                                                                                                 |
 | `tests/integration/authority/share-restores.test.ts`      | the forecast (exact, read-only, union of shares, replacement of the target's share, group target), and the confirmation over HTTP: nothing stored on the first post, shared on the post that carries every mission, back again otherwise                                                                                                                         |
-| `tests/integration/authority/close-orphaned.test.ts`      | an owner of the connection closes an orphaned mission (entry, tokens, the door), never one that serves; strangers, former group members and delegated clients read "not found"; what the connection page lists; the route                                                                                                                                        |
+| `tests/integration/authority/close-orphaned.test.ts`      | an owner of the connection closes an orphaned mission (entry, tokens, the door), never one that serves; strangers, former group members and delegated clients read "not found"; what the page of the account lists; the route                                                                                                                                    |
 | `tests/integration/authority/rules-read-by-pages.test.ts` | what a page reads is what the act answers: `ownerActRefusal` and `ShareContext.unshareable`, `transferTargets`, `ConnectionService.reassignTargets()`, `gateEditBlockedBy` and `MissionDetail.gates_editable`, on every status                                                                                                                                   |
 | `tests/integration/store/ownership-and-orphans.test.ts`   | the repository transitions; migration `0007` (reset, triggers)                                                                                                                                                                                                                                                                                                   |
 | `tests/integration/store/audit-guarded-append.test.ts`    | `AuditRepo.appendUnlessLatest`: two writers, one entry; per object, within the guarded acts, not for an older equal entry                                                                                                                                                                                                                                        |
@@ -674,20 +676,20 @@ at the execution door` with the same fields. Do not look for `orphaned` in
   page and the post (a mission was orphaned meanwhile), or the pending share
   expired (10 minutes) and the form was posted without `restore` values.
 - **A beneficiary cannot tick a risk at issuance.** It is outside
-  `authorityOf`: compare "Shared with you" on `/accounts` (what they received) with the
-  owner's "Shares" card. A share made to a group reaches them only while
+  `authorityOf`: compare "Shared with you" on `/accounts` (what they received) with
+  "Who has access" on the owner's page of the account. A share made to a group reaches them only while
   `groupsOf(user)` lists the group.
-- **"Not shared: … not in this provider's catalog".** The form posted an id
+- **"Some permissions are not in this service's catalog; no access was given."** The form posted an id
   that is not an explicit id (`ShareError('risk-unknown', detail)` lists
   them): env-scoped entries are shared as `provider[env].name`.
 - **A connection vanished from its owners' list.** Its status is `unowned`
   (or its owner group is empty, or its owner user was deactivated):
-  Administration → Connections lists it.
+  Settings → Accounts without owner (`/admin/connections`) lists it.
   Log line `connection has no owner left`.
 - **A user in the admin group is not an operator.** A local group holds the
   rule's name, so the IdP claim is skipped (log: `IdP group claim collides
 with a local group`), and local membership does not count.
-- **"The target already owns this connection".** `target-is-owner`: the
+- **"They already own this account …".** `target-is-owner`: the
   email is the owner's, or that of a current member of the owner group. A
   co-owner needs no share; to keep somebody's access after they leave the
   group, an owner shares to them once they have left.
@@ -724,9 +726,9 @@ with a local group`), and local membership does not count.
   door sees it and refuses or serves; nobody is named).
 - Deleting a group.
 - A deprovisioning feed from the IdP: `users.status = 'removed'` is set by an
-  operator only (Administration → Users, handbook
+  operator only (Settings → People, handbook
   [authentication](authentication.md)); nothing syncs with the IdP's
   directory.
 - Migrating shares made to a co-owner before the `target-is-owner` rule
-  covered them: such a row still stands, is listed in the connection's Share
-  dialog, and an owner revokes it there.
+  covered them: such a row still stands, is listed under "Who has
+  access" on the page of the account, and an owner removes it there.

@@ -2,7 +2,7 @@
 title: SSH provider — bash over SSH on the v5 SDK
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-14
 tracks:
   - plugins/ssh/src/
   - plugins/ssh/tests/unit/
@@ -307,7 +307,7 @@ The environment is the **owner's label on the host resource**. The default
 `host[<ref>]` segment (first `ident` equal to a resource ref), so no
 `envOf(slice)` hook is needed — unlike Vercel, where the env lives in the
 arguments. An unlabelled host never qualifies a write risk, so a mission on
-it can only read; the owner labels it in the connection's resources page.
+it can only read; the owner labels it on the account's page (Accounts).
 `acceptable_in_envs` closes the label set to `dev | staging | prod`: a host
 labelled `qa` would not qualify either.
 
@@ -458,8 +458,8 @@ design is in [`bash-provider.md`](../legacy/bash-provider.md). Until then
 
 ## References
 
-- Code: `plugins/ssh/src/`; tests `plugins/ssh/tests/unit/` (696 tests:
-  299 kit / classifier / evaluated presets / lexer / allow-list /
+- Code: `plugins/ssh/src/`; tests `plugins/ssh/tests/unit/` (697 tests:
+  300 kit / classifier / evaluated presets / lexer / allow-list /
   credential / fake transport in `plugin.test.ts`, 181 adversarial lines in
   `adversarial.test.ts`, 90 in `classify.test.ts`, 87 hostile `host` and
   `cmd` values fed to `classify` and to `execute` in `injection.test.ts`,

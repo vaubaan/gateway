@@ -172,12 +172,12 @@ the catalog's `acceptable_in_envs` decides.
 
 ## Presets
 
-| Preset               | Scope                                                                                                                                                      |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `read-only`          | Email status, domains, campaign metadata. No PII, no write.                                                                                                |
-| `developer`          | One mission per code project: reads plus transactional sends to internal and allow-listed recipients, generous budgets. No bulk, no PII, no domain change. |
-| `marketing-operator` | Reads including PII, contacts and segments, drafts and single sends `auto`; `broadcast-send`, `send-batch` and `segment-write` need `approval`.            |
-| `domain-admin`       | Read and verify domains freely; `domain-write` needs `approval`. No send.                                                                                  |
+| Preset               | Scope                                                                                                                                                     |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `read-only`          | Email status, domains, campaign metadata. No PII, no write.                                                                                               |
+| `developer`          | One mission per code project: reads plus transactional sends to internal and allow-listed recipients, generous limits. No bulk, no PII, no domain change. |
+| `marketing-operator` | Reads including PII, contacts and segments, drafts and single sends `auto`; `broadcast-send`, `send-batch` and `segment-write` need `approval`.           |
+| `domain-admin`       | Read and verify domains freely; `domain-write` needs `approval`. No send.                                                                                 |
 
 Presets are UI sugar: the persisted policy is the explicit enumeration.
 `send-email-external-unbounded` is env-scoped and never offered; a creator
@@ -189,7 +189,7 @@ evaluates each one call by call). Values are a starting point — ADR
 
 ## Tests
 
-`npx vitest run plugins/resend` — 232 tests: the SDK kit
+`npx vitest run plugins/resend` — 233 tests: the SDK kit
 (`assertPluginWellFormed`, `assertCatalogCoverage` with no fallback hit,
 `assertNoWildcard`, `assertPresetsValid`), the classifier (cross-cutting
 rules in `plugin.test.ts`, scenarios per tool in `classify.test.ts`),
