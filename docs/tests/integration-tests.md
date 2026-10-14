@@ -2625,7 +2625,7 @@ failed after 2 parts (Error)'` — not the provider's sentence — the credit
 
 > Covers: handbook [[git-remote]], [[execution-door]] (shared admission,
 > door-bound tools, catalog `git_remote`), [[providers/github]] (review, ref
-> moves, permissions). Spec: `vaubaan-gateway.md` §4.1 bis, §2.4, §4.4. ADR
+> moves, permissions). Spec: `vaubaan-gateway.md` §4.1 ter, §2.4, §4.4. ADR
 > `gateway-as-git-remote`.
 
 The real `git` client (git 2.48.1 on the development machine) against the real
@@ -2634,19 +2634,23 @@ GitHub is `FakeGithubHost` (`tests/integration/git/fake-github-host.ts`): the
 real `git http-backend` over bare repositories behind a loopback listener, and
 a REST API for installation tokens (with per-installation permissions and
 GitHub's 422), `GET /repos`, `git/ref`, `git/refs` (create, `force:false`
-checked with `merge-base --is-ancestor`, delete) and `compare` computed with
-git on the same repositories. The agent's git has an empty configuration, the
+checked with `merge-base --is-ancestor`, delete), `compare` (with its
+`commits`) and `commits/{sha}` computed with git on the same repositories. The agent's git has an empty configuration, the
 setup kit's credential helper and the key in `VAUBAAN_MISSION_TOKEN`. Nothing
 reaches github.com.
 
-- **`packages/plugin-sdk/tests/unit/git-wire.test.ts`** (20) — pkt-line
+- **`packages/plugin-sdk/tests/unit/git-wire.test.ts`** (32) — pkt-line
   framing (lengths 0–3, too large, not hex, truncated), the same packets
   whatever the chunking with the rest of the stream handed on byte for byte,
   side-band splitting; the command list (every command, capabilities of the
   first line, zero ids, malformed lines, shallow lines, push certificates, a
   list without its flush, round trip); **a seeded fuzz of 4000 mutated
   lists**: a well-formed list or a protocol error, nothing else; report-status
-  and advertisement round trips.
+  and advertisement round trips; a feature list on any command line;
+  `prependChunk`; the v2 request head (one command, wherever it is; none, two,
+  empty, no end, too long refused; **a property test over 3000 generated
+  heads**); the listing filters (the capabilities moved off a hidden first
+  ref, the placeholder line, v2 untouched, `ls-refs`).
 - **`tests/integration/git/git-remote.test.ts`** (14) — clone with protocol v2
   (the header relayed) and v0, the key never upstream, a read token for one
   repository, one `github__git_fetch` entry; a fetch after an upstream push; a
@@ -2679,6 +2683,30 @@ reaches github.com.
   of an existing ref; a client gone mid-pack (nothing left at GitHub, no row);
   an in-flight temporary ref swept past its deadline; clones with
   `protocol.version` 0, 1 and 2.
+- **`tests/integration/git/git-remote-review.test.ts`** (13) — one
+  regression test per finding of the adversarial review (2026-10-14): a push
+  refused **budget-exhausted** or **rate-limited** sends nothing to GitHub's
+  receive-pack; a temporary ref GitHub refuses to delete keeps its row,
+  postponed (the sweeper does not block on it); a later push to the same ref
+  supersedes the one waiting for approval; the ceiling of 100 temporary refs
+  per mission; a capability on the **second command line** refused; a push
+  without `report-status` refused with `ERR`; another mission's `ls-remote`
+  (v2 and v0) lists no `refs/vaubaan/*`, whose names carry no mission id; a
+  read-only mission gets a 403 for the push advertisement and no write token;
+  **a workflow added then taken back inside one push asks for approval**; a v2
+  request naming two commands refused and audited, `ls-refs` with its
+  capabilities first free and filtered; **an SSH-signed commit arrives at
+  GitHub byte for byte, signature intact**.
+- **`tests/unit/server/git/command-list.test.ts`** (3) — **a property test of
+  `readPushCommands` over 3000 generated command lists** (capabilities on any
+  line, hostile ref names, duplicates, 51 commands): whatever is accepted is
+  what the door implements, with `report-status`, unique and well-formed
+  refs; 2000 mutated byte strings answered, never thrown; the in-flight bound.
+- **`plugins/github/tests/unit/git-moves.test.ts`** (6) — a force-push and a
+  delete as receive-pack compare-and-swap on the reviewed old id; a provider
+  failure on the second ref reported on that ref, before any ref fails the
+  call; an intermediate commit's workflow path counted; a commit of 300 files
+  refused.
 - **`src/server/missions/bootstrap-kit.test.ts`** (21) — the kit's git step:
   absent without a served repository; the helper reading the variable for the
   instance's origin, never the secret, a store or a URL credential; the
