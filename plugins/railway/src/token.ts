@@ -71,7 +71,7 @@ export const railwayTokenCredential: ApiKeyCredentialSpec = {
   createUrl: RAILWAY_TOKENS_PAGE,
   guide: {
     steps: [
-      'Sign in to Railway as the account the agents will act as; a shared service account is fine.',
+      'Sign in to Railway as the account the agents will act as.',
       'Open Account settings, Tokens, and create a token with No workspace selected.',
       'Railway tokens carry no permission choice: the account reaches what its role allows, and Vaubaan decides who may do what.',
       'Copy the token and paste it here. Railway shows it once.',

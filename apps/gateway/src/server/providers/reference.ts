@@ -10,12 +10,7 @@
  * community validation status.
  */
 import { parseSlice } from '@vaubaan/policy-engine';
-import {
-  credentialSpecsOf,
-  type PluginRegistry,
-  type RegisteredPlugin,
-  type TokenHandout,
-} from '@vaubaan/plugin-sdk';
+import type { PluginRegistry, RegisteredPlugin, TokenHandout } from '@vaubaan/plugin-sdk';
 import type {
   CredentialKind,
   DataModel,
@@ -98,7 +93,11 @@ function cardOf(registered: RegisteredPlugin, risks: readonly CatalogRisk[]): Pr
     description: plugin.description ?? null,
     experimental: plugin.experimental === true,
     credential_kind: plugin.credential.kind,
-    credential_kinds: credentialSpecsOf(plugin).map((spec) => spec.kind),
+    // `credentialSpecsOf`, spelled out: this module also reaches client components, and
+    // a value import of the SDK would pull its server dependencies into the browser.
+    credential_kinds: [plugin.credential, ...(plugin.alternativeCredentials ?? [])].map(
+      (spec) => spec.kind,
+    ),
     counts: countsOf(registered, risks),
     plane_slugs: plugin.dataModel.planes.map((plane) => plane.slug),
     envs: catalogEnvs(plugin.catalog.risks),

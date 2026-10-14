@@ -67,7 +67,7 @@ export const githubTokenCredential: ApiKeyCredentialSpec = {
   createUrl: GITHUB_TOKENS_PAGE,
   guide: {
     steps: [
-      'Sign in to GitHub as the account the agents will act as; a shared service account is fine.',
+      'Sign in to GitHub as the account the agents will act as.',
       'Open Settings, Developer settings, Personal access tokens, Fine-grained tokens, then Generate new token.',
       'Choose the organisation as resource owner, and only the repositories the missions need.',
       'Tick the permissions below; GitHub adds Metadata (read) by itself.',

@@ -50,6 +50,7 @@ import { fileURLToPath } from 'node:url';
 
 import { GITHUB_APP_PERMISSIONS, githubCredential } from '@vaubaan/plugin-github';
 import { defaultPermissionChoice, type AppManifestRegistration } from '@vaubaan/plugin-sdk';
+import { SUPABASE_API_BASE } from '@vaubaan/plugin-supabase';
 import { mockFetch, type MockFetch } from '@vaubaan/plugin-sdk/testing';
 
 import { getRoot, type GatewayRoot } from '../../../src/server/compose/root';
@@ -181,6 +182,8 @@ const CREATED_APP = {
     publicKeyEncoding: { type: 'spki', format: 'pem' },
   }).privateKey,
 };
+/** The one project the mocked Supabase lists. */
+const MOCK_SUPABASE_PROJECT = 'abcdefghijklmnopqrst';
 
 const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -263,6 +266,27 @@ function mockedGithub(): MockFetch {
           content: Buffer.from('# mocked file\n').toString('base64'),
         };
       },
+    },
+    // Supabase, for the account connected with a pasted personal access token
+    // (no Supabase app is registered here): the token's check and discovery.
+    {
+      method: 'GET',
+      url: `${SUPABASE_API_BASE}/organizations`,
+      body: [{ id: 'org-e2e', slug: 'acme', name: 'Acme' }],
+    },
+    {
+      method: 'GET',
+      url: `${SUPABASE_API_BASE}/projects`,
+      body: [
+        {
+          id: MOCK_SUPABASE_PROJECT,
+          ref: MOCK_SUPABASE_PROJECT,
+          name: 'app-staging',
+          organization_slug: 'acme',
+          region: 'eu-west-1',
+          status: 'ACTIVE_HEALTHY',
+        },
+      ],
     },
     {
       // A file created or updated on a branch (`github__create_or_update_file`).

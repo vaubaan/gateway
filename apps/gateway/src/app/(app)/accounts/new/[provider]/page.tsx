@@ -30,6 +30,7 @@ import {
   Callout,
   Disclosure,
   Field,
+  FormStep,
   Hint,
   Input,
   PageHeader,
@@ -81,7 +82,7 @@ function ledeOf(provider: ConnectableProvider, method: ConnectMethod): string {
       return `You install your company’s ${name} app on the account you choose, then come back here.`;
     case 'api-key':
       return method.label
-        ? `Paste a ${method.label} you create at ${name}; a shared service account is fine.`
+        ? `Create a ${method.label} at ${name} and paste it here.`
         : `${name} has no sign-in flow for this: paste a key you created there.`;
     case 'ssh-key':
       return 'The gateway makes a key pair and keeps the private key; you install the public key on the host.';
@@ -166,6 +167,31 @@ function wayPath(
   return `${NEW_CONNECTION_PATH}/${encodeURIComponent(provider.id)}?${query.toString()}`;
 }
 
+/**
+ * The form alone, or — for a way with a guide — the guide's steps, then the
+ * form as the last step ("Paste it here"): the token is created before it is
+ * pasted.
+ */
+function Guided({
+  guide,
+  step,
+  children,
+}: {
+  guide: React.ReactNode;
+  step: number;
+  children: React.ReactNode;
+}) {
+  if (!guide) return <>{children}</>;
+  return (
+    <div className={styles.guided}>
+      {guide}
+      <FormStep n={step} title={TOKEN_CONNECT.pasteTitle} testId="token-paste">
+        {children}
+      </FormStep>
+    </div>
+  );
+}
+
 function unownedOf(reconnect: ConnectionDetail | null): boolean {
   return reconnect?.connection.status === 'unowned';
 }
@@ -212,6 +238,11 @@ export default async function ConnectOneAccountPage({
   const other = provider.methods.find((m) => m !== method && m.configured) ?? null;
   const appWay = provider.methods.find((m) => m.usesApp) ?? null;
   const tokenWithoutApp = !method.usesApp && appWay !== null && !appWay.configured;
+  // The form is the last step after the guide's one or two.
+  const pasteStep =
+    method.guide && (method.guide.permissions.length > 0 || method.unavailableTools.length > 0)
+      ? 3
+      : 2;
   // The server refuses to reconnect an account without owner (`connection-unowned`).
   const unowned = reconnect?.connection.status === 'unowned';
   const name = provider.displayName;
@@ -279,89 +310,96 @@ export default async function ConnectOneAccountPage({
           connect their {name} accounts.
         </Callout>
       ) : (
-        <form
-          method="post"
-          action={`${CONNECTIONS_PATH}/connect/${encodeURIComponent(provider.id)}`}
-          className={styles.form}
+        <Guided
+          guide={
+            method.guide ? (
+              <>
+                {tokenWithoutApp && (
+                  <Hint>
+                    {TOKEN_CONNECT.appMissing(name)}{' '}
+                    {principal.isOperator && TOKEN_CONNECT.appMissingForAdmin}
+                  </Hint>
+                )}
+                <TokenGuide service={name} method={method} />
+              </>
+            ) : null
+          }
+          step={pasteStep}
         >
-          {returnTo && <input type="hidden" name="return_to" value={returnTo} />}
-          <input type="hidden" name={METHOD_FIELD} value={method.kind} />
-          {tokenWithoutApp && (
-            <Hint>
-              {TOKEN_CONNECT.appMissing(name)}{' '}
-              {principal.isOperator && TOKEN_CONNECT.appMissingForAdmin}
-            </Hint>
-          )}
-          {reconnect && (
-            <input type="hidden" name="connection_id" value={reconnect.connection.id} />
-          )}
-          {provider.experimental && (
-            <Callout tone="neutral" title="Experimental service">
-              It can be connected, but it is left out of new missions by default and may offer no
-              tool yet.
-            </Callout>
-          )}
-          {!reconnect && (
-            <Field
-              label="Name"
-              shape="how it appears in missions"
-              optional
-              htmlFor="connection-name"
-              hint={`Useful with two ${name} accounts.`}
-            >
-              <Input
-                id="connection-name"
-                name="name"
-                maxLength={MAX_NAME_LENGTH}
-                placeholder={name}
-                autoComplete="off"
-                defaultValue={typed?.name ?? ''}
-              />
-            </Field>
-          )}
-          <CredentialFieldInputs
-            idPrefix="credential"
-            fields={method.fields}
-            values={{ ...reconnect?.fields, ...typed?.values }}
-            invalid={typed?.invalid}
-          />
-          <div className={styles.formActions}>
-            <Button type="submit" variant="primary">
-              {submitLabel(provider, method, reconnect !== null)}
-            </Button>
-            <ButtonLink href={back} variant="ghost">
-              {ACTIONS.cancel}
-            </ButtonLink>
-            <span className={styles.formHint}>
-              {redirectFlow
-                ? `You come back here once ${name} has answered.`
-                : method.kind === 'ssh-key'
-                  ? 'The private key is encrypted at rest and never shown.'
-                  : TOKEN_CONNECT.submitHint(name)}
-            </span>
-          </div>
-          {method.guide ? (
-            <div className={styles.prose}>
-              <p>{TOKEN_CONNECT.whatWeDo(name)}</p>
-              <p>{TOKEN_CONNECT.sharedAccount}</p>
+          <form
+            method="post"
+            action={`${CONNECTIONS_PATH}/connect/${encodeURIComponent(provider.id)}`}
+            className={styles.form}
+          >
+            {returnTo && <input type="hidden" name="return_to" value={returnTo} />}
+            <input type="hidden" name={METHOD_FIELD} value={method.kind} />
+            {reconnect && (
+              <input type="hidden" name="connection_id" value={reconnect.connection.id} />
+            )}
+            {provider.experimental && (
+              <Callout tone="neutral" title="Experimental service">
+                It can be connected, but it is left out of new missions by default and may offer no
+                tool yet.
+              </Callout>
+            )}
+            {!reconnect && (
+              <Field
+                label="Name"
+                shape="how it appears in missions"
+                optional
+                htmlFor="connection-name"
+                hint={`Useful with two ${name} accounts.`}
+              >
+                <Input
+                  id="connection-name"
+                  name="name"
+                  maxLength={MAX_NAME_LENGTH}
+                  placeholder={name}
+                  autoComplete="off"
+                  defaultValue={typed?.name ?? ''}
+                />
+              </Field>
+            )}
+            <CredentialFieldInputs
+              idPrefix="credential"
+              fields={method.fields}
+              values={{ ...reconnect?.fields, ...typed?.values }}
+              invalid={typed?.invalid}
+            />
+            <div className={styles.formActions}>
+              <Button type="submit" variant="primary">
+                {submitLabel(provider, method, reconnect !== null)}
+              </Button>
+              <ButtonLink href={back} variant="ghost">
+                {ACTIONS.cancel}
+              </ButtonLink>
+              {!method.guide && (
+                <span className={styles.formHint}>
+                  {redirectFlow
+                    ? `You come back here once ${name} has answered.`
+                    : method.kind === 'ssh-key'
+                      ? 'The private key is encrypted at rest and never shown.'
+                      : TOKEN_CONNECT.submitHint(name)}
+                </span>
+              )}
             </div>
-          ) : (
-            <Disclosure
-              id={`account-connect:${method.kind}`}
-              show={redirectFlow ? `What happens at ${name}` : 'How to get what this form asks'}
-              hide="Hide the how-to"
-              testId="connect-how-to"
-            >
-              <HowTo provider={provider} method={method} reconnect={reconnect !== null} />
-            </Disclosure>
-          )}
-        </form>
-      )}
-
-      {!unowned && method.configured && (method.guide || method.unavailableTools.length > 0) && (
-        <div className={styles.guideBlock}>
-          <TokenGuide service={name} method={method} />
-        </div>
+            {method.guide ? (
+              <div className={styles.prose}>
+                <p>{TOKEN_CONNECT.whatWeDo(name)}</p>
+                <p>{TOKEN_CONNECT.sharedAccount}</p>
+              </div>
+            ) : (
+              <Disclosure
+                id={`account-connect:${method.kind}`}
+                show={redirectFlow ? `What happens at ${name}` : 'How to get what this form asks'}
+                hide="Hide the how-to"
+                testId="connect-how-to"
+              >
+                <HowTo provider={provider} method={method} reconnect={reconnect !== null} />
+              </Disclosure>
+            )}
+          </form>
+        </Guided>
       )}
 
       {!reconnect && (

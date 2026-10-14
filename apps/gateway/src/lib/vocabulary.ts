@@ -1257,6 +1257,7 @@ export const TOKEN_CONNECT = {
   expiresSoonBody:
     'Create a new token at the service and reconnect before then; missions keep running on the same account.',
   orToken: 'or a token',
+  pasteTitle: 'Paste it here',
 } as const;
 
 /** A token that expires within this many days is announced on its account page. */

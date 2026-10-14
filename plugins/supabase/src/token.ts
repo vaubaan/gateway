@@ -76,7 +76,7 @@ export const supabaseTokenCredential: ApiKeyCredentialSpec = {
   createUrl: SUPABASE_TOKENS_PAGE,
   guide: {
     steps: [
-      'Sign in to Supabase as the account the agents will act as; a shared service account is fine.',
+      'Sign in to Supabase as the account the agents will act as.',
       'Open Account preferences, Access tokens, then generate a new token.',
       'Make it a scoped token: pick the organisation and only the projects the missions need.',
       'Grant the permissions below, choose an expiry, and generate the token.',
