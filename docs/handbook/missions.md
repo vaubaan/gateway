@@ -1116,7 +1116,7 @@ Read by the creator and by the teammates. In the order a person needs it:
    **Change limits** button (`data-testid="change-limits"`, also in "···"):
    it reloads the page with `?edit=limits#permissions`, and the section then
    shows `LimitsEditor` (`limits-editor.tsx`, a client component) instead of
-   the disclosure — the same permission table (`PermissionTable` `read`),
+   the disclosure — the same permission table (`PermissionTable` `usage`: four columns, the limit in the usage column, so it fits a phone),
    each row with what was used this period and two fields, the limit per
    period and the calls per minute (or per the row's own window); no tick, no
    switch. **Review the change** (disabled while nothing moved or a field is

@@ -162,9 +162,9 @@ export function LimitsEditor({
   return (
     <div data-testid="limits-editor">
       <PermissionTable
-        variant="read"
+        variant="usage"
         caption={`Limits of ${missionName}, being changed`}
-        labels={{ limit: limitLabel }}
+        labels={{ usage: limitLabel }}
         testId="limits-table"
       >
         {groups.map((group) => (
@@ -188,7 +188,7 @@ export function LimitsEditor({
                   id={row.risk_id}
                   severity={row.level}
                   tag={row.env ? <EnvTag env={row.env} /> : undefined}
-                  perDay={
+                  usage={
                     <Input
                       size="sm"
                       type="number"
