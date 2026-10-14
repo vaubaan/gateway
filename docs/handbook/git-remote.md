@@ -20,11 +20,19 @@ tracks:
   - packages/plugin-sdk/src/git/
   - packages/gateway-core/src/pipeline.ts
   - plugins/github/src/git-remote.ts
+  - plugins/github/src/git-credential.ts
+  - plugins/github/src/git-rest.ts
+  - plugins/github/src/git-review.ts
+  - plugins/github/src/git-moves.ts
   - plugins/github/src/git-call.ts
   - plugins/github/src/permission-check.ts
   - apps/gateway/tests/integration/git/
   - apps/gateway/tests/e2e/v5/git-remote.spec.ts
   - packages/plugin-sdk/tests/unit/git-wire.test.ts
+  - apps/gateway/tests/unit/server/git/
+  - plugins/github/tests/unit/git-moves.test.ts
+  - apps/gateway/src/server/budget/budget-stage.ts
+  - apps/gateway/src/server/budget/session-service.ts
 ---
 
 # Git remote — `/git/<owner>/<repo>.git`, the second door of the execution surface
@@ -50,38 +58,54 @@ upstream.
 apps/gateway/src/app/git/[...path]/route.ts   GET | POST | PUT | DELETE /git/** → root.git.handle (nodejs runtime)
 apps/gateway/src/proxy.ts                     `config.matcher` excludes /git/: the Next proxy would buffer and cut the pack
 apps/gateway/src/server/git/                  host-agnostic, never imports `next`
-  index.ts       createGitModule(deps) → root.git { door, pipeline, sweeper, handle }
-  door.ts        GitDoor.handle(): path, Basic key, admission, fetch relay, push advertisement, probe; bearerOf()
-  push.ts        Push: one receive-pack request, steps 1–7 below; commandListIssue(), deleteTemporaryRefs()
-  upstream.ts    executeContextFor(), callUpstream(), relayedResponse(), observed(); RelayJobs; the git pipeline's upstream stage
-  sweeper.ts     startPendingRefSweeper(): deletes temporary refs past their deadline
-  paths.ts       parseGitPath(), gitRemoteBase(public_url)
-  wire.ts        gitText(), unauthorized(), errPacket(), lfsUnsupported(), pushReport()
-  words.ts       refusalLine(), refusalText(), prefixed() ("Vaubaan: " lines), resultText()
+  index.ts          createGitModule(deps) → root.git { door, pipeline, sweeper, handle }
+  door.ts           GitDoor.handle(): path, Basic key, admission, probe, dispatch; bearerOf()
+  scope.ts          Scope (one admitted request), fetchCall/pushCall, targetOf, refsRefusal, the refusal answers
+  fetch.ts          FetchSide: the upload-pack advertisement and ls-refs (filtered), the decided pack relay, the v2 head
+  push-side.ts      PushSide: the receive-pack advertisement, the push's first checks (pushRisk), then Push
+  push.ts           Push: one receive-pack request, the steps below
+  command-list.ts   readPushCommands(), commandListIssue(), provisional(), ACCEPTED_PUSH_CAPABILITIES
+  temporary-refs.ts TemporaryRefs (store, keepForApproval, cleanUp), deleteTemporaryRefs(), temporaryRefName(), PushStop
+  report.ts         reportOf(), refuseAll(), messagesOf(), refOutcomes()
+  in-flight.ts      InFlightPushes, inMemoryInFlightPushes() (single-process only)
+  constants.ts      HTTP statuses, units, every bound of the door
+  upstream.ts       executeContextFor(), callUpstream(), relayedResponse(), observed(); RelayJobs; the git pipeline's upstream stage
+  sweeper.ts        startPendingRefSweeper(): deletes temporary refs past their deadline
+  paths.ts          parseGitPath(), gitRemoteBase(public_url)
+  wire.ts           gitText(), unauthorized(), errPacket(), lfsUnsupported(), pushReport()
+  words.ts          refusalLine(), refusalText(), prefixed() ("Vaubaan: " lines), resultText()
 apps/gateway/src/server/store/repositories/pending-refs.ts   PendingRefsRepo (migration 0015 git_pending_refs)
+apps/gateway/src/server/budget/{budget-stage,session-service}.ts   preflight(): the limits read without counting
 packages/plugin-sdk/src/git/
-  pkt-line.ts      pktLine(), parsePktLines(), PktLineReader (one pkt-line at a time, rest() streams the remainder), side-band
-  receive-pack.ts  readCommandList(), encodeCommandList(), emptyPack(), parse/encodeReportStatus, sendRefUpdates()
+  pkt-line.ts      pktLine(), parsePktLines(), PktLineReader (one pkt-line at a time, rest() streams the remainder), side-band,
+                   encodePkt(), printableRef()
+  streams.ts       prependChunk(head, rest), streamOf(reader): the one "head, then the rest" helper
+  receive-pack.ts  readCommandList() (a feature list on any line), encodeCommandList(), emptyPack(), report-status, sendRefUpdates()
+  upload-pack.ts   readV2RequestHead() (exactly one command), advertisementWithout(), lsRefsWithout()
   advertisement.ts parse/encodeAdvertisement() (v0/v1)
-  remote.ts        GitRemoteCapability, GitRefUpdate, GitReviewedUpdate, GIT_TEMPORARY_REF_PREFIX = 'refs/vaubaan/'
+  remote.ts        GitRemoteCapability (pushRisk, abilities, insteadOf…), GitRefUpdate, GitReviewedUpdate, GIT_TEMPORARY_REF_PREFIX
 plugins/github/src/
-  git-remote.ts    githubGitRemote: repositoryOf, upstream (gitGrant), review, compareUrl, insteadOf, abilities; executeGit()
-  git-call.ts      GIT_FETCH_TOOL, GIT_PUSH_TOOL, readGitCall(), pushedRef() — shared by classify and execute
+  git-remote.ts      githubGitRemote: the capability, assembled from the modules below
+  git-credential.ts  gitGrant(), upstream(), repositoryOf(), GIT_TOKEN_PERMISSIONS
+  git-rest.ts        GithubRest: refValue, defaultBranch, compare (with its commits), commitPaths, request
+  git-review.ts      review(): stale info, kind, net files, every commit's workflow paths, permissions; compareUrl()
+  git-moves.ts       executeGit(): REST create and fast-forward, receive-pack compare-and-swap for force and delete
+  git-call.ts        GIT_FETCH_TOOL, GIT_PUSH_TOOL, readGitCall(), pushedRef() — shared by classify and execute
   permission-check.ts  gitFetchNeeds(), gitPushNeeds(), missingPermissionSentence()
 ```
 
 ## Routes
 
-| Request                                               | What the door does                                                                                  |
-| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `GET …/info/refs?service=git-upload-pack`             | precheck of `github__git_fetch { step: 'refs' }`, then relay the provider's advertisement           |
-| `POST …/git-upload-pack` (v2 `command=ls-refs`)       | same precheck, relay                                                                                |
-| `POST …/git-upload-pack` (v0 negotiation, v2 `fetch`) | the audited, counted call `github__git_fetch { step: 'pack' }`; bytes relayed by its upstream stage |
-| `GET …/info/refs?service=git-receive-pack`            | precheck (read), then the provider's refs minus `refs/vaubaan/*`, with the door's capabilities      |
-| `POST …/git-receive-pack`                             | a push (`push.ts`)                                                                                  |
-| `…/info/lfs/*`                                        | `501`, Git LFS's JSON error: not supported (use `github__mint_install_token`)                       |
-| `info/refs` without `service` (dumb protocol), other  | `403` / `404` text: smart HTTP only                                                                 |
-| wrong method                                          | `405` with `Allow`                                                                                  |
+| Request                                                | What the door does                                                                                                       |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `GET …/info/refs?service=git-upload-pack`              | precheck of `github__git_fetch { step: 'refs' }`, then the provider's advertisement without `refs/vaubaan/*`             |
+| `POST …/git-upload-pack` (v2 `command=ls-refs`)        | same precheck, the provider's answer without `refs/vaubaan/*`                                                            |
+| `POST …/git-upload-pack` (v0/v1 negotiation, v2 other) | the audited, counted call `github__git_fetch { step: 'pack' }`; bytes relayed by its upstream stage                      |
+| `GET …/info/refs?service=git-receive-pack`             | precheck (read), the mission's `pushRisk`, then the provider's refs minus `refs/vaubaan/*`, with the door's capabilities |
+| `POST …/git-receive-pack`                              | the same two checks, then a push (`push.ts`)                                                                             |
+| `…/info/lfs/*`                                         | `501`, Git LFS's JSON error: not supported (use `github__mint_install_token`)                                            |
+| `info/refs` without `service` (dumb protocol), other   | `403` / `404` text: smart HTTP only                                                                                      |
+| wrong method                                           | `405` with `Allow`                                                                                                       |
 
 `<owner>/<repo>` is cut by `parseGitPath` (`.git` optional) and named by the
 plugin (`gitRemote.repositoryOf`). `registry.gitRemote()` is the one plugin
@@ -110,18 +134,26 @@ Every request then carries an `AbortSignal` that fires at
 
 ## Fetch: a relay
 
-Nothing of a fetch is parsed but, under protocol v2, the first pkt-line of an
-upload-pack POST (`peekFirstLine`) to tell `ls-refs` from `fetch`; the
-`Git-Protocol` header, `Content-Encoding`, `Content-Type`, `Accept` and
-`User-Agent` are forwarded, so git and GitHub speak v2 when git asks (v0 and v1
-otherwise; tests clone with `protocol.version` 0, 1 and 2). Requests that only
-list refs are **prechecked** (`CallPipeline.precheck`: mission, resource, risk
-stages; a refusal is audited, a pass writes nothing). The request that
-transfers objects is the call: the door attaches a `RelayJob` to the
-`CallRequest` (`RelayJobs`, a `WeakMap` keyed by the call — **single-process
-only**: a job lives for one request in one process; a multi-replica host needs
-nothing more, the job never leaves the request) and runs
-`pipeline.execute`. After the decision and the budget decrement, the git
+The `Git-Protocol` header, `Content-Encoding`, `Content-Type`, `Accept` and
+`User-Agent` are forwarded, so git and GitHub speak v2 when git asks (v0 and
+v1 otherwise; tests clone with `protocol.version` 0, 1 and 2). Requests that
+only list refs are **prechecked** (`CallPipeline.precheck`: mission,
+resource, risk stages; a refusal is audited, a pass writes nothing) and their
+answer is read whole — at most `MAX_REF_LISTING_BYTES` (16 MiB) — to leave
+out the gateway's temporary refs (`advertisementWithout` for v0/v1,
+`lsRefsWithout` for v2).
+
+Under protocol v2 the head of an upload-pack POST is read up to its delim
+packet (`readV2RequestHead`): exactly one `command=` line, or `ERR` and one
+audit entry; `ls-refs` is a listing, any other command a transfer. The head's
+bytes and the rest of the body go on unchanged (`prependChunk`). A
+gzip-encoded v2 body is not read: it is counted as a transfer (fail closed).
+
+The request that transfers objects is the call: the door attaches a
+`RelayJob` to the `CallRequest` (`RelayJobs`, a `WeakMap` keyed by the call —
+**single-process only**: a job lives for one request in one process; a
+multi-replica host needs nothing more, the job never leaves the request) and
+runs `pipeline.execute`. After the decision and the budget decrement, the git
 pipeline's upstream stage mints the read credential, calls the provider and
 hands the response to git through `observed()`; the audit entry is written
 when the stream ends, so its latency covers the transfer, and a broken stream
@@ -130,69 +162,92 @@ an incremental fetch negotiating in several rounds is one entry per round.
 
 ## Push
 
-`Push.handle()`:
+`PushSide` first: the mission's read (`refsRefusal`) and its `pushRisk`
+(`github.git-push`) — a mission without it is refused, audited, before any
+write credential exists. Then `Push.handle()`:
 
-1. **Read** the command list off the stream (`PktLineReader`,
-   `readCommandList`): at most `MAX_COMMAND_LIST_BYTES` (1 MiB). A
-   compressed body, a truncated or malformed list, a push certificate →
-   `ERR` pkt-line, one audit entry (`reject`).
-2. **Fail closed** (`commandListIssue`): every capability the client asks
-   must be one the door advertised (`report-status`, `side-band-64k`,
-   `quiet`, `ofs-delta`, `delete-refs`, `agent=…`, `object-format=sha1`) —
+1. **Read** the command list (`readPushCommands`): at most
+   `MAX_COMMAND_LIST_BYTES` (1 MiB). A compressed body, a truncated or
+   malformed list, a push certificate → `ERR` pkt-line, one audit entry.
+   **Fail closed** (`commandListIssue`): every capability the client asks,
+   on **any** command line, must be one the door advertised
+   (`ACCEPTED_PUSH_CAPABILITIES`, `agent=…`, `object-format=sha1`) —
    `atomic`, `push-options`, `report-status-v2`, anything new is refused, not
-   ignored; at most `MAX_PUSH_COMMANDS` (50) refs; ref names at most 1024
-   bytes, none with a byte `git check-ref-format` never allows; the same ref
-   twice; a `shallow` line that is not an object id.
+   ignored; `report-status` is required; at most `MAX_PUSH_COMMANDS` (50)
+   refs; ref names at most 1024 bytes, none with a byte
+   `git check-ref-format` never allows; the same ref twice; a `shallow` line
+   that is not an object id.
+2. **In flight**: at most `MAX_PUSHES_IN_FLIGHT_PER_MISSION` (2) pushes of a
+   mission at once (`InFlightPushes`, **single-process only**; a
+   multi-replica host replaces it by a shared counter with a lease).
 3. **Precheck** with the updates as git sent them (fast-forward assumed, no
-   files): a push the mission can never make — main without
-   `merge-protected`, a tag without `tag-write`, a ref outside
-   `refs/heads/` and `refs/tags/`, `refs/vaubaan/*` — is refused and audited
-   before any byte leaves. **Every ref** is classified: one `github__git_push`
-   call carries all of them.
-4. **Store** the pack at GitHub under temporary refs
-   `refs/vaubaan/<mission>/<nonce>/<n>`: each is recorded in
-   `git_pending_refs` **before** the upload, with the deadline
-   `now + git.request_timeout + 5 min`; the pack is streamed untouched through
-   `capped()`, which errors once `git.max_pack_mb` is passed.
-5. **Review** (`gitRemote.review`): for each ref, its value at GitHub is read
-   (`GET git/ref/<ref>`) and must equal the client's `old` — a client that
-   claims a later `old` to keep commits out of the review is refused as
-   _stale info_ —; the compare API gives fast-forward or not (a
-   non-fast-forward is compared both ways), commits, changed paths (renames:
-   both names), workflow files (anything under `.github/workflows/`). Beyond
-   300 files or 250 commits, an unrelated history, an empty repository: the
-   push cannot be reviewed and is refused. Then the App's permissions: the
-   push token must hold `contents: write`, and `workflows: write` when a
-   workflow file changes, or the push is refused by the permission's name.
+   files), **limits included** (`precheck(…, { limits: true })` →
+   `BudgetStage.preflight` → `SessionService.preflightLimits`: the quota and
+   rate windows read, nothing counted; a limit refusal is recorded as the
+   decision would record it, claim request included): a push the mission, its
+   permissions or its limits refuse — main without `merge-protected`, a tag
+   without `tag-write`, a ref outside `refs/heads/` and `refs/tags/`,
+   `refs/vaubaan/*`, `git-push` spent — is refused and audited before any
+   byte leaves. **Every ref** is classified: one `github__git_push` call
+   carries all of them.
+4. **Store** (`TemporaryRefs.store`) the pack at GitHub under temporary refs
+   `refs/vaubaan/<32 random hex>` (`temporaryRefName`; no mission id: every
+   reader of the repository at GitHub can list them): first the mission's
+   ceiling (`MAX_TEMPORARY_REFS_PER_MISSION`, 100), then each ref recorded in
+   `git_pending_refs` with the ref it stands for and the deadline
+   `now + git.request_timeout + 5 min`, then the pack streamed untouched
+   through `capped()`, which errors once `git.max_pack_mb` is passed.
+5. **Review** (`gitRemote.review`, `git-review.ts`): for each ref, its value
+   at GitHub (`GET git/ref/<ref>`) must equal the client's `old` — a client
+   that claims a later `old` is refused as _stale info_ —; the compare API
+   gives fast-forward or not (a non-fast-forward is compared both ways),
+   commits, the net changed paths (renames: both names); **each commit the
+   range brings** is read (`GET commits/{sha}`, `COMMITS_REVIEWED_MAX` 100 per
+   push, 8 at a time) and its paths under `.github/workflows/` count as
+   workflow files of the update. Beyond 300 files or 250 commits per
+   comparison, 100 commits per push, a commit listing 300 files, an unrelated
+   history, an empty repository: refused. Then the App's permissions: the push
+   token must hold `contents: write`, and `workflows: write` when a workflow
+   file changes, or the push is refused by the permission's name.
 6. **Decide**: one `github__git_push { repository, updates[] }`, the reviewed
    updates as arguments: one decision, one request when gated, one audit
    entry; every ref refused when one is.
-7. **Move**, allowed (`executeGit`), per ref, in order, reported per ref like
-   git without `--atomic`: create `POST git/refs`; fast-forward
-   `PATCH git/refs/<ref> force:false` (GitHub refuses a non-fast-forward);
-   force (only an accepted `force-push`) and delete: the ref is read again and
-   must still be the reviewed `old`, then `PATCH force:true` / `DELETE`.
-8. **Clean up** on every path — success, refusal, provider failure, a client
-   gone mid-pack: `deleteTemporaryRefs` (receive-pack, compare-and-swap on the
-   object id) with a deadline of its own (60 s), never the request's signal;
-   the rows go once deleted. Refused `approval-required`: the refs stay, their
-   deadline becomes the request's expiry (`PendingRefsRepo.extend`), so the
-   person reads the comparison at GitHub; an allowed replay of the same
-   commits removes what the earlier push left.
+7. **Move**, allowed (`executeGit`, `git-moves.ts`), per ref, in order,
+   reported per ref like git without `--atomic`: create `POST git/refs`;
+   fast-forward `PATCH git/refs/<ref> force:false` (GitHub refuses a
+   non-fast-forward); force (an accepted `force-push`) and delete: one
+   receive-pack command `<old> <new|0> <ref>` with an empty pack — a
+   compare-and-swap GitHub checks under the ref's lock. A provider failure on
+   one ref reports that ref (`GitHub did not apply this update`) and the next
+   ones are tried; a failure before any ref fails the call.
+8. **Clean up** (`TemporaryRefs.cleanUp`) on every path — success, refusal,
+   provider failure, a client gone mid-pack: `deleteTemporaryRefs`
+   (receive-pack, compare-and-swap on the object id, per ref; a ref GitHub
+   refused is re-read in the advertisement and counts as gone only when it is
+   no longer listed) with a deadline of its own (60 s), never the request's
+   signal; only the rows of refs confirmed gone go. Refused
+   `approval-required` (`keepForApproval`): the refs stay, their deadline
+   becomes the request's expiry, and an earlier push of the mission waiting
+   for the same ref is superseded (its refs deleted). An allowed replay of
+   the same commits removes what the earlier push left.
 
-The sweeper (`startPendingRefSweeper`, every 5 min, 100 rows a pass, timer
-`unref`'d) deletes at the provider every row past its deadline, grouped by
-connection and repository; a connection that is gone drops its rows; a
-provider that does not answer keeps them, for at most 24 h after the deadline.
-Several replicas may sweep: a second delete of a deleted ref changes nothing.
+The sweeper (`startPendingRefSweeper`, every 5 min, timer `unref`'d) deletes
+at the provider every row past its deadline, grouped by connection and
+repository, in batches of 100 until nothing is left (at most 20 batches a
+run). A group GitHub kept is postponed by one interval — to the back of the
+queue, so it never blocks the rows behind it; a row older than 48 h is given
+up and logged; a connection that is gone drops its rows. Several replicas may
+sweep: a second delete of a deleted ref is reported gone.
 
 ### What the door advertises
 
 `report-status`, `delete-refs`, `side-band-64k`, `quiet`, then `ofs-delta` and
 `object-format=sha1` when GitHub advertises them, `agent=vaubaan-gateway`.
 Never `atomic`, `push-options`, `push-cert`, `report-status-v2`: git itself
-then refuses `--atomic`, `-o` and `--signed` with its own sentence. A
-repository in another object format is refused at the advertisement.
+then refuses `--atomic`, `-o` and `--signed` with its own sentence, and a
+client that asks anyway is refused. A repository in another object format is
+refused at the advertisement. A signed commit is an ordinary object: it
+crosses byte for byte, signature intact (tested with an SSH signature).
 
 ## What git shows
 
@@ -253,7 +308,22 @@ http-backend` over bare repositories, a REST API for tokens, refs and
   expired missions, a token connection, the App's permissions, the sweeper,
   the catalog, the shared admission (`git-remote*.test.ts`); multi-ref pushes,
   lying old ids, ref-name tricks, unsupported capabilities, truncated streams,
-  a client gone mid-pack (`git-remote-security.test.ts`).
+  a client gone mid-pack (`git-remote-security.test.ts`); one regression test
+  per finding of the adversarial review — limits refused before the upload,
+  temporary refs kept until GitHub confirms them gone, superseded and capped,
+  capabilities on any line, `report-status` required, listings without
+  temporary refs, no push advertisement without `pushRisk`, an intermediate
+  workflow commit, a v2 head with two commands — and an SSH-signed commit
+  crossing byte for byte (`git-remote-review.test.ts`).
+- `packages/plugin-sdk/tests/unit/git-wire.test.ts` also: a feature list on
+  any line, `prependChunk`, the v2 head (with a property test over 3000
+  generated heads), the listing filters.
+- `apps/gateway/tests/unit/server/git/command-list.test.ts` — a property test
+  of `readPushCommands` over 3000 generated command lists and 2000 mutated
+  byte strings; the in-flight bound.
+- `plugins/github/tests/unit/git-moves.test.ts` — the compare-and-swap of a
+  force-push and a delete, per-ref provider failures, the per-commit review,
+  against `mockFetch`.
 - `apps/gateway/tests/e2e/v5/git-remote.spec.ts` — the built server, the
   mission page's Git block, clone → push → refused push → force-push asking
   first → approval in the browser → replay; writes

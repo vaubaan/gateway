@@ -252,12 +252,14 @@ key; `created_at`), written by `store.invitations` (`repositories/invitations.ts
 gives `UsersRepo.endSessionsOfIssuer(issuer)` its use: the users of a removed sign-in
 provider get `sessions_ended_at` = now (handbook [authentication](authentication.md),
 "Removing a provider"). `0015` adds the table `git_pending_refs` (`ref` primary key — the
-temporary ref `refs/vaubaan/<mission>/<nonce>/<n>` at the provider —, `connection_id` and
-`mission_id` as plain columns, not foreign keys, `repository`, `object_id`, `expires_at`,
-`created_at`; index on `expires_at`): the git remote records each temporary ref before the
-pack leaves, moves its deadline to the request's expiry when the push waits for an
-approval, and drops the row once the ref is deleted; its sweeper deletes what outlived its
-deadline (handbook [git-remote](git-remote.md)). Written by `store.pendingRefs`
+temporary ref `refs/vaubaan/<random>` at the provider —, `target_ref` (the branch or tag it
+stands for), `connection_id` and `mission_id` as plain columns, not foreign keys,
+`repository`, `object_id`, `expires_at`, `created_at`; indexes on `expires_at` and on
+`(mission_id, repository)`): the git remote records each temporary ref before the pack
+leaves, moves its deadline to the request's expiry when the push waits for an approval,
+drops the row once the provider confirmed the ref gone, and counts a mission's rows
+(`countFor`) against its ceiling; its sweeper deletes what outlived its deadline and
+postpones (`extend`) what the provider kept (handbook [git-remote](git-remote.md)). Written by `store.pendingRefs`
 (`repositories/pending-refs.ts`).
 
 | Area        | Tables                                                                                                                     | Notes                                                                                                                                                                                                                                                                                                                                                                                                               |

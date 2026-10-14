@@ -66,7 +66,9 @@ change that removes it.
   `git` client against `git http-backend` standing in for GitHub, with a REST
   API computed from the same repositories: protocol v2 relayed to GitHub
   itself, GitHub accepting a pack under `refs/vaubaan/*`, the compare API's
-  limits and the `PATCH git/refs` answers are read from GitHub's
+  limits, the `commits` of a comparison and `GET commits/{sha}`, the
+  `PATCH git/refs` answers, and a compare-and-swap of an empty-pack
+  receive-pack command for a force-push or a delete are read from GitHub's
   documentation, not observed. →
   [git-remote, "Tests"](git-remote.md#tests)
 - **The release pipeline has never run.** `.github/workflows/release.yml` is
@@ -113,10 +115,12 @@ change that removes it.
   its answer. → [audit, "Administrative entries: who writes what"](audit.md#administrative-entries-who-writes-what)
 
 - **Git: a push is reviewed through GitHub's compare API, so a push larger
-  than it lists (300 files, 250 commits per ref) is refused**, to be split; a
-  force-push or a branch deletion has no compare-and-swap at GitHub (the ref
-  is read again just before; threat model A30). `git push --atomic`, push
-  options, signed pushes and Git LFS are not served. →
+  than it lists (300 files, 250 commits per ref) is refused**, to be split, as
+  is a push bringing more than 100 commits (each is read for workflow
+  changes). A push refused after its pack was stored — by the review, or
+  waiting for an approval — has cost one upload (threat model A31).
+  `git push --atomic`, push options, signed pushes and Git LFS are not
+  served; signed commits are. →
   [git-remote, "Push"](git-remote.md#push)
 
 ## One process

@@ -93,96 +93,124 @@ host's review, never an agent's claim about its own push.
 
 ### D3. Fetch: a streaming relay, protocol v2 when git asks for it
 
-A clone or fetch is relayed byte for byte, both ways, never buffered: the
-`Git-Protocol` header is forwarded, so git and GitHub speak protocol v2 when
-git asks (the default since git 2.26), v0 otherwise; the request body may be
-gzip-encoded and is forwarded as it is. The upstream credential is an
-installation token scoped to the one repository and `contents: read`
-(App connection), or the connection's token (token connection).
+A clone or fetch is relayed to GitHub: the `Git-Protocol` header is
+forwarded, so git and GitHub speak protocol v2 when git asks (the default
+since git 2.26), v0 or v1 otherwise. The upstream credential is an
+installation token scoped to the one repository and `contents: read` (App
+connection), or the connection's token (token connection).
 
 Which request is the call: the requests that only list refs — `GET info/refs`
 and, in v2, the `ls-refs` command — are **prechecked** (mission, resource and
-risk stages, nothing written) and a precheck that fails runs the full
-pipeline, which refuses and audits; the request that transfers objects (a v0
-`git-upload-pack` POST, a v2 `fetch` command) is the audited, counted call
-`github__git_fetch { repository, step: 'pack' }`, risk `read-code`. A plain
-clone is one entry; an incremental fetch that negotiates in several rounds is
-one entry per round. Its audit entry is written when the relayed stream ends,
-so its latency covers the transfer and a stream that broke is an upstream
-error.
+risk stages; a refusal is audited, a pass is not recorded); the request that
+transfers objects (a v0/v1 `git-upload-pack` POST, a v2 `fetch` or any other
+command) is the audited, counted call `github__git_fetch { repository, step:
+'pack' }`, risk `read-code`, its bytes relayed as they come, never held. A
+plain clone is one entry; an incremental fetch that negotiates in several
+rounds is one entry per round. Its audit entry is written when the relayed
+stream ends.
 
-### D4. Push: command list, precheck, temporary ref, review, one decision, REST moves
+The head of a v2 request — its capability lines up to the delim packet — is
+read strictly: **exactly one** `command=` line, or the request is refused
+(`ERR`, audited). The door does not rely on GitHub to refuse a second
+command. A gzip-encoded v2 body is not read and is counted as a transfer
+(fail closed).
+
+The ref listings — the v0/v1 advertisement and the v2 `ls-refs` answer — are
+read whole (at most 16 MiB) and relayed **without the gateway's temporary
+refs** (`refs/vaubaan/*`): a mission does not see another mission's pending
+pushes through the door. GitHub's own interface and API still list them
+(D5).
+
+### D4. Push: command list, limits, temporary ref, review, one decision, moves
 
 1. The door reads the command list (pkt-lines, bounded: 1 MiB for the list,
    65 520 bytes per pkt-line, 1 024 bytes per ref name, 50 commands) and
    leaves the pack in the stream. It is **fail closed**: a capability it did
-   not advertise, the same ref twice, a ref name with a byte
-   `git check-ref-format` never allows, a malformed shallow line, a push
-   certificate, a truncated or malformed pkt-line is a refusal (`ERR` line,
-   one audit entry), never ignored. **Every** command is read and decided,
-   not the first one only (cf. CVE-2025-54583 in FINOS GitProxy, which
-   checked the first branch of a multi-ref push).
-2. **Precheck** with the updates as git sent them (fast-forward assumed, no
-   files): a push the mission can never make is refused before any byte
-   leaves for GitHub.
-3. The pack is **streamed** to GitHub under temporary refs
-   `refs/vaubaan/<mission>/<nonce>/<n>`, through a byte counter that cuts it
-   at the configured cap, within the configured time. Each temporary ref is
-   recorded (`git_pending_refs`) **before** the pack leaves, with the
-   request's deadline.
-4. The plugin **reviews** each update: it reads the ref's value at GitHub
+   not advertise — **on any command line**, since receive-pack honours a
+   feature list wherever it is written —, a missing `report-status` (without
+   it a client reads a refused push as a success), the same ref twice, a ref
+   name with a byte `git check-ref-format` never allows, a malformed shallow
+   line, a push certificate, a truncated or malformed pkt-line: a refusal
+   (`ERR` line, one audit entry), never ignored. **Every** command is read
+   and decided, not the first one only (cf. CVE-2025-54583 in FINOS
+   GitProxy, which checked the first branch of a multi-ref push).
+2. The mission must hold the plugin's `pushRisk` (`github.git-push`): a
+   mission that cannot push gets neither the receive-pack advertisement nor
+   a write credential minted for it.
+3. At most **2 pushes of one mission in flight** at once; a third is refused
+   before its pack is read.
+4. **Precheck** with the updates as git sent them (fast-forward assumed, no
+   files), **the limits included**: the budget's quota and rate windows are
+   read without counting (`BudgetStage.preflight`), so a push its mission,
+   its permissions or its limits refuse is refused, with the claim URL when
+   there is one, before any byte leaves for GitHub. What cannot move earlier
+   — an approval, a refusal of the review — needs the pack at GitHub first.
+5. The pack is **streamed** to GitHub under temporary refs
+   `refs/vaubaan/<32 random hex>` — no mission id in the name, since every
+   reader of the repository can list them at GitHub —, through a byte counter
+   that cuts it at the configured cap, within the configured time. Each
+   temporary ref is recorded (`git_pending_refs`, with the ref it stands for)
+   **before** the pack leaves, with the request's deadline. A mission holds
+   at most **100** temporary refs at once.
+6. The plugin **reviews** each update: it reads the ref's value at GitHub
    (`GET git/ref`) and refuses the push as _stale info_ when the client's
-   `old` differs — the client's old ids are claims, and a later claimed
-   `old` would keep out of the review the commits between the real value and
-   the claim (a workflow change, say). Then GitHub's compare API: fast-forward
-   or not (a non-fast-forward is compared both ways, so a rewrite that takes a
-   workflow back is seen), commit count, changed paths (renames: both names),
-   workflow files (anything under `.github/workflows/`). The App's
-   permissions are checked against what the update needs (`contents: write`,
-   `workflows: write` for a workflow file) from the one declaration of
-   `app-manifest.ts`. The pack is never read.
-5. **One call** `github__git_push { repository, updates[] }`, the reviewed
+   `old` differs — the client's old ids are claims, and a later claimed `old`
+   would keep out of the review the commits between the real value and the
+   claim. Then GitHub's compare API: fast-forward or not (a non-fast-forward
+   is compared both ways, so a rewrite that takes a workflow back is seen),
+   commit count, the net changed paths (renames: both names). **Every commit
+   the range brings is read** (`GET commits/{sha}`, at most 100 per push, a
+   commit listing 300 files or more refused): a workflow file changed by an
+   intermediate commit and taken back at the tip still counts as a workflow
+   change. Workflow files are anything under `.github/workflows/`. The App's
+   permissions are checked against what the updates need (`contents:
+write`, `workflows: write` for a workflow file) from the one declaration
+   of `app-manifest.ts`. The pack is never read.
+7. **One call** `github__git_push { repository, updates[] }`, the reviewed
    updates as arguments: one decision, one request when gated, one audit
    entry for the whole push, every ref refused when one is.
-6. Allowed: the plugin moves each ref through the REST API, in order, each
-   reporting on its own like git without `--atomic`: `POST git/refs` for a
-   create (GitHub refuses an existing ref), `PATCH git/refs/<ref>` with
-   `force: false` for a fast-forward (GitHub refuses a non-fast-forward),
-   and — only when `force-push` or `branch-delete` was accepted — the ref
-   read again and required to still be the reviewed `old`, then
-   `PATCH … force: true` or `DELETE`. The report git reads carries the
-   original ref names, `ok` or `ng <reason>` per ref.
-7. The temporary refs are deleted on every path — success, refusal,
-   provider failure, a client that hung up — with a deadline of their own,
-   never the request's signal; their rows go with them. What could not be
-   deleted is left to the sweeper.
+8. Allowed: the plugin moves each ref, in order, each reporting on its own
+   like git without `--atomic`; a provider failure on one ref reports that
+   ref and the others go on:
+   - create: `POST git/refs` (GitHub refuses an existing ref);
+   - fast-forward: `PATCH git/refs/<ref>` with `force: false` (GitHub
+     refuses a non-fast-forward against the ref's value at that moment);
+   - force-push (only when `force-push` was accepted) and delete (only when
+     `branch-delete` or `tag-write` was): a command `<old> <new> <ref>` to
+     GitHub's receive-pack with an empty pack — the objects are already
+     there under the temporary ref — whose `old` GitHub checks under the
+     ref's lock: a **compare-and-swap** on the reviewed value.
+9. The temporary refs are deleted on every path — success, refusal, provider
+   failure, a client that hung up — with a deadline of their own, never the
+   request's signal. A row goes only when GitHub confirmed its ref gone (per
+   ref, `ok` in the report, or no longer listed); a ref GitHub kept keeps its
+   row, for the sweeper.
 
-The REST moves are the owner's decision (2026-10-14: "fast-forward via
-PATCH refs force:false"). They leave one residual race, recorded in the
-threat model: between the re-read and a forced `PATCH` or a `DELETE`, a
-concurrent push to the same branch can be overwritten — the API has no
-compare-and-swap. A fast-forward has none: GitHub refuses a non-fast-forward
-against the ref's value at the time of the `PATCH`.
+The moves follow the owner's decision ("fast-forward via PATCH refs
+force:false") and his answer to the question of accepted risk A31: the REST
+API has no compare-and-swap, so a forced `PATCH` or a `DELETE` after a re-read
+could overwrite a push that landed in between. Force and delete therefore go
+through receive-pack, whose expected old value GitHub checks atomically;
+create and fast-forward keep the REST writes, which are safe without it.
 
 ### D4 bis. The capabilities the door advertises
 
-| Capability              | Advertised                | Why                                                                                                                                                               |
-| ----------------------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `report-status`         | yes                       | git needs it to print a per-ref outcome.                                                                                                                          |
-| `report-status-v2`      | no                        | Per-ref options for proc-receive; nothing to report with them. A client asking for it is refused.                                                                 |
-| `delete-refs`           | yes                       | Deletions are decided (`branch-delete`, `tag-write`) and implemented.                                                                                             |
-| `side-band-64k`         | yes                       | Carries the gateway's messages on `remote:` lines (the approval URL).                                                                                             |
-| `quiet`                 | yes                       | Harmless; GitHub's own progress is not relayed.                                                                                                                   |
-| `ofs-delta`             | when GitHub advertises it | The pack is relayed untouched.                                                                                                                                    |
-| `object-format=sha1`    | yes                       | Object ids are SHA-1 throughout; a SHA-256 repository is refused.                                                                                                 |
-| `agent=vaubaan-gateway` | yes                       | Identification only.                                                                                                                                              |
-| `atomic`                | no                        | The decision is all-or-nothing, the REST moves are not atomic across refs: advertising it would promise what the door cannot keep. git refuses `--atomic` itself. |
-| `push-options`          | no                        | They would reach only the temporary refs. git refuses `-o` itself.                                                                                                |
-| `push-cert`             | no                        | Signed pushes are neither verified nor relayed; refused.                                                                                                          |
+| Capability              | Advertised                | Why                                                                                                                                                          |
+| ----------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `report-status`         | yes, and required         | git needs it to print a per-ref outcome; a push without it is refused, since a client that does not ask for it reads any answer as a success.                |
+| `report-status-v2`      | no                        | Per-ref options for proc-receive; nothing to report with them. A client asking for it is refused.                                                            |
+| `delete-refs`           | yes                       | Deletions are decided (`branch-delete`, `tag-write`) and implemented.                                                                                        |
+| `side-band-64k`         | yes                       | Carries the gateway's messages on `remote:` lines (the approval URL).                                                                                        |
+| `quiet`                 | yes                       | Harmless; GitHub's own progress is not relayed.                                                                                                              |
+| `ofs-delta`             | when GitHub advertises it | The pack is relayed untouched.                                                                                                                               |
+| `object-format=sha1`    | yes                       | Object ids are SHA-1 throughout; a SHA-256 repository is refused.                                                                                            |
+| `agent=vaubaan-gateway` | yes                       | Identification only.                                                                                                                                         |
+| `atomic`                | no                        | The decision is all-or-nothing, the moves are not atomic across refs: advertising it would promise what the door cannot keep. git refuses `--atomic` itself. |
+| `push-options`          | no                        | They would reach only the temporary refs. git refuses `-o` itself.                                                                                           |
+| `push-cert`             | no                        | Signed pushes are neither verified nor relayed; refused. A signed **commit** is an object like any other and crosses byte for byte, signature intact.        |
 
-Fetch: the request is relayed as it is (the `Git-Protocol` header forwarded,
-the body untouched, gzip included); the door reads at most the first
-pkt-line of a v2 `git-upload-pack` body to tell `ls-refs` from `fetch`.
+A capability the door did not advertise is refused wherever the client wrote
+it — first command line or any other.
 
 ### D5. Approval and replay: the same push again
 
@@ -193,24 +221,41 @@ commit asks again. The refusal reaches git as `ng <ref> approval required —
 instruction on lines of their own. The temporary refs stay while the request
 is pending, so the person reads the diff at GitHub (the request page links
 GitHub's compare view); their rows in `git_pending_refs` (migration 0015)
-then carry the request's expiry instead of the push's deadline, and the
-sweeper deletes them after it, like any temporary ref that outlived its
-deadline (a crash, a client gone, a provider that did not answer). The replay stores the pack again under
-new temporary refs: nothing of the first push is reused.
+then carry the request's expiry instead of the push's deadline. A later push
+of the same mission to the same ref **supersedes** them: its own refs wait,
+the earlier ones are deleted. The replay stores the pack again under new
+temporary refs: nothing of the first push is reused.
+
+A sweeper (every five minutes) deletes at GitHub every temporary ref whose
+deadline passed — an expired request, a push that never finished (a crash, a
+client gone, a provider that did not answer or kept the ref). One run takes
+batches of 100 until nothing is left to try (at most 20); a group GitHub
+refused this run is postponed by one interval, to the back of the queue,
+instead of heading every batch; a row older than 48 hours is given up and
+logged; a connection that is gone drops its rows.
 
 ### D6. Limits fail closed, every refusal audited
 
-`git.max_pack_mb` (default 200) and `git.request_timeout` (default
-10 min) are configuration keys. A push over the cap, a push GitHub's compare
-cannot review in full (300 files or 250 commits per ref, an unrelated
-history, an empty repository), a protocol violation: refused with a sentence
-git prints, and one audit entry (`CallPipeline.reject`, `refused` with no
-code). The defaults are chosen under Railway's limits, read on 2026-10-14
-in docs.railway.com "Public networking — specs and limits": "HTTP requests
-can run for up to 15 minutes if data keeps transferring", they close "after
-5 minutes with no data transferred", "request bodies must finish uploading
-within 5 minutes", headers are limited to 32 KB, and no body size limit is
-stated. 200 MB in 5 minutes is about 5.5 Mbit/s of upload.
+`git.max_pack_mb` (default 200) and `git.request_timeout` (default 10 min)
+are configuration keys; the others are constants of the git module: 50 refs
+per push, 2 pushes of a mission in flight, 100 temporary refs per mission,
+100 commits reviewed one by one per push, 16 MiB of ref listing. A push over
+a cap, a push GitHub's compare cannot review in full (300 files or 250
+commits per ref, an unrelated history, an empty repository), a protocol
+violation: refused with a sentence git prints, and one audit entry
+(`CallPipeline.reject`, `refused` with no code). A push refused after its
+pack was stored — the review, an approval — has cost one upload; the
+in-flight bound and the surface rate limit bound how often. The defaults are
+chosen under Railway's limits, read on 2026-10-14 in docs.railway.com
+"Public networking — specs and limits": "HTTP requests can run for up to 15
+minutes if data keeps transferring", they close "after 5 minutes with no data
+transferred", "request bodies must finish uploading within 5 minutes",
+headers are limited to 32 KB, and no body size limit is stated. 200 MB in 5
+minutes is about 5.5 Mbit/s of upload.
+
+A mission key revoked or rotated while one of its requests is streaming does
+not stop that request: admission runs once per request, like a tool call on
+the MCP door. A request lasts at most `git.request_timeout`.
 
 ### D7. What git shows
 
@@ -245,10 +290,18 @@ No maintained library covers the part we need: on npm, `git-pkt-line`
 (0.1.0, last published 2022), `git-http-backend` (1.1.2, 2022) and
 `node-git-server` (1.0.0, 2022) are unmaintained, and none reads a
 receive-pack command list strictly. The SDK keeps its own pkt-line framing,
-command-list reader, report-status and advertisement codec
+command-list reader, report-status and advertisement codec, the strict
+reader of a v2 request head and the filters of the ref listings
 (`packages/plugin-sdk/src/git/`, a few hundred lines), with exhaustive unit
-tests and a seeded fuzz of the command-list reader; everything after the
-command list — the pack — is bytes the door never parses.
+tests and seeded property tests of the command-list reader, of the door's
+judgement of a command list and of the v2 head; everything after the command
+list — the pack — is bytes the door never parses. One helper streams "a head
+already read, then the rest" (`prependChunk`).
+
+An independent adversarial review of the branch (2026-10-14) found no policy
+escape and seven issues of cost, residue and strictness; D3 to D6 describe
+the code after their fixes, and each has a regression test
+(`apps/gateway/tests/integration/git/git-remote-review.test.ts`).
 
 ### D10. The upstream credential
 
@@ -309,10 +362,16 @@ http-backend` over a bare clone, a `pre-receive` hook calling the
   repositories on GitHub Free, rulesets know nothing of the mission's budget
   or approvals, and a token connection cannot be narrowed at all.
   `mint_install_token` stays for the rare case that needs a raw token.
-- **Move refs through GitHub's receive-pack with an empty pack**, the
-  reviewed `old` as compare-and-swap, `atomic` when GitHub offers it (this
-  branch's first implementation): stronger against concurrent pushes, but a
-  second write transport; the owner chose the REST moves (D4).
+- **Every move through GitHub's receive-pack** (this branch's first
+  implementation, `atomic` when GitHub offers it): one transport for all, but
+  the owner chose the REST writes for create and fast-forward, which need no
+  compare-and-swap.
+- **Force and delete through REST after a re-read** (the second
+  implementation): a push landing between the re-read and the write is
+  overwritten — the API has no compare-and-swap. Replaced by receive-pack for
+  those two (D4).
+- **Trust the client's old ids, or GitHub to refuse a second v2 command**:
+  both are claims of someone else; the door checks them itself.
 - **A credential helper trading the key for minted tokens** (proposal option
   c): the token still leaves; nothing is enforced at push time; useless for a
   token connection.

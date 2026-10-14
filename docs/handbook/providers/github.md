@@ -229,22 +229,28 @@ review.
   token) presents its token; its permissions are unknown, nothing is
   declined on a guess. The git transport is `Basic x-access-token:<token>` to
   `https://github.com/<owner>/<repo>.git`.
-- **Review** (`review`). For each ref: `GET git/ref/<ref>` must equal the
-  client's `old` (else stale info — a lie about `old` would keep commits out
-  of the review); `GET compare/<base>...<head>` gives the status, commit
-  count and files (renames: both names); a non-fast-forward is compared both
-  ways; a created ref is compared with the default branch. Workflow files:
-  anything under `.github/workflows/`. 300 files or 250 commits, an unrelated
-  history, an empty repository: not reviewable, refused. Then the push
+- **Review** (`review`, `git-review.ts`). For each ref: `GET git/ref/<ref>`
+  must equal the client's `old` (else stale info — a lie about `old` would
+  keep commits out of the review); `GET compare/<base>...<head>` gives the
+  status, commit count, the commits and the net files (renames: both names);
+  a non-fast-forward is compared both ways; a created ref is compared with
+  the default branch. Each commit the range brings is read
+  (`GET commits/{sha}`, at most 100 per push): its paths under
+  `.github/workflows/` are workflow files of the update even when the tip
+  takes them back. Workflow files: anything under `.github/workflows/`. 300
+  files or 250 commits per comparison, a commit listing 300 files, an
+  unrelated history, an empty repository: not reviewable, refused. Then the push
   token's permissions must cover `gitPushNeeds(updates)` (`contents: write`,
   plus `workflows: write` when a workflow file changes), or the push is
   refused by the permission's name.
-- **Execute** (`executeGit`), per ref, in order, reported per ref: create
-  `POST git/refs`; fast-forward `PATCH git/refs/<ref> force:false`; force
-  (accepted `force-push` only) and delete: `GET git/ref` again, must still be
-  the reviewed `old`, then `PATCH force:true` / `DELETE`. A 422 on a
-  fast-forward reads "non-fast-forward … fetch first"; a 5xx is an upstream
-  error.
+- **Execute** (`executeGit`, `git-moves.ts`), per ref, in order, reported
+  per ref: create `POST git/refs`; fast-forward
+  `PATCH git/refs/<ref> force:false`; force (accepted `force-push` only) and
+  delete: one receive-pack command `<old> <new|0> <ref>` with an empty pack,
+  whose `old` GitHub checks under the ref's lock (compare-and-swap). A 422 on
+  a fast-forward reads "non-fast-forward … fetch first"; a 5xx on a ref after
+  the first reports that ref and the next ones are tried; before any ref, it
+  is an upstream error.
 - **Slices** (`gitSlicesOf`, `classify.ts`): fetch `repo[R].branch.R`,
   `repo[R].tag.R` (`read-code`); every pushed ref `<ref>.push.W`
   (`git-push`); a branch `branch[B].W` (`feature-branch-write`,

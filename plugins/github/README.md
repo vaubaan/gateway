@@ -147,13 +147,15 @@ decided and audited like any call:
 - **Review** (`review`): each ref's value is read at GitHub (`GET git/ref`) —
   a client's `old` that differs is refused as stale — then the compare API
   gives fast-forward or not, commits, changed paths and workflow files
-  (anything under `.github/workflows/`). Over 300 files or 250 commits the
-  push is refused: split it. A workflow change without `workflows: write`
+  (anything under `.github/workflows/`), and every commit of the range is
+  read for workflow changes (at most 100 per push). Over 300 files or 250
+  commits the push is refused: split it. A workflow change without `workflows: write`
   is refused by the permission's name (`permission-check.ts`).
 - **Moves** (`execute` of `github__git_push`), per ref, reported per ref:
   `POST git/refs`, `PATCH git/refs/<ref>` `force: false` for a
-  fast-forward, `force: true` only for an accepted `force-push` after the
-  ref is read again, `DELETE` likewise.
+  fast-forward; an accepted force-push or delete through GitHub's
+  receive-pack with the reviewed `old` as the expected value
+  (compare-and-swap); a provider failure on one ref reports that ref.
 - **Interface words**: `insteadOf` (`https://github.com/`, rewritten to the
   instance by the setup kit) and `abilities` (what each risk means for git,
   sorted on the mission page), `compareUrl` (GitHub's comparison, linked
