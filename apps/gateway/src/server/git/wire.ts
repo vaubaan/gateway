@@ -23,19 +23,11 @@ import {
   sideBand,
 } from '@vaubaan/plugin-sdk';
 
+import { HTTP_NOT_IMPLEMENTED, HTTP_OK, HTTP_UNAUTHORIZED, NO_CACHE } from './constants';
 import { oneLine, prefixed } from './words';
 
 /** Realm of the Basic challenge; git shows it to a person typing a password. */
 export const GIT_REALM = 'Vaubaan Gateway';
-const NO_CACHE = { 'Cache-Control': 'no-cache, no-store' };
-
-export const HTTP_UNAUTHORIZED = 401;
-export const HTTP_FORBIDDEN = 403;
-export const HTTP_NOT_FOUND = 404;
-export const HTTP_METHOD_NOT_ALLOWED = 405;
-export const HTTP_TOO_MANY_REQUESTS = 429;
-export const HTTP_BAD_GATEWAY = 502;
-const HTTP_NOT_IMPLEMENTED = 501;
 
 /** A plain-text answer; git prints its lines under `remote:`. */
 export function gitText(
@@ -59,7 +51,7 @@ export function unauthorized(text: string): Response {
 /** An `ERR` pkt-line: git stops with `fatal: remote error: <line>`. */
 export function errPacket(service: string, line: string): Response {
   return new Response(pktLine(`ERR ${oneLine(line)}\n`), {
-    status: 200,
+    status: HTTP_OK,
     headers: { 'Content-Type': `application/x-${service}-result`, ...NO_CACHE },
   });
 }
@@ -119,7 +111,7 @@ export function pushReport(input: {
     body = report;
   }
   return new Response(concatBytes([body]), {
-    status: 200,
+    status: HTTP_OK,
     headers: { 'Content-Type': RECEIVE_PACK_RESULT_TYPE, ...NO_CACHE },
   });
 }

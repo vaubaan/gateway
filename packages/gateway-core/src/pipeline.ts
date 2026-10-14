@@ -311,6 +311,17 @@ export interface BudgetStage {
     call: CallRequest,
     input: { readonly risks_touched: readonly RiskId[]; readonly now: Date },
   ): Promise<BudgetDecision>;
+  /**
+   * The refusal the call's limits alone would get (`budget-exhausted`,
+   * `rate-limited`), recorded as `decide` records it; `null` when they are
+   * clear. Counts nothing, consumes no approval. Optional: a stage without it
+   * leaves `precheck` to the stages before the budget.
+   */
+  preflight?(
+    ctx: MissionContext,
+    call: CallRequest,
+    input: { readonly risks_touched: readonly RiskId[]; readonly now: Date },
+  ): Promise<Refusal | null>;
 }
 
 /** Mint or decrypt the ephemeral upstream credential, forward, return the
@@ -594,9 +605,24 @@ export class CallPipeline {
    * any byte leaves; the push it then decides with `execute` touches at
    * least these risks.
    */
-  async precheck(ctx: MissionContext, call: CallRequest): Promise<CallOutcome | null> {
-    const placed = await this.place(ctx, call, this.now());
-    return isOutcome(placed) ? placed : null;
+  async precheck(
+    ctx: MissionContext,
+    call: CallRequest,
+    options: { readonly limits?: boolean } = {},
+  ): Promise<CallOutcome | null> {
+    const now = this.now();
+    const placed = await this.place(ctx, call, now);
+    if (isOutcome(placed)) return placed;
+    const preflight = this.deps.budget.preflight?.bind(this.deps.budget);
+    if (!options.limits || !preflight) return null;
+    // `limits`: also the budget's quota and rate windows, read and not counted —
+    // the call these updates become touches at least these risks.
+    const { classified } = placed;
+    const attempt = await this.attempt('budget', call, classified.entry, () =>
+      preflight(ctx, call, { risks_touched: classified.risks_touched, now }),
+    );
+    if (!attempt.ok) return attempt.outcome;
+    return attempt.value ? this.refused(classified.entry, attempt.value) : null;
   }
 
   /** The first stages of `execute` (and all of `precheck`). */

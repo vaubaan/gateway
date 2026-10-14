@@ -15,6 +15,7 @@ import type { Logger } from '../logging';
 import type { Store } from '../store';
 import { systemClock, type Clock } from '../store/clock';
 import { GitDoor } from './door';
+import { inMemoryInFlightPushes } from './in-flight';
 import { startPendingRefSweeper, type PendingRefSweeper } from './sweeper';
 import { createGitUpstreamStage, RelayJobs } from './upstream';
 
@@ -62,6 +63,7 @@ export function createGitModule(deps: GitModuleDeps): GitModule {
     pipeline,
     jobs,
     pendingRefs: deps.store.pendingRefs,
+    inFlight: inMemoryInFlightPushes(),
     credentials,
     credentialCache,
     logger,
@@ -86,7 +88,11 @@ export {
   type GitEndpoint,
   type GitPath,
 } from './paths';
-export { deleteTemporaryRefs, MAX_COMMAND_LIST_BYTES, Push } from './push';
+export { commandListIssue, provisional, readPushCommands } from './command-list';
+export * from './constants';
+export { inMemoryInFlightPushes, type InFlightPushes } from './in-flight';
+export { Push } from './push';
+export { deleteTemporaryRefs, isTemporaryRef, temporaryRefName } from './temporary-refs';
 export {
   PENDING_REF_GIVE_UP_MS,
   PENDING_REF_SWEEP_BATCH,

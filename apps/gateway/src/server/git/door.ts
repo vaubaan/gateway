@@ -3,12 +3,12 @@
  * ADR gateway-as-git-remote). Host-agnostic `Request → Response`;
  * `src/app/git/[...path]/route.ts` is a one-line adapter.
  *
- *   GET  /git/<repo>.git/info/refs?service=git-upload-pack    refs of a fetch
- *   POST /git/<repo>.git/git-upload-pack                       objects of a fetch
- *   GET  /git/<repo>.git/info/refs?service=git-receive-pack   refs before a push
- *   POST /git/<repo>.git/git-receive-pack                      a push
+ *   GET  /git/<repo>.git/info/refs?service=git-upload-pack    refs of a fetch   (fetch.ts)
+ *   POST /git/<repo>.git/git-upload-pack                       a fetch           (fetch.ts)
+ *   GET  /git/<repo>.git/info/refs?service=git-receive-pack   refs before a push (push-side.ts)
+ *   POST /git/<repo>.git/git-receive-pack                      a push            (push-side.ts, push.ts)
  *
- * Order of a request:
+ * Order of a request, here:
  *
  *   path        the repository and the endpoint; LFS is answered "not supported"
  *   key         HTTP Basic, the mission key as the password (the user name is
@@ -17,77 +17,39 @@
  *   admission   the MCP door's own (`MissionAdmission`, one instance): verifier,
  *               401 reasons, `wrong-credential-kind`, the per-mission surface
  *               rate limit shared with `/mcp`
- *   decision    the git pipeline: the same resource, risk and budget stages and
- *               the same audit as `tools/call`, with the git tools of the plugin
- *               (`github__git_fetch`, `github__git_push`)
- *
- * Which request is the call (ADR D3): the requests that only list refs
- * (`info/refs`, a v2 `ls-refs`) are prechecked — a refusal is audited, a pass
- * is not recorded; the request that transfers objects is the audited, counted
- * `github__git_fetch { step: 'pack' }`; a push is one `github__git_push`.
+ *   probe       git's credential probe (a flush packet alone) is answered empty
  *
  * The key is never logged and never sent upstream; the provider's credential
  * never comes back. Nothing here imports `next`.
  */
-import type {
-  CallOutcome,
-  CallPipeline,
-  CallRequest,
-  ClientOrigin,
-  MissionContext,
-} from '@vaubaan/gateway-core';
+import type { CallPipeline } from '@vaubaan/gateway-core';
 import {
-  advertisementType,
-  encodeAdvertisement,
-  ExecutorRefusal,
-  GIT_TEMPORARY_REF_PREFIX,
-  GitProtocolError,
-  parseAdvertisement,
-  PktLineReader,
-  PktLineError,
-  pktLine,
-  pktLineText,
   RECEIVE_PACK_SERVICE,
   UPLOAD_PACK_SERVICE,
-  type ExecuteContext,
-  type GitAccess,
   type PluginRegistry,
-  type RegisteredPlugin,
 } from '@vaubaan/plugin-sdk';
 
 import type { InstanceConfig } from '../config';
-import { isDenial, type MissionAdmission } from '../execution/admission';
+import { isDenial, type AdmissionDenial, type MissionAdmission } from '../execution/admission';
 import { readAgentLabel } from '../execution/request-meta';
 import type { Logger } from '../logging';
 import type { PendingRefsRepo } from '../store';
-import { parseGitPath, type GitPath } from './paths';
-import { GIT_AGENT, Push } from './push';
 import {
-  callUpstream,
-  executeContextFor,
-  relayedResponse,
-  type GitTarget,
-  type RelayJobs,
-  type UpstreamDeps,
-} from './upstream';
-import {
-  errPacket,
-  gitText,
-  HTTP_BAD_GATEWAY,
   HTTP_FORBIDDEN,
   HTTP_METHOD_NOT_ALLOWED,
   HTTP_NOT_FOUND,
   HTTP_TOO_MANY_REQUESTS,
-  lfsUnsupported,
-  unauthorized,
-} from './wire';
-import { refusalLine, refusalText, resultText } from './words';
-
-const MS_PER_SECOND = 1000;
-const HTTP_UNAUTHORIZED = 401;
-
-/** What a push may ask of the door: only what the door implements (ADR D4). */
-const PUSH_CAPABILITIES = ['report-status', 'delete-refs', 'side-band-64k', 'quiet'] as const;
+  MS_PER_SECOND,
+  NO_CACHE,
+} from './constants';
+import { FetchSide } from './fetch';
+import type { InFlightPushes } from './in-flight';
+import { parseGitPath, type GitPath } from './paths';
+import { PushSide } from './push-side';
+import type { Scope } from './scope';
+import type { RelayJobs, UpstreamDeps } from './upstream';
+import { gitText, lfsUnsupported, unauthorized } from './wire';
+import { refusalLine } from './words';
 
 export interface GitDoorDeps extends UpstreamDeps {
   readonly config: Pick<InstanceConfig, 'git'>;
@@ -98,17 +60,8 @@ export interface GitDoorDeps extends UpstreamDeps {
   readonly pipeline: CallPipeline;
   readonly jobs: RelayJobs;
   readonly pendingRefs: PendingRefsRepo;
+  readonly inFlight: InFlightPushes;
   readonly logger: Logger;
-}
-
-/** An admitted git request, about one repository of the mission's provider. */
-interface Scope {
-  readonly ctx: MissionContext;
-  readonly client: ClientOrigin;
-  readonly registered: RegisteredPlugin;
-  readonly repository: string;
-  readonly agentLabel: string | null;
-  readonly signal: AbortSignal;
 }
 
 const TEXT = {
@@ -122,7 +75,13 @@ const TEXT = {
 } as const;
 
 export class GitDoor {
-  constructor(private readonly deps: GitDoorDeps) {}
+  private readonly fetchSide: FetchSide;
+  private readonly pushSide: PushSide;
+
+  constructor(private readonly deps: GitDoorDeps) {
+    this.fetchSide = new FetchSide(deps);
+    this.pushSide = new PushSide(deps);
+  }
 
   /** The admission this door uses: the MCP door's own instance (structural test). */
   get admission(): MissionAdmission {
@@ -142,33 +101,7 @@ export class GitDoor {
     const bearer = bearerOf(request.headers.get('authorization'));
     if (bearer === null) return unauthorized(TEXT.noKey);
     const admitted = await this.deps.admission.admit(request, `Bearer ${bearer}`);
-    if (isDenial(admitted)) {
-      switch (admitted.denial) {
-        case 'cross-origin':
-          return gitText(
-            HTTP_FORBIDDEN,
-            'Cross-origin requests are not accepted on this endpoint.',
-          );
-        case 'verification-throttled':
-        case 'rate-limited': {
-          const seconds = Math.max(1, Math.ceil(admitted.retryAfterMs / MS_PER_SECOND));
-          return gitText(
-            HTTP_TOO_MANY_REQUESTS,
-            `Too many requests for this mission; retry in ${seconds} s.`,
-            { 'Retry-After': String(seconds) },
-          );
-        }
-        case 'unauthenticated': {
-          const reason = admitted.error.reason;
-          return unauthorized(reason ? `This key stopped working: ${reason}.` : TEXT.unknownKey);
-        }
-        case 'refused':
-          return gitText(
-            HTTP_FORBIDDEN,
-            `${refusalLine(admitted.refusal)}\n${admitted.refusal.hint}`,
-          );
-      }
-    }
+    if (isDenial(admitted)) return denialAnswer(admitted);
 
     const repository = registered.plugin.gitRemote?.repositoryOf(path.repositoryPath) ?? null;
     if (repository === null) {
@@ -177,309 +110,58 @@ export class GitDoor {
         `'${path.repositoryPath.slice(0, 120)}' is not a repository name.`,
       );
     }
-    const label = readAgentLabel(request.headers, undefined);
     const scope: Scope = {
       ctx: admitted.ctx,
       client: admitted.client,
       registered,
       repository,
-      agentLabel: label.label,
+      agentLabel: readAgentLabel(request.headers, undefined).label,
       signal: AbortSignal.any([
         request.signal,
         AbortSignal.timeout(this.deps.config.git.requestTimeoutSeconds * MS_PER_SECOND),
       ]),
     };
 
-    if (path.endpoint.kind === 'upload-pack' || path.endpoint.kind === 'receive-pack') {
-      const probe = await probeAnswer(request, path.endpoint.kind);
-      if (probe) return probe;
-    }
-
     switch (path.endpoint.kind) {
       case 'info-refs':
         return path.endpoint.service === RECEIVE_PACK_SERVICE
-          ? this.pushAdvertisement(scope)
-          : this.fetchAdvertisement(request, scope);
+          ? this.pushSide.advertisement(scope)
+          : this.fetchSide.advertisement(request, scope);
       case 'upload-pack':
-        return this.uploadPack(request, scope);
+        return (
+          (await probeAnswer(request, UPLOAD_PACK_SERVICE)) ??
+          this.fetchSide.uploadPack(request, scope)
+        );
       case 'receive-pack':
-        return this.receivePack(request, scope);
+        return (
+          (await probeAnswer(request, RECEIVE_PACK_SERVICE)) ??
+          this.pushSide.receivePack(request, scope)
+        );
       default:
         return gitText(HTTP_NOT_FOUND, TEXT.smartOnly);
     }
   }
+}
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // Calls and their checks
-  // ───────────────────────────────────────────────────────────────────────────
-
-  private fetchCall(scope: Scope, step: 'refs' | 'pack'): CallRequest {
-    const remote = scope.registered.plugin.gitRemote!;
-    return {
-      tool: remote.fetchTool,
-      args: { repository: scope.repository, step },
-      channel: 'git',
-      agent_label: scope.agentLabel,
-      client: scope.client,
-      signal: scope.signal,
-    };
-  }
-
-  /** The target of an admitted call: the mission's connection to the plugin's provider. */
-  private targetOf(scope: Scope): GitTarget {
-    const { plugin } = scope.registered;
-    const connection = scope.ctx.connections.find((c) => c.provider === plugin.id);
-    // The precheck's resource stage refuses a mission without this connection.
-    if (!connection) throw new Error('git door: a prechecked call without its connection');
-    return { plugin, remote: plugin.gitRemote!, connection, repository: scope.repository };
-  }
-
-  /** Mission, resource and risk checks of a refs listing; the refusal, audited, or nothing. */
-  private async refsRefusal(scope: Scope): Promise<CallOutcome | null> {
-    const outcome = await this.deps.pipeline.precheck(scope.ctx, this.fetchCall(scope, 'refs'));
-    if (outcome) this.log('git fetch', scope, outcome);
-    return outcome;
-  }
-
-  // ───────────────────────────────────────────────────────────────────────────
-  // Fetch
-  // ───────────────────────────────────────────────────────────────────────────
-
-  private async fetchAdvertisement(request: Request, scope: Scope): Promise<Response> {
-    const refused = await this.refsRefusal(scope);
-    if (refused) return refusedAdvertisement(refused);
-    return this.relayDirect(scope, 'read', {
-      method: 'GET',
-      suffix: `/info/refs?service=${UPLOAD_PACK_SERVICE}`,
-      headers: request.headers,
-      body: null,
-    });
-  }
-
-  private async uploadPack(request: Request, scope: Scope): Promise<Response> {
-    if (!request.body) return errPacket(UPLOAD_PACK_SERVICE, 'an empty fetch request');
-    // Protocol v2: the first packet names the command; `ls-refs` only lists refs.
-    let body: ReadableStream<Uint8Array> = request.body;
-    if (isProtocolV2(request) && !request.headers.get('content-encoding')) {
-      const peeked = await peekFirstLine(request.body);
-      if (peeked === null)
-        return errPacket(UPLOAD_PACK_SERVICE, 'the fetch request could not be read');
-      body = peeked.stream;
-      if (peeked.line === 'command=ls-refs') {
-        const refused = await this.refsRefusal(scope);
-        if (refused) return errPacket(UPLOAD_PACK_SERVICE, lineOf(refused));
-        return this.relayDirect(scope, 'read', {
-          method: 'POST',
-          suffix: `/${UPLOAD_PACK_SERVICE}`,
-          headers: request.headers,
-          body,
-        });
-      }
-    }
-    return this.relayDecided(scope, {
-      method: 'POST',
-      suffix: `/${UPLOAD_PACK_SERVICE}`,
-      headers: request.headers,
-      body,
-    });
-  }
-
-  /**
-   * The objects of a fetch: one call through the pipeline; the bytes flow from
-   * its upstream stage once the call is allowed and counted.
-   */
-  private async relayDecided(
-    scope: Scope,
-    request: { method: 'POST'; suffix: string; headers: Headers; body: ReadableStream<Uint8Array> },
-  ): Promise<Response> {
-    const call = this.fetchCall(scope, 'pack');
-    let respond!: (response: Response) => void;
-    const responded = new Promise<Response>((resolve) => {
-      respond = resolve;
-    });
-    this.deps.jobs.attach(call, {
-      repository: scope.repository,
-      access: 'read',
-      request,
-      signal: scope.signal,
-      respond,
-    });
-    const outcome = this.deps.pipeline.execute(scope.ctx, call);
-    const first = await Promise.race([
-      responded.then((response) => ({ response }) as const),
-      outcome.then((o) => ({ outcome: o }) as const),
-    ]);
-    if ('response' in first) {
-      outcome
-        .then((o) => this.log('git fetch', scope, o))
-        .catch((err: unknown) =>
-          this.deps.logger.error('git fetch: the audit of a relayed fetch failed', {
-            mission_id: scope.ctx.mission.id,
-            error: err instanceof Error ? err.name : 'Error',
-          }),
-        );
-      return first.response;
-    }
-    this.log('git fetch', scope, first.outcome);
-    return errPacket(UPLOAD_PACK_SERVICE, lineOf(first.outcome));
-  }
-
-  /** A relayed request that is not a call (refs listings, after their precheck). */
-  private async relayDirect(
-    scope: Scope,
-    access: GitAccess,
-    request: {
-      method: 'GET' | 'POST';
-      suffix: string;
-      headers: Headers;
-      body: ReadableStream<Uint8Array> | null;
-    },
-  ): Promise<Response> {
-    const target = this.targetOf(scope);
-    const attempt = async (): Promise<Response> => {
-      const execCtx = await executeContextFor(this.deps, scope.ctx, target, scope.signal);
-      const upstream = await target.remote.upstream(execCtx, target.repository, access);
-      return callUpstream(execCtx, upstream, { ...request, signal: scope.signal });
-    };
-    try {
-      let answer = await attempt();
-      if (answer.status === HTTP_UNAUTHORIZED && request.body === null) {
-        // A cached token the provider no longer takes: drop it and mint once more.
-        await answer.body?.cancel();
-        await this.deps.credentialCache.drop(target.connection.id);
-        answer = await attempt();
-      }
-      if (!answer.ok) {
-        await answer.body?.cancel();
-        return this.upstreamFailure(scope, `HTTP ${answer.status}`);
-      }
-      return relayedResponse(answer, answer.body);
-    } catch (err) {
-      if (err instanceof ExecutorRefusal) return gitText(HTTP_FORBIDDEN, err.message);
-      return this.upstreamFailure(scope, err instanceof Error ? err.name : 'Error');
-    }
-  }
-
-  private upstreamFailure(scope: Scope, what: string): Response {
-    const name = scope.registered.plugin.displayName;
-    this.deps.logger.warn('git: the provider did not answer', {
-      mission_id: scope.ctx.mission.id,
-      provider: scope.registered.plugin.id,
-      error: what,
-    });
-    return gitText(
-      HTTP_BAD_GATEWAY,
-      `${name} did not answer this request (${what}). Try again; if it persists, tell the human.`,
-    );
-  }
-
-  // ───────────────────────────────────────────────────────────────────────────
-  // Push
-  // ───────────────────────────────────────────────────────────────────────────
-
-  /**
-   * The refs before a push: the provider's, minus the gateway's temporary refs,
-   * with the capabilities the door implements and nothing else (ADR D4).
-   */
-  private async pushAdvertisement(scope: Scope): Promise<Response> {
-    const refused = await this.refsRefusal(scope);
-    if (refused) return refusedAdvertisement(refused);
-    const target = this.targetOf(scope);
-    let execCtx: ExecuteContext;
-    let body: Uint8Array;
-    try {
-      execCtx = await executeContextFor(this.deps, scope.ctx, target, scope.signal);
-      const upstream = await target.remote.upstream(execCtx, target.repository, 'write');
-      const answer = await callUpstream(execCtx, upstream, {
-        method: 'GET',
-        suffix: `/info/refs?service=${RECEIVE_PACK_SERVICE}`,
-        headers: new Headers({ accept: advertisementType(RECEIVE_PACK_SERVICE) }),
-        body: null,
-        signal: scope.signal,
-      });
-      if (!answer.ok) {
-        await answer.body?.cancel();
-        if (answer.status === HTTP_UNAUTHORIZED) {
-          await this.deps.credentialCache.drop(target.connection.id);
-        }
-        return this.upstreamFailure(scope, `HTTP ${answer.status}`);
-      }
-      body = new Uint8Array(await answer.arrayBuffer());
-    } catch (err) {
-      // The plugin declined (the account lacks the permission a push needs).
-      if (err instanceof ExecutorRefusal) return gitText(HTTP_FORBIDDEN, err.message);
-      return this.upstreamFailure(scope, err instanceof Error ? err.name : 'Error');
-    }
-    let upstreamAd;
-    try {
-      upstreamAd = parseAdvertisement(body);
-    } catch (err) {
-      if (err instanceof GitProtocolError) return this.upstreamFailure(scope, err.name);
-      throw err;
-    }
-    // Object ids are SHA-1 throughout the door: a repository in another format is refused.
-    const format = upstreamAd.capabilities.find((c) => c.startsWith('object-format='));
-    if (format !== undefined && format !== 'object-format=sha1') {
+function denialAnswer(denial: AdmissionDenial): Response {
+  switch (denial.denial) {
+    case 'cross-origin':
+      return gitText(HTTP_FORBIDDEN, 'Cross-origin requests are not accepted on this endpoint.');
+    case 'verification-throttled':
+    case 'rate-limited': {
+      const seconds = Math.max(1, Math.ceil(denial.retryAfterMs / MS_PER_SECOND));
       return gitText(
-        HTTP_FORBIDDEN,
-        `This repository uses ${format.slice('object-format='.length)} object ids; the git remote supports SHA-1 repositories only.`,
+        HTTP_TOO_MANY_REQUESTS,
+        `Too many requests for this mission; retry in ${seconds} s.`,
+        { 'Retry-After': String(seconds) },
       );
     }
-    const capabilities = [
-      ...PUSH_CAPABILITIES,
-      ...upstreamAd.capabilities.filter((c) => c === 'ofs-delta' || c === 'object-format=sha1'),
-      `agent=${GIT_AGENT}`,
-    ];
-    return new Response(
-      encodeAdvertisement({
-        service: RECEIVE_PACK_SERVICE,
-        refs: upstreamAd.refs.filter((r) => !r.name.startsWith(GIT_TEMPORARY_REF_PREFIX)),
-        capabilities,
-      }),
-      {
-        status: 200,
-        headers: {
-          'Content-Type': advertisementType(RECEIVE_PACK_SERVICE),
-          'Cache-Control': 'no-cache, no-store',
-        },
-      },
-    );
-  }
-
-  private async receivePack(request: Request, scope: Scope): Promise<Response> {
-    // Same rule as for a fetch: a mission that cannot read the refs cannot push.
-    const refused = await this.refsRefusal(scope);
-    if (refused) return errPacket(RECEIVE_PACK_SERVICE, lineOf(refused));
-    return new Push(
-      {
-        config: this.deps.config,
-        pipeline: this.deps.pipeline,
-        pendingRefs: this.deps.pendingRefs,
-        credentials: this.deps.credentials,
-        credentialCache: this.deps.credentialCache,
-        logger: this.deps.logger,
-      },
-      {
-        request,
-        ctx: scope.ctx,
-        client: scope.client,
-        target: this.targetOf(scope),
-        agentLabel: scope.agentLabel,
-        signal: scope.signal,
-      },
-    ).handle();
-  }
-
-  private log(event: string, scope: Scope, outcome: CallOutcome): void {
-    // Arguments are never logged; the audit entry carries their fingerprint.
-    this.deps.logger.info(event, {
-      mission_id: scope.ctx.mission.id,
-      token_prefix: scope.ctx.token.prefix,
-      outcome: outcome.kind,
-      refusal_code: outcome.audit.refusal_code,
-      arguments_hash: outcome.audit.arguments_hash,
-      agent_label: outcome.audit.agent_label,
-    });
+    case 'unauthenticated': {
+      const reason = denial.error.reason;
+      return unauthorized(reason ? `This key stopped working: ${reason}.` : TEXT.unknownKey);
+    }
+    case 'refused':
+      return gitText(HTTP_FORBIDDEN, `${refusalLine(denial.refusal)}\n${denial.refusal.hint}`);
   }
 }
 
@@ -522,93 +204,12 @@ const PROBE_BODY = '0000';
  * it is answered `200` with an empty body, after the admission, and is
  * neither decided nor audited.
  */
-async function probeAnswer(
-  request: Request,
-  endpoint: 'upload-pack' | 'receive-pack',
-): Promise<Response | null> {
+async function probeAnswer(request: Request, service: string): Promise<Response | null> {
   if (request.headers.get('content-length') !== String(PROBE_BODY.length)) return null;
   const body = await request.clone().text();
   if (body !== PROBE_BODY) return null;
-  const service = endpoint === 'upload-pack' ? UPLOAD_PACK_SERVICE : RECEIVE_PACK_SERVICE;
   return new Response(null, {
     status: 200,
-    headers: {
-      'Content-Type': `application/x-${service}-result`,
-      'Cache-Control': 'no-cache, no-store',
-    },
+    headers: { 'Content-Type': `application/x-${service}-result`, ...NO_CACHE },
   });
-}
-
-function isProtocolV2(request: Request): boolean {
-  return /(^|:)version=2(:|$)/.test(request.headers.get('git-protocol') ?? '');
-}
-
-/** The first pkt-line of a body as text, and the body again, whole. */
-async function peekFirstLine(
-  body: ReadableStream<Uint8Array>,
-): Promise<{ readonly line: string | null; readonly stream: ReadableStream<Uint8Array> } | null> {
-  const reader = new PktLineReader(body);
-  try {
-    const first = await reader.read();
-    const head =
-      first?.kind === 'data'
-        ? pktLine(first.payload)
-        : first
-          ? new TextEncoder().encode(specialOf(first.kind))
-          : new Uint8Array(0);
-    const rest = reader.rest();
-    const restReader = rest.getReader();
-    let headSent = false;
-    return {
-      line: first ? pktLineText(first) : null,
-      stream: new ReadableStream<Uint8Array>({
-        async pull(controller) {
-          if (!headSent) {
-            headSent = true;
-            if (head.length > 0) {
-              controller.enqueue(head);
-              return;
-            }
-          }
-          const { done, value } = await restReader.read();
-          if (done) controller.close();
-          else controller.enqueue(value);
-        },
-        cancel(reason) {
-          return restReader.cancel(reason);
-        },
-      }),
-    };
-  } catch (err) {
-    if (err instanceof PktLineError) return null;
-    throw err;
-  }
-}
-
-function specialOf(kind: 'flush' | 'delim' | 'response-end'): string {
-  return kind === 'flush' ? '0000' : kind === 'delim' ? '0001' : '0002';
-}
-
-/** One line for a refused call, whatever its kind. */
-function lineOf(outcome: CallOutcome): string {
-  switch (outcome.kind) {
-    case 'refused':
-      return refusalLine(outcome.refusal);
-    case 'rejected':
-      return outcome.reason;
-    case 'failed':
-      return outcome.refusal ? refusalLine(outcome.refusal) : outcome.error;
-    case 'allowed':
-      // Allowed and nothing relayed: the plugin declined (its sentence is the result).
-      return resultText(outcome.result) || 'nothing was relayed';
-  }
-}
-
-/** A refused refs listing: git prints the body under `remote:` before its own error. */
-function refusedAdvertisement(outcome: CallOutcome): Response {
-  const text =
-    outcome.kind === 'refused'
-      ? `${refusalLine(outcome.refusal)}\n${refusalText(outcome.refusal).replace(/^Vaubaan: /gm, '')}`
-      : lineOf(outcome);
-  return gitText(HTTP_FORBIDDEN, text);
 }

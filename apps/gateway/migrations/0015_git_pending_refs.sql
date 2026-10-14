@@ -9,7 +9,10 @@
 -- expiry, so the person who answers reads the diff at the provider. A sweeper deletes at
 -- the provider whatever outlived its deadline (a crash, a client gone, a provider down).
 --
---   ref            the temporary ref, unique at the provider (it carries a random nonce)
+--   ref            the temporary ref, unique at the provider (`refs/vaubaan/<random>`: no
+--                  mission id in it, since every reader of the repository sees it)
+--   target_ref     the branch or tag the push asked for: a later push of the same mission
+--                  to the same ref supersedes a pending one
 --   connection_id  the connection whose credential deletes it (not a foreign key: a
 --                  revoked connection leaves rows the sweeper drops without a call)
 --   repository     the resource ref (`owner/repo`)
@@ -18,10 +21,11 @@
 --   expires_at     the push's deadline, or the request's expiry; the sweeper deletes the
 --                  ref after it
 --
--- Portable SQL: one table, one index.
+-- Portable SQL: one table, two indexes.
 
 CREATE TABLE git_pending_refs (
   ref            TEXT NOT NULL PRIMARY KEY,
+  target_ref     TEXT NOT NULL,
   connection_id  TEXT NOT NULL,
   repository     TEXT NOT NULL,
   mission_id     TEXT NOT NULL,
@@ -31,3 +35,4 @@ CREATE TABLE git_pending_refs (
 ) STRICT; -- sqlite: STRICT
 
 CREATE INDEX git_pending_refs_expires_at ON git_pending_refs (expires_at);
+CREATE INDEX git_pending_refs_mission ON git_pending_refs (mission_id, repository);

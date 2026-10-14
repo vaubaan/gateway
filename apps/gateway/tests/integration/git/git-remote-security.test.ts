@@ -297,11 +297,12 @@ describe('temporary refs are cleaned up on every path', () => {
 
   it('a temporary ref whose push never finished is swept once its deadline passed', async () => {
     const main = (await rig.host.refOf(REPOSITORY, 'refs/heads/main'))!;
-    const stray = `refs/vaubaan/${developer.mission.id}/deadbeef/0`;
+    const stray = `refs/vaubaan/${'de'.repeat(16)}`;
     await rig.host.git(REPOSITORY, ['update-ref', stray, main]);
     await rig.root.store.pendingRefs.add([
       {
         ref: stray,
+        targetRef: 'refs/heads/feature/stray',
         connectionId: rig.github.id,
         repository: REPOSITORY,
         missionId: developer.mission.id,
