@@ -205,6 +205,12 @@ describe('push', () => {
       repository: REPOSITORY,
       updates: [{ ref: 'refs/heads/feature/rewrite', kind: 'force', new: rewritten }],
     });
+    // The person who answers reads the rewrite at GitHub: the commits wait under the temporary ref.
+    const pages = viewed.view.call.provider_pages;
+    expect(pages.map((p) => p.label)).toEqual(['refs/heads/feature/rewrite']);
+    expect(pages[0]?.url).toMatch(
+      new RegExp(`^https://github\\.com/${REPOSITORY}/compare/[0-9a-f]{40}\\.\\.\\.${rewritten}$`),
+    );
     expect(
       await rig.root.requests.service.decide(rig.ada, requestId, { resolution: 'grant' }),
     ).toMatchObject({ ok: true });

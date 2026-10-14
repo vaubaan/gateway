@@ -145,6 +145,7 @@ function approval(overrides: Partial<ApprovalView> = {}): ApprovalView {
           gate: 'approval',
         },
       ],
+      provider_pages: [],
     },
     gate: { policy: 'approval', open_until: null },
     gates: [

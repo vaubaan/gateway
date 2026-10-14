@@ -19,6 +19,7 @@
  * One decide entry point per request kind: `decideClaim` and
  * `decideApproval`; `decide()` dispatches on the kind of the request.
  */
+import { providerPagesOf, type ProviderPage } from './provider-pages';
 import type { AdminAct } from '@vaubaan/gateway-core';
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 import { serializeSlice } from '@vaubaan/policy-engine';
@@ -258,6 +259,8 @@ export interface ApprovalCall {
   readonly slices: readonly string[] | null;
   /** Every risk the call counts against, the gated one included. */
   readonly risks: readonly TouchedRiskLine[];
+  /** Pages of the provider showing what the call would do (a push's comparison); empty once erased. */
+  readonly provider_pages: readonly ProviderPage[];
 }
 
 /** The gate of one risk an approval request covers, as the mission holds it now. */
@@ -749,6 +752,9 @@ export class RequestService {
       request.state === 'granted' ? await store.approvals.getByRequest(request.id) : null;
     const events = await this.lastEvents(session_id);
 
+    // An overdue request reads `expired` before the sweeper erases its blob:
+    // nothing is opened for it either.
+    const openArguments = open ? await store.requests.getArguments(request.id) : null;
     return {
       kind: 'approval',
       request: summary,
@@ -764,12 +770,11 @@ export class RequestService {
       call: {
         tool,
         fingerprint,
-        // An overdue request reads `expired` before the sweeper erases its blob:
-        // nothing is opened for it either.
-        arguments: open ? await store.requests.getArguments(request.id) : null,
+        arguments: openArguments,
         arguments_erased: !open,
         slices: audited ? audited.slices_executed.map(serializeSlice) : null,
         risks,
+        provider_pages: providerPagesOf(this.deps.registry, tool, openArguments),
       },
       gate: { policy: firstGate.policy, open_until: firstGate.open_until },
       gates,
