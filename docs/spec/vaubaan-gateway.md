@@ -883,7 +883,18 @@ instance checks again when the act arrives.
   longer sign in and their sessions end, and their missions and connected
   apps keep the rules of a deactivation (they stop only when the
   administrator deactivates them); company apps (the apps registered at
-  each service); **people** — everyone who signed in, with the provider
+  each service — entered by hand, or, for a service that offers it,
+  **created from the page in one step**: the administrator picks the
+  owner (an organisation, or their own account at the service), a name
+  that defaults to one naming the instance, and the permissions the app
+  requests — by default what the service's tools need, the sensitive
+  ones explained and removable, each saying which tools stop working
+  without it; the service asks them to confirm, sends them back, and the
+  instance stores the app's settings where the form would, secrets never
+  shown back; afterwards the page shows the app, its owner, a link to it
+  at the service and its permissions, and the next step: installing it
+  on the company's repositories, which is connecting an account);
+  **people** — everyone who signed in, with the provider
   they signed in through (deactivate, reactivate), and the
   **invitations** (invite an address, remove one; removing it is asked
   first and stops the next sign-ins, not an open session); the page says
@@ -915,7 +926,11 @@ a mounted file, never committing anything:
   interface, with the reason;
 - per provider in use, the **app registered by the company** at that
   provider: identifier and secret, or private key for app-install
-  providers;
+  providers. Each instance registers its own apps — entered here or on
+  the Administration page, or created from that page where the provider
+  offers it (§4.2); the instance never uses an app shared with another
+  instance, whose key would reach every installation of every company
+  using it;
 - the operator's **bootstrap token**, usable until a sign-in provider
   is configured;
 - the **admin rule**: a group of a named sign-in provider
@@ -1045,6 +1060,17 @@ same for any agent, with no value of any mission.
   last credit produce exactly one allow and one refusal.
 - **Anti-replay and anti-redirect** on provider authorization flows:
   single-use nonce, return URL limited to the instance's public URL.
+- **Creating a company app from the interface** is an administrator's
+  act: its `state` is random, single-use, bound to the administrator's
+  web session and short-lived; the code the provider returns is
+  exchanged once, server to server, and only when no app is set for that
+  provider and the configuration file does not set it. The app's secrets
+  go straight to the encrypted settings, are never shown back and never
+  logged; the audit records who created which app (its identifier, its
+  name, the permissions requested), never a secret.
+- **A missing provider permission is a refusal, not a failure.** When
+  the company app lacks a permission a tool needs, the call is declined
+  with a message naming the permission, before anything is sent.
 - **Surface rate limits** on the MCP endpoint per mission, on connection
   flows per user, on the request page per IP.
 - **Mission tokens at rest.** The instance stores a SHA-256 digest of each
@@ -1070,7 +1096,9 @@ the interface with the bootstrap token, adds a sign-in provider (or
 declares it in the configuration), signs in through it — which revokes
 the bootstrap token when they match the admin rule —, and invites the
 addresses an open provider should admit. They then register one app per
-provider in use and enter its secrets.
+provider in use — in one step from Administration → Company apps where
+the provider offers it (GitHub), otherwise at the provider, entering its
+secrets by hand.
 
 ### 7.2 Connect an account
 
@@ -1248,7 +1276,12 @@ automated suite. Trust comes from usage.
   - structured refusals: every code, every field, the `hint`;
   - credential separation (§6): a mission token on the management
     surface, a delegated token on the execution surface, either on a
-    request, are refused unambiguously.
+    request, are refused unambiguously;
+  - creating a company app from the interface (§6): the request built
+    per permission choice, the `state` single-use, expiring and bound to
+    the session, every failure of the exchange, the refusals when the
+    file sets the app or an app is already set, an audit entry without a
+    secret, and a tool refused by name when the app lacks its permission.
 - **Integration**, on an ephemeral instance with embedded store and
   simulated IdP: connection, share, issuance, claim, approval and
   replay, revocation flows, `orphaned` states, OAuth delegation then
@@ -1339,6 +1372,10 @@ automated suite. Trust comes from usage.
   [sign-in-providers-admission-and-admin-rule](../decisions/sign-in-providers-admission-and-admin-rule.md),
   [github-sign-in](../decisions/github-sign-in.md),
   [security-headers-set-by-the-application](../decisions/security-headers-set-by-the-application.md)).
+- Every instance registers its own company apps, never a shared one; for
+  GitHub the administrator creates the app from the interface through
+  the provider's app manifest (ADR
+  [company-app-created-from-a-manifest](../decisions/company-app-created-from-a-manifest.md)).
 
 ### 11.2 Open questions
 
