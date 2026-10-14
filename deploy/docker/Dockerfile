@@ -69,7 +69,9 @@ COPY --from=build --chown=vaubaan:vaubaan /app/apps/gateway/.next/standalone ./
 COPY --from=build --chown=vaubaan:vaubaan /app/apps/gateway/.next/static ./apps/gateway/.next/static
 COPY --from=build --chown=vaubaan:vaubaan /app/apps/gateway/public ./apps/gateway/public
 USER vaubaan
-VOLUME ["/data"]
+# No VOLUME instruction: /data is mounted by the deployment (Compose volume, a
+# platform volume such as Railway's, which refuses VOLUME, or `docker run -v`).
+# Without a mount the database lives in the container and dies with it.
 EXPOSE 3000
 # Liveness through the same path the reverse proxy uses; no curl in the image.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
