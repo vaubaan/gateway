@@ -7,7 +7,7 @@ tools) and adds four GraphQL-backed environment-variable tools, under the
 handbook: [`docs/handbook/providers/railway.md`](../../docs/handbook/providers/railway.md);
 decisions: [`railway-rewrap-remote-mcp`](../../docs/decisions/railway-rewrap-remote-mcp.md),
 [`plugin-arguments-closed-surface-and-typed-refusals`](../../docs/decisions/plugin-arguments-closed-surface-and-typed-refusals.md).
-Plugin version 4.0.0, catalog version 3.
+Plugin version 4.1.0, catalog version 3.
 
 ## Data model
 
@@ -124,6 +124,20 @@ token requests — the MCP server refuses tokens minted without it. Access
 tokens last one hour; the host refreshes them with the standard
 `refresh_token` grant declared by the spec (`refreshable: true`), including
 after an `UpstreamAuthError`.
+
+## Credential, the other way: an account token
+
+Without a company OAuth app — or beside it — an account is connected with a
+Railway **account token** pasted by hand (`railwayTokenCredential`,
+`src/token.ts`): railway.com/account/tokens, "No workspace", as the account the
+agents will act as (a shared service account is fine). It runs discovery and
+the four GraphQL variable tools; the ten tools of Railway's MCP server need
+the OAuth app (Railway documents that server for OAuth sign-in only) and are
+not listed on a token account. Checked with `query { me { name email } }`.
+Workspace and project tokens are not offered (see the handbook). Removing the
+account tells the person to delete the token under Account settings → Tokens.
+ADR
+[`token-connections-beside-the-integration-app`](../../docs/decisions/token-connections-beside-the-integration-app.md).
 
 ## Development
 

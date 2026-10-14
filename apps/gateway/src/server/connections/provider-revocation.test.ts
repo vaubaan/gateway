@@ -260,7 +260,11 @@ describe('revoking a connection withdraws the grant at the provider', () => {
     const withEndpoint = fixturePlugin({ id: 'a', credential: withRevocation('token-form') });
     const withHook = fixturePlugin({ id: 'b', credential: API_KEY_SPEC, revoke: async () => {} });
     const neither = fixturePlugin({ id: 'c', credential: OAUTH_SPEC });
-    expect([withEndpoint, withHook, neither].map(canWithdraw)).toEqual([true, true, false]);
+    expect([withEndpoint, withHook, neither].map((plugin) => canWithdraw(plugin))).toEqual([
+      true,
+      true,
+      false,
+    ]);
 
     const h = oauthHarness(withRevocation('token-form'), [{ method: 'POST', url: REVOKE_URL }]);
     const { alice, connection } = await connect(h);

@@ -581,6 +581,7 @@ const RULES: Readonly<Record<string, Rule>> = {
   'ProviderAppsService.installVerification': READ,
   'ProviderAppsService.hostAppConfig': READ,
   'ProviderAppsService.pluginAppConfig': READ,
+  'ProviderAppsService.pluginAppConfigFor': READ,
   'ProviderAppsService.save': {
     kind: 'mutation',
     target: providerApps,

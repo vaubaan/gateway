@@ -55,6 +55,8 @@ import {
   ACCOUNT_WORDS,
   ACTIONS,
   ago,
+  expiresOn,
+  listed,
   capitalize,
   count,
   formatNumber,
@@ -67,6 +69,8 @@ import {
   SECTIONS,
   shortDate,
   TERMS,
+  TOKEN_CONNECT,
+  TOKEN_EXPIRY_NOTICE_DAYS,
 } from '@/lib/vocabulary';
 import type { GatewayRoot } from '@/server/compose';
 import {
@@ -99,6 +103,9 @@ import styles from '../accounts.module.css';
 export const ACCOUNT_PARAMS = { access: 'access', resource: 'resource' } as const;
 const RESOURCES_ANCHOR = 'resources';
 const ACCESS_ANCHOR = 'who-has-access';
+/** One day, for the token expiry notice. */
+const DAY_MS = 86_400_000;
+
 /** Resources listed before "All N". */
 const RESOURCES_SHOWN = 10;
 /** A person who has not signed in for this long is worth a word beside their name. */
@@ -585,9 +592,16 @@ export function AccountView({
     }),
     `connected ${shortDate(connection.createdAt, now)}`,
     !revoked && detail.discovery ? `checked ${agoWords(detail.discovery.at, now)}` : null,
+    // A pasted token's expiry is said ahead of it, on the first line of the page.
+    !revoked && detail.tokenExpiresAt ? expiresOn(detail.tokenExpiresAt, now) : null,
   ]
     .filter(Boolean)
     .join(' · ');
+  const tokenExpiresSoon =
+    !revoked &&
+    connection.status !== 'expired' &&
+    detail.tokenExpiresAt !== null &&
+    Date.parse(detail.tokenExpiresAt) - now.getTime() <= TOKEN_EXPIRY_NOTICE_DAYS * DAY_MS;
 
   const details = <DetailToggle key="details" />;
   const reconnect = (
@@ -628,9 +642,19 @@ export function AccountView({
         connection.status === 'expired' ||
         connection.status === 'unowned' ||
         revoked ||
+        tokenExpiresSoon ||
         (detail.discovery && !detail.discovery.ok && !revoked)) && (
         <div className={styles.notes}>
           {note}
+          {tokenExpiresSoon && detail.tokenExpiresAt && (
+            <Callout
+              tone="warn"
+              title={TOKEN_CONNECT.expiresSoonTitle(shortDate(detail.tokenExpiresAt, now))}
+              testId="token-expires-soon"
+            >
+              {TOKEN_CONNECT.expiresSoonBody}
+            </Callout>
+          )}
           {connection.status === 'expired' && (
             <Callout tone="bad" title="This account needs reconnecting" testId="account-expired">
               {detail.providerLabel} rejected the stored credential and it could not be renewed.
@@ -688,6 +712,35 @@ export function AccountView({
                 term: 'Credential',
                 value: `${credentialKindLabel(detail.credentialKind)} · encrypted at rest, never shown`,
               },
+              ...(detail.credentialKind === 'api-key' &&
+              (detail.tokenAccount || detail.tokenExpiresAt)
+                ? [
+                    {
+                      term: TOKEN_CONNECT.tokenFacts,
+                      value: [
+                        detail.tokenAccount ? TOKEN_CONNECT.actsAs(detail.tokenAccount) : null,
+                        detail.tokenExpiresAt
+                          ? expiresOn(detail.tokenExpiresAt, now)
+                          : TOKEN_CONNECT.tokenNoExpiry,
+                      ]
+                        .filter(Boolean)
+                        .join(' · '),
+                    },
+                  ]
+                : []),
+              ...(detail.unavailableTools.length > 0
+                ? [
+                    {
+                      term: TOKEN_CONNECT.notWithToken(detail.unavailableTools.length),
+                      value: (
+                        <span data-testid="account-unavailable-tools">
+                          {listed(detail.unavailableTools.map((tool) => tool.title))} —{' '}
+                          {detail.unavailableTools[0]!.reason}
+                        </span>
+                      ),
+                    },
+                  ]
+                : []),
               ...Object.entries(detail.fields).map(([name, value]) => ({
                 term: capitalize(name.replace(/_/g, ' ')),
                 value: <Mono>{value}</Mono>,

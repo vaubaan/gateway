@@ -33,7 +33,6 @@
 import {
   UpstreamAuthError,
   UpstreamHttpError,
-  expectCredentialKind,
   type ConnectionContext,
   type ExecuteContext,
   type McpToolContent,
@@ -58,6 +57,7 @@ import {
   UPSERT_VARIABLE,
   UPSERT_VARIABLES,
 } from './custom-tools.ts';
+import { MCP_NEEDS_THE_APP, railwayBearerOf } from './token.ts';
 import { railwayTools, toUpstreamName } from './tools.ts';
 
 export type FetchImpl = typeof fetch;
@@ -348,13 +348,18 @@ export async function executeRailway(
   if (!DECLARED_TOOLS.has(tool)) {
     return { content: [{ type: 'text', text: `unknown tool '${tool}'` }], isError: true };
   }
-  const secret = expectCredentialKind(PROVIDER, ctx.credential, 'oauth2');
+  // The host refuses an MCP tool on a token connection before the budget
+  // (`unavailableTools`) ; declined here too, for a host that does not.
+  if (ctx.credential.kind === 'api-key' && !CUSTOM_TOOL_NAMES.has(tool)) {
+    return { content: [{ type: 'text', text: `${tool} ${MCP_NEEDS_THE_APP}` }], isError: true };
+  }
+  const token = railwayBearerOf(ctx.credential);
   const effective = pinTarget(tool, args, ctx.resources);
   // Declined here, before any request : a result the agent reads, not an upstream failure.
   if ('refused' in effective) {
     return { content: [{ type: 'text', text: effective.refused }], isError: true };
   }
-  const result = await executeCall(ctx.fetch, secret.accessToken, tool, effective.args, ctx.signal);
+  const result = await executeCall(ctx.fetch, token, tool, effective.args, ctx.signal);
 
   const mcp = asToolResult(result);
   if (tool === AGENT_TOOL) {
@@ -372,15 +377,38 @@ export async function executeRailway(
 export async function discoverRailwayResources(
   ctx: ConnectionContext,
 ): Promise<readonly Resource[]> {
-  const secret = expectCredentialKind(PROVIDER, ctx.credential, 'oauth2');
+  const token = railwayBearerOf(ctx.credential);
+  if (ctx.credential.kind !== 'api-key') {
+    return listProjects(ctx, token, PROJECTS_QUERY, {});
+  }
+  // An account token: its personal projects, then each of its workspaces'.
+  const out = await listProjects(ctx, token, PROJECTS_QUERY, {});
+  const me = await callGraphql<WorkspacesOfMe>(ctx.fetch, token, WORKSPACES_QUERY, {}, ctx.signal);
+  for (const workspace of me.me?.workspaces ?? []) {
+    for (const project of await listProjects(ctx, token, WORKSPACE_PROJECTS_QUERY, {
+      workspaceId: workspace.id,
+    })) {
+      if (!out.some((known) => known.ref === project.ref)) out.push(project);
+    }
+  }
+  return out;
+}
+
+/** Every project a projects query answers, page by page up to `RAILWAY_MAX_PROJECT_PAGES`. */
+async function listProjects(
+  ctx: ConnectionContext,
+  token: string,
+  query: string,
+  variables: Readonly<Record<string, unknown>>,
+): Promise<Resource[]> {
   const out: Resource[] = [];
   let after: string | null = null;
   for (let page = 0; page < RAILWAY_MAX_PROJECT_PAGES; page += 1) {
     const data: ProjectsPage = await callGraphql<ProjectsPage>(
       ctx.fetch,
-      secret.accessToken,
-      PROJECTS_QUERY,
-      { first: RAILWAY_PROJECT_PAGE_SIZE, after },
+      token,
+      query,
+      { ...variables, first: RAILWAY_PROJECT_PAGE_SIZE, after },
       ctx.signal,
     );
     for (const edge of data.projects.edges) {
@@ -414,6 +442,63 @@ export async function discoverRailwayResources(
   }
   return out;
 }
+
+/** The fields of one project node, shared by both projects queries. */
+const PROJECT_NODE_FIELDS = /* GraphQL */ `
+  id
+  name
+  environments {
+    edges {
+      node {
+        id
+        name
+      }
+    }
+  }
+  services {
+    edges {
+      node {
+        id
+        name
+      }
+    }
+  }
+`;
+
+/** The workspaces of the account an account token belongs to (Railway docs, "Fetch workspaces"). */
+const WORKSPACES_QUERY = /* GraphQL */ `
+  query vaubaanWorkspaces {
+    me {
+      workspaces {
+        id
+        name
+      }
+    }
+  }
+`;
+
+interface WorkspacesOfMe {
+  readonly me?: {
+    readonly workspaces?: ReadonlyArray<{ readonly id: string; readonly name: string }>;
+  };
+}
+
+/** The projects of one workspace (Railway docs, "List projects in a workspace"). */
+const WORKSPACE_PROJECTS_QUERY = /* GraphQL */ `
+  query vaubaanWorkspaceProjects($workspaceId: String!, $first: Int!, $after: String) {
+    projects(workspaceId: $workspaceId, first: $first, after: $after) {
+      edges {
+        node {
+          ${PROJECT_NODE_FIELDS}
+        }
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+    }
+  }
+`;
 
 const PROJECTS_QUERY = /* GraphQL */ `
   query vaubaanProjects($first: Int!, $after: String) {

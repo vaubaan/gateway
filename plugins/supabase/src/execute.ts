@@ -36,7 +36,6 @@
 import {
   UpstreamAuthError,
   UpstreamHttpError,
-  expectCredentialKind,
   type ConnectionContext,
   type ExecuteContext,
   type McpToolResult,
@@ -51,6 +50,7 @@ import {
   tableSchemas,
   type ToolIdentifiers,
 } from './classify.ts';
+import { supabaseBearerOf } from './token.ts';
 import { SUPABASE_TOOL_NAMES } from './tools.ts';
 
 /** Public Management API of Supabase. */
@@ -82,7 +82,7 @@ export async function executeSupabase(
   if ('denied' in target) return errorResult(target.denied);
   const read = readIdentifiers(tool, args);
   if ('denied' in read) return errorResult(read.denied);
-  const token = expectCredentialKind('supabase', ctx.credential, 'oauth2').accessToken;
+  const token = supabaseBearerOf('supabase', ctx.credential);
   const call: SupabaseCall = { fetchImpl: ctx.fetch, token, projectRef: target.ref, id: read.id };
   const payload = await callSupabase(call, tool, args, ctx.signal);
   return text(payload);
@@ -124,7 +124,7 @@ interface ProjectDto {
 export async function discoverSupabaseResources(
   ctx: ConnectionContext,
 ): Promise<readonly Resource[]> {
-  const token = expectCredentialKind('supabase', ctx.credential, 'oauth2').accessToken;
+  const token = supabaseBearerOf('supabase', ctx.credential);
   const [organizations, projects] = await Promise.all([
     mgmtFetch(ctx.fetch, token, '/organizations', undefined, ctx.signal) as Promise<
       readonly OrganizationDto[] | null

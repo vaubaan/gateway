@@ -64,8 +64,10 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   // ── 2. Connect GitHub through the company's App ───────────────────────────
   await page.getByRole('link', { name: 'Connect an account' }).click();
   await expect(page).toHaveURL(/\/accounts#connect$/);
-  // A service that needs a company app nobody registered is listed, and says so.
-  await expect(page.getByTestId('service-railway')).toContainText('needs a company app');
+  // A service that needs a company app nobody registered is listed, and says so;
+  // one that also takes a token offers the token instead.
+  await expect(page.getByTestId('service-gmail')).toContainText('needs a company app');
+  await expect(page.getByTestId('service-railway')).toContainText('account token');
   await page.getByTestId('service-github').getByRole('link').click();
   await expect(
     page.getByRole('heading', { name: 'Connect a GitHub account', level: 1 }),

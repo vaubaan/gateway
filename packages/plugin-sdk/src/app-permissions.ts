@@ -11,7 +11,7 @@
  * it through these functions, never through a list of their own.
  */
 
-import type { AppPermission } from './credential.ts';
+import type { AppPermission, TokenPermission } from './credential.ts';
 
 /** The choice "do not request this permission" ; never sent to a provider. */
 export const NO_ACCESS = 'none';
@@ -136,6 +136,35 @@ export function missingPermissions(
     if (needed === undefined) continue;
     if (!accessCovers(permission, granted[permission.name], needed)) {
       out.push({ permission, access: needed });
+    }
+  }
+  return out;
+}
+
+/**
+ * The permissions a person ticks on a token created by hand, read from the
+ * app's declaration when the provider's tokens share the app's permission
+ * names (GitHub's fine-grained tokens): one entry per level that serves a
+ * tool the token can run, a level named `read` as `read`, any other one
+ * (`write`, `admin`) as `read-write` — by the level's own word, not its rank:
+ * GitHub's Workflows has a write level only. `excluded` are the tools the token way cannot run. One
+ * declaration feeds the app's manifest and the token guide (ADR
+ * token-connections-beside-the-integration-app).
+ */
+export function tokenPermissionsOf(
+  permissions: readonly AppPermission[],
+  excluded: ReadonlySet<string> = new Set(),
+): TokenPermission[] {
+  const out: TokenPermission[] = [];
+  for (const permission of permissions) {
+    for (const level of permission.levels) {
+      const tools = level.tools.filter((tool) => !excluded.has(tool));
+      if (tools.length === 0) continue;
+      out.push({
+        name: permission.label,
+        access: level.access === 'read' ? 'read' : 'read-write',
+        tools,
+      });
     }
   }
   return out;

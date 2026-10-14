@@ -24,6 +24,7 @@ import type {
   PluginRegistry,
   ProviderAppConfig,
 } from '@vaubaan/plugin-sdk';
+import type { CredentialKind } from '@vaubaan/shared';
 
 import {
   PROVIDER_APP_FIELD_PROPERTY,
@@ -33,7 +34,8 @@ import {
 import type { ConfigRepo, ConfigWrite } from '../store/repositories/config';
 import {
   APP_FIELD_NAME_PATTERN,
-  appConfigFieldsOf,
+  appConfigFieldsOfPlugin,
+  appSpecOfPlugin,
   CLIENT_SECRET_FIELD,
   isRequired,
 } from './fields';
@@ -131,7 +133,7 @@ export class ProviderAppsService {
 
   async status(providerId: string): Promise<ProviderAppStatus> {
     const { plugin } = this.registry.require(providerId);
-    const fields = appConfigFieldsOf(plugin.credential);
+    const fields = appConfigFieldsOfPlugin(plugin);
     const { source, values } = await this.read(providerId, fields);
     const missing = missingFields(fields, values);
     const visible: Record<string, string> = {};
@@ -146,7 +148,7 @@ export class ProviderAppsService {
       providerId,
       displayName: plugin.displayName,
       experimental: plugin.experimental === true,
-      credentialKind: plugin.credential.kind,
+      credentialKind: appSpecOfPlugin(plugin).kind,
       needsApp: fields.length > 0,
       fields,
       source: fields.length === 0 ? 'none' : source,
@@ -164,7 +166,7 @@ export class ProviderAppsService {
    * the kinds that install nothing.
    */
   async installVerification(providerId: string): Promise<InstallVerification | null> {
-    const spec = this.registry.require(providerId).plugin.credential;
+    const spec = appSpecOfPlugin(this.registry.require(providerId).plugin);
     if (spec.kind !== 'app-install') return null;
     if (spec.userVerification) return 'verified';
     const flag = await this.config.get(acceptUnverifiedKey(providerId));
@@ -181,7 +183,7 @@ export class ProviderAppsService {
     accept: boolean,
   ): Promise<ProviderAppStatus> {
     const { plugin } = this.registry.require(providerId);
-    const spec = plugin.credential;
+    const spec = appSpecOfPlugin(plugin);
     if (spec.kind !== 'app-install') {
       throw new ProviderAppError([`${plugin.displayName} is not connected by installing an app`]);
     }
@@ -202,7 +204,7 @@ export class ProviderAppsService {
    */
   async hostAppConfig(providerId: string): Promise<ProviderAppConfig> {
     const { plugin } = this.registry.require(providerId);
-    const fields = appConfigFieldsOf(plugin.credential);
+    const fields = appConfigFieldsOfPlugin(plugin);
     const { values } = await this.read(providerId, fields);
     const missing = missingFields(fields, values);
     if (missing.length > 0) throw new ProviderAppNotConfigured(providerId, missing);
@@ -218,9 +220,22 @@ export class ProviderAppsService {
    */
   async pluginAppConfig(providerId: string): Promise<ProviderAppConfig> {
     const { plugin } = this.registry.require(providerId);
-    if (appConfigFieldsOf(plugin.credential).length === 0) return {};
+    if (appConfigFieldsOfPlugin(plugin).length === 0) return {};
     const { [CLIENT_SECRET_FIELD]: _clientSecret, ...rest } = await this.hostAppConfig(providerId);
     return rest;
+  }
+
+  /**
+   * The `appConfig` a plugin receives for a connection made with this kind of
+   * credential: the company app's record (`pluginAppConfig`) when the kind is
+   * the one the app serves, `{}` otherwise. A token pasted by hand works
+   * whether or not the company registered an app, so its connection never
+   * depends on the app's settings (ADR token-connections-beside-the-integration-app).
+   */
+  async pluginAppConfigFor(providerId: string, kind: CredentialKind): Promise<ProviderAppConfig> {
+    const { plugin } = this.registry.require(providerId);
+    if (appSpecOfPlugin(plugin).kind !== kind) return {};
+    return this.pluginAppConfig(providerId);
   }
 
   /**
@@ -292,7 +307,7 @@ export class ProviderAppsService {
     input: Readonly<Record<string, string>>,
   ): Promise<ConfigWrite[]> {
     const { plugin } = this.registry.require(providerId);
-    const fields = appConfigFieldsOf(plugin.credential);
+    const fields = appConfigFieldsOfPlugin(plugin);
     if (fields.length === 0) {
       throw new ProviderAppError([
         `${plugin.displayName} needs no provider app: each user connects with their own credential`,

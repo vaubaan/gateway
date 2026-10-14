@@ -5,6 +5,8 @@
 export {
   APP_FIELD_NAME_PATTERN,
   appConfigFieldsOf,
+  appConfigFieldsOfPlugin,
+  appSpecOfPlugin,
   CLIENT_ID_FIELD,
   CLIENT_SECRET_FIELD,
   isRequired,

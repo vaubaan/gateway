@@ -168,8 +168,21 @@ export interface ProviderPlugin {
   readonly dataModel: DataModel;
   /** The risk catalog, loaded from `risk-catalog.yaml` at boot, presets included. */
   readonly catalog: RiskCatalog;
-  /** How a connection to this provider is obtained, stored and refreshed. */
+  /**
+   * How a connection to this provider is obtained, stored and refreshed —
+   * the primary way, offered first (the company's app, when there is one).
+   */
   readonly credential: CredentialSpec;
+  /**
+   * Other ways the same provider can be connected, offered beside the
+   * primary one (a token pasted by hand when the company registered no app).
+   * Each has its own fields, check and `unavailableTools` ; discovery and
+   * execution read `ctx.credential.kind`. One declaration with `credential`:
+   * read both through `credentialSpecsOf`. Kinds are unique across the two,
+   * and at most one of them goes through a company app (`definePlugin`).
+   * ADR token-connections-beside-the-integration-app.
+   */
+  readonly alternativeCredentials?: readonly CredentialSpec[];
 
   /**
    * Classify a concrete call into the slices it touches. Pure : no IO, no

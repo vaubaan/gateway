@@ -90,6 +90,24 @@ describe('shipped plugins through the generic connect driver', () => {
     for (const plugin of SHIPPED_PLUGINS) expect(plugin.revoke, plugin.id).toBeUndefined();
   });
 
+  it('every shipped token way guides the person, checks the token and says where to delete it', () => {
+    for (const plugin of SHIPPED_PLUGINS) {
+      for (const spec of plugin.alternativeCredentials ?? []) {
+        if (spec.kind !== 'api-key') continue;
+        expect(spec.label, plugin.id).toBeTruthy();
+        expect(spec.createUrl, plugin.id).toMatch(/^https:\/\//);
+        expect(spec.guide?.steps.length, plugin.id).toBeGreaterThan(0);
+        expect(typeof spec.verify, plugin.id).toBe('function');
+        expect(spec.manualRevocation, plugin.id).toBeTruthy();
+        // A secret is never shown back: the token field is secret.
+        expect(
+          spec.fields.every((field) => field.secret),
+          plugin.id,
+        ).toBe(true);
+      }
+    }
+  });
+
   it('ships no app-install plugin whose installations cannot be verified', () => {
     // Such a plugin would only be connectable with "accept unverified installations" on.
     for (const plugin of SHIPPED_PLUGINS) {
@@ -98,22 +116,31 @@ describe('shipped plugins through the generic connect driver', () => {
     }
   });
 
-  it('offers a provider only once its company app is configured, and flags experimental ones', async () => {
+  it('offers a way only once its company app is configured, a token way at once, and flags experimental ones', async () => {
     const h = connectionsHarness({ plugins: SHIPPED_PLUGINS });
     const before = await h.service.providers();
-    const byKind = (kind: string) => before.filter((p) => p.kind === kind);
     // Redirect flows need the company app; forms need nothing from the operator.
-    for (const p of [...byKind('oauth2'), ...byKind('app-install')]) {
-      expect(p.configured, p.id).toBe(false);
-      expect(p.fields, p.id).toEqual([]);
+    for (const p of before) {
+      for (const way of p.methods) {
+        expect(way.configured, `${p.id} ${way.kind}`).toBe(!way.usesApp);
+        if (way.usesApp) expect(way.fields, p.id).toEqual([]);
+        else expect(way.fields.length, p.id).toBeGreaterThan(0);
+      }
+      // A service is connectable as soon as one of its ways needs no app, and offers that way.
+      expect(p.configured, p.id).toBe(p.methods.some((way) => !way.usesApp));
+      if (p.configured) expect(p.kind, p.id).not.toBe('oauth2');
     }
-    for (const p of [...byKind('api-key'), ...byKind('ssh-key')]) {
-      expect(p.configured, p.id).toBe(true);
-      expect(p.fields.length, p.id).toBeGreaterThan(0);
-    }
-    expect(byKind('oauth2').length).toBeGreaterThan(0);
-    expect(byKind('app-install').length).toBeGreaterThan(0);
-    expect(byKind('ssh-key').length).toBeGreaterThan(0);
+    const ways = before.flatMap((p) => p.methods.map((way) => way.kind));
+    expect(ways).toContain('oauth2');
+    expect(ways).toContain('app-install');
+    expect(ways).toContain('ssh-key');
+    // The owner's decision of 2026-10-14: these three also take a token pasted by hand.
+    expect(
+      before
+        .filter((p) => p.methods.length > 1)
+        .map((p) => p.id)
+        .sort(),
+    ).toEqual(['github', 'railway', 'supabase']);
     expect(before.filter((p) => p.experimental).map((p) => p.id)).toEqual(
       SHIPPED_PLUGINS.filter((p) => p.experimental === true).map((p) => p.id),
     );

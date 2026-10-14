@@ -192,6 +192,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/connections/connect-flow.test.ts`                                         |        7 |
 | `apps/gateway/tests/integration/connections/reassign-and-settle.test.ts`                                  |        5 |
 | `apps/gateway/tests/integration/connections/repository-status.test.ts`                                    |        6 |
+| `apps/gateway/tests/integration/connections/token-connect.test.ts`                                        |        1 |
 | `apps/gateway/tests/integration/demo/build-stamp.test.ts`                                                 |       10 |
 | `apps/gateway/tests/integration/demo/demo-safety.test.ts`                                                 |       13 |
 | `apps/gateway/tests/integration/demo/demo-smoke.test.ts`                                                  |       17 |
@@ -2047,6 +2048,30 @@ Integration:
      session;
   4. an unknown provider is reported as unknown, and a failure to read the
      app settings as a failure.
+
+- **`tests/integration/connections/token-connect.test.ts`** (1; ADR
+  token-connections-beside-the-integration-app) — `buildRoot` with the real
+  encryptor and the **real GitHub plugin**, GitHub mocked: with no app the
+  token is the way offered; a classic token is refused by its shape before
+  GitHub is asked (the redirect keeps `method`); a fine-grained token is
+  checked (`GET /user`, the expiry header), its repositories discovered
+  (`/user/repos`), and it is in no table; a mission calls
+  `github__list_branches` with it as bearer; `github__mint_install_token` is
+  absent from `tools/list`, refused with "needs the GitHub App", audited
+  `refused`, no counter for its risk and no request to GitHub; a 401 turns the
+  account `expired` and the call `connection-unavailable`; revoking it asks
+  GitHub nothing and says where to delete the token.
+- Unit, beside the code: `src/server/connections/token-connections.test.ts`
+  (8: the way offered with and without an app, a pasted token's check and
+  what is kept, a rejected or expired token storing nothing, an undeclared
+  way, the app way still needing its app, an app account reconnected with a
+  token on the same id, no refresh for a token, no withdrawal for a token),
+  `src/server/execution/execution.test.ts` ("a tool the way of connecting
+  cannot run": not listed, refused by the resource stage with the account and
+  the reason), `packages/plugin-sdk/tests/unit/alternative-credentials.test.ts`
+  (7: the declaration and its checks), and `plugins/{github,supabase,railway}/tests/unit/token.test.ts`
+  (11, 5, 5: the check at paste, discovery and calls with the token, the
+  tools refused).
 
 Not covered here: the pages themselves (server components; walked by hand,
 see [`e2e-tests.md`](./e2e-tests.md)), and a real provider.

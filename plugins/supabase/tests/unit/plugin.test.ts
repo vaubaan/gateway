@@ -350,7 +350,14 @@ describe('supabase credential', () => {
     const ctx = execCtx(never);
     const wrong = {
       ...ctx,
-      credential: { kind: 'api-key' as const, fields: { api_key: 'k' }, metadata: {} },
+      // api-key is the pasted personal access token, a declared way; an SSH key is not.
+      credential: {
+        kind: 'ssh-key' as const,
+        privateKeyPem: 'k',
+        publicKey: 'p',
+        fields: {},
+        metadata: {},
+      },
     };
     await expect(
       supabasePlugin.execute(wrong, 'supabase__get_project', { project_ref: STAGING_REF }),

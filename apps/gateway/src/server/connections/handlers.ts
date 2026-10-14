@@ -55,11 +55,16 @@ import type { Notice, NoticeStore } from './pending';
 import { providerGrantReport } from './provider-grant';
 import {
   CONNECTIONS_PATH,
+  defaultMethod,
+  methodOf,
   type Actor,
   type Connected,
   type ConnectionService,
   type DiscoveryRecord,
 } from './service';
+
+/** The form input naming the way to connect (a credential kind of the plugin). */
+export const METHOD_FIELD = 'method';
 
 export const NEW_CONNECTION_PATH = `${CONNECTIONS_PATH}/new`;
 export const PROVIDER_APPS_PAGE = '/admin/provider-apps';
@@ -289,6 +294,7 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
       const form = await readForm(request);
       if (!form) return notAFormResponse();
       const reconnectId = stringField(form, 'connection_id') || null;
+      const method = stringField(form, METHOD_FIELD) || null;
       const typed = prefixedFields(form, FIELD_PREFIX);
       try {
         const result = await deps.connections.start(who.actor, providerId, {
@@ -296,6 +302,7 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
           returnTo: stringField(form, 'return_to') || null,
           reconnectId,
           fields: typed,
+          method,
         });
         if (result.kind === 'redirect') return redirect(result.url);
         return await redirectWithNotice(
@@ -309,6 +316,7 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
         // return to afterwards stay in its address.
         const query = new URLSearchParams();
         if (reconnectId) query.set('connection', reconnectId);
+        if (method) query.set(METHOD_FIELD, method);
         const returnTo = stringField(form, 'return_to');
         if (returnTo) query.set('return_to', returnTo);
         const back = unknownProvider
@@ -319,12 +327,13 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
         // The form comes back as it was typed, the field in error marked: the
         // name and the non-secret values only — a key is never kept.
         const provider = unknownProvider ? null : await deps.connections.provider(providerId);
+        const way = provider ? (methodOf(provider, method) ?? defaultMethod(provider)) : null;
         const notice = failureNotice(err, 'Not connected');
         return redirectWithNotice(
           who.principal,
           back,
-          provider
-            ? { ...notice, form: echoOfForm(provider.fields, typed, stringField(form, 'name')) }
+          way
+            ? { ...notice, form: echoOfForm(way.fields, typed, stringField(form, 'name')) }
             : notice,
         );
       }

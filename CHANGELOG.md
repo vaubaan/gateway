@@ -210,6 +210,25 @@ names, and the notes about them do too.
 write …)`), instead of GitHub's bare 403. The push token of
   `github__mint_install_token` carries `pull_requests` and `workflows` only when the
   installation holds them.
+- **Connect GitHub, Supabase and Railway with a token, beside the company app.**
+  When an administrator registered the service's app, people connect through it as
+  before, and "Use a token instead" is one click away; when not, the token is the
+  way, with a guide read from the plugin: where to create it, the permissions to
+  tick and the tools each serves, the expiry to choose, and what a token cannot
+  run. GitHub takes a fine-grained personal access token only (a classic `ghp_`
+  token is refused); `github__mint_install_token` needs the App and is neither
+  listed nor run on a token account. Supabase takes a personal access token (a
+  scoped one is recommended) and runs every tool with it. Railway takes an account
+  token, which runs discovery and the four variable tools; the ten tools of
+  Railway's MCP server need the OAuth app. A pasted token is checked at the
+  service before it is stored, the account page says who it acts as and when it
+  expires, ahead of it, and removing the account says where to delete the token
+  (no service offers an endpoint the gateway may use for it). A shared service
+  account is fine: Activity says which person and mission made each call. Plugin
+  authors: `alternativeCredentials`, `unavailableTools`, and the `label`, `guide`
+  and `verify` of an `api-key` spec (ADR
+  `token-connections-beside-the-integration-app`). Plugins: github 3.1.0,
+  supabase 4.2.0, railway 4.1.0.
 - **Several sign-in providers on one instance**, OpenID Connect and GitHub: a
   company directory (Entra ID, Google Workspace, Okta, Keycloak) and people who
   sign in with their own account (personal Google or Microsoft, GitHub), at once.

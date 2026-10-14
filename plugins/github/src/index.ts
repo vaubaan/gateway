@@ -16,6 +16,7 @@ import { classifyGithub } from './classify.ts';
 import { githubCredential } from './credential.ts';
 import { githubDataModel } from './data-model.ts';
 import { discoverGithubResources, executeGithub } from './execute.ts';
+import { githubTokenCredential } from './token.ts';
 import { githubToolTitles } from './tool-titles.ts';
 import { githubTools } from './tools.ts';
 
@@ -28,11 +29,11 @@ export const githubCatalog = loadCatalogFile(GITHUB_CATALOG_PATH);
 export const githubPlugin = definePlugin({
   id: 'github',
   displayName: 'GitHub',
-  version: '3.0.0',
+  version: '3.1.0',
   description:
     'Repositories, branches, files, pull requests, issues, releases and workflows of the GitHub App installation.',
   summary:
-    "One account is one installation of your company's GitHub App on an organisation; one resource is one repository. A mission picks repositories and the permissions it holds on them. GitHub has no environment label: protected branches (main, master, release-*) and working branches (feature/*, fix/*, …) are told apart by two different permissions.",
+    "One account is one installation of your company's GitHub App on an organisation, or a fine-grained personal access token; one resource is one repository. A mission picks repositories and the permissions it holds on them. GitHub has no environment label: protected branches (main, master, release-*) and working branches (feature/*, fix/*, …) are told apart by two different permissions.",
   manualRevocation:
     "Uninstall your company's GitHub App from the organisation, in the organisation's settings under GitHub Apps, once no other account of this gateway uses that installation. The gateway never uninstalls it: one installation may serve several accounts.",
   docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/github.md',
@@ -52,6 +53,9 @@ export const githubPlugin = definePlugin({
   dataModel: githubDataModel,
   catalog: githubCatalog.catalog,
   credential: githubCredential,
+  // Beside the App : a fine-grained token pasted by hand, for a company that
+  // registered no App (ADR token-connections-beside-the-integration-app).
+  alternativeCredentials: [githubTokenCredential],
   classify: classifyGithub,
   execute: executeGithub,
   discoverResources: discoverGithubResources,
@@ -60,6 +64,13 @@ export const githubPlugin = definePlugin({
 export default githubPlugin;
 
 export { classifyGithub, githubCredential, githubDataModel, githubTools };
+export {
+  expiryOf,
+  githubTokenCredential,
+  GITHUB_TOKEN_FIELD,
+  MINT_NEEDS_THE_APP,
+  verifyGithubToken,
+} from './token.ts';
 export { buildAppJwt, mintInstallationToken } from './app-install.ts';
 export { discoverGithubResources, executeGithub, MINT_PERMISSIONS } from './execute.ts';
 export { GITHUB_APP_PERMISSIONS, githubManifestRegistration } from './app-manifest.ts';

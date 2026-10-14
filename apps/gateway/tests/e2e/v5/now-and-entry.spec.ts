@@ -93,7 +93,8 @@ test('a form that refuses a key keeps what was typed, marks the field and says i
   await page.getByRole('button', { name: 'Connect', exact: true }).click();
 
   // Back on the same form, with why at the top…
-  await expect(page).toHaveURL(/\/accounts\/new\/stripe\?notice=/);
+  // (the way it was connecting stays in the address: `method=api-key`)
+  await expect(page).toHaveURL(/\/accounts\/new\/stripe\?method=api-key&notice=/);
   await expect(page.getByTestId('notice')).toContainText('Not connected');
   // …what was typed still there — except the key, which is never kept…
   await expect(name).toHaveValue('Acme billing sandbox');

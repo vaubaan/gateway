@@ -180,3 +180,10 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* The guide to a token created by hand, its steps then the form as the last one. */
+.guided {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}

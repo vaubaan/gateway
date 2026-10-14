@@ -110,7 +110,7 @@ flowchart LR
 | `tools`                                              | —     | `McpToolDeclaration[]`. Every name starts with the prefix; names unique. May be empty (experimental, classifier-only plugin).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `dataModel`                                          | —     | `DataModel` of the risk-model spec §2; `validateDataModel` runs in `definePlugin`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `catalog`                                            | —     | `RiskCatalog` with `presets`; loaded from YAML, see below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| `credential`                                         | —     | `CredentialSpec`, see below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `credential`                                         | —     | `CredentialSpec`, see below; `alternativeCredentials?` adds other ways.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `classify(tool, args, resources)`                    | yes   | `{ slices: Slice[] } \| { denied: string }`. `resources` = the mission's resources on this connection; used to derive the env and default refs. The gateway core's `Classifier` is this member plus `envOf` (`Pick<ProviderPlugin, 'classify' \| 'envOf'>`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `execute(ctx, tool, args)`                           | no    | `ctx: ExecuteContext` = credential (decrypted), appConfig, fetch, signal?, logger?, resources, agentLabel?, credentialCache?, emitPart?. Throws every provider failure (`UpstreamAuthError` on 401/403, `UpstreamHttpError` on another failed status); returns `isError` only for what it declines itself (`ExecutorRefusal` + `declining`) — see "Errors of `execute`".                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `discoverResources(ctx)`                             | no    | `ctx: ConnectionContext` (same minus resources/agentLabel). Returns `Resource[]`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
@@ -321,7 +321,11 @@ highest level), `checkPermissionChoice` (a level or `NO_ACCESS` per
 permission; a mandatory one kept; anything undeclared refused),
 `toolsLostAt`, `accessCovers`, `unconditionalNeeds(permissions, tool)` (the
 levels a tool needs on every call; `onlyWhen` needs are the plugin's to
-check) and `missingPermissions`. `definePlugin` names each malformed member,
+check), `missingPermissions` and `tokenPermissionsOf(permissions, excluded)`
+(the token guide's permissions read off the same declaration when the
+provider's tokens share the app's permission names: a `read` level as
+`read`, any other as `read-write`, the `excluded` tools left out).
+`definePlugin` names each malformed member,
 a tool a level lists that the plugin does not declare, and an `onlyWhen`
 tool that its level does not list.
 
@@ -346,6 +350,38 @@ OAuth client secret and never reads `process.env`. `expectCredentialKind(
 pluginId, secret, kind)` narrows the secret or throws
 `CredentialKindMismatch`. The encrypted envelope (`Credential` in
 `@vaubaan/shared`) never reaches a plugin.
+
+**More than one way to connect** (ADR
+[token-connections-beside-the-integration-app](../decisions/token-connections-beside-the-integration-app.md)).
+`ProviderPlugin.alternativeCredentials?: CredentialSpec[]` adds ways beside
+`credential` (the primary, offered first). Read them only through
+`credentialSpecsOf(plugin)`, `credentialSpecFor(plugin, kind)`,
+`appCredentialSpecOf(plugin)` and `unavailableToolReason(plugin, kind,
+tool)`. `definePlugin` validates each alternative like a primary spec (issues
+prefixed `alternativeCredentials[i]`), refuses a kind declared twice and more
+than one way through a company app. A plugin with several ways reads
+`ctx.credential.kind` in `execute` and `discoverResources`.
+
+Every spec may carry (`CredentialSpecCommon`):
+
+| Member              | Meaning                                                                                                                                         |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `unavailableTools?` | tool name → one sentence (≤ 300 chars) why a connection made this way cannot run it; the host refuses it before the budget and does not list it |
+| `manualRevocation?` | where a person removes the grant of a connection made this way; overrides the plugin's sentence                                                 |
+
+An `api-key` spec may also carry:
+
+| Member    | Meaning                                                                                                                                                                                                                                                                             |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `label?`  | what the person creates, lower case, in the service's words ("fine-grained personal access token")                                                                                                                                                                                  |
+| `guide?`  | `{ steps, permissions: { name, access: 'read' \| 'read-write', tools }[], recommendedExpiryDays: number \| null, docsUrl? }` — rendered by the connect page; every tool the way can run must be served by a permission (an empty list means the token carries no permission choice) |
+| `verify?` | `(ctx) → { account, expiresAt }`: asked before anything is stored; throw `UpstreamAuthError` on a rejected token                                                                                                                                                                    |
+
+A plugin whose tokens share its app's permission names derives the guide's
+permissions with `tokenPermissionsOf` rather than writing a second list
+(GitHub). The plugin's own `refresh` and `revoke` hooks serve its primary kind only.
+Shipped examples: `plugins/github/src/token.ts`, `plugins/supabase/src/token.ts`,
+`plugins/railway/src/token.ts`.
 
 ### Catalog path (`catalog-path.ts`)
 
