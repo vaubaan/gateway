@@ -40,6 +40,7 @@ import {
   type GithubCall,
 } from './call.ts';
 import { installationTokenFor } from './credential.ts';
+import { githubTokenOf, MINT_NEEDS_THE_APP } from './token.ts';
 import { dispatchGithubTool, type OctokitLike } from './octokit-dispatch.ts';
 import {
   assertAppPermissions,
@@ -90,16 +91,24 @@ async function executeRead(
   if ('denied' in call) throw new ExecutorRefusal(refusalOf(tool, call.denied));
   if (call.tool === MINT_TOOL) return mintInstallTokenTool(ctx, call);
 
-  // Least privilege : the per-call token only sees the repository the call
-  // names ; account-shaped tools (search) get an installation-wide token.
-  // Reused across calls when the host provides a connection-scoped cache.
-  // What the installation holds is checked before anything else is sent: a
-  // missing permission is declined by name, not left to GitHub's 403.
-  const { token, permissions } = await installationGrantForCall(
-    ctx,
-    'target' in call ? call.target.repo : undefined,
-  );
-  assertAppPermissions(call, permissions);
+  // A token connection sends the pasted token itself; what it may do is what
+  // its owner ticked at GitHub, which GitHub enforces. Through the App, least
+  // privilege : the per-call token only sees the repository the call names ;
+  // account-shaped tools (search) get an installation-wide token. Reused across
+  // calls when the host provides a connection-scoped cache. What the
+  // installation holds is checked before anything else is sent: a missing
+  // permission is declined by name, not left to GitHub's 403.
+  let token: string;
+  if (ctx.credential.kind === 'api-key') {
+    token = githubTokenOf(ctx);
+  } else {
+    const grant = await installationGrantForCall(
+      ctx,
+      'target' in call ? call.target.repo : undefined,
+    );
+    assertAppPermissions(call, grant.permissions);
+    token = grant.token;
+  }
   const octokit: OctokitLike = new Octokit({
     auth: token,
     request: { fetch: ctx.fetch, ...(ctx.signal ? { signal: ctx.signal } : {}) },
@@ -140,6 +149,11 @@ async function mintInstallTokenTool(
   ctx: ExecuteContext,
   call: Extract<GithubCall, { tool: typeof MINT_TOOL }>,
 ): Promise<McpToolResult> {
+  // The host refuses it before the budget on a token connection
+  // (`unavailableTools`) ; this guard keeps a host that does not from minting nothing.
+  if (ctx.credential.kind !== 'app-install') {
+    throw new ExecutorRefusal(`${MINT_TOOL} ${MINT_NEEDS_THE_APP}`);
+  }
   // The access_tokens endpoint takes names without owner.
   const repositories = call.repositories.map((r) => r.repo);
   const mint = (permissions: Readonly<Record<string, string>>) =>
@@ -185,18 +199,23 @@ interface InstallationRepositoryDto {
 }
 
 /**
- * Resources reachable through the installation : one `Resource` per
- * repository the App is installed on, paged by `DISCOVERY_PAGE_SIZE` up to
- * `DISCOVERY_MAX_PAGES`. The owner labels the environment later.
+ * Resources reachable through the connection : one `Resource` per
+ * repository, paged by `DISCOVERY_PAGE_SIZE` up to `DISCOVERY_MAX_PAGES`.
+ * Through the App, the repositories it is installed on
+ * (`GET /installation/repositories`) ; with a pasted token, the repositories
+ * the token reaches (`GET /user/repos`, a bare list). The owner labels the
+ * environment later.
  */
 export async function discoverGithubResources(
   ctx: ConnectionContext,
 ): Promise<readonly Resource[]> {
-  const { token } = await installationTokenFor(ctx);
+  const viaToken = ctx.credential.kind === 'api-key';
+  const token = viaToken ? githubTokenOf(ctx) : (await installationTokenFor(ctx)).token;
+  const path = viaToken ? '/user/repos' : '/installation/repositories';
   const out: Resource[] = [];
   let listed = 0;
   for (let page = 1; page <= DISCOVERY_MAX_PAGES; page++) {
-    const url = `${GITHUB_API_BASE}/installation/repositories?per_page=${DISCOVERY_PAGE_SIZE}&page=${page}`;
+    const url = `${GITHUB_API_BASE}${path}?per_page=${DISCOVERY_PAGE_SIZE}&page=${page}`;
     const res = await ctx.fetch(url, {
       method: 'GET',
       headers: { ...GITHUB_API_HEADERS, Authorization: `Bearer ${token}` },
@@ -204,21 +223,15 @@ export async function discoverGithubResources(
     });
     if (res.status === 401 || res.status === 403) {
       throw new UpstreamAuthError(
-        `github rejected the installation token (HTTP ${res.status})`,
+        `github rejected the ${viaToken ? 'personal access' : 'installation'} token (HTTP ${res.status})`,
         res.status,
       );
     }
     if (!res.ok) {
-      throw new UpstreamHttpError(
-        `github GET /installation/repositories failed with HTTP ${res.status}`,
-        res.status,
-      );
+      throw new UpstreamHttpError(`github GET ${path} failed with HTTP ${res.status}`, res.status);
     }
-    const body = (await res.json()) as {
-      total_count?: number;
-      repositories?: readonly InstallationRepositoryDto[];
-    };
-    const repositories = body.repositories ?? [];
+    const listing = repositoryPageOf(await res.json());
+    const repositories = listing.repositories;
     listed += repositories.length;
     for (const r of repositories) {
       // A name the reader of the calls would refuse is of no use to a
@@ -242,11 +255,25 @@ export async function discoverGithubResources(
         },
       });
     }
-    const total = body.total_count;
+    const total = listing.total;
     if (repositories.length < DISCOVERY_PAGE_SIZE || (total !== undefined && listed >= total))
       break;
   }
   return out;
+}
+
+/** `/installation/repositories` answers `{ total_count, repositories }`, `/user/repos` a bare list. */
+function repositoryPageOf(body: unknown): {
+  readonly repositories: readonly InstallationRepositoryDto[];
+  readonly total: number | undefined;
+} {
+  if (Array.isArray(body))
+    return { repositories: body as InstallationRepositoryDto[], total: undefined };
+  const wrapped = (body ?? {}) as {
+    total_count?: number;
+    repositories?: readonly InstallationRepositoryDto[];
+  };
+  return { repositories: wrapped.repositories ?? [], total: wrapped.total_count };
 }
 
 type OctokitLog = NonNullable<ConstructorParameters<typeof Octokit>[0]>['log'];

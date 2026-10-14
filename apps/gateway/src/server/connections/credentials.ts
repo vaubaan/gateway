@@ -24,14 +24,16 @@
  */
 import { isUnavailableConnectionStatus } from '@vaubaan/gateway-core';
 import { UpstreamAuthError } from '@vaubaan/shared';
-import type {
-  ConnectionContext,
-  CredentialSecret,
-  OAuth2CredentialSpec,
-  PluginRegistry,
-  ProviderAppConfig,
-  ProviderPlugin,
+import {
+  credentialSpecFor,
+  type ConnectionContext,
+  type CredentialSecret,
+  type OAuth2CredentialSpec,
+  type PluginRegistry,
+  type ProviderAppConfig,
+  type ProviderPlugin,
 } from '@vaubaan/plugin-sdk';
+import type { CredentialKind } from '@vaubaan/shared';
 
 import type { Logger } from '../logging';
 import { CLIENT_ID_FIELD, CLIENT_SECRET_FIELD, type ProviderAppsService } from '../provider-apps';
@@ -73,12 +75,24 @@ export interface CredentialBrokerDeps {
 
 /**
  * Can the gateway withdraw the provider-side grant of a connection to this
- * plugin? The one rule, for the broker and for the page that says beforehand
- * what a revocation will do.
+ * plugin made with this kind of credential (the primary kind when omitted)?
+ * The one rule, for the broker and for the page that says beforehand what a
+ * revocation will do. The plugin's own `revoke` hook serves its primary way
+ * of connecting; another way withdraws only through its own declarative
+ * `revocation` (ADR token-connections-beside-the-integration-app).
  */
-export function canWithdraw(plugin: Pick<ProviderPlugin, 'revoke' | 'credential'>): boolean {
-  if (plugin.revoke) return true;
-  return plugin.credential.kind === 'oauth2' && plugin.credential.revocation !== undefined;
+export function canWithdraw(
+  plugin: Pick<ProviderPlugin, 'revoke' | 'credential' | 'alternativeCredentials'>,
+  kind: CredentialKind = plugin.credential.kind,
+): boolean {
+  if (plugin.revoke && kind === plugin.credential.kind) return true;
+  const spec = credentialSpecFor(plugin, 'oauth2');
+  return kind === 'oauth2' && spec !== null && spec.revocation !== undefined;
+}
+
+/** The plugin's `refresh` override serves its primary way of connecting only. */
+function ownRefreshApplies(plugin: ProviderPlugin, credential: CredentialSecret): boolean {
+  return plugin.refresh !== undefined && credential.kind === plugin.credential.kind;
 }
 
 /** A withdrawal that takes longer than the delay did not confirm anything. */
@@ -198,7 +212,8 @@ export class CredentialBroker {
     held: ResolvedCredential | null,
   ): Promise<ProviderGrantOutcome> {
     const plugin = held?.plugin ?? this.deps.registry.get(connection.provider)?.plugin;
-    if (!plugin || !canWithdraw(plugin)) return 'manual';
+    const kind = held?.credential.kind ?? plugin?.credential.kind;
+    if (!plugin || !kind || !canWithdraw(plugin, kind)) return 'manual';
     const log = { connection_id: connection.id, provider: plugin.id };
     if (held === null) {
       this.deps.logger.warn('provider grant not withdrawn: no readable credential', log);
@@ -234,12 +249,12 @@ export class CredentialBroker {
     plugin: ProviderPlugin,
     held: ResolvedCredential,
   ): Promise<RevocationAttempt> {
-    if (plugin.revoke) {
+    if (plugin.revoke && held.credential.kind === plugin.credential.kind) {
       await plugin.revoke(this.contextOf(held, AbortSignal.timeout(REVOCATION_REQUEST_TIMEOUT_MS)));
       return { outcome: 'revoked' };
     }
-    const spec = plugin.credential;
-    if (spec.kind !== 'oauth2' || !spec.revocation || held.credential.kind !== 'oauth2') {
+    const spec = credentialSpecFor(plugin, 'oauth2');
+    if (!spec || !spec.revocation || held.credential.kind !== 'oauth2') {
       return { outcome: 'no-token' };
     }
     return revokeGrant(spec.revocation, await this.oauthClient(plugin.id, spec), held.credential, {
@@ -285,10 +300,10 @@ export class CredentialBroker {
   }
 
   private canRefresh(resolved: ResolvedCredential): boolean {
-    if (resolved.plugin.refresh) return true;
-    const spec = resolved.plugin.credential;
+    if (ownRefreshApplies(resolved.plugin, resolved.credential)) return true;
+    const spec = credentialSpecFor(resolved.plugin, 'oauth2');
     return (
-      spec.kind === 'oauth2' &&
+      spec !== null &&
       spec.refreshable &&
       resolved.credential.kind === 'oauth2' &&
       resolved.credential.refreshToken !== null
@@ -346,17 +361,17 @@ export class CredentialBroker {
   /** A fresh secret, or `UpstreamAuthError` (rejected) / `ProviderUnreachableError` (transient). */
   private async obtain(current: ResolvedCredential): Promise<CredentialSecret> {
     const { plugin, credential } = current;
-    if (plugin.refresh) {
+    if (plugin.refresh && ownRefreshApplies(plugin, credential)) {
       const refreshed = await plugin.refresh(this.contextOf(current));
-      if (refreshed.kind !== plugin.credential.kind) {
+      if (refreshed.kind !== credential.kind) {
         throw new Error(`plugin '${plugin.id}' refreshed into a '${refreshed.kind}' credential`);
       }
       return refreshed;
     }
-    const spec = plugin.credential;
-    if (spec.kind !== 'oauth2' || !spec.refreshable || credential.kind !== 'oauth2') {
+    const spec = credentialSpecFor(plugin, 'oauth2');
+    if (!spec || !spec.refreshable || credential.kind !== 'oauth2') {
       throw new UpstreamAuthError(
-        `a '${spec.kind}' credential cannot be refreshed; reconnect the provider`,
+        `a '${credential.kind}' credential cannot be refreshed; reconnect the provider`,
         HTTP_UNAUTHORIZED,
       );
     }

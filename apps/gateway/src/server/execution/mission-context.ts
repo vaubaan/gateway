@@ -28,7 +28,11 @@ import type {
 } from '@vaubaan/gateway-core';
 
 import { isStale, periodOf, policyEntryOf } from '../budget';
-import { connectionOwnerOf, connectionSummaryOf } from '../connections/mapping';
+import {
+  connectionCredentialKind,
+  connectionOwnerOf,
+  connectionSummaryOf,
+} from '../connections/mapping';
 import type { Store } from '../store';
 import type { ConnectionRecord, ConnectionResourceRecord, MissionRecord } from '../store/types';
 
@@ -80,6 +84,7 @@ export async function loadMissionContext(
     connections.push({
       ...connectionSummaryOf(connection),
       owner: await ownerOf(store, connection),
+      credential_kind: connectionCredentialKind(connection, null),
     });
     const selected = new Set(selection.resourceIds);
     if (selected.size === 0) continue;

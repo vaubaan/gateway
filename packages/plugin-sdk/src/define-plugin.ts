@@ -332,7 +332,7 @@ function credentialSpecIssues(plugin: ProviderPlugin): string[] {
 }
 
 function oneSpecIssues(plugin: ProviderPlugin, spec: CredentialSpec, at: string): string[] {
-  const own = kindSpecIssues(spec);
+  const own = kindSpecIssues(spec, plugin);
   const issues = at === 'credential' ? own : own.map((i) => i.replace(/^credential/, at));
   if (!isRecord(spec) || typeof spec.kind !== 'string') return issues;
   const tools = new Set(isList(plugin.tools) ? plugin.tools.map((t) => t?.name) : []);
@@ -442,7 +442,7 @@ function isSentence(x: unknown, max: number): x is string {
   return typeof x === 'string' && x.trim().length > 0 && x.length <= max;
 }
 
-function kindSpecIssues(spec: CredentialSpec): string[] {
+function kindSpecIssues(spec: CredentialSpec, plugin: ProviderPlugin): string[] {
   if (!spec || typeof spec !== 'object') return ['credential: missing CredentialSpec'];
   if (typeof spec.kind !== 'string' || !isCredentialKind(spec.kind)) {
     return [`credential.kind: expected one of ${CREDENTIAL_KINDS.join(' | ')}`];

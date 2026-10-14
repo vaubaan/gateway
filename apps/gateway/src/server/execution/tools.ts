@@ -19,7 +19,7 @@
  * authenticated).
  */
 import { tokenHolderLabel, type MissionContext } from '@vaubaan/gateway-core';
-import type { PluginRegistry } from '@vaubaan/plugin-sdk';
+import { unavailableToolReason, type PluginRegistry } from '@vaubaan/plugin-sdk';
 import type {
   ConnectionStatus,
   Gate,
@@ -47,7 +47,11 @@ export function callableTools(ctx: MissionContext, registry: PluginRegistry): Mc
   const tools: McpToolDeclaration[] = [];
   for (const { plugin } of registry.all()) {
     if (plugin.experimental || !providers.has(plugin.id)) continue;
-    tools.push(...plugin.tools);
+    // A mission holds one connection per provider; a tool its way of
+    // connecting cannot run is not listed (the resource stage refuses it too).
+    const connection = ctx.connections.find((c) => c.provider === plugin.id);
+    const kind = connection?.credential_kind ?? plugin.credential.kind;
+    tools.push(...plugin.tools.filter((t) => unavailableToolReason(plugin, kind, t.name) === null));
   }
   return tools;
 }

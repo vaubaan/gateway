@@ -39,7 +39,12 @@ import {
   type ResourceResolution,
   type ResourceStage,
 } from '@vaubaan/gateway-core';
-import type { ClassifyOutcome, PluginRegistry, ProviderPlugin } from '@vaubaan/plugin-sdk';
+import {
+  unavailableToolReason,
+  type ClassifyOutcome,
+  type PluginRegistry,
+  type ProviderPlugin,
+} from '@vaubaan/plugin-sdk';
 import type { Slice } from '@vaubaan/shared';
 
 import type { ConnectionsRepo } from '../store';
@@ -76,6 +81,24 @@ function classifySafely(
     // A classifier is pure and total by contract; one that throws is refused, not trusted.
     return { denied: `the classifier failed: ${err instanceof Error ? err.message : String(err)}` };
   }
+}
+
+/**
+ * Why this connection cannot run the tool, or `null`: the plugin's
+ * `unavailableTools` for the way the connection was made (ADR
+ * token-connections-beside-the-integration-app). The sentence names the tool
+ * and the account, then the plugin's reason ("needs the GitHub App: …").
+ */
+export function toolUnavailableOn(
+  plugin: ProviderPlugin,
+  connection: Pick<MissionConnection, 'display_name' | 'credential_kind'>,
+  tool: string,
+): string | null {
+  const kind = connection.credential_kind ?? plugin.credential.kind;
+  const reason = unavailableToolReason(plugin, kind, tool);
+  return reason === null
+    ? null
+    : `tool '${tool}' is not available on the ${plugin.displayName} account '${connection.display_name}': ${reason}`;
 }
 
 export function createResourceStage(deps: ResourceStageDeps): ResourceStage {
@@ -115,6 +138,11 @@ export function createResourceStage(deps: ResourceStageDeps): ResourceStage {
           reason: `tool '${call.tool}' belongs to ${plugin.displayName}, and this mission holds no ${plugin.displayName} connection.`,
         };
       }
+
+      // A tool the connection's way of connecting cannot run (a token where the
+      // tool needs the company's app) is refused here, before any budget is touched.
+      const unavailable = toolUnavailableOn(plugin, connection, call.tool);
+      if (unavailable) return { ok: false, reason: unavailable };
 
       const allowed = ctx.resources.filter((r) => r.connection_id === connection.id);
       const allowedRefs = new Set(allowed.map((r) => r.ref));

@@ -20,8 +20,9 @@
  * installation token from the App's private key (`app-install.ts`), scoped
  * to the repositories and permissions the call needs.
  *
- * No personal-access-token path : the contract carries one `CredentialSpec`
- * per plugin and the on-prem instance always registers its own App (ADR D3).
+ * The other way to connect, a fine-grained personal access token pasted by
+ * hand when no App is registered, is `token.ts` (ADR
+ * token-connections-beside-the-integration-app).
  */
 
 import {

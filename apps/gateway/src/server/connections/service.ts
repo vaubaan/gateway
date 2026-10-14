@@ -23,18 +23,25 @@
  * plugin at connect time and merged by `syncDiscoveredResources`, which
  * never overwrites an owner edit and never deletes a row.
  */
-import { UpstreamAuthError, type CredentialKind } from '@vaubaan/shared';
-import type {
-  ApiKeyCredentialSpec,
-  AppInstallCredentialSpec,
-  ConnectionContext,
-  CredentialField,
-  CredentialSecret,
-  OAuth2CredentialSpec,
-  PluginRegistry,
-  ProviderPlugin,
-  Resource,
-  SshKeyCredentialSpec,
+import { isCredentialKind, UpstreamAuthError, type CredentialKind } from '@vaubaan/shared';
+import {
+  appCredentialSpecOf,
+  credentialSpecFor,
+  credentialSpecsOf,
+  isAppCredentialSpec,
+  type ApiKeyCredentialSpec,
+  type AppInstallCredentialSpec,
+  type ConnectionContext,
+  type CredentialCheck,
+  type CredentialField,
+  type CredentialSecret,
+  type CredentialSpec,
+  type OAuth2CredentialSpec,
+  type PluginRegistry,
+  type ProviderPlugin,
+  type Resource,
+  type SshKeyCredentialSpec,
+  type TokenPermissionAccess,
 } from '@vaubaan/plugin-sdk';
 import type { AuditWriter } from '@vaubaan/gateway-core';
 
@@ -84,7 +91,7 @@ import {
   OAuth2TokenError,
   type OAuth2Client,
 } from './oauth2';
-import { connectionOwnerOf } from './mapping';
+import { connectionCredentialKind, connectionOwnerOf } from './mapping';
 import type { PendingConnect, PendingConnectStore, PendingFlowKind } from './pending';
 import { generateEd25519KeyPair } from './ssh-keypair';
 
@@ -122,18 +129,89 @@ export interface Actor {
   readonly groups: readonly GroupRecord[];
 }
 
-export interface ConnectableProvider {
-  readonly id: string;
-  readonly displayName: string;
-  readonly description: string | null;
-  readonly experimental: boolean;
+/** A tool of the plugin, as a person reads it: its title and its name. */
+export interface ToolLabel {
+  readonly name: string;
+  /** The plugin's title (`Merge a pull request`), or the name when it has none. */
+  readonly title: string;
+}
+
+/** One permission to tick at the provider, with the tools it serves. */
+export interface TokenPermissionView {
+  readonly name: string;
+  readonly access: TokenPermissionAccess;
+  readonly tools: readonly ToolLabel[];
+}
+
+/** How to create the token by hand, read from the plugin's declaration. */
+export interface TokenGuideView {
+  readonly steps: readonly string[];
+  readonly permissions: readonly TokenPermissionView[];
+  readonly recommendedExpiryDays: number | null;
+  readonly docsUrl: string | null;
+}
+
+/** A tool a way of connecting cannot run, and why. */
+export interface UnavailableToolView extends ToolLabel {
+  readonly reason: string;
+}
+
+/**
+ * One way an account of a service can be connected (ADR
+ * token-connections-beside-the-integration-app): through the company's app,
+ * or with a token pasted by hand, each with what the form asks and what it
+ * cannot do.
+ */
+export interface ConnectMethod {
   readonly kind: CredentialKind;
-  /** The company app is registered (or none is needed): users may connect. */
+  /** Goes through an app the company registers at the service. */
+  readonly usesApp: boolean;
+  /** Usable now: its app is registered (and verifiable), or it needs none. */
   readonly configured: boolean;
   /** The fields of the connect form (`api-key`, `ssh-key`); empty for redirect flows. */
   readonly fields: readonly CredentialField[];
   /** Where the user creates the key (`api-key`). */
   readonly createUrl: string | null;
+  /** What the person creates, in the service's words (`api-key`): "fine-grained personal access token". */
+  readonly label: string | null;
+  readonly guide: TokenGuideView | null;
+  readonly unavailableTools: readonly UnavailableToolView[];
+}
+
+export interface ConnectableProvider {
+  readonly id: string;
+  readonly displayName: string;
+  readonly description: string | null;
+  readonly experimental: boolean;
+  /** The way offered first (`defaultMethod`); the four fields below are its own. */
+  readonly kind: CredentialKind;
+  /** At least one way can be used now: users may connect. */
+  readonly configured: boolean;
+  /** The fields of the connect form (`api-key`, `ssh-key`); empty for redirect flows. */
+  readonly fields: readonly CredentialField[];
+  /** Where the user creates the key (`api-key`). */
+  readonly createUrl: string | null;
+  /**
+   * Every way the plugin declares, primary first. The offered one is the
+   * first that is `configured` (the company's app when it is registered),
+   * else the primary.
+   */
+  readonly methods: readonly ConnectMethod[];
+}
+
+/** The way a page offers first: the first one usable now, else the primary. */
+export function defaultMethod(provider: Pick<ConnectableProvider, 'methods'>): ConnectMethod {
+  const first = provider.methods[0];
+  if (!first) throw new Error('a provider declares at least one way of connecting');
+  return provider.methods.find((m) => m.configured) ?? first;
+}
+
+/** The way of this kind, or `null` when the service does not connect that way. */
+export function methodOf(
+  provider: Pick<ConnectableProvider, 'methods'>,
+  kind: string | null | undefined,
+): ConnectMethod | null {
+  return provider.methods.find((m) => m.kind === kind) ?? null;
 }
 
 export interface DiscoveryRecord {
@@ -160,8 +238,14 @@ export interface ConnectionView {
   readonly providerLabel: string;
   readonly providerGrant: ProviderGrantView;
   readonly experimental: boolean;
-  /** `null` when the plugin is no longer registered. */
+  /** How this account was made (`connectionCredentialKind`); `null` when unknown and the plugin is gone. */
   readonly credentialKind: CredentialKind | null;
+  /** What the service said the pasted token acts as, at connect time (`octocat`); `null` when not said. */
+  readonly tokenAccount: string | null;
+  /** When the pasted token stops working, as the service said at connect time; `null` when it did not. */
+  readonly tokenExpiresAt: string | null;
+  /** Tools of the service an account made this way cannot run, and why. */
+  readonly unavailableTools: readonly UnavailableToolView[];
   readonly ownerLabel: string;
   /** `ssh-key`: the line to append to `authorized_keys`. */
   readonly publicKey: string | null;
@@ -182,6 +266,11 @@ export interface StartInput {
   readonly reconnectId?: string | null;
   /** Form values for `api-key` / `ssh-key`. */
   readonly fields?: Readonly<Record<string, string>>;
+  /**
+   * The way to connect, a credential kind the plugin declares. Absent: the
+   * kind of the account being reconnected, else the way offered first.
+   */
+  readonly method?: string | null;
 }
 
 export interface Connected {
@@ -270,6 +359,8 @@ interface FinalizeOptions {
   readonly returnTo: string | null;
   readonly discovery: DiscoveryPolicy;
   readonly metadata: Record<string, unknown>;
+  /** When the credential stops working, as the provider said; else an OAuth token's own expiry. */
+  readonly expiresAt?: string | null;
 }
 
 /** The outcome of the discovery attempted before the connection is written. */
@@ -304,21 +395,56 @@ export class ConnectionService {
 
   private async describe(providerId: string): Promise<ConnectableProvider> {
     const { plugin } = this.deps.registry.require(providerId);
-    const spec = plugin.credential;
+    const app = appCredentialSpecOf(plugin);
     // An installation nobody can verify is not connectable until the operator says so.
-    const status = needsProviderApp(spec) ? await this.deps.providerApps.status(providerId) : null;
-    const configured =
+    const status =
+      app && needsProviderApp(app) ? await this.deps.providerApps.status(providerId) : null;
+    const appConfigured =
       status === null || (status.configured && status.installVerification !== 'unverified-refused');
+    const methods = credentialSpecsOf(plugin).map((spec) =>
+      methodView(plugin, spec, isAppCredentialSpec(spec) ? appConfigured : true),
+    );
+    const offered = defaultMethod({ methods });
     return {
       id: plugin.id,
       displayName: plugin.displayName,
       description: plugin.description ?? null,
       experimental: plugin.experimental === true,
-      kind: spec.kind,
-      configured,
-      fields: spec.kind === 'api-key' || spec.kind === 'ssh-key' ? spec.fields : [],
-      createUrl: spec.kind === 'api-key' ? (spec.createUrl ?? null) : null,
+      kind: offered.kind,
+      configured: methods.some((m) => m.configured),
+      fields: offered.fields,
+      createUrl: offered.createUrl,
+      methods,
     };
+  }
+
+  /**
+   * The spec a connect flow runs: the way the form chose, else the way of the
+   * account being reconnected, else the way offered first. A way the plugin
+   * does not declare is refused.
+   */
+  private async chooseSpec(
+    plugin: ProviderPlugin,
+    method: string | null | undefined,
+    reconnect: ConnectionRecord | null,
+  ): Promise<CredentialSpec> {
+    if (method) {
+      const chosen = isCredentialKind(method) ? credentialSpecFor(plugin, method) : null;
+      if (!chosen) {
+        throw new ConnectError(
+          'invalid-input',
+          `${plugin.displayName} cannot be connected that way (${method.slice(0, 40)})`,
+        );
+      }
+      return chosen;
+    }
+    if (reconnect) {
+      const kind = connectionCredentialKind(reconnect, plugin.credential.kind);
+      const same = kind ? credentialSpecFor(plugin, kind) : null;
+      if (same) return same;
+    }
+    const offered = defaultMethod(await this.describe(plugin.id));
+    return credentialSpecFor(plugin, offered.kind) ?? plugin.credential;
   }
 
   // ── Reads ─────────────────────────────────────────────────────────────────
@@ -356,7 +482,7 @@ export class ConnectionService {
       returnTo,
       reconnectId: reconnect?.id ?? null,
     };
-    const spec = plugin.credential;
+    const spec = await this.chooseSpec(plugin, input.method, reconnect);
 
     switch (spec.kind) {
       case 'oauth2':
@@ -412,14 +538,66 @@ export class ConnectionService {
       fields: read.values,
       metadata: read.visible,
     };
+    const check = await this.verifyPasted(flow.plugin, spec, secret);
     const connected = await this.finalize(flow.actor, flow.plugin, secret, {
       displayName: flow.displayName,
       reconnectId: flow.reconnectId,
       returnTo: flow.returnTo,
       discovery: 'required',
-      metadata: { fields: read.visible },
+      metadata: {
+        fields: read.visible,
+        ...(check ? { account: check.account, expires_at: check.expiresAt } : {}),
+      },
+      expiresAt: check?.expiresAt ?? null,
     });
     return { kind: 'connected', ...connected };
+  }
+
+  /**
+   * Asks the provider about pasted values before anything is stored (the
+   * spec's `verify`): who they act as and when they stop working. A
+   * rejection, an answer that is not understood or a credential already
+   * expired refuses the connection; an unreachable provider says so. `null`
+   * when the spec declares no check (the first discovery is then the check).
+   */
+  private async verifyPasted(
+    plugin: ProviderPlugin,
+    spec: ApiKeyCredentialSpec,
+    secret: CredentialSecret,
+  ): Promise<CredentialCheck | null> {
+    if (!spec.verify) return null;
+    let check: CredentialCheck;
+    try {
+      check = await spec.verify({
+        credential: secret,
+        appConfig: await this.deps.providerApps.pluginAppConfig(plugin.id),
+        fetch: this.deps.fetch,
+        signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
+      });
+    } catch (err) {
+      const rejected = err instanceof UpstreamAuthError || !isTransportFailure(err);
+      throw new ConnectError(
+        rejected ? 'credential-rejected' : 'provider-unreachable',
+        `${plugin.displayName}: ${errorMessage(err)}`,
+      );
+    }
+    const expiresAt = check.expiresAt === null ? null : Date.parse(check.expiresAt);
+    if (expiresAt !== null && !Number.isFinite(expiresAt)) {
+      throw new ConnectError(
+        'credential-rejected',
+        `${plugin.displayName}: the expiry date it gave cannot be read`,
+      );
+    }
+    if (expiresAt !== null && expiresAt <= this.deps.clock.now().getTime()) {
+      throw new ConnectError(
+        'credential-rejected',
+        `${plugin.displayName}: this token expired on ${new Date(expiresAt).toISOString().slice(0, 10)}`,
+      );
+    }
+    return {
+      account: cleanName(check.account),
+      expiresAt: expiresAt === null ? null : new Date(expiresAt).toISOString(),
+    };
   }
 
   private async connectWithSshKey(
@@ -482,13 +660,14 @@ export class ConnectionService {
     const pending = await this.deps.pending.take(query.get('state'), actor.user.id);
     if (!pending || pending.providerId !== providerId) throw new ConnectError('state-invalid');
     const plugin = this.requirePlugin(providerId);
-    const spec = plugin.credential;
 
-    if (pending.kind === 'oauth2' && spec.kind === 'oauth2') {
-      return this.completeOAuth2(actor, plugin, spec, pending, query);
+    if (pending.kind === 'oauth2') {
+      const spec = credentialSpecFor(plugin, 'oauth2');
+      if (spec) return this.completeOAuth2(actor, plugin, spec, pending, query);
     }
-    if (pending.kind === 'app-install' && spec.kind === 'app-install') {
-      return this.completeAppInstall(actor, plugin, spec, pending, query);
+    if (pending.kind === 'app-install') {
+      const spec = credentialSpecFor(plugin, 'app-install');
+      if (spec) return this.completeAppInstall(actor, plugin, spec, pending, query);
     }
     throw new ConnectError('state-invalid');
   }
@@ -718,7 +897,7 @@ export class ConnectionService {
     options: FinalizeOptions,
   ): Promise<ConnectionRecord> {
     const { connections } = this.deps.store;
-    const expiresAt = secret.kind === 'oauth2' ? secret.expiresAt : null;
+    const expiresAt = options.expiresAt ?? (secret.kind === 'oauth2' ? secret.expiresAt : null);
     const sealed = serializeSecret(secret);
     const metadata = { credential_kind: secret.kind, ...options.metadata };
     if (!options.reconnectId) {
@@ -743,8 +922,14 @@ export class ConnectionService {
       );
     }
     const previous = await connections.getById(options.reconnectId);
+    // Reconnected another way (an app account now on a token, or back): the
+    // facts of the old way (installation id, token account) no longer hold.
+    const sameWay = previous?.metadata?.credential_kind === secret.kind;
+    const before = previous?.metadata ?? {};
+    let kept: Record<string, unknown> = before;
+    if (!sameWay) kept = 'discovery' in before ? { discovery: before.discovery } : {};
     const reconnected = await connections.setMetadata(options.reconnectId, {
-      ...(previous?.metadata ?? {}),
+      ...kept,
       ...metadata,
     });
     await this.audit(actor.user.id, 'connection-reconnected', reconnected, null);
@@ -1123,8 +1308,8 @@ export class ConnectionService {
     const app = await this.hostAppConfig(plugin.id);
     const clientId = app[CLIENT_ID_FIELD];
     if (!clientId) throw new ConnectError('app-not-configured');
-    const isPublic =
-      plugin.credential.kind === 'oauth2' && plugin.credential.clientAuthMethod === 'none';
+    const spec = credentialSpecFor(plugin, 'oauth2');
+    const isPublic = spec !== null && spec.clientAuthMethod === 'none';
     return { clientId, clientSecret: isPublic ? null : (app[CLIENT_SECRET_FIELD] ?? null) };
   }
 
@@ -1188,16 +1373,29 @@ export class ConnectionService {
    * connection too, and for a provider whose plugin is gone (nothing is known,
    * so the person removes the access by hand).
    */
-  providerGrantOf(connection: Pick<ConnectionRecord, 'provider'>): {
+  providerGrantOf(
+    connection: Pick<ConnectionRecord, 'provider'> & Partial<Pick<ConnectionRecord, 'metadata'>>,
+  ): {
     readonly providerLabel: string;
     readonly grant: ProviderGrantView;
   } {
     const plugin = this.deps.registry.get(connection.provider)?.plugin;
+    if (!plugin) {
+      return {
+        providerLabel: connection.provider,
+        grant: { withdrawnByGateway: false, byHand: null },
+      };
+    }
+    // The way the account was made says where its grant lives: a pasted token
+    // is deleted on the token page, an app is uninstalled elsewhere.
+    const kind =
+      connectionCredentialKind(connection, plugin.credential.kind) ?? plugin.credential.kind;
+    const spec = credentialSpecFor(plugin, kind);
     return {
-      providerLabel: plugin?.displayName ?? connection.provider,
+      providerLabel: plugin.displayName,
       grant: {
-        withdrawnByGateway: plugin ? canWithdraw(plugin) : false,
-        byHand: plugin?.manualRevocation ?? null,
+        withdrawnByGateway: canWithdraw(plugin, kind),
+        byHand: spec?.manualRevocation ?? plugin.manualRevocation ?? null,
       },
     };
   }
@@ -1205,12 +1403,18 @@ export class ConnectionService {
   private async view(connection: ConnectionRecord): Promise<ConnectionView> {
     const registered = this.deps.registry.get(connection.provider);
     const metadata = connection.metadata ?? {};
+    const kind = connectionCredentialKind(connection, registered?.plugin.credential.kind ?? null);
+    const spec = registered && kind ? credentialSpecFor(registered.plugin, kind) : null;
+    const pasted = kind === 'api-key';
     return {
       connection,
       providerLabel: registered?.plugin.displayName ?? connection.provider,
       providerGrant: this.providerGrantOf(connection).grant,
       experimental: registered?.plugin.experimental === true,
-      credentialKind: registered?.plugin.credential.kind ?? null,
+      credentialKind: kind,
+      tokenAccount: pasted && typeof metadata.account === 'string' ? metadata.account : null,
+      tokenExpiresAt: pasted ? connection.credentialExpiresAt : null,
+      unavailableTools: registered && spec ? unavailableToolsOf(registered.plugin, spec) : [],
       ownerLabel: await this.ownerLabel(connection),
       publicKey: typeof metadata.public_key === 'string' ? metadata.public_key : null,
       fields: stringValues(metadata.fields),
@@ -1351,6 +1555,47 @@ export function toPluginResource(provider: string, record: ConnectionResourceRec
     env: record.env,
     displayName: record.displayName,
     ...(record.metadata ? { metadata: record.metadata } : {}),
+  };
+}
+
+function toolLabel(plugin: ProviderPlugin, name: string): ToolLabel {
+  return { name, title: plugin.toolTitles?.[name] ?? name };
+}
+
+function unavailableToolsOf(plugin: ProviderPlugin, spec: CredentialSpec): UnavailableToolView[] {
+  return Object.entries(spec.unavailableTools ?? {}).map(([name, reason]) => ({
+    ...toolLabel(plugin, name),
+    reason,
+  }));
+}
+
+/** One way of connecting as the connect page shows it, read from the plugin's declaration. */
+function methodView(
+  plugin: ProviderPlugin,
+  spec: CredentialSpec,
+  configured: boolean,
+): ConnectMethod {
+  const guide = spec.kind === 'api-key' ? spec.guide : undefined;
+  return {
+    kind: spec.kind,
+    usesApp: isAppCredentialSpec(spec),
+    configured,
+    fields: spec.kind === 'api-key' || spec.kind === 'ssh-key' ? spec.fields : [],
+    createUrl: spec.kind === 'api-key' ? (spec.createUrl ?? null) : null,
+    label: spec.kind === 'api-key' ? (spec.label ?? null) : null,
+    guide: guide
+      ? {
+          steps: guide.steps,
+          permissions: guide.permissions.map((p) => ({
+            name: p.name,
+            access: p.access,
+            tools: p.tools.map((tool) => toolLabel(plugin, tool)),
+          })),
+          recommendedExpiryDays: guide.recommendedExpiryDays,
+          docsUrl: guide.docsUrl ?? null,
+        }
+      : null,
+    unavailableTools: unavailableToolsOf(plugin, spec),
   };
 }
 

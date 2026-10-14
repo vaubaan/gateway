@@ -12,10 +12,12 @@
  *   ssh-key      nothing: the instance generates the key pair
  */
 import {
+  appCredentialSpecOf,
   CLIENT_ID_FIELD,
   CLIENT_SECRET_FIELD,
   type CredentialField,
   type CredentialSpec,
+  type ProviderPlugin,
 } from '@vaubaan/plugin-sdk';
 
 // One definition, in the SDK: the plugin contract names these two keys.
@@ -53,6 +55,25 @@ export function appConfigFieldsOf(spec: CredentialSpec): readonly CredentialFiel
     case 'ssh-key':
       return [];
   }
+}
+
+/**
+ * The way of connecting a plugin's company app serves: its `oauth2` or
+ * `app-install` spec, whichever of its declared ways that is (at most one,
+ * `definePlugin`), else its primary spec — which then needs no app. A plugin
+ * that also accepts a pasted token keeps one app.
+ */
+export function appSpecOfPlugin(
+  plugin: Pick<ProviderPlugin, 'credential' | 'alternativeCredentials'>,
+): CredentialSpec {
+  return appCredentialSpecOf(plugin) ?? plugin.credential;
+}
+
+/** The settings of a plugin's company app; empty when it has none. */
+export function appConfigFieldsOfPlugin(
+  plugin: Pick<ProviderPlugin, 'credential' | 'alternativeCredentials'>,
+): readonly CredentialField[] {
+  return appConfigFieldsOf(appSpecOfPlugin(plugin));
 }
 
 /** True when connecting this provider goes through an app the company registered. */

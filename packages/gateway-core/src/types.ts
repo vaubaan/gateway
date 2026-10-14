@@ -16,6 +16,7 @@
 
 import type {
   Connection,
+  CredentialKind,
   ConnectionResource,
   Mission,
   MissionPolicy,
@@ -84,6 +85,10 @@ export type ConnectionOwner = Principal & { readonly display: string };
  *  for the duration of one call (spec §2.4). */
 export type MissionConnection = Pick<Connection, 'id' | 'provider' | 'display_name' | 'status'> & {
   readonly owner: ConnectionOwner;
+  /** How the connection was made, when its plugin connects in more than one
+   *  way: a tool its way cannot run is refused before the budget and left out
+   *  of `tools/list`. Absent or `null`: the plugin's primary way. */
+  readonly credential_kind?: CredentialKind | null;
 };
 
 /** One resource a mission may touch, hydrated from its selection (spec §0
