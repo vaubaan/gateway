@@ -185,7 +185,10 @@ access tokens: creation steps, resource owner, expiration, repository access);
 Supabase (Management API authentication, personal access tokens, scoped token
 permission names, `x-fga-permissions`); Railway docs (public API tokens and
 headers, `me` and workspace queries, projects in a workspace, MCP server
-security notes). The per-endpoint fine-grained permissions of the GitHub tools
-follow the GitHub App permissions the plugin already documents (Contents, Pull
-requests, Issues, Actions, Workflows, Administration); the Context7 quota ran
-out before each endpoint could be checked one by one.
+security notes). The fine-grained permissions of the GitHub token guide are
+read off the App's own declaration, `GITHUB_APP_PERMISSIONS`
+(`tokenPermissionsOf`): fine-grained tokens use the App's permission names, so
+the manifest and the guide share one source. Which permission each endpoint
+needs was not re-checked endpoint by endpoint against GitHub's docs: the
+Context7 quota ran out (twice, 2026-10-14), so the guide inherits the App
+declaration's mapping as is.

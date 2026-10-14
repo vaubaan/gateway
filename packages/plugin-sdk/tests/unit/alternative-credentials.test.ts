@@ -9,6 +9,7 @@ import {
   type CredentialSpec,
   type OAuth2CredentialSpec,
 } from '../../src/credential.ts';
+import { tokenPermissionsOf } from '../../src/app-permissions.ts';
 import { pluginIssues } from '../../src/define-plugin.ts';
 import type { ProviderPlugin } from '../../src/plugin.ts';
 import { acmePlugin } from '../fixtures/acme/acme-plugin.ts';
@@ -141,5 +142,41 @@ describe('alternative credentials', () => {
       withCredentials(OAUTH, [{ ...TOKEN, verify: 'yes' } as unknown as ApiKeyCredentialSpec]),
     );
     expect(issues).toContain('alternativeCredentials[0].verify: expected a function when present');
+  });
+});
+
+describe('tokenPermissionsOf', () => {
+  test('reads a token guide off an app permission declaration, minus the excluded tools', () => {
+    const permissions = tokenPermissionsOf(
+      [
+        {
+          name: 'contents',
+          label: 'Contents',
+          description: 'Code.',
+          levels: [
+            { access: 'read', label: 'Read', tools: ['acme__list_things', 'acme__mint'] },
+            { access: 'write', label: 'Read and write', tools: ['acme__mint'] },
+          ],
+        },
+      ],
+      new Set(['acme__mint']),
+    );
+    expect(permissions).toEqual([
+      { name: 'Contents', access: 'read', tools: ['acme__list_things'] },
+    ]);
+  });
+
+  test('a permission with a write level only is read-write, not read', () => {
+    const permissions = tokenPermissionsOf([
+      {
+        name: 'workflows',
+        label: 'Workflows',
+        description: 'Workflow files.',
+        levels: [{ access: 'write', label: 'Read and write', tools: ['acme__push'] }],
+      },
+    ]);
+    expect(permissions).toEqual([
+      { name: 'Workflows', access: 'read-write', tools: ['acme__push'] },
+    ]);
   });
 });

@@ -321,7 +321,11 @@ highest level), `checkPermissionChoice` (a level or `NO_ACCESS` per
 permission; a mandatory one kept; anything undeclared refused),
 `toolsLostAt`, `accessCovers`, `unconditionalNeeds(permissions, tool)` (the
 levels a tool needs on every call; `onlyWhen` needs are the plugin's to
-check) and `missingPermissions`. `definePlugin` names each malformed member,
+check), `missingPermissions` and `tokenPermissionsOf(permissions, excluded)`
+(the token guide's permissions read off the same declaration when the
+provider's tokens share the app's permission names: a `read` level as
+`read`, any other as `read-write`, the `excluded` tools left out).
+`definePlugin` names each malformed member,
 a tool a level lists that the plugin does not declare, and an `onlyWhen`
 tool that its level does not list.
 
@@ -373,7 +377,9 @@ An `api-key` spec may also carry:
 | `guide?`  | `{ steps, permissions: { name, access: 'read' \| 'read-write', tools }[], recommendedExpiryDays: number \| null, docsUrl? }` — rendered by the connect page; every tool the way can run must be served by a permission (an empty list means the token carries no permission choice) |
 | `verify?` | `(ctx) → { account, expiresAt }`: asked before anything is stored; throw `UpstreamAuthError` on a rejected token                                                                                                                                                                    |
 
-The plugin's own `refresh` and `revoke` hooks serve its primary kind only.
+A plugin whose tokens share its app's permission names derives the guide's
+permissions with `tokenPermissionsOf` rather than writing a second list
+(GitHub). The plugin's own `refresh` and `revoke` hooks serve its primary kind only.
 Shipped examples: `plugins/github/src/token.ts`, `plugins/supabase/src/token.ts`,
 `plugins/railway/src/token.ts`.
 

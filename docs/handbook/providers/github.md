@@ -175,9 +175,11 @@ repository and organisation of its account with coarse scopes.
   (`MINT_NEEDS_THE_APP`: "needs the GitHub App: …"): the host refuses it
   before the budget and does not list it; `execute` declines it too.
 - **Guide**: the steps of GitHub's "Creating a fine-grained personal access
-  token", and the permissions per tool (Contents, Pull requests, Issues,
-  Actions, Workflows, Administration — the App's own permission names, which
-  fine-grained tokens share). `definePlugin` checks every API tool is served.
+  token", and the permissions per tool read off `GITHUB_APP_PERMISSIONS`
+  (`tokenPermissionsOf` of the SDK: a `read` level as read, any other level
+  as read and write, the mint left out) — fine-grained tokens use the App's
+  permission names, so the manifest and the guide have one source.
+  `definePlugin` checks every API tool is served.
 - **Removal**: nothing is sent to GitHub (`/credentials/revoke` is the
   leak-report endpoint); the person deletes the token under Settings,
   Developer settings, Personal access tokens, Fine-grained tokens.

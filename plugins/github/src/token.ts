@@ -27,12 +27,14 @@ import {
   UpstreamAuthError,
   UpstreamHttpError,
   expectCredentialKind,
+  tokenPermissionsOf,
   type ApiKeyCredentialSpec,
   type ConnectionContext,
   type CredentialCheck,
 } from '@vaubaan/plugin-sdk';
 
 import { GITHUB_API_BASE, GITHUB_API_HEADERS } from './app-install.ts';
+import { GITHUB_APP_PERMISSIONS } from './app-manifest.ts';
 import { MINT_TOOL } from './call.ts';
 
 /** Name of the form field, and key of the secret, holding the token. */
@@ -73,65 +75,9 @@ export const githubTokenCredential: ApiKeyCredentialSpec = {
       'Tick the permissions below; GitHub adds Metadata (read) by itself.',
       'Generate the token, copy it, and paste it here. GitHub shows it once.',
     ],
-    permissions: [
-      {
-        name: 'Contents',
-        access: 'read',
-        tools: [
-          'github__list_branches',
-          'github__list_commits',
-          'github__get_file_contents',
-          'github__get_commit',
-          'github__search_code',
-          'github__list_releases',
-          'github__list_tags',
-        ],
-      },
-      {
-        name: 'Contents',
-        access: 'read-write',
-        tools: [
-          'github__create_branch',
-          'github__create_or_update_file',
-          'github__push_files',
-          'github__delete_file',
-          'github__merge_pull_request',
-          'github__create_release',
-          'github__delete_release',
-        ],
-      },
-      {
-        name: 'Pull requests',
-        access: 'read',
-        tools: ['github__list_pull_requests', 'github__get_pull_request'],
-      },
-      {
-        name: 'Pull requests',
-        access: 'read-write',
-        tools: ['github__create_pull_request', 'github__merge_pull_request'],
-      },
-      {
-        name: 'Issues',
-        access: 'read',
-        tools: ['github__list_issues', 'github__get_issue', 'github__search_issues'],
-      },
-      { name: 'Issues', access: 'read-write', tools: ['github__add_issue_comment'] },
-      {
-        name: 'Actions',
-        access: 'read',
-        tools: ['github__list_workflows', 'github__list_workflow_runs'],
-      },
-      {
-        name: 'Workflows',
-        access: 'read-write',
-        tools: ['github__create_or_update_file', 'github__push_files'],
-      },
-      {
-        name: 'Administration',
-        access: 'read-write',
-        tools: ['github__get_branch_protection', 'github__update_branch_protection'],
-      },
-    ],
+    // The App's own declaration: fine-grained tokens use the same permission
+    // names, so the manifest and this guide cannot drift apart.
+    permissions: tokenPermissionsOf(GITHUB_APP_PERMISSIONS, new Set([MINT_TOOL])),
     recommendedExpiryDays: 90,
     docsUrl:
       'https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens',
