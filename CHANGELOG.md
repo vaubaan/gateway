@@ -218,9 +218,13 @@ write …)`), instead of GitHub's bare 403. The push token of
   run. GitHub takes a fine-grained personal access token only (a classic `ghp_`
   token is refused); `github__mint_install_token` needs the App and is neither
   listed nor run on a token account. Supabase takes a personal access token (a
-  scoped one is recommended) and runs every tool with it. Railway takes an account
-  token, which runs discovery and the four variable tools; the ten tools of
-  Railway's MCP server need the OAuth app. A pasted token is checked at the
+  scoped one is recommended) and runs every tool with it. Railway takes a workspace
+  token (recommended: one workspace only) or an account token, and runs every
+  tool with it, the ten tools of Railway's MCP server included (the token is sent
+  to it as a Bearer; checked with a workspace token on 2026-10-14). When that
+  server refuses a token Railway's API still accepts, the call fails naming the
+  kind of token and the account stays usable; a token refused everywhere makes
+  the account "Needs reconnecting". A pasted token is checked at the
   service before it is stored, the account page says who it acts as and when it
   expires, ahead of it, and removing the account says where to delete the token
   (no service offers an endpoint the gateway may use for it). A shared service
@@ -228,7 +232,7 @@ write …)`), instead of GitHub's bare 403. The push token of
   authors: `alternativeCredentials`, `unavailableTools`, and the `label`, `guide`
   and `verify` of an `api-key` spec (ADR
   `token-connections-beside-the-integration-app`). Plugins: github 3.1.0,
-  supabase 4.2.0, railway 4.1.0.
+  supabase 4.2.0, railway 4.2.0.
 - **Several sign-in providers on one instance**, OpenID Connect and GitHub: a
   company directory (Entra ID, Google Workspace, Okta, Keycloak) and people who
   sign in with their own account (personal Google or Microsoft, GitHub), at once.

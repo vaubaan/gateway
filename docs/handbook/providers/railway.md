@@ -5,6 +5,7 @@ date: 2026-10-13
 last_synced: 2026-10-14
 tracks:
   - plugins/railway/src/token.ts
+  - plugins/railway/src/user-agent.ts
   - plugins/railway/src/
   - plugins/railway/tests/
   - plugins/railway/README.md
@@ -16,7 +17,7 @@ The Railway plugin on the v5 Plugin SDK (feature P1.2d). It rewraps the
 official Railway MCP server (`mcp.railway.com`) and adds four GraphQL
 variable tools, authenticates through the company's Railway Auth app
 (OAuth2 + PKCE, refresh on the hot path), discovers projects as resources
-and ships three presets. Plugin version 4.0.0. ADRs:
+and ships three presets. Plugin version 4.2.0. ADRs:
 [[railway-rewrap-remote-mcp]] (why rewrap, audience binding, refresh),
 [[plugin-contract-and-credential-spec]] (the contract) and
 [`plugin-arguments-closed-surface-and-typed-refusals`](../../decisions/plugin-arguments-closed-surface-and-typed-refusals.md)
@@ -262,28 +263,57 @@ plugin therefore declares `refreshable: true` and implements no `refresh`
 (the alignment on the v5 SDK removed `refreshRailwayCredential` and `railwayNeedsRefresh`).
 The plugin never persists: the host refreshes and stores the result.
 
-## Connecting with an account token
+## Connecting with a workspace token
 
-Beside the OAuth app, `src/token.ts` declares an **account token** ("No
-workspace" at railway.com/account/tokens) pasted by hand, the way offered
-when no Railway app is registered (ADR [token-connections-beside-the-integration-app](../../decisions/token-connections-beside-the-integration-app.md)). Railway documents it as an
-`Authorization: Bearer` for the public GraphQL API; `railwayBearerOf` returns
-it or the OAuth access token.
+Beside the OAuth app, `src/token.ts` declares a Railway token pasted by hand
+(`api-key`, label "workspace token"), the way offered when no Railway app is
+registered (ADR [token-connections-beside-the-integration-app](../../decisions/token-connections-beside-the-integration-app.md),
+amendment of 2026-10-14). One form takes either kind of token, both created
+under Account settings → Tokens; `railwayBearerOf` returns it or the OAuth
+access token.
 
-- **What runs**: discovery and the four GraphQL variable tools. The ten tools
-  rewrapped from Railway's MCP server are `unavailableTools`
-  (`MCP_NEEDS_THE_APP`), derived as "every declared tool that is not a
-  custom one": Railway documents that server for OAuth and CLI sign-in only,
-  and an MCP 401 would expire the connection for every tool.
-- **Check at paste** (`verifyRailwayToken`): `query { me { name email } }` →
-  the email (else the name). A GraphQL error (a project or workspace token
-  has no `me`) or a 401 refuses it. No expiry is exposed.
-- **Discovery with a token**: the personal projects (`projects`), then for
-  each workspace of `me.workspaces` its projects
-  (`projects(workspaceId:)`), without duplicates.
-- **Why not a workspace token**: how it answers `me` and the personal
-  project list is not documented; why not a project token: it is scoped to
-  one environment and refused by the MCP server.
+- **Kinds**: the **workspace token** (a workspace selected) is recommended —
+  one workspace, least privilege, fit for a shared service account; the
+  **account token** ("No workspace") is the second choice — every workspace
+  of the account. A **project token** is not accepted: it reaches one
+  environment of one project (sent as `Project-Access-Token`), while the
+  plugin's resource is a project. The guide's steps say all three.
+- **What runs**: every tool. Discovery and the four variable tools go to the
+  GraphQL API; the ten rewrapped tools go to `https://mcp.railway.com/` with
+  the token as `Authorization: Bearer`. Empirical check of 2026-10-14
+  (orchestrator, dogfood workspace `vaubaan`, workspace token): `initialize`
+  200, `tools/call list-projects` 200 with the workspace's project, a bogus
+  Bearer 401 on `tools/call`; `tools/list` answers without a token (69 tools
+  that day). Railway's docs describe the server for OAuth and CLI sign-in
+  only, so the account token is enabled on the MCP server without having been
+  checked.
+- **Check at paste** (`verifyRailwayToken` → `probeRailwayToken`):
+  `query vaubaanTokenOwner { me { name email } }` → an account token, named
+  by its email (else its name). Otherwise `projects(first: 100)` → a
+  workspace token, named `the <workspace> workspace` from a separate
+  `projects { workspace { name } }` query, else `the workspace of <first
+three projects>`, else unnamed. Neither answers (GraphQL `errors`, no
+  `data`, 401 or 403) → `UpstreamAuthError`, nothing stored. Another failed
+  status is a plain `Error`: Railway did not answer, which says nothing of
+  the token. No expiry is exposed.
+- **Discovery with a token**: the projects the token reaches (`projects`),
+  then, when `me.workspaces` answers (an account token), each workspace's
+  projects (`projects(workspaceId:)`) without duplicates. A workspace token's
+  refused `me` ends the list (`askRailwayGraphql` returns refusals as
+  answers).
+- **MCP refusal of a pasted token** (`explainMcpRefusal`, called by
+  `executeRailway` on an `UpstreamAuthError` from an MCP-server tool on an
+  `api-key` connection): the token is probed again. Refused by the API too →
+  `UpstreamAuthError` 401 ("deleted or has expired; reconnect with a new
+  workspace token"), the host's rejected-credential path. Accepted by the
+  API → `UpstreamAuthError` 403 naming the kind ("refused this account
+  token … reconnect with a workspace token"): the host treats 403 as "not
+  permitted", so a healthy connection is not expired for the variable tools.
+  A probe that cannot reach Railway rethrows the original refusal. An OAuth
+  connection is never probed.
+- **User-Agent**: every request carries `User-Agent: vaubaan-gateway`
+  (`src/user-agent.ts`); Cloudflare in front of the MCP server refuses some
+  default user agents (error 1010).
 - **Guide**: no permission choice exists on a Railway token; the steps say so.
 - **Removal**: no deletion endpoint was found; the person deletes the token
   under Account settings, Tokens.
@@ -291,8 +321,8 @@ it or the OAuth access token.
 ## Execution
 
 `executeRailway(ctx, tool, args)` first answers a tool the plugin does not
-declare with an `isError` result, then narrows the secret with
-`expectCredentialKind('railway', …, 'oauth2')`, then pins the target
+declare with an `isError` result, then reads the bearer with
+`railwayBearerOf` (the OAuth access token or the pasted token), then pins the target
 (`pinTarget`):
 
 1. an argument the tool does not declare is refused, by the classifier's own

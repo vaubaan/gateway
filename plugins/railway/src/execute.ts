@@ -57,8 +57,9 @@ import {
   UPSERT_VARIABLE,
   UPSERT_VARIABLES,
 } from './custom-tools.ts';
-import { MCP_NEEDS_THE_APP, railwayBearerOf } from './token.ts';
+import { askRailwayGraphql, explainMcpRefusal, railwayBearerOf } from './token.ts';
 import { railwayTools, toUpstreamName } from './tools.ts';
+import { RAILWAY_USER_AGENT } from './user-agent.ts';
 
 export type FetchImpl = typeof fetch;
 
@@ -140,6 +141,7 @@ export async function callUpstream(
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
+      'User-Agent': RAILWAY_USER_AGENT,
       Accept: 'application/json, text/event-stream',
       'MCP-Protocol-Version': '2025-06-18',
     },
@@ -196,6 +198,7 @@ export async function callGraphql<T>(
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
+      'User-Agent': RAILWAY_USER_AGENT,
     },
     body: JSON.stringify({ query, variables }),
     ...(signal ? { signal } : {}),
@@ -348,18 +351,26 @@ export async function executeRailway(
   if (!DECLARED_TOOLS.has(tool)) {
     return { content: [{ type: 'text', text: `unknown tool '${tool}'` }], isError: true };
   }
-  // The host refuses an MCP tool on a token connection before the budget
-  // (`unavailableTools`) ; declined here too, for a host that does not.
-  if (ctx.credential.kind === 'api-key' && !CUSTOM_TOOL_NAMES.has(tool)) {
-    return { content: [{ type: 'text', text: `${tool} ${MCP_NEEDS_THE_APP}` }], isError: true };
-  }
   const token = railwayBearerOf(ctx.credential);
   const effective = pinTarget(tool, args, ctx.resources);
   // Declined here, before any request : a result the agent reads, not an upstream failure.
   if ('refused' in effective) {
     return { content: [{ type: 'text', text: effective.refused }], isError: true };
   }
-  const result = await executeCall(ctx.fetch, token, tool, effective.args, ctx.signal);
+  let result: unknown;
+  try {
+    result = await executeCall(ctx.fetch, token, tool, effective.args, ctx.signal);
+  } catch (err) {
+    // A pasted token refused by the MCP server : dead (401) or a kind the server does not take (403).
+    if (
+      err instanceof UpstreamAuthError &&
+      ctx.credential.kind === 'api-key' &&
+      !CUSTOM_TOOL_NAMES.has(tool)
+    ) {
+      throw await explainMcpRefusal(ctx.fetch, token, err, ctx.signal);
+    }
+    throw err;
+  }
 
   const mcp = asToolResult(result);
   if (tool === AGENT_TOOL) {
@@ -381,10 +392,19 @@ export async function discoverRailwayResources(
   if (ctx.credential.kind !== 'api-key') {
     return listProjects(ctx, token, PROJECTS_QUERY, {});
   }
-  // An account token: its personal projects, then each of its workspaces'.
+  // A pasted token: the projects it reaches (a workspace token: its workspace's ;
+  // an account token: its personal ones), then, for an account token only, each
+  // of its workspaces'. A workspace token has no `me` : its refusal ends the list.
   const out = await listProjects(ctx, token, PROJECTS_QUERY, {});
-  const me = await callGraphql<WorkspacesOfMe>(ctx.fetch, token, WORKSPACES_QUERY, {}, ctx.signal);
-  for (const workspace of me.me?.workspaces ?? []) {
+  const me = await askRailwayGraphql<WorkspacesOfMe>(
+    ctx.fetch,
+    token,
+    WORKSPACES_QUERY,
+    {},
+    ctx.signal,
+  );
+  if (!me.ok) return out;
+  for (const workspace of me.data.me?.workspaces ?? []) {
     for (const project of await listProjects(ctx, token, WORKSPACE_PROJECTS_QUERY, {
       workspaceId: workspace.id,
     })) {

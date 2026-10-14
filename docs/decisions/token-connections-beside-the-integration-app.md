@@ -26,6 +26,45 @@ partially-supersedes:
 > [threat-model](../handbook/threat-model.md). Spec patch: delivered beside
 > this ADR (§0 "Connection", §5, §7.2).
 
+> **Amendment of 2026-10-14 — Railway: workspace token, and the MCP server's
+> tools on a token (brief PM).** Supersedes the Railway row of D5 and the
+> rejected alternative "sending a Railway account token to the MCP server".
+>
+> - **Empirical check, 2026-10-14** (orchestrator, against the real service,
+>   with a workspace token of the dogfood workspace `vaubaan`):
+>   `https://mcp.railway.com` (Streamable HTTP, SSE responses) accepts
+>   `Authorization: Bearer <workspace token>` — `initialize` 200,
+>   `tools/call list-projects` 200 returning the workspace's project; a bogus
+>   Bearer gets 401 on `tools/call`; `tools/list` answers 200 without a token
+>   (69 tools that day). Cloudflare in front refuses some user agents (error
+>   1010): every request now carries `User-Agent: vaubaan-gateway`. Railway's
+>   docs still describe the server for OAuth and the CLI's sign-in only, so
+>   the **account token is not verified** on the MCP server.
+> - **The workspace token is offered and recommended** (least privilege: one
+>   workspace; fit for a shared service account), the account token second,
+>   both through the one `api-key` way (D1 refuses a kind declared twice, and
+>   one form suits both: they are created on the same page and sent the same
+>   way). Project tokens stay out: one environment of one project, while the
+>   resource is a project.
+> - **Check at paste**: `me` answers for an account token only; otherwise the
+>   projects the token reaches answer for a workspace token, shown as its
+>   workspace (`the vaubaan workspace`), else by its projects. Discovery lists
+>   the reached projects, then, for an account token, each of its workspaces'.
+> - **Every tool runs on a token**: `unavailableTools` is gone. When the MCP
+>   server refuses a pasted token (401/403), the plugin asks the API about
+>   the same token: refused there too → 401, the rejected-credential path
+>   ("Needs reconnecting"); still accepted → 403 naming the kind of token
+>   and the way out (a workspace token, or the company app). The 403 keeps a
+>   healthy connection usable for the variable tools — the reason D5 gave for
+>   not sending tokens to the MCP server at all — instead of expiring it on
+>   the first MCP call if Railway turns out not to take account tokens there.
+> - Rejected: **two `api-key` declarations, one per kind** (refused by D1's
+>   rule, and two cards for one service); **expiring the connection on any
+>   MCP 401** (the brief's first reading: it would stop the variable tools
+>   of a valid account token); **keeping the account token MCP-less while the
+>   workspace token runs everything** (the kind is not stored, and the 403
+>   path makes the uncertainty harmless).
+
 ## Context
 
 The plugin contract carried one `CredentialSpec` per plugin

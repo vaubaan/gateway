@@ -101,7 +101,7 @@ this table in the same commit.
 
 Versions shipped today (`version` in `src/index.ts`, equal to the plugin's
 `package.json`; what telemetry reports as `plugin_version`): `4.2.0` for
-supabase; `4.1.0` for railway; `3.1.0` for github; `3.0.0` for cloudflare-dns,
+supabase; `4.2.0` for railway; `3.1.0` for github; `3.0.0` for cloudflare-dns,
 upstash-redis and vercel; `2.0.0` for ssh; `0.4.0` for stripe; `0.3.0` for gmail and
 resend. A version moves by a breaking step — major, or minor before 1.0 —
 when the classification becomes stricter or the executor refuses what it used
