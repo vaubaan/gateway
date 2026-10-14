@@ -100,19 +100,23 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/lib/dates.test.ts`                                                                      |        8 |
 | `apps/gateway/src/server/audit/filters.test.ts`                                                           |       24 |
 | `apps/gateway/src/server/auth/admin-rule.test.ts`                                                         |        5 |
+| `apps/gateway/src/server/auth/admission.test.ts`                                                          |        5 |
 | `apps/gateway/src/server/auth/bootstrap.test.ts`                                                          |        3 |
 | `apps/gateway/src/server/auth/claims.test.ts`                                                             |       22 |
+| `apps/gateway/src/server/auth/github.test.ts`                                                             |        9 |
 | `apps/gateway/src/server/auth/guard.test.ts`                                                              |       10 |
 | `apps/gateway/src/server/auth/handlers.test.ts`                                                           |        9 |
 | `apps/gateway/src/server/auth/idp-settings.test.ts`                                                       |        8 |
 | `apps/gateway/src/server/auth/origin.test.ts`                                                             |        5 |
 | `apps/gateway/src/server/auth/session-service.test.ts`                                                    |       11 |
+| `apps/gateway/src/server/auth/sign-in-providers.test.ts`                                                  |        6 |
 | `apps/gateway/src/server/authority/authority-service.test.ts`                                             |       20 |
 | `apps/gateway/src/server/authority/mission-grounds.test.ts`                                               |       27 |
 | `apps/gateway/src/server/compose/compose.test.ts`                                                         |       17 |
 | `apps/gateway/src/server/config/duration.test.ts`                                                         |        2 |
 | `apps/gateway/src/server/config/keys-doc.test.ts`                                                         |       35 |
 | `apps/gateway/src/server/config/load.test.ts`                                                             |       54 |
+| `apps/gateway/src/server/config/sign-in.test.ts`                                                          |       15 |
 | `apps/gateway/src/server/connections/codec-and-keypair.test.ts`                                           |       12 |
 | `apps/gateway/src/server/connections/credentials.test.ts`                                                 |       15 |
 | `apps/gateway/src/server/connections/input.test.ts`                                                       |       25 |
@@ -129,7 +133,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/http/client-ip.test.ts`                                                          |       11 |
 | `apps/gateway/src/server/http/document.test.ts`                                                           |        6 |
 | `apps/gateway/src/server/http/healthz.test.ts`                                                            |        4 |
-| `apps/gateway/src/server/now/derive.test.ts`                                                              |        5 |
+| `apps/gateway/src/server/http/security-headers.test.ts`                                                   |        6 |
 | `apps/gateway/src/server/logging/logging.test.ts`                                                         |        6 |
 | `apps/gateway/src/server/management/door.test.ts`                                                         |        4 |
 | `apps/gateway/src/server/management/hard-deny.test.ts`                                                    |       16 |
@@ -137,11 +141,13 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/management/tools.test.ts`                                                        |       32 |
 | `apps/gateway/src/server/missions/bootstrap-kit.test.ts`                                                  |       16 |
 | `apps/gateway/src/server/missions/catalog-view.test.ts`                                                   |       21 |
+| `apps/gateway/src/server/missions/git-view.test.ts`                                                       |        3 |
 | `apps/gateway/src/server/missions/orphan-reason.test.ts`                                                  |        4 |
 | `apps/gateway/src/server/missions/preview.test.ts`                                                        |       44 |
 | `apps/gateway/src/server/missions/summary.test.ts`                                                        |        8 |
 | `apps/gateway/src/server/missions/token-name.test.ts`                                                     |       23 |
 | `apps/gateway/src/server/missions/token.test.ts`                                                          |       10 |
+| `apps/gateway/src/server/now/derive.test.ts`                                                              |        5 |
 | `apps/gateway/src/server/oauth-as/authorization.test.ts`                                                  |       41 |
 | `apps/gateway/src/server/oauth-as/client-metadata-document.test.ts`                                       |       91 |
 | `apps/gateway/src/server/oauth-as/clients.test.ts`                                                        |       40 |
@@ -153,6 +159,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/oauth-as/redirect-uri.test.ts`                                                   |       52 |
 | `apps/gateway/src/server/oauth-as/secrets.test.ts`                                                        |        6 |
 | `apps/gateway/src/server/oauth-as/token-service.test.ts`                                                  |       66 |
+| `apps/gateway/src/server/provider-apps/registration.test.ts`                                              |       25 |
 | `apps/gateway/src/server/provider-apps/service.test.ts`                                                   |       15 |
 | `apps/gateway/src/server/providers/planes.test.ts`                                                        |        9 |
 | `apps/gateway/src/server/providers/reference.test.ts`                                                     |       20 |
@@ -161,6 +168,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/requests/claim.test.ts`                                                          |       38 |
 | `apps/gateway/src/server/requests/client-ip.test.ts`                                                      |        2 |
 | `apps/gateway/src/server/requests/events.test.ts`                                                         |        7 |
+| `apps/gateway/src/server/requests/provider-pages.test.ts`                                                 |        2 |
 | `apps/gateway/src/server/requests/state.test.ts`                                                          |        9 |
 | `apps/gateway/src/server/requests/sweeper.test.ts`                                                        |        4 |
 | `apps/gateway/src/server/shares/errors.test.ts`                                                           |        4 |
@@ -178,6 +186,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/audit/session-history-retention.test.ts`                                  |       11 |
 | `apps/gateway/tests/integration/auth/deactivate-user.test.ts`                                             |       12 |
 | `apps/gateway/tests/integration/auth/oidc-login.test.ts`                                                  |       22 |
+| `apps/gateway/tests/integration/auth/sign-in-providers.test.ts`                                           |       16 |
 | `apps/gateway/tests/integration/authority/close-orphaned.test.ts`                                         |       11 |
 | `apps/gateway/tests/integration/authority/door-latency.bench.test.ts`                                     |        1 |
 | `apps/gateway/tests/integration/authority/handlers.test.ts`                                               |       11 |
@@ -204,6 +213,9 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/execution/pipeline.test.ts`                                               |       24 |
 | `apps/gateway/tests/integration/execution/streaming.test.ts`                                              |       13 |
 | `apps/gateway/tests/integration/execution/team-door.test.ts`                                              |       11 |
+| `apps/gateway/tests/integration/git/git-remote-limits.test.ts`                                            |       10 |
+| `apps/gateway/tests/integration/git/git-remote-security.test.ts`                                          |       37 |
+| `apps/gateway/tests/integration/git/git-remote.test.ts`                                                   |       14 |
 | `apps/gateway/tests/integration/management/hard-deny.test.ts`                                             |        6 |
 | `apps/gateway/tests/integration/management/management-door.test.ts`                                       |       34 |
 | `apps/gateway/tests/integration/management/output-schemas.test.ts`                                        |        9 |
@@ -239,6 +251,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/store/requests-approvals.test.ts`                                         |       14 |
 | `apps/gateway/tests/integration/store/schema.test.ts`                                                     |        6 |
 | `apps/gateway/tests/integration/store/sessions.test.ts`                                                   |       11 |
+| `apps/gateway/tests/integration/store/sign-in-providers-store.test.ts`                                    |        4 |
 | `apps/gateway/tests/integration/store/token-holders.test.ts`                                              |        4 |
 | `apps/gateway/tests/integration/store/users-issuer.test.ts`                                               |       14 |
 | `apps/gateway/tests/integration/store/web-sessions.test.ts`                                               |        8 |
@@ -284,11 +297,13 @@ this table says where each requirement lives, and what is not written yet.
 | `packages/gateway-core/tests/unit/pipeline.test.ts`                                                       |       38 |
 | `packages/gateway-core/tests/unit/risk-gateway.test.ts`                                                   |        9 |
 | `packages/gateway-core/tests/unit/token-holder.test.ts`                                                   |        3 |
+| `packages/plugin-sdk/tests/unit/app-permissions.test.ts`                                                  |        9 |
 | `packages/plugin-sdk/tests/unit/arguments.test.ts`                                                        |       10 |
 | `packages/plugin-sdk/tests/unit/catalog-loader.test.ts`                                                   |       31 |
 | `packages/plugin-sdk/tests/unit/catalog-path.test.ts`                                                     |        4 |
 | `packages/plugin-sdk/tests/unit/define-plugin.test.ts`                                                    |       33 |
 | `packages/plugin-sdk/tests/unit/env-of.test.ts`                                                           |        8 |
+| `packages/plugin-sdk/tests/unit/git-wire.test.ts`                                                         |       20 |
 | `packages/plugin-sdk/tests/unit/identifiers-kit.test.ts`                                                  |        9 |
 | `packages/plugin-sdk/tests/unit/registry.test.ts`                                                         |       11 |
 | `packages/plugin-sdk/tests/unit/slices.test.ts`                                                           |       21 |
@@ -315,6 +330,7 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/cloudflare-dns/tests/unit/identifiers.test.ts`                                                   |       59 |
 | `plugins/cloudflare-dns/tests/unit/plugin.test.ts`                                                        |       51 |
 | `plugins/cloudflare-dns/tests/unit/risk-catalog.test.ts`                                                  |       38 |
+| `plugins/github/tests/unit/app-manifest.test.ts`                                                          |       36 |
 | `plugins/github/tests/unit/classify.test.ts`                                                              |       69 |
 | `plugins/github/tests/unit/data-model.test.ts`                                                            |        1 |
 | `plugins/github/tests/unit/execute.test.ts`                                                               |       25 |
@@ -385,7 +401,7 @@ this table says where each requirement lives, and what is not written yet.
 The table is generated from the JSON report of one run of the whole suite
 (`npx vitest run --reporter=json`). A count is the number of tests the file
 declares, `it.each` expanded, **skipped tests included**: the TOTAL is the
-report's number of tests, of which 9854 passed and 1 was skipped in that
+report's number of tests, of which 10315 ran and 1 was skipped in that
 run, made with a build (as `npm run ci` does). The one skipped whatever the
 build is the latency measurement of the authority re-check
 (`door-latency.bench.test.ts`, run with `VAUBAAN_BENCH=1`). Without a build 27
@@ -708,9 +724,11 @@ as `UpstreamAuthError`, another status as `UpstreamHttpError`), the catalog
 path resolved with
 `catalogPathNextTo` and present on disk.
 
-**GitHub** (587) — `plugin.test.ts` (16): structural kit (26 tools, the 14
-named risks touched), the fallback lint, presets `read-only` / `developer` /
-`release-manager`, the `app-install` credential spec with its five app
+**GitHub** (639) — `plugin.test.ts` (17): structural kit (26 tools and the
+git remote's two, the 18 named risks touched), the fallback lint, presets
+`read-only` / `developer` / `release-manager` (catalog v6: `developer` without
+the mint risks, a force-push asking first; `release-manager` pushing tags,
+asking first), the `app-install` credential spec with its five app
 settings and the declarative `userVerification` (GitHub token endpoint,
 `GET /user/installations`, 100 per page). `execute.test.ts` (25):
 installation token minting (JWT → `access_tokens`), per-call repository
@@ -722,7 +740,9 @@ than the declared one is refused without merging), and `push_files` reads
 multi-slice tools, the `workflow-via-file` slice, retired tools, structural
 denials, and 34 cases of **what it cannot place exactly** (non-canonical
 workflow paths, `refs/…` branch names, malformed identifiers), all refused.
-`risk-catalog` (56): one `[tool, args, risks]` row per call shape, evaluated
+`risk-catalog` (71): one `[tool, args, risks]` row per call shape — git
+fetches and pushes included (every ref, force, deletion, tags, workflow
+files) — evaluated
 through the shipped catalog — the risks each tool touches, exactly.
 `injection.test.ts` (415): the identifier suite — every identifier position
 against every hostile value (319), numbers, what a legitimate value still
@@ -1579,12 +1599,13 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   idempotent re-run, incremental apply of a new file, checksum
   immutability of an applied file (boot refused), full rollback of a
   failing file (nothing recorded, no table left), a database carrying a
-  migration this image does not ship is refused, the eleven shipped
-  migrations `0001`-`0013` in the default directory.
+  migration this image does not ship is refused, the fifteen shipped
+  migrations `0001`-`0015` in the default directory (`0015_git_pending_refs`:
+  the temporary refs of the git remote).
 - **`unit/server/store/db.test.ts`** (2) — `isSqliteVersionAtLeast`
   against `MIN_SQLITE_VERSION`: major, minor and patch compared in order;
   a missing or malformed component counts as zero.
-- **`integration/store/schema.test.ts`** (6) — the 30 tables exist; every table is `STRICT`; the store satisfies the composition root's
+- **`integration/store/schema.test.ts`** (6) — the 32 tables exist (`git_pending_refs` since 0015); every table is `STRICT`; the store satisfies the composition root's
   `Store` port (`kind`, `ping()`, `close()`); boot against an empty file sets WAL,
   `foreign_keys`, `synchronous=NORMAL` and reopens without re-migrating;
   two writers on one file serialize under `BEGIN IMMEDIATE` (second gets
@@ -2594,6 +2615,75 @@ failed after 2 parts (Error)'` — not the provider's sentence — the credit
   per call; one mint per repository scope; never served or stored close to
   expiry; lifetime bounded by what is left; `github__mint_install_token`
   never cached.
+
+## Scenarios — Git remote
+
+> Covers: handbook [[git-remote]], [[execution-door]] (shared admission,
+> door-bound tools, catalog `git_remote`), [[providers/github]] (review, ref
+> moves, permissions). Spec: `vaubaan-gateway.md` §4.1 bis, §2.4, §4.4. ADR
+> `gateway-as-git-remote`.
+
+The real `git` client (git 2.48.1 on the development machine) against the real
+composition root on the `:memory:` store with the shipped GitHub plugin;
+GitHub is `FakeGithubHost` (`tests/integration/git/fake-github-host.ts`): the
+real `git http-backend` over bare repositories behind a loopback listener, and
+a REST API for installation tokens (with per-installation permissions and
+GitHub's 422), `GET /repos`, `git/ref`, `git/refs` (create, `force:false`
+checked with `merge-base --is-ancestor`, delete) and `compare` computed with
+git on the same repositories. The agent's git has an empty configuration, the
+setup kit's credential helper and the key in `VAUBAAN_MISSION_TOKEN`. Nothing
+reaches github.com.
+
+- **`packages/plugin-sdk/tests/unit/git-wire.test.ts`** (20) — pkt-line
+  framing (lengths 0–3, too large, not hex, truncated), the same packets
+  whatever the chunking with the rest of the stream handed on byte for byte,
+  side-band splitting; the command list (every command, capabilities of the
+  first line, zero ids, malformed lines, shallow lines, push certificates, a
+  list without its flush, round trip); **a seeded fuzz of 4000 mutated
+  lists**: a well-formed list or a protocol error, nothing else; report-status
+  and advertisement round trips.
+- **`tests/integration/git/git-remote.test.ts`** (14) — clone with protocol v2
+  (the header relayed) and v0, the key never upstream, a read token for one
+  repository, one `github__git_fetch` entry; a fetch after an upstream push; a
+  repository outside the mission named; a feature branch pushed (risks
+  `feature-branch-write` + `git-push`, temporary refs gone) and fast-forwarded,
+  counted twice; main refused by `merge-protected` with nothing sent upstream;
+  `refs/vaubaan/` and `refs/notes/` refused; **force-push: approval URL,
+  temporary ref kept while the request is open, the request's arguments and
+  GitHub comparison link, grant, the same push again passes**; a workflow
+  change asks first; tags and deletions need `tag-write` and
+  `branch-delete`; 300 files refused, the temporary ref cleaned, audited; no
+  key, a wrong key, a revoked mission; the git tools refused over MCP; LFS 501.
+- **`tests/integration/git/git-remote-limits.test.ts`** (10) — the pack cap
+  (`VAUBAAN_GIT_MAX_PACK_MB=1`: refused, one audit entry, git's probe not a
+  call); the budget of `git-push` and its claim URL; a rotated key, an expired
+  mission; an installation without `contents: write` (clone works, push
+  refused by name) and without `workflows: write` (code pushed, a workflow
+  change refused by name, nothing counted); a token connection (its token
+  upstream, never the key); the sweeper of an expired pending ref; the shared
+  admission; the catalog's `git_remote`.
+- **`tests/integration/git/git-remote-security.test.ts`** (37) — **multi-ref
+  pushes**: a feature branch with main (both refused, nothing moves), two
+  feature branches (one decision, one entry, both move), a forbidden tag
+  second in the list; `--atomic` and `-o` refused by git itself, and
+  `atomic`, `push-options`, `report-status-v2`, `object-format=sha256`, an
+  unknown capability refused in a raw push; 14 ref-name tricks never created;
+  a ref twice; 51 refs; a list that never ends, a cut pkt-line, impossible and
+  non-hex lengths, no command — `ERR` and audited; **a client that lies in its
+  old id to hide a workflow change** (stale info, nothing moves) and a create
+  of an existing ref; a client gone mid-pack (nothing left at GitHub, no row);
+  an in-flight temporary ref swept past its deadline; clones with
+  `protocol.version` 0, 1 and 2.
+- **`src/server/missions/bootstrap-kit.test.ts`** (21) — the kit's git step:
+  absent without a served repository; the helper reading the variable for the
+  instance's origin, never the secret, a store or a URL credential; the
+  `insteadOf` rewrite from the plugin, or none; one clone line per
+  repository; the instructions' Git section; `/agent-bootstrap.md` §8.
+- **`src/server/missions/git-view.test.ts`** (3) — the mission page's Git
+  block: absent without a repository; remotes; abilities sorted by the policy;
+  the raw-token tool named.
+- **`src/server/requests/provider-pages.test.ts`** (2) — a waiting push links
+  GitHub's comparison per ref; nothing for another tool or erased arguments.
 
 ## Scenarios — Authority, shares, groups
 

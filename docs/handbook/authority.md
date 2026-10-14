@@ -13,7 +13,7 @@ tracks:
   - apps/gateway/src/server/store/membership.ts
   - apps/gateway/src/server/connections/service.ts
   - apps/gateway/src/server/connections/notice-redirect.ts
-  - apps/gateway/src/server/execution/door.ts
+  - apps/gateway/src/server/execution/admission.ts
   - apps/gateway/src/server/auth/login.ts
   - apps/gateway/src/server/store/repositories/shares.ts
   - apps/gateway/src/server/store/repositories/groups.ts
@@ -397,7 +397,7 @@ written, and no administrative entry: no human is behind a read.
 
 | Reader                                                                                                                         | Call                                                                                                                                                                                                      |
 | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| the execution door, every request                                                                                              | `grounds.inspect` (`execution/door.ts`)                                                                                                                                                                   |
+| the execution surface, every request                                                                                           | `grounds.inspect` (`execution/admission.ts`)                                                                                                                                                              |
 | `MissionService`: list, detail and session page (creator or member); gate, rotate, revoke, `draftFrom` / `duplicate` (creator) | `grounds.inspect` (`access` for the reads, `ownInspected` for the creator's acts, `list`; `stateAfterRefusal` for the state reported when the store refused a token insert)                               |
 | `MissionTeamService`: team, members, tokens                                                                                    | none of its own: every method that reads a mission starts from `MissionService.access`, so it holds the mission already derived; after a refused token insert it asks `MissionService.stateAfterRefusal`  |
 | `RequestService`: view, claim and approval decisions                                                                           | `grounds.derive` (`own`)                                                                                                                                                                                  |
@@ -526,7 +526,7 @@ mission back.
 
 ### The door
 
-`ExecutionDoor.credentialResolver` (`execution/door.ts`) calls
+`MissionAdmission.credentialResolver` (`execution/admission.ts`, both doors) calls
 `grounds.inspect(verified.mission)` between the token verification and
 `loadMissionContext`, on every request whose token authenticates
 (`tools/list`, `tools/call`, the catalog endpoint). A token that stopped on
@@ -535,7 +535,7 @@ answered 401 before that, and the mission is not inspected
 ([execution-door](execution-door.md), "Token holders"). The pipeline's `checkMissionActive` then refuses an
 orphaned mission with `mission-inactive`, `status: 'orphaned'`; the refusal's
 hint tells the agent that the same token works again once the authority is
-back. The door logs `mission orphaned at the execution door` (info: `cause`,
+back. The door logs `mission orphaned at the execution surface` (info: `cause`,
 `connection_id`, `uncovered`) and writes no administrative entry, in either
 direction. `grounds` is a required dependency of the door and of
 `createExecutionModule`.
@@ -654,8 +654,7 @@ A page that catches a service error matches it by shape (`isShareError(err,
   the uncovered risks; `grounds.check(mission)` gives the same. Audit → the
   mission: a `mission-orphaned` entry names the act and its author (when two
   acts were under way at once, the one that settled first). No entry
-  means no service watched the change: the instance log has `mission orphaned
-at the execution door` with the same fields. Do not look for `orphaned` in
+  means no service watched the change: the instance log has `mission orphaned at the execution surface` with the same fields. Do not look for `orphaned` in
   the `missions` table: the row is `active`.
 - **A mission should be back and is not.** `orphan.uncovered` on its page
   lists what is still not covered: a new share must cover **every** accepted

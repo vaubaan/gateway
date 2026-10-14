@@ -50,6 +50,7 @@ Packaging and deployment (image, compose file, reverse proxy) are in
 | Handbook                                      | What it covers                                                                                                                                                         |
 | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [execution-door](execution-door.md)           | How an agent holding a mission token lists and calls tools: `/mcp`, the bearer dispatch, the call pipeline's stages, the agent label, streaming, the catalog endpoint. |
+| [git-remote](git-remote.md)                   | The instance as the agents' git remote: `/git/<owner>/<repo>.git`, fetch relayed, push decided ref by ref, temporary refs, the sweeper.                                |
 | [management-door](management-door.md)         | How an agent acts on behalf of a user: the instance as OAuth authorization server, delegated tokens, admission, the tools of `/mcp/manage`.                            |
 | [budget-and-sessions](budget-and-sessions.md) | How a call that passed the risk check is counted against its mission's budget: the decision core, the session service, rate windows, mission states.                   |
 

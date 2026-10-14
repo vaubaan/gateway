@@ -48,6 +48,7 @@ tracks:
   - apps/gateway/src/lib/connections/session.ts
   - apps/gateway/next.config.ts
   - apps/gateway/tests/unit/app/
+  - apps/gateway/src/app/(app)/reference/[id]/page.tsx
 ---
 
 # Web app — route map, layouts, shell, design system
@@ -1010,6 +1011,14 @@ two catch-all risks (`read-data`, `uncategorized-write`) and the tools whose
 name says nothing of a plane (`get_project`, `execute_sql`, the
 `*_function` tools…). The same map feeds the plane filter of the permission editor
 ([missions](missions.md)).
+
+**Git.** The page of the one plugin that declares a `gitRemote` ends with a
+"Git" section (`reference-git`, `(app)/reference/[id]/page.tsx`): the remote
+`<public_url>/git/<owner>/<repo>.git` with the key as the password, the two
+audited git tools, each of the plugin's `abilities` with the permission it
+needs (linked to its anchor), and what the gateway does not do (read the pack,
+serve LFS, signed pushes, push options, `--atomic`). Handbook
+[git-remote](git-remote.md).
 
 `src/server/providers/links.ts` (browser-safe) is the only place that builds
 those URLs and anchors: `providerPath`, `riskReferencePath`,

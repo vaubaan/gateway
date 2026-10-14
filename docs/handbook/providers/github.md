@@ -19,6 +19,9 @@ tracks:
   - plugins/github/src/app-manifest.ts
   - plugins/github/src/permission-check.ts
   - plugins/github/src/credential-keys.ts
+  - plugins/github/src/git-remote.ts
+  - plugins/github/src/git-call.ts
+  - plugins/github/src/tool-titles.ts
   - plugins/github/tests/unit/
 ---
 
@@ -188,8 +191,8 @@ repository and organisation of its account with coarse scopes.
 
 | File                      | Role                                                                                                                                                                                                                                                                                                       |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/index.ts`            | `definePlugin` → `githubPlugin` v3.0.0.                                                                                                                                                                                                                                                                    |
-| `src/risk-catalog.yaml`   | 14 risks + fallback, 3 presets, `catalog_version: 5`.                                                                                                                                                                                                                                                      |
+| `src/index.ts`            | `definePlugin` → `githubPlugin` v3.1.0.                                                                                                                                                                                                                                                                    |
+| `src/risk-catalog.yaml`   | 18 risks + fallback, 3 presets, `catalog_version: 6`.                                                                                                                                                                                                                                                      |
 | `src/data-model.ts`       | Plane `repo`, 17 entities (`delete` under `release` is a verb leaf); `branch` is `envScopable`.                                                                                                                                                                                                            |
 | `src/tools.ts`            | 26 tools. Retired by risk-model §7.2 #1 and not declared: `dispatch_workflow`, `cancel_workflow_run`, `rerun_workflow_run`.                                                                                                                                                                                |
 | `src/call.ts`             | The grammar of every identifier (`ownerName`, `repoName`, `repoFullName`, `repoPath`, `revision`, `branchName`, `tagName`, `pullRequestHead`, `positiveInteger`, `workflowRef`) and `readGithubCall`, the one reader `classify` and `execute` share; the refusal wording (`repositoryNotSelectedMessage`). |
@@ -198,10 +201,65 @@ repository and organisation of its account with coarse scopes.
 | `src/app-install.ts`      | `buildAppJwt`, `mintInstallationToken`, `installationIdOf`, `GITHUB_API_BASE`, `GITHUB_API_HEADERS`.                                                                                                                                                                                                       |
 | `src/execute.ts`          | `executeGithub` (the body run under the SDK's `declining`), `discoverGithubResources`, `MINT_PERMISSIONS`, discovery paging constants (100 per page, 10 pages at most).                                                                                                                                    |
 | `src/app-manifest.ts`     | `GITHUB_APP_PERMISSIONS`, `githubManifestRegistration`, `buildGithubManifest`, `githubRegisteredApp`, `GITHUB_LOGIN_PATTERN`.                                                                                                                                                                              |
-| `src/permission-check.ts` | `needsOf(call)`, `assertAppPermissions(call, granted)`, `declineMissingPermissions`, `mintPermissions`, `MINT_NEEDS`.                                                                                                                                                                                      |
+| `src/permission-check.ts` | `needsOf(call)`, `assertAppPermissions(call, granted)`, `assertGranted`, `missingPermissionSentence`, `declineMissingPermissions`, `mintPermissions`, `MINT_NEEDS`, `gitFetchNeeds`, `gitPushNeeds`.                                                                                                       |
 | `src/credential-keys.ts`  | `GITHUB_APP_CONFIG`, `GITHUB_WEB_BASE` (shared by the credential spec and the manifest flow).                                                                                                                                                                                                              |
 | `src/token-cache.ts`      | `installationTokenForCall(ctx, repo)`: per-call token served from `ctx.credentialCache`, 50 min at most, 5 min expiry margin.                                                                                                                                                                              |
 | `src/octokit-dispatch.ts` | `dispatchGithubTool(octokit, call, args)`: checked call → Octokit call; reads the pull request before a merge and declines (`ExecutorRefusal`) a base other than the declared one.                                                                                                                         |
+| `src/git-call.ts`         | `GIT_FETCH_TOOL`, `GIT_PUSH_TOOL`, `readGitCall` (the one reader of the git tools' arguments, shared by `classify` and `execute`), `pushedRef` (branches and tags only, `refs/vaubaan/` reserved).                                                                                                         |
+| `src/git-remote.ts`       | `githubGitRemote` (the plugin's `gitRemote`): `upstream` (credential per access), `review`, `compareUrl`, `insteadOf`, `abilities`; `executeGit` (the ref moves).                                                                                                                                          |
+
+## The git remote
+
+The plugin declares the instance's git remote (`gitRemote`, SDK
+`GitRemoteCapability`; handbook [git-remote](../git-remote.md), ADR
+[gateway-as-git-remote](../../decisions/gateway-as-git-remote.md)). Two tools
+the pipeline decides and audits but that are **not MCP tools** (refused on
+`/mcp`): `github__git_fetch { repository, step }` and
+`github__git_push { repository, updates[] }`, whose arguments are the host's
+review.
+
+- **Credential** (`gitGrant`). An App connection mints a token for the one
+  repository: `contents: read` to fetch and review; to push,
+  `contents: write` + `workflows: write`, or `contents: write` alone when the
+  installation lacks `workflows` (GitHub answers 422 to the first; the mint
+  falls back, as `mint_install_token` does), and a refusal naming the
+  permission when even that is refused. Cached per repository and access in
+  `ctx.credentialCache`, with the permissions GitHub reported. A token
+  connection (`api-key`, field `token`, the fine-grained personal access
+  token) presents its token; its permissions are unknown, nothing is
+  declined on a guess. The git transport is `Basic x-access-token:<token>` to
+  `https://github.com/<owner>/<repo>.git`.
+- **Review** (`review`). For each ref: `GET git/ref/<ref>` must equal the
+  client's `old` (else stale info — a lie about `old` would keep commits out
+  of the review); `GET compare/<base>...<head>` gives the status, commit
+  count and files (renames: both names); a non-fast-forward is compared both
+  ways; a created ref is compared with the default branch. Workflow files:
+  anything under `.github/workflows/`. 300 files or 250 commits, an unrelated
+  history, an empty repository: not reviewable, refused. Then the push
+  token's permissions must cover `gitPushNeeds(updates)` (`contents: write`,
+  plus `workflows: write` when a workflow file changes), or the push is
+  refused by the permission's name.
+- **Execute** (`executeGit`), per ref, in order, reported per ref: create
+  `POST git/refs`; fast-forward `PATCH git/refs/<ref> force:false`; force
+  (accepted `force-push` only) and delete: `GET git/ref` again, must still be
+  the reviewed `old`, then `PATCH force:true` / `DELETE`. A 422 on a
+  fast-forward reads "non-fast-forward … fetch first"; a 5xx is an upstream
+  error.
+- **Slices** (`gitSlicesOf`, `classify.ts`): fetch `repo[R].branch.R`,
+  `repo[R].tag.R` (`read-code`); every pushed ref `<ref>.push.W`
+  (`git-push`); a branch `branch[B].W` (`feature-branch-write`,
+  `merge-protected` or the fallback); a tag `tag[T].W` (`create-release`'s
+  pattern — the deliberate overlap with `tag-write`); not a fast-forward
+  `<ref>.force.W` (`force-push`); a deletion `<ref>.delete.W`
+  (`branch-delete`, `tag-write`; a deleted branch also writes `branch[B].W`);
+  workflow files `<ref>.workflow-via-file.W` (`workflow-write-via-file`).
+- **App permissions** (`app-manifest.ts`): `github__git_fetch` under
+  `contents: read`, `github__git_push` under `contents: write`, and under
+  `workflows: write` "for a git push that changes a file under
+  .github/workflows/".
+- **Interface**: `insteadOf: https://github.com/` (the setup kit's rewrite),
+  `abilities` (what each permission means for git, for the mission page),
+  `compareUrl` (the request page's link to GitHub's comparison).
 
 ## Tool → slice mapping
 
@@ -343,7 +401,13 @@ outside the ident class before it reaches a slice.
   release, and the reverse; `release-manager` carries both, each under
   `approval`.
 - Two mint risks (`clone` vs `push`): the push token leaves the gateway's
-  perimeter with write permissions, hence a separate, approval-gated entry.
+  perimeter with write permissions, hence a separate entry. Since catalog v6
+  no preset carries either: the git remote gives git without a token leaving.
+- **Catalog v6 — git through the remote.** `git-push` (every pushed ref,
+  leaf `push`), `force-push` (leaf `force`), `branch-delete` (leaf `delete`
+  on a branch), `tag-write` (leaves `push` and `delete` on a tag). Nothing
+  renamed. A pushed tag also writes `tag[<name>]`, which `create-release`
+  matches: a release mission accepts both, deliberately.
 - `merge_pull_request` is classified on the declared `base`, `main` when
   the argument is absent — the conservative assumption — and the declaration
   is binding: the merge is refused when the pull request targets another
@@ -355,29 +419,33 @@ outside the ident class before it reaches a slice.
 
 ## Presets
 
-| Preset            | Risks (quota / rate per 60 s)                                                                                                                                                                                                | Approval                                         |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| `read-only`       | read-code 5000/120, read-meta 5000/120                                                                                                                                                                                       | —                                                |
-| `developer`       | read-code 10000/240, read-meta 10000/240, search-global 500/30, feature-branch-write 3000/60, bulk-file-write 1000/30, create-pr 200/10, comment-write 500/20, workflow-write-via-file 50/5, mint clone 50/5, mint push 20/2 | workflow-write-via-file, mint-install-token-push |
-| `release-manager` | read-code 5000/120, read-meta 5000/120, feature-branch-write 500/30, create-pr 100/10, comment-write 200/10, merge-protected 50/5, create-release 20/2, delete-release 5/1                                                   | merge-protected, create-release, delete-release  |
+| Preset            | Risks (quota / rate per 60 s)                                                                                                                                                                                                 | Approval                                                   |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `read-only`       | read-code 5000/120, read-meta 5000/120                                                                                                                                                                                        | —                                                          |
+| `developer`       | read-code 10000/240, read-meta 10000/240, search-global 500/30, feature-branch-write 3000/60, bulk-file-write 1000/30, create-pr 200/10, comment-write 500/20, workflow-write-via-file 50/5, git-push 200/10, force-push 20/2 | workflow-write-via-file, force-push                        |
+| `release-manager` | read-code 5000/120, read-meta 5000/120, feature-branch-write 500/30, create-pr 100/10, comment-write 200/10, merge-protected 50/5, create-release 20/2, delete-release 5/1, git-push 100/10, tag-write 20/2                   | merge-protected, create-release, delete-release, tag-write |
 
 The numbers are defaults the creator adjusts at issuance; the deferred ADR
 `mission-presets-default-values` (plan §5.5) will settle them across
-plugins. `branch-protection-write` is in no preset.
+plugins. `branch-protection-write`, `branch-delete` and both mint risks are in
+no preset. Missions issued from the v5 `developer` keep their mint risks: a
+policy is stored, not derived from the preset.
 
 ## Tests
 
-`npx vitest run plugins/github` — 623 tests, no network:
+`npx vitest run plugins/github` — 639 tests, no network:
 
-- `plugin.test.ts` (16): kit assertions, coverage with samples per tool
-  (the 14 named risks touched, `fallbackHits` empty), the fallback catching
+- `plugin.test.ts` (17): kit assertions, coverage with samples per tool
+  and per git tool (the 18 named risks touched, `fallbackHits` empty), the fallback catching
   a write on an unconventional branch and a merge into a non-protected one,
   preset invariants, credential spec, resource check.
-- `risk-catalog.test.ts` (56): the table `[tool, arguments, risks touched]`
+- `risk-catalog.test.ts` (71): the table `[tool, arguments, risks touched]`
   evaluated through `classifyGithub` and the shipped catalog — at least one
   row per tool, every risk of the catalog named by a row (protected and
   feature branches, workflow files, bulk pushes, merges, both mint
-  purposes, the fallback cases).
+  purposes, git fetches and pushes — every ref, force, deletion, tags,
+  workflow files —, the fallback cases); the v6 presets (developer without
+  the mint risks, force-push asking first; release-manager's tags).
 - `classify.test.ts` (69): the per-tool security suite of `classifyGithub`
   (reads, branch and file writes, pull requests, comments, releases, rules,
   mint, retired tools, structural denials: non-canonical paths, refs given
@@ -411,7 +479,12 @@ plugins. `branch-protection-write` is in no preset.
   field; a call without its permission declined by name with nothing sent
   past the token mint (a workflow file needs Workflows, another file does
   not); nothing declined when GitHub did not report the permissions; the push
-  token's 422 fallback and its refusal.
+  token's 422 fallback and its refusal; the git remote's two tools in the
+  declaration.
+
+The git remote end to end (review, ref moves, permissions, token
+connection) is tested by the host against a git-backed stand-in of GitHub:
+`apps/gateway/tests/integration/git/` (handbook [git-remote](../git-remote.md)).
 
 ## How to debug
 

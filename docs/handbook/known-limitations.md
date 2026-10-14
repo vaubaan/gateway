@@ -24,6 +24,7 @@ tracks:
   - apps/gateway/tests/demo/guards.ts
   - deploy/collector/
   - .github/workflows/release.yml
+  - apps/gateway/src/server/git/
 ---
 
 # Known limitations
@@ -61,6 +62,13 @@ change that removes it.
   projects, its workspace's name) follow the public API's shape without a live
   run. →
   [railway, "Connecting with a workspace token"](providers/railway.md#connecting-with-a-workspace-token)
+- **The git remote has never pushed to github.com.** Its tests run the real
+  `git` client against `git http-backend` standing in for GitHub, with a REST
+  API computed from the same repositories: protocol v2 relayed to GitHub
+  itself, GitHub accepting a pack under `refs/vaubaan/*`, the compare API's
+  limits and the `PATCH git/refs` answers are read from GitHub's
+  documentation, not observed. →
+  [git-remote, "Tests"](git-remote.md#tests)
 - **The release pipeline has never run.** `.github/workflows/release.yml` is
   written and its Node scripts are tested, but no `v2.*` tag exists: no image was
   published, signed or attested by it. →
@@ -103,6 +111,13 @@ change that removes it.
   request fails, the act stands, and a retry finds nothing left to do and
   records nothing. Calls are not concerned: a call's entry is written before
   its answer. → [audit, "Administrative entries: who writes what"](audit.md#administrative-entries-who-writes-what)
+
+- **Git: a push is reviewed through GitHub's compare API, so a push larger
+  than it lists (300 files, 250 commits per ref) is refused**, to be split; a
+  force-push or a branch deletion has no compare-and-swap at GitHub (the ref
+  is read again just before; threat model A30). `git push --atomic`, push
+  options, signed pushes and Git LFS are not served. →
+  [git-remote, "Push"](git-remote.md#push)
 
 ## One process
 

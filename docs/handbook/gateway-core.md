@@ -440,6 +440,23 @@ audit entry is still written once, when the forward ends, so its
 resolved
 `{ connection, resource | null }`.
 
+`CallRequest.channel` (`'mcp' | 'git'`, `CALL_CHANNELS`; absent is `mcp`)
+says which door of the execution surface the call came through; the resource
+stage of the host refuses a tool presented at the other door (the git
+remote's two tools belong to `git`, every other tool to `mcp`). Two entries
+serve the git remote (handbook [git-remote](git-remote.md)):
+
+- `precheck(ctx, call)` runs the stages before the budget — argument
+  faithfulness, mission active, resource, risk — and answers the refusal
+  (audited, exactly as `execute` audits it) or `null`: a call that passes is
+  not recorded, counted or executed. `execute` shares these stages
+  (`place`), so what passes a precheck is decided again in full.
+- `reject(ctx, call, reason, audited = reason)` records a call the door
+  refuses on grounds no stage decides (a pack over the cap, a push the
+  provider cannot review, a protocol violation): one entry, `refused` with no
+  code, the mission not consulted, nothing counted; the audited reason goes
+  through `auditReason` (argument values replaced).
+
 ### Stage contracts (hook points)
 
 | Interface       | Filled by      | Contract                                                                                                                                                                        |
