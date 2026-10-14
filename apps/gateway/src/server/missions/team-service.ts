@@ -18,12 +18,14 @@
  *
  * Who may do what:
  *
- *   creator   add and remove members; create named tokens; revoke any token;
- *             generate, rotate and revoke their own token
- *   member    generate, rotate and revoke their OWN token; read the mission and
- *             its team. Nothing else: they cannot change the mission, its
- *             gates or its members, nor answer its requests (`MissionService`
- *             and `RequestService` know the creator only)
+ *   creator   add and remove members; create and replace named tokens; revoke
+ *             any token; generate, rotate and revoke their own token. The
+ *             creator cannot leave: stopping the mission is their act
+ *   member    generate, rotate and revoke their OWN token; leave the mission
+ *             (their token is revoked with it); read the mission and its team.
+ *             Nothing else: they cannot change the mission, its gates or its
+ *             members, nor answer its requests (`MissionService` and
+ *             `RequestService` know the creator only)
  *
  * Every token of a mission shares its resources, its policy and its ONE
  * budget (spec §3.2): nothing here touches a counter. A member works under
@@ -159,6 +161,17 @@ export type NamedTokenResult =
   | IssuedTokenResult
   | { readonly ok: false; readonly reason: 'invalid-name'; readonly problem: string }
   | { readonly ok: false; readonly reason: 'name-taken' };
+
+export type ReplaceNamedTokenResult =
+  | IssuedTokenResult
+  /** Not a working machine key of this mission (a member's key, a revoked one…). */
+  | { readonly ok: false; readonly reason: 'not-replaceable' };
+
+export type LeaveResult =
+  | { readonly ok: true; readonly token_revoked: boolean }
+  | NotFound
+  /** The creator is on the mission by construction: they stop it, they do not leave it. */
+  | { readonly ok: false; readonly reason: 'creator-cannot-leave' };
 
 export type RevokeTokenResult =
   | { readonly ok: true; readonly token_id: string; readonly already: boolean }
@@ -376,8 +389,8 @@ export class MissionTeamService {
   /**
    * A token for something that has no account, identified by the name the
    * creator gives it (spec §0). Creator only. The secret is in this result
-   * only: the creator hands it to the machine. To replace it, revoke it and
-   * create one with the same name.
+   * only: the creator hands it to the machine. To replace it:
+   * `replaceNamedToken`.
    */
   async createNamedToken(
     user: AuthoritySubject,
@@ -429,6 +442,106 @@ export class MissionTeamService {
       actor_id: user.id,
     });
     return this.revealed(mission, issued, false);
+  }
+
+  /**
+   * "Replace key" on a machine key (spec §7.8): the creator retires the named token
+   * and receives a new one of the same name, in ONE store transaction — the old key
+   * stops working at once, there is no instant at which the name is free, and no grace
+   * period. One administrative entry (`mission-rotated`, the old prefix before, the
+   * new one after) and one `rotation` event. Creator only.
+   */
+  async replaceNamedToken(
+    user: AuthoritySubject,
+    missionId: string,
+    tokenId: string,
+  ): Promise<ReplaceNamedTokenResult> {
+    const mission = await this.creatorMission(user, missionId);
+    if (!mission) return { ok: false, reason: 'not-found' };
+    const old = await this.deps.store.missions.getToken(tokenId);
+    if (!old || old.missionId !== mission.id) return { ok: false, reason: 'not-found' };
+    if (old.holder.kind !== 'named' || old.status !== 'active') {
+      return { ok: false, reason: 'not-replaceable' };
+    }
+    const state = await this.deps.missions.stateOf(mission);
+    if (state.kind !== 'active') return { ok: false, reason: 'inactive', state: state.kind };
+    const name = old.holder.name;
+
+    let issued: IssuedSecret;
+    try {
+      issued = await issueTokenTo(
+        { missions: this.deps.store.missions, mint: this.mint },
+        {
+          missionId: mission.id,
+          holder: { kind: 'named', name },
+          createdBy: user.id,
+          replacing: old.id,
+        },
+      );
+    } catch (err) {
+      if (!(err instanceof TokenNotIssuableError)) throw err;
+      // Revoked or replaced meanwhile by another tab: nothing was written.
+      if (err.reason === 'token-not-replaceable') return { ok: false, reason: 'not-replaceable' };
+      return this.notIssued(mission.id, err);
+    }
+    await this.audit(
+      user.id,
+      'mission-rotated',
+      mission.id,
+      { token_prefix: old.prefix },
+      { token_prefix: issued.prefix, token_kind: 'named', holder: name },
+    );
+    await this.recordEvent(mission.id, user.id, {
+      kind: 'rotation',
+      details: {
+        token_prefix: issued.prefix,
+        token_kind: 'named',
+        holder: name,
+        replaced_prefix: old.prefix,
+      },
+    });
+    this.deps.logger.info('mission named token replaced', {
+      mission_id: mission.id,
+      token_name: name,
+      token_prefix: issued.prefix,
+      replaced_prefix: old.prefix,
+      actor_id: user.id,
+    });
+    return this.revealed(mission, issued, true);
+  }
+
+  /**
+   * A teammate leaves a mission by themselves (spec §7.9 bis): the same act as the
+   * creator removing them — the membership ends and their working token is revoked
+   * in one store transaction, so the token is refused from its next call with the
+   * reason `holder-removed`, and they no longer read the mission. One administrative
+   * entry (`mission-member-left`) and, when they held a key, a `revocation` event.
+   * The creator cannot leave: they stop the mission instead.
+   */
+  async leave(user: AuthoritySubject, missionId: string): Promise<LeaveResult> {
+    const access = await this.deps.missions.access(user, missionId);
+    if (!access) return { ok: false, reason: 'not-found' };
+    if (access.role === 'creator') return { ok: false, reason: 'creator-cannot-leave' };
+    const { mission } = access;
+    const removed = await this.deps.store.missions.removeMember(mission.id, user.id);
+    // Removed by the creator between the read and the write: the same end, already reached.
+    if (!removed) return { ok: false, reason: 'not-found' };
+    const revoked = removed.tokenRevoked;
+    const member = await this.deps.store.users.getById(user.id);
+    await this.audit(
+      user.id,
+      'mission-member-left',
+      mission.id,
+      { member_user_id: user.id, member_email: member?.email ?? null },
+      { token_revoked_prefix: revoked?.prefix ?? null },
+    );
+    if (revoked) await this.recordRevocation(mission.id, user.id, revoked);
+    this.deps.logger.info('mission member left', {
+      mission_id: mission.id,
+      member_user_id: user.id,
+      token_prefix: revoked?.prefix ?? null,
+    });
+    return { ok: true, token_revoked: revoked !== null };
   }
 
   /**
@@ -541,6 +654,7 @@ export class MissionTeamService {
     act:
       | 'mission-member-added'
       | 'mission-member-removed'
+      | 'mission-member-left'
       | 'mission-token-issued'
       | 'mission-rotated'
       | 'mission-token-revoked',

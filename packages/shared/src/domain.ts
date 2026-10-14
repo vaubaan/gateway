@@ -287,6 +287,7 @@ export type SessionEventKind =
   | 'approval'
   | 'gate-opened'
   | 'gate-changed'
+  | 'limits-changed'
   | 'rotation'
   | 'revocation';
 

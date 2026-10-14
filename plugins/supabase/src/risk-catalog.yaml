@@ -45,8 +45,8 @@
 # Risk count : 25 named risks + 1 fallback.
 
 provider: supabase
-catalog_version: 4
-catalog_date: 2026-10-13
+catalog_version: 5
+catalog_date: 2026-10-14
 
 risks:
   # ───────────────────────────────────────────────────────────────────────
@@ -505,7 +505,7 @@ presets:
 
   - id: staging-developer
     label: Staging developer
-    description: One mission per application. Day-to-day development on staging-labelled projects — migrations of any kind, RLS, buckets and objects, users one by one, edge functions and their secrets, SQL reads of the managed schemas. Reads data, schema, objects and functions on every selected project. No auth, storage or SSO configuration, no signed URL, nothing written outside staging.
+    description: One mission per application. Day-to-day development on staging-labelled projects — migrations of any kind, RLS, buckets and objects, users one by one, edge functions and their secrets. Reads data, schema, objects and functions on every selected project. No auth, storage or SSO configuration, no signed URL, nothing written outside staging.
     entries:
       - risk_id: supabase.read-data
         quota: 10000
@@ -522,13 +522,6 @@ presets:
       - risk_id: supabase[staging].auth.read-users
         quota: 500
         rate_limit: { max: 30, window_seconds: 60 }
-        gate: auto
-      # Not a read-only preset : this one already lists users and migrates
-      # on staging. Without it, any query calling a function of the
-      # application would be refused there.
-      - risk_id: supabase[staging].read-managed-schemas
-        quota: 2000
-        rate_limit: { max: 60, window_seconds: 60 }
         gate: auto
       - risk_id: supabase[staging].bulk-row-write
         quota: 200

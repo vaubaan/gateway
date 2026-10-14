@@ -89,6 +89,12 @@ carry) go together. Not decided here: a row that is never used again never
 moves, so the removal needs either a cut-off after which unused legacy tokens
 are declared retired, or patience.
 
+**Settled on 2026-10-14** (product owner, [owner-decisions-second-round](owner-decisions-second-round.md)):
+the argon2id path stays until the next major version of the gateway. No v5
+release removes it, so a token stored by an earlier build keeps working, and is
+moved to its digest on its first use, for as long as v5 lasts. The next major
+version may drop it, with the cut-off stated in its release notes.
+
 ## Consequences
 
 - Issuing a token no longer takes tens of milliseconds.

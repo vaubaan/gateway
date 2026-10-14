@@ -449,7 +449,10 @@ test('a creator adds a teammate and a machine key; each holder is attributed; ea
   const gone = await joan.goto(missionUrl);
   expect(gone?.status()).toBe(404);
   await joan.goto('/missions');
-  await expect(joan.getByTestId('missions-shared')).toContainText('No mission is shared with you.');
+  // Nothing is shared with her any more (whether the page then shows its empty "Shared
+  // with you" region or its one empty state depends on what else she created).
+  await expect(joan.getByRole('heading', { name: 'Missions', level: 1 })).toBeVisible();
+  await expect(joan.getByRole('main')).not.toContainText(MISSION);
 
   // Ines replaces the CI's key: the consequence is stated, the old key stops, the new one works.
   await ines.getByRole('button', { name: `Replace the machine key ${CI}` }).click();
@@ -459,7 +462,8 @@ test('a creator adds a teammate and a machine key; each holder is attributed; ea
   await expect(replaceMachine).toContainText('The current key stops working at once');
   await replaceMachine.getByRole('button', { name: 'Replace key' }).click();
   const ciSecond = await keyOfDialog(ines, `Machine key “${CI}” for “${MISSION}”`);
-  expect(await doorSays(ciToken)).toEqual({ status: 401, reason: 'token-revoked' });
+  // One act on the server: the old key was replaced, not revoked then made again.
+  expect(await doorSays(ciToken)).toEqual({ status: 401, reason: 'token-rotated' });
   expect(await doorSays(ciSecond)).toEqual({ status: 200, reason: null });
 
   // …then revokes it: she types its name; refused with its own reason; hers still works.
@@ -469,4 +473,36 @@ test('a creator adds a teammate and a machine key; each holder is attributed; ea
   expect(await doorSays(ciSecond)).toEqual({ status: 401, reason: 'token-revoked' });
   expect(await doorSays(inesToken)).toEqual({ status: 200, reason: null });
   await snap(ines, 'team-creator-after-removal');
+
+  // ── A teammate leaves by themselves ─────────────────────────────────────
+  // Ines adds Joan again; Joan generates a key, then leaves: she types the mission's
+  // name, her key is refused at once, and the mission is gone for her.
+  await ines.getByRole('button', { name: 'Add people' }).click();
+  await ines
+    .getByTestId('add-people-dialog')
+    .getByTestId('member-candidate')
+    .selectOption(E2E_SHARE_TARGET.email);
+  await ines
+    .getByTestId('add-people-dialog')
+    .getByRole('button', { name: 'Add to the mission' })
+    .click();
+  await expect(personRow(ines, E2E_SHARE_TARGET.email)).toContainText('no key yet');
+  await joan.goto(missionUrl);
+  await joan.getByRole('button', { name: 'Generate my key' }).first().click();
+  const joanThird = await keyOfDialog(joan, `Your key for “${MISSION}”`);
+  expect(await doorSays(joanThird)).toEqual({ status: 200, reason: null });
+  // The creator is not offered to leave: she stops the mission instead.
+  await ines.getByTestId('mission-menu').click();
+  await expect(ines.getByRole('menuitem', { name: 'Leave the mission' })).toHaveCount(0);
+  await ines.keyboard.press('Escape');
+  await missionMenu(joan, 'Leave the mission');
+  await expect(joan.getByRole('dialog')).toContainText('Your key stops working at once');
+  await snap(joan, 'team-teammate-leave');
+  await confirmByTyping(joan, MISSION, 'Leave the mission');
+  await expect(joan).toHaveURL(/\/missions$/);
+  expect(await doorSays(joanThird)).toEqual({ status: 401, reason: 'holder-removed' });
+  expect(await doorSays(inesToken)).toEqual({ status: 200, reason: null });
+  expect((await joan.goto(missionUrl))?.status()).toBe(404);
+  await ines.goto(missionUrl);
+  await expect(personRow(ines, E2E_SHARE_TARGET.email)).toHaveCount(0);
 });

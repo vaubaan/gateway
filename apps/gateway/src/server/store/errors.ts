@@ -33,6 +33,8 @@ export const TOKEN_NOT_ISSUABLE_REASONS = [
   'mission-not-active',
   'holder-not-a-member',
   'name-taken',
+  /** The named token a replacement names is not a working token of this mission. */
+  'token-not-replaceable',
 ] as const;
 export type TokenNotIssuableReason = (typeof TOKEN_NOT_ISSUABLE_REASONS)[number];
 

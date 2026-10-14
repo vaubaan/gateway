@@ -505,11 +505,20 @@ describe('supabase — SQL reads of the managed schemas', () => {
     }
   });
 
-  test('the staging developer reads them on staging only ; the migration operator never', () => {
+  test('no shipped preset reads them: the staging developer and the migration operator are refused', () => {
     const developer = presetRisks('staging-developer');
-    expect(decide(...sql(STAGING, AUTH_USERS), developer).outcome).toBe('allowed');
-    expect(decide(...sql(STAGING, UNKNOWN_FUNCTION), developer).outcome).toBe('allowed');
-    expect(decide(...sql(PROD, AUTH_USERS), developer).outcome).toBe('denied');
+    for (const ref of [STAGING, PROD]) {
+      for (const query of [AUTH_USERS, UNKNOWN_FUNCTION]) {
+        const decision = decide(...sql(ref, query), developer);
+        expect(decision.outcome, `${ref} ${query}`).toBe('denied');
+      }
+    }
+    expect(decide(...sql(STAGING, APPLICATION), developer).outcome).toBe('allowed');
+    // Ticked on purpose for staging, it passes there.
+    expect(
+      decide(...sql(STAGING, AUTH_USERS), [...developer, 'supabase[staging].read-managed-schemas'])
+        .outcome,
+    ).toBe('allowed');
     const operator = presetRisks('migration-operator');
     expect(decide(...sql(STAGING, AUTH_USERS), operator).outcome).toBe('denied');
     expect(decide(...sql(PROD, AUTH_USERS), operator).outcome).toBe('denied');

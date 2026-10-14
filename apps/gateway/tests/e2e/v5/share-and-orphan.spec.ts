@@ -357,15 +357,21 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await disconnecting.getByRole('textbox').fill(connectionName);
   await disconnect.click();
   await expect(ines.getByText('Account disconnected', { exact: true })).toBeVisible();
-  await expect(ines.getByTestId('account-disconnected')).toBeVisible();
   // What is left to do at the service is said once: by the note of the act…
-  const byHand = ines.getByText(/Remove the access at GitHub by hand\./);
+  const byHand = ines.getByText(/Still granted at GitHub\./);
   await expect(byHand).toHaveCount(1);
+  await expect(ines.getByText(/Uninstall your company.s GitHub App/)).toHaveCount(1);
+  await expect(ines.getByRole('main')).not.toContainText('by hand');
+  // …which also says the credential is erased: the page does not say it a second time.
+  await expect(ines.getByTestId('account-disconnected')).toHaveCount(0);
   await snap(ines, 'connection-revoked-provider-grant');
   // …and, on every later visit, by the page itself.
   await ines.goto(`/accounts/${connectionId}`);
   await expect(ines.getByText('Account disconnected', { exact: true })).toHaveCount(0);
-  await expect(ines.getByTestId('provider-grant')).toContainText('by hand');
+  await expect(ines.getByTestId('account-disconnected')).toBeVisible();
+  await expect(ines.getByTestId('provider-grant')).toContainText(
+    /Uninstall your company.s GitHub App/,
+  );
   await expect(byHand).toHaveCount(1);
   // A disconnected account takes no owner act any more.
   await expect(ines.getByRole('link', { name: 'Give access', exact: true })).toHaveCount(0);

@@ -27,8 +27,8 @@
 # mission on these two risks is bounded by its quota and rate limit.
 
 provider: gmail
-catalog_version: 3
-catalog_date: 2026-10-13
+catalog_version: 4
+catalog_date: 2026-10-14
 
 risks:
   # ─── READS ─────────────────────────────────────────────────────────────

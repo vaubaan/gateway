@@ -27,8 +27,9 @@
   flex: none;
   margin-top: var(--space-half);
 }
+/* A success is said in the accent: green is for checklist ticks only. */
 .tone_ok .icon {
-  color: var(--ok);
+  color: var(--accent);
 }
 .tone_bad .icon {
   color: var(--bad);

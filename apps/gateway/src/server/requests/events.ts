@@ -143,6 +143,8 @@ function describeWithoutDetails(kind: string): string {
       return 'The creator opened a gate for the period';
     case 'gate-changed':
       return 'The creator edited a gate';
+    case 'limits-changed':
+      return 'The creator changed the limits of a risk';
     case 'rotation':
       return ROTATION_LINE;
     case 'revocation':
@@ -172,6 +174,10 @@ export function describeEvent(event: SessionEventLike): string {
       return describeGateOpened(parsed.details);
     case 'gate-changed':
       return describeGateChanged(parsed.details);
+    case 'limits-changed': {
+      const d = parsed.details;
+      return `The creator changed the limits: quota ${d.quota_before} → ${d.quota}, rate ${d.rate_limit_max_before} → ${d.rate_limit_max} per window`;
+    }
     case 'rotation':
       return describeRotation(parsed.details);
     case 'revocation':

@@ -67,6 +67,14 @@ export interface DecideContext {
   readonly session: SessionRecord;
   /** Consumed count per requested risk in this period (0 when no row exists yet). */
   readonly counters: ReadonlyMap<RiskId, number>;
+  /**
+   * The limits of the requested risks as the mission's policy stores them NOW, read in
+   * this transaction: a limit changed after the caller loaded the mission is the one
+   * that decides (`MissionsRepo.setLimits` writes in a transaction of its own, so a
+   * decision sees either the old values or the new ones, never a call above the new
+   * limit once it is committed). A risk absent from the policy has no entry.
+   */
+  readonly limits: ReadonlyMap<RiskId, StoredLimits>;
   readonly now: Iso;
   /**
    * Non-consuming lookup of the usable approvals of the mission for one call (tool and
@@ -91,6 +99,13 @@ export interface DecideContext {
   createRequest(input: Omit<InsertRequestInput, 'missionId' | 'sessionId'>): RequestRecord;
   /** Records an extra event beyond the one returned in the outcome. */
   recordEvent(event: UntypedNewEvent): EventRecord;
+}
+
+/** The limits of one accepted risk as `mission_policy` holds them. */
+export interface StoredLimits {
+  readonly quota: number;
+  readonly rateLimit: number;
+  readonly rateWindowSeconds: number;
 }
 
 /** Which events of a session `riskEvents` returns. */
@@ -230,6 +245,13 @@ interface CounterRow {
   risk_id: string;
   period_start: string;
   consumed: number;
+}
+
+interface LimitsRow {
+  risk_id: string;
+  quota: number;
+  rate_limit: number;
+  rate_window_seconds: number;
 }
 
 interface EventRow {
@@ -453,6 +475,27 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
     return result;
   }
 
+  function readLimits(missionId: string, riskIds: readonly RiskId[]): Map<RiskId, StoredLimits> {
+    const result = new Map<RiskId, StoredLimits>();
+    if (riskIds.length === 0) return result;
+    // A Postgres port reads these rows `FOR SHARE`, so that a limits update waits for
+    // the decision (or the decision for the update) instead of interleaving.
+    const rows = db
+      .prepare<string[], LimitsRow>(
+        `SELECT risk_id, quota, rate_limit, rate_window_seconds FROM mission_policy
+         WHERE mission_id = ? AND risk_id IN (${placeholders(riskIds.length)})`,
+      )
+      .all(missionId, ...riskIds);
+    for (const row of rows) {
+      result.set(row.risk_id, {
+        quota: row.quota,
+        rateLimit: row.rate_limit,
+        rateWindowSeconds: row.rate_window_seconds,
+      });
+    }
+    return result;
+  }
+
   function recentRows(sessionId: string, options: RecentEventsOptions): EventRow[] {
     const { before, limit, calls } = options;
     if (!calls) {
@@ -529,6 +572,7 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
         const context: DecideContext = {
           session,
           counters,
+          limits: readLimits(input.missionId, riskIds),
           now,
           findApprovals: (call) => findApprovalsSync(ctx, input.missionId, call, now),
           consumeApproval: (id) => consumeApprovalSync(ctx, input.missionId, id, now),

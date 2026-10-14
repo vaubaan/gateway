@@ -750,6 +750,8 @@ export const ACT_WORDS = {
   'invitation-added': 'invited an address',
   'invitation-removed': 'removed an invitation',
   'config-changed': 'changed the configuration',
+  'limits-changed': 'changed the limits of a mission',
+  'mission-member-left': 'left a mission',
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1120,6 +1122,8 @@ export const MISSION_ACTIONS = {
   editOneByOne: 'Edit the permissions one by one',
   hideEditor: 'Hide the permissions',
   change: 'Change',
+  changeLimits: 'Change limits',
+  leave: 'Leave the mission',
 } as const;
 
 /** Sentences the mission pages share. */

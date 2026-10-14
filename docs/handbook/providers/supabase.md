@@ -25,10 +25,10 @@ modelling rationale (research, edge cases) is preserved in git history
 
 | Member              | Where                   | Facts                                                                                                                                                                                                                                 |
 | ------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id` / `version`    | `src/index.ts`          | `supabase`, `4.0.0`. Default export `supabasePlugin`.                                                                                                                                                                                 |
+| `id` / `version`    | `src/index.ts`          | `supabase`, `4.1.0`. Default export `supabasePlugin`.                                                                                                                                                                                 |
 | `tools`             | `src/tools.ts`          | 44, prefix `supabase__`. The three v4 `*_to_venv` tools are gone (plan §8-Q5).                                                                                                                                                        |
 | `dataModel`         | `src/data-model.ts`     | 4 planes (`db`, `storage`, `auth`, `functions` : 14 / 6 / 8 / 6 entities, 34 in all) rooted on `project` (`envScopable`). Also the one list of the schemas Supabase manages (`SUPABASE_MANAGED_SCHEMAS`), which both SQL readers use. |
-| `catalog`           | `src/risk-catalog.yaml` | `catalog_version: 4`, 24 live risks + the deprecated `supabase.row-write-one` + `supabase.uncategorized-write`, 3 presets. Loaded by `loadCatalogFile` at import.                                                                     |
+| `catalog`           | `src/risk-catalog.yaml` | `catalog_version: 5`, 24 live risks + the deprecated `supabase.row-write-one` + `supabase.uncategorized-write`, 3 presets. Loaded by `loadCatalogFile` at import.                                                                     |
 | `credential`        | `src/credential.ts`     | `oauth2`, PKCE, `client_secret_basic`, scope `all`, `refreshable: true`.                                                                                                                                                              |
 | `classify`          | `src/classify.ts`       | Pure ; identifiers validated, missing identifiers denied, undeclared arguments denied. Exports `resolveProjectRef`, `readIdentifiers` and `tableSchemas`, which `execute` shares, and the grammar `base64Text`.                       |
 | migration reading   | `src/migration-sql.ts`  | Pure allow-list reader of the SQL of `apply_migration` : the write classes it takes, every class when a statement is not recognised.                                                                                                  |
@@ -274,10 +274,12 @@ one-line change, reviewed like the catalog.
 - **`supabase.read-managed-schemas`** (catalog v4, product owner's decision
   of 2026-10-13) is the read of `auth`, `vault`, `storage` internals and
   the other managed schemas through `execute_sql`, and of any query the
-  reader cannot read. Env-scoped on `preview`, `staging` and `prod`. No
-  read-only preset carries it ; `staging-developer` does, on `[staging]`,
-  because that preset already lists users and migrates there, and without
-  it every query calling an application function would be refused.
+  reader cannot read. Env-scoped on `preview`, `staging` and `prod`. **No
+  shipped preset carries it** (catalog v5, product owner's decision of
+  2026-10-14: `staging-developer` carried it on `[staging]` until then). A
+  person who needs it ticks it on purpose in the mission's editor; without
+  it, a query that calls an application function is refused with the
+  missing risk named.
   `auth.read-users` is the auth admin API only : it no longer claims to
   cover a SELECT on `auth.users`, which it never did.
 - `db-role-write` and `extension-write` are reached through
@@ -319,11 +321,11 @@ account's page (Accounts).
 
 ### Presets
 
-| Preset               | Entries                                                                                                                                                                                                                                                                                                                                                                                                           | Allows                                                                                                                                                                                                          | Does not allow                                                                                                                    |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `read-only-analyst`  | `read-data`, `storage.object-read`                                                                                                                                                                                                                                                                                                                                                                                | Queries, schema and config reads, bucket and object listing on every selected project, labelled or not.                                                                                                         | Any write, user listing, signed URLs, function reads.                                                                             |
-| `staging-developer`  | `read-data`, `storage.object-read`, `functions.read` ; on `[staging]`, all `auto` : `auth.read-users`, `read-managed-schemas`, `bulk-row-write`, `migration-write`, `policy-write`, `db-role-write`, `extension-write`, `bucket-write`, `storage.object-write-one`, `storage.bulk-object-write`, `auth.user-write-one`, `auth.generate-link`, `functions.body-write`, `functions.deploy`, `function-secret-write` | On staging : any migration (unrecognised ones included), buckets and objects, users one by one, links, edge functions and secrets, user listing. Reads of data, schema, objects and functions on every project. | Auth, storage, SSO and third-party-auth configuration, bulk user writes, signed URLs ; any write or user listing outside staging. |
-| `migration-operator` | `read-data` ; on `[staging]`, `auto` : `migration-write`, `bulk-row-write`, `policy-write`, `db-role-write`, `extension-write` ; on `[prod]`, `approval` : `migration-write`, `policy-write`                                                                                                                                                                                                                      | Any migration on staging. On prod, plain schema changes and RLS statements, each behind an approval.                                                                                                            | On prod : row writes, dropped tables or columns, grants, extensions, functions, anything unrecognised. Every non-migration write. |
+| Preset               | Entries                                                                                                                                                                                                                                                                                                                                                                                   | Allows                                                                                                                                                                                                          | Does not allow                                                                                                                    |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `read-only-analyst`  | `read-data`, `storage.object-read`                                                                                                                                                                                                                                                                                                                                                        | Queries, schema and config reads, bucket and object listing on every selected project, labelled or not.                                                                                                         | Any write, user listing, signed URLs, function reads.                                                                             |
+| `staging-developer`  | `read-data`, `storage.object-read`, `functions.read` ; on `[staging]`, all `auto` : `auth.read-users`, `bulk-row-write`, `migration-write`, `policy-write`, `db-role-write`, `extension-write`, `bucket-write`, `storage.object-write-one`, `storage.bulk-object-write`, `auth.user-write-one`, `auth.generate-link`, `functions.body-write`, `functions.deploy`, `function-secret-write` | On staging : any migration (unrecognised ones included), buckets and objects, users one by one, links, edge functions and secrets, user listing. Reads of data, schema, objects and functions on every project. | Auth, storage, SSO and third-party-auth configuration, bulk user writes, signed URLs ; any write or user listing outside staging. |
+| `migration-operator` | `read-data` ; on `[staging]`, `auto` : `migration-write`, `bulk-row-write`, `policy-write`, `db-role-write`, `extension-write` ; on `[prod]`, `approval` : `migration-write`, `policy-write`                                                                                                                                                                                              | Any migration on staging. On prod, plain schema changes and RLS statements, each behind an approval.                                                                                                            | On prod : row writes, dropped tables or columns, grants, extensions, functions, anything unrecognised. Every non-migration write. |
 
 `db-role-write` and `extension-write` sit in the two migration presets
 because an unrecognised migration (a function body, a trigger) touches all
@@ -380,6 +382,25 @@ capped at `MAX_DISCOVERED_PROJECTS` with a logger warning) and returns
 organization_name, region, status } }` ; the owner labels `env`. A project
 whose ref is not a host label (`projectRefIdent`) fails discovery : no call
 could name it.
+
+**Revoking the grant at Supabase.** On disconnection the host sends
+`POST https://api.supabase.com/v1/oauth/revoke` (`SUPABASE_OAUTH_REVOKE_URL`,
+format `client-credentials-json`): `Content-Type: application/json`, body
+`{ client_id, client_secret, refresh_token }`, no `Authorization` header; any
+2xx counts as withdrawn. Checked on 2026-10-14 against the Management API's
+OpenAPI document (`https://api.supabase.com/api/v1-json`, operation
+`v1-revoke-token`, "Revoke oauth app authorization and it's corresponding
+tokens"): method `POST`, body `application/json` schema `OAuthRevokeTokenBody`
+with the three fields **required** and `additionalProperties: false`
+(`client_id` a UUID), no `security` on the operation, success `204`, errors
+`401`, `403`, `429`. The implementation matches; nothing was changed. The
+operation is marked **Beta / experimental** by Supabase: a change of it shows
+as `failed` on the disconnected account (the person is told to remove the app
+by hand), never as a silent success. _Fallback, Context7 missing — check by
+hand at the next review_: Context7 (`/supabase/supabase`,
+`/websites/supabase`, `/websites/api_supabase_api_v1`) returned nothing for this
+operation, only the project-level OAuth server's `revokeGrant`, which is a
+different API.
 
 ## Tests
 

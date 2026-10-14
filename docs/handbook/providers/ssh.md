@@ -48,7 +48,7 @@ the v5 surface below.
 ```
 plugins/ssh/src/
   index.ts             createSshPlugin({ transport }) → definePlugin ; sshPlugin (default)
-  risk-catalog.yaml    7 risks + fallback, 3 presets, catalog_version 3
+  risk-catalog.yaml    7 risks + fallback, 3 presets, catalog_version 4
   data-model.ts        plane host : host (envScopable) → command → secret-file | destructive | package | service | privilege
   tools.ts             ssh__exec (host?, cmd, timeout_s?)
   shell-lex.ts         lexCommandLine — words, redirections and simple commands as a POSIX shell builds them ; names what it cannot model
@@ -278,7 +278,7 @@ not a proof: a credential kept in `config.yml` is not on it.
 
 ## 4. Catalog and presets
 
-`src/risk-catalog.yaml`, `catalog_version: 3`. Ids from v4 kept
+`src/risk-catalog.yaml`, `catalog_version: 4`. Ids from v4 kept
 (`exec-read`, `exec-read-secret-files`, `exec-write`, `uncategorized-write`);
 four added (`exec-destructive`, `exec-package-install`, `exec-service-control`,
 `exec-sudo`). Write risks: `acceptable_in_envs: [dev, staging, prod]`;

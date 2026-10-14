@@ -482,6 +482,31 @@ export function envNotices(
   return notices;
 }
 
+/**
+ * Lines of a policy checked exactly as issuance checks the explicit lines of a draft
+ * on one connection (`classifyLines`, then `issuesOf`): known to the catalog, inside
+ * the creator's authority now, resolvable on the selected resources, with a budget
+ * that `budgetProblem` accepts. A change of a mission's limits after issuance
+ * (`MissionService.setLimits`) is judged by this and nothing else, so that whatever
+ * caps a creation caps the change. Each line names its quota, rate and gate: no
+ * preset fills anything in.
+ */
+export function checkPolicyLines(
+  connection: IssuanceConnection,
+  selected: readonly IssuanceResource[],
+  lines: readonly MissionPolicyEntry[],
+  index = 0,
+): { readonly passes: readonly MissionPolicyEntry[]; readonly issues: readonly PreviewIssue[] } {
+  const where: Where = { connection_index: index, connection_id: connection.id };
+  const buckets = classifyLines(lines, {
+    connection,
+    selected,
+    presetOnly: false,
+    preset: { defaults: new Map(), unresolved: [] },
+  });
+  return { passes: buckets.passes, issues: issuesOf(buckets, connection, where) };
+}
+
 /** One connection of a draft against the creator's authority on it. */
 export function previewConnection(
   connection: IssuanceConnection,

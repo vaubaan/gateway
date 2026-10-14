@@ -10,6 +10,8 @@
  *                                     creator; or, while it is orphaned, an owner of one
  *                                     of its connections)
  *   POST /api/missions/:id/gate       `{ risk_id, gate }`: the gate of one accepted risk
+ *   POST /api/missions/:id/limits     `{ limits: [{ risk_id, quota, rate_limit: { max } }] }`:
+ *                                     the limits of accepted risks (creator only)
  *
  * Every one is a mutation or reveals a secret: valid user session, origin
  * check, `Cache-Control: no-store` (spec §6). A mission always has an
@@ -17,7 +19,7 @@
  */
 import { guardMutation, refusalResponse, type Authenticator, type UserPrincipal } from '../auth';
 import { parseMissionDraft } from './draft-schema';
-import type { MissionService } from './mission-service';
+import type { LimitEdit, MissionService } from './mission-service';
 import type { MissionDraft } from './model';
 
 export interface MissionHandlerDeps {
@@ -33,6 +35,54 @@ export interface MissionHandlers {
   revoke(request: Request, missionId: string): Promise<Response>;
   /** `POST /api/missions/:id/gate` — body `{ risk_id, gate: 'auto' | 'approval' }`. */
   setGate(request: Request, missionId: string): Promise<Response>;
+  /**
+   * `POST /api/missions/:id/limits` — body `{ limits: [{ risk_id, quota, rate_limit:
+   * { max } }] }`: the new quota and calls per rate window of risks the mission holds.
+   */
+  setLimits(request: Request, missionId: string): Promise<Response>;
+}
+
+const INVALID_LIMITS_EDIT = {
+  error: 'invalid-limits-edit',
+  message:
+    'The body is { "limits": [{ "risk_id": string, "quota": number, "rate_limit": { "max": number } }] }, with at least one permission.',
+};
+
+/** Largest number a limit may be written as: past it, a JSON number is no longer exact. */
+const LARGEST_LIMIT = Number.MAX_SAFE_INTEGER;
+
+/** One line of a limits edit, or `null` when it is not one. */
+function limitLineOf(raw: unknown): LimitEdit | null {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null;
+  const { risk_id: riskId, quota, rate_limit: rate, ...extra } = raw as Record<string, unknown>;
+  if (Object.keys(extra).length > 0) return null;
+  if (typeof riskId !== 'string' || typeof quota !== 'number') return null;
+  if (typeof rate !== 'object' || rate === null || Array.isArray(rate)) return null;
+  const { max, ...rateExtra } = rate as Record<string, unknown>;
+  // The window is the mission's: it is not part of a change, and naming it is refused.
+  if (Object.keys(rateExtra).length > 0 || typeof max !== 'number') return null;
+  if (Math.abs(quota) > LARGEST_LIMIT || Math.abs(max) > LARGEST_LIMIT) return null;
+  return { risk_id: riskId, quota, rate_limit_max: max };
+}
+
+/** The lines of a limits edit, or `null` when the body is not one. */
+async function limitsEditOf(request: Request): Promise<LimitEdit[] | null> {
+  let raw: unknown;
+  try {
+    raw = await request.json();
+  } catch {
+    return null;
+  }
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null;
+  const { limits, ...extra } = raw as Record<string, unknown>;
+  if (Object.keys(extra).length > 0 || !Array.isArray(limits) || limits.length === 0) return null;
+  const lines: LimitEdit[] = [];
+  for (const item of limits) {
+    const line = limitLineOf(item);
+    if (!line) return null;
+    lines.push(line);
+  }
+  return lines;
 }
 
 const INVALID_GATE_EDIT = {
@@ -172,6 +222,40 @@ export function createMissionHandlers(deps: MissionHandlerDeps): MissionHandlers
           return json(409, {
             error: 'mission-inactive',
             message: `The mission is ${result.state}; every call is refused, whether or not a permission asks first.`,
+          });
+      }
+    },
+
+    async setLimits(request, missionId) {
+      const principal = await userOf(request);
+      if (principal instanceof Response) return principal;
+      const edits = await limitsEditOf(request);
+      if (!edits) return json(400, INVALID_LIMITS_EDIT);
+      const result = await deps.service.setLimits(principal.user, missionId, edits);
+      if (result.ok) {
+        return json(200, { mission: { id: result.mission.id }, changed: result.changed });
+      }
+      switch (result.reason) {
+        case 'not-found':
+          return json(404, NOT_FOUND);
+        case 'invalid-limits':
+          return json(400, { ...INVALID_LIMITS_EDIT, message: result.problem });
+        case 'risk-not-in-policy':
+          return json(422, {
+            error: 'risk-not-in-policy',
+            risk_ids: result.risk_ids,
+            message: `The mission does not hold ${result.risk_ids.join(', ')}: limits are changed on the permissions a mission holds. To add or remove one, create a mission or duplicate this one.`,
+          });
+        case 'refused':
+          return json(422, {
+            error: 'refused',
+            issues: result.issues,
+            message: result.issues.map((issue) => issue.message).join(' '),
+          });
+        case 'inactive':
+          return json(409, {
+            error: 'mission-inactive',
+            message: `The mission is ${result.state}; its limits are not changed.`,
           });
       }
     },

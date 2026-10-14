@@ -119,13 +119,12 @@ test('exhaust a budget, then the creator — and only the creator — answers th
   await expect(ada.getByLabel('Calls to give back')).toHaveValue('2');
   await expect(ada.getByRole('button', { name: 'Give back 2 calls' })).toBeVisible();
   await ada.getByTestId('answer-reset-period').getByRole('radio').check();
-  // A limit is set when the mission is created: the page does not promise an editor that
-  // does not exist, it says what is true and leads to it — a copy with another limit.
-  await expect(ada.getByRole('main')).not.toContainText('edit the mission');
-  await expect(ada.getByTestId('claim-duplicate')).toHaveText('duplicate the mission');
-  await expect(ada.getByTestId('claim-duplicate')).toHaveAttribute(
+  // A limit is changed for good on the mission: the page leads to its limits editor.
+  await expect(ada.getByRole('main')).not.toContainText('duplicate the mission');
+  await expect(ada.getByTestId('claim-change-limit')).toHaveText('change the limit');
+  await expect(ada.getByTestId('claim-change-limit')).toHaveAttribute(
     'href',
-    /^\/missions\/new\?from=[0-9a-f-]{36}$/,
+    /^\/missions\/[0-9a-f-]{36}\?edit=limits#permissions$/,
   );
   await snap(ada, 'claim-creator-view');
 

@@ -177,6 +177,13 @@ export interface SessionEventView {
   readonly gate_before: Gate | null;
   /** End of the period a `gate-opened` event opened the gate for. */
   readonly gate_open_until: string | null;
+  /** The limits a `limits-changed` event set on its risk, and the ones it replaced. */
+  readonly limits: {
+    readonly quota: number;
+    readonly quota_before: number;
+    readonly rate_limit_max: number;
+    readonly rate_limit_max_before: number;
+  } | null;
   /** How many tokens a `revocation` retired. */
   readonly tokens_revoked: number | null;
   /** The token a `rotation` issued, or the one token a `revocation` retired. */
@@ -539,6 +546,7 @@ const NO_DETAIL = {
   gate: null,
   gate_before: null,
   gate_open_until: null,
+  limits: null,
   tokens_revoked: null,
   token_prefix: null,
   replaced_prefix: null,
@@ -625,6 +633,8 @@ function detailFields(parsed: SessionEventDetails | null): EventDetailFields {
         gate: parsed.details.gate,
         gate_before: parsed.details.gate_before,
       };
+    case 'limits-changed':
+      return { ...NO_DETAIL, limits: { ...parsed.details } };
     case 'rotation':
       return {
         ...NO_DETAIL,

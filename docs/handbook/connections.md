@@ -528,18 +528,21 @@ plugin has a way.
 row that holds none) and written in the `connection-revoked` entry as
 `after.provider_grant`:
 
-| Outcome   | When                                                                                                                                       | What the person is told                                                                    |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| `revoked` | the plugin's `revoke` resolved, or the endpoint answered 2xx                                                                               | "Access withdrawn at <provider>": nothing left to remove                                   |
-| `manual`  | the plugin declares no way, or the stored credential holds no token the endpoint accepts                                                   | "Remove the access at <provider> by hand", then the plugin's `manualRevocation` sentence   |
-| `failed`  | there is a way and it did not confirm: any other status, unreachable, too slow, a `revoke` that threw, a credential that could not be read | "Access NOT withdrawn at <provider>": it may still stand; remove it by hand, same sentence |
-| `NULL`    | a connection revoked by a build that asked nothing                                                                                         | read as `manual`                                                                           |
+| Outcome   | When                                                                                                                                       | What the person is told                                                                        |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| `revoked` | the plugin's `revoke` resolved, or the endpoint answered 2xx                                                                               | "Access withdrawn at <provider>": nothing left to remove                                       |
+| `manual`  | the plugin declares no way, or the stored credential holds no token the endpoint accepts                                                   | "Still granted at <provider>", then the plugin's `manualRevocation` sentence: what to do, once |
+| `failed`  | there is a way and it did not confirm: any other status, unreachable, too slow, a `revoke` that threw, a credential that could not be read | "Access NOT withdrawn at <provider>": it may still stand; then the same sentence, once         |
+| `NULL`    | a connection revoked by a build that asked nothing                                                                                         | read as `manual`                                                                               |
 
 The wording is one module, `provider-grant.ts` (`providerGrantForecast`
 before the act, `providerGrantReport` after): the dialog, the notice of the
 redirect (tone `warning` whenever something is left to do — the revocation
 itself succeeded) and the banner of the revoked connection's page say the
-same thing. Log lines: `provider grant withdrawn` (`info`), `provider grant
+same thing. What to do at the provider is said once: the plugin's sentence,
+never a second "remove it by hand" around it; and the page that shows the
+notice of the act does not repeat it in its own banner (it comes back on the
+next visit). Log lines: `provider grant withdrawn` (`info`), `provider grant
 not withdrawn` (`warn`, with the upstream status, never a token).
 
 Which shipped provider does what:

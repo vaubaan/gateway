@@ -48,6 +48,13 @@ export interface IssueTokenInput {
   readonly holder: TokenHolderRecord;
   /** The user who generates or creates it. */
   readonly createdBy: string;
+  /**
+   * A named token this one replaces (the creator's "Replace key" on a machine key):
+   * its id. The old token is retired (`rotated`) and the new one inserted under the
+   * same name in ONE transaction, so there is no instant at which the name is free
+   * or two keys of it work. The holder must be that token's name.
+   */
+  readonly replacing?: string;
 }
 
 export interface AddedMember {
@@ -119,6 +126,25 @@ export interface MissionsRepo {
     readonly openingClosed: boolean;
   } | null>;
   /**
+   * Changes the limits of accepted risks after issuance (the creator's "Change limits"):
+   * the quota per period and the number of calls of the rate window, nothing else — the
+   * rate window, the gate and the list of accepted risks stay as they are. In one
+   * transaction: every listed risk is read, the ones whose values move are written, and,
+   * when the mission has a session, one `limits-changed` event per changed risk is
+   * recorded. Returns each listed risk with its limits before and after; `null` (nothing
+   * written) when a listed risk is not in the mission's policy. The budget reads the
+   * policy rows inside its own decision transaction, so no call decided after this
+   * commit sees the old values.
+   */
+  setLimits(
+    id: string,
+    changes: readonly LimitChange[],
+    actorUserId: string,
+  ): Promise<{
+    readonly mission: MissionRecord;
+    readonly changes: readonly AppliedLimitChange[];
+  } | null>;
+  /**
    * Issues a token to one holder. A member's previous active token becomes `rotated`
    * in the same transaction (at most one active token per member of a mission); the
    * tokens of the other holders are untouched. A named token whose name an active
@@ -182,6 +208,25 @@ export interface MissionsRepo {
   getMember(missionId: string, userId: string): Promise<MissionMemberRecord | null>;
   /** The current members, in the order they were added. Never the creator. */
   listMembers(missionId: string): Promise<MissionMemberRecord[]>;
+}
+
+/** The new limits of one accepted risk (`MissionsRepo.setLimits`). */
+export interface LimitChange {
+  readonly riskId: RiskId;
+  readonly quota: number;
+  /** Calls allowed per rate window; the window itself does not change. */
+  readonly rateLimit: number;
+}
+
+/** One listed risk as `setLimits` found it and left it. */
+export interface AppliedLimitChange {
+  readonly riskId: RiskId;
+  readonly before: { readonly quota: number; readonly rateLimit: number };
+  readonly after: { readonly quota: number; readonly rateLimit: number };
+  /** Its stored window, unchanged: what `rateLimit` counts over. */
+  readonly rateWindowSeconds: number;
+  /** False when the values asked were the ones it had: nothing was written for it. */
+  readonly changed: boolean;
 }
 
 export interface SetGateOptions {
@@ -431,6 +476,15 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
   const setGateStmt = db.prepare<[string, string, string]>(
     'UPDATE mission_policy SET gate = ? WHERE mission_id = ? AND risk_id = ?',
   );
+  const limitsOf = db.prepare<
+    [string, string],
+    { quota: number; rate_limit: number; rate_window_seconds: number }
+  >(
+    'SELECT quota, rate_limit, rate_window_seconds FROM mission_policy WHERE mission_id = ? AND risk_id = ?',
+  );
+  const setLimitsStmt = db.prepare<[number, number, string, string]>(
+    'UPDATE mission_policy SET quota = ?, rate_limit = ? WHERE mission_id = ? AND risk_id = ?',
+  );
   // The session's events belong to the sessions repository: its primitives run here,
   // inside this repository's transaction.
   const sessions = createSessionPrimitives(ctx);
@@ -667,6 +721,60 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
         };
       });
     },
+    async setLimits(id, changes, actorUserId) {
+      const ids = changes.map((c) => c.riskId);
+      if (new Set(ids).size !== ids.length) throw new InvariantError('duplicate risk id in limits');
+      for (const change of changes) {
+        if (!Number.isInteger(change.quota) || change.quota < 0) {
+          throw new InvariantError(`quota must be a non-negative integer (${change.riskId})`);
+        }
+        if (!Number.isInteger(change.rateLimit) || change.rateLimit < 0) {
+          throw new InvariantError(`rate limit must be a non-negative integer (${change.riskId})`);
+        }
+      }
+      const now = nowIso(ctx);
+      return withImmediateTransaction(db, () => {
+        requireMission(id);
+        const applied: AppliedLimitChange[] = [];
+        for (const change of changes) {
+          const row = limitsOf.get(id, change.riskId);
+          if (!row) return null;
+          const moved = row.quota !== change.quota || row.rate_limit !== change.rateLimit;
+          applied.push({
+            riskId: change.riskId,
+            before: { quota: row.quota, rateLimit: row.rate_limit },
+            after: { quota: change.quota, rateLimit: change.rateLimit },
+            rateWindowSeconds: row.rate_window_seconds,
+            changed: moved,
+          });
+        }
+        const moved = applied.filter((a) => a.changed);
+        if (moved.length === 0) return { mission: requireMission(id), changes: applied };
+        for (const a of moved) setLimitsStmt.run(a.after.quota, a.after.rateLimit, id, a.riskId);
+        touch.run(now, id);
+        const session = sessions.sessionOfMission(id);
+        if (session) {
+          for (const a of moved) {
+            sessions.recordEvent(
+              session.id,
+              {
+                kind: 'limits-changed',
+                riskId: a.riskId,
+                actorUserId,
+                details: {
+                  quota: a.after.quota,
+                  quota_before: a.before.quota,
+                  rate_limit_max: a.after.rateLimit,
+                  rate_limit_max_before: a.before.rateLimit,
+                },
+              } satisfies NewEvent,
+              now,
+            );
+          }
+        }
+        return { mission: requireMission(id), changes: applied };
+      });
+    },
     async issueToken(input) {
       const id = ctx.newId();
       const now = nowIso(ctx);
@@ -694,6 +802,19 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
           }
           previous = activeOfMember.get(input.missionId, holder.userId);
           if (previous) retireOne.run(now, previous.id);
+        } else if (input.replacing !== undefined) {
+          const old = tokenById.get(input.replacing);
+          if (
+            !old ||
+            old.mission_id !== input.missionId ||
+            old.kind !== 'named' ||
+            old.status !== 'active' ||
+            old.name !== holder.name
+          ) {
+            throw new TokenNotIssuableError('token-not-replaceable', input.missionId);
+          }
+          retireOne.run(now, old.id);
+          previous = old;
         } else if (activeOfName.get(input.missionId, holder.name)) {
           throw new TokenNotIssuableError('name-taken', input.missionId);
         }

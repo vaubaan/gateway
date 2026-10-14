@@ -446,7 +446,7 @@ describe('gmail presets', () => {
 
   test('ships read-only and developer', () => {
     expect(gmailPlugin.catalog.presets?.map((p) => p.id)).toEqual(['read-only', 'developer']);
-    expect(gmailPlugin.catalog.catalog_version).toBe(3);
+    expect(gmailPlugin.catalog.catalog_version).toBe(4);
   });
 
   test('read-only : reads only, no bulk read, no sensitive label, every entry auto', () => {

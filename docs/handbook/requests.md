@@ -533,11 +533,11 @@ it, for both kinds:
    the endpoint refuses any field it does not expect — and a date is sent as
    the instant the person meant in their own time zone. "Extend the mission"
    is not offered on a mission that has no end date (`no-expiry`). The note
-   under the answers says what is true of a limit: it is set when the mission
-   is created and no page edits it afterwards, so "for another limit from now
-   on, duplicate the mission with the limit you want" — a link to
-   `/missions/new?from=<id>` (`data-testid="claim-duplicate"`), the "Duplicate"
-   of the mission's menu.
+   under the answers says how a limit changes for good: "for another limit
+   from now on, change the limit on the mission" — a link to
+   `/missions/<id>?edit=limits#permissions` (`data-testid="claim-change-limit"`),
+   the mission's limits editor ([missions](missions.md), "Changing the limits
+   after issuance").
 
 Then context, never a condition to answer: "What led here" (`request-events`:
 the last six session events worded by `eventWords`, a link to the mission's
