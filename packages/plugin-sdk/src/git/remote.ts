@@ -90,6 +90,19 @@ export interface GitPushResult {
   }[];
 }
 
+/**
+ * What one permission of the catalog means for git, in the interface's words
+ * ("push to branches named feature/*, fix/*…"). The mission page sorts these
+ * lines into "can", "asks you first" and "cannot" from the mission's policy:
+ * the plugin says what each permission is for git, the policy says whether
+ * the mission holds it.
+ */
+export interface GitAbility {
+  readonly risk_id: string;
+  /** A verb phrase completing "With git, the agent can …" (`push tags`). */
+  readonly words: string;
+}
+
 export interface GitRemoteCapability {
   /** Audited name of a fetch (`github__git_fetch`) ; classified, never executed by `execute`. */
   readonly fetchTool: string;
@@ -112,6 +125,15 @@ export interface GitRemoteCapability {
     repository: string,
     updates: readonly GitRefUpdate[],
   ): Promise<GitReview>;
+  /**
+   * The prefix of the provider's own git URLs (`https://github.com/`). The
+   * setup kit rewrites it to the instance (`url.<instance>/git/.insteadOf`),
+   * so a hard-coded provider URL, a submodule or a script goes through the
+   * mission too. Absent: the kit offers no rewrite.
+   */
+  readonly insteadOf?: string;
+  /** What the permissions of the catalog mean for git, most common first. */
+  readonly abilities?: readonly GitAbility[];
   /** A page of the provider showing what an update brings, for the person who approves it. */
   compareUrl?(repository: string, update: GitReviewedUpdate): string | null;
 }

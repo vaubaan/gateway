@@ -65,6 +65,7 @@ describe('output schemas of the management tools', () => {
         'env',
         'mcp_json',
         'agent_instructions',
+        'git',
         'verify',
       ]);
     }
@@ -76,6 +77,7 @@ describe('output schemas of the management tools', () => {
         env: 'x',
         mcp_json: '{}',
         agent_instructions: 'i',
+        git: null,
         verify: 'v',
         reveals_secret: true,
       },

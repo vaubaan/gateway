@@ -103,6 +103,21 @@ function gitRemoteIssues(plugin: ProviderPlugin): string[] {
   for (const fn of ['repositoryOf', 'upstream', 'review'] as const) {
     if (typeof remote[fn] !== 'function') issues.push(`gitRemote.${fn}: expected a function`);
   }
+  const abilities: unknown = remote.abilities;
+  if (abilities !== undefined) {
+    const risks = new Set((plugin.catalog?.risks ?? []).map((r) => r.id));
+    if (!isList(abilities)) issues.push('gitRemote.abilities: expected a list when present');
+    else
+      abilities.forEach((ability, i) => {
+        if (!isRecord(ability) || typeof ability.words !== 'string' || ability.words === '') {
+          issues.push(`gitRemote.abilities[${i}]: expected { risk_id, words }`);
+        } else if (typeof ability.risk_id !== 'string' || !risks.has(ability.risk_id)) {
+          issues.push(
+            `gitRemote.abilities[${i}].risk_id '${String(ability.risk_id)}' is not a risk of the catalog`,
+          );
+        }
+      });
+  }
   return issues;
 }
 

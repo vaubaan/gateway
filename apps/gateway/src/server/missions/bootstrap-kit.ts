@@ -12,6 +12,11 @@
  *      risks, budget, what to do on each structured refusal and when the
  *      token itself stops working, and a short "management door" section — the other MCP door of the instance,
  *      which this token does not open;
+ *   4. when the mission holds an account of the provider the instance is the
+ *      git remote of (spec §4.1 bis): git's configuration — a credential
+ *      helper that reads the variable (never `store` or `cache`, never the
+ *      key in a URL) and the recommended `insteadOf` rewrite of the
+ *      provider's URLs — and the remote of each repository;
  *   +  `curl … tools/list`.
  *
  * Pure: the instance URL comes from the configuration (`public_url`), nothing
@@ -70,6 +75,17 @@ export interface BootstrapKitInput {
   readonly policy: readonly KitPolicyLine[];
   /** The secret right after issuance or rotation; the prefix on a revisited page. */
   readonly token: { readonly secret: string } | { readonly prefix: string };
+  /** The git remote, when the mission has repositories it serves; absent otherwise. */
+  readonly git?: KitGitRemote | null;
+}
+
+export interface KitGitRemote {
+  /** `<public_url>/git/`. */
+  readonly base: string;
+  /** The provider's own git URL prefix the kit rewrites to `base` (from the plugin), or none. */
+  readonly insteadOf: string | null;
+  /** The resource refs it serves for this mission (`acme/app`). */
+  readonly repositories: readonly string[];
 }
 
 export interface BootstrapKit {
@@ -80,6 +96,8 @@ export interface BootstrapKit {
   readonly mcp_json: string;
   /** 3. */
   readonly agent_instructions: string;
+  /** 4. git's configuration and the remotes; `null` when the mission has no repository the instance serves. */
+  readonly git: string | null;
   /** Verification command. */
   readonly verify: string;
   /** False when the kit only carries the masked prefix. */
@@ -177,6 +195,41 @@ function agentLabelGuidance(): string[] {
   ];
 }
 
+/** The inline credential helper: prints the key from the variable when git asks; stores nothing. */
+export function gitCredentialHelper(): string {
+  return `!f() { echo username=mission; echo "password=$${MISSION_TOKEN_ENV}"; }; f`;
+}
+
+function gitSnippet(git: KitGitRemote): string {
+  const origin = new URL(git.base).origin;
+  const lines = [
+    '# The gateway is your git remote and the mission key is the password.',
+    '# The helper reads the variable each time: the key is never written to disk.',
+    `git config --global ${shellQuote(`credential.${origin}.helper`)} \\`,
+    `  ${shellQuote(gitCredentialHelper())}`,
+  ];
+  if (git.insteadOf) {
+    lines.push(
+      `# Recommended: ${git.insteadOf} URLs (submodules, scripts) go through the gateway too.`,
+      `git config --global ${shellQuote(`url.${git.base}.insteadOf`)} ${shellQuote(git.insteadOf)}`,
+    );
+  }
+  lines.push(...git.repositories.map((ref) => `git clone ${shellQuote(`${git.base}${ref}.git`)}`));
+  return lines.join('\n');
+}
+
+/** The "Git" section of the instruction block. */
+function gitSection(git: KitGitRemote): string[] {
+  return [
+    '### Git',
+    `- This gateway is your git remote: ${git.repositories.map((ref) => `\`${git.base}${ref}.git\``).join(', ')}. Clone, fetch and push there with plain git; the mission key is the password (any user name). You need no other credential, and must not look for one.`,
+    '- A push is decided ref by ref, every ref of it, with the permissions above: which branches and tags, deletions, rewrites (force-push), and changes to CI workflow files. One push is one action: if one ref is refused, the whole push is.',
+    '- A refused push prints the reason on `remote: Vaubaan:` lines. When the reason carries a URL (an approval, a limit to raise), hand it to the human, wait, then push exactly the same commits again: an approval covers those commits only; a changed commit asks again.',
+    '- If git says a ref is stale or not a fast-forward, someone pushed first: fetch, rebase or merge, push again.',
+    '- Git LFS is not served through the gateway.',
+  ];
+}
+
 function agentInstructions(
   input: BootstrapKitInput,
   endpoint: string,
@@ -224,6 +277,7 @@ function agentInstructions(
     'An HTTP 401 whose `error.data.reason` is set means this key authenticated before and no longer does. It says nothing about the mission:',
     ...stopped,
     '',
+    ...(input.git ? [...gitSection(input.git), ''] : []),
     ...managementDoorSection(managementEndpoint),
   ].join('\n');
 }
@@ -250,6 +304,7 @@ export function buildBootstrapKit(input: BootstrapKitInput): BootstrapKit {
     env: `export ${MISSION_TOKEN_ENV}=${shellQuote(tokenValue)}`,
     mcp_json: JSON.stringify(mcpConfig, null, 2),
     agent_instructions: agentInstructions(input, endpoint, managementEndpoint),
+    git: input.git && input.git.repositories.length > 0 ? gitSnippet(input.git) : null,
     verify: [
       `curl -sS ${shellQuote(endpoint)} \\`,
       `  -H "Authorization: Bearer $${MISSION_TOKEN_ENV}" \\`,

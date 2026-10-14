@@ -294,3 +294,39 @@ What the door changes and what it does not:
 - so being a connected app is not a way around a refusal of §5: hand the URL
   to the human. Creating yourself a wider mission to get past a refusal is
   visible to the person and will cost you their consent.
+
+## 8. Git
+
+When your mission holds repositories of a service this gateway serves as a
+git remote (GitHub), the gateway is your remote: `<instance>/git/<owner>/<repo>.git`.
+The catalog (`GET <instance>/mcp/catalog`) gives it per repository as
+`git_remote`, and your setup kit has the configuration. Plain git, nothing
+else to install:
+
+```sh
+git config --global credential.<instance origin>.helper \
+  '!f() { echo username=mission; echo "password=$VAUBAAN_MISSION_TOKEN"; }; f'
+git config --global url.<instance>/git/.insteadOf <the service's own git URL prefix>
+git clone <instance>/git/<owner>/<repo>.git
+```
+
+The mission key is the password, read from the variable each time git asks.
+Never put it in a URL, in `.git/config` or in a credential store.
+
+- **Clone and fetch** need the read permission of the repository. Protocol
+  versions 0, 1 and 2 work.
+- **A push is decided ref by ref, every ref of it**: which branches and tags,
+  deletions, rewrites (force-push), changes to CI workflow files, against the
+  mission's permissions and limits. One push is one action: if one ref is
+  refused, every ref of the push is.
+- **A refusal** shows as `! [remote rejected] <ref> (<reason>)`, with
+  `remote: Vaubaan:` lines that say what to do. When they carry a URL (an
+  approval, a limit to raise), hand it to the human, wait for the answer, then
+  push **exactly the same commits** again. A changed commit asks again.
+- **Stale info or non-fast-forward**: the branch moved since your last fetch.
+  Fetch, rebase or merge, push again. The gateway checks the value you claim
+  for each ref against the service; it never takes your word for it.
+- **Not supported**, and refused with a sentence: `git push --atomic`, push
+  options (`-o`), signed pushes, more than 50 refs in one push, pushes too
+  large for the service's comparison to review (split them), a pack larger
+  than the instance's limit, Git LFS.

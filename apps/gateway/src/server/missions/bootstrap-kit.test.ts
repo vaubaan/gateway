@@ -190,6 +190,48 @@ describe('buildBootstrapKit', () => {
   });
 });
 
+describe('the git step of the kit', () => {
+  const git = {
+    base: 'https://gateway.acme.example/git/',
+    insteadOf: 'https://github.com/',
+    repositories: ['acme/app', 'acme/web'],
+  };
+
+  it('is absent without a repository the instance serves', () => {
+    expect(buildBootstrapKit(INPUT).git).toBeNull();
+    expect(buildBootstrapKit({ ...INPUT, git: { ...git, repositories: [] } }).git).toBeNull();
+    expect(buildBootstrapKit(INPUT).agent_instructions).not.toContain('### Git');
+  });
+
+  it('reads the key from the variable through a helper, never a URL or a store', () => {
+    const kit = buildBootstrapKit({ ...INPUT, git });
+    expect(kit.git).toContain(
+      `git config --global 'credential.https://gateway.acme.example.helper'`,
+    );
+    expect(kit.git).toContain('password=$VAUBAAN_MISSION_TOKEN');
+    expect(kit.git).not.toContain(SECRET);
+    expect(kit.git).not.toMatch(/helper (store|cache)|@gateway/);
+    expect(kit.git).toContain(
+      `git config --global 'url.https://gateway.acme.example/git/.insteadOf' 'https://github.com/'`,
+    );
+    expect(kit.git).toContain(`git clone 'https://gateway.acme.example/git/acme/app.git'`);
+    expect(kit.git).toContain(`git clone 'https://gateway.acme.example/git/acme/web.git'`);
+  });
+
+  it('offers no rewrite when the plugin names no provider prefix', () => {
+    const kit = buildBootstrapKit({ ...INPUT, git: { ...git, insteadOf: null } });
+    expect(kit.git).not.toContain('insteadOf');
+  });
+
+  it('tells the agent how git is decided and what to do with a refusal', () => {
+    const text = buildBootstrapKit({ ...INPUT, git }).agent_instructions;
+    expect(text).toContain('### Git');
+    expect(text).toContain('`https://gateway.acme.example/git/acme/app.git`');
+    expect(text).toContain('every ref of it');
+    expect(text).toContain('push exactly the same commits again');
+  });
+});
+
 describe('/agent-bootstrap.md', () => {
   const page = readFileSync(
     fileURLToPath(new URL('../../app/agent-bootstrap.md/content.md', import.meta.url)),
@@ -238,6 +280,14 @@ describe('/agent-bootstrap.md', () => {
     expect(page).toContain('`mission.creator`');
     for (const reason of AUTH_FAILURE_REASONS) expect(page).toContain(`\`${reason}\``);
     expect(page).toContain('Never look for another key to continue.');
+  });
+
+  it('documents the git remote: the helper, every ref decided, the replay, what is refused', () => {
+    expect(page).toContain('## 8. Git');
+    expect(page).toContain('git_remote');
+    expect(page).toContain('every ref of it');
+    expect(page).toContain('exactly the same commits');
+    expect(page).toContain('Git LFS');
   });
 
   it('refers to the key by its variable and names no instance', () => {

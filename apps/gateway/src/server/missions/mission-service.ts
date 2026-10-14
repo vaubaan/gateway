@@ -69,7 +69,13 @@ import type {
   MissionTokenRecord,
   UserRecord,
 } from '../store/types';
-import { buildBootstrapKit, type BootstrapKit, type KitPolicyLine } from './bootstrap-kit';
+import {
+  buildBootstrapKit,
+  type BootstrapKit,
+  type KitGitRemote,
+  type KitPolicyLine,
+} from './bootstrap-kit';
+import { gitRemoteBase } from '../git/paths';
 import { enumerateCatalog } from './catalog-view';
 import type {
   CatalogRisk,
@@ -1532,7 +1538,23 @@ export class MissionService {
       })),
       policy,
       token,
+      git: this.gitRemoteOf(connections),
     });
+  }
+
+  /** The git remote of the kit: the repositories of the provider the instance serves as a remote. */
+  private gitRemoteOf(connections: readonly MissionDetailConnection[]): KitGitRemote | null {
+    const remote = this.deps.registry.gitRemote();
+    if (!remote) return null;
+    const repositories = connections
+      .filter((c) => c.provider === remote.plugin.id)
+      .flatMap((c) => c.resources.map((r) => r.ref));
+    if (repositories.length === 0) return null;
+    return {
+      base: gitRemoteBase(this.deps.publicUrl),
+      insteadOf: remote.plugin.gitRemote?.insteadOf ?? null,
+      repositories: [...new Set(repositories)],
+    };
   }
 }
 

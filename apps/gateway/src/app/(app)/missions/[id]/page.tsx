@@ -61,6 +61,7 @@ import {
   WAITING,
 } from '@/lib/vocabulary';
 import { enumerateCatalog, groupVariants } from '@/server/missions/catalog-view';
+import { missionGitView } from '@/server/missions/git-view';
 import { explainOrphan } from '@/server/missions/orphan-reason';
 import { riskExplainer } from '@/server/providers/reference';
 import { toolTitleOf } from '@/server/providers/tool-titles';
@@ -170,6 +171,12 @@ export default async function MissionPage({ params, searchParams }: Props) {
   const lines = allowLines(detail.policy, notIncluded);
   const near = state.kind === 'active' ? nearestLimit(detail.policy) : null;
   const explain = riskExplainer(root.registry);
+  const git = missionGitView({
+    registry: root.registry,
+    publicUrl: root.config.publicUrl,
+    connections: detail.connections,
+    policy: detail.policy,
+  });
   const missionPath = `${ROUTES.missions}/${mission.id}`;
   const limitGroups: LimitGroup[] = editingLimits
     ? detail.connections
@@ -435,6 +442,57 @@ export default async function MissionPage({ params, searchParams }: Props) {
       />
 
       <TeamSection team={team} calls={calls} period={period} me={user.id} now={now.toISOString()} />
+
+      {git && (
+        <Section
+          id="git"
+          title="Git"
+          note="The key is the password; nothing else is needed."
+          testId="mission-git"
+        >
+          <p>
+            {git.remotes.length === 1 ? 'Git remote' : 'Git remotes'}:{' '}
+            {git.remotes.map((url, i) => (
+              <span key={url}>
+                {i > 0 && ' · '}
+                <Mono>{url}</Mono>
+              </span>
+            ))}
+          </p>
+          <p data-testid="git-can">
+            <strong>With git, the agent can:</strong>{' '}
+            {git.can.length > 0 ? git.can.join(' · ') : 'nothing yet'}.
+          </p>
+          {git.asks.length > 0 && (
+            <p data-testid="git-asks">
+              <strong>{asksFirst(creatorName)}:</strong> {git.asks.join(' · ')}.
+            </p>
+          )}
+          {git.cannot.length > 0 && (
+            <p data-testid="git-cannot">
+              <strong>It cannot:</strong> {git.cannot.join(' · ')}.
+            </p>
+          )}
+          <Hint>
+            Every ref of a push is decided; one refused ref refuses the push. A refused push tells
+            the agent why, with the link to hand you when you can say yes.
+          </Hint>
+          {git.rawTokenTools.length > 0 && (
+            <Callout
+              tone="warn"
+              title={`A raw ${git.provider} token can leave`}
+              testId="git-raw-token"
+            >
+              This mission can ask for a short-lived {git.provider} token (
+              {git.rawTokenTools.map((tool) => (
+                <Mono key={tool}>{tool}</Mono>
+              ))}
+              ). Whoever holds it acts at {git.provider} directly: for its lifetime, the rules above
+              do not apply, only {git.provider}’s own.
+            </Callout>
+          )}
+        </Section>
+      )}
 
       <Section
         id="permissions"

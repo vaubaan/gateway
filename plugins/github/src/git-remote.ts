@@ -437,6 +437,26 @@ export const githubGitRemote: GitRemoteCapability = {
   upstream,
   review,
   compareUrl,
+  insteadOf: `${GITHUB_WEB_BASE}/`,
+  abilities: [
+    { risk_id: 'github.read-code', words: 'clone and fetch' },
+    { risk_id: 'github.git-push', words: 'push' },
+    {
+      risk_id: 'github.feature-branch-write',
+      words: 'push to working branches (feature/*, fix/*, chore/*, bug/*, docs/*, refactor/*)',
+    },
+    {
+      risk_id: 'github.merge-protected',
+      words: 'push to main, master, prod, production and release-* branches',
+    },
+    { risk_id: 'github.force-push', words: 'force-push (rewrite a branch)' },
+    { risk_id: 'github.branch-delete', words: 'delete branches' },
+    { risk_id: 'github.tag-write', words: 'push and delete tags' },
+    {
+      risk_id: 'github.workflow-write-via-file',
+      words: 'change CI workflows (.github/workflows/)',
+    },
+  ],
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
