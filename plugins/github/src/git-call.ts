@@ -19,7 +19,12 @@
  * namespace (`refs/notes`, `refs/pull`, …) are refused.
  */
 
-import { GIT_TEMPORARY_REF_PREFIX, GIT_UPDATE_KINDS, OID_SHAPE } from '@vaubaan/plugin-sdk';
+import {
+  GIT_TEMPORARY_REF_PREFIX,
+  GIT_UPDATE_KINDS,
+  OID_SHAPE,
+  printableRef,
+} from '@vaubaan/plugin-sdk';
 import type { GitReviewedUpdate, GitUpdateKind } from '@vaubaan/plugin-sdk';
 
 import {
@@ -82,12 +87,12 @@ export function pushedRef(ref: string): { refKind: GitRefKind; name: string } | 
   if (ref.startsWith(BRANCH_PREFIX)) {
     const name = branchName(ref.slice(BRANCH_PREFIX.length));
     if (name !== null) return { refKind: 'branch', name };
-    return { denied: `'${printable(ref)}' is not a valid branch name` };
+    return { denied: `'${printableRef(ref)}' is not a valid branch name` };
   }
   if (ref.startsWith(TAG_PREFIX)) {
     const name = tagName(ref.slice(TAG_PREFIX.length));
     if (name !== null) return { refKind: 'tag', name };
-    return { denied: `'${printable(ref)}' is not a valid tag name` };
+    return { denied: `'${printableRef(ref)}' is not a valid tag name` };
   }
   return { denied: refNotPushable(ref) };
 }
@@ -130,7 +135,7 @@ function readPush(target: RepoTarget, raw: unknown): GitCall | Denied {
     const read = readUpdate(item);
     if ('denied' in read) return read;
     if (seen.has(read.update.ref)) {
-      return { denied: `'${printable(read.update.ref)}' is updated twice in one push` };
+      return { denied: `'${printableRef(read.update.ref)}' is updated twice in one push` };
     }
     seen.add(read.update.ref);
     updates.push(read);
@@ -150,19 +155,21 @@ function readUpdate(item: unknown): GitTargetUpdate | Denied {
   const next = oidOrNull(u.new);
   const kind = GIT_UPDATE_KINDS.find((k) => k === u.kind);
   if (old === undefined || next === undefined || kind === undefined) {
-    return { denied: `${GIT_PUSH_TOOL}: '${printable(u.ref)}' has a malformed old, new or kind` };
+    return {
+      denied: `${GIT_PUSH_TOOL}: '${printableRef(u.ref)}' has a malformed old, new or kind`,
+    };
   }
   if (!consistent(kind, old, next)) {
-    return { denied: `${GIT_PUSH_TOOL}: '${printable(u.ref)}' is not a valid '${kind}' update` };
+    return { denied: `${GIT_PUSH_TOOL}: '${printableRef(u.ref)}' is not a valid '${kind}' update` };
   }
   const commits = u.commits;
   if (typeof commits !== 'number' || !Number.isSafeInteger(commits) || commits < 0) {
-    return { denied: `${GIT_PUSH_TOOL}: '${printable(u.ref)}' has a malformed commit count` };
+    return { denied: `${GIT_PUSH_TOOL}: '${printableRef(u.ref)}' has a malformed commit count` };
   }
   const files = stringList(u.files);
   const workflowFiles = stringList(u.workflow_files);
   if (files === null || workflowFiles === null || files.length > MAX_GIT_UPDATE_FILES) {
-    return { denied: `${GIT_PUSH_TOOL}: '${printable(u.ref)}' has a malformed list of files` };
+    return { denied: `${GIT_PUSH_TOOL}: '${printableRef(u.ref)}' has a malformed list of files` };
   }
   return {
     ...pushed,
@@ -202,10 +209,4 @@ function stringList(value: unknown): string[] | null {
   return (value as readonly unknown[]).every((v) => typeof v === 'string')
     ? [...(value as string[])]
     : null;
-}
-
-/** A ref as a refusal quotes it : bounded, printable. */
-function printable(value: string): string {
-  const clean = value.replace(/[\p{Cc}\p{Cs}\u2028\u2029]/gu, '?');
-  return clean.length > 120 ? `${clean.slice(0, 120)}…` : clean;
 }

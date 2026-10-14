@@ -109,6 +109,12 @@ export interface GitRemoteCapability {
   /** Audited name of a push (`github__git_push`) ; classified and executed. */
   readonly pushTool: string;
   /**
+   * The permission every push touches (`github.git-push`). A mission that
+   * does not hold it is refused the push advertisement itself, before any
+   * write credential is minted for it.
+   */
+  readonly pushRisk: string;
+  /**
    * The resource ref of the repository a URL path names (`acme/app` for
    * `/git/acme/app.git`, the `.git` suffix already removed), or `null` when
    * the path names no repository of this provider. Pure.

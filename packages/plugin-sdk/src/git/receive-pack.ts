@@ -48,7 +48,7 @@ export interface RefCommand {
   readonly ref: string;
 }
 
-/** The command list of a push request, and the capabilities its first line asked for. */
+/** The command list of a push request, and the capabilities any of its lines asked for. */
 export interface CommandList {
   readonly commands: readonly RefCommand[];
   readonly capabilities: readonly string[];
@@ -92,7 +92,7 @@ export function parseCommand(line: string): RefCommand {
 export async function readCommandList(next: () => Promise<Pkt | null>): Promise<CommandList> {
   const commands: RefCommand[] = [];
   const shallow: string[] = [];
-  let capabilities: string[] = [];
+  const capabilities: string[] = [];
   let pushCert = false;
   for (;;) {
     const pkt = await next();
@@ -102,11 +102,12 @@ export async function readCommandList(next: () => Promise<Pkt | null>): Promise<
     let line = pktLineText(pkt) ?? '';
     const nul = line.indexOf('\0');
     if (nul !== -1) {
-      if (commands.length === 0)
-        capabilities = line
-          .slice(nul + 1)
-          .split(' ')
-          .filter(Boolean);
+      // git writes the feature list on the first command line, but receive-pack
+      // honours one on any line: every one is collected, so that the door
+      // refuses what it does not implement wherever it was written.
+      for (const capability of line.slice(nul + 1).split(' ')) {
+        if (capability && !capabilities.includes(capability)) capabilities.push(capability);
+      }
       line = line.slice(0, nul);
     }
     if (line.startsWith('shallow ')) {

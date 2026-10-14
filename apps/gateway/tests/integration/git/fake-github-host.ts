@@ -250,6 +250,10 @@ export class FakeGithubHost {
       );
       return json({ full_name: repository, default_branch: head.replace(/^refs\/heads\//, '') });
     }
+    const commitRead = /^\/repos\/([^/]+)\/([^/]+)\/commits\/([0-9a-f]{40})$/.exec(url.pathname);
+    if (commitRead && method === 'GET') {
+      return this.commitFiles(`${commitRead[1]}/${commitRead[2]}`, commitRead[3] ?? '');
+    }
     const compare = /^\/repos\/([^/]+)\/([^/]+)\/compare\/(.+)$/.exec(url.pathname);
     if (compare && method === 'GET') {
       if (this.compareStatus !== null) return json({ message: 'unavailable' }, this.compareStatus);
@@ -347,8 +351,51 @@ export class FakeGithubHost {
       })
       // GitHub lists at most 300 files.
       .slice(0, 300);
-    return json({ status, ahead_by: ahead, behind_by: behind, total_commits: ahead, files });
+    const list = await this.git(repository, ['rev-list', '--reverse', `${mergeBase}..${h}`]);
+    const commits = list
+      .split('\n')
+      .filter(Boolean)
+      .slice(0, 250)
+      .map((sha) => ({ sha }));
+    return json({
+      status,
+      ahead_by: ahead,
+      behind_by: behind,
+      total_commits: ahead,
+      commits,
+      files,
+    });
   }
+
+  /** `GET commits/{sha}`: the files of one commit against its first parent. */
+  private async commitFiles(repository: string, sha: string): Promise<Response> {
+    if ((await this.refOf(repository, `${sha}^{commit}`)) === null) {
+      return json({ message: 'Not Found' }, 404);
+    }
+    const out = await this.git(repository, [
+      'diff-tree',
+      '--no-commit-id',
+      '--name-status',
+      '-r',
+      '-M',
+      '--root',
+      sha,
+    ]);
+    const files = out
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => {
+        const [code = '', first = '', second] = line.split('\t');
+        return code.startsWith('R') && second !== undefined
+          ? { filename: second, previous_filename: first }
+          : { filename: first };
+      });
+    this.commitReads += 1;
+    return json({ sha, files });
+  }
+
+  /** How many `GET commits/{sha}` the review made. */
+  commitReads = 0;
 
   // ───────────────────────────────────────────────────────────────────────────
   // Smart HTTP, through `git http-backend`

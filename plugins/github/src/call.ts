@@ -138,6 +138,17 @@ export function revision(value: unknown): string | null {
   return wellFormed ? value : null;
 }
 
+/**
+ * Every path under `.github/workflows/`: GitHub asks the `workflows`
+ * permission for any change there, nested or not, whatever the extension.
+ */
+export const WORKFLOW_DIRECTORY = /^\.github\/workflows\//i;
+
+/** A change under `.github/workflows/` (what the git remote counts as a workflow change). */
+export function isUnderWorkflowDirectory(path: string): boolean {
+  return WORKFLOW_DIRECTORY.test(path);
+}
+
 /** GitHub recognizes workflow files at `.github/workflows/*.yml` and `.yaml`. */
 export function isWorkflowPath(path: string): boolean {
   return /^\.github\/workflows\/[^/]+\.(yml|yaml)$/i.test(path);

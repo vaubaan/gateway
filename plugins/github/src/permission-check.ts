@@ -16,11 +16,8 @@ import { ExecutorRefusal, missingPermissions, unconditionalNeeds } from '@vaubaa
 import type { GitReviewedUpdate } from '@vaubaan/plugin-sdk';
 
 import { GITHUB_APP_PERMISSIONS } from './app-manifest.ts';
-import { MINT_TOOL, type GithubCall } from './call.ts';
+import { MINT_TOOL, WORKFLOW_DIRECTORY, type GithubCall } from './call.ts';
 import { GIT_FETCH_TOOL, GIT_PUSH_TOOL } from './git-call.ts';
-
-/** GitHub asks for `workflows` on any change under this directory. */
-const WORKFLOW_DIRECTORY = /^\.github\/workflows\//i;
 
 /** Permission sets of `github__mint_install_token`, by purpose: what it needs, what it adds when held. */
 export const MINT_NEEDS = {

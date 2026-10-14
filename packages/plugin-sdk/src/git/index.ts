@@ -6,3 +6,5 @@ export * from './pkt-line.ts';
 export * from './receive-pack.ts';
 export * from './advertisement.ts';
 export * from './remote.ts';
+export * from './streams.ts';
+export * from './upload-pack.ts';

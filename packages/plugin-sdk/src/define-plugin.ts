@@ -103,9 +103,12 @@ function gitRemoteIssues(plugin: ProviderPlugin): string[] {
   for (const fn of ['repositoryOf', 'upstream', 'review'] as const) {
     if (typeof remote[fn] !== 'function') issues.push(`gitRemote.${fn}: expected a function`);
   }
+  const risks = new Set((plugin.catalog?.risks ?? []).map((r) => r.id));
+  if (typeof remote.pushRisk !== 'string' || !risks.has(remote.pushRisk)) {
+    issues.push(`gitRemote.pushRisk '${String(remote.pushRisk)}' is not a risk of the catalog`);
+  }
   const abilities: unknown = remote.abilities;
   if (abilities !== undefined) {
-    const risks = new Set((plugin.catalog?.risks ?? []).map((r) => r.id));
     if (!isList(abilities)) issues.push('gitRemote.abilities: expected a list when present');
     else
       abilities.forEach((ability, i) => {

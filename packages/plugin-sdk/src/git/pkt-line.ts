@@ -36,6 +36,8 @@ export type Pkt =
   | { readonly kind: 'delim' }
   | { readonly kind: 'response-end' };
 
+import { prependChunk, streamOf } from './streams.ts';
+
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -169,23 +171,7 @@ export class PktLineReader {
   rest(): ReadableStream<Uint8Array> {
     const head = this.buffer;
     this.buffer = new Uint8Array(0);
-    const reader = this.reader;
-    let headSent = head.length === 0;
-    return new ReadableStream<Uint8Array>({
-      async pull(controller) {
-        if (!headSent) {
-          headSent = true;
-          controller.enqueue(head);
-          return;
-        }
-        const { done, value } = await reader.read();
-        if (done) controller.close();
-        else controller.enqueue(value);
-      },
-      cancel(reason) {
-        return reader.cancel(reason);
-      },
-    });
+    return prependChunk(head, streamOf(this.reader));
   }
 
   /** Stops reading the underlying stream. */
@@ -239,4 +225,27 @@ export function sideBand(band: number, bytes: Uint8Array): Uint8Array[] {
     out.push(pktLine(payload));
   }
   return out;
+}
+
+/** The bytes of one pkt-line as it travels (a data line re-framed, a special packet as is). */
+export function encodePkt(pkt: Pkt): Uint8Array<ArrayBuffer> {
+  switch (pkt.kind) {
+    case 'data':
+      return pktLine(pkt.payload);
+    case 'flush':
+      return encoder.encode(FLUSH_PKT);
+    case 'delim':
+      return encoder.encode(DELIM_PKT);
+    case 'response-end':
+      return encoder.encode(RESPONSE_END_PKT);
+  }
+}
+
+/**
+ * A ref name or any value quoted in a refusal git prints: printable ASCII
+ * only (anything else becomes `?`), at most 120 characters.
+ */
+export function printableRef(value: string): string {
+  const clean = value.replace(/[^\x20-\x7e]/g, '?');
+  return clean.length > 120 ? `${clean.slice(0, 120)}…` : clean;
 }
