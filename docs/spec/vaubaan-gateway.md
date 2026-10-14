@@ -428,12 +428,19 @@ the company:
 - The executor authenticates with its mission token, never with a
   provider credential.
 - The gateway mints or decrypts in memory an ephemeral upstream
-  credential, uses it for the call, releases it.
+  credential, uses it for the call, releases it. The same holds for a
+  provider protocol the gateway relays under the mission's permissions —
+  git, through the instance's git remote (§4.1 ter): the executor presents
+  its mission token as the password, the gateway presents the provider's
+  credential upstream, and neither crosses to the other side.
 - The executor receives the provider's response, never a credential
   usable outside the gateway. **One deliberate exception:** a tool whose
   very purpose is to hand the agent a short-lived, narrowly scoped
   provider token, because the work cannot go through the gateway (a
-  repository-scoped installation token for `git clone` and `git push`).
+  repository-scoped installation token for a tool that speaks to the
+  provider directly — Git LFS, a provider CLI). Plain `git clone` and
+  `git push` go through the gateway's git remote (§4.1 ter) and need no
+  such token.
   Such a tool is a risk of its own in the catalog, never accepted by
   default, counted against the budget and audited like any call; the
   long-lived credential still never leaves the instance. **In a preset, a
@@ -651,8 +658,11 @@ mission by its creator.
 
 ### 4.1 Execution surface
 
-The executor has one door: the instance's execution MCP endpoint, in
-JSON-RPC, authenticated by `Authorization: Bearer <mission token>`.
+The executor has the instance's execution MCP endpoint, in JSON-RPC,
+authenticated by `Authorization: Bearer <mission token>`, and — for a
+provider whose agents speak git — the git remote of §4.1 ter, the second
+door of the same surface: the same token, the same admission, the same
+decision and the same audit.
 
 - **Discovery** (`tools/list`): the tools of the providers the mission
   carries. In v5.0 the list is filtered **per provider, not per tool**: a
@@ -763,6 +773,60 @@ A user sees their delegations in the interface (§4.2, "Connected apps"),
 with the client holding each one, the date its absolute lifetime ends, and
 the missions it issued, and may revoke each of them; the revocation is asked
 first.
+
+### 4.1 ter Git remote — the second door of the execution surface
+
+For a provider whose plugin declares it (GitHub in v5.0), the instance is
+the agent's git remote: `https://<instance>/git/<owner>/<repo>.git`. The
+agent needs git and its mission token, nothing else.
+
+- **Authentication**: the mission token is the HTTP password (any user
+  name), read by a credential helper from the variable of the setup kit
+  (§4.4), never written in a URL or a file. Admission is the execution
+  door's, shared and not copied: the same verifier, the same `401`
+  reasons, the same `wrong-credential-kind`, the same per-mission rate
+  limit, one window for both doors. A missing or rejected password is a
+  `401` with a Basic challenge.
+- **Fetch and clone** are relayed to the provider as a stream, never
+  stored: protocol versions 0, 1 and 2. The transfer of objects is one
+  call (risk `read-code` for GitHub), counted and audited like a tool
+  call; listing refs is checked, not counted.
+- **Push** is decided **ref by ref, every ref of it**: branches and tags
+  only, never the gateway's own temporary refs; creation, fast-forward,
+  rewrite (force-push), deletion, tags and changes to CI workflow files
+  each map to permissions of the catalog. The whole push is **one call**:
+  one decision, one request to the creator when gated, one audit entry;
+  if one ref is refused, every ref of the push is. The values the client
+  claims for the refs are checked against the provider: a push based on
+  stale information is refused. Every commit the push brings is reviewed,
+  not only the net change: a CI workflow changed and changed back inside
+  one push still asks for the permission to change workflows. A push its
+  mission, its permissions or its limits refuse is refused before its
+  content leaves for the provider.
+- **How it works**: the pack is streamed to the provider under temporary
+  refs, never read by the gateway; the provider says what each update
+  brings (commits, changed paths); then the decision; then the refs move,
+  each reported on its own; a rewrite or a deletion moves only if the ref
+  still holds the value that was reviewed. Temporary refs are deleted on
+  every path, carry no mission identifier and are left out of the ref
+  listings the gateway relays; those of a push waiting for an approval stay
+  until the request expires, so the creator can read the change at the
+  provider, and a scheduled sweep removes any that outlived their deadline.
+  A mission holds a bounded number of them, and runs a bounded number of
+  pushes at once.
+- **Refusals** reach git as words git prints: the reason on the rejected
+  ref, what to do on `remote:` lines, the approval or claim URL whole. An
+  approved push is replayed by pushing **the same commits** again; a
+  changed commit asks again (§3.5).
+- **Fail closed**: a capability the gateway does not implement (atomic
+  pushes, push options, signed pushes — signed commits cross unchanged),
+  asked anywhere in the request, a malformed or oversized request,
+  more refs than a push may carry, a pack larger than the configured cap, a
+  push the provider cannot compare in full: refused with a sentence and
+  audited. Git LFS is not served. A mission that may not push is not offered
+  the push at all.
+- The git tools are not MCP tools: calling them over MCP is a structural
+  rejection, and the git door reaches no other tool.
 
 ### 4.2 Human surface
 
@@ -950,14 +1014,17 @@ a mounted file, never committing anything:
   overridable, disableable).
 
 Optional keys have defaults; among them the **absolute lifetime of a
-delegation** (ninety days) and the **audit retention** (ninety days).
+delegation** (ninety days), the **audit retention** (ninety days) and the
+git remote's **largest push** (200 MiB) and **longest request** (ten
+minutes).
 
 Anything missing makes startup fail with a message naming the variable.
 
 ### 4.4 Bootstrap kit after issuance
 
 Inherited from v4 §12.4, adapted: after a mission is issued, the
-interface shows its key, then three numbered snippets to copy and a
+interface shows its key, then three numbered snippets to copy — four when
+the mission holds repositories the instance serves as a git remote — and a
 verification command — the "setup kit" of the interface. The prose around
 the snippets is in the interface's words; the commands, the variable name,
 the MCP tool names, the refusal codes and the fields keep the protocol's.
@@ -971,6 +1038,13 @@ the MCP tool names, the refusal codes and the fields keep the protocol's.
    carried, resource refs, accepted risks, budget, what to do on each
    structured refusal (in particular: hand the request URL to the human,
    never try to work around it) and when the key itself stops working.
+4. When the instance is the git remote of repositories of the mission
+   (§4.1 ter): git's configuration — a credential helper that reads the
+   variable (never a stored credential), the recommended rewrite of the
+   provider's own git URLs to the instance, so that submodules and scripts
+   go through the mission too — and the remote of each repository. The
+   mission page shows the same remotes and what git may do under the
+   mission: can, asks first, cannot.
 
 A generic page served by the instance without authentication documents the
 same for any agent, with no value of any mission.
@@ -1304,7 +1378,9 @@ automated suite. Trust comes from usage.
     secret, and a tool refused by name when the app lacks its permission.
 - **Integration**, on an ephemeral instance with embedded store and
   simulated IdP: connection, share, issuance, claim, approval and
-  replay, revocation flows, `orphaned` states, OAuth delegation then
+  replay, revocation flows, the git remote with the real `git` client
+  against a local git server standing in for the provider (multi-ref
+  pushes, claimed ref values, malformed requests included), `orphaned` states, OAuth delegation then
   issuance of a mission by an MCP client within the user's authority and
   refusal beyond it.
 - **End to end, acceptance criterion for the cutover**: connect the
@@ -1321,7 +1397,8 @@ automated suite. Trust comes from usage.
   - every plugin ships at least one preset, and every preset references
     only `RiskId`s of its own catalog;
   - a user's authority on a connection is recomputed from their current
-    group membership, never from a snapshot.
+    group membership, never from a snapshot;
+  - the git remote admits with the execution door's own admission.
 - **Out of scope**: integration tests against real providers.
 
 ## 11. v1 decisions & open questions
