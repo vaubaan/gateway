@@ -18,6 +18,8 @@
 
 import type { CredentialKind } from '@vaubaan/shared';
 
+import type { ConnectionContext } from './plugin.ts';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Form fields — shared by api-key forms, ssh-key forms and app configuration
 // ─────────────────────────────────────────────────────────────────────────────
@@ -44,12 +46,95 @@ export type ProviderAppConfig = Readonly<Record<string, string>>;
 // CredentialSpec — one variant per kind
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * What every way of connecting may say beside its own flow. A plugin that
+ * connects in more than one way (`ProviderPlugin.alternativeCredentials`, ADR
+ * token-connections-beside-the-integration-app) declares, per way, what that
+ * way cannot do and where a person removes its grant.
+ */
+export interface CredentialSpecCommon {
+  /**
+   * Tools of this plugin that a connection made this way cannot run, each
+   * with one sentence saying why and what it needs (`github__mint_install_token`
+   * → "needs the GitHub App: …"). The host refuses such a call before the
+   * budget is touched and leaves the tool out of `tools/list` for a mission
+   * whose connection was made this way. Keys are tool names of the plugin.
+   */
+  readonly unavailableTools?: Readonly<Record<string, string>>;
+  /**
+   * Where, at the provider, a person removes the grant of a connection made
+   * this way, when it differs from `ProviderPlugin.manualRevocation` (a pasted
+   * token is deleted on the token page, an app is uninstalled elsewhere).
+   */
+  readonly manualRevocation?: string;
+}
+
+/** Access a token permission grants at the provider, in the provider's own two words. */
+export const TOKEN_PERMISSION_ACCESS = ['read', 'read-write'] as const;
+export type TokenPermissionAccess = (typeof TOKEN_PERMISSION_ACCESS)[number];
+
+/**
+ * One permission (GitHub "Contents", Supabase "Database") the person ticks
+ * when they create the token, with the tools of the plugin it serves. The
+ * connect page lists these; nothing about permissions is written in the page.
+ */
+export interface TokenPermission {
+  /** The permission's name as the provider's token page shows it. */
+  readonly name: string;
+  readonly access: TokenPermissionAccess;
+  /** Tools of the plugin that need it ; at least one. */
+  readonly tools: readonly string[];
+}
+
+/**
+ * How a person creates the token by hand at the provider: the guide the
+ * connect page shows, derived from this declaration.
+ */
+export interface TokenGuide {
+  /** Where to click at the provider, one plain sentence per step, no markup. */
+  readonly steps: readonly string[];
+  /**
+   * The permissions to grant. Every tool of the plugin that this way of
+   * connecting can run is served by at least one of them (`definePlugin`).
+   */
+  readonly permissions: readonly TokenPermission[];
+  /** The lifetime to choose at the provider, in days ; `null` when the provider offers no expiry. */
+  readonly recommendedExpiryDays: number | null;
+  /** The provider's documentation of this kind of token. */
+  readonly docsUrl?: string;
+}
+
+/**
+ * What the provider says about a pasted credential, read by `verify` before
+ * anything is stored: who it belongs to and when it stops working.
+ */
+export interface CredentialCheck {
+  /** The account the credential acts as, in the provider's words (`octocat`, `acme, beta`) ; `null` when not exposed. */
+  readonly account: string | null;
+  /** ISO-8601 ; `null` when the credential does not expire or the provider does not say. */
+  readonly expiresAt: string | null;
+}
+
 /** The user pastes one or more values (API token, account id). */
-export interface ApiKeyCredentialSpec {
+export interface ApiKeyCredentialSpec extends CredentialSpecCommon {
   readonly kind: 'api-key';
   readonly fields: readonly CredentialField[];
   /** URL of the provider page where the user creates the key. */
   readonly createUrl?: string;
+  /**
+   * What the person creates, in the provider's words, lower case
+   * ("fine-grained personal access token"). Shown on the connect page.
+   */
+  readonly label?: string;
+  /** How to create it by hand ; the connect page renders it. */
+  readonly guide?: TokenGuide;
+  /**
+   * Ask the provider about the pasted values before anything is stored. A
+   * rejection throws `UpstreamAuthError` (nothing is stored, the person reads
+   * the provider's message) ; an expiry in the past is refused by the host.
+   * Absent: the first resource discovery is the only check.
+   */
+  verify?(ctx: ConnectionContext): Promise<CredentialCheck>;
 }
 
 export type OAuth2ClientAuthMethod = 'client_secret_basic' | 'client_secret_post' | 'none';
@@ -58,7 +143,7 @@ export type OAuth2ClientAuthMethod = 'client_secret_basic' | 'client_secret_post
  * Authorization-code flow run by the host against the company's own OAuth
  * app. The plugin never sees the client secret.
  */
-export interface OAuth2CredentialSpec {
+export interface OAuth2CredentialSpec extends CredentialSpecCommon {
   readonly kind: 'oauth2';
   readonly authorizationUrl: string;
   readonly tokenUrl: string;
@@ -296,7 +381,7 @@ export interface AppManifestRegistration {
  * redirects to the installation page and receives an installation id ; the
  * plugin mints short-lived tokens from the app's private key at call time.
  */
-export interface AppInstallCredentialSpec {
+export interface AppInstallCredentialSpec extends CredentialSpecCommon {
   readonly kind: 'app-install';
   /**
    * Operator settings the host collects once (app id, private key, app slug…).
@@ -324,7 +409,7 @@ export interface AppInstallCredentialSpec {
  * The instance generates a key pair ; the operator installs the public key
  * on the target host. The private key never leaves the instance.
  */
-export interface SshKeyCredentialSpec {
+export interface SshKeyCredentialSpec extends CredentialSpecCommon {
   readonly kind: 'ssh-key';
   readonly algorithm: 'ed25519';
   /** Non-secret connection parameters the user fills in (host, port, user). */
@@ -336,6 +421,55 @@ export type CredentialSpec =
   | OAuth2CredentialSpec
   | AppInstallCredentialSpec
   | SshKeyCredentialSpec;
+
+/** A way of connecting that goes through an app the company registers at the provider. */
+export type AppCredentialSpec = OAuth2CredentialSpec | AppInstallCredentialSpec;
+
+export function isAppCredentialSpec(spec: CredentialSpec): spec is AppCredentialSpec {
+  return spec.kind === 'oauth2' || spec.kind === 'app-install';
+}
+
+/**
+ * Every way a plugin connects, its primary `credential` first, then its
+ * `alternativeCredentials` in declared order. The one reading of the
+ * declaration: the host never looks at the two members separately.
+ */
+export function credentialSpecsOf(plugin: {
+  readonly credential: CredentialSpec;
+  readonly alternativeCredentials?: readonly CredentialSpec[];
+}): readonly CredentialSpec[] {
+  return [plugin.credential, ...(plugin.alternativeCredentials ?? [])];
+}
+
+/** The spec of one kind, or `null` when the plugin does not connect that way. */
+export function credentialSpecFor<K extends CredentialKind>(
+  plugin: Parameters<typeof credentialSpecsOf>[0],
+  kind: K,
+): Extract<CredentialSpec, { kind: K }> | null {
+  const found = credentialSpecsOf(plugin).find((spec) => spec.kind === kind);
+  return (found as Extract<CredentialSpec, { kind: K }> | undefined) ?? null;
+}
+
+/** The way of connecting through the company's app (at most one per plugin), or `null`. */
+export function appCredentialSpecOf(
+  plugin: Parameters<typeof credentialSpecsOf>[0],
+): AppCredentialSpec | null {
+  return credentialSpecsOf(plugin).find(isAppCredentialSpec) ?? null;
+}
+
+/**
+ * Why a connection made with this kind cannot run this tool, or `null` when
+ * it can. A kind the plugin does not declare runs nothing.
+ */
+export function unavailableToolReason(
+  plugin: Parameters<typeof credentialSpecsOf>[0] & { readonly displayName: string },
+  kind: CredentialKind,
+  tool: string,
+): string | null {
+  const spec = credentialSpecFor(plugin, kind);
+  if (!spec) return `${plugin.displayName} cannot be connected with a '${kind}' credential.`;
+  return spec.unavailableTools?.[tool] ?? null;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CredentialSecret — the decrypted material (memory only)

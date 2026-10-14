@@ -22,8 +22,11 @@ import { semanticIssues } from './catalog-loader.ts';
 import {
   CLIENT_ID_FIELD,
   CLIENT_SECRET_FIELD,
+  isAppCredentialSpec,
   OAUTH2_REVOCATION_FORMATS,
+  TOKEN_PERMISSION_ACCESS,
   type AppInstallCredentialSpec,
+  type CredentialSpec,
   type OAuth2CredentialSpec,
 } from './credential.ts';
 import type { ProviderPlugin } from './plugin.ts';
@@ -295,8 +298,151 @@ function hookIssues(plugin: ProviderPlugin): string[] {
   return issues;
 }
 
+/** Upper bound of one `unavailableTools` reason and of one guide step. */
+export const CREDENTIAL_SENTENCE_MAX_LENGTH = 300;
+
+/**
+ * The primary spec and every alternative, each checked alone (issues of an
+ * alternative are prefixed `alternativeCredentials[i]`), then together: kinds
+ * unique, at most one company app.
+ */
 function credentialSpecIssues(plugin: ProviderPlugin): string[] {
-  const spec = plugin.credential;
+  const issues = [...oneSpecIssues(plugin, plugin.credential, 'credential')];
+  const alternatives: unknown = plugin.alternativeCredentials;
+  if (alternatives === undefined) return issues;
+  if (!isList(alternatives))
+    return [...issues, 'alternativeCredentials: expected a list when present'];
+  alternatives.forEach((alt, i) => {
+    issues.push(...oneSpecIssues(plugin, alt as CredentialSpec, `alternativeCredentials[${i}]`));
+  });
+  const specs = [plugin.credential, ...alternatives].filter(
+    (s): s is CredentialSpec => isRecord(s) && typeof s.kind === 'string',
+  );
+  const kinds = specs.map((s) => s.kind);
+  const repeated = kinds.filter((k, i) => kinds.indexOf(k) !== i);
+  if (repeated.length > 0) {
+    issues.push(`alternativeCredentials: kind '${repeated[0]}' is declared twice`);
+  }
+  if (specs.filter((s) => isAppCredentialSpec(s)).length > 1) {
+    issues.push(
+      'alternativeCredentials: at most one way of connecting may go through a company app',
+    );
+  }
+  return issues;
+}
+
+function oneSpecIssues(plugin: ProviderPlugin, spec: CredentialSpec, at: string): string[] {
+  const own = kindSpecIssues(spec);
+  const issues = at === 'credential' ? own : own.map((i) => i.replace(/^credential/, at));
+  if (!isRecord(spec) || typeof spec.kind !== 'string') return issues;
+  const tools = new Set(isList(plugin.tools) ? plugin.tools.map((t) => t?.name) : []);
+  issues.push(...unavailableToolsIssues(spec.unavailableTools, tools, at));
+  if (
+    spec.manualRevocation !== undefined &&
+    !isSentence(spec.manualRevocation, PLUGIN_MANUAL_REVOCATION_MAX_LENGTH)
+  ) {
+    issues.push(`${at}.manualRevocation: expected one or two sentences when present`);
+  }
+  if (spec.kind === 'api-key') {
+    if (spec.label !== undefined && !isSentence(spec.label, CREDENTIAL_SENTENCE_MAX_LENGTH)) {
+      issues.push(`${at}.label: expected a short name when present`);
+    }
+    if (spec.verify !== undefined && typeof spec.verify !== 'function') {
+      issues.push(`${at}.verify: expected a function when present`);
+    }
+    if (spec.createUrl !== undefined && !isHttpsUrl(spec.createUrl)) {
+      issues.push(`${at}.createUrl: expected an https URL when present`);
+    }
+    if (spec.guide !== undefined) {
+      issues.push(...guideIssues(spec.guide, tools, spec.unavailableTools ?? {}, `${at}.guide`));
+    }
+  }
+  return issues;
+}
+
+function unavailableToolsIssues(
+  unavailable: unknown,
+  tools: ReadonlySet<unknown>,
+  at: string,
+): string[] {
+  if (unavailable === undefined) return [];
+  if (!isRecord(unavailable)) return [`${at}.unavailableTools: expected a record tool → reason`];
+  const issues: string[] = [];
+  for (const [tool, reason] of Object.entries(unavailable)) {
+    if (!tools.has(tool))
+      issues.push(`${at}.unavailableTools: '${tool}' is not a tool of this plugin`);
+    if (!isSentence(reason, CREDENTIAL_SENTENCE_MAX_LENGTH)) {
+      issues.push(`${at}.unavailableTools.${tool}: expected one sentence saying why`);
+    }
+  }
+  return issues;
+}
+
+/**
+ * A guide lists real tools, in the closed access set, and covers every tool
+ * this way of connecting can run: the page derives the permissions to tick
+ * from it, so a tool nobody asked a permission for would fail at the provider.
+ */
+function guideIssues(
+  guide: unknown,
+  tools: ReadonlySet<unknown>,
+  unavailable: Readonly<Record<string, string>>,
+  at: string,
+): string[] {
+  if (!isRecord(guide)) return [`${at}: expected { steps, permissions, recommendedExpiryDays }`];
+  const issues: string[] = [];
+  if (!isList(guide.steps) || guide.steps.length === 0) {
+    issues.push(`${at}.steps: expected at least one step`);
+  } else if (!guide.steps.every((step) => isSentence(step, CREDENTIAL_SENTENCE_MAX_LENGTH))) {
+    issues.push(`${at}.steps: every step is one plain sentence`);
+  }
+  const days = guide.recommendedExpiryDays;
+  if (days !== null && (typeof days !== 'number' || !Number.isInteger(days) || days < 1)) {
+    issues.push(`${at}.recommendedExpiryDays: expected a positive number of days or null`);
+  }
+  if (guide.docsUrl !== undefined && !isHttpsUrl(guide.docsUrl)) {
+    issues.push(`${at}.docsUrl: expected an https URL when present`);
+  }
+  if (!isList(guide.permissions) || guide.permissions.length === 0) {
+    return [...issues, `${at}.permissions: expected at least one permission`];
+  }
+  const served = new Set<unknown>();
+  guide.permissions.forEach((permission, i) => {
+    const where = `${at}.permissions[${i}]`;
+    if (!isRecord(permission)) {
+      issues.push(`${where}: expected { name, access, tools }`);
+      return;
+    }
+    if (!isName(permission.name)) issues.push(`${where}.name: expected the provider's name`);
+    if (!(TOKEN_PERMISSION_ACCESS as readonly unknown[]).includes(permission.access)) {
+      issues.push(`${where}.access: expected one of ${TOKEN_PERMISSION_ACCESS.join(' | ')}`);
+    }
+    if (!isList(permission.tools) || permission.tools.length === 0) {
+      issues.push(`${where}.tools: expected at least one tool`);
+      return;
+    }
+    for (const tool of permission.tools) {
+      if (!tools.has(tool))
+        issues.push(`${where}.tools: '${String(tool)}' is not a tool of this plugin`);
+      else if (typeof tool === 'string' && tool in unavailable) {
+        issues.push(`${where}.tools: '${tool}' is unavailable this way`);
+      }
+      served.add(tool);
+    }
+  });
+  for (const tool of tools) {
+    if (typeof tool === 'string' && !(tool in unavailable) && !served.has(tool)) {
+      issues.push(`${at}.permissions: no permission serves '${tool}'`);
+    }
+  }
+  return issues;
+}
+
+function isSentence(x: unknown, max: number): x is string {
+  return typeof x === 'string' && x.trim().length > 0 && x.length <= max;
+}
+
+function kindSpecIssues(spec: CredentialSpec): string[] {
   if (!spec || typeof spec !== 'object') return ['credential: missing CredentialSpec'];
   if (typeof spec.kind !== 'string' || !isCredentialKind(spec.kind)) {
     return [`credential.kind: expected one of ${CREDENTIAL_KINDS.join(' | ')}`];
