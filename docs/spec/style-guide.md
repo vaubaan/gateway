@@ -218,8 +218,9 @@ side): a theme applies to an element and everything inside it.
 - **The current section** is marked by a fill and the strong weight, not by a
   colour. Every page belongs to exactly one section.
 - **In a narrow window** the navigation collapses to its icons, each still named
-  for assistive technology and on hover; on a phone it becomes a bar above the
-  page.
+  for assistive technology and on hover; on a phone it becomes a bar at the
+  foot of the page, a word under each icon, with the less frequent sections
+  behind "More".
 - **One home**: the root. The brand and the sign-in both lead there.
 - **Administration is part of Settings**: the same shell and the same global
   navigation, with a local navigation beside the page. No label is used for two
@@ -314,8 +315,9 @@ How a page looks is judged by eye, against the gallery, at 1440×900 and
 - **A search across the gateway** (the mockups draw a field in the navigation).
   Not provided: nothing would answer it yet.
 - **Notifications** outside the interface (mail, chat) for what waits.
-- **The phone**: the collapsed shell and the answer row hold; whole pages were
-  not drawn at 390 px.
+- **The phone**: pages hold at 390 px — tables become labelled lines, row
+  actions are always drawn, nothing scrolls sideways — but no page was designed
+  for it first.
 
 ## 9. Known gaps between this guide and the interface
 
