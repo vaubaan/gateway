@@ -36,6 +36,7 @@ import {
   ExecutorRefusal,
   GIT_TEMPORARY_REF_PREFIX,
   GitProtocolError,
+  OID_SHAPE,
   parseReceivePackResult,
   PktLineError,
   PktLineReader,
@@ -63,6 +64,30 @@ import { prefixed, refusalLine, refusalText, resultText } from './words';
 
 /** The command list of a push may not exceed this many bytes (refs, not objects). */
 export const MAX_COMMAND_LIST_BYTES = 1024 * 1024;
+/** Ref updates one push may carry (the plugin's own bound is the same order). */
+export const MAX_PUSH_COMMANDS = 50;
+/** Longest ref name accepted in a command. */
+export const MAX_REF_NAME_LENGTH = 1024;
+/**
+ * The capabilities a client may ask for on a push: exactly what the door
+ * advertises (ADR gateway-as-git-remote D4), plus `agent=` and
+ * `object-format=sha1`. Anything else — `atomic`, `push-options`,
+ * `report-status-v2`, a capability git invents later — is refused, never
+ * ignored: a client that asks for a semantics the door does not provide must
+ * not believe it got it.
+ */
+export const ACCEPTED_PUSH_CAPABILITIES = [
+  'report-status',
+  'side-band-64k',
+  'quiet',
+  'ofs-delta',
+  'delete-refs',
+] as const;
+/** Deadline of the cleanup of temporary refs: it runs even when the client is gone. */
+const CLEANUP_TIMEOUT_MS = 60_000;
+/** How long a temporary ref may live past the request's own deadline before the sweeper takes it. */
+const IN_FLIGHT_MARGIN_MS = 5 * 60_000;
+const MS_PER_SECOND = 1000;
 /** What the gateway calls itself in the capabilities it sends upstream. */
 export const GIT_AGENT = 'vaubaan-gateway';
 const BYTES_PER_MEGABYTE = 1024 * 1024;
@@ -156,6 +181,8 @@ export class Push {
       throw err;
     }
     if (list.pushCert) return this.unreadable('signed pushes are not supported');
+    const malformed = commandListIssue(list);
+    if (malformed !== null) return this.unreadable(malformed);
 
     const format: ReportFormat = {
       reportStatus: list.capabilities.includes('report-status'),
@@ -263,6 +290,21 @@ export class Push {
       ),
     ]);
     const limit = this.deps.config.git.maxPackBytes;
+    // Recorded before a byte leaves: if this process dies or the client goes
+    // away mid-push, the sweeper finds them once the deadline has passed.
+    const deadline = new Date(
+      Date.now() + this.deps.config.git.requestTimeoutSeconds * MS_PER_SECOND + IN_FLIGHT_MARGIN_MS,
+    ).toISOString();
+    await this.deps.pendingRefs.add(
+      stored.map((r) => ({
+        ref: r.temporary,
+        connectionId: target.connection.id,
+        repository: target.repository,
+        missionId: ctx.mission.id,
+        objectId: r.objectId,
+        expiresAt: deadline,
+      })),
+    );
     const pack = capped(reader.rest(), limit);
     // From here the provider may hold the refs: they are cleaned up whatever follows.
     this.stored = stored;
@@ -360,25 +402,31 @@ export class Push {
   // 7. Temporary refs: kept for a pending approval, deleted otherwise
   // ───────────────────────────────────────────────────────────────────────────
 
+  /** The refs stay while the request is open; the sweeper takes them at its expiry. */
   private async keepForApproval(expiresAt: string): Promise<void> {
-    const { ctx, target } = this.input;
-    await this.deps.pendingRefs.add(
-      this.stored.map((s) => ({
-        ref: s.temporary,
-        connectionId: target.connection.id,
-        repository: target.repository,
-        missionId: ctx.mission.id,
-        objectId: s.objectId,
-        expiresAt,
-      })),
+    await this.deps.pendingRefs.extend(
+      this.stored.map((s) => s.temporary),
+      expiresAt,
     );
   }
 
+  /**
+   * Delete temporary refs at the provider, then their rows. Runs on every
+   * path — success, refusal, provider failure, a client that hung up — with
+   * a deadline of its own, never the request's signal. Rows of refs that
+   * could not be deleted stay for the sweeper.
+   */
   private async cleanUp(stored: readonly StoredRef[]): Promise<void> {
     if (stored.length === 0) return;
     try {
       const { execCtx, upstream } = await this.upstream();
-      await deleteTemporaryRefs(execCtx, upstream, stored, this.input.signal);
+      await deleteTemporaryRefs(
+        { ...execCtx, signal: AbortSignal.timeout(CLEANUP_TIMEOUT_MS) },
+        upstream,
+        stored,
+        AbortSignal.timeout(CLEANUP_TIMEOUT_MS),
+      );
+      await this.deps.pendingRefs.remove(stored.map((s) => s.temporary));
     } catch (err) {
       this.deps.logger.warn('temporary refs of a push not deleted', {
         mission_id: this.input.ctx.mission.id,
@@ -399,7 +447,6 @@ export class Push {
     await this.cleanUp(
       earlier.map((r) => ({ ref: r.ref, temporary: r.ref, objectId: r.objectId })),
     );
-    await this.deps.pendingRefs.remove(earlier.map((r) => r.ref));
   }
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -450,6 +497,55 @@ export class Push {
       agent_label: outcome.audit.agent_label,
     });
   }
+}
+
+/**
+ * What the door refuses in a command list before anything else (fail
+ * closed): a capability it did not advertise, too many commands, a ref name
+ * too long or with a byte git never writes, the same ref twice, a shallow
+ * line that is not an object id. `null` when the list is acceptable. Which
+ * refs a mission may push is the pipeline's question, for every command.
+ */
+export function commandListIssue(list: CommandList): string | null {
+  for (const capability of list.capabilities) {
+    const accepted =
+      (ACCEPTED_PUSH_CAPABILITIES as readonly string[]).includes(capability) ||
+      /^agent=[\x21-\x7e]{1,256}$/.test(capability) ||
+      capability === 'object-format=sha1';
+    if (!accepted) {
+      return `the capability '${printable(capability)}' is not supported by this git remote (push without --atomic, --push-option or --signed)`;
+    }
+  }
+  if (list.commands.length > MAX_PUSH_COMMANDS) {
+    return `a push may update at most ${MAX_PUSH_COMMANDS} refs at once; this one updates ${list.commands.length}`;
+  }
+  const seen = new Set<string>();
+  for (const command of list.commands) {
+    if (command.ref.length > MAX_REF_NAME_LENGTH || hasForbiddenRefByte(command.ref)) {
+      return `'${printable(command.ref)}' is not a valid ref name`;
+    }
+    if (seen.has(command.ref)) return `'${printable(command.ref)}' is updated twice in one push`;
+    seen.add(command.ref);
+  }
+  if (list.shallow.some((oid) => !OID_SHAPE.test(oid))) {
+    return 'a shallow line of this push is not an object id';
+  }
+  return null;
+}
+
+/** A byte `git check-ref-format` never allows: control characters, space, `~^:?*[\\`. */
+function hasForbiddenRefByte(ref: string): boolean {
+  for (const char of ref) {
+    const code = char.codePointAt(0) ?? 0;
+    if (code <= 0x20 || code === 0x7f || '~^:?*[\\'.includes(char)) return true;
+  }
+  return false;
+}
+
+/** A value quoted in a refusal: bounded, printable. */
+function printable(value: string): string {
+  const clean = value.replace(/[^\x20-\x7e]/g, '?');
+  return clean.length > 120 ? `${clean.slice(0, 120)}…` : clean;
 }
 
 /** What git sent, before any review: the precheck's arguments. */

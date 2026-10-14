@@ -1,12 +1,13 @@
--- Migration 0015 — temporary refs of pushes waiting for an approval (spec §4.1 bis "Git
+-- Migration 0015 — temporary refs a push created at the provider (spec §4.1 bis "Git
 -- remote"; ADR gateway-as-git-remote D5).
 --
 -- A push through the git remote stores its pack at the provider under temporary refs
 -- (`refs/vaubaan/<mission>/<nonce>/<n>`) so that the provider can compare what it
--- brings. They are deleted as soon as the push is decided — except when the decision is
--- `approval-required`: then they stay while the request is open, so the person who
--- answers reads the diff at the provider, and a sweeper deletes them once the request
--- has expired. One row per temporary ref left at the provider.
+-- brings. Each is recorded here before the pack leaves, with the request's deadline, and
+-- the row is dropped once the ref is deleted — as soon as the push is decided, except
+-- when the decision is `approval-required`: then the deadline becomes the request's
+-- expiry, so the person who answers reads the diff at the provider. A sweeper deletes at
+-- the provider whatever outlived its deadline (a crash, a client gone, a provider down).
 --
 --   ref            the temporary ref, unique at the provider (it carries a random nonce)
 --   connection_id  the connection whose credential deletes it (not a foreign key: a
@@ -14,7 +15,8 @@
 --   repository     the resource ref (`owner/repo`)
 --   mission_id     the mission whose push it holds
 --   object_id      what it points at: the delete is a compare-and-swap on it
---   expires_at     the request's expiry; the sweeper deletes the ref after it
+--   expires_at     the push's deadline, or the request's expiry; the sweeper deletes the
+--                  ref after it
 --
 -- Portable SQL: one table, one index.
 

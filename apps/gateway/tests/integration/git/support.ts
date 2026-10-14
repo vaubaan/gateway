@@ -7,7 +7,7 @@
  * configuration and the setup kit's credential helper: the key is read from
  * `VAUBAAN_MISSION_TOKEN`, never written anywhere.
  */
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { generateKeyPairSync } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
@@ -17,6 +17,7 @@ import { join } from 'node:path';
 import { Readable } from 'node:stream';
 
 import { githubPlugin } from '@vaubaan/plugin-github';
+import { parseReceivePackResult } from '@vaubaan/plugin-sdk';
 import type { MissionPolicyEntry } from '@vaubaan/shared';
 
 import { serializeSecret } from '../../../src/server/connections';
@@ -75,8 +76,28 @@ export interface GitRig extends ExecutionInstance {
     key: string | null,
     extraConfig?: Record<string, string>,
   ): Promise<GitResult>;
+  /**
+   * A push git would never send: `body` (a command list, then a pack) posted
+   * as it is to the door, the key as the Basic password. The report is read
+   * without side-band (ask only `report-status`).
+   */
+  rawPush(
+    key: string,
+    body: Uint8Array | ReadableStream<Uint8Array>,
+    repository?: string,
+  ): Promise<RawPushAnswer>;
+  /** A pack of `revs` (`git pack-objects --revs` syntax: `<sha>`, `^<sha>`) from a working copy. */
+  packOf(cwd: string, revs: readonly string[]): Promise<Uint8Array>;
   /** A fresh directory for a clone. */
   workdir(): string;
+}
+
+export interface RawPushAnswer {
+  readonly status: number;
+  /** The `ERR` line of a refused request, if any. */
+  readonly err: string | null;
+  readonly unpack: string | null;
+  readonly refs: ReadonlyMap<string, { ok: true } | { ok: false; error: string }>;
 }
 
 export interface GitRigOptions {
@@ -175,6 +196,42 @@ export async function openGitRig(options: GitRigOptions = {}): Promise<GitRig> {
       });
       if (!issued.ok) throw new Error(`issue refused: ${JSON.stringify(issued)}`);
       return { mission: issued.mission, token: issued.token.secret, prefix: issued.token.prefix };
+    },
+    async rawPush(key, body, repository = REPOSITORY) {
+      const response = await fetch(`${remoteBase}${repository}.git/git-receive-pack`, {
+        method: 'POST',
+        headers: {
+          authorization: `Basic ${Buffer.from(`mission:${key}`).toString('base64')}`,
+          'content-type': 'application/x-git-receive-pack-request',
+        },
+        body,
+        duplex: 'half',
+      } as RequestInit);
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      const text = new TextDecoder().decode(bytes);
+      const err = /ERR ([^\n]*)/.exec(text)?.[1] ?? null;
+      if (err !== null || bytes.length === 0) {
+        return { status: response.status, err, unpack: null, refs: new Map() };
+      }
+      const report = parseReceivePackResult(bytes, false);
+      return { status: response.status, err: null, unpack: report.unpack, refs: report.refs };
+    },
+    async packOf(cwd, revs) {
+      return new Promise((resolve, reject) => {
+        const child = spawn('git', ['pack-objects', '--stdout', '--revs', '-q'], {
+          cwd,
+          env: isolatedGitEnv(home),
+        });
+        const out: Buffer[] = [];
+        child.stdout.on('data', (chunk: Buffer) => out.push(chunk));
+        child.on('error', reject);
+        child.on('close', (code) =>
+          code === 0
+            ? resolve(new Uint8Array(Buffer.concat(out)))
+            : reject(new Error(`pack-objects ${code}`)),
+        );
+        child.stdin.end(`${revs.join('\n')}\n`);
+      });
     },
     git: (cwd, args, key, extraConfig = {}) => runGit(cwd, args, home, key, extraConfig),
     workdir() {

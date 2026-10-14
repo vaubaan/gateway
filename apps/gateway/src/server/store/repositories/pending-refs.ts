@@ -1,10 +1,11 @@
 /**
- * Temporary refs of pushes waiting for an approval (spec §4.1 bis "Git remote";
- * migration 0015; ADR gateway-as-git-remote D5). The git door records the
- * temporary refs it leaves at the provider when a push is answered
- * `approval-required`; the sweeper of the git module deletes them at the
- * provider once the request has expired, then drops the rows. Nothing else
- * reads them: the pack itself is never stored here.
+ * Temporary refs a push created at the provider (spec §4.1 bis "Git remote";
+ * migration 0015; ADR gateway-as-git-remote D5). The git door records each
+ * one before the pack leaves, with the request's deadline, and drops the row
+ * once the ref is deleted; a push answered `approval-required` moves the
+ * deadline to the request's expiry. The sweeper deletes at the provider what
+ * outlived its deadline (a crash, a client gone, a provider that did not
+ * answer). The pack itself is never stored here.
  */
 
 import type { Iso } from '../types.ts';
@@ -31,6 +32,8 @@ export interface PendingRefsRepo {
   listExpired(now: Iso, limit: number): Promise<PendingRefRecord[]>;
   /** The rows of one mission on one repository (a replay cleans what its request left). */
   listFor(missionId: string, repository: string): Promise<PendingRefRecord[]>;
+  /** Moves the deadline of these rows (a push now waiting for an approval). */
+  extend(refs: readonly string[], expiresAt: Iso): Promise<void>;
   /** Drops the rows; returns how many existed. */
   remove(refs: readonly string[]): Promise<number>;
 }
@@ -73,6 +76,12 @@ export function createPendingRefsRepo(ctx: RepoContext): PendingRefsRepo {
     `SELECT ${COLUMNS} FROM git_pending_refs WHERE mission_id = ? AND repository = ? ORDER BY ref`,
   );
   const remove = db.prepare<[string]>('DELETE FROM git_pending_refs WHERE ref = ?');
+  const setExpiry = db.prepare<[string, string]>(
+    'UPDATE git_pending_refs SET expires_at = ? WHERE ref = ?',
+  );
+  const extendAll = db.transaction((refs: readonly string[], expiresAt: string) => {
+    for (const ref of refs) setExpiry.run(expiresAt, ref);
+  });
   const insertAll = db.transaction((rows: readonly NewPendingRef[], createdAt: string) => {
     for (const r of rows) {
       insert.run(
@@ -99,6 +108,9 @@ export function createPendingRefsRepo(ctx: RepoContext): PendingRefsRepo {
     },
     async listFor(missionId, repository) {
       return forMission.all(missionId, repository).map(toRecord);
+    },
+    async extend(refs, expiresAt) {
+      if (refs.length > 0) extendAll(refs, expiresAt);
     },
     async remove(refs) {
       return refs.length === 0 ? 0 : removeAll(refs);

@@ -238,8 +238,10 @@ export class FakeGithubHost {
         201,
       );
     }
-    if (!this.tokenOf(headers.get('authorization')))
-      return json({ message: 'Bad credentials' }, 401);
+    const token = this.tokenOf(headers.get('authorization'));
+    if (!token) return json({ message: 'Bad credentials' }, 401);
+    const refs = await this.serveRefs(url, method, init, token);
+    if (refs) return refs;
     const repo = /^\/repos\/([^/]+)\/([^/]+)$/.exec(url.pathname);
     if (repo && method === 'GET') {
       const repository = `${repo[1]}/${repo[2]}`;
@@ -255,6 +257,65 @@ export class FakeGithubHost {
       return this.compare(`${compare[1]}/${compare[2]}`, base, head);
     }
     return json({ message: 'Not Found' }, 404);
+  }
+
+  /** Ref writes the REST API refused, for the tests that check what reached GitHub. */
+  readonly refWrites: { method: string; ref: string; force?: boolean }[] = [];
+
+  /** `GET git/ref/<ref>`, `POST git/refs`, `PATCH|DELETE git/refs/<ref>` over the bare repository. */
+  private async serveRefs(
+    url: URL,
+    method: string,
+    init: RequestInit | undefined,
+    token: MintedToken,
+  ): Promise<Response | null> {
+    const m = /^\/repos\/([^/]+)\/([^/]+)\/git\/(ref|refs)(\/.*)?$/.exec(url.pathname);
+    if (!m) return null;
+    const repository = `${m[1]}/${m[2]}`;
+    const ref = m[4] ? `refs${m[4].split('/').map(decodeURIComponent).join('/')}` : null;
+    if (method === 'GET' && m[3] === 'ref' && ref) {
+      const sha = await this.refOf(repository, ref);
+      if (sha === null) return json({ message: 'Not Found' }, 404);
+      return json({ ref, object: { sha, type: 'commit' } });
+    }
+    if (token.permissions && token.permissions.contents !== 'write') {
+      return json({ message: 'Resource not accessible by integration' }, 403);
+    }
+    const body = JSON.parse(String(init?.body ?? '{}')) as {
+      ref?: string;
+      sha?: string;
+      force?: boolean;
+    };
+    if (method === 'POST' && m[3] === 'refs' && !ref) {
+      const target = body.ref ?? '';
+      this.refWrites.push({ method, ref: target });
+      if ((await this.refOf(repository, target)) !== null) {
+        return json({ message: 'Reference already exists' }, 422);
+      }
+      await this.git(repository, ['update-ref', target, body.sha ?? '', '0'.repeat(40)]);
+      return json({ ref: target, object: { sha: body.sha } }, 201);
+    }
+    if (!ref || m[3] !== 'refs') return null;
+    const current = await this.refOf(repository, ref);
+    if (current === null) return json({ message: 'Reference does not exist' }, 422);
+    if (method === 'PATCH') {
+      this.refWrites.push({ method, ref, force: body.force === true });
+      const sha = body.sha ?? '';
+      if (body.force !== true) {
+        const ff = await this.git(repository, ['merge-base', '--is-ancestor', current, sha])
+          .then(() => true)
+          .catch(() => false);
+        if (!ff) return json({ message: 'Update is not a fast forward' }, 422);
+      }
+      await this.git(repository, ['update-ref', ref, sha, current]);
+      return json({ ref, object: { sha } });
+    }
+    if (method === 'DELETE') {
+      this.refWrites.push({ method, ref });
+      await this.git(repository, ['update-ref', '-d', ref, current]);
+      return new Response(null, { status: 204 });
+    }
+    return null;
   }
 
   private async compare(repository: string, base: string, head: string): Promise<Response> {

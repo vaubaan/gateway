@@ -417,9 +417,17 @@ export class GitDoor {
       if (err instanceof GitProtocolError) return this.upstreamFailure(scope, err.name);
       throw err;
     }
+    // Object ids are SHA-1 throughout the door: a repository in another format is refused.
+    const format = upstreamAd.capabilities.find((c) => c.startsWith('object-format='));
+    if (format !== undefined && format !== 'object-format=sha1') {
+      return gitText(
+        HTTP_FORBIDDEN,
+        `This repository uses ${format.slice('object-format='.length)} object ids; the git remote supports SHA-1 repositories only.`,
+      );
+    }
     const capabilities = [
       ...PUSH_CAPABILITIES,
-      ...upstreamAd.capabilities.filter((c) => c === 'ofs-delta' || c.startsWith('object-format=')),
+      ...upstreamAd.capabilities.filter((c) => c === 'ofs-delta' || c === 'object-format=sha1'),
       `agent=${GIT_AGENT}`,
     ];
     return new Response(

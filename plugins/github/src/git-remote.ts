@@ -31,13 +31,9 @@
 import {
   ExecutorRefusal,
   GIT_TEMPORARY_REF_PREFIX,
-  RECEIVE_PACK_SERVICE,
   UpstreamAuthError,
   UpstreamHttpError,
-  advertisementType,
   expectCredentialKind,
-  parseAdvertisement,
-  sendRefUpdates,
   type ExecuteContext,
   type GitAccess,
   type GitRefUpdate,
@@ -45,6 +41,7 @@ import {
   type GitReview,
   type GitReviewedUpdate,
   type GitUpdateKind,
+  type GitPushResult,
   type GitUpstream,
   type McpToolResult,
 } from '@vaubaan/plugin-sdk';
@@ -86,7 +83,6 @@ export const COMPARE_MAX_COMMITS = 250;
 const TOKEN_USER = 'x-access-token';
 /** The credential field of a token connection (the `api-key` kind). */
 export const TOKEN_CONNECTION_FIELD = 'token';
-const GIT_AGENT = 'vaubaan-gateway';
 const MS_PER_SECOND = 1000;
 const CACHE_SECONDS = 50 * 60;
 
@@ -187,7 +183,7 @@ async function upstream(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Review — GitHub's compare API, read before the decision
+// GitHub's REST API, as the review and the ref moves use it
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface CompareFile {
@@ -211,19 +207,51 @@ type Comparison =
     }
   | { readonly ok: false; readonly reason: string };
 
+/** GitHub's answer to a ref write it refuses (not a fast-forward, already exists, protected). */
+const UNPROCESSABLE_REF = 422;
+const HTTP_NOT_FOUND = 404;
+const HTTP_CONFLICT = 409;
+
+/** `heads/feature/x` → `heads/feature/x` with every segment URL-encoded. */
+function refPath(ref: string): string {
+  return ref
+    .replace(/^refs\//, '')
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
+}
+
 class GithubRest {
-  private token: string | null = null;
+  private readonly tokens = new Map<GitAccess, string>();
 
   constructor(
     private readonly ctx: ExecuteContext,
     private readonly target: RepoTarget,
   ) {}
 
-  async get(path: string): Promise<Response> {
-    this.token ??= (await gitGrant(this.ctx, this.target, 'read')).token;
-    const res = await this.ctx.fetch(`${GITHUB_API_BASE}${path}`, {
-      method: 'GET',
-      headers: { ...GITHUB_API_HEADERS, Authorization: `Bearer ${this.token}` },
+  private get repoPath(): string {
+    return `/repos/${this.target.owner}/${this.target.repo}`;
+  }
+
+  async request(
+    access: GitAccess,
+    method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+    path: string,
+    body?: unknown,
+  ): Promise<Response> {
+    let token = this.tokens.get(access);
+    if (token === undefined) {
+      token = (await gitGrant(this.ctx, this.target, access)).token;
+      this.tokens.set(access, token);
+    }
+    const res = await this.ctx.fetch(`${GITHUB_API_BASE}${this.repoPath}${path}`, {
+      method,
+      headers: {
+        ...GITHUB_API_HEADERS,
+        Authorization: `Bearer ${token}`,
+        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       ...(this.ctx.signal ? { signal: this.ctx.signal } : {}),
     });
     if (res.status === 401) {
@@ -235,18 +263,40 @@ class GithubRest {
 
   /** The repository's default branch, or `null` for an empty repository. */
   async defaultBranch(): Promise<string | null> {
-    const res = await this.get(`/repos/${this.target.owner}/${this.target.repo}`);
+    const res = await this.request('read', 'GET', '');
     if (!res.ok)
       throw new UpstreamHttpError(`github GET /repos failed with HTTP ${res.status}`, res.status);
     const body = (await res.json()) as { default_branch?: unknown };
     return typeof body.default_branch === 'string' ? body.default_branch : null;
   }
 
+  /**
+   * What `ref` points at now at GitHub, or `null` when it does not exist.
+   * `GET /git/ref/{ref}` answers one exact ref; anything else is "absent".
+   */
+  async refValue(ref: string): Promise<string | null> {
+    const res = await this.request('read', 'GET', `/git/ref/${refPath(ref)}`);
+    if (res.status === HTTP_NOT_FOUND || res.status === HTTP_CONFLICT) {
+      // 409: an empty repository has no ref at all.
+      await res.body?.cancel();
+      return null;
+    }
+    if (!res.ok) {
+      throw new UpstreamHttpError(`github GET git/ref failed with HTTP ${res.status}`, res.status);
+    }
+    const body = (await res.json()) as { ref?: unknown; object?: { sha?: unknown } };
+    if (body.ref !== ref || typeof body.object?.sha !== 'string') return null;
+    return body.object.sha;
+  }
+
   /** `base...head` : what `head` brings since its merge base with `base`. */
   async compare(base: string, head: string, label: string): Promise<Comparison> {
-    const path = `/repos/${this.target.owner}/${this.target.repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`;
-    const res = await this.get(path);
-    if (res.status === 404) {
+    const res = await this.request(
+      'read',
+      'GET',
+      `/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`,
+    );
+    if (res.status === HTTP_NOT_FOUND) {
       await res.body?.cancel();
       return {
         ok: false,
@@ -283,6 +333,31 @@ function shortName(ref: string): string {
   return /^[0-9a-f]{40}$/.test(ref) ? ref.slice(0, 12) : ref;
 }
 
+/** Every change under `.github/workflows/` counts, nested or not: GitHub asks `workflows` for all of them. */
+const WORKFLOW_DIRECTORY = /^\.github\/workflows\//i;
+
+function workflowFilesOf(files: readonly string[]): string[] {
+  return files.filter((path) => isWorkflowPath(path) || WORKFLOW_DIRECTORY.test(path));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Review — read before the decision
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The client's `old` is a claim: the ref's value at GitHub is read, and a
+ * push whose `old` differs is refused (git calls it "stale info"). Otherwise
+ * a client could claim a later `old` and keep out of the review the commits
+ * — a workflow change, say — that lie between the real value and its claim.
+ */
+async function staleRef(rest: GithubRest, update: GitRefUpdate): Promise<string | null> {
+  const actual = await rest.refValue(update.ref);
+  if (actual === update.old) return null;
+  return update.old === null
+    ? `${update.ref} already exists at GitHub; fetch first, then push again`
+    : `${update.ref} has moved at GitHub since your last fetch (stale info); fetch first, then push again`;
+}
+
 async function review(
   ctx: ExecuteContext,
   repository: string,
@@ -292,10 +367,13 @@ async function review(
   const rest = new GithubRest(ctx, target);
   let defaultBranch: string | null | undefined;
   const reviewed: GitReviewedUpdate[] = [];
+  // Every update is reviewed, not only the first.
   for (const update of updates) {
     const pushed = pushedRef(update.ref);
     if ('denied' in pushed) return { ok: false, reason: `${update.ref}: ${pushed.denied}` };
     const label = update.ref;
+    const stale = await staleRef(rest, update);
+    if (stale !== null) return { ok: false, reason: stale };
     if (update.new === null) {
       reviewed.push({ ...update, kind: 'delete', commits: 0, files: [], workflow_files: [] });
       continue;
@@ -333,7 +411,7 @@ async function review(
       kind,
       commits: ok[0]?.commits ?? 0,
       files,
-      workflow_files: files.filter((path) => isWorkflowPath(path)),
+      workflow_files: workflowFilesOf(files),
     });
   }
   // The push token's permissions cover what these updates need — a workflow
@@ -362,10 +440,21 @@ export const githubGitRemote: GitRemoteCapability = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Execute — move the real refs
+// Execute — move the real refs through the REST API
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** `execute` of the two git tools ; the arguments are the host's review. */
+/**
+ * `execute` of the push tool; the arguments are the host's review. Each ref
+ * moves on its own, in order, and reports on its own — like git without
+ * `--atomic`:
+ *
+ *   create        POST   git/refs                  (GitHub refuses an existing ref)
+ *   fast-forward  PATCH  git/refs/<ref> force:false (GitHub refuses a non-fast-forward)
+ *   force         the ref is read again and must still be the reviewed `old`,
+ *                 then PATCH force:true — only an accepted `force-push` gets here
+ *   delete        the ref is read again and must still be the reviewed `old`,
+ *                 then DELETE git/refs/<ref>
+ */
 export async function executeGit(
   ctx: ExecuteContext,
   tool: GitCall['tool'],
@@ -380,65 +469,69 @@ export async function executeGit(
   }
   const grant = await gitGrant(ctx, call.target, 'write');
   assertGranted(GIT_PUSH_TOOL, gitPushNeeds(call.updates.map((u) => u.update)), grant.permissions);
-  const remote = await upstream(ctx, call.target.ref, 'write');
-  const atomic = await advertisesAtomic(ctx, remote);
-  const commands = call.updates.map(({ update }) => ({
-    old: update.old,
-    new: update.new,
-    ref: update.ref,
-  }));
-  if (commands.some((c) => c.ref.startsWith(GIT_TEMPORARY_REF_PREFIX))) {
-    throw new ExecutorRefusal(`'${GIT_TEMPORARY_REF_PREFIX}' is reserved by the gateway`);
+  const rest = new GithubRest(ctx, call.target);
+  const updates: GitPushResult['updates'][number][] = [];
+  for (const { update } of call.updates) {
+    updates.push({ ref: update.ref, ...(await moveRef(rest, update)) });
   }
-  const sent = await sendRefUpdates({
-    fetch: ctx.fetch,
-    upstream: remote,
-    commands,
-    atomic,
-    agent: GIT_AGENT,
-    ...(ctx.signal ? { signal: ctx.signal } : {}),
-  });
-  if (sent.status === 401) {
-    throw new UpstreamAuthError('github rejected the credential (HTTP 401)', 401);
-  }
-  if (sent.report === null) {
-    throw new UpstreamHttpError(`github receive-pack answered HTTP ${sent.status}`, sent.status);
-  }
-  const { report } = sent;
-  const unpackFailed = report.unpack !== 'ok';
-  const updates = commands.map((c) => {
-    const status = report.refs.get(c.ref);
-    if (unpackFailed) return { ref: c.ref, ok: false, error: `unpack ${report.unpack}` };
-    if (!status) return { ref: c.ref, ok: false, error: 'github reported nothing for this ref' };
-    return status.ok ? { ref: c.ref, ok: true } : { ref: c.ref, ok: false, error: status.error };
-  });
   return {
     content: [{ type: 'text', text: JSON.stringify({ updates }) }],
     ...(updates.some((u) => !u.ok) ? { isError: true } : {}),
   };
 }
 
-/** Does GitHub's receive-pack offer `atomic` for this repository? */
-async function advertisesAtomic(ctx: ExecuteContext, remote: GitUpstream): Promise<boolean> {
-  const res = await ctx.fetch(`${remote.url}/info/refs?service=${RECEIVE_PACK_SERVICE}`, {
-    method: 'GET',
-    headers: {
-      Authorization: remote.authorization,
-      Accept: advertisementType(RECEIVE_PACK_SERVICE),
-    },
-    ...(ctx.signal ? { signal: ctx.signal } : {}),
-  });
-  if (res.status === 401) {
-    await res.body?.cancel();
-    throw new UpstreamAuthError('github rejected the credential (HTTP 401)', 401);
+type MoveOutcome = { readonly ok: true } | { readonly ok: false; readonly error: string };
+
+async function moveRef(rest: GithubRest, update: GitReviewedUpdate): Promise<MoveOutcome> {
+  if (update.ref.startsWith(GIT_TEMPORARY_REF_PREFIX)) {
+    return { ok: false, error: `'${GIT_TEMPORARY_REF_PREFIX}' is reserved by the gateway` };
   }
-  if (!res.ok) {
-    await res.body?.cancel();
-    throw new UpstreamHttpError(
-      `github receive-pack advertisement answered HTTP ${res.status}`,
-      res.status,
-    );
+  const path = `/git/refs/${refPath(update.ref)}`;
+  let res: Response;
+  switch (update.kind) {
+    case 'create':
+      res = await rest.request('write', 'POST', '/git/refs', {
+        ref: update.ref,
+        sha: update.new,
+      });
+      break;
+    case 'fast-forward':
+      res = await rest.request('write', 'PATCH', path, { sha: update.new, force: false });
+      break;
+    case 'force':
+    case 'delete': {
+      // No compare-and-swap in the API: the ref is read again, right before.
+      if ((await rest.refValue(update.ref)) !== update.old) {
+        return { ok: false, error: 'stale info: the ref moved at GitHub during the review' };
+      }
+      res =
+        update.kind === 'force'
+          ? await rest.request('write', 'PATCH', path, { sha: update.new, force: true })
+          : await rest.request('write', 'DELETE', path);
+      break;
+    }
   }
-  const ad = parseAdvertisement(new Uint8Array(await res.arrayBuffer()));
-  return ad.capabilities.includes('atomic');
+  if (res.ok) {
+    await res.body?.cancel();
+    return { ok: true };
+  }
+  return { ok: false, error: await refusalOfRefWrite(res, update) };
+}
+
+/** GitHub's reason for a refused ref write, in the words git prints. */
+async function refusalOfRefWrite(res: Response, update: GitReviewedUpdate): Promise<string> {
+  let message = '';
+  try {
+    const body = (await res.json()) as { message?: unknown };
+    message = typeof body.message === 'string' ? body.message : '';
+  } catch {
+    message = '';
+  }
+  if (res.status === UNPROCESSABLE_REF && update.kind === 'fast-forward') {
+    return `non-fast-forward (GitHub: ${message || 'Update is not a fast forward'}); fetch first`;
+  }
+  if (res.status >= 500) {
+    throw new UpstreamHttpError(`github ref write failed with HTTP ${res.status}`, res.status);
+  }
+  return `GitHub refused the update (HTTP ${res.status}${message ? `: ${message}` : ''})`;
 }
