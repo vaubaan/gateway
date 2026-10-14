@@ -29,6 +29,15 @@ names, and the notes about them do too.
 **Upgrade notes** — only for an instance that already runs a build made from the
 `v5` branch:
 
+- **The `developer` preset of GitHub no longer hands out tokens; the gateway is
+  the git remote.** Schema migration `0015` applies at start. Missions issued
+  before keep their policy (it is stored, not derived from the preset), mint risks
+  included. A new mission from `developer` holds `github.git-push` (runs freely)
+  and `github.force-push` (asks first) instead of the two
+  `mint-install-token-*` risks: point the agent's git at the instance with the
+  setup kit's new step 4. If a reverse proxy in front of the instance caps request
+  bodies or buffers them, lift it for `/git/` (a push body is the pack, up to
+  `git.max_pack_mb`).
 - **A sign-in provider anyone can hold an account at needs an admission rule.**
   Schema migration `0014` applies at start. If `idp.issuer` is
   `https://accounts.google.com` or a Microsoft multi-tenant or personal-accounts
@@ -191,6 +200,29 @@ names, and the notes about them do too.
   affected; trying again once the identity provider answers is the remedy.
 
 ### Added
+
+- **The gateway is the agent's git remote.** With a mission key and git, and
+  nothing else, an agent clones, fetches and pushes
+  `https://<instance>/git/<owner>/<repo>.git` (GitHub, through the company's App or
+  a token connection); the key is the password, read by a credential helper from
+  `VAUBAAN_MISSION_TOKEN`. A clone is relayed as a stream (protocol v0, v1, v2) and
+  counted once as `github__git_fetch`. A push is decided ref by ref, every ref of
+  it, as one call `github__git_push`: which branches and tags, rewrites, deletions
+  and CI workflow changes, against the mission's permissions and limits; one
+  refused ref refuses the push, and git prints why, with the URL to hand to a
+  person. The pack is streamed to GitHub under a temporary ref, never stored or
+  read by the gateway; the refs move through GitHub's API once decided. An
+  approved push is replayed by pushing the same commits again; the request page
+  links GitHub's comparison. Refused, with a sentence: atomic pushes, push options,
+  signed pushes, more than 50 refs, a pack over `git.max_pack_mb` (default 200),
+  a push GitHub cannot compare in full (300 files or 250 commits per ref), Git LFS.
+  New configuration keys `git.max_pack_mb` and `git.request_timeout` (default
+  10 minutes). The setup kit has a fourth step (git's configuration and the
+  remotes), the mission page a "Git" block (can, asks first, cannot), the GitHub
+  reference page and `/agent-bootstrap.md` a "Git" section, and `/mcp/catalog` a
+  `git_remote` per repository. GitHub catalog v6 adds `github.git-push`,
+  `github.force-push`, `github.branch-delete` and `github.tag-write` (plugin
+  3.1.0).
 
 - **Create the company's GitHub App from the gateway.** Settings → Company apps →
   GitHub offers "Create the GitHub App" while none is set: choose the owner (an

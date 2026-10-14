@@ -857,7 +857,7 @@ What each answer contains (`views.ts`):
 - **`issue_mission`** — `mission` (`mission_id`, `creator_user_id`,
   `issued_via_client_id`), `token` (`secret`, `prefix`, `env_var`,
   `shown_once`), `bootstrap_kit` (`endpoint`, `env`, `mcp_json`,
-  `agent_instructions`, `verify`), `policy`, `summary`, `notices`.
+  `agent_instructions`, `git` — the git step of the kit or `null`, handbook [git-remote](git-remote.md) —, `verify`), `policy`, `summary`, `notices`.
 - **`rotate_mission_token`** — the new `token` and `bootstrap_kit`, for a
   mission this delegation issued.
 - **`revoke_mission`** — `state: revoked`, `tokens_revoked`,

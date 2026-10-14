@@ -17,6 +17,7 @@ import { githubCredential } from './credential.ts';
 import { githubDataModel } from './data-model.ts';
 import { discoverGithubResources, executeGithub } from './execute.ts';
 import { githubTokenCredential } from './token.ts';
+import { githubGitRemote } from './git-remote.ts';
 import { githubToolTitles } from './tool-titles.ts';
 import { githubTools } from './tools.ts';
 
@@ -48,6 +49,9 @@ export const githubPlugin = definePlugin({
       readOnlyRiskIds: ['github.mint-install-token-clone'],
     },
   ],
+  // The instance as the agents' git remote (spec §4.1 ter) : clone, fetch and push
+  // with the mission key as the password, every push decided ref by ref.
+  gitRemote: githubGitRemote,
   tools: githubTools,
   toolTitles: githubToolTitles,
   dataModel: githubDataModel,
@@ -75,3 +79,10 @@ export { buildAppJwt, mintInstallationToken } from './app-install.ts';
 export { discoverGithubResources, executeGithub, MINT_PERMISSIONS } from './execute.ts';
 export { GITHUB_APP_PERMISSIONS, githubManifestRegistration } from './app-manifest.ts';
 export { assertAppPermissions, needsOf } from './permission-check.ts';
+export { GIT_FETCH_TOOL, GIT_PUSH_TOOL, readGitCall } from './git-call.ts';
+export {
+  COMPARE_MAX_COMMITS,
+  COMPARE_MAX_FILES,
+  GIT_TOKEN_PERMISSIONS,
+  githubGitRemote,
+} from './git-remote.ts';

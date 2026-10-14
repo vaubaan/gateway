@@ -207,12 +207,24 @@
 # approvals:
 #   expiry: 10m
 
-# Surface rate limit of the execution MCP door: requests per minute (integer
-# >= 1), per mission, all agents of the mission together (spec §6). Separate from the
-# per-risk rate limits of a mission's budget.
+# Surface rate limit of the execution surface — the MCP door and the git remote
+# together: requests per minute (integer >= 1), per mission, all agents of the
+# mission together (spec §6). Separate from the per-risk rate limits of a
+# mission's budget.
 # env: VAUBAAN_MCP_RATE_LIMIT_PER_MINUTE
 # mcp:
 #   rate_limit_per_minute: 600
+
+# The git remote (https://<public_url>/git/<owner>/<repo>.git, spec §4.1 ter).
+# max_pack_mb: the largest push accepted, in MiB (1 to 4096); a larger push is
+#   refused, and git prints why.
+# request_timeout: how long one git request may last (at most 1h). Behind
+#   Railway keep it under 15 minutes, and know that Railway wants a request
+#   body uploaded within 5 minutes.
+# env: VAUBAAN_GIT_MAX_PACK_MB, VAUBAAN_GIT_REQUEST_TIMEOUT
+# git:
+#   max_pack_mb: 200
+#   request_timeout: 10m
 
 # Authorization server of the management MCP door (/mcp/manage, spec §4.1 bis):
 # an MCP client such as Claude Code obtains a delegated token for a user

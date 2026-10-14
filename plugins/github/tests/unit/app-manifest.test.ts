@@ -49,6 +49,9 @@ describe('the permission declaration', () => {
       GITHUB_APP_PERMISSIONS.flatMap((p) => p.levels.flatMap((level) => level.tools)),
     );
     for (const tool of githubPlugin.tools) expect(named).toContain(tool.name);
+    // The git remote's two tools too: a fetch reads contents, a push writes them.
+    expect(named).toContain('github__git_fetch');
+    expect(named).toContain('github__git_push');
   });
 
   test('defaults to what the tools need: every permission at its highest level', () => {

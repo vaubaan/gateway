@@ -126,6 +126,18 @@ sign in.
   without it opens no stored credential, and the key without the volume is
   nothing. Losing the key loses every connection's credential.
 
+## 7. The git remote
+
+Agents clone and push through `https://<your domain>/git/<owner>/<repo>.git`.
+Railway's edge limits (docs.railway.com, "Public networking — specs and
+limits", read on 2026-10-14): a request may last up to 15 minutes while data
+flows and is closed after 5 minutes without any; **a request body must finish
+uploading within 5 minutes**; headers are capped at 32 KB; no body size limit
+is stated. The defaults fit: `VAUBAAN_GIT_MAX_PACK_MB=200` (about 5.5 Mbit/s
+of upload to send 200 MiB in 5 minutes) and `VAUBAAN_GIT_REQUEST_TIMEOUT=10m`
+(under the 15 minutes). A push larger than the agent's link can send in 5
+minutes fails at Railway's edge: push fewer commits at a time.
+
 ## What the image does on Railway
 
 Started as root (`RAILWAY_RUN_UID=0`), the entrypoint gives `/data` to the

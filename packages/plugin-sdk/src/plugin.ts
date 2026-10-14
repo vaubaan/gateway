@@ -25,6 +25,7 @@ import type {
 
 import type { CredentialSecret, CredentialSpec, ProviderAppConfig } from './credential.ts';
 import type { EnvOf } from './env-of.ts';
+import type { GitRemoteCapability } from './git/remote.ts';
 import type { ToolResultPartSink } from './streaming.ts';
 
 /**
@@ -161,6 +162,15 @@ export interface ProviderPlugin {
    * stable.
    */
   readonly experimental?: boolean;
+
+  /**
+   * The instance as this provider's git remote (spec vaubaan-gateway §4.1 ter) :
+   * `git clone` / `git push` against `https://<instance>/git/<repository>.git`
+   * with the mission key as the password, decided and audited like a tool
+   * call. Absent for a provider whose agents have no git to speak. At most
+   * one registered plugin declares it : the `/git/` path is shared.
+   */
+  readonly gitRemote?: GitRemoteCapability;
 
   /** The MCP tools the plugin exposes, named `<prefix>__<local>`. May be empty for an experimental, classifier-only plugin. */
   readonly tools: readonly McpToolDeclaration[];

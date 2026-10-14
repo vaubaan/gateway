@@ -117,9 +117,9 @@ test('create a three-account mission on one page, then replace its key and stop 
   const digest = page.getByTestId('preset-digest-github');
   await expect(digest).toContainText('8 run freely');
   await expect(digest).toContainText('2 ask you first');
-  // Fifteen ids on GitHub: ten chosen, four left out, and the fallback, which no preset
-  // holds and nobody counts as something a preset "left out".
-  await expect(digest).toContainText('4 not included');
+  // Nineteen ids on GitHub (catalog v6): ten chosen, eight left out, and the fallback,
+  // which no preset holds and nobody counts as something a preset "left out".
+  await expect(digest).toContainText('8 not included');
   await expect(
     page.getByTestId('preset-detail-github').getByRole('link', { name: /In the reference/ }),
   ).toHaveAttribute('href', '/reference/github#preset-developer');
@@ -162,7 +162,7 @@ test('create a three-account mission on one page, then replace its key and stop 
   const editor = page.getByTestId('risks-github');
   await expect(editor).toBeVisible();
   // By default it lists what the person may allow here: on an account they own, everything.
-  await expect(editor.locator('[data-permission]')).toHaveCount(15);
+  await expect(editor.locator('[data-permission]')).toHaveCount(19);
   const merge = permissionRow(editor, 'github.merge-protected');
   await expect(merge).toContainText('Write on main / master / release-*');
   // The id is printed as the protocol spells it; the severity is one word.
@@ -186,7 +186,7 @@ test('create a three-account mission on one page, then replace its key and stop 
   await expect(page.getByLabel('Limit for github.read-code')).toHaveValue('10000');
   await expect(page.getByLabel('Per minute for github.read-code')).toHaveValue('240');
   await expect(page.getByTestId('risks-count-github')).toHaveText(
-    '10 chosen of 15 you may allow here',
+    '10 chosen of 19 you may allow here',
   );
   // Adjust one limit and one "ask me first": the choice says it was adjusted, the counts follow.
   await page.getByLabel('Limit for github.read-code').fill('42');
@@ -482,7 +482,7 @@ test('the reference explains each service: permissions against presets, tools, m
     .click();
   await expect(page.getByRole('heading', { name: 'Reference', level: 1 })).toBeVisible();
   // One line per shipped plugin, from the registry; the experimental one says so.
-  await expect(page.getByTestId('provider-github')).toContainText('15 permissions');
+  await expect(page.getByTestId('provider-github')).toContainText('19 permissions');
   await expect(page.getByTestId('provider-github')).toContainText('3 presets');
   await expect(page.getByTestId('provider-github')).toContainText('26 tools');
   await expect(page.getByTestId('provider-gmail')).toContainText('experimental');
@@ -670,18 +670,18 @@ test('the reference explains each service: permissions against presets, tools, m
     'asks first',
   );
   // The earlier sections still lead somewhere: `#risks` and `#presets` open Permissions.
-  // Fifteen permissions, folded, read in about one and a half screens.
+  // Nineteen permissions (catalog v6 added the four of git), folded, read in about two screens.
   await page.goto('/reference/github#risks');
   await expect(page.getByRole('tab', { name: /Permissions/ })).toHaveAttribute(
     'aria-selected',
     'true',
   );
-  await expect(page.locator('tr[data-testid^="risk-github."]')).toHaveCount(15);
+  await expect(page.locator('tr[data-testid^="risk-github."]')).toHaveCount(19);
   const first = await page.getByTestId('risk-github.read-code').boundingBox();
   const last = await page.getByTestId('risk-github.delete-release').boundingBox();
   const viewport = page.viewportSize();
   if (!first || !last || !viewport) throw new Error('the list of permissions is not laid out');
-  expect((last.y + last.height - first.y) / viewport.height).toBeLessThan(1.75);
+  expect((last.y + last.height - first.y) / viewport.height).toBeLessThan(2.1);
   // The page does not scroll sideways at this width.
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1280);
   // The one tool that hands a token of the service to the agent, and its permissions, say so.

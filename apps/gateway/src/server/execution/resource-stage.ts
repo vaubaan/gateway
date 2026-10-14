@@ -101,6 +101,26 @@ export function toolUnavailableOn(
     : `tool '${tool}' is not available on the ${plugin.displayName} account '${connection.display_name}': ${reason}`;
 }
 
+/**
+ * A tool belongs to one door (spec §4.1 ter): the two tools of a plugin's git
+ * remote are decided only for calls that came through `/git/`, whose
+ * arguments the host built from the push itself; every other tool only for
+ * calls that came over MCP. The reason of the mismatch, or `null`.
+ */
+export function doorMismatch(plugin: ProviderPlugin, call: CallRequest): string | null {
+  const remote = plugin.gitRemote;
+  const isGitTool =
+    remote !== undefined && (call.tool === remote.fetchTool || call.tool === remote.pushTool);
+  const channel = call.channel ?? 'mcp';
+  if (isGitTool && channel !== 'git') {
+    return `tool '${call.tool}' is how the gateway records git itself; it cannot be called over MCP. Use git with the mission's remote (the catalog gives its URL).`;
+  }
+  if (!isGitTool && channel === 'git') {
+    return `tool '${call.tool}' cannot be reached through the git remote.`;
+  }
+  return null;
+}
+
 export function createResourceStage(deps: ResourceStageDeps): ResourceStage {
   function notInMission(
     citedRef: string,
@@ -131,6 +151,8 @@ export function createResourceStage(deps: ResourceStageDeps): ResourceStage {
         };
       }
       const { plugin } = registered;
+      const wrongDoor = doorMismatch(plugin, call);
+      if (wrongDoor) return { ok: false, reason: wrongDoor };
       const connection = ctx.connections.find((c) => c.provider === plugin.id);
       if (!connection) {
         return {

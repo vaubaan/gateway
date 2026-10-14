@@ -83,8 +83,18 @@ export function KitSteps({ kit }: { kit: BootstrapKit }) {
         wrap
         testId="kit-instructions"
       />
+      {kit.git !== null ? (
+        <KitStep
+          n={4}
+          title="Use the gateway as the git remote"
+          hint="clone and push with plain git; the key stays in the variable"
+          text={kit.git}
+          label="Git configuration"
+          testId="kit-git"
+        />
+      ) : null}
       <KitStep
-        n={4}
+        n={kit.git !== null ? 5 : 4}
         title="Check it works"
         hint="lists the tools this key can call"
         text={kit.verify}

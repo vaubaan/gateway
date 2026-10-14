@@ -14,6 +14,8 @@ tracks:
   - apps/gateway/src/app/api/missions/
   - apps/gateway/src/app/agent-bootstrap.md/
   - apps/gateway/src/components/shell/AppShell.tsx
+  - apps/gateway/src/server/missions/git-view.ts
+  - apps/gateway/src/app/(app)/missions/bootstrap-kit-view.tsx
 
   - apps/gateway/src/server/providers/
   - apps/gateway/tests/integration/missions/
@@ -1250,9 +1252,22 @@ ${VAUBAAN_MISSION_TOKEN}' } } } }`: the variable by reference, never the
    the mission key does not open it, and that nothing behind it lifts a
    refusal. "The limits below are shared, they are not multiplied" is said
    once, in the opening paragraph;
-4. `verify` — `curl -sS '<endpoint>' … -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'`.
+4. `git` — present only when the mission holds repositories of the provider
+   the instance is the git remote of (`KitGitRemote`, built by
+   `MissionService.gitRemoteOf` from `registry.gitRemote()` and
+   `gitRemoteBase(public_url)`; handbook [git-remote](git-remote.md)):
+   `git config --global 'credential.<instance origin>.helper'` set to the
+   inline helper `gitCredentialHelper()` (prints `password=$VAUBAAN_MISSION_TOKEN`;
+   never `store` or `cache`, never the key in a URL), the recommended
+   `url.<public_url>/git/.insteadOf <gitRemote.insteadOf>` when the plugin
+   names one, and one `git clone` per repository; `null` otherwise. The
+   instructions then carry a "Git" section (`gitSection`): the remotes, every
+   ref of a push decided, refusals on `remote: Vaubaan:` lines and the replay
+   with the same commits, stale info, no LFS;
+5. `verify` — `curl -sS '<endpoint>' … -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'`.
 
 The kit also carries `endpoint` (`<public_url>/mcp`) and `reveals_secret`.
+The management door's kit (`BootstrapKitView`) carries `git` too.
 
 `instanceUrl` is `InstanceConfig.publicUrl`; `EXECUTION_DOOR_PATH` (`/mcp`) is
 the only path this file writes down; the management endpoint is built from
@@ -1265,13 +1280,23 @@ one holder and what a stopped key means, and that it names no instance.
 Like the kit, the page is written in the interface's words (key, permission,
 limit, account, teammate, machine key, connected app) around the protocol's
 names, and opens with a note that maps the two sets; its §4 is "One set of
-limits, however many agents or keys".
+limits, however many agents or keys"; its §8 is "Git" (the remote, the
+helper, every ref decided, the replay, what is refused).
 
 On the pages the kit is `KitSteps` (`bootstrap-kit-view.tsx`): four numbered
 steps — "Put the key in the agent's environment", "Point the agent at the
 gateway", "Tell the agent what it has", "Check it works" — each a `CodeBlock`
 with its Copy button (`data-testid` `kit-env`, `kit-mcp`, `kit-instructions`,
-`kit-verify`).
+`kit-verify`); with a git step, "Use the gateway as the git remote"
+(`kit-git`) is the fourth and the check the fifth.
+
+The mission page has a "Git" block (`data-testid` `mission-git`) when the
+mission holds such repositories: `missionGitView` (`missions/git-view.ts`,
+pure) lists the remotes and sorts the plugin's `gitRemote.abilities` into
+"With git, the agent can" / asks first / "It cannot" from the mission's
+policy, and warns (`git-raw-token`) when the mission holds a permission of a
+raw-token tool (`tokenHandouts`): during that token's life the rules above do
+not apply.
 
 ## Wiring
 

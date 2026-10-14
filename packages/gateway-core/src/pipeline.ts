@@ -222,9 +222,19 @@ export interface ClientOrigin {
   readonly user_agent: string | null;
 }
 
+/**
+ * The door a call came through : the MCP execution endpoint, or the git
+ * remote (spec §4.1 ter). A tool belongs to exactly one of them ; the
+ * resource stage refuses a tool presented at the other door.
+ */
+export const CALL_CHANNELS = ['mcp', 'git'] as const;
+export type CallChannel = (typeof CALL_CHANNELS)[number];
+
 export interface CallRequest {
   readonly tool: string;
   readonly args: Record<string, unknown>;
+  /** The door the call came through ; absent means `mcp`. */
+  readonly channel?: CallChannel;
   /** Optional free-form attribution (spec §0 "Mission token"). */
   readonly agent_label: string | null;
   readonly client: ClientOrigin;
@@ -301,6 +311,17 @@ export interface BudgetStage {
     call: CallRequest,
     input: { readonly risks_touched: readonly RiskId[]; readonly now: Date },
   ): Promise<BudgetDecision>;
+  /**
+   * The refusal the call's limits alone would get (`budget-exhausted`,
+   * `rate-limited`), recorded as `decide` records it; `null` when they are
+   * clear. Counts nothing, consumes no approval. Optional: a stage without it
+   * leaves `precheck` to the stages before the budget.
+   */
+  preflight?(
+    ctx: MissionContext,
+    call: CallRequest,
+    input: { readonly risks_touched: readonly RiskId[]; readonly now: Date },
+  ): Promise<Refusal | null>;
 }
 
 /** Mint or decrypt the ephemeral upstream credential, forward, return the
@@ -540,7 +561,12 @@ interface ClassifiedCall {
 
 /** A stage result that ends the call. Every `CallOutcome` carries its `audit` entry; no intermediate value does. */
 function isOutcome(
-  x: CallOutcome | TargetedCall | ClassifiedCall | CallAuditEntry,
+  x:
+    | CallOutcome
+    | TargetedCall
+    | ClassifiedCall
+    | CallAuditEntry
+    | { readonly targeted: TargetedCall; readonly classified: ClassifiedCall },
 ): x is CallOutcome {
   return 'audit' in x;
 }
@@ -559,6 +585,54 @@ export class CallPipeline {
    */
   async execute(ctx: MissionContext, call: CallRequest): Promise<CallOutcome> {
     const now = this.now();
+    const placed = await this.place(ctx, call, now);
+    if (isOutcome(placed)) return placed;
+    const { targeted, classified } = placed;
+
+    const decided = await this.decideBudget(ctx, call, classified, now);
+    if (isOutcome(decided)) return decided;
+
+    return this.forward(ctx, call, targeted.target, decided);
+  }
+
+  /**
+   * The stages before the budget: is the call well formed, is the mission
+   * active, is the target in the mission and available, does the mission hold
+   * every risk the call touches? A refusal here is audited, exactly as
+   * `execute` audits it; a call that passes is not recorded, counted or
+   * executed (`null`). The git door asks it before it stores a pack at the
+   * provider, so that a push the mission can never make is refused before
+   * any byte leaves; the push it then decides with `execute` touches at
+   * least these risks.
+   */
+  async precheck(
+    ctx: MissionContext,
+    call: CallRequest,
+    options: { readonly limits?: boolean } = {},
+  ): Promise<CallOutcome | null> {
+    const now = this.now();
+    const placed = await this.place(ctx, call, now);
+    if (isOutcome(placed)) return placed;
+    const preflight = this.deps.budget.preflight?.bind(this.deps.budget);
+    if (!options.limits || !preflight) return null;
+    // `limits`: also the budget's quota and rate windows, read and not counted —
+    // the call these updates become touches at least these risks.
+    const { classified } = placed;
+    const attempt = await this.attempt('budget', call, classified.entry, () =>
+      preflight(ctx, call, { risks_touched: classified.risks_touched, now }),
+    );
+    if (!attempt.ok) return attempt.outcome;
+    return attempt.value ? this.refused(classified.entry, attempt.value) : null;
+  }
+
+  /** The first stages of `execute` (and all of `precheck`). */
+  private async place(
+    ctx: MissionContext,
+    call: CallRequest,
+    now: Date,
+  ): Promise<
+    CallOutcome | { readonly targeted: TargetedCall; readonly classified: ClassifiedCall }
+  > {
     // Before the fingerprint is taken: a value JSON cannot carry (`1e999` parses to
     // Infinity, written back as `null`) would be approved as one thing and executed
     // as another. Structural, like an unknown tool: no stage sees the call.
@@ -587,11 +661,30 @@ export class CallPipeline {
 
     const classified = await this.decideRisks(ctx, call, targeted);
     if (isOutcome(classified)) return classified;
+    return { targeted, classified };
+  }
 
-    const decided = await this.decideBudget(ctx, call, classified, now);
-    if (isOutcome(decided)) return decided;
-
-    return this.forward(ctx, call, targeted.target, decided);
+  /**
+   * A call the door refuses on grounds no stage decides — a git push larger
+   * than the configured cap, one the provider cannot review, a request that
+   * breaks the protocol. `reason` goes to the caller. What the audit keeps is
+   * `audited` (default: `reason`), built by the host, with every argument
+   * value found in it replaced (`auditReason`): a provider's own message
+   * goes to the caller only. One audit entry, `refused` with no code, like a
+   * structural rejection ; the mission is not consulted and nothing is
+   * counted.
+   */
+  async reject(
+    ctx: MissionContext,
+    call: CallRequest,
+    reason: string,
+    audited: string = reason,
+  ): Promise<CallOutcome> {
+    return this.rejected(
+      this.baseEntry(ctx, call, this.now()),
+      reason,
+      auditReason(audited, call.args),
+    );
   }
 
   /** Resource resolution, then connection availability. */

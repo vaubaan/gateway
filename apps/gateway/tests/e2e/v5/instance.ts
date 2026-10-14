@@ -117,6 +117,17 @@ export const MOCK_GITHUB = {
 } as const;
 
 /**
+ * The git remote spec: a second installation of the company's App whose one
+ * repository is a real bare repository served by `git http-backend`
+ * (`FakeGithubHost`), so that real `git clone` / `git push` go through the
+ * instance to it. Nothing reaches github.com.
+ */
+export const E2E_GIT = {
+  installationId: '7070',
+  repository: 'acme-git/app',
+} as const;
+
+/**
  * The company-app spec: the organisation the administrator creates the GitHub
  * App in, and the code the mocked GitHub sends back once they confirm.
  */

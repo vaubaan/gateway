@@ -190,7 +190,108 @@ const OTHER_WRITES: readonly Row[] = [
   ['mint_install_token', 'push, fan-out', { purpose: 'push' }, ['mint-install-token-push']],
 ];
 
-const ROWS: readonly Row[] = [...READS, ...BRANCH_AND_FILE_WRITES, ...OTHER_WRITES];
+const OLD = 'a'.repeat(40);
+const NEW = 'b'.repeat(40);
+type Kind = 'create' | 'fast-forward' | 'force' | 'delete';
+const gitUpdate = (ref: string, kind: Kind, files: readonly string[] = ['src/a.ts']) => ({
+  ref,
+  old: kind === 'create' ? null : OLD,
+  new: kind === 'delete' ? null : NEW,
+  kind,
+  commits: kind === 'delete' ? 0 : 1,
+  files: kind === 'delete' ? [] : files,
+  workflow_files: files.filter((f) => f.startsWith('.github/workflows/')),
+});
+const gitPush = (...updates: ReturnType<typeof gitUpdate>[]) => ({
+  repository: 'acme/app',
+  updates,
+});
+
+/** The git remote's two tools (spec §4.1 ter) : never MCP tools, classified the same way. */
+const GIT: readonly Row[] = [
+  ['git_fetch', 'refs', { repository: 'acme/app', step: 'refs' }, ['read-code']],
+  ['git_fetch', 'pack', { repository: 'acme/app', step: 'pack' }, ['read-code']],
+  [
+    'git_push',
+    'new feature branch',
+    gitPush(gitUpdate('refs/heads/feature/x', 'create')),
+    ['git-push', 'feature-branch-write'],
+  ],
+  [
+    'git_push',
+    'fast-forward on a feature branch',
+    gitPush(gitUpdate('refs/heads/fix/y', 'fast-forward')),
+    ['git-push', 'feature-branch-write'],
+  ],
+  [
+    'git_push',
+    'force on a feature branch',
+    gitPush(gitUpdate('refs/heads/feature/x', 'force')),
+    ['git-push', 'feature-branch-write', 'force-push'],
+  ],
+  [
+    'git_push',
+    'to main',
+    gitPush(gitUpdate('refs/heads/main', 'fast-forward')),
+    ['git-push', 'merge-protected'],
+  ],
+  [
+    'git_push',
+    'unconventional branch',
+    gitPush(gitUpdate('refs/heads/wip', 'create')),
+    ['git-push', FALLBACK],
+  ],
+  [
+    'git_push',
+    'workflow change',
+    gitPush(gitUpdate('refs/heads/feature/ci', 'fast-forward', [WORKFLOW])),
+    ['git-push', 'feature-branch-write', 'workflow-write-via-file'],
+  ],
+  [
+    'git_push',
+    'delete a feature branch',
+    gitPush(gitUpdate('refs/heads/feature/old', 'delete')),
+    ['git-push', 'feature-branch-write', 'branch-delete'],
+  ],
+  [
+    'git_push',
+    'delete main',
+    gitPush(gitUpdate('refs/heads/main', 'delete')),
+    ['git-push', 'merge-protected', 'branch-delete'],
+  ],
+  [
+    'git_push',
+    'new tag',
+    gitPush(gitUpdate('refs/tags/v1.2.0', 'create')),
+    ['git-push', 'tag-write', 'create-release'],
+  ],
+  [
+    'git_push',
+    'moved tag',
+    gitPush(gitUpdate('refs/tags/v1.2.0', 'force')),
+    ['git-push', 'tag-write', 'create-release', 'force-push'],
+  ],
+  [
+    'git_push',
+    'tag with a workflow change',
+    gitPush(gitUpdate('refs/tags/v2', 'create', [WORKFLOW])),
+    ['git-push', 'tag-write', 'create-release', 'workflow-write-via-file'],
+  ],
+  [
+    'git_push',
+    'deleted tag',
+    gitPush(gitUpdate('refs/tags/v1.2.0', 'delete')),
+    ['git-push', 'tag-write', 'create-release'],
+  ],
+  [
+    'git_push',
+    'two refs at once',
+    gitPush(gitUpdate('refs/heads/feature/x', 'create'), gitUpdate('refs/heads/main', 'force')),
+    ['git-push', 'feature-branch-write', 'merge-protected', 'force-push'],
+  ],
+];
+
+const ROWS: readonly Row[] = [...READS, ...BRANCH_AND_FILE_WRITES, ...OTHER_WRITES, ...GIT];
 
 const resources: readonly Resource[] = [appRepo, libRepo];
 const indexed = prepareCatalog(githubCatalog.catalog, { warn: () => undefined });
@@ -210,9 +311,14 @@ describe('github — the risks each tool touches', () => {
     expect(risksOf(tool, args).sort()).toEqual([...risks].sort());
   });
 
-  test('every declared tool has a row', () => {
+  test('every declared tool has a row, the two tools of the git remote included', () => {
     const covered = new Set(ROWS.map(([tool]) => `github__${tool}`));
-    expect(githubPlugin.tools.map((t) => t.name).filter((name) => !covered.has(name))).toEqual([]);
+    const declared = [
+      ...githubPlugin.tools.map((t) => t.name),
+      githubPlugin.gitRemote.fetchTool,
+      githubPlugin.gitRemote.pushTool,
+    ];
+    expect(declared.filter((name) => !covered.has(name))).toEqual([]);
   });
 
   test('the rows name every risk of the catalog, and only risks of the catalog', () => {

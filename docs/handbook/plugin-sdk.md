@@ -62,6 +62,15 @@ packages/plugin-sdk/
                         PLUGIN_SUMMARY_MAX_LENGTH, MAX_INSTALLATIONS_PER_PAGE
     registry.ts         PluginRegistry, createRegistry, RegisteredPlugin, ProviderLabel, PluginRegistryError
     flags.ts            PluginHostFlags, DEFAULT_HOST_FLAGS, normalizeArgsIfEnabled
+    git/                the git remote's wire primitives and contract (handbook git-remote): pkt-line, streams
+                        (prependChunk), receive-pack, upload-pack (v2 head, listing filters), advertisement, remote
+      pkt-line.ts       pktLine, flushPkt, parsePktLines, PktLineReader (one pkt-line at a time, rest()),
+                        side-band helpers, PKT_LINE_MAX
+      receive-pack.ts   readCommandList, parseCommand, encodeCommandList, emptyPack, report-status
+                        encode/parse, sendRefUpdates, ZERO_OID, OID_SHAPE, GitProtocolError, GitUpstream
+      advertisement.ts  parseAdvertisement, encodeAdvertisement (smart HTTP v0/v1)
+      remote.ts         GitRemoteCapability, GitAbility, GitRefUpdate, GitReviewedUpdate, GitReview,
+                        GIT_UPDATE_KINDS, GIT_TEMPORARY_REF_PREFIX
     index.ts            barrel + re-exports of the shared vocabulary a plugin needs
                         (+ parseSlice / serializeSlice from @vaubaan/policy-engine)
     testing/
@@ -75,7 +84,8 @@ packages/plugin-sdk/
     fixtures/acme/      a tiny valid plugin (risk-catalog.yaml + acme-plugin.ts) used by the tests
     unit/               catalog-loader (31), catalog-path (4), env-of (8), registry (11),
                         define-plugin (32), testing-kit (14), identifiers-kit (9), streaming (9), arguments (10),
-                        slices (21)
+                        slices (21), git-wire (20: framing, command list, a seeded
+                        fuzz of the command-list reader)
 ```
 
 Dependencies: `@vaubaan/shared`, `@vaubaan/policy-engine`, `js-yaml`.
@@ -106,6 +116,7 @@ flowchart LR
 | `displayName`, `version`, `description?`, `docsUrl?` | —     | `version` is semver and goes into telemetry (a version that is not semver is never reported).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `summary?`                                           | —     | A short paragraph in plain words for the provider reference of the web interface (`/reference/<id>`): what one connection is, what one resource is, where the environment of a call comes from. Optional; when present, a non-empty string of at most `PLUGIN_SUMMARY_MAX_LENGTH` (600) characters. Every shipped plugin fills it (`reference.test.ts`). `labels()` carries it.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `tokenHandouts?`                                     | —     | `TokenHandout { tool, riskIds, readOnlyRiskIds? }[]`: the tools whose purpose is to hand the agent a short-lived, narrowly scoped provider token (spec §2.4, the one exception to "the executor never sees a provider credential"), each with the catalog risks such a call touches. `definePlugin` checks that the tool is declared and the risks are entries of the catalog. A declaration for the reader — the provider reference marks these tools and risks; the host decides nothing from it. GitHub declares `github__mint_install_token`. `readOnlyRiskIds` names the risks among `riskIds` whose token cannot write at the provider; a risk not named there is taken as write (`writeHandoutRiskIds(plugin)`), and `definePlugin` refuses a preset that leaves a write one on `auto` (spec §2.4: a token-handing risk that grants write is gated by approval in presets, a read-only one may be automatic). |
+| `gitRemote?`                                         | —     | `GitRemoteCapability`: the instance as this provider's git remote (`/git/<repository>.git`, spec §4.1 ter, handbook [git-remote](git-remote.md)). Two tool names the pipeline decides and audits but that are **not MCP tools** (`fetchTool`, `pushTool`, prefixed, distinct, never in `tools`); `pushRisk` (the permission every push touches: a mission without it gets no push advertisement); `repositoryOf(path)`; `upstream(ctx, repository, 'read' \| 'write')` → the endpoint and the `Authorization` to present there, in memory; `review(ctx, repository, updates)` → the reviewed updates (kind, commits, files, workflow files) or a reason to refuse; optional `compareUrl`, `insteadOf` (the provider's URL prefix the setup kit rewrites), `abilities` (`{ risk_id, words }[]`: what each permission means for git, for the mission page). At most one registered plugin declares it. GitHub does.    |
 | `experimental?`                                      | —     | `true` for a plugin the host registers but keeps out of the default connect / issuance flows, listing none of its tools (gmail). `labels()` carries it as a boolean.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `tools`                                              | —     | `McpToolDeclaration[]`. Every name starts with the prefix; names unique. May be empty (experimental, classifier-only plugin).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `dataModel`                                          | —     | `DataModel` of the risk-model spec §2; `validateDataModel` runs in `definePlugin`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
@@ -129,7 +140,11 @@ broken definition in one pass. `pluginIssues` is the concatenation of
 entry is an issue — `tools[i].name: expected a string` — not a `TypeError`),
 `dataModelIssues`, `catalogIssues`, `credentialSpecIssues`, `hookIssues` and
 `tokenHandoutIssues` (each hand-out names a declared tool and at least one
-risk of the plugin's own catalog).
+risk of the plugin's own catalog) and `gitRemoteIssues` (the two git tools
+prefixed, distinct and not MCP tools; the three functions present; each
+ability's `risk_id` a risk of the catalog). `declaredToolNames(plugin)` — the
+MCP tools plus the git remote's two — is what `toolTitles` and the company
+app's permission declaration (`manifestRegistration.permissions`) may name.
 
 `catalogIssues` runs `semanticIssues` on `plugin.catalog`. It is the only
 validation a catalog **written in TypeScript** goes through (it never
@@ -635,6 +650,7 @@ issue), indexes each catalog with `prepareCatalog`. Derivations:
 | `toolDeclarations()`                | Every tool of every plugin.                                                                                                         |
 | `labels()`                          | `ProviderLabel { id, displayName, version, description \| null, summary \| null, experimental }[]` for the UI.                      |
 | `idEnum()`                          | `[string, ...string[]]` for validation schemas; throws on an empty registry.                                                        |
+| `gitRemote()`                       | The one plugin that declares a `gitRemote`, or `null`; the constructor refuses two (the `/git/` path is shared).                    |
 
 Tool names cannot collide across plugins: ids are unique and the prefix
 rule (checked per plugin) is a bijection on ids.

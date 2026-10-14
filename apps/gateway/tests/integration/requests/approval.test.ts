@@ -297,6 +297,8 @@ describe('approval gate: refusal, decision, replay', () => {
           { risk_id: READ, label: READ, quota: 10, consumed: 1, remaining: 9, gate: 'auto' },
           { risk_id: MERGE, label: MERGE, quota: 3, consumed: 0, remaining: 3, gate: 'approval' },
         ],
+        // Not a git push: no page of the provider to read.
+        provider_pages: [],
       });
       expect(view.gate).toEqual({ policy: 'approval', open_until: null });
       expect(view.approval).toBeNull();

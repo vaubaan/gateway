@@ -1,0 +1,59 @@
+/**
+ * The GitHub git remote : the provider side of `https://<instance>/git/<owner>/<repo>.git`.
+ *
+ * Spec : docs/spec/vaubaan-gateway.md §4.1 ter "Git remote", §2.4 ;
+ *        docs/spec/gateway-risk-model.md §7.
+ * ADR  : docs/decisions/gateway-as-git-remote.md.
+ * Handbook : docs/handbook/git-remote.md, docs/handbook/providers/github.md.
+ *
+ * What the host asks of this plugin (`GitRemoteCapability`), module by module :
+ *
+ *   upstream   git-credential.ts  the repository's smart HTTP endpoint and the
+ *                                 credential to present there, in memory
+ *   review     git-review.ts      what each ref update brings, read at GitHub
+ *   execute    git-moves.ts       the reviewed refs moved, each reported
+ *   REST       git-rest.ts        the reads and writes both of them use
+ *
+ * `github__git_fetch` is never executed here : the host relays the bytes.
+ */
+import type { GitRemoteCapability } from '@vaubaan/plugin-sdk';
+
+import { GITHUB_WEB_BASE } from './credential.ts';
+import { GIT_FETCH_TOOL, GIT_PUSH_TOOL } from './git-call.ts';
+import { repositoryOf, upstream } from './git-credential.ts';
+import { compareUrl, review } from './git-review.ts';
+
+export { GIT_TOKEN_PERMISSIONS } from './git-credential.ts';
+export { COMPARE_MAX_COMMITS, COMPARE_MAX_FILES } from './git-rest.ts';
+export { COMMITS_REVIEWED_MAX } from './git-review.ts';
+export { executeGit } from './git-moves.ts';
+
+export const githubGitRemote: GitRemoteCapability = {
+  fetchTool: GIT_FETCH_TOOL,
+  pushTool: GIT_PUSH_TOOL,
+  pushRisk: 'github.git-push',
+  repositoryOf,
+  upstream,
+  review,
+  compareUrl,
+  insteadOf: `${GITHUB_WEB_BASE}/`,
+  abilities: [
+    { risk_id: 'github.read-code', words: 'clone and fetch' },
+    { risk_id: 'github.git-push', words: 'push' },
+    {
+      risk_id: 'github.feature-branch-write',
+      words: 'push to working branches (feature/*, fix/*, chore/*, bug/*, docs/*, refactor/*)',
+    },
+    {
+      risk_id: 'github.merge-protected',
+      words: 'push to main, master, prod, production and release-* branches',
+    },
+    { risk_id: 'github.force-push', words: 'force-push (rewrite a branch)' },
+    { risk_id: 'github.branch-delete', words: 'delete branches' },
+    { risk_id: 'github.tag-write', words: 'push and delete tags' },
+    {
+      risk_id: 'github.workflow-write-via-file',
+      words: 'change CI workflows (.github/workflows/)',
+    },
+  ],
+};

@@ -5,7 +5,12 @@
  * and the catalog endpoint. Built once by the composition root as
  * `root.execution`. Handbook: docs/handbook/execution-door.md.
  */
-import { CallPipeline, upstreamErrorClassName, type CacheClient } from '@vaubaan/gateway-core';
+import {
+  CallPipeline,
+  upstreamErrorClassName,
+  type CacheClient,
+  type CallPipelineDeps,
+} from '@vaubaan/gateway-core';
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import type { AuthModule } from '../auth';
@@ -15,12 +20,14 @@ import type { BuildInfo } from '../compose/root';
 import type { RateLimiter } from '../compose/ports';
 import type { InstanceConfig } from '../config';
 import type { ConnectionsModule } from '../connections';
+import { gitRemoteBase } from '../git/paths';
 import type { Logger } from '../logging';
 import type { MissionsModule } from '../missions';
 import type { Store } from '../store';
 import { systemClock, type Clock } from '../store/clock';
 import { ConnectionCredentialCache } from './credential-cache';
-import { ExecutionDoor, type DelegatedTokenResolver } from './door';
+import type { DelegatedTokenResolver } from './admission';
+import { ExecutionDoor } from './door';
 import { createResourceStage } from './resource-stage';
 import type { TelemetrySink } from './telemetry-sink';
 import { createRiskStage } from './risk-stage';
@@ -56,8 +63,12 @@ export interface ExecutionHandlers {
   readonly catalog: (request: Request) => Promise<Response>;
 }
 
+/** The stages of the call pipeline, for the git door's own pipeline (same stages, same audit). */
+export type ExecutionStages = CallPipelineDeps;
+
 export interface ExecutionModule {
   readonly pipeline: CallPipeline;
+  readonly stages: ExecutionStages;
   readonly credentialCache: ConnectionCredentialCache;
   /** The verifier of mission tokens: the management door identifies one with it, to refuse it by kind. */
   readonly tokens: TokenVerifier;
@@ -82,7 +93,7 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
   const logger = deps.logger.child({ component: 'execution-door' });
   const credentialCache = new ConnectionCredentialCache(deps.cache);
 
-  const pipeline = new CallPipeline({
+  const stages: ExecutionStages = {
     resources: createResourceStage({
       registry: deps.registry,
       connections: deps.store.connections,
@@ -108,7 +119,8 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
         error_class: upstreamErrorClassName(error),
         stack_frames: stackFramesOf(error),
       }),
-  });
+  };
+  const pipeline = new CallPipeline(stages);
 
   const tokens = new TokenVerifier({
     missions: deps.missions.service,
@@ -129,10 +141,14 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
     build: deps.build,
     clock,
     delegations: deps.delegations,
+    ...(deps.registry.gitRemote()
+      ? { gitRemote: { base: gitRemoteBase(deps.config.publicUrl) } }
+      : {}),
   });
 
   return {
     pipeline,
+    stages,
     credentialCache,
     tokens,
     door,
@@ -149,12 +165,19 @@ export {
   ExecutionDoor,
   MCP_SERVER_INFO_NAME,
   SURFACE_RATE_LIMITED_RPC_CODE,
+  type ExecutionDoorDeps,
+} from './door';
+export {
+  isDenial,
+  MissionAdmission,
   SURFACE_RATE_WINDOW_MS,
   TOKEN_LAST_USED_GRANULARITY_SECONDS,
+  type AdmissionDenial,
+  type Admitted,
   type DelegatedTokenResolver,
-  type ExecutionDoorDeps,
+  type MissionAdmissionDeps,
   type TokenUseRecorder,
-} from './door';
+} from './admission';
 export { loadMissionContext, missionResourceOf, periodOf } from './mission-context';
 export {
   AGENT_LABEL_HEADER,
@@ -184,6 +207,8 @@ export {
   buildCatalog,
   callableProviders,
   callableTools,
+  gitRemoteUrl,
+  type GitRemoteView,
   type CatalogBudgetLine,
   type CatalogConnection,
   type CatalogResource,

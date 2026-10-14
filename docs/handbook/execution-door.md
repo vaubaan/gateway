@@ -5,6 +5,8 @@ date: 2026-10-13
 last_synced: 2026-10-14
 tracks:
   - apps/gateway/src/server/execution/
+  - apps/gateway/src/server/git/paths.ts
+  - packages/plugin-sdk/src/git/remote.ts
   - apps/gateway/src/server/http/client-ip.ts
   - apps/gateway/src/app/mcp/
   - apps/gateway/src/app/.well-known/oauth-protected-resource/route.ts
@@ -54,7 +56,8 @@ Built on [gateway-core](gateway-core.md) (pipeline, refusals),
 ```
 apps/gateway/src/server/execution/      host-agnostic, never imports `next`
   index.ts            createExecutionModule(deps) → root.execution { pipeline, credentialCache, tokens, door, handlers }; the log line of a failed decision stage
-  door.ts             ExecutionDoor: handleMcp(), handleCatalog(); admission, MCP serving
+  door.ts             ExecutionDoor: handleMcp(), handleCatalog(); MCP serving; renders an admission denial as JSON-RPC
+  admission.ts        MissionAdmission: origin, bearer, grounds, surface rate limit — one instance, shared with the git remote
   token-verifier.ts   TokenVerifier — asks the mission service at every call; throttles the argon2id check of legacy tokens
   mission-context.ts  loadMissionContext(), missionResourceOf(), periodOf()
   resource-stage.ts   createResourceStage(), citedRefs(), toolUnavailableOn()
@@ -113,7 +116,21 @@ Everything before "protocol" answers with a JSON-RPC error envelope whose `id`
 is `null` (no request was parsed yet); everything after is a JSON-RPC response
 to the request's own id.
 
-### Admission (`door.ts`)
+### Admission (`admission.ts`)
+
+`MissionAdmission` is the part of a request the two doors of the execution
+surface share: this one and the git remote (`/git/**`, handbook
+[git-remote](git-remote.md)). The MCP door builds the one instance
+(`ExecutionDoor.admission`) and the git module is handed it, so the two cannot
+drift: same verifier, same 401 reasons, same `wrong-credential-kind`, same
+grounds, same surface window. `admit(request, authorization)` answers either
+`{ ctx, mission, client }` or a denial (`cross-origin`,
+`verification-throttled`, `unauthenticated` with its `AuthError`, `refused`
+with a `Refusal`, `rate-limited`); each door renders a denial in its own
+protocol — JSON-RPC here, HTTP text and a Basic challenge at the git remote,
+which passes the password of its Basic credential as `Bearer <key>`. A
+structural test of the git suite holds `root.git.door.admission ===
+root.execution.door.admission`.
 
 - **Origin.** A request that carries an `Origin` header different from
   `config.publicUrl.origin` is refused. The door sends no CORS header and
@@ -275,7 +292,7 @@ Once every legacy row has been used or retired, the throttle is dead code and
 goes with the `argon2` dependency. `SELECT COUNT(*) FROM mission_tokens WHERE
 hash_alg = 'argon2id' AND status = 'active'` says how many are left.
 
-### Grounds (`door.ts` → `authority/mission-grounds.ts`)
+### Grounds (`admission.ts` → `authority/mission-grounds.ts`)
 
 Between the token verification and the mission context,
 `credentialResolver` calls `deps.grounds.inspect(verified.mission)`: for a
@@ -290,7 +307,7 @@ Nothing is written: `orphaned` is derived for this request and stored nowhere
 (spec §2.3). The next request asks again, so the day the authority is back the
 **same token** is served, on the same session and counters — a refused call
 consumed nothing. The door writes no administrative entry in either direction
-(no human is behind a read): it logs `mission orphaned at the execution door`
+(no human is behind a read): it logs `mission orphaned at the execution surface`
 (info, with `cause`, `connection_id`, `uncovered`) and the pipeline audits the
 refused call. A `revoked` or `expired` mission is not re-checked.
 
@@ -380,11 +397,18 @@ and "Order of a call"; ADR
 
 1. `registry.providerForTool(tool)` → the plugin; none → rejection
    `unknown tool '<name>'…`.
-2. The mission's connection of that provider (one per provider per mission);
+2. The door the call came through (`doorMismatch`): the two tools of a
+   plugin's git remote (`gitRemote.fetchTool`, `gitRemote.pushTool`) are
+   decided only for a call whose `CallRequest.channel` is `git`, and every
+   other tool only for `mcp` (the default). A mismatch is a rejection — a git
+   tool over MCP reads "…is how the gateway records git itself; it cannot be
+   called over MCP…" — so the arguments of a push are always the host's
+   review, never an agent's claim.
+3. The mission's connection of that provider (one per provider per mission);
    none → rejection `…this mission holds no <Provider> connection.`
-3. `allowed` = the context's resources on that connection; `known` = every
+4. `allowed` = the context's resources on that connection; `known` = every
    resource row of the connection.
-4. `plugin.classify(tool, args, allowed)`:
+5. `plugin.classify(tool, args, allowed)`:
    - slices → `citedRefs(slices, knownRefs)`: the `ident` and `list` segments
      that equal a known ref. A cited ref outside `allowed` →
      `resource-not-in-mission`. Otherwise the target resource is the first
@@ -856,7 +880,15 @@ mission is 403 `mission-inactive`), `Cache-Control: no-store`:
       "provider": "github",
       "name": "acme-org",
       "status": "active",
-      "resources": [{ "ref": "acme/app", "env": null, "display_name": "acme/app" }],
+      "resources": [
+        {
+          "ref": "acme/app",
+          "env": null,
+          "display_name": "acme/app",
+          // Only for the provider the instance is the git remote of (spec §4.1 ter).
+          "git_remote": "https://gw.acme.example/git/acme/app.git",
+        },
+      ],
     },
   ],
   "budget": [
@@ -874,7 +906,10 @@ mission is 403 `mission-inactive`), `Cache-Control: no-store`:
 
 `tools` is the whole surface of the instance (experimental plugins excluded);
 `budget` comes from `SessionService.stateOf` for the current period and is the
-same for every holder of the mission. `token.kind` is `member` (then `holder`
+same for every holder of the mission. `git_remote` is present on the resources
+of the one plugin that declares a `gitRemote` (`registry.gitRemote()`), built
+by `gitRemoteUrl` from `gitRemoteBase(public_url)` (`server/git/paths.ts`).
+`token.kind` is `member` (then `holder`
 is the member's email) or `named` (then it is the name the creator gave);
 `prefix` is the public part of the token, never more.
 
@@ -1171,7 +1206,7 @@ Scenarios in [integration-tests](../tests/integration-tests.md).
 - **401 with a token that was just issued** — read `error.data.reason`: it is
   set when the secret is right and the token stopped (`token-rotated`,
   `token-revoked`, `holder-removed`, `holder-deactivated`; the instance log has
-  `retired mission token presented at the execution door` with the prefix).
+  `retired mission token presented at the execution surface` with the prefix).
   Without a reason the bearer is truncated or belongs to another instance. 401 and no
   `Authorization` header reaching the instance at all: the TLS terminator
   strips it, or the client probed `/.well-known/oauth-protected-resource` and

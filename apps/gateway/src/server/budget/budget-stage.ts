@@ -39,15 +39,30 @@ export function createBudgetStage(deps: BudgetStageDeps): BudgetStage {
     return periodSpecOf(period, record.periodAnchor);
   }
 
+  async function missionOf(ctx: MissionContext): Promise<BudgetMission> {
+    return {
+      id: ctx.mission.id,
+      status: ctx.mission.status,
+      expires_at: ctx.mission.expires_at,
+      period: await periodOf(ctx),
+      policy: ctx.policy,
+    };
+  }
+
   return {
+    async preflight(ctx, call, input) {
+      return deps.service.preflightLimits({
+        mission: await missionOf(ctx),
+        tool: call.tool,
+        args: call.args,
+        risks_touched: input.risks_touched,
+        agent_label: call.agent_label,
+        token: tokenAttributionOf(ctx.token),
+        now: input.now,
+      });
+    },
     async decide(ctx, call, input): Promise<BudgetDecision> {
-      const mission: BudgetMission = {
-        id: ctx.mission.id,
-        status: ctx.mission.status,
-        expires_at: ctx.mission.expires_at,
-        period: await periodOf(ctx),
-        policy: ctx.policy,
-      };
+      const mission = await missionOf(ctx);
       const result = await deps.service.recordCall({
         mission,
         tool: call.tool,

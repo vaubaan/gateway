@@ -186,6 +186,22 @@ const KEY_TABLE = [
     min: 1,
   },
   {
+    path: 'git.max_pack_mb',
+    env: 'VAUBAAN_GIT_MAX_PACK_MB',
+    kind: 'int',
+    default: 200,
+    min: 1,
+    max: 4096,
+  },
+  {
+    path: 'git.request_timeout',
+    env: 'VAUBAAN_GIT_REQUEST_TIMEOUT',
+    kind: 'string',
+    format: 'duration',
+    default: '10m',
+    maxSeconds: 3_600,
+  },
+  {
     path: 'oauth.access_token_ttl',
     env: 'VAUBAAN_OAUTH_ACCESS_TOKEN_TTL',
     kind: 'string',

@@ -253,6 +253,17 @@ environment.
   callers, and the audit records no address. It says so in one warning
   at boot. `deploy/config/.env.example` sets it to Docker's address pool (the
   Caddy container of the reference Compose file); narrow it to your proxy.
+- **Git remote**: `https://<public_url>/git/<owner>/<repo>.git` is the agents'
+  git remote (handbook [git-remote](../docs/handbook/git-remote.md)). A push
+  body is the pack itself, streamed and never stored: the reverse proxy must
+  not cap or buffer request bodies under `/git/` (the reference Caddyfile
+  does neither). `git.max_pack_mb` (default 200 MiB) caps a push and
+  `git.request_timeout` (default 10 minutes) caps one git request; Node's own
+  server stops receiving a request body after 5 minutes (`requestTimeout`),
+  which bounds the upload time whatever the key says. Temporary refs
+  (`refs/vaubaan/*`) appear in the repositories for the length of a push, or
+  of a pending approval; the instance removes them, and a sweep every five
+  minutes takes those a crash left behind.
 - **Management door**: the instance is also the OAuth authorization server of
   `/mcp/manage` (handbook
   [management-door](../docs/handbook/management-door.md)). Defaults: access

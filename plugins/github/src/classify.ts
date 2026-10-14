@@ -44,7 +44,18 @@
 
 import { parseSlice, type ClassifyOutcome, type Resource, type Slice } from '@vaubaan/plugin-sdk';
 
-import { MINT_TOOL, PROVIDER, githubRepoRefs, readGithubCall, type GithubCall } from './call.ts';
+import {
+  MINT_TOOL,
+  PROVIDER,
+  githubRepoRefs,
+  isWorkflowPath,
+  readGithubCall,
+  type GithubCall,
+} from './call.ts';
+
+import { isGitTool, readGitCall, type GitCall, type GitTargetUpdate } from './git-call.ts';
+
+export { isWorkflowPath } from './call.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public entry point
@@ -56,9 +67,55 @@ export function classifyGithub(
   args: Readonly<Record<string, unknown>>,
   resources: readonly Resource[],
 ): ClassifyOutcome {
+  if (isGitTool(tool)) {
+    const git = readGitCall(tool, args, githubRepoRefs(resources));
+    if ('denied' in git) return git;
+    return { slices: gitSlicesOf(git) };
+  }
   const call = readGithubCall(tool, args, githubRepoRefs(resources));
   if ('denied' in call) return call;
   return { slices: slicesOf(call) };
+}
+
+/**
+ * The slices of a git fetch or push (spec §4.1 ter ; catalog v6).
+ *
+ *   fetch                    repo[R].branch.R, repo[R].tag.R           (read-code)
+ *   push, every ref          <ref>.push.W                              (git-push)
+ *   push to a branch         branch[B].W                               (feature-branch-write,
+ *                                                                       merge-protected or the fallback)
+ *   push of a tag            tag[T].W                                  (tag-write, create-release)
+ *   not a fast-forward       <ref>.force.W                             (force-push)
+ *   a deletion               <ref>.delete.W                            (branch-delete, tag-write)
+ *   CI workflow files        <ref>.workflow-via-file.W                 (workflow-write-via-file)
+ *
+ * A deleted branch also touches `branch[B].W` : deleting `main` is a write on
+ * `main`. The workflow marker is set from the review's `workflow_files` and,
+ * as a second reading, from the files themselves.
+ */
+export function gitSlicesOf(call: GitCall): Slice[] {
+  const repo = `${PROVIDER}.repo[${call.target.ref}]`;
+  if (call.tool === 'github__git_fetch') {
+    return [build(`${repo}.branch.R`), build(`${repo}.tag.R`)];
+  }
+  return dedup(call.updates.flatMap((u) => gitUpdateSlices(repo, u)));
+}
+
+function gitUpdateSlices(repo: string, target: GitTargetUpdate): Slice[] {
+  const { update } = target;
+  const ref = `${repo}.${target.refKind}[${asIdent(target.name)}]`;
+  const out = [build(`${ref}.push.W`)];
+  if (update.kind === 'delete') {
+    if (target.refKind === 'branch') out.push(build(`${ref}.W`));
+    out.push(build(`${ref}.delete.W`));
+    return out;
+  }
+  out.push(build(`${ref}.W`));
+  if (update.kind === 'force') out.push(build(`${ref}.force.W`));
+  const workflow =
+    update.workflow_files.length > 0 || update.files.some((path) => isWorkflowPath(path));
+  if (workflow) out.push(build(`${ref}.workflow-via-file.W`));
+  return out;
 }
 
 /** The slices of a call whose identifiers `readGithubCall` has checked. */
@@ -186,11 +243,6 @@ function fileWriteSlices(repo: string, branch: string, paths: readonly string[])
     }
   }
   return out;
-}
-
-/** GitHub recognizes workflow files at `.github/workflows/*.yml` and `.yaml`. */
-export function isWorkflowPath(path: string): boolean {
-  return /^\.github\/workflows\/[^/]+\.(yml|yaml)$/i.test(path);
 }
 
 /**

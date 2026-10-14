@@ -61,7 +61,67 @@ export function pluginIssues(plugin: ProviderPlugin): string[] {
     ...credentialSpecIssues(plugin),
     ...hookIssues(plugin),
     ...tokenHandoutIssues(plugin),
+    ...gitRemoteIssues(plugin),
   ];
+}
+
+/** Every tool name a plugin answers for : its MCP tools and the two tools of its git remote. */
+export function declaredToolNames(
+  plugin: Pick<ProviderPlugin, 'tools' | 'gitRemote'>,
+): Set<string> {
+  const names = new Set<string>(isList(plugin.tools) ? plugin.tools.map((t) => t?.name) : []);
+  if (plugin.gitRemote) {
+    names.add(plugin.gitRemote.fetchTool);
+    names.add(plugin.gitRemote.pushTool);
+  }
+  return names;
+}
+
+/**
+ * The git remote's two tools carry the plugin's prefix, are distinct, and are
+ * NOT MCP tools : listed in `tools`, an agent could call the push tool with
+ * arguments of its own instead of the host's review.
+ */
+function gitRemoteIssues(plugin: ProviderPlugin): string[] {
+  const remote: unknown = plugin.gitRemote;
+  if (remote === undefined) return [];
+  if (!isRecord(remote)) return ['gitRemote: expected an object when present'];
+  const issues: string[] = [];
+  const prefix = typeof plugin.id === 'string' ? toolPrefixFor(plugin.id) : '';
+  const mcp = new Set(isList(plugin.tools) ? plugin.tools.map((t) => t?.name) : []);
+  for (const key of ['fetchTool', 'pushTool'] as const) {
+    const name = remote[key];
+    if (typeof name !== 'string' || !name.startsWith(prefix) || name.length === prefix.length) {
+      issues.push(`gitRemote.${key} must be a tool name starting with '${prefix}'`);
+      continue;
+    }
+    if (mcp.has(name)) issues.push(`gitRemote.${key} '${name}' must not be an MCP tool`);
+  }
+  if (remote.fetchTool === remote.pushTool) {
+    issues.push('gitRemote.fetchTool and gitRemote.pushTool must differ');
+  }
+  for (const fn of ['repositoryOf', 'upstream', 'review'] as const) {
+    if (typeof remote[fn] !== 'function') issues.push(`gitRemote.${fn}: expected a function`);
+  }
+  const risks = new Set((plugin.catalog?.risks ?? []).map((r) => r.id));
+  if (typeof remote.pushRisk !== 'string' || !risks.has(remote.pushRisk)) {
+    issues.push(`gitRemote.pushRisk '${String(remote.pushRisk)}' is not a risk of the catalog`);
+  }
+  const abilities: unknown = remote.abilities;
+  if (abilities !== undefined) {
+    if (!isList(abilities)) issues.push('gitRemote.abilities: expected a list when present');
+    else
+      abilities.forEach((ability, i) => {
+        if (!isRecord(ability) || typeof ability.words !== 'string' || ability.words === '') {
+          issues.push(`gitRemote.abilities[${i}]: expected { risk_id, words }`);
+        } else if (typeof ability.risk_id !== 'string' || !risks.has(ability.risk_id)) {
+          issues.push(
+            `gitRemote.abilities[${i}].risk_id '${String(ability.risk_id)}' is not a risk of the catalog`,
+          );
+        }
+      });
+  }
+  return issues;
 }
 
 /** A handout names a declared tool and risks of the plugin's own catalog. */
@@ -236,7 +296,7 @@ function toolTitleIssues(plugin: ProviderPlugin): string[] {
   const titles: unknown = plugin.toolTitles;
   if (titles === undefined) return [];
   if (!isRecord(titles)) return ['toolTitles: expected an object keyed by tool name when present'];
-  const tools = new Set(isList(plugin.tools) ? plugin.tools.map((t) => t?.name) : []);
+  const tools = declaredToolNames(plugin);
   const issues: string[] = [];
   for (const [tool, title] of Object.entries(titles)) {
     if (!tools.has(tool)) issues.push(`toolTitles['${tool}'] is not a tool of this plugin`);
@@ -335,7 +395,8 @@ function oneSpecIssues(plugin: ProviderPlugin, spec: CredentialSpec, at: string)
   const own = kindSpecIssues(spec, plugin);
   const issues = at === 'credential' ? own : own.map((i) => i.replace(/^credential/, at));
   if (!isRecord(spec) || typeof spec.kind !== 'string') return issues;
-  const tools = new Set(isList(plugin.tools) ? plugin.tools.map((t) => t?.name) : []);
+  // The git remote's tools need permissions on a token too.
+  const tools = declaredToolNames(plugin);
   issues.push(...unavailableToolsIssues(spec.unavailableTools, tools, at));
   if (
     spec.manualRevocation !== undefined &&
@@ -609,7 +670,8 @@ function appPermissionIssues(permissions: unknown, at: string, plugin: ProviderP
   if (!isList(permissions) || permissions.length === 0) {
     return [`${at}.permissions: expected at least one permission`];
   }
-  const tools = new Set(isList(plugin.tools) ? plugin.tools.map((t) => t.name) : []);
+  // The git remote's tools are decided like any tool, so they need permissions too.
+  const tools = declaredToolNames(plugin);
   const issues: string[] = [];
   const seen = new Set<string>();
   for (const [i, raw] of permissions.entries()) {

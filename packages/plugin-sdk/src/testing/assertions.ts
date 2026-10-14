@@ -30,7 +30,7 @@ import {
   presetWildcardIssues,
   wildcardIssues,
 } from '../catalog-loader.ts';
-import { pluginIssues } from '../define-plugin.ts';
+import { declaredToolNames, pluginIssues } from '../define-plugin.ts';
 import type { ProviderPlugin } from '../plugin.ts';
 import { PluginRegistry } from '../registry.ts';
 import { sliceRoundTripIssues } from '../slices.ts';
@@ -156,7 +156,8 @@ export function assertCatalogCoverage(
 ): CoverageReport {
   const registry = new PluginRegistry([plugin]);
   const indexed: IndexedRiskCatalog = registry.catalogOf(plugin.id);
-  const declared = new Set(plugin.tools.map((t) => t.name));
+  // The MCP tools and, for a plugin with a git remote, its two tools.
+  const declared = declaredToolNames(plugin);
   const run: CoverageRun = {
     plugin,
     indexed,

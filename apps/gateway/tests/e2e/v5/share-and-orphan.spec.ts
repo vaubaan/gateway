@@ -82,10 +82,10 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   // ── The owner shares ────────────────────────────────────────────────────
   const ines = await browserOf(browser, request, E2E_SHARE_OWNER, `/accounts/${connectionId}`);
   await expect(ines.getByRole('heading', { name: connectionName, level: 1 })).toBeVisible();
-  // Nobody but its owner holds it yet: one line, "all 15".
+  // Nobody but its owner holds it yet: one line, "all 19".
   const access = ines.getByTestId('who-has-access');
   await expect(access.getByRole('row')).toHaveCount(2);
-  await expect(access).toContainText('all 15');
+  await expect(access).toContainText('all 19');
   await ines.getByRole('link', { name: 'Give access', exact: true }).click();
   const dialog = ines.getByTestId('give-access-dialog');
   await expect(
@@ -122,8 +122,8 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
 
   await dialog.getByLabel('Email').fill(E2E_SHARE_TARGET.email);
   // "Select all" ticks the boxes one by one: every permission but "anything not named".
-  await dialog.getByRole('button', { name: 'Select all 14' }).click();
-  await expect(summary).toContainText('14 of 15 permissions');
+  await dialog.getByRole('button', { name: 'Select all 18' }).click();
+  await expect(summary).toContainText('18 of 19 permissions');
   await expect(dialog.getByLabel('Give github.uncategorized-write')).not.toBeChecked();
   await expect(dialog.getByLabel('Give github.merge-protected')).toBeChecked();
   await snap(ines, 'share-dialog-select-all');
@@ -132,7 +132,7 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await expect(dialog.getByLabel(`Give ${READ_CODE}`)).toBeChecked();
   await expect(dialog.getByLabel(`Give ${READ_META}`)).toBeChecked();
   await expect(dialog.getByLabel('Give github.merge-protected')).not.toBeChecked();
-  await expect(summary).toContainText('2 of 15 permissions');
+  await expect(summary).toContainText('2 of 19 permissions');
   await expect(submit).toHaveText('Give access · 2 permissions');
   // "Clear", then the same two by hand: the list posted is the one ticked.
   await dialog.getByRole('button', { name: 'Clear' }).click();
@@ -148,9 +148,9 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   ).toBeVisible();
   // "Who has access" lists her; the count unfolds the explicit list.
   const shareRow = access.getByRole('row').filter({ hasText: E2E_SHARE_TARGET.name });
-  await expect(shareRow).toContainText('2 of 15');
+  await expect(shareRow).toContainText('2 of 19');
   await expect(shareRow).toContainText('read only');
-  await shareRow.getByRole('link', { name: '2 of 15' }).click();
+  await shareRow.getByRole('link', { name: '2 of 19' }).click();
   const held = ines.getByTestId('access-permissions');
   await expect(held).toContainText(READ_CODE);
   await expect(held).toContainText(READ_META);
@@ -165,10 +165,10 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   const shared = joan.getByTestId('shared-with-you');
   const received = shared.getByRole('row').filter({ hasText: connectionName });
   await expect(received).toContainText(E2E_SHARE_OWNER.email);
-  await expect(received).toContainText('2 of 15');
+  await expect(received).toContainText('2 of 19');
   // The exact list, on demand.
   await expect(joan.getByTestId('allowed-permissions')).toHaveCount(0);
-  await received.getByRole('link', { name: '2 of 15' }).click();
+  await received.getByRole('link', { name: '2 of 19' }).click();
   await expect(joan.getByTestId('allowed-permissions')).toContainText(READ_CODE);
   await expect(joan.getByTestId('allowed-permissions')).toContainText(READ_META);
   await snap(joan, 'shares-received');

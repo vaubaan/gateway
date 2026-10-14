@@ -245,9 +245,17 @@ const bootstrapKit = z
     env: z.string(),
     mcp_json: z.string(),
     agent_instructions: z.string(),
+    git: z
+      .string()
+      .nullable()
+      .describe(
+        "git's configuration when the gateway is the git remote of the mission's repositories",
+      ),
     verify: z.string(),
   })
-  .describe('What the executing agent needs: endpoint, variable, MCP configuration, instructions.');
+  .describe(
+    'What the executing agent needs: endpoint, variable, MCP configuration, instructions, git.',
+  );
 
 const issuedAnswer = z.looseObject({
   mission: z.looseObject({

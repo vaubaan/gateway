@@ -14,6 +14,7 @@ tracks:
   - apps/gateway/src/server/compose/shipped-plugins.ts
   - apps/gateway/src/server/compose/ports.ts
   - apps/gateway/tests/integration/compose/boot.test.ts
+  - apps/gateway/src/server/store/repositories/pending-refs.ts
 ---
 
 # Store — embedded SQLite, schema and migrations, repositories
@@ -61,6 +62,9 @@ apps/gateway/migrations/
   0014_sign_in_providers_and_invitations.sql
                                   groups: `provider`, the sign-in provider that claims an IdP group
                                   (backfilled `idp`); table `invitations` (schema version 14)
+  0015_git_pending_refs.sql
+                                  table `git_pending_refs`: the temporary refs a git push created at
+                                  the provider, and their deadline (schema version 15)
 apps/gateway/src/server/store/
   index.ts                        openStore() / openMemoryStore(), Store type, re-exports
   db.ts                           openDb() — better-sqlite3 handle, pragmas, MIN_SQLITE_VERSION,
@@ -83,7 +87,7 @@ apps/gateway/src/server/store/
     context.ts                    RepoContext (db, clock, newId, encryptor, catalog) + row helpers
     enums.ts                      the closed sets of the shared and gateway-core unions, as lists for parseEnum
     users.ts groups.ts invitations.ts connections.ts shares.ts missions.ts sessions.ts
-    requests.ts approvals.ts delegations.ts audit.ts config.ts web-sessions.ts
+    requests.ts approvals.ts delegations.ts audit.ts config.ts web-sessions.ts pending-refs.ts
 ```
 
 ## Opening the store
@@ -207,9 +211,9 @@ five-id catalog).
   with no resource…), driver errors (`SqliteError` with `code`) for constraint
   violations the schema catches (`UNIQUE`, `FOREIGN KEY`, `CHECK`).
 
-## Schema (`0001_schema.sql` … `0014_sign_in_providers_and_invitations.sql`)
+## Schema (`0001_schema.sql` … `0015_git_pending_refs.sql`)
 
-Schema version 14. `0001` creates every table and trigger; `0002` only replaces the
+Schema version 15. `0001` creates every table and trigger; `0002` only replaces the
 `audit_risks` delete trigger (see Audit); `0003` adds `web_sessions`; `0004` adds the
 owner-curation columns of `connection_resources` (plain `ADD COLUMN`s); `0005` adds
 `approvals.tool` (`NOT NULL DEFAULT ''`: a row written before it matches no call) and
@@ -247,7 +251,16 @@ by a group of another provider, as it skips a local one — and the table `invit
 key; `created_at`), written by `store.invitations` (`repositories/invitations.ts`). It also
 gives `UsersRepo.endSessionsOfIssuer(issuer)` its use: the users of a removed sign-in
 provider get `sessions_ended_at` = now (handbook [authentication](authentication.md),
-"Removing a provider").
+"Removing a provider"). `0015` adds the table `git_pending_refs` (`ref` primary key — the
+temporary ref `refs/vaubaan/<random>` at the provider —, `target_ref` (the branch or tag it
+stands for), `connection_id` and `mission_id` as plain columns, not foreign keys,
+`repository`, `object_id`, `expires_at`, `created_at`; indexes on `expires_at` and on
+`(mission_id, repository)`): the git remote records each temporary ref before the pack
+leaves, moves its deadline to the request's expiry when the push waits for an approval,
+drops the row once the provider confirmed the ref gone, and counts a mission's rows
+(`countFor`) against its ceiling; its sweeper deletes what outlived its deadline and
+postpones (`extend`) what the provider kept (handbook [git-remote](git-remote.md)). Written by `store.pendingRefs`
+(`repositories/pending-refs.ts`).
 
 | Area        | Tables                                                                                                                     | Notes                                                                                                                                                                                                                                                                                                                                                                                                               |
 | ----------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -260,6 +273,7 @@ provider get `sessions_ended_at` = now (handbook [authentication](authentication
 | Missions    | `missions`, `mission_connections`, `mission_resources`, `mission_policy`, `mission_tokens`, `mission_members`              | status `active\|expired\|revoked` (`orphaned` is derived, `0007` refuses it; `exhausted` is per risk, computed); `period_anchor` + nullable `period_seconds`; `resource_scope all\|selected`; policy row = `(quota, rate_limit, rate_window_seconds, gate)`; two partial unique indexes = one `active` token per member and per token name (`0010`, below)                                                          |
 | Sessions    | `sessions`, `session_counters`, `events`                                                                                   | one session per mission (`mission_id` unique); counters keyed `(session_id, risk_id, period_start)`; events are free-form `kind` + JSON details; `events.agent_label` (`0008`) is a copy of the label of a call event, made at insert, for the per-label timeline                                                                                                                                                   |
 | Requests    | `requests`, `approvals`                                                                                                    | `kind claim\|approval`, `state open\|granted\|refused\|expired`; approval requests carry `tool`, `fingerprint`, `risk_ids_json` (every gated risk of the call) and the encrypted `args_blob` (NULL on decision and on expiry); one approval per request, bound to `(mission, tool, fingerprint)` and listing the risks it covers, consumed via `consumed_at`                                                        |
+| Git remote  | `git_pending_refs`                                                                                                         | temporary refs at the provider and their deadline (migration `0015`)                                                                                                                                                                                                                                                                                                                                                |
 | Audit       | `audit`, `audit_risks`, `audit_purge_guard`                                                                                | see below                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 SQLite-only constructs are marked `-- sqlite:` in the file (`STRICT`, `RAISE(ABORT)`);
@@ -687,7 +701,7 @@ transaction takes the delegation from the code or from the rotated token.
 
 ## Repository methods at a glance
 
-Every method of the twelve repository interfaces, as declared in `repositories/*.ts`.
+Every method of the thirteen repository interfaces, as declared in `repositories/*.ts`.
 Some early primitives are called by the store suites and the fixtures only (in production a
 request or an approval is born inside a decision transaction and a share through
 `replaceForTarget`); they are listed all the same: the list is the interface.
@@ -705,6 +719,7 @@ request or an approval is born inside a decision transaction and a share through
 | `delegations` (`DelegationsRepo`) | `registerClient`, `getClient`, `getClientByClientId`, `listClients`, `updateClientDocument`, `decideClient`, `disableClient`, `deleteUnusedClients`, `create`, `getById`, `listForUser`, `listForClient`, `revoke`, `revokeIfActive`, `activityOf`, `createCode`, `findCode`, `redeemCode`, `findRefreshToken`, `rotateRefreshToken`, `rotateSuccessorOf`, `createAccessToken`, `findActiveAccessToken`, `revokeAccessToken`, `purgeExpired` |
 | `audit` (`AuditRepo`)             | `append`, `appendUnlessLatest`, `getById`, `list`, `search`, `latestCall`, `agentLabels`, `agentLabelActivity`, `tokenHolderActivity`, `countAllowedTouches`, `purgeOlderThan`, `purgeByRetention`                                                                                                                                                                                                                                           |
 | `config` (`ConfigRepo`)           | `get`, `set`, `getSecret`, `setSecret`, `delete`, `apply`, `keys`                                                                                                                                                                                                                                                                                                                                                                            |
+| `pendingRefs` (`PendingRefsRepo`) | `add`, `extend`, `listExpired`, `listFor`, `remove`                                                                                                                                                                                                                                                                                                                                                                                          |
 | `webSessions` (`WebSessionsRepo`) | `get`, `set`, `delete`, `count`                                                                                                                                                                                                                                                                                                                                                                                                              |
 
 `MissionsRepo.setStatus` is the mission's (it takes a `StoredMissionStatus`, see above);

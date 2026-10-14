@@ -60,6 +60,7 @@ import { seedConnection } from '../../../src/server/missions/testing';
 import type { UserRecord } from '../../../src/server/store/types';
 import { seedDayOfWork, type AuditRig } from '../../integration/audit/support';
 import { FakeGithub, routeFetch } from '../../integration/auth/fake-github';
+import { FakeGithubHost } from '../../integration/git/fake-github-host';
 import { FakeIdp } from '../../integration/auth/fake-idp';
 import { seedInstance, testRootDeps } from '../../integration/missions/support';
 import {
@@ -67,6 +68,7 @@ import {
   controlPort,
   E2E_APPROVER_USER,
   E2E_AUDIT_USER,
+  E2E_GIT,
   E2E_GITHUB_ORG,
   E2E_MANIFEST_CODE,
   E2E_OPERATOR,
@@ -461,6 +463,40 @@ async function issueDeveloperMission(
   return { mission_id: issued.mission.id, token: issued.token.secret };
 }
 
+/**
+ * A mission of the approver from the `developer` preset as shipped, on an
+ * installation whose repository is real git (`E2E_GIT`), and its token.
+ */
+async function issueGitMission(
+  root: GatewayRoot,
+  name: string,
+): Promise<{ mission_id: string; token: string }> {
+  const user = await root.store.users.upsertFromIdp({
+    issuer: IDP_ISSUER,
+    subject: E2E_APPROVER_USER.sub,
+    email: E2E_APPROVER_USER.email,
+    displayName: E2E_APPROVER_USER.name,
+  });
+  const seeded = await seedConnection(root.store, {
+    provider: 'github',
+    owner: { kind: 'user', id: user.id },
+    displayName: 'acme-git',
+    resources: [{ ref: E2E_GIT.repository }],
+  });
+  await root.store.connections.reconnect(
+    seeded.connection.id,
+    serializeSecret({ kind: 'app-install', installationId: E2E_GIT.installationId, metadata: {} }),
+  );
+  const issued = await root.missions.service.issue(user, {
+    name,
+    connections: [{ connection_id: seeded.connection.id, preset: 'developer' }],
+    period: { kind: 'recurring', length_seconds: 86_400 },
+    expires_at: null,
+  });
+  if (!issued.ok) throw new Error(`mission "${name}" was not issued`);
+  return { mission_id: issued.mission.id, token: issued.token.secret };
+}
+
 async function main(): Promise<void> {
   if (!existsSync(STANDALONE_SERVER)) {
     throw new Error(
@@ -477,7 +513,20 @@ async function main(): Promise<void> {
   );
   // No default user: the IdP has no claims to hand out until a spec says who
   // signs in (`idp/next-user`), so a spec that forgets to fails at its sign-in.
-  const github = mockedGithub();
+  const mocked = mockedGithub();
+  // The git remote spec's repository: real git behind a GitHub stand-in, reached
+  // by its own installation; every other provider request goes to the mock.
+  const gitHost = await FakeGithubHost.start();
+  await gitHost.createRepository(E2E_GIT.repository);
+  const gitOwner = `/${E2E_GIT.repository.split('/')[0]}/`;
+  const github: typeof fetch = (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    const toGitHost =
+      url.pathname.startsWith(gitOwner) ||
+      url.pathname.startsWith(`/repos${gitOwner}`) ||
+      url.pathname === `/app/installations/${E2E_GIT.installationId}/access_tokens`;
+    return toGitHost ? gitHost.fetch(input, init) : mocked(input, init);
+  };
 
   // Build the root where production code looks for it (`globalThis`), before
   // Next boots: the app's own `getRoot()` then finds it already there.
@@ -627,7 +676,7 @@ async function main(): Promise<void> {
         // handed over so a spec can check it never reached the executor.
         sendJson(res, 200, {
           installation_token: INSTALLATION_TOKEN,
-          calls: github.calls.map((call) => ({
+          calls: mocked.calls.map((call) => ({
             method: call.method,
             url: call.url,
             with_installation_token: (call.headers.authorization ?? '').endsWith(
@@ -644,6 +693,16 @@ async function main(): Promise<void> {
           200,
           await issueSmallMission(root, seeded.ada, seeded.github.connection.id, name),
         );
+        return;
+      }
+      if (url.pathname === `${CONTROL_PREFIX}/git-mission` && req.method === 'POST') {
+        const { name } = JSON.parse(await readBody(req)) as { name: string };
+        sendJson(res, 200, await issueGitMission(root, name));
+        return;
+      }
+      if (url.pathname === `${CONTROL_PREFIX}/git-refs`) {
+        // The refs of the repository behind the stand-in, as GitHub would hold them.
+        sendJson(res, 200, await gitHost.refs(E2E_GIT.repository));
         return;
       }
       if (url.pathname === `${CONTROL_PREFIX}/developer-mission` && req.method === 'POST') {

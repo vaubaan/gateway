@@ -36,4 +36,8 @@ export const githubToolTitles: Readonly<Record<string, string>> = {
   github__list_tags: 'List tags',
   github__create_release: 'Create a release',
   github__delete_release: 'Delete a release',
+  // The two tools of the git remote : never in `tools/list`, shown on approval
+  // requests and in the activity.
+  github__git_fetch: 'Clone or fetch with git',
+  github__git_push: 'Push with git',
 };

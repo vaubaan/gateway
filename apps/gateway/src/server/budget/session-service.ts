@@ -127,6 +127,11 @@ export interface SessionServiceDeps {
   readonly approvalValiditySeconds: number;
 }
 
+/** A preflight that found the limits clear: nothing written. */
+interface PreflightPass extends DecisionOutcome {
+  readonly pass: true;
+}
+
 /** What the transaction callback hands back, beyond the store's `allow` / `event`. */
 interface TransactionOutcome extends DecisionOutcome {
   /** Typed here: the store takes any event, this service writes only known shapes. */
@@ -202,6 +207,57 @@ export class SessionService {
       refusal: this.refusalOf(decision, request),
       request_id: request?.id ?? null,
     };
+  }
+
+  /**
+   * Would the call be refused for its limits — `budget-exhausted` or
+   * `rate-limited` — whatever its approvals? Nothing is counted. A limit
+   * refusal is recorded exactly as `recordCall` records it (the refused event,
+   * the claim request); any other outcome writes nothing and answers `null`.
+   * The git door asks it before a push's pack leaves for the provider: a push
+   * its limits refuse costs no upload. The authoritative decision stays
+   * `recordCall`'s.
+   */
+  async preflightLimits(input: RecordCallInput): Promise<Refusal | null> {
+    const { mission, now } = input;
+    const risks = distinctRisks(input.risks_touched);
+    const period = currentPeriod(mission.period, now);
+    const fingerprint = fingerprintArguments(input.args);
+    const result = await this.deps.sessions.decideAndDecrement(
+      { missionId: mission.id, riskIds: risks, periodStart: period.start },
+      (ctx): TransactionOutcome | PreflightPass => {
+        const live: BudgetMission = { ...mission, policy: livePolicy(mission.policy, ctx.limits) };
+        const decision = decide({
+          policy: live.policy,
+          risks_touched: risks,
+          counters: ctx.counters,
+          rate_windows: this.probeWindows(live, risks, now),
+          period,
+          fingerprint,
+          // Approvals are not this question: only the limits are.
+          approvals: new Map(),
+          opened_gates: new Set(risks),
+        });
+        if (
+          decision.kind === 'refuse' &&
+          (decision.code === 'budget-exhausted' || decision.code === 'rate-limited')
+        ) {
+          return this.applyRefusal(
+            ctx,
+            { ...input, mission: live },
+            decision,
+            fingerprint,
+            null,
+            now,
+          );
+        }
+        return { allow: false, event: null, pass: true };
+      },
+    );
+    const outcome = result.outcome;
+    if ('pass' in outcome) return null;
+    const { decision, request } = outcome;
+    return decision.kind === 'allow' ? null : this.refusalOf(decision, request);
   }
 
   /** Mission state with the rollover applied on read (spec §2.3, §3.3). */

@@ -374,6 +374,14 @@ remaining, approval_id }` (the first consumed approval; all are on the event) or
 `{ outcome: 'refused', refusal }`. `CallPipeline` then forwards upstream and writes the
 audit entry with `remaining_budget` and `approval_id` (gateway-core).
 
+`preflight(ctx, call, { risks_touched, now })` asks
+`SessionService.preflightLimits`: the same transaction and `decide()`, approvals left
+aside, counting nothing. A `budget-exhausted` or `rate-limited` refusal is recorded as
+`recordCall` records it (the refused event, the claim request) and returned; anything
+else writes nothing and answers `null`. The git door calls it through
+`CallPipeline.precheck(…, { limits: true })` before a push's pack leaves for the
+provider (handbook [git-remote](git-remote.md#push)).
+
 ## Rate windows (`rate-limit/sliding-window.ts`)
 
 `SlidingWindowRateLimiter` keeps, per key, the ascending timestamps of its actions and

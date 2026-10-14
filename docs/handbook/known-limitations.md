@@ -24,6 +24,7 @@ tracks:
   - apps/gateway/tests/demo/guards.ts
   - deploy/collector/
   - .github/workflows/release.yml
+  - apps/gateway/src/server/git/
 ---
 
 # Known limitations
@@ -61,6 +62,15 @@ change that removes it.
   projects, its workspace's name) follow the public API's shape without a live
   run. →
   [railway, "Connecting with a workspace token"](providers/railway.md#connecting-with-a-workspace-token)
+- **The git remote has never pushed to github.com.** Its tests run the real
+  `git` client against `git http-backend` standing in for GitHub, with a REST
+  API computed from the same repositories: protocol v2 relayed to GitHub
+  itself, GitHub accepting a pack under `refs/vaubaan/*`, the compare API's
+  limits, the `commits` of a comparison and `GET commits/{sha}`, the
+  `PATCH git/refs` answers, and a compare-and-swap of an empty-pack
+  receive-pack command for a force-push or a delete are read from GitHub's
+  documentation, not observed. →
+  [git-remote, "Tests"](git-remote.md#tests)
 - **The release pipeline has never run.** `.github/workflows/release.yml` is
   written and its Node scripts are tested, but no `v2.*` tag exists: no image was
   published, signed or attested by it. →
@@ -103,6 +113,15 @@ change that removes it.
   request fails, the act stands, and a retry finds nothing left to do and
   records nothing. Calls are not concerned: a call's entry is written before
   its answer. → [audit, "Administrative entries: who writes what"](audit.md#administrative-entries-who-writes-what)
+
+- **Git: a push is reviewed through GitHub's compare API, so a push larger
+  than it lists (300 files, 250 commits per ref) is refused**, to be split, as
+  is a push bringing more than 100 commits (each is read for workflow
+  changes). A push refused after its pack was stored — by the review, or
+  waiting for an approval — has cost one upload (threat model A31).
+  `git push --atomic`, push options, signed pushes and Git LFS are not
+  served; signed commits are. →
+  [git-remote, "Push"](git-remote.md#push)
 
 ## One process
 

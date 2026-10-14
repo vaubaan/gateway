@@ -99,7 +99,7 @@ export interface RevealedTokenView {
 
 export type BootstrapKitView = Pick<
   BootstrapKit,
-  'endpoint' | 'env' | 'mcp_json' | 'agent_instructions' | 'verify'
+  'endpoint' | 'env' | 'mcp_json' | 'agent_instructions' | 'git' | 'verify'
 >;
 
 export interface IssuedMissionAnswer {
@@ -147,6 +147,7 @@ function kitView(kit: BootstrapKit): BootstrapKitView {
     env: kit.env,
     mcp_json: kit.mcp_json,
     agent_instructions: kit.agent_instructions,
+    git: kit.git,
     verify: kit.verify,
   };
 }

@@ -613,6 +613,19 @@ function ApprovalBody({
         ) : (
           <ArgList items={argumentsOf(call.arguments)} testId="approval-arguments" />
         )}
+        {call.provider_pages.length > 0 && (
+          <p className={styles.erased} data-testid="approval-provider-pages">
+            What it brings, at the service:{' '}
+            {call.provider_pages.map((page, i) => (
+              <span key={page.url}>
+                {i > 0 && ' · '}
+                <a href={page.url} rel="noreferrer" target="_blank">
+                  {page.label}
+                </a>
+              </span>
+            ))}
+          </p>
+        )}
       </CallBox>
 
       <FactColumns

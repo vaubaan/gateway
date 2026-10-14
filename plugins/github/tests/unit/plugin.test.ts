@@ -92,7 +92,42 @@ const samples = {
   github__list_tags: [{ args: { ...repo } }],
   github__create_release: [{ args: { ...repo, tag_name: 'v1.0.0' } }],
   github__delete_release: [{ args: { ...repo, release_id: 1 } }],
+  // The git remote's two tools : their arguments are the host's review.
+  github__git_fetch: [{ args: { repository: 'acme/app', step: 'pack' } }],
+  github__git_push: [
+    {
+      args: {
+        repository: 'acme/app',
+        updates: [
+          gitUpdate('refs/heads/feature/test', 'create'),
+          gitUpdate('refs/heads/main', 'force', ['.github/workflows/ci.yml']),
+          gitUpdate('refs/heads/feature/old', 'delete'),
+          gitUpdate('refs/tags/v1.0.0', 'create'),
+        ],
+      },
+    },
+    {
+      args: { repository: 'acme/app', updates: [gitUpdate('refs/notes/x', 'create')] },
+      expectDenied: true,
+    },
+  ],
 } as const;
+
+function gitUpdate(
+  ref: string,
+  kind: 'create' | 'force' | 'delete',
+  files: readonly string[] = ['a.ts'],
+) {
+  return {
+    ref,
+    old: kind === 'create' ? null : 'a'.repeat(40),
+    new: kind === 'delete' ? null : 'b'.repeat(40),
+    kind,
+    commits: kind === 'delete' ? 0 : 1,
+    files: kind === 'delete' ? [] : [...files],
+    workflow_files: files.filter((f) => f.startsWith('.github/workflows/')),
+  };
+}
 
 const resources: readonly Resource[] = [appRepo];
 
@@ -110,8 +145,9 @@ describe('github plugin — structural kit', () => {
 
   test('every tool classifies to slices a named risk covers ; no sample slice lands on the fallback', () => {
     const report = assertCatalogCoverage(githubPlugin, samples, { resources });
-    expect(report.toolsChecked).toBe(26);
-    // The 14 named risks, in catalog order ; the fallback is not among them.
+    // The 26 MCP tools and the git remote's two.
+    expect(report.toolsChecked).toBe(28);
+    // The 18 named risks, in catalog order ; the fallback is not among them.
     expect(report.risksTouched).toEqual([
       'github.read-code',
       'github.read-meta',
@@ -125,6 +161,10 @@ describe('github plugin — structural kit', () => {
       'github.create-release',
       'github.delete-release',
       'github.branch-protection-write',
+      'github.git-push',
+      'github.force-push',
+      'github.branch-delete',
+      'github.tag-write',
       'github.mint-install-token-clone',
       'github.mint-install-token-push',
     ]);
@@ -159,7 +199,7 @@ describe('github plugin — structural kit', () => {
 
   test('the fallback is the one catalog risk the samples leave out', () => {
     const named = githubCatalog.catalog.risks.filter((r) => !r.fallback).map((r) => r.id);
-    expect(named).toHaveLength(14);
+    expect(named).toHaveLength(18);
     expect(githubCatalog.catalog.risks.filter((r) => r.fallback).map((r) => r.id)).toEqual([
       'github.uncategorized-write',
     ]);
@@ -194,7 +234,7 @@ describe('github catalog — presets', () => {
 
   test('ships read-only, developer and release-manager', () => {
     expect(presets.map((p) => p.id)).toEqual(['read-only', 'developer', 'release-manager']);
-    expect(githubCatalog.catalog.catalog_version).toBe(5);
+    expect(githubCatalog.catalog.catalog_version).toBe(6);
   });
 
   test('read-only grants reads only, no search, gate auto', () => {
@@ -224,8 +264,23 @@ describe('github catalog — presets', () => {
       expect(dev).not.toContain(id);
     }
     expect(entry('developer', 'github.workflow-write-via-file')?.gate).toBe('approval');
-    expect(entry('developer', 'github.mint-install-token-push')?.gate).toBe('approval');
-    expect(entry('developer', 'github.mint-install-token-clone')?.gate).toBe('auto');
+    // Catalog v6 : git goes through the gateway's remote ; a force-push asks first,
+    // and no preset hands a token that leaves (the mint risks are added by hand).
+    expect(entry('developer', 'github.git-push')?.gate).toBe('auto');
+    expect(entry('developer', 'github.force-push')?.gate).toBe('approval');
+    for (const id of [
+      'github.mint-install-token-clone',
+      'github.mint-install-token-push',
+      'github.branch-delete',
+      'github.tag-write',
+    ]) {
+      expect(dev).not.toContain(id);
+    }
+  });
+
+  test('release-manager pushes tags with git, each asking first', () => {
+    expect(entry('release-manager', 'github.git-push')?.gate).toBe('auto');
+    expect(entry('release-manager', 'github.tag-write')?.gate).toBe('approval');
   });
 
   // Spec §2.4: a token that can write is handed after approval; the clone token is
@@ -244,9 +299,34 @@ describe('github catalog — presets', () => {
     }
     expect([...writeHandoutRiskIds(githubPlugin)]).toEqual(['github.mint-install-token-push']);
     expect(pluginIssues(githubPlugin)).toEqual([]);
+    // No shipped preset carries a mint risk since catalog v6 ; a preset that put the
+    // clone token on auto is still checked against the declaration.
+    const withClone = {
+      ...githubPlugin,
+      catalog: {
+        ...githubPlugin.catalog,
+        presets: githubPlugin.catalog.presets.map((p) =>
+          p.id !== 'developer'
+            ? p
+            : {
+                ...p,
+                entries: [
+                  ...p.entries,
+                  {
+                    risk_id: 'github.mint-install-token-clone',
+                    quota: 50,
+                    rate_limit: { max: 5, window_seconds: 60 },
+                    gate: 'auto' as const,
+                  },
+                ],
+              },
+        ),
+      },
+    };
+    expect(pluginIssues(withClone)).toEqual([]);
     // Without the declaration the clone token is taken as write, and the preset is refused.
     const undeclared = {
-      ...githubPlugin,
+      ...withClone,
       tokenHandouts: (githubPlugin.tokenHandouts ?? []).map(({ tool, riskIds }) => ({
         tool,
         riskIds,
