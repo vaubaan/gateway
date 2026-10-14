@@ -266,7 +266,7 @@ provider says the credential itself is invalid.
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
 | `api-key`     | `fields` (≥ 1 with `secret: true`), `createUrl?`                                                                                                                   | `{ fields: Record<name, value>, metadata }`                          |
 | `oauth2`      | `authorizationUrl`, `tokenUrl` (https), `scopes`, `pkce`, `resourceIndicator?`, `clientAuthMethod`, `refreshable`, `extraAuthorizationParams?`, `appConfigFields?` | `{ accessToken, refreshToken, expiresAt, scopes, metadata }`         |
-| `app-install` | `appConfigFields` (app id, private key…), `installUrl(appConfig)`, `installationIdParam`, `userVerification?`                                                      | `{ installationId, metadata }` + `ctx.appConfig` for the private key |
+| `app-install` | `appConfigFields` (app id, private key…), `installUrl(appConfig)`, `installationIdParam`, `userVerification?`, `manifestRegistration?`                             | `{ installationId, metadata }` + `ctx.appConfig` for the private key |
 | `ssh-key`     | `algorithm: 'ed25519'`, `fields` (host, port, user)                                                                                                                | `{ privateKeyPem, publicKey, fields, metadata }`                     |
 
 **`userVerification` (`app-install`).** The installation id on the
@@ -296,6 +296,34 @@ by path. A spec **without** the block is valid, but the host refuses to
 connect it unless the operator explicitly accepts unverified installations
 for that provider ([connections](connections.md), "Installation binding").
 `ctx.appConfig` never contains `client_secret`, for any kind.
+
+**`manifestRegistration` (`app-install`, optional).** How the administrator
+creates the company's app from the interface when the provider offers an
+app manifest flow (GitHub), instead of registering it by hand (ADR
+[company-app-created-from-a-manifest](../decisions/company-app-created-from-a-manifest.md)).
+Declarative like `userVerification`: the host runs the flow
+([connections](connections.md), "Company apps created from the page").
+
+| Member                                      | Meaning                                                                                                                                                |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `permissions`                               | `AppPermission[]`: the provider's name, a label, a sentence, levels lowest first (`access`, `label`, `tools`, `onlyWhen?`), `mandatory?`, `sensitive?` |
+| `ownerLoginPattern`, `nameMaxLength`        | checked before the login goes in a URL and the name in the manifest                                                                                    |
+| `registrationUrl(owner)`                    | where the manifest is posted: an organisation's or the personal account's address                                                                      |
+| `manifestField`, `stateParam`, `codeParam`  | `manifest`, `state`, `code`                                                                                                                            |
+| `buildManifest(input)`                      | the manifest from the name, `public_url`, the connection callback, the return address and the chosen permissions                                       |
+| `conversionUrl(code)`, `conversionHeaders?` | the exchange endpoint (POST, no credential), `null` for a code outside the provider's grammar; never `Authorization`                                   |
+| `registeredApp(body)`                       | the created app: every `appConfigFields` value, its name, slug, owner, page and permissions — or `null`                                                |
+
+The permission declaration is the single source for what the page offers,
+what the manifest requests and what the plugin checks a call against. The
+SDK reads it in `app-permissions.ts`: `defaultPermissionChoice` (every
+highest level), `checkPermissionChoice` (a level or `NO_ACCESS` per
+permission; a mandatory one kept; anything undeclared refused),
+`toolsLostAt`, `accessCovers`, `unconditionalNeeds(permissions, tool)` (the
+levels a tool needs on every call; `onlyWhen` needs are the plugin's to
+check) and `missingPermissions`. `definePlugin` names each malformed member,
+a tool a level lists that the plugin does not declare, and an `onlyWhen`
+tool that its level does not list.
 
 **Revocation of an `oauth2` grant** is declared, not coded:
 `revocation: { url, format }` on the spec, with `format` one of

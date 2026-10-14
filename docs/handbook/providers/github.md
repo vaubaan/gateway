@@ -15,6 +15,9 @@ tracks:
   - plugins/github/src/execute.ts
   - plugins/github/src/octokit-dispatch.ts
   - plugins/github/src/token-cache.ts
+  - plugins/github/src/app-manifest.ts
+  - plugins/github/src/permission-check.ts
+  - plugins/github/src/credential-keys.ts
   - plugins/github/tests/unit/
 ---
 
@@ -34,8 +37,10 @@ in git history.
 ## What one connection is
 
 A **GitHub App installation** on the company's organisation. An administrator
-registers the App once, with "Request user authorization (OAuth) during
-installation" enabled, and gives the instance five app-config keys
+creates the App once — from Settings → Administration → Company apps through
+GitHub's App manifest flow ("The company's App, created from the page"
+below), or by hand at GitHub with "Request user authorization (OAuth) during
+installation" enabled — and the instance holds five app-config keys
 (`app_id`, `private_key`, `app_slug`, `client_id`, `client_secret`); a user
 connects by installing the App and the host stores the `installation_id` as
 the connection's secret (`app-install` credential kind) — once it has
@@ -104,6 +109,51 @@ must be decimal digits (`installationIdOf` in `src/app-install.ts`, at most
 20); anything else throws `the installation id of the connection is not a
 number` and nothing is sent.
 
+### The company's App, created from the page
+
+`githubManifestRegistration` (`src/app-manifest.ts`, wired as
+`githubCredential.manifestRegistration`; ADR
+[company-app-created-from-a-manifest](../../decisions/company-app-created-from-a-manifest.md))
+posts a manifest to `https://github.com/organizations/<org>/settings/apps/new`
+or `https://github.com/settings/apps/new` (the login checked against
+`GITHUB_LOGIN_PATTERN`): `name` (34 characters at most), `url` =
+`public_url`, `redirect_url` = the instance's return route, `callback_urls` =
+[the connection callback], `request_oauth_on_install: true`, `public: false`,
+the chosen `default_permissions`; no `hook_attributes`, no `default_events`,
+no `setup_url` (the gateway takes no webhook; with OAuth on install GitHub
+sends the installing person to the callback). `POST
+/app-manifests/{code}/conversions` (the code checked against
+`[A-Za-z0-9_-]{1,128}`, no authentication) answers the App;
+`githubRegisteredApp` keeps `id` → `app_id`, `pem` → `private_key`, `slug`,
+`client_id`, `client_secret`, and drops `webhook_secret`.
+
+`GITHUB_APP_PERMISSIONS` is the one declaration of what the App may request,
+level by level, with the tools each level serves:
+
+| Permission       | Read                                                               | Write                                                                                              |
+| ---------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| `metadata`       | `list_tags` — mandatory, GitHub grants it                          | —                                                                                                  |
+| `contents`       | branches, commits, files, `search_code`, releases, the clone token | branch and file writes, `push_files`, merge, releases, the push token — **sensitive**              |
+| `pull_requests`  | list, get, merge (reads the pull request first)                    | create, merge; on a push token when held                                                           |
+| `issues`         | list, get, `search_issues`                                         | `add_issue_comment`                                                                                |
+| `actions`        | `list_workflows`, `list_workflow_runs`                             | —                                                                                                  |
+| `administration` | `get_branch_protection`                                            | `update_branch_protection` — **sensitive**                                                         |
+| `workflows`      | —                                                                  | a file write, push or delete under `.github/workflows/`; on a push token when held — **sensitive** |
+
+The permissions of the App are the hard ceiling at GitHub, which matters
+where a repository has no branch protection (private repositories on a free
+plan). `src/permission-check.ts` checks every call against what the
+installation holds — the `permissions` GitHub reports with the per-call
+installation token, kept beside it in the cache — and declines a call that
+lacks one with an `ExecutorRefusal` naming it (`github__create_branch needs
+the GitHub App permission Contents (contents: write, “Read and write”)…`),
+before anything is sent. A token whose permissions GitHub did not report
+(an entry cached by an older build) declines nothing. The push token asks
+for `contents: write` plus `pull_requests` and `workflows` (`MINT_PERMISSIONS`);
+GitHub answers 422 when the installation lacks one, and the mint is retried
+with `contents: write` and `metadata: read` only; a second 422 is declined by
+name.
+
 ## Files
 
 | File                      | Role                                                                                                                                                                                                                                                                                                       |
@@ -117,6 +167,9 @@ number` and nothing is sent.
 | `src/credential.ts`       | `githubCredential` (app-install spec), `installationTokenFor(ctx, scope)`.                                                                                                                                                                                                                                 |
 | `src/app-install.ts`      | `buildAppJwt`, `mintInstallationToken`, `installationIdOf`, `GITHUB_API_BASE`, `GITHUB_API_HEADERS`.                                                                                                                                                                                                       |
 | `src/execute.ts`          | `executeGithub` (the body run under the SDK's `declining`), `discoverGithubResources`, `MINT_PERMISSIONS`, discovery paging constants (100 per page, 10 pages at most).                                                                                                                                    |
+| `src/app-manifest.ts`     | `GITHUB_APP_PERMISSIONS`, `githubManifestRegistration`, `buildGithubManifest`, `githubRegisteredApp`, `GITHUB_LOGIN_PATTERN`.                                                                                                                                                                              |
+| `src/permission-check.ts` | `needsOf(call)`, `assertAppPermissions(call, granted)`, `declineMissingPermissions`, `mintPermissions`, `MINT_NEEDS`.                                                                                                                                                                                      |
+| `src/credential-keys.ts`  | `GITHUB_APP_CONFIG`, `GITHUB_WEB_BASE` (shared by the credential spec and the manifest flow).                                                                                                                                                                                                              |
 | `src/token-cache.ts`      | `installationTokenForCall(ctx, repo)`: per-call token served from `ctx.credentialCache`, 50 min at most, 5 min expiry margin.                                                                                                                                                                              |
 | `src/octokit-dispatch.ts` | `dispatchGithubTool(octokit, call, args)`: checked call → Octokit call; reads the pull request before a merge and declines (`ExecutorRefusal`) a base other than the declared one.                                                                                                                         |
 
@@ -284,7 +337,7 @@ plugins. `branch-protection-write` is in no preset.
 
 ## Tests
 
-`npx vitest run plugins/github` — 587 tests, no network:
+`npx vitest run plugins/github` — 623 tests, no network:
 
 - `plugin.test.ts` (16): kit assertions, coverage with samples per tool
   (the 14 named risks touched, `fallbackHits` empty), the fallback catching
@@ -321,6 +374,14 @@ plugins. `branch-protection-write` is in no preset.
   expiry, lifetime bounded by what is left of the token,
   `github__mint_install_token` never cached.
 - `data-model.test.ts` (1): data-model integrity.
+- `app-manifest.test.ts` (36): the declaration names every tool, its
+  defaults, its three sensitive permissions and the tools lost per level;
+  the manifest per permission choice; the registration URLs and the logins
+  refused; the code grammar; the conversion answer read and refused field by
+  field; a call without its permission declined by name with nothing sent
+  past the token mint (a workflow file needs Workflows, another file does
+  not); nothing declined when GitHub did not report the permissions; the push
+  token's 422 fallback and its refusal.
 
 ## How to debug
 

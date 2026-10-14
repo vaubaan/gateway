@@ -10,8 +10,19 @@
  * bound to the person who connects: verified by the gateway, or — for a
  * plugin that cannot prove it — refused until an administrator explicitly
  * accepts unverified installations, with a warning.
+ *
+ * A service whose plugin declares a manifest flow (GitHub) opens on "Create
+ * the <service> App" while no app is set; the form to enter an app registered
+ * by hand stays one click away (`?by=hand`). An app created from here shows
+ * its name, owner, link and permissions, and the next step: installing it
+ * (ADR company-app-created-from-a-manifest).
  */
 import { CredentialFieldInputs, NoticeBanner } from '@/components/connections/parts';
+import {
+  AppCreateForm,
+  permissionSummary,
+  RegisteredAppFacts,
+} from '@/components/settings/AppRegistration';
 import styles from '@/components/settings/settings.module.css';
 import {
   Button,
@@ -19,6 +30,7 @@ import {
   Callout,
   CodeBlock,
   DataTable,
+  Disclosure,
   Hint,
   PageHeader,
   Section,
@@ -33,20 +45,26 @@ import {
   ACCOUNT_WORDS,
   ACTIONS,
   CONFIG_WORDS,
+  ROUTES,
   SETTINGS_ACTIONS,
   SETTINGS_PAGES,
 } from '@/lib/vocabulary';
+import type { GatewayRoot } from '@/server/compose';
 import {
   ACCEPT_UNVERIFIED_ACTION,
   PROVIDER_APPS_PAGE,
+  providerAppPath,
   REFUSE_UNVERIFIED_ACTION,
 } from '@/server/connections';
-import type { ProviderAppStatus } from '@/server/provider-apps';
+import type { AppRegistrationRecord, ProviderAppStatus } from '@/server/provider-apps';
 
 export const dynamic = 'force-dynamic';
 
 /** The query parameter that opens the form of one service. */
 const APP_PARAM = 'app';
+/** `?by=hand`: the form to enter an app registered by hand, for a service that offers creation. */
+const BY_PARAM = 'by';
+const BY_HAND = 'hand';
 
 function listOf(names: readonly string[]): string {
   if (names.length <= 1) return names[0] ?? '';
@@ -115,11 +133,29 @@ function UnverifiedInstallations({ app, action }: { app: ProviderAppStatus; acti
   );
 }
 
-function AppForm({ app, callbackUrl }: { app: ProviderAppStatus; callbackUrl: string }) {
+function AppForm({
+  app,
+  callbackUrl,
+  createHref,
+}: {
+  app: ProviderAppStatus;
+  callbackUrl: string;
+  /** Set when the service's app can be created from this page instead. */
+  createHref?: string;
+}) {
   const readOnly = app.source === 'file';
   const action = `${PROVIDER_APPS_PAGE}/${encodeURIComponent(app.providerId)}`;
   return (
     <div className={styles.detail} data-testid={`app-form-${app.providerId}`}>
+      {createHref && (
+        <p className={styles.prose}>
+          Registered the app yourself at {app.displayName}? Enter what it gave you below, or{' '}
+          <a className={styles.reveal} href={createHref}>
+            create it from here instead
+          </a>
+          .
+        </p>
+      )}
       <div className={styles.block}>
         <p className={styles.quiet}>
           {app.credentialKind === 'oauth2'
@@ -186,6 +222,10 @@ export default async function CompanyAppsPage({
   const withApp = apps.filter((app) => app.needsApp);
   const withoutApp = apps.filter((app) => !app.needsApp);
   const opened = firstParam(params[APP_PARAM]);
+  const byHand = firstParam(params[BY_PARAM]) === BY_HAND;
+  const creatable = withApp.filter(
+    (app) => !app.configured && root.connections.registration.manifestOf(app.providerId),
+  );
 
   const columns: readonly Column<ProviderAppStatus>[] = [
     {
@@ -226,23 +266,88 @@ export default async function CompanyAppsPage({
             </ButtonLink>
           )}
           rowDetail={(app) =>
-            opened === app.providerId ? (
-              <AppForm
-                app={app}
-                callbackUrl={root.connections.service.callbackUrl(app.providerId).href}
-              />
-            ) : null
+            opened === app.providerId ? <AppDetail root={root} app={app} byHand={byHand} /> : null
           }
           empty={<Hint>No service of this gateway needs a company app.</Hint>}
           testId="company-apps"
         />
         <Hint>
-          You register one app per service at the service itself, then enter what it gave you here;
-          the gateway ships no shared app.
+          Each gateway has its own app at each service, never a shared one: you register it at the
+          service and enter what it gave you here
+          {creatable.length > 0 &&
+            `, or create ${listOf(creatable.map((app) => `the ${app.displayName} one`))} from here in one step`}
+          .
           {withoutApp.length > 0 &&
             ` ${listOf(withoutApp.map((app) => app.displayName))} connect with a key and need nothing here.`}
         </Hint>
       </Section>
     </>
+  );
+}
+
+/**
+ * What opens under a service's line: the creation form while no app is set
+ * and the plugin offers it; the facts of an app created here and the next
+ * step; otherwise the form.
+ */
+async function AppDetail({
+  root,
+  app,
+  byHand,
+}: {
+  root: GatewayRoot;
+  app: ProviderAppStatus;
+  byHand: boolean;
+}) {
+  const registration = root.connections.registration;
+  const manifest = registration.manifestOf(app.providerId);
+  const callbackUrl = root.connections.service.callbackUrl(app.providerId).href;
+  const line = providerAppPath(app.providerId);
+  const id = encodeURIComponent(app.providerId);
+  const creatable = manifest !== null && (await registration.availability(app.providerId)) === null;
+  if (manifest && creatable && !byHand) {
+    const { plugin } = root.registry.require(app.providerId);
+    return (
+      <div className={styles.detail}>
+        <AppCreateForm
+          providerId={app.providerId}
+          displayName={app.displayName}
+          manifest={manifest}
+          defaultName={registration.defaultName(app.providerId)}
+          toolTitles={plugin.toolTitles ?? {}}
+          action={`${PROVIDER_APPS_PAGE}/${id}/create`}
+          manualHref={`${PROVIDER_APPS_PAGE}?${APP_PARAM}=${id}&${BY_PARAM}=${BY_HAND}#${id}`}
+          cancelHref={PROVIDER_APPS_PAGE}
+        />
+      </div>
+    );
+  }
+  const form = (
+    <AppForm app={app} callbackUrl={callbackUrl} createHref={creatable ? line : undefined} />
+  );
+  const record: AppRegistrationRecord | null = manifest
+    ? await root.providerApps.registration(app.providerId)
+    : null;
+  if (!manifest || !record) return form;
+  return (
+    <div className={styles.detail}>
+      <RegisteredAppFacts
+        displayName={app.displayName}
+        name={record.name}
+        htmlUrl={record.htmlUrl}
+        ownerLogin={record.ownerLogin}
+        ownerKind={record.ownerKind}
+        permissions={permissionSummary(manifest.permissions, record.permissions)}
+        installHref={`${ROUTES.accounts}/new/${id}`}
+      />
+      <Disclosure
+        id={`company-apps-${app.providerId}-by-hand`}
+        show="Edit its settings by hand"
+        hide="Hide its settings"
+        remember={false}
+      >
+        {form}
+      </Disclosure>
+    </div>
   );
 }

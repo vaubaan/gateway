@@ -48,7 +48,8 @@ import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { githubCredential } from '@vaubaan/plugin-github';
+import { GITHUB_APP_PERMISSIONS, githubCredential } from '@vaubaan/plugin-github';
+import { defaultPermissionChoice, type AppManifestRegistration } from '@vaubaan/plugin-sdk';
 import { mockFetch, type MockFetch } from '@vaubaan/plugin-sdk/testing';
 
 import { getRoot, type GatewayRoot } from '../../../src/server/compose/root';
@@ -64,6 +65,8 @@ import {
   controlPort,
   E2E_APPROVER_USER,
   E2E_AUDIT_USER,
+  E2E_GITHUB_ORG,
+  E2E_MANIFEST_CODE,
   E2E_OPERATOR,
   E2E_SHARE_OWNER,
   E2E_SHARE_TARGET,
@@ -115,9 +118,10 @@ async function readBody(req: IncomingMessage): Promise<string> {
 const random = (bytes = 24): string => randomBytes(bytes).toString('hex');
 
 /**
- * The company's GitHub App, as the operator would mount it
- * (`providers.github.*`). The key pair and the secrets are generated per run:
- * no credential of this file exists anywhere else.
+ * The company's GitHub App, as the administrator entered it in Company apps
+ * (stored, not mounted: the company-app spec removes it and creates one from
+ * the manifest flow, then puts it back). The key pair and the secrets are
+ * generated per run: no credential of this file exists anywhere else.
  */
 const GITHUB_APP = {
   appId: '123',
@@ -140,15 +144,43 @@ if (!verification) throw new Error('the github plugin no longer verifies install
 const GITHUB_API = new URL(verification.installationsUrl).origin;
 const GITHUB_INSTALL_PAGE = githubCredential.installUrl({ app_slug: GITHUB_APP.slug });
 
-function githubEnv(): Record<string, string> {
+/** The app-config fields of the company's App, as the form saves them. */
+function githubAppConfig(): Record<string, string> {
   return {
-    VAUBAAN_PROVIDER_GITHUB_APP_ID: GITHUB_APP.appId,
-    VAUBAAN_PROVIDER_GITHUB_APP_SLUG: GITHUB_APP.slug,
-    VAUBAAN_PROVIDER_GITHUB_PRIVATE_KEY: GITHUB_APP.privateKey,
-    VAUBAAN_PROVIDER_GITHUB_CLIENT_ID: GITHUB_APP.clientId,
-    VAUBAAN_PROVIDER_GITHUB_CLIENT_SECRET: GITHUB_APP.clientSecret,
+    app_id: GITHUB_APP.appId,
+    app_slug: GITHUB_APP.slug,
+    private_key: GITHUB_APP.privateKey,
+    client_id: GITHUB_APP.clientId,
+    client_secret: GITHUB_APP.clientSecret,
   };
 }
+
+function requireManifestFlow(): AppManifestRegistration {
+  const flow = githubCredential.manifestRegistration;
+  if (!flow) throw new Error('the github plugin no longer offers the manifest flow');
+  return flow;
+}
+const manifestFlow = requireManifestFlow();
+
+/**
+ * The App GitHub "creates" when the company-app spec confirms its manifest:
+ * what `POST /app-manifests/{code}/conversions` answers. Its key is generated
+ * per run too.
+ */
+const CREATED_APP = {
+  id: 4_870_897,
+  slug: 'vaubaan-gateway-e2e-test',
+  owner: { login: E2E_GITHUB_ORG, type: 'Organization' },
+  html_url: 'https://github.com/apps/vaubaan-gateway-e2e-test',
+  client_id: 'Iv23liE2eCreated',
+  client_secret: random(),
+  webhook_secret: random(),
+  pem: generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    privateKeyEncoding: { type: 'pkcs1', format: 'pem' },
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+  }).privateKey,
+};
 
 const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -162,6 +194,18 @@ const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/
 function mockedGithub(): MockFetch {
   const api = escapeRegExp(GITHUB_API);
   return mockFetch([
+    {
+      // The code exchange of the manifest flow: GitHub hands over the App it
+      // created, with the name and permissions of the manifest it was sent.
+      method: 'POST',
+      url: (url) => manifestFlow.conversionUrl(E2E_MANIFEST_CODE) === url,
+      status: 201,
+      respond: () => ({
+        ...CREATED_APP,
+        name: lastManifest.name,
+        permissions: lastManifest.permissions,
+      }),
+    },
     {
       method: 'POST',
       url: verification!.tokenUrl,
@@ -184,7 +228,8 @@ function mockedGithub(): MockFetch {
       respond: () => ({
         token: INSTALLATION_TOKEN,
         expires_at: new Date(Date.now() + 3_600_000).toISOString(),
-        permissions: { contents: 'read', metadata: 'read' },
+        // The company's App holds what the tools need (its default permissions).
+        permissions: defaultPermissionChoice(GITHUB_APP_PERMISSIONS),
       }),
     },
     {
@@ -253,6 +298,12 @@ function githubInstallCallback(pageUrl: URL): string | null {
 /* ------------------------------------------------------------------------ */
 /* Fixtures                                                                  */
 /* ------------------------------------------------------------------------ */
+
+/** What the last manifest the mocked GitHub received asked for. */
+let lastManifest: { name: string; permissions: Record<string, string> } = {
+  name: 'unset',
+  permissions: {},
+};
 
 /** The risk the executor of "exhaust and claim" spends, and its quota. */
 const SMALL_RISK = 'github.read-code';
@@ -358,7 +409,7 @@ async function main(): Promise<void> {
     testRootDeps({
       publicUrl: PUBLIC_URL,
       // The admin rule names the operator of the share spec.
-      env: { ...githubEnv(), VAUBAAN_ADMIN_EMAILS: E2E_OPERATOR.email },
+      env: { VAUBAAN_ADMIN_EMAILS: E2E_OPERATOR.email },
       deps: {
         oidc: {
           fetch: routeFetch({
@@ -377,6 +428,7 @@ async function main(): Promise<void> {
     claims: { sub: 'sub', email: 'email', groups: 'groups' },
     allowedEmailDomains: [],
   });
+  await root.providerApps.save('github', githubAppConfig());
   // Seeded under the issuer their ID tokens will carry: the same people sign in below.
   const seeded = await seedInstance(root, idp.iss);
   // Ada's GitHub connection is an installation of the mocked GitHub, so her
@@ -442,6 +494,43 @@ async function main(): Promise<void> {
           await root.store.invitations.remove(invitation.email);
         }
         sendJson(res, 200, { ok: true });
+        return;
+      }
+      if (url.pathname === `${CONTROL_PREFIX}/github-app/clear` && req.method === 'POST') {
+        // The company-app spec starts from an instance without a GitHub App.
+        await root.providerApps.clear('github');
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+      if (url.pathname === `${CONTROL_PREFIX}/github-app/restore` && req.method === 'POST') {
+        // ...and puts the company's App back, whatever it left behind.
+        await root.providerApps.clear('github');
+        await root.providerApps.save('github', githubAppConfig());
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+      if (url.pathname === `${CONTROL_PREFIX}/github-app/manifest` && req.method === 'POST') {
+        // GitHub's side of the confirmation: it reads the manifest the browser
+        // posted and sends the browser back with a code and the state.
+        const posted = JSON.parse(await readBody(req)) as {
+          manifest: {
+            name: string;
+            redirect_url: string;
+            default_permissions: Record<string, string>;
+          };
+          state: string;
+        };
+        lastManifest = {
+          name: posted.manifest.name,
+          permissions: posted.manifest.default_permissions,
+        };
+        const back = new URL(posted.manifest.redirect_url);
+        back.searchParams.set(manifestFlow.codeParam, E2E_MANIFEST_CODE);
+        back.searchParams.set(manifestFlow.stateParam, posted.state);
+        sendJson(res, 200, {
+          redirect: back.href,
+          conversion: manifestFlow.conversionUrl(E2E_MANIFEST_CODE),
+        });
         return;
       }
       if (url.pathname === `${CONTROL_PREFIX}/provider-pages`) {

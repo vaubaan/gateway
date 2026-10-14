@@ -332,6 +332,9 @@ function credentialSpecIssues(plugin: ProviderPlugin): string[] {
         issues.push('credential.installationIdParam: expected a query parameter name');
       }
       if (spec.userVerification !== undefined) issues.push(...userVerificationIssues(spec));
+      if (spec.manifestRegistration !== undefined) {
+        issues.push(...manifestRegistrationIssues(spec, plugin));
+      }
       break;
     case 'ssh-key':
       if (spec.algorithm !== 'ed25519')
@@ -375,16 +378,20 @@ function userVerificationIssues(spec: AppInstallCredentialSpec): string[] {
   return issues;
 }
 
-function installationsHeaderIssues(headers: unknown, at: string): string[] {
+function installationsHeaderIssues(
+  headers: unknown,
+  at: string,
+  field = 'installationsHeaders',
+): string[] {
   if (headers === undefined) return [];
-  if (!isRecord(headers)) return [`${at}.installationsHeaders: expected a record of header values`];
+  if (!isRecord(headers)) return [`${at}.${field}: expected a record of header values`];
   const issues: string[] = [];
   for (const [name, value] of Object.entries(headers)) {
     if (typeof value !== 'string') {
-      issues.push(`${at}.installationsHeaders.${name}: expected a string`);
+      issues.push(`${at}.${field}.${name}: expected a string`);
     }
     if (name.toLowerCase() === 'authorization') {
-      issues.push(`${at}.installationsHeaders: the host sets Authorization itself`);
+      issues.push(`${at}.${field}: the host sets Authorization itself`);
     }
   }
   return issues;
@@ -409,6 +416,110 @@ function paginationIssues(pagination: unknown, at: string): string[] {
     );
   }
   return issues;
+}
+
+const MANIFEST_FUNCTIONS = [
+  'registrationUrl',
+  'buildManifest',
+  'conversionUrl',
+  'registeredApp',
+] as const;
+
+function manifestRegistrationIssues(
+  spec: AppInstallCredentialSpec,
+  plugin: ProviderPlugin,
+): string[] {
+  const at = 'credential.manifestRegistration';
+  const m: unknown = spec.manifestRegistration;
+  if (!isRecord(m)) return [`${at}: expected an object when present`];
+  const issues: string[] = [];
+  for (const fn of MANIFEST_FUNCTIONS) {
+    if (typeof m[fn] !== 'function') issues.push(`${at}.${fn}: expected a function`);
+  }
+  for (const key of ['manifestField', 'stateParam', 'codeParam'] as const) {
+    if (!isName(m[key])) issues.push(`${at}.${key}: expected a parameter name`);
+  }
+  if (isName(m.stateParam) && m.stateParam === m.codeParam) {
+    issues.push(`${at}: stateParam and codeParam must differ`);
+  }
+  if (typeof m.ownerLoginPattern !== 'string' || !isRegExpSource(m.ownerLoginPattern)) {
+    issues.push(`${at}.ownerLoginPattern: expected a regular expression`);
+  }
+  const max = m.nameMaxLength;
+  if (typeof max !== 'number' || !Number.isInteger(max) || max < 1) {
+    issues.push(`${at}.nameMaxLength: expected a positive integer`);
+  }
+  issues.push(...installationsHeaderIssues(m.conversionHeaders, at, 'conversionHeaders'));
+  issues.push(...appPermissionIssues(m.permissions, at, plugin));
+  return issues;
+}
+
+function appPermissionIssues(permissions: unknown, at: string, plugin: ProviderPlugin): string[] {
+  if (!isList(permissions) || permissions.length === 0) {
+    return [`${at}.permissions: expected at least one permission`];
+  }
+  const tools = new Set(isList(plugin.tools) ? plugin.tools.map((t) => t.name) : []);
+  const issues: string[] = [];
+  const seen = new Set<string>();
+  for (const [i, raw] of permissions.entries()) {
+    const where = `${at}.permissions[${i}]`;
+    if (!isRecord(raw) || !isName(raw.name) || !isName(raw.label) || !isName(raw.description)) {
+      issues.push(`${where}: expected a name, a label and a description`);
+      continue;
+    }
+    if (seen.has(raw.name)) issues.push(`${where}: '${raw.name}' is declared twice`);
+    seen.add(raw.name);
+    if (!isList(raw.levels) || raw.levels.length === 0) {
+      issues.push(`${where}.levels: expected at least one level`);
+      continue;
+    }
+    issues.push(...levelIssues(raw.levels, where, tools));
+  }
+  return issues;
+}
+
+function levelIssues(
+  levels: readonly unknown[],
+  where: string,
+  tools: ReadonlySet<string>,
+): string[] {
+  const issues: string[] = [];
+  const accesses = new Set<string>();
+  for (const level of levels) {
+    if (!isRecord(level) || !isName(level.access) || !isName(level.label) || !isList(level.tools)) {
+      issues.push(`${where}.levels: each level needs an access, a label and a list of tools`);
+      continue;
+    }
+    if (accesses.has(level.access)) issues.push(`${where}: level '${level.access}' twice`);
+    accesses.add(level.access);
+    for (const tool of level.tools) {
+      if (typeof tool !== 'string' || !tools.has(tool)) {
+        issues.push(`${where}.${level.access}: '${String(tool)}' is not a tool of the plugin`);
+      }
+    }
+    const onlyWhen: unknown = level.onlyWhen;
+    if (onlyWhen === undefined) continue;
+    if (!isRecord(onlyWhen)) {
+      issues.push(`${where}.${level.access}.onlyWhen: expected tool → condition`);
+      continue;
+    }
+    for (const [tool, words] of Object.entries(onlyWhen)) {
+      if (!level.tools.includes(tool) || !isName(words)) {
+        issues.push(`${where}.${level.access}.onlyWhen: '${tool}' must be one of its tools`);
+      }
+    }
+  }
+  return issues;
+}
+
+function isRegExpSource(source: string): boolean {
+  if (source.length === 0) return false;
+  try {
+    new RegExp(source);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** The host authenticates the app's OAuth client : the operator must be asked for it. */

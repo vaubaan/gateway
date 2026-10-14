@@ -180,6 +180,117 @@ export interface AppInstallUserVerification {
   readonly pagination?: AppInstallListPagination;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Creating the company's app from a manifest
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * One access level of a provider permission (`read`, `write`), and the tools
+ * that need at least this level. Levels are listed lowest first ; a higher
+ * level includes the lower ones.
+ */
+export interface AppPermissionLevel {
+  /** The provider's word for the level, sent as is (`read`, `write`). */
+  readonly access: string;
+  /** What a person reads (`Read`, `Read and write`). */
+  readonly label: string;
+  /** Tools of this plugin that need at least this level ; may be empty. */
+  readonly tools: readonly string[];
+  /**
+   * The tools among `tools` that need this level for some calls only, each
+   * with the words that say which (`for a file under .github/workflows/`).
+   * The plugin checks such a need itself, call by call.
+   */
+  readonly onlyWhen?: Readonly<Record<string, string>>;
+}
+
+/**
+ * One permission the company app may request, as the provider names it. The
+ * single declaration the host derives the choice of permissions, the manifest
+ * and the "tools that stop working" sentences from.
+ */
+export interface AppPermission {
+  /** The provider's key (`contents`, `pull_requests`). */
+  readonly name: string;
+  readonly label: string;
+  /** One sentence : what the permission lets the app do. */
+  readonly description: string;
+  /** Lowest first ; at least one. */
+  readonly levels: readonly AppPermissionLevel[];
+  /** The provider grants it at its lowest level whatever is asked (GitHub's metadata). */
+  readonly mandatory?: boolean;
+  /**
+   * Set on a permission whose highest level a company may prefer to withhold :
+   * why it is sensitive, in one or two sentences. Shown next to the choice.
+   */
+  readonly sensitive?: string;
+}
+
+/** Who owns the app at the provider : an organisation (its login) or the administrator's own account. */
+export type AppOwner =
+  | { readonly kind: 'organization'; readonly login: string }
+  | { readonly kind: 'personal' };
+
+/** What the host hands `buildManifest` : addresses on `public_url`, the chosen permissions. */
+export interface AppManifestInput {
+  readonly name: string;
+  /** The instance's public URL (the app's homepage). */
+  readonly homepageUrl: string;
+  /** The connection callback of this provider (`/connections/callback/<id>`). */
+  readonly callbackUrl: string;
+  /** Where the provider sends the browser back after the app is created. */
+  readonly redirectUrl: string;
+  /** Permission name → access, the mandatory ones included. */
+  readonly permissions: Readonly<Record<string, string>>;
+}
+
+/** The app the provider created, read from its answer to the code exchange. */
+export interface RegisteredApp {
+  /** Every app-config field (`appConfigFields`), secrets included. */
+  readonly appConfig: ProviderAppConfig;
+  readonly name: string;
+  readonly slug: string;
+  readonly ownerLogin: string;
+  /** The app's page at the provider (https). */
+  readonly htmlUrl: string;
+  /** The permissions the app holds, as the provider answered them. */
+  readonly permissions: Readonly<Record<string, string>>;
+}
+
+/**
+ * The company's app created from a manifest (GitHub App manifest flow) : the
+ * administrator picks the owner, a name and the permissions ; the host posts
+ * the manifest to `registrationUrl` with a single-use `state` ; the provider
+ * asks the administrator to confirm and sends the browser back to
+ * `redirectUrl` with a code ; the host exchanges the code, server to server,
+ * at `conversionUrl(code)`. Declarative like `userVerification` : the host
+ * runs the flow and stores the settings where the manual form would ; the
+ * plugin writes no handler.
+ */
+export interface AppManifestRegistration {
+  /** The permissions the app may request ; the default is every highest level. */
+  readonly permissions: readonly AppPermission[];
+  /** Regex source an organisation login must match before it is put in a URL. */
+  readonly ownerLoginPattern: string;
+  /** Longest name the provider accepts. */
+  readonly nameMaxLength: number;
+  /** The address the manifest is posted to (the host appends `stateParam`). */
+  registrationUrl(owner: AppOwner): string;
+  /** The form field carrying the JSON manifest (`manifest`). */
+  readonly manifestField: string;
+  /** The query parameter carrying the state, out and back (`state`). */
+  readonly stateParam: string;
+  /** The query parameter of the redirect carrying the code (`code`). */
+  readonly codeParam: string;
+  buildManifest(input: AppManifestInput): Readonly<Record<string, unknown>>;
+  /** The exchange endpoint for this code (POST, no authentication), or `null` for a malformed code. */
+  conversionUrl(code: string): string | null;
+  /** Static headers of the exchange (API version, `Accept`). Never `Authorization`. */
+  readonly conversionHeaders?: Readonly<Record<string, string>>;
+  /** The created app, or `null` when the answer lacks a field the instance needs. */
+  registeredApp(body: unknown): RegisteredApp | null;
+}
+
 /**
  * A platform app the company installs on its account (GitHub App). The host
  * redirects to the installation page and receives an installation id ; the
@@ -202,6 +313,11 @@ export interface AppInstallCredentialSpec {
    * callback is an unauthenticated claim.
    */
   readonly userVerification?: AppInstallUserVerification;
+  /**
+   * How the administrator creates the app from the interface, when the
+   * provider offers a manifest flow. Without it the app is entered by hand.
+   */
+  readonly manifestRegistration?: AppManifestRegistration;
 }
 
 /**

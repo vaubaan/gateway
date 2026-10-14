@@ -41,22 +41,24 @@ import {
 } from './call.ts';
 import { installationTokenFor } from './credential.ts';
 import { dispatchGithubTool, type OctokitLike } from './octokit-dispatch.ts';
-import { installationTokenForCall } from './token-cache.ts';
+import {
+  assertAppPermissions,
+  declineMissingPermissions,
+  mintPermissions,
+} from './permission-check.ts';
+import { installationGrantForCall } from './token-cache.ts';
 
-/** Permission sets of `github__mint_install_token`, by purpose. */
+/**
+ * Permission sets of `github__mint_install_token`, by purpose, when the
+ * installation holds everything the purpose may use. A push token carries
+ * `pull_requests` and `workflows` only when the installation holds them
+ * (`permission-check.ts`): GitHub refuses a token asking for more.
+ */
 export const MINT_PERMISSIONS: Readonly<
   Record<'clone' | 'push', Readonly<Record<string, string>>>
 > = {
-  clone: { contents: 'read' },
-  // workflows:write covers pushes that include `.github/workflows/*.yml` —
-  // GitHub rejects the push otherwise. Requires the App itself to hold
-  // workflows R/W ; GitHub silently drops a permission the App lacks.
-  push: {
-    contents: 'write',
-    pull_requests: 'write',
-    metadata: 'read',
-    workflows: 'write',
-  },
+  clone: mintPermissions('clone', {}),
+  push: mintPermissions('push', {}),
 };
 
 /** Repositories per page and page cap of `discoverResources` (GitHub maxes `per_page` at 100). */
@@ -91,10 +93,13 @@ async function executeRead(
   // Least privilege : the per-call token only sees the repository the call
   // names ; account-shaped tools (search) get an installation-wide token.
   // Reused across calls when the host provides a connection-scoped cache.
-  const token = await installationTokenForCall(
+  // What the installation holds is checked before anything else is sent: a
+  // missing permission is declined by name, not left to GitHub's 403.
+  const { token, permissions } = await installationGrantForCall(
     ctx,
     'target' in call ? call.target.repo : undefined,
   );
+  assertAppPermissions(call, permissions);
   const octokit: OctokitLike = new Octokit({
     auth: token,
     request: { fetch: ctx.fetch, ...(ctx.signal ? { signal: ctx.signal } : {}) },
@@ -135,17 +140,41 @@ async function mintInstallTokenTool(
   ctx: ExecuteContext,
   call: Extract<GithubCall, { tool: typeof MINT_TOOL }>,
 ): Promise<McpToolResult> {
-  const minted = await installationTokenFor(ctx, {
-    // The access_tokens endpoint takes names without owner.
-    repositories: call.repositories.map((r) => r.repo),
-    permissions: MINT_PERMISSIONS[call.purpose],
-  });
+  // The access_tokens endpoint takes names without owner.
+  const repositories = call.repositories.map((r) => r.repo);
+  const mint = (permissions: Readonly<Record<string, string>>) =>
+    installationTokenFor(ctx, { repositories, permissions });
+  let minted: Awaited<ReturnType<typeof mint>>;
+  try {
+    // Everything the purpose may use; GitHub answers 422 when the installation
+    // lacks one of them.
+    minted = await mint(MINT_PERMISSIONS[call.purpose]);
+  } catch (error) {
+    if (!notGranted(error)) throw error;
+    const needs = mintPermissions(call.purpose, NOTHING_HELD);
+    try {
+      // Then what the purpose cannot do without.
+      minted = await mint(needs);
+    } catch (again) {
+      if (notGranted(again)) declineMissingPermissions(call, needs);
+      throw again;
+    }
+  }
   return json({
     token: minted.token,
     expires_at: minted.expiresAt.toISOString(),
     repositories: minted.repositories,
     permissions: minted.permissions,
   });
+}
+
+/** The permissions of an installation that holds nothing optional: `mintPermissions` adds no extra. */
+const NOTHING_HELD: Readonly<Record<string, string>> = { metadata: 'read' };
+/** GitHub's answer to a token asking for a permission the installation does not hold. */
+const UNPROCESSABLE = 422;
+
+function notGranted(error: unknown): boolean {
+  return error instanceof UpstreamHttpError && error.status === UNPROCESSABLE;
 }
 
 interface InstallationRepositoryDto {

@@ -77,6 +77,20 @@ The gateway asks for `read:user user:email`, and `read:org` only when
 organisation restricts OAuth App access, approve the App there before you use
 a team rule.
 
+This OAuth App only signs people in. The **GitHub App** through which
+missions reach your repositories is another one, and you do not make it by
+hand: once signed in, open Settings → Administration → Company apps →
+GitHub, choose your organisation (for the dogfooding instance, `vaubaan`),
+keep the name `Vaubaan <your domain>` or change it, review the permissions
+(Contents write, Administration and Workflows are sensitive: withhold what
+your missions do not need, especially on private repositories of a free plan,
+which have no branch protection), and press "Create the GitHub App" then
+"Continue to GitHub". GitHub asks you to confirm and sends you back; the App
+belongs to your organisation and its key stays in this gateway, encrypted.
+Then "Install it on your repositories". Do not set
+`VAUBAAN_PROVIDER_GITHUB_*`: an App set in the variables is read-only on that
+page and cannot be created there.
+
 ## 4. The admin rule and who may sign in
 
 GitHub is open to anyone: the gateway refuses to start with a GitHub provider

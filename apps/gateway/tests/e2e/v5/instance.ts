@@ -115,3 +115,10 @@ export const MOCK_GITHUB = {
   repositories: ['acme/app', 'acme/docs'],
   branches: [{ name: 'main' }, { name: 'feature/billing' }],
 } as const;
+
+/**
+ * The company-app spec: the organisation the administrator creates the GitHub
+ * App in, and the code the mocked GitHub sends back once they confirm.
+ */
+export const E2E_GITHUB_ORG = 'acme-e2e';
+export const E2E_MANIFEST_CODE = 'e2e0manifest0code0000000000000000000000';

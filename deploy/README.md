@@ -87,6 +87,15 @@ are made on Settings → People (handbook
 [authentication](../docs/handbook/authentication.md)). On Railway, follow
 [railway.md](railway.md).
 
+Then the company apps (**Settings → Administration → Company apps**): one app
+per service in use, registered by your company — this gateway never uses an
+app shared with another one. For GitHub, "Create the GitHub App" does it from
+the page: choose the organisation (or your own account), the name and the
+permissions, confirm at GitHub, and the App's id, key and secrets come back
+stored encrypted — nothing to copy. The other services' apps are registered
+at the service and entered on the same page, or set in the configuration
+(`providers.<id>.*`, then read-only there).
+
 Minimum to start: `public_url` (https), `store.path`,
 `encryption.master_key`, the admin rule (`admin.group` or `admin.emails`)
 and `bootstrap_token` (until an IdP is configured). Anything missing stops
