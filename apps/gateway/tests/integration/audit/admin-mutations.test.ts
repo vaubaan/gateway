@@ -624,6 +624,21 @@ const RULES: Readonly<Record<string, Rule>> = {
     writes: { act: 'gate-changed', object: 'mission', actor: 'alice' },
   },
 
+  'MissionService.setLimits': {
+    kind: 'mutation',
+    target: missions,
+    prepare: (rig) => rig.issue(),
+    drive: (rig, mission: MissionRecord) =>
+      rig.root.missions.service.setLimits(rig.alice.user, mission.id, [
+        {
+          risk_id: mission.policy[0]?.riskId ?? '',
+          quota: (mission.policy[0]?.quota ?? 1) + 1,
+          rate_limit_max: mission.policy[0]?.rateLimit ?? 1,
+        },
+      ]),
+    writes: { act: 'limits-changed', object: 'mission', actor: 'alice' },
+  },
+
   // ── missions: members and per-holder tokens ───────────────────────────────
   'MissionTeamService.team': READ,
   'UserNames.get': READ,
@@ -1141,6 +1156,7 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'group-created',
       'group-member-added',
       'group-member-removed',
+      'limits-changed',
       'mission-issued',
       'mission-issued',
       'mission-issued',

@@ -89,6 +89,7 @@ export const ADMIN_ACTS = membersOf<AdminAct>({
   'expiry-extended': true,
   'gate-opened': true,
   'gate-changed': true,
+  'limits-changed': true,
   'approval-granted': true,
   'request-refused': true,
   'delegation-granted': true,

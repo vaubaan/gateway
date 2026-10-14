@@ -113,6 +113,20 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       rig.mission.id,
     ),
   ),
+  'missions.handlers.setLimits': json('user', 200, (rig, headers) =>
+    rig.root.missions.handlers.setLimits(
+      post(`/api/missions/${rig.mission.id}/limits`, headers, {
+        limits: [
+          {
+            risk_id: rig.mission.policy[0]?.riskId,
+            quota: (rig.mission.policy[0]?.quota ?? 1) + 1,
+            rate_limit: { max: 1 },
+          },
+        ],
+      }),
+      rig.mission.id,
+    ),
+  ),
   'missions.handlers.addMember': json('user', 201, (rig, headers) =>
     rig.root.missions.handlers.addMember(
       post(`/api/missions/${rig.mission.id}/members`, headers, { email: rig.seeded.bob.email }),

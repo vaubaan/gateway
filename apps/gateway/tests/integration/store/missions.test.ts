@@ -567,4 +567,90 @@ describe('missions repository', () => {
     expect((await store.missions.listMembers(shared.id)).map((x) => x.userId)).toEqual([bob]);
     expect(await store.missions.revokeMemberTokensOf(bob)).toEqual([]);
   });
+  it('setLimits moves the quota and the rate of listed risks, in one transaction, and nothing else', async () => {
+    const m = await create();
+    const session = await store.sessions.getOrCreate(m.id);
+    const result = await store.missions.setLimits(
+      m.id,
+      [
+        { riskId: 'github.code-read', quota: 7, rateLimit: 30 },
+        { riskId: 'github.merge-protected', quota: 2, rateLimit: 1 },
+      ],
+      creator,
+    );
+    expect(result?.changes).toEqual([
+      {
+        riskId: 'github.code-read',
+        before: { quota: 100, rateLimit: 30 },
+        after: { quota: 7, rateLimit: 30 },
+        rateWindowSeconds: 60,
+        changed: true,
+      },
+      {
+        riskId: 'github.merge-protected',
+        before: { quota: 2, rateLimit: 1 },
+        after: { quota: 2, rateLimit: 1 },
+        rateWindowSeconds: 600,
+        changed: false,
+      },
+    ]);
+    expect(result?.mission.policy).toEqual([{ ...POLICY[0], quota: 7 }, POLICY[1]]);
+    // One event, for the risk that moved.
+    expect(await store.sessions.listEvents(session.id)).toMatchObject([
+      {
+        kind: 'limits-changed',
+        riskId: 'github.code-read',
+        actorUserId: creator,
+        details: { quota: 7, quota_before: 100, rate_limit_max: 30, rate_limit_max_before: 30 },
+      },
+    ]);
+  });
+
+  it('setLimits writes nothing when one listed risk is not in the policy, and refuses a negative or repeated line', async () => {
+    const m = await create();
+    expect(
+      await store.missions.setLimits(
+        m.id,
+        [
+          { riskId: 'github.code-read', quota: 1, rateLimit: 1 },
+          { riskId: 'github.bulk-file-write', quota: 1, rateLimit: 1 },
+        ],
+        creator,
+      ),
+    ).toBeNull();
+    expect((await store.missions.getById(m.id))?.policy).toEqual(POLICY);
+    await expect(
+      store.missions.setLimits(
+        m.id,
+        [{ riskId: 'github.code-read', quota: -1, rateLimit: 1 }],
+        creator,
+      ),
+    ).rejects.toThrow(InvariantError);
+    await expect(
+      store.missions.setLimits(
+        m.id,
+        [
+          { riskId: 'github.code-read', quota: 1, rateLimit: 1 },
+          { riskId: 'github.code-read', quota: 2, rateLimit: 1 },
+        ],
+        creator,
+      ),
+    ).rejects.toThrow(InvariantError);
+  });
+
+  it('the decision reads the stored limits of the touched risks inside its transaction', async () => {
+    const m = await create();
+    await store.missions.setLimits(
+      m.id,
+      [{ riskId: 'github.code-read', quota: 3, rateLimit: 4 }],
+      creator,
+    );
+    const seen = await store.sessions.decideAndDecrement(
+      { missionId: m.id, riskIds: ['github.code-read'], periodStart: m.periodAnchor },
+      (ctx) => ({ allow: false, limits: ctx.limits }),
+    );
+    expect([...seen.outcome.limits]).toEqual([
+      ['github.code-read', { quota: 3, rateLimit: 4, rateWindowSeconds: 60 }],
+    ]);
+  });
 });

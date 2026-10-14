@@ -748,6 +748,7 @@ export const ACT_WORDS = {
   'user-deactivated': 'deactivated a person',
   'user-reactivated': 'reactivated a person',
   'config-changed': 'changed the configuration',
+  'limits-changed': 'changed the limits of a mission',
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
