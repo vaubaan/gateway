@@ -47,7 +47,7 @@ export class PktLineError extends Error {
 }
 
 /** One pkt-line carrying `payload` (a string is UTF-8 encoded as is, newline included). */
-export function pktLine(payload: string | Uint8Array): Uint8Array {
+export function pktLine(payload: string | Uint8Array): Uint8Array<ArrayBuffer> {
   const bytes = typeof payload === 'string' ? encoder.encode(payload) : payload;
   if (bytes.length > PKT_PAYLOAD_MAX) {
     throw new PktLineError(`pkt-line payload of ${bytes.length} bytes exceeds ${PKT_PAYLOAD_MAX}`);
@@ -58,12 +58,12 @@ export function pktLine(payload: string | Uint8Array): Uint8Array {
   return out;
 }
 
-export function flushPkt(): Uint8Array {
+export function flushPkt(): Uint8Array<ArrayBuffer> {
   return encoder.encode(FLUSH_PKT);
 }
 
 /** Concatenate byte chunks. */
-export function concatBytes(chunks: readonly Uint8Array[]): Uint8Array {
+export function concatBytes(chunks: readonly Uint8Array[]): Uint8Array<ArrayBuffer> {
   const total = chunks.reduce((n, c) => n + c.length, 0);
   const out = new Uint8Array(total);
   let at = 0;

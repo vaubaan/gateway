@@ -296,10 +296,12 @@ describe('the reference of the shipped plugins', () => {
       github.presets.map((preset) => preset.id),
     );
     expect(byId.get('github.uncategorized-write')?.presets).toEqual([]);
+    // Catalog v6: no preset hands a token that leaves; the risk is added by hand.
     expect(byId.get('github.mint-install-token-push')).toMatchObject({
       declared_tools: ['github__mint_install_token'],
-      presets: [{ id: 'developer', anchor: 'preset-developer' }],
+      presets: [],
     });
+    expect(byId.get('github.force-push')?.presets.map((p) => p.id)).toEqual(['developer']);
     // Both ways agree: a preset's lines are exactly the risks that name it.
     for (const reference of references) {
       for (const preset of reference.presets) {

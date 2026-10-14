@@ -550,7 +550,12 @@ interface ClassifiedCall {
 
 /** A stage result that ends the call. Every `CallOutcome` carries its `audit` entry; no intermediate value does. */
 function isOutcome(
-  x: CallOutcome | TargetedCall | ClassifiedCall | CallAuditEntry,
+  x:
+    | CallOutcome
+    | TargetedCall
+    | ClassifiedCall
+    | CallAuditEntry
+    | { readonly targeted: TargetedCall; readonly classified: ClassifiedCall },
 ): x is CallOutcome {
   return 'audit' in x;
 }
@@ -569,6 +574,39 @@ export class CallPipeline {
    */
   async execute(ctx: MissionContext, call: CallRequest): Promise<CallOutcome> {
     const now = this.now();
+    const placed = await this.place(ctx, call, now);
+    if (isOutcome(placed)) return placed;
+    const { targeted, classified } = placed;
+
+    const decided = await this.decideBudget(ctx, call, classified, now);
+    if (isOutcome(decided)) return decided;
+
+    return this.forward(ctx, call, targeted.target, decided);
+  }
+
+  /**
+   * The stages before the budget: is the call well formed, is the mission
+   * active, is the target in the mission and available, does the mission hold
+   * every risk the call touches? A refusal here is audited, exactly as
+   * `execute` audits it; a call that passes is not recorded, counted or
+   * executed (`null`). The git door asks it before it stores a pack at the
+   * provider, so that a push the mission can never make is refused before
+   * any byte leaves; the push it then decides with `execute` touches at
+   * least these risks.
+   */
+  async precheck(ctx: MissionContext, call: CallRequest): Promise<CallOutcome | null> {
+    const placed = await this.place(ctx, call, this.now());
+    return isOutcome(placed) ? placed : null;
+  }
+
+  /** The first stages of `execute` (and all of `precheck`). */
+  private async place(
+    ctx: MissionContext,
+    call: CallRequest,
+    now: Date,
+  ): Promise<
+    CallOutcome | { readonly targeted: TargetedCall; readonly classified: ClassifiedCall }
+  > {
     // Before the fingerprint is taken: a value JSON cannot carry (`1e999` parses to
     // Infinity, written back as `null`) would be approved as one thing and executed
     // as another. Structural, like an unknown tool: no stage sees the call.
@@ -597,48 +635,30 @@ export class CallPipeline {
 
     const classified = await this.decideRisks(ctx, call, targeted);
     if (isOutcome(classified)) return classified;
-
-    const decided = await this.decideBudget(ctx, call, classified, now);
-    if (isOutcome(decided)) return decided;
-
-    return this.forward(ctx, call, targeted.target, decided);
-  }
-
-  /**
-   * Would the call pass the mission, resource and risk checks? Runs those
-   * stages without the budget, without executing and without writing
-   * anything : the git door asks it before it stores a pack at the provider,
-   * so that a push the mission can never make is refused before any byte
-   * leaves. A `false` answer is not a refusal : the door then runs `execute`
-   * on the same call, which refuses it and writes the audit entry. A stage
-   * that throws answers `false` for the same reason.
-   */
-  async precheck(ctx: MissionContext, call: CallRequest): Promise<boolean> {
-    const now = this.now();
-    if (unfaithfulArgument(call.args)) return false;
-    if (checkMissionActive(ctx, now)) return false;
-    try {
-      const resolved = await this.deps.resources.resolve(ctx, call);
-      if (!resolved.ok) return false;
-      if (checkConnectionAvailable(resolved.target.connection)) return false;
-      const verdict = await this.deps.risks.evaluate(ctx, call, resolved.target);
-      return verdict.kind === 'allow';
-    } catch {
-      return false;
-    }
+    return { targeted, classified };
   }
 
   /**
    * A call the door refuses on grounds no stage decides — a git push larger
    * than the configured cap, one the provider cannot review, a request that
-   * breaks the protocol. `reason` is built by the host (it names limits and
-   * refs, never an argument value the caller sent) ; it goes to the caller
-   * and is stored as it is. One audit entry, `refused` with no code, like a
+   * breaks the protocol. `reason` goes to the caller. What the audit keeps is
+   * `audited` (default: `reason`), built by the host, with every argument
+   * value found in it replaced (`auditReason`): a provider's own message
+   * goes to the caller only. One audit entry, `refused` with no code, like a
    * structural rejection ; the mission is not consulted and nothing is
    * counted.
    */
-  async reject(ctx: MissionContext, call: CallRequest, reason: string): Promise<CallOutcome> {
-    return this.rejected(this.baseEntry(ctx, call, this.now()), reason, HOST_BUILT);
+  async reject(
+    ctx: MissionContext,
+    call: CallRequest,
+    reason: string,
+    audited: string = reason,
+  ): Promise<CallOutcome> {
+    return this.rejected(
+      this.baseEntry(ctx, call, this.now()),
+      reason,
+      auditReason(audited, call.args),
+    );
   }
 
   /** Resource resolution, then connection availability. */

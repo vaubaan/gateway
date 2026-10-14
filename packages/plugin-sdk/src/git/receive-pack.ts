@@ -130,7 +130,7 @@ export async function readCommandList(next: () => Promise<Pkt | null>): Promise<
 export function encodeCommandList(
   commands: readonly RefCommand[],
   capabilities: readonly string[],
-): Uint8Array {
+): Uint8Array<ArrayBuffer> {
   const lines = commands.map((c, i) => {
     const text = `${c.old ?? ZERO_OID} ${c.new ?? ZERO_OID} ${c.ref}`;
     return pktLine(
@@ -145,7 +145,7 @@ export function encodeCommandList(
  * requires a pack after any create or update command, even when the server
  * already holds every object (gitprotocol-pack(5)).
  */
-export function emptyPack(): Uint8Array {
+export function emptyPack(): Uint8Array<ArrayBuffer> {
   const header = new Uint8Array([0x50, 0x41, 0x43, 0x4b, 0, 0, 0, 2, 0, 0, 0, 0]);
   const digest = createHash('sha1').update(header).digest();
   return concatBytes([header, new Uint8Array(digest)]);
@@ -196,7 +196,7 @@ export function parseReceivePackResult(body: Uint8Array, sideBand: boolean): Rep
 export function encodeReportStatus(
   unpack: string,
   refs: readonly { readonly ref: string; readonly error: string | null }[],
-): Uint8Array {
+): Uint8Array<ArrayBuffer> {
   return concatBytes([
     pktLine(`unpack ${unpack}\n`),
     ...refs.map((r) => pktLine(r.error === null ? `ok ${r.ref}\n` : `ng ${r.ref} ${r.error}\n`)),

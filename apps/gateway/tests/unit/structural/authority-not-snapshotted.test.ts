@@ -265,7 +265,8 @@ describe('authority is recomputed, never snapshotted', () => {
         'reads a token row by prefix only to know whether a drawn prefix is free; the mission that comes with it is never looked at',
       'requests/request-service.ts':
         'derives: `own` goes through `grounds.derive`; the inbox reads the name only',
-      'execution/door.ts': 'derives: `grounds.inspect` on every request, before the pipeline',
+      'execution/admission.ts':
+        'derives: `grounds.inspect` on every request of both doors (MCP and the remote), before the pipeline',
       'audit/query-service.ts': 'reads names and creators only, never the status',
       'budget/budget-stage.ts':
         'reads the period anchor only; the status it decides on is the context’s, derived by the door',
@@ -282,8 +283,10 @@ describe('authority is recomputed, never snapshotted', () => {
       const readers = PRODUCTION.filter(
         ({ path, text }) => LOADS.test(text) && !path.startsWith('store/'),
       ).map((s) => s.path);
-      // The door loads through the token verifier; it is listed for what it does next.
-      expect([...readers, 'execution/door.ts'].sort()).toEqual(Object.keys(MISSION_READERS).sort());
+      // The admission loads through the token verifier; it is listed for what it does next.
+      expect([...readers, 'execution/admission.ts'].sort()).toEqual(
+        Object.keys(MISSION_READERS).sort(),
+      );
 
       const text = (path: string) => PRODUCTION.find((s) => s.path === path)?.text ?? '';
       for (const [path, why] of Object.entries(MISSION_READERS)) {

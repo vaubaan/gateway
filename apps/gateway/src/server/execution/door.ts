@@ -66,44 +66,27 @@ import {
 } from '@modelcontextprotocol/server';
 import {
   AUTH_REQUIRED_HTTP_STATUS,
-  AuthError,
-  BOOTSTRAP_ACTOR_ID,
   checkMissionActive,
-  DoorAuthenticator,
-  isRefusal,
   refusalToRpcError,
-  refuse,
   rpcError,
   tokenHolderLabel,
-  type AuthFailureReason,
   type CallPipeline,
   type CallRequest,
   type ClientOrigin,
-  type CredentialResolver,
-  type DelegationContext,
   type MissionContext,
   type Refusal,
-  type ResolvedCredential,
 } from '@vaubaan/gateway-core';
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 import type { JsonRpcError } from '@vaubaan/shared';
 
-import { SESSION_COOKIE, type SessionService as WebSessionService } from '../auth';
-import type { MissionGrounds } from '../authority';
-import { budgetMissionOf, type SessionService } from '../budget';
 import type { BuildInfo } from '../compose/root';
-import type { RateLimiter } from '../compose/ports';
-import type { InstanceConfig } from '../config';
-import { UNKNOWN_CLIENT } from '../http/client-ip';
+import { budgetMissionOf, type SessionService } from '../budget';
 import type { Logger } from '../logging';
-import { maskedToken, prefixOfBearer, type TokenRetirement } from '../missions';
-import type { Store } from '../store';
+import { maskedToken } from '../missions';
 import { systemClock, type Clock } from '../store/clock';
-import type { MissionRecord } from '../store/types';
-import { loadMissionContext } from './mission-context';
-import { clientOriginOf, readAgentLabel, trustedProxyList } from './request-meta';
-import type { TokenVerifier } from './token-verifier';
-import { buildCatalog, callableTools } from './tools';
+import { isDenial, MissionAdmission, type Admitted, type MissionAdmissionDeps } from './admission';
+import { readAgentLabel } from './request-meta';
+import { buildCatalog, callableTools, type GitRemoteView } from './tools';
 
 /** Name the door announces to MCP clients. */
 export const MCP_SERVER_INFO_NAME = 'vaubaan-gateway';
@@ -111,7 +94,6 @@ export const MCP_SERVER_INFO_NAME = 'vaubaan-gateway';
 export const SURFACE_RATE_LIMITED_RPC_CODE = -32002;
 /** JSON-RPC code of a structural rejection: the call cannot be placed (unknown tool, arguments). */
 export const CALL_REJECTED_RPC_CODE = -32602;
-export const SURFACE_RATE_WINDOW_MS = 60_000;
 
 const HTTP_FORBIDDEN = 403;
 const HTTP_METHOD_NOT_ALLOWED = 405;
@@ -119,53 +101,19 @@ const HTTP_TOO_MANY_REQUESTS = 429;
 const MS_PER_SECOND = 1000;
 /** Key under which the request scope rides `AuthInfo.extra` to the per-request server. */
 const SCOPE_KEY = 'vaubaan';
-const SESSION_ID_SHAPE = /^[A-Za-z0-9_-]{16,}$/;
 const TOOLS_CALL_METHOD = 'tools/call';
 const PROGRESS_NOTIFICATION = 'notifications/progress';
 
-/** Identifies a delegated token (management door). Absent until then. */
-export interface DelegatedTokenResolver {
-  resolve(bearer: string): Promise<DelegationContext | null>;
-}
-
-export interface ExecutionDoorDeps {
-  readonly config: Pick<InstanceConfig, 'publicUrl' | 'trustedProxies' | 'mcp'>;
-  readonly store: Pick<Store, 'connections' | 'users' | 'groups' | 'sessions'>;
+export interface ExecutionDoorDeps extends MissionAdmissionDeps {
   readonly registry: PluginRegistry;
-  readonly tokens: TokenVerifier;
-  /** Records "last used" on the token a call authenticated with (to the minute). */
-  readonly tokenUse: TokenUseRecorder;
-  /** Is the mission still grounded in its creator's current authority? Never optional. */
-  readonly grounds: Pick<MissionGrounds, 'inspect'>;
-  readonly webSessions: Pick<WebSessionService, 'read'>;
   readonly budget: Pick<SessionService, 'stateOf'>;
   readonly pipeline: CallPipeline;
-  readonly rateLimiter: RateLimiter;
   readonly logger: Logger;
   readonly build: BuildInfo;
   readonly clock?: Clock;
-  readonly delegations?: DelegatedTokenResolver;
+  /** Where the catalog says the git remote of each repository is; absent: no git remote. */
+  readonly gitRemote?: GitRemoteView;
 }
-
-/** `MissionsRepo.markTokenUsed`: the door's only write outside the pipeline. */
-export interface TokenUseRecorder {
-  markTokenUsed(tokenId: string, granularitySeconds: number): Promise<boolean>;
-}
-
-/** `mission_tokens.last_used_at` is written at most once per token in this many seconds. */
-export const TOKEN_LAST_USED_GRANULARITY_SECONDS = 60;
-
-/**
- * What the door answers for a token whose secret matched and that no longer
- * authenticates. A token revoked together with its mission is not here: that
- * one still identifies the mission and is answered `mission-inactive`.
- */
-const AUTH_FAILURE_OF: Readonly<Record<TokenRetirement, AuthFailureReason>> = {
-  rotated: 'token-rotated',
-  revoked: 'token-revoked',
-  'holder-removed': 'holder-removed',
-  'holder-deactivated': 'holder-deactivated',
-};
 
 /** What one authenticated request carries to the handlers. */
 interface RequestScope {
@@ -174,29 +122,17 @@ interface RequestScope {
   readonly client: ClientOrigin;
 }
 
-interface Authenticated {
-  readonly ctx: MissionContext;
-  readonly mission: MissionRecord;
-  readonly client: ClientOrigin;
-}
-
-class VerificationThrottled extends Error {
-  constructor(readonly retryAfterMs: number) {
-    super('too many token verifications');
-  }
-}
-
 export class ExecutionDoor {
+  /** The admission of a mission key; the git door is handed this same instance. */
+  readonly admission: MissionAdmission;
   private readonly clock: Clock;
-  private readonly missionsByContext = new WeakMap<MissionContext, MissionRecord>();
-  private readonly proxies: ReturnType<typeof trustedProxyList>;
   private readonly modern: McpHttpHandler;
   /** 2025-era calls that asked for progress: the SDK's stateless leg, answering in SSE. */
   private readonly legacyStream: LegacyHttpHandler;
 
   constructor(private readonly deps: ExecutionDoorDeps) {
     this.clock = deps.clock ?? systemClock;
-    this.proxies = trustedProxyList(deps.config.trustedProxies);
+    this.admission = new MissionAdmission(deps);
     // 2026-07-28 traffic. The handler holds nothing between requests; the factory
     // builds one server per request around the scope the door authenticated.
     const onerror = (error: Error): void =>
@@ -250,164 +186,44 @@ export class ExecutionDoor {
     const creator = await this.deps.store.users.getById(gate.mission.creatorUserId);
     return json(
       200,
-      buildCatalog(gate.ctx, this.deps.registry, state, {
-        creator: creator?.email ?? null,
-      }),
+      buildCatalog(
+        gate.ctx,
+        this.deps.registry,
+        state,
+        { creator: creator?.email ?? null },
+        this.deps.gitRemote ?? null,
+      ),
     );
   }
 
   // ───────────────────────────────────────────────────────────────────────────
-  // Admission: origin, bearer, surface rate limit
+  // Admission: origin, bearer, surface rate limit (shared with the other door)
   // ───────────────────────────────────────────────────────────────────────────
 
-  private async admit(request: Request): Promise<Authenticated | Response> {
-    const origin = request.headers.get('origin');
-    if (origin !== null && origin !== this.deps.config.publicUrl.origin) {
-      return json(
-        HTTP_FORBIDDEN,
-        rpcError(null, -32600, 'cross-origin requests are not accepted on this endpoint.'),
-      );
-    }
-
-    // Resolved once per request: the audit entry and the verification throttle
-    // must name the same address.
-    const client = clientOriginOf(request.headers, {
-      proxies: this.proxies,
-      configured: this.deps.config.trustedProxies.length > 0,
-    });
-    let ctx: MissionContext | Refusal;
-    try {
-      ctx = await this.authenticate(request.headers, client.ip ?? UNKNOWN_CLIENT);
-    } catch (err) {
-      if (err instanceof VerificationThrottled) return tooManyRequests(err.retryAfterMs);
-      if (err instanceof AuthError) {
+  private async admit(request: Request): Promise<Admitted | Response> {
+    const outcome = await this.admission.admit(request, request.headers.get('authorization'));
+    if (!isDenial(outcome)) return outcome;
+    switch (outcome.denial) {
+      case 'cross-origin':
+        return json(
+          HTTP_FORBIDDEN,
+          rpcError(null, -32600, 'cross-origin requests are not accepted on this endpoint.'),
+        );
+      case 'verification-throttled':
+      case 'rate-limited':
+        return tooManyRequests(outcome.retryAfterMs);
+      case 'unauthenticated': {
         // `reason` is set only for a token whose secret was proven: the caller
         // learns nothing they could not have learnt while the token worked.
+        const err = outcome.error;
         const data = err.reason ? { reason: err.reason } : undefined;
         return json(AUTH_REQUIRED_HTTP_STATUS, rpcError(null, err.code, err.message, data), {
           'WWW-Authenticate': `Bearer realm="${MCP_SERVER_INFO_NAME}"`,
         });
       }
-      throw err;
+      case 'refused':
+        return json(HTTP_FORBIDDEN, refusalToRpcError(null, outcome.refusal));
     }
-    if (isRefusal(ctx)) {
-      this.deps.logger.warn('bearer refused at the execution door', { refusal_code: ctx.code });
-      return json(HTTP_FORBIDDEN, refusalToRpcError(null, ctx));
-    }
-
-    const surface = await this.deps.rateLimiter.take(
-      `mcp:mission:${ctx.mission.id}`,
-      this.deps.config.mcp.rateLimitPerMinute,
-      SURFACE_RATE_WINDOW_MS,
-    );
-    if (!surface.allowed) return tooManyRequests(surface.retryAfterMs);
-
-    const mission = this.missionsByContext.get(ctx);
-    if (!mission) throw new Error('execution door: mission context without its record');
-    await this.noteTokenUse(ctx);
-    return { ctx, mission, client };
-  }
-
-  /**
-   * "Last used" of the token, for the creator's list of tokens. Informational:
-   * a failure to record it is logged and never refuses the request.
-   */
-  private async noteTokenUse(ctx: MissionContext): Promise<void> {
-    try {
-      await this.deps.tokenUse.markTokenUsed(ctx.token.id, TOKEN_LAST_USED_GRANULARITY_SECONDS);
-    } catch (err) {
-      this.deps.logger.warn('token use not recorded', {
-        mission_id: ctx.mission.id,
-        token_prefix: ctx.token.prefix,
-        error: err instanceof Error ? err.name : 'Error',
-      });
-    }
-  }
-
-  private async authenticate(
-    headers: Headers,
-    clientIp: string,
-  ): Promise<MissionContext | Refusal> {
-    const authorization = headers.get('authorization');
-    if (!authorization && (await this.deps.webSessions.read(headers))) {
-      // A browser session presented where a mission token is expected.
-      return refuse.wrongCredentialKind({
-        door: 'execution',
-        presented: 'human-session',
-        expected: 'mission-token',
-      });
-    }
-    return new DoorAuthenticator(this.credentialResolver(clientIp)).authenticateMission(
-      authorization,
-    );
-  }
-
-  /** One resolver per request: the verification throttle is keyed on the caller's address. */
-  private credentialResolver(clientIp: string): CredentialResolver {
-    return {
-      resolve: async (bearer): Promise<ResolvedCredential | null> => {
-        const verified = await this.deps.tokens.verify(bearer, clientIp);
-        if (verified.outcome === 'throttled')
-          throw new VerificationThrottled(verified.retryAfterMs);
-        if (verified.outcome !== 'unknown') {
-          if (verified.outcome === 'retired') {
-            // A token retired by the revocation of its MISSION still identifies that
-            // mission, so the caller is told `mission-inactive`. Every other retired
-            // token no longer authenticates, and the 401 says why: replaced by its
-            // holder, revoked on its own, its member removed, its holder deactivated.
-            // In those cases the mission may be serving its other holders, so
-            // `mission-inactive` would be a lie about the mission.
-            // The status read here is the STORED one, on purpose: the question is
-            // whether the store still holds the mission active, asked before the
-            // derivation (`grounds.inspect`) below.
-            const withItsMission =
-              verified.reason === 'revoked' && verified.mission.status !== 'active';
-            if (!withItsMission) {
-              const reason = AUTH_FAILURE_OF[verified.reason];
-              this.deps.logger.warn('retired mission token presented at the execution door', {
-                mission_id: verified.mission.id,
-                token_prefix: verified.token.prefix,
-                token_kind: verified.token.holder.kind,
-                reason,
-              });
-              throw AuthError.tokenStopped(reason);
-            }
-          }
-          // Authority is never snapshotted in a mission, and `orphaned` is never
-          // stored: the creator's authority is re-read here, and the mission is
-          // orphaned for this request exactly when it does not ground it now.
-          const { mission, orphan } = await this.deps.grounds.inspect(verified.mission);
-          if (orphan) {
-            // No administrative entry: no human is behind this read. The refused
-            // call itself is audited by the pipeline (`mission-inactive`).
-            this.deps.logger.info('mission orphaned at the execution door', {
-              mission_id: mission.id,
-              cause: orphan.cause,
-              connection_id: orphan.connectionId,
-              uncovered: orphan.uncovered,
-            });
-          }
-          const context = await loadMissionContext(this.deps.store, mission, verified.token);
-          this.missionsByContext.set(context, mission);
-          return { kind: 'mission-token', context };
-        }
-
-        // A bearer of mission-token shape is never used as a session-store key.
-        if (!prefixOfBearer(bearer) && SESSION_ID_SHAPE.test(bearer)) {
-          const asCookie = new Headers({ cookie: `${SESSION_COOKIE}=${bearer}` });
-          const session = await this.deps.webSessions.read(asCookie);
-          if (session) {
-            const { record } = session;
-            return {
-              kind: 'human-session',
-              user_id: record.kind === 'user' ? record.userId : BOOTSTRAP_ACTOR_ID,
-            };
-          }
-        }
-        const delegation = await this.deps.delegations?.resolve(bearer);
-        return delegation ? { kind: 'delegated-token', delegation } : null;
-      },
-    };
   }
 
   // ───────────────────────────────────────────────────────────────────────────

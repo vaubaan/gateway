@@ -80,7 +80,7 @@ export function parseAdvertisement(body: Uint8Array): Advertisement {
 }
 
 /** Write a smart HTTP v0 advertisement : the service line, a flush, the refs with the capabilities on the first. */
-export function encodeAdvertisement(ad: Advertisement): Uint8Array {
+export function encodeAdvertisement(ad: Advertisement): Uint8Array<ArrayBuffer> {
   const caps = ad.capabilities.join(' ');
   const refLines =
     ad.refs.length === 0

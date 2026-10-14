@@ -68,6 +68,22 @@ export interface CatalogResource {
   readonly ref: string;
   readonly env: string | null;
   readonly display_name: string;
+  /**
+   * The repository's remote on this instance (spec §4.1 bis), for a resource
+   * of the provider whose git remote the instance is: `git clone` it with the
+   * mission key as the password. Absent otherwise.
+   */
+  readonly git_remote?: string;
+}
+
+/** Where the instance's git remote lives (`<public_url>/git/`). */
+export interface GitRemoteView {
+  readonly base: string;
+}
+
+/** The remote URL of one repository: `<public_url>/git/<ref>.git`. */
+export function gitRemoteUrl(view: GitRemoteView, ref: string): string {
+  return `${view.base}${ref}.git`;
 }
 
 export interface CatalogConnection {
@@ -122,7 +138,9 @@ export function buildCatalog(
   registry: PluginRegistry,
   state: MissionState,
   people: { readonly creator: string | null } = { creator: null },
+  gitRemote: GitRemoteView | null = null,
 ): MissionCatalog {
+  const gitProvider = gitRemote ? registry.gitRemote()?.plugin.id : undefined;
   const callable = new Set(callableTools(ctx, registry).map((t) => t.name));
   const tools: CatalogTool[] = [];
   for (const { plugin } of registry.all()) {
@@ -162,7 +180,14 @@ export function buildCatalog(
       status: connection.status,
       resources: ctx.resources
         .filter((r) => r.connection_id === connection.id)
-        .map((r) => ({ ref: r.ref, env: r.env ?? null, display_name: r.displayName })),
+        .map((r) => ({
+          ref: r.ref,
+          env: r.env ?? null,
+          display_name: r.displayName,
+          ...(gitRemote && connection.provider === gitProvider
+            ? { git_remote: gitRemoteUrl(gitRemote, r.ref) }
+            : {}),
+        })),
     })),
     budget: ctx.policy.map((entry) => {
       // An inactive mission has nothing left to spend.
