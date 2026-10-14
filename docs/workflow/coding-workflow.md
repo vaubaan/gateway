@@ -413,7 +413,7 @@ in a comment.
 | `release` | tag only     | `contents: write`                                                                                         | `gh release create --verify-tag`: title `Vaubaan Gateway <version>`, body from the changelog section plus the pull and verify commands, the two SBOM files as assets; marked pre-release, or latest for a final version.                                                                                                                                                                                                                                                 |
 
 Image: `ghcr.io/<owner>/<repository>`, lower-cased — today
-`ghcr.io/sbw-vaubaan/vaubaan-gateway`. Tags: `<version>`; a final release
+`ghcr.io/vaubaan/gateway`. Tags: `<version>`; a final release
 also moves `<major>.<minor>` and `latest`. Because those two only move
 forward, a tag older than an existing release is refused: no maintenance
 branch is published.

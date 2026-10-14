@@ -92,7 +92,7 @@ Invalid instance configuration (1 problem):
 
 Every release publishes one image for `linux/amd64` and `linux/arm64` on the
 GitHub Container Registry, under the repository's name
-(`ghcr.io/sbw-vaubaan/vaubaan-gateway`). No release exists yet; until the
+(`ghcr.io/vaubaan/gateway`). No release exists yet; until the
 first one, build the image from the sources as the quick start does.
 
 | Tag               | Moves?                            | Use it for                                    |
@@ -103,12 +103,12 @@ first one, build the image from the sources as the quick start does.
 | `2.2.0-rc.1`, ... | never; pre-releases have no alias | testing what comes next                       |
 
 ```bash
-docker pull ghcr.io/sbw-vaubaan/vaubaan-gateway:2.1.3
+docker pull ghcr.io/vaubaan/gateway:2.1.3
 ```
 
 To run a released image with the reference Compose file, replace the
 `build:` block and the `image:` line of the `gateway` service by
-`image: ghcr.io/sbw-vaubaan/vaubaan-gateway:<version>` and drop `--build`.
+`image: ghcr.io/vaubaan/gateway:<version>` and drop `--build`.
 The version you run is on `/healthz` (`version`, `commit`) and in the footer
 of every page.
 
@@ -118,9 +118,9 @@ attestation for the image: it states that this digest was built by the
 GitHub's runners. Check it with the GitHub CLI before the first start:
 
 ```bash
-gh attestation verify oci://ghcr.io/sbw-vaubaan/vaubaan-gateway:2.1.3 \
-  --repo sbw-vaubaan/vaubaan-gateway \
-  --signer-workflow sbw-vaubaan/vaubaan-gateway/.github/workflows/release.yml \
+gh attestation verify oci://ghcr.io/vaubaan/gateway:2.1.3 \
+  --repo vaubaan/gateway \
+  --signer-workflow vaubaan/gateway/.github/workflows/release.yml \
   --source-ref refs/tags/v2.1.3
 ```
 
@@ -134,8 +134,8 @@ is public, or private on GitHub Enterprise Cloud.
 own SBOM and provenance:
 
 ```bash
-docker buildx imagetools inspect ghcr.io/sbw-vaubaan/vaubaan-gateway:2.1.3 --format '{{ json .SBOM }}'
-docker buildx imagetools inspect ghcr.io/sbw-vaubaan/vaubaan-gateway:2.1.3 --format '{{ json .Provenance }}'
+docker buildx imagetools inspect ghcr.io/vaubaan/gateway:2.1.3 --format '{{ json .SBOM }}'
+docker buildx imagetools inspect ghcr.io/vaubaan/gateway:2.1.3 --format '{{ json .Provenance }}'
 ```
 
 What a version number promises (configuration keys, refusal codes, the

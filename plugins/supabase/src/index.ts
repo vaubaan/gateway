@@ -33,8 +33,7 @@ export const supabasePlugin = definePlugin({
     "One account is your company's Supabase OAuth app authorised on an organisation; one resource is one project (database, storage, auth and edge functions). Supabase runs one project per environment, so the owner of the account labels each project (staging, prod, …) and the permissions tied to an environment apply to the projects carrying that label.",
   manualRevocation:
     "Revoke your company's OAuth app in the settings of the Supabase organisation, under the authorised OAuth apps.",
-  docsUrl:
-    'https://github.com/sbw-vaubaan/vaubaan-gateway/blob/main/docs/handbook/providers/supabase.md',
+  docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/supabase.md',
   tools: supabaseTools,
   toolTitles: supabaseToolTitles,
   dataModel: supabaseDataModel,

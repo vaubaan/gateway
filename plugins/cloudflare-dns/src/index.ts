@@ -38,8 +38,7 @@ export const cloudflareDnsPlugin = definePlugin({
     'One account is one Cloudflare API token; one resource is one DNS zone (a domain). A mission touches only the zones it was given. DNS has no environment: ordinary records, apex / MX / NS changes, deletions, imports and zone settings are separate permissions instead.',
   manualRevocation:
     'Delete the API token in the Cloudflare dashboard, under My Profile, API Tokens.',
-  docsUrl:
-    'https://github.com/sbw-vaubaan/vaubaan-gateway/blob/main/docs/handbook/providers/cloudflare-dns.md',
+  docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/cloudflare-dns.md',
   tools: cloudflareDnsTools,
   toolTitles: cloudflareDnsToolTitles,
   dataModel: cloudflareDnsDataModel,

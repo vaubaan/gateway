@@ -24,7 +24,7 @@ vulnerability.**
 
 Report it through GitHub's private vulnerability reporting: on the
 repository, open the **Security** tab and choose **Report a vulnerability**
-([direct link](https://github.com/sbw-vaubaan/vaubaan-gateway/security/advisories/new)).
+([direct link](https://github.com/vaubaan/gateway/security/advisories/new)).
 This creates a security advisory that only you and the maintainers can read.
 The project has no other reporting channel.
 

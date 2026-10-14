@@ -39,8 +39,7 @@ export const stripePlugin = definePlugin({
     'One account is one Stripe account, given as a test key, a live key, or both; each mode is its own resource, labelled test or live by the plugin. Every permission is held per mode, so a mission can work freely in test mode and touch live billing only within its limits and after your yes.',
   manualRevocation:
     'Delete or roll the API key in the Stripe Dashboard, under Developers, API keys.',
-  docsUrl:
-    'https://github.com/sbw-vaubaan/vaubaan-gateway/blob/main/docs/handbook/providers/stripe.md',
+  docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/stripe.md',
   tools: stripeTools,
   toolTitles: stripeToolTitles,
   dataModel: stripeDataModel,
