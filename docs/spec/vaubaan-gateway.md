@@ -69,20 +69,37 @@ company registered at a provider).
   domain: there is no tenant, no org, no project. Everything the
   instance holds belongs to the company that runs it.
 - **Operator** — the person or team that installs, configures and
-  maintains the instance (identity provider, provider apps, master key,
+  maintains the instance (sign-in providers, provider apps, master key,
   telemetry). The operator is not an identity of the domain; they have
-  access to the configuration, not to other people's missions. Until the
-  IdP is configured, the operator is whoever holds the bootstrap token.
-  Afterwards, the operator is any user matching the **admin rule** of the
-  instance configuration: an IdP group name or a list of emails.
-- **Identity provider (IdP)** — the company's authentication service, to
-  which the instance delegates the identification of humans through
-  OpenID Connect. The instance stores no password.
+  access to the configuration, not to other people's missions. Until a
+  sign-in provider is configured, the operator is whoever holds the
+  bootstrap token. Afterwards, the operator is any user matching the
+  **admin rule** of the instance configuration: a group of a named
+  sign-in provider, or a list of emails that a provider has verified.
+- **Identity provider (IdP), sign-in provider** — an authentication
+  service to which the instance delegates the identification of humans:
+  the company's directory through OpenID Connect (Entra ID, Google
+  Workspace, Okta, Keycloak), or a public service where private persons
+  hold their own accounts (a personal Google or Microsoft account through
+  OpenID Connect, GitHub through its OAuth sign-in). An instance may offer
+  **several sign-in providers at once**; each has an id, a name, and its
+  own admission rule. The instance stores no password.
+- **Open provider** — a sign-in provider at which anyone in the world can
+  hold an account (GitHub, Google accounts outside a Workspace, Microsoft
+  personal accounts). It never admits by itself: it needs allowed email
+  domains or the invitation list. A tenant provider (an Entra tenant, a
+  Workspace restricted to its domain, the company's Okta or Keycloak) may
+  admit everyone its directory authenticates.
+- **Invitation** — an email address an administrator allowed to sign in,
+  instance-wide, through any provider that verified it.
 
 **Identities**
 
-- **User** — a human authenticated by the IdP. Stably identified by the
-  subject the IdP provides, displayed by their email.
+- **User** — a human authenticated by a sign-in provider. Stably
+  identified by the pair (issuer, subject) the provider vouches for,
+  displayed by their email. **Identities never merge by email**: the same
+  person signing in through two providers is two users, and the instance
+  offers no way to join them.
 - **Group** — a named set of users. Comes from the IdP claims when it
   provides them, otherwise from a local table kept by the operator. A
   group can be the **owner of a connection** and the **target of a
@@ -269,9 +286,12 @@ coding agents. v4 was a SaaS; v5 is a product you install.
   two instances. There is no org, no project, no isolation between
   tenants inside an instance.
 - **No local human authentication.** No password, no magic link, no
-  proprietary SSO. The instance delegates everything to the company's
-  IdP through OpenID Connect. The only local secret is the operator's
-  bootstrap token, used to configure the IdP and then useless.
+  proprietary SSO. The instance delegates everything to its sign-in
+  providers (OpenID Connect, and GitHub's OAuth sign-in). An invitation
+  is an entry of an allow-list, not a credential: it sends nothing and
+  signs nobody in. The only local secret is the operator's bootstrap
+  token, used to configure sign-in and then useless.
+- **No account linking.** Two identities of one person stay two users.
 - **No high availability.** An instance is a single process with an
   embedded store. Cache, rate limit and budget counters are local to the
   process. Replication and failover are out of scope.
@@ -855,8 +875,19 @@ instance checks again when the act arrives.
   I allowed to prepare missions in my name: until when each consent runs,
   the missions each prepared, and its disconnection, asked first. For an
   administrator, **Administration**: a setup checklist of what the instance
-  still needs; sign-in (the identity provider); company apps (the apps
-  registered at each service); people (deactivate, reactivate); teams (the
+  still needs; **sign-in** — the list of sign-in providers, each with its
+  kind, its admission rule and the address to register at it; an
+  administrator adds, edits, tests and removes one, its secret never shown
+  back, and a provider set by the configuration file is shown read-only;
+  removing one says how many people signed in through it: they can no
+  longer sign in and their sessions end, and their missions and connected
+  apps keep the rules of a deactivation (they stop only when the
+  administrator deactivates them); company apps (the apps registered at
+  each service); **people** — everyone who signed in, with the provider
+  they signed in through (deactivate, reactivate), and the
+  **invitations** (invite an address, remove one; removing it is asked
+  first and stops the next sign-ins, not an open session); the page says
+  that one person signing in through two providers is two people; teams (the
   local ones are kept here); accounts without owner (name a new owner — the
   administrator's only act on an account); registered apps (the OAuth
   clients of the management door: approve, disable); telemetry. Acts that
@@ -874,15 +905,27 @@ a mounted file, never committing anything:
 - the **master key** for encryption at rest;
 - the instance's **public URL** (used for provider callbacks, request
   URLs, the bootstrap kit);
-- the **IdP configuration**: issuer URL, client identifier, client
-  secret, claim mapping (subject, email, groups);
+- the **sign-in providers**: zero, one or several, each with an id, a
+  name, a kind (OpenID Connect or GitHub), its issuer (or GitHub's base
+  URL), client identifier, client secret, claim mapping (subject, email,
+  groups) for OpenID Connect, its allowed email domains and whether it
+  admits invited addresses only. The single-provider keys of earlier
+  versions keep working as one provider. An open provider with neither
+  allowed domains nor "invited only" is refused at startup and in the
+  interface, with the reason;
 - per provider in use, the **app registered by the company** at that
   provider: identifier and secret, or private key for app-install
   providers;
-- the operator's **bootstrap token**, usable until the IdP is
-  configured;
-- the **admin rule**: an IdP group name or a list of emails that defines
-  who is operator once the bootstrap token is revoked;
+- the operator's **bootstrap token**, usable until a sign-in provider
+  is configured;
+- the **admin rule**: a group of a named sign-in provider
+  (`<provider>:<group>`; a GitHub group is an organisation team,
+  `org/team`) and/or a list of emails, that defines who is operator once
+  the bootstrap token is revoked. An email matches the verified email of a
+  user of any provider. A group matches only the members that provider
+  claims: a group of provider A never satisfies a rule written for
+  provider B. A group without a provider is accepted while one provider
+  is configured, and refused once there are several;
 - the **telemetry opt-in** and the collector URL (default supplied,
   overridable, disableable).
 
@@ -936,9 +979,11 @@ same for any agent, with no value of any mission.
   least one **preset** in their catalog. Contribution process:
   [CONTRIBUTING](../../CONTRIBUTING.md) and the plugin kit,
   [plugins/README](../../plugins/README.md).
-- **The company's IdP** — authenticates humans, provides subject, email
-  and groups. The instance trusts it for identity, never for
-  authorization: shares and missions are local.
+- **The sign-in providers** — authenticate humans, provide subject,
+  email (verified) and, for a company directory, groups. The instance
+  trusts each for the identities of its own issuer only, never for
+  authorization: shares and missions are local, and admission is the
+  instance's (allowed domains, invitations).
 - **Providers** — each company registers its own apps. The authorization
   flow runs between the user, the provider and the instance; no third
   party.
@@ -965,9 +1010,23 @@ same for any agent, with no value of any mission.
   requires being placed behind a TLS termination held by the company.
   The configured public URL must be HTTPS; provider callbacks and
   request URLs carry it.
-- **Human authentication.** Delegated to the IdP. Web sessions are short
-  and bound to the instance's origin. Every mutation requires a valid
-  session and an origin check.
+- **Human authentication.** Delegated to the sign-in providers. Each
+  sign-in attempt carries its own `state`, nonce and PKCE verifier and
+  is bound to the provider that started it: a response for provider A
+  never completes an attempt started for provider B. A sign-in is
+  admitted only on an email the provider verified, matching that
+  provider's allowed domains, the invitation list or the admin emails —
+  or, for a tenant provider without allowed domains, any user of the
+  tenant. An unverified email never admits and never makes an
+  administrator. Web sessions are short and bound to the instance's
+  origin. Every mutation requires a valid session and an origin check.
+- **Browser hardening set by the instance itself.** Every response carries
+  the security headers — a Content-Security-Policy that admits only the
+  instance's own scripts (a per-request nonce) and forbids framing,
+  `nosniff`, a same-origin referrer policy, a permissions policy that
+  grants no device, and HSTS when the public URL is https — so that a
+  deployment behind any TLS terminator has them; the reference proxy
+  adds none that conflicts.
 - **Separation of the three credentials.** The gateway recognizes three
   kinds of bearers and none crosses over: the **mission token** opens
   the execution surface only; the **delegated token** opens the
@@ -1007,9 +1066,11 @@ same for any agent, with no value of any mission.
 ### 7.1 Install an instance
 
 The operator deploys the image, provides the configuration (§4.3), opens
-the interface with the bootstrap token, fills in the IdP, signs in
-through the IdP, and revokes the bootstrap token. They then register one
-app per provider in use and enter its secrets.
+the interface with the bootstrap token, adds a sign-in provider (or
+declares it in the configuration), signs in through it — which revokes
+the bootstrap token when they match the admin rule —, and invites the
+addresses an open provider should admit. They then register one app per
+provider in use and enter its secrets.
 
 ### 7.2 Connect an account
 
@@ -1215,7 +1276,7 @@ automated suite. Trust comes from usage.
 ### 11.1 Settled decisions
 
 - One instance, one company, one trust domain.
-- Human identity through OpenID Connect only.
+- Human identity through OpenID Connect, and GitHub's OAuth sign-in.
 - Restriction and `accepted_risks` always enumerated.
 - Budget per `RiskId`, mandatory quota, optional expiry.
 - Recurrence by quota reload at a fixed period, continuous session.
@@ -1270,6 +1331,14 @@ automated suite. Trust comes from usage.
   and is refused outside it.
 - After bootstrap, the operator is defined by the admin rule of the
   instance configuration.
+- Several sign-in providers per instance, OpenID Connect and GitHub;
+  identities never merge by email; admission by allowed domains, an
+  instance-wide invitation list and the admin emails, an open provider
+  always needing one of them; the admin rule's group names its provider;
+  the instance sets its own security headers (ADRs
+  [sign-in-providers-admission-and-admin-rule](../decisions/sign-in-providers-admission-and-admin-rule.md),
+  [github-sign-in](../decisions/github-sign-in.md),
+  [security-headers-set-by-the-application](../decisions/security-headers-set-by-the-application.md)).
 
 ### 11.2 Open questions
 
@@ -1333,5 +1402,6 @@ overturn. A question an ADR settled is in §11.1.
 ---
 
 _Date: 2026-10-12; §0 "Words", §4.2, §4.4 and §7 aligned with the redesigned
-interface on 2026-10-14. Author: rpelissier + Claude (drafting). Status:
+interface on 2026-10-14; several sign-in providers, invitations and the
+admin rule across providers on 2026-10-14. Author: rpelissier + Claude (drafting). Status:
 draft v5 for review._
