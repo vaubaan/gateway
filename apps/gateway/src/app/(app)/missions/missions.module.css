@@ -505,3 +505,9 @@ p.railRefused {
   color: var(--ink-3);
   font-size: var(--text-xs);
 }
+
+/* The Git block: a remote URL breaks rather than push the page sideways. */
+.wrapAnywhere {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}

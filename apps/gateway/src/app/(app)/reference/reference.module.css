@@ -361,3 +361,13 @@
     width: 96px;
   }
 }
+
+/* The Git section: long URLs and ids break rather than push the page sideways. */
+.wrapAnywhere {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.gitAbilities {
+  margin: 8px 0;
+  padding-left: 18px;
+}

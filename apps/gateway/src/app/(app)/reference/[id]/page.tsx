@@ -124,25 +124,28 @@ export default async function ServiceReferencePage({ params }: Props) {
       <ServiceView reference={reference} />
       {gitRemote && (
         <Section id="git" title="Git" testId="reference-git">
-          <p>
-            This gateway is the git remote of the repositories a mission holds:{' '}
-            <Mono>{`${gitRemoteBase(root.config.publicUrl)}<owner>/<repo>.git`}</Mono>, the mission
-            key as the password. Clone and fetch are relayed to {reference.name} as they are; a push
-            is decided ref by ref, every ref of it, like a call of the tool{' '}
-            <Mono>{gitRemote.pushTool}</Mono>, and a clone or fetch like{' '}
-            <Mono>{gitRemote.fetchTool}</Mono>.
-          </p>
-          <KeyValue
-            items={(gitRemote.abilities ?? []).map((ability) => ({
-              term: ability.words,
-              value: <Mono href={`#risk-${ability.risk_id}`}>{ability.risk_id}</Mono>,
-            }))}
-          />
-          <p className={styles.quiet}>
-            The gateway decides on refs and changed paths, never on the content of the code: it does
-            not read the pack. A push the provider cannot compare in full is refused; split it. Git
-            LFS, signed pushes, push options and <Mono>--atomic</Mono> are not served.
-          </p>
+          <div className={styles.wrapAnywhere}>
+            <p>
+              This gateway is the git remote of the repositories a mission holds:{' '}
+              <Mono>{`${gitRemoteBase(root.config.publicUrl)}<owner>/<repo>.git`}</Mono>, the
+              mission key as the password. Clone and fetch are relayed to {reference.name} as they
+              are; a push is decided ref by ref, every ref of it, like a call of the tool{' '}
+              <Mono>{gitRemote.pushTool}</Mono>, and a clone or fetch like{' '}
+              <Mono>{gitRemote.fetchTool}</Mono>.
+            </p>
+            <ul className={styles.gitAbilities} data-testid="reference-git-abilities">
+              {(gitRemote.abilities ?? []).map((ability) => (
+                <li key={ability.risk_id}>
+                  {ability.words} — <Mono href={`#risk-${ability.risk_id}`}>{ability.risk_id}</Mono>
+                </li>
+              ))}
+            </ul>
+            <p className={styles.quiet}>
+              The gateway decides on refs and changed paths, never on the content of the code: it
+              does not read the pack. A push the provider cannot compare in full is refused; split
+              it. Git LFS, signed pushes, push options and <Mono>--atomic</Mono> are not served.
+            </p>
+          </div>
         </Section>
       )}
     </ReferenceFrame>
