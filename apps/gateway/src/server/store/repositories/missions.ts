@@ -48,6 +48,13 @@ export interface IssueTokenInput {
   readonly holder: TokenHolderRecord;
   /** The user who generates or creates it. */
   readonly createdBy: string;
+  /**
+   * A named token this one replaces (the creator's "Replace key" on a machine key):
+   * its id. The old token is retired (`rotated`) and the new one inserted under the
+   * same name in ONE transaction, so there is no instant at which the name is free
+   * or two keys of it work. The holder must be that token's name.
+   */
+  readonly replacing?: string;
 }
 
 export interface AddedMember {
@@ -795,6 +802,19 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
           }
           previous = activeOfMember.get(input.missionId, holder.userId);
           if (previous) retireOne.run(now, previous.id);
+        } else if (input.replacing !== undefined) {
+          const old = tokenById.get(input.replacing);
+          if (
+            !old ||
+            old.mission_id !== input.missionId ||
+            old.kind !== 'named' ||
+            old.status !== 'active' ||
+            old.name !== holder.name
+          ) {
+            throw new TokenNotIssuableError('token-not-replaceable', input.missionId);
+          }
+          retireOne.run(now, old.id);
+          previous = old;
         } else if (activeOfName.get(input.missionId, holder.name)) {
           throw new TokenNotIssuableError('name-taken', input.missionId);
         }

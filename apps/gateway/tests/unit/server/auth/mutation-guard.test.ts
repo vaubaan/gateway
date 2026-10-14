@@ -161,6 +161,20 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       'none',
     ),
   ),
+  'missions.handlers.replaceNamedToken': json('user', 404, (rig, headers) =>
+    rig.root.missions.handlers.replaceNamedToken(
+      post(`/api/missions/${rig.mission.id}/tokens/none/replace`, headers, {}),
+      rig.mission.id,
+      'none',
+    ),
+  ),
+  // The rightful caller is the creator, who cannot leave: the service answers 409.
+  'missions.handlers.leave': json('user', 409, (rig, headers) =>
+    rig.root.missions.handlers.leave(
+      post(`/api/missions/${rig.mission.id}/leave`, headers, {}),
+      rig.mission.id,
+    ),
+  ),
   'requests.handlers.decide': json('user', 200, (rig, headers) =>
     rig.root.requests.handlers.decide(
       post(`/api/requests/${rig.claimId}/decide`, headers, { resolution: 'reset-period' }),

@@ -114,6 +114,8 @@ export type AdminAct =
   | 'mission-member-added'
   /** The creator removed a member; their token, if any, is revoked with them. */
   | 'mission-member-removed'
+  /** A member left the mission by themselves; their token, if any, is revoked with it. */
+  | 'mission-member-left'
   /** A token of the mission was issued: a member generated their first one, or
    *  the creator created a named token. Never the secret. */
   | 'mission-token-issued'

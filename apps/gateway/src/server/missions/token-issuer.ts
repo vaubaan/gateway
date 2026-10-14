@@ -38,6 +38,8 @@ export async function issueTokenTo(
     readonly missionId: string;
     readonly holder: TokenHolderRecord;
     readonly createdBy: string;
+    /** A named token of the same name this one replaces, in the same transaction. */
+    readonly replacing?: string;
   },
 ): Promise<IssuedSecret> {
   for (let attempt = 0; attempt < MAX_MINT_ATTEMPTS; attempt++) {
@@ -51,6 +53,7 @@ export async function issueTokenTo(
       hashAlg: minted.hashAlg,
       holder: input.holder,
       createdBy: input.createdBy,
+      ...(input.replacing === undefined ? {} : { replacing: input.replacing }),
     });
     return {
       secret: minted.secret,

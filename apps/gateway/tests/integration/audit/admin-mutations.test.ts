@@ -692,6 +692,46 @@ const RULES: Readonly<Record<string, Rule>> = {
       rig.root.missions.team.revokeToken(rig.alice.user, prepared.mission.id, prepared.tokenId),
     writes: { act: 'mission-token-revoked', object: 'mission', actor: 'alice' },
   },
+  'MissionTeamService.replaceNamedToken': {
+    kind: 'mutation',
+    target: team,
+    prepare: async (rig) => {
+      const mission = await rig.issue();
+      const made = await rig.root.missions.team.createNamedToken(
+        rig.alice.user,
+        mission.id,
+        'CI runner',
+      );
+      if (!made.ok) throw new Error('expected a machine key');
+      const named = (await rig.root.store.missions.listTokens(mission.id)).find(
+        (t) => t.holder.kind === 'named',
+      );
+      if (!named) throw new Error('expected the machine key row');
+      return { mission, tokenId: named.id };
+    },
+    drive: (rig, prepared: { mission: MissionRecord; tokenId: string }) =>
+      rig.root.missions.team.replaceNamedToken(
+        rig.alice.user,
+        prepared.mission.id,
+        prepared.tokenId,
+      ),
+    writes: { act: 'mission-rotated', object: 'mission', actor: 'alice' },
+  },
+  'MissionTeamService.leave': {
+    kind: 'mutation',
+    target: team,
+    // The operator is a user like any other: Alice gives them a seat on her mission.
+    prepare: async (rig) => {
+      const mission = await rig.issue();
+      const added = await rig.root.missions.team.addMember(rig.alice.user, mission.id, {
+        email: rig.operator.email,
+      });
+      if (!added.ok) throw new Error(`add refused: ${added.reason}`);
+      return mission;
+    },
+    drive: (rig, mission: MissionRecord) => rig.root.missions.team.leave(rig.operator, mission.id),
+    writes: { act: 'mission-member-left', object: 'mission', actor: 'operator' },
+  },
   'MissionTeamService.revokeTokensOfDeactivated': {
     kind: 'mutation',
     target: team,
@@ -1161,12 +1201,14 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'mission-issued',
       'mission-issued',
       'mission-member-added',
+      'mission-member-left',
       'mission-member-removed',
       'mission-orphaned',
       'mission-orphaned',
       'mission-restored',
       'mission-revoked',
       'mission-revoked',
+      'mission-rotated',
       'mission-rotated',
       'mission-rotated',
       'mission-rotated',

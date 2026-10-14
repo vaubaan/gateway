@@ -79,6 +79,7 @@ export const ADMIN_ACTS = membersOf<AdminAct>({
   'mission-revoked': true,
   'mission-member-added': true,
   'mission-member-removed': true,
+  'mission-member-left': true,
   'mission-token-issued': true,
   'mission-token-revoked': true,
   'mission-closed': true,

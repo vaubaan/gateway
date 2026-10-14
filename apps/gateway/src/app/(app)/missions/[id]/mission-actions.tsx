@@ -12,7 +12,7 @@
  *   generate my key      a teammate's first key (nothing stops: no question asked)
  *   replace a key        asks first and states the consequence — the old key
  *                        stops working at once, for whom — then shows the new one, once
- *   revoke a key, remove a teammate, stop the mission
+ *   revoke a key, remove a teammate, leave the mission, stop the mission
  *                        cannot be undone: the person types a phrase
  *
  * A page offers an act only when the server would take it (the team view and
@@ -57,6 +57,7 @@ type Act =
   | { readonly kind: 'replace-machine'; readonly token: TeamTokenView }
   | { readonly kind: 'revoke-key'; readonly token: TeamTokenView }
   | { readonly kind: 'remove-teammate'; readonly userId: string; readonly email: string }
+  | { readonly kind: 'leave' }
   | { readonly kind: 'stop' };
 
 interface MissionActs {
@@ -164,10 +165,28 @@ export function MissionActsProvider({
   }
 
   async function replaceMachine(token: TeamTokenView) {
-    // The gateway has no single act for it: the old key is revoked, then a key of the
-    // same name is made. If the second step fails, the dialog says so and the name is free.
-    if ((await post(`/tokens/${encodeURIComponent(token.id)}/revoke`)) === null) return;
-    if (!(await createMachineKey(token.holder.label))) router.refresh();
+    // One act on the server: the old key is retired and the new one issued together.
+    const answer = await post(`/tokens/${encodeURIComponent(token.id)}/replace`);
+    if (
+      !reveal(
+        answer,
+        `Machine key “${token.holder.label}” for “${mission.name}”`,
+        `The machine key ${token.holder.label}`,
+      )
+    ) {
+      router.refresh();
+    }
+  }
+
+  async function leave() {
+    if ((await post('/leave')) === null) return;
+    close();
+    toast({
+      title: `You left “${mission.name}”`,
+      description: 'Your key stopped working. The creator can add you again.',
+    });
+    router.push(ROUTES.missions);
+    router.refresh();
   }
 
   async function revokeKey(token: TeamTokenView) {
@@ -423,6 +442,27 @@ export function MissionActsProvider({
         />
       )}
 
+      {act?.kind === 'leave' && (
+        <DangerConfirm
+          title="Leave this mission?"
+          body={
+            <>
+              {team.my_token
+                ? 'Your key stops working at once: an agent that uses it is refused from its next call. '
+                : ''}
+              You no longer see this mission. What you did stays in its activity. Only its creator
+              can add you again; you would then generate a new key.
+            </>
+          }
+          phrase={mission.name}
+          confirmLabel={MISSION_ACTIONS.leave}
+          busy={busy}
+          error={error}
+          onCancel={close}
+          onConfirm={() => void leave()}
+        />
+      )}
+
       {act?.kind === 'stop' && (
         <DangerConfirm
           title="Stop this mission?"
@@ -541,6 +581,11 @@ export function MissionMenu({
       {mine && (
         <MenuItem danger onSelect={() => acts.open({ kind: 'revoke-key', token: mine })}>
           {MISSION_ACTIONS.revokeMyKey}
+        </MenuItem>
+      )}
+      {!isCreator && (
+        <MenuItem danger onSelect={() => acts.open({ kind: 'leave' })}>
+          {MISSION_ACTIONS.leave}
         </MenuItem>
       )}
       {stoppable && (
