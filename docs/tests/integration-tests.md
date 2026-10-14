@@ -2646,7 +2646,8 @@ real `git http-backend` over bare repositories behind a loopback listener, and
 a REST API for installation tokens (with per-installation permissions and
 GitHub's 422), `GET /repos`, `git/ref`, `git/refs` (create, `force:false`
 checked with `merge-base --is-ancestor`, delete), `compare` (with its
-`commits`) and `commits/{sha}` computed with git on the same repositories. The agent's git has an empty configuration, the
+`commits`), `commits/{sha}` and `commits?sha=` (the history, `rev-list`)
+computed with git on the same repositories. The agent's git has an empty configuration, the
 setup kit's credential helper and the key in `VAUBAAN_MISSION_TOKEN`. Nothing
 reaches github.com.
 
@@ -2694,6 +2695,16 @@ reaches github.com.
   of an existing ref; a client gone mid-pack (nothing left at GitHub, no row);
   an in-flight temporary ref swept past its deadline; clones with
   `protocol.version` 0, 1 and 2.
+- **`tests/integration/git/git-remote-base.test.ts`** (5) — the base of a
+  review, on a repository whose default branch `main` diverged from `v5` by
+  more than GitHub compares (the dogfood repository's shape): **a new branch
+  with one commit on top of `v5` is allowed**, reviewed as one commit, no
+  workflow; a workflow change of its own still asks first; a merge of a moved
+  `v5` into a feature branch is allowed and does not ask again for `v5`'s own
+  workflow change; a rebase onto a moved `v5` is a force-push that asks
+  first, not a refusal for its size; **a branch built on a push still waiting
+  for approval is reviewed for the pending workflow change** (a temporary ref
+  is never a base).
 - **`tests/integration/git/git-remote-review.test.ts`** (13) — one
   regression test per finding of the adversarial review (2026-10-14): a push
   refused **budget-exhausted** or **rate-limited** sends nothing to GitHub's

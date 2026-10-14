@@ -66,7 +66,8 @@ change that removes it.
   `git` client against `git http-backend` standing in for GitHub, with a REST
   API computed from the same repositories: protocol v2 relayed to GitHub
   itself, GitHub accepting a pack under `refs/vaubaan/*`, the compare API's
-  limits, the `commits` of a comparison and `GET commits/{sha}`, the
+  limits, the `commits` of a comparison, `GET commits/{sha}` and
+  `GET commits?sha=` (the history the base of a review is searched in), the
   `PATCH git/refs` answers, and a compare-and-swap of an empty-pack
   receive-pack command for a force-push or a delete are read from GitHub's
   documentation, not observed. →

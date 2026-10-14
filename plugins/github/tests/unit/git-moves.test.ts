@@ -7,6 +7,7 @@
  */
 import {
   concatBytes,
+  encodeAdvertisement,
   encodeReportStatus,
   flushPkt,
   sideBand,
@@ -130,6 +131,26 @@ describe('moves', () => {
 });
 
 describe('review', () => {
+  /** The branch heads (only the pushed branch, at `old`) and `new`'s history: no nearer base. */
+  const noOtherBranch: MockRoute[] = [
+    {
+      method: 'GET',
+      url: 'https://github.com/acme/app.git/info/refs?service=git-upload-pack',
+      respond: () =>
+        Buffer.from(
+          encodeAdvertisement({
+            service: 'git-upload-pack',
+            refs: [{ oid: OLD, name: 'refs/heads/feature/x' }],
+            capabilities: [],
+          }),
+        ).toString('latin1'),
+    },
+    {
+      method: 'GET',
+      url: `${API}/commits?sha=${NEW}&per_page=100&page=1`,
+      body: [{ sha: NEW }, { sha: MID }, { sha: OLD }],
+    },
+  ];
   const refRoute = (sha: string): MockRoute => ({
     method: 'GET',
     url: `${API}/git/ref/heads/feature/x`,
@@ -140,6 +161,7 @@ describe('review', () => {
     const fetch = mockFetch([
       mintRoute(),
       refRoute(OLD),
+      ...noOtherBranch,
       {
         method: 'GET',
         url: `${API}/compare/${OLD}...${NEW}`,
@@ -183,6 +205,7 @@ describe('review', () => {
     const fetch = mockFetch([
       mintRoute(),
       refRoute(OLD),
+      ...noOtherBranch,
       {
         method: 'GET',
         url: `${API}/compare/${OLD}...${NEW}`,

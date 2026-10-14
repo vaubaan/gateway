@@ -199,7 +199,13 @@ write credential exists. Then `Push.handle()`:
    through `capped()`, which errors once `git.max_pack_mb` is passed.
 5. **Review** (`gitRemote.review`, `git-review.ts`): for each ref, its value
    at GitHub (`GET git/ref/<ref>`) must equal the client's `old` — a client
-   that claims a later `old` is refused as _stale info_ —; the compare API
+   that claims a later `old` is refused as _stale info_ —; the **base** is
+   what no branch already holds (`BaseFinder`, ADR D4 ter): the nearest
+   existing branch heads in `new`'s history (the upload-pack advertisement's
+   `refs/heads/*`, `GET commits?sha=<new>`, 3 pages, 3 candidates, the
+   narrowest comparison kept) — for a create, or the default branch when none
+   is in reach; for an update, `old`, or a nearer head when `old..new` brings
+   more than one commit; the compare API
    gives fast-forward or not (a non-fast-forward is compared both ways),
    commits, the net changed paths (renames: both names); **each commit the
    range brings** is read (`GET commits/{sha}`, `COMMITS_REVIEWED_MAX` 100 per

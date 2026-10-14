@@ -50,7 +50,17 @@ export type Comparison =
       readonly shas: readonly string[];
       readonly files: readonly string[];
     }
-  | { readonly ok: false; readonly reason: string };
+  | {
+      readonly ok: false;
+      readonly reason: string;
+      /** GitHub's status when the comparison exists but is too large to review. */
+      readonly status?: string;
+      /** How many commits `head` brings, when GitHub said. */
+      readonly commits?: number;
+    };
+
+/** Commits of one page of `GET commits?sha=` (GitHub's maximum). */
+export const ANCESTORS_PAGE_SIZE = 100;
 
 /** `heads/feature/x` with every segment URL-encoded. */
 export function refPath(ref: string): string {
@@ -171,6 +181,8 @@ export class GithubRest {
       return {
         ok: false,
         reason: `${label} is too large to review (${files.length >= COMPARE_MAX_FILES ? `${COMPARE_MAX_FILES} or more files` : `more than ${COMPARE_MAX_COMMITS} commits`}); push it in smaller parts`,
+        status: body.status ?? 'unknown',
+        commits,
       };
     }
     return {
@@ -180,6 +192,27 @@ export class GithubRest {
       shas,
       files: pathsOf(files),
     };
+  }
+
+  /**
+   * One page of the commits reachable from `sha`, newest first
+   * (`GET commits?sha=`); page 1 is the first. An empty page ends the history.
+   */
+  async ancestors(sha: string, page: number): Promise<readonly string[]> {
+    const res = await this.request(
+      'read',
+      'GET',
+      `/commits?sha=${encodeURIComponent(sha)}&per_page=${ANCESTORS_PAGE_SIZE}&page=${page}`,
+    );
+    if (!res.ok) {
+      throw new UpstreamHttpError(`github GET commits failed with HTTP ${res.status}`, res.status);
+    }
+    const body: unknown = await res.json();
+    if (!Array.isArray(body)) return [];
+    return (body as readonly unknown[]).flatMap((c) => {
+      const sha = typeof c === 'object' && c !== null ? (c as { sha?: unknown }).sha : undefined;
+      return typeof sha === 'string' ? [sha] : [];
+    });
   }
 
   /** The paths one commit changes against its first parent; `null` when GitHub truncated the list. */

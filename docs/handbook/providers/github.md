@@ -233,8 +233,12 @@ review.
   must equal the client's `old` (else stale info — a lie about `old` would
   keep commits out of the review); `GET compare/<base>...<head>` gives the
   status, commit count, the commits and the net files (renames: both names);
-  a non-fast-forward is compared both ways; a created ref is compared with
-  the default branch. Each commit the range brings is read
+  a non-fast-forward is compared both ways. The base is the nearest existing
+  branch head in the pushed commit's history (`BaseFinder`: the upload-pack
+  advertisement's `refs/heads/*`, `GET commits?sha=`, up to 3 candidates, the
+  narrowest comparison): a created ref is compared with it, or with the
+  default branch when none is found; an update with `old`, or with a nearer
+  head when `old..new` brings more than one commit (ADR D4 ter). Each commit the range brings is read
   (`GET commits/{sha}`, at most 100 per push): its paths under
   `.github/workflows/` are workflow files of the update even when the tip
   takes them back. Workflow files: anything under `.github/workflows/`. 300
