@@ -29,6 +29,11 @@ import {
   SIDE_BAND,
   GitProtocolError,
   ZERO_OID,
+  advertisementWithout,
+  lsRefsWithout,
+  prependChunk,
+  readV2RequestHead,
+  V2_HEAD_MAX_LINES,
   type CommandList,
 } from '../../src/index.ts';
 
@@ -294,5 +299,166 @@ describe('report-status and the advertisement', () => {
     expect(parseAdvertisement(encodeAdvertisement(ad))).toEqual(ad);
     expect(parseAdvertisement(encodeAdvertisement({ ...ad, refs: [] })).refs).toEqual([]);
     expect(() => parseAdvertisement(pktLine('nope\n'))).toThrow(GitProtocolError);
+  });
+});
+
+describe('a feature list on any command line', () => {
+  it('is collected, so that the door judges it wherever it was written', async () => {
+    const list = await readList(
+      concatBytes([
+        pktLine(`${ZERO_OID} ${A} refs/heads/a\0report-status`),
+        pktLine(`${ZERO_OID} ${B} refs/heads/b\0atomic report-status push-options`),
+        flushPkt(),
+      ]),
+    );
+    expect(list.commands.map((c) => c.ref)).toEqual(['refs/heads/a', 'refs/heads/b']);
+    expect(list.capabilities).toEqual(['report-status', 'atomic', 'push-options']);
+  });
+});
+
+describe('prependChunk', () => {
+  it('yields the head, then the rest, and passes an error of the rest on', async () => {
+    const head = encoder.encode('head');
+    expect(
+      new TextDecoder().decode(
+        await drain(prependChunk(head, chunked(encoder.encode('-rest'), 2))),
+      ),
+    ).toBe('head-rest');
+    const failing = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.error(new Error('gone'));
+      },
+    });
+    await expect(drain(prependChunk(head, failing))).rejects.toThrow('gone');
+  });
+});
+
+describe('the head of a v2 request', () => {
+  const head = (lines: readonly string[], end: 'delim' | 'flush' | 'none' = 'delim') =>
+    concatBytes([
+      ...lines.map((l) => pktLine(`${l}\n`)),
+      ...(end === 'delim' ? [encoder.encode('0001')] : end === 'flush' ? [flushPkt()] : []),
+    ]);
+  const readHead = (bytes: Uint8Array, size = 3) =>
+    readV2RequestHead(new PktLineReader(chunked(bytes, size)));
+
+  it('names its one command, wherever the line is, and keeps the bytes to send on', async () => {
+    const bytes = head(['agent=git/2.48.1', 'object-format=sha1', 'command=ls-refs']);
+    const read = await readHead(concatBytes([bytes, pktLine('peel\n'), flushPkt()]));
+    expect(read.command).toBe('ls-refs');
+    expect(read.bytes).toEqual(bytes);
+  });
+
+  it.each([
+    ['no command', head(['agent=x'])],
+    ['two commands', head(['command=ls-refs', 'command=fetch'])],
+    ['an empty command', head(['command='])],
+    ['no end', head(['command=fetch'], 'none')],
+    [
+      'too many lines',
+      head([...Array.from({ length: V2_HEAD_MAX_LINES + 1 }, () => 'x'), 'command=fetch']),
+    ],
+  ])('refuses %s', async (_name, bytes) => {
+    await expect(readHead(bytes)).rejects.toBeInstanceOf(GitProtocolError);
+  });
+
+  it('accepts exactly the heads with one command, for 3000 generated inputs', async () => {
+    const random = prng(0xbeef);
+    const pool = [
+      'command=ls-refs',
+      'command=fetch',
+      'command=object-info',
+      'agent=git/x',
+      'object-format=sha1',
+      'server-option=a',
+      'command=',
+      'junk',
+    ];
+    for (let i = 0; i < 3000; i += 1) {
+      const lines = Array.from(
+        { length: Math.floor(random() * 6) },
+        () => pool[Math.floor(random() * pool.length)]!,
+      );
+      const end = (['delim', 'flush', 'none'] as const)[Math.floor(random() * 3)]!;
+      const commands = lines.filter((l) => l.startsWith('command='));
+      const expected =
+        end !== 'none' && commands.length === 1 && commands[0] !== 'command='
+          ? commands[0]!.slice(8)
+          : null;
+      try {
+        const read = await readHead(head(lines, end), 1 + Math.floor(random() * 7));
+        expect(read.command, `input #${i}`).toBe(expected);
+      } catch (err) {
+        if (!(err instanceof GitProtocolError)) throw err;
+        expect(expected, `input #${i}`).toBeNull();
+      }
+    }
+  });
+});
+
+describe('the refs a fetch lists', () => {
+  const hidden = (ref: string) => ref.startsWith('refs/vaubaan/');
+  const names = (body: Uint8Array) =>
+    parsePktLines(body)
+      .flatMap((p) => (p.kind === 'data' ? [new TextDecoder().decode(p.payload)] : []))
+      .map((t) => t.replace(/\0.*$/s, '').trimEnd());
+
+  it('a v0 advertisement loses the hidden refs, and the capabilities move to the next kept ref', () => {
+    const ad = concatBytes([
+      pktLine('# service=git-upload-pack\n'),
+      flushPkt(),
+      pktLine(`${A} refs/vaubaan/0123\0multi_ack symref=HEAD:refs/heads/main\n`),
+      pktLine(`${B} refs/heads/main\n`),
+      pktLine(`${C} refs/tags/v1\n`),
+      pktLine(`${A} refs/tags/v1^{}\n`),
+      flushPkt(),
+    ]);
+    const out = advertisementWithout(ad, hidden);
+    expect(names(out)).toEqual([
+      '# service=git-upload-pack',
+      `${B} refs/heads/main`,
+      `${C} refs/tags/v1`,
+      `${A} refs/tags/v1^{}`,
+    ]);
+    expect(new TextDecoder().decode(out)).toContain(
+      `${B} refs/heads/main\0multi_ack symref=HEAD:refs/heads/main`,
+    );
+    expect(parseAdvertisement(out).capabilities).toEqual([
+      'multi_ack',
+      'symref=HEAD:refs/heads/main',
+    ]);
+  });
+
+  it('an advertisement of hidden refs only keeps its capabilities on the placeholder line', () => {
+    const ad = concatBytes([
+      pktLine('# service=git-upload-pack\n'),
+      flushPkt(),
+      pktLine(`${A} refs/vaubaan/0123\0ofs-delta\n`),
+      flushPkt(),
+    ]);
+    const parsed = parseAdvertisement(advertisementWithout(ad, hidden));
+    expect(parsed.refs).toEqual([]);
+    expect(parsed.capabilities).toEqual(['ofs-delta']);
+  });
+
+  it('a v2 capability advertisement and an ls-refs answer', () => {
+    const v2 = concatBytes([
+      pktLine('# service=git-upload-pack\n'),
+      flushPkt(),
+      pktLine('version 2\n'),
+      pktLine('ls-refs\n'),
+      flushPkt(),
+    ]);
+    expect(advertisementWithout(v2, hidden)).toEqual(v2);
+    const ls = concatBytes([
+      pktLine(`${A} HEAD symref-target:refs/heads/main\n`),
+      pktLine(`${B} refs/vaubaan/0123\n`),
+      pktLine(`${C} refs/heads/main\n`),
+      flushPkt(),
+    ]);
+    expect(names(lsRefsWithout(ls, hidden))).toEqual([
+      `${A} HEAD symref-target:refs/heads/main`,
+      `${C} refs/heads/main`,
+    ]);
   });
 });
