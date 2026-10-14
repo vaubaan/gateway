@@ -318,9 +318,11 @@ capability, no new privilege). The smoke test runs both.
 Native addons (`argon2`, `better-sqlite3`) are prebuilt for glibc, which is
 why the base is Debian slim rather than Alpine; `next.config.ts` traces
 their binaries and runtime files explicitly (`outputFileTracingIncludes`)
-and the smoke test loads both inside the image. Build-time arguments:
-`NODE_IMAGE` (the whole base image reference, tag and digest; it replaces
-the former `NODE_VERSION`) and `GIT_COMMIT_SHA` (shown by `/healthz`).
+and the smoke test loads both inside the image. Build-time argument:
+`GIT_COMMIT_SHA` (shown by `/healthz`). The base image is not an argument:
+it is written, with its digest, on the first `FROM` line. Nothing else than
+`node` runs in the container: the package managers of the base image (npm,
+npx, corepack, yarn) are removed from it, and the smoke test checks it.
 
 The Dockerfile has no `# syntax=` line: it is built by the frontend built
 into BuildKit (it uses no heredoc, no `--mount` and no `--link`), so no
@@ -341,8 +343,9 @@ docker buildx imagetools inspect caddy:<version>-alpine
 ```
 
 The digest is what is pulled: once it is present the registry ignores the
-tag, which is why the Dockerfile takes one `NODE_IMAGE` argument rather than
-a version on its own. The base must stay a Debian (glibc) image. Nothing
-proposes these bumps automatically yet: they are done by hand before every
-release and on a Node or Debian security release — the procedure is in
+tag, which is why version and digest are written together on one line. The
+base must stay a Debian (glibc) image. Dependabot proposes the bumps every
+week (a new major of Node excepted: it changes the ABI of the native addons);
+they are also checked by hand before every release and on a Node or Debian
+security release — the procedure is in
 [`docs/workflow/coding-workflow.md`](../docs/workflow/coding-workflow.md#refreshing-the-base-image-digests).

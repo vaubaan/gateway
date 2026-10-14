@@ -397,7 +397,10 @@ possible (spec §4, §5, §7):
    its server (PID 1) runs as uid 10001 with no effective capability, and
    `/data` and every file in it belong to 10001.
 8. **No env file shipped** — the image contains no `apps/gateway/.env*`
-   file (the build context excludes every `.env*`).
+   file (the build context excludes every `.env*`). **No package manager
+   shipped** either: no `npm`, `npx`, `corepack`, `yarn` on the path, no
+   `/usr/local/lib/node_modules/npm`, no `/opt/yarn-v*` (the runner stage
+   removes them; the gateway runs `node` only).
 9. **No test file shipped** — outside `node_modules`, `/app` holds no
    `*.test.*`, `*.spec.*` or `*.bench.*` file, no `testing.ts` / `testing.js`,
    no `vitest.config.*` or `playwright.config.*`, and no directory named

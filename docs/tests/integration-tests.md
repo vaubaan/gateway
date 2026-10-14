@@ -4103,7 +4103,8 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
   [[plugin-identifiers-one-grammar-for-classify-and-execute]]; the proofs
   themselves are the plugins' own suites).
 - **`base-images-pinned.test.ts`** (5) — the Dockerfile builds every stage
-  from the one `NODE_IMAGE`, pinned by full version and digest; **nothing
+  from the one base image of its first `FROM` line (no `ARG` in a `FROM`),
+  pinned by full version and digest; **nothing
   else runs in the build**: no `# syntax=` frontend unless pinned the same
   way (the file declares none), and every `COPY --from=` / `--mount=…from=`
   names a stage of the file, never an image; the Compose

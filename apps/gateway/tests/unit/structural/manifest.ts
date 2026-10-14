@@ -649,7 +649,7 @@ export const INVARIANTS: readonly Invariant[] = [
       {
         file: `${STRUCTURAL}/base-images-pinned.test.ts`,
         tests: [
-          'the Dockerfile builds every stage from the one pinned NODE_IMAGE',
+          'the Dockerfile builds every stage from the one pinned base image',
           'the Compose file pins every image it pulls',
           'the refresh procedure is written down where the pins point to',
         ],
