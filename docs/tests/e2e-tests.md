@@ -522,9 +522,11 @@ instance with no company app for the service, create the token the page's
 guide describes on a real (ideally dedicated) account, paste it, and check
 that the account page names the account and the expiry the service gave;
 that a mission's call runs; that removing the token at the service turns the
-account "Needs reconnecting" at the next call; and, for Railway, whether
-an account token is accepted by the MCP server (if it is, the
-`unavailableTools` of `plugins/railway/src/token.ts` can shrink). With an app
+account "Needs reconnecting" at the next call; and, for Railway, with a
+workspace token, that the account page names the workspace and an MCP-server
+tool (`railway__list-projects`) runs, then, with an account token, whether
+Railway's MCP server accepts it (a refusal reads "refused this account token"
+and the variable tools keep running). With an app
 registered too, "Use a token instead" is one click away and both kinds of
 account work side by side.
 

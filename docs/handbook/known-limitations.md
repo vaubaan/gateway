@@ -19,6 +19,7 @@ tracks:
   - packages/telemetry/src/queue.ts
   - plugins/railway/src/classify.ts
   - plugins/railway/src/execute.ts
+  - plugins/railway/src/token.ts
   - apps/gateway/tests/integration/auth/fake-idp.ts
   - apps/gateway/tests/demo/guards.ts
   - deploy/collector/
@@ -52,6 +53,14 @@ change that removes it.
   that is already installed comes back with a `code` (L2), and whether
   Railway's API accepts the token obtained for its MCP server (L3). →
   [cutover-from-v4, "The live checks"](cutover-from-v4.md#4-the-live-checks)
+- **Railway tokens: what was checked live and what was not.** A workspace
+  token was checked against Railway's MCP server on 2026-10-14; an account
+  token was not (Railway documents that server for OAuth only — if it refuses
+  one, the call fails naming the kind and the account stays usable), and the
+  GraphQL queries a workspace token answers at paste and at discovery (its
+  projects, its workspace's name) follow the public API's shape without a live
+  run. →
+  [railway, "Connecting with a workspace token"](providers/railway.md#connecting-with-a-workspace-token)
 - **The release pipeline has never run.** `.github/workflows/release.yml` is
   written and its Node scripts are tested, but no `v2.*` tag exists: no image was
   published, signed or attested by it. →

@@ -7,7 +7,7 @@ tools) and adds four GraphQL-backed environment-variable tools, under the
 handbook: [`docs/handbook/providers/railway.md`](../../docs/handbook/providers/railway.md);
 decisions: [`railway-rewrap-remote-mcp`](../../docs/decisions/railway-rewrap-remote-mcp.md),
 [`plugin-arguments-closed-surface-and-typed-refusals`](../../docs/decisions/plugin-arguments-closed-surface-and-typed-refusals.md).
-Plugin version 4.1.0, catalog version 3.
+Plugin version 4.2.0, catalog version 3.
 
 ## Data model
 
@@ -125,24 +125,51 @@ tokens last one hour; the host refreshes them with the standard
 `refresh_token` grant declared by the spec (`refreshable: true`), including
 after an `UpstreamAuthError`.
 
-## Credential, the other way: an account token
+## Credential, the other way: a workspace token
 
 Without a company OAuth app — or beside it — an account is connected with a
-Railway **account token** pasted by hand (`railwayTokenCredential`,
-`src/token.ts`): railway.com/account/tokens, "No workspace", as the account the
-agents will act as (a shared service account is fine). It runs discovery and
-the four GraphQL variable tools; the ten tools of Railway's MCP server need
-the OAuth app (Railway documents that server for OAuth sign-in only) and are
-not listed on a token account. Checked with `query { me { name email } }`.
-Workspace and project tokens are not offered (see the handbook). Removing the
-account tells the person to delete the token under Account settings → Tokens.
-ADR
-[`token-connections-beside-the-integration-app`](../../docs/decisions/token-connections-beside-the-integration-app.md).
+Railway token pasted by hand (`railwayTokenCredential`, `src/token.ts`),
+created under railway.com/account/tokens. Every tool runs with it: discovery
+and the four variable tools on the GraphQL API, the ten tools of Railway's MCP
+server with the token sent as `Authorization: Bearer` to
+`https://mcp.railway.com/`.
+
+| Token                                  | Reach                          | Offered                     | MCP server                                                |
+| -------------------------------------- | ------------------------------ | --------------------------- | --------------------------------------------------------- |
+| **workspace token** (workspace chosen) | that workspace only            | yes, recommended            | accepted — checked against the real service on 2026-10-14 |
+| account token ("No workspace")         | every workspace of the account | yes, second choice          | not checked; Railway documents the server for OAuth only  |
+| project token                          | one environment of one project | no: a resource is a project | —                                                         |
+
+A shared service account that is a member of the workspace is fine: Vaubaan
+decides who may do what.
+
+**Check at paste** (`probeRailwayToken`): `query { me { name email } }`
+answers for an account token only (named by its email). Otherwise the
+projects the token reaches answer for a workspace token, named by its
+workspace (`the vaubaan workspace`) or, when the workspace name is not
+exposed, by its projects. Neither answers → the token is refused.
+
+**Discovery**: the projects the token reaches, then — account token only —
+each workspace of `me.workspaces`. A workspace token has no `me`; its refusal
+ends the list.
+
+**When the MCP server refuses a pasted token** (401 or 403), the plugin asks
+the API about the same token (`explainMcpRefusal`): refused there too → a
+rejected credential (401, the account "Needs reconnecting"); still accepted →
+the MCP server does not take this kind of token: a 403 naming it ("refused
+this account token … reconnect with a workspace token"), and the connection
+stays usable for the variable tools. `railway__whoami` may say little with a
+workspace token, which has no user behind it.
+
+Removing the account tells the person to delete the token under Account
+settings → Tokens. ADR
+[`token-connections-beside-the-integration-app`](../../docs/decisions/token-connections-beside-the-integration-app.md)
+(amendment of 2026-10-14).
 
 ## Development
 
 ```
-npx vitest run plugins/railway     # 406 tests, no network
+npx vitest run plugins/railway     # 421 tests, no network
 npx tsc -p plugins/railway/tsconfig.json --noEmit
 ```
 
