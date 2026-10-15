@@ -30,14 +30,16 @@ can be guessed.
      the life of a pending row, so the live pending rows are bounded;
    - callbacks: 30 per minute per known address, 2 000 per minute instance-wide;
    - bootstrap: 10 attempts per 10 minutes instance-wide.
-     A refused attempt redirects with the closed code `too-many-attempts` and
-     writes nothing.
+
+   A refused attempt redirects with the closed code `too-many-attempts` and
+   writes nothing.
+
 2. Every wrong bootstrap token is counted durably (`instance_config`
    `bootstrap.misses`); at 50 the token is revoked (`bootstrap.revoked_at`), as
    the first operator sign-in would revoke it. The token is a one-time install
    secret: one being guessed has lost its value.
-3. The limiter is the in-memory sliding window of the instance (`// single-process
-only` behind the `RateLimiter` port, like every surface limit); a hosted
+3. The limiter is the in-memory sliding window of the instance (single-process
+   only, behind the `RateLimiter` port like every surface limit); a hosted
    deployment replaces it with a shared one.
 
 ## Consequences

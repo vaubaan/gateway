@@ -235,6 +235,18 @@ Each registration first deletes the clients registered more than 30 days ago
 that no operator decided about and that never received a delegation
 (`UNUSED_CLIENT_RETENTION_MS`).
 
+A registration that will **wait for an operator** (policy `operator-approved`
+and not loopback-only, or policy `closed` — which refuses earlier) also expires
+the dynamic registrations that have waited longer than a day
+(`PENDING_REGISTRATION_TTL_MS`, `DelegationsRepo.deleteUndecidedClients`), and
+is refused with `429 access_denied` while `MAX_PENDING_REGISTRATIONS` (50)
+still wait: an anonymous caller cannot fill the operator's "Registered apps"
+page. Every page that shows a client's name says it is the name the client
+gave itself, not verified. A CORS preflight of a protocol endpoint answers a
+fixed `Access-Control-Allow-Headers: authorization, content-type,
+mcp-protocol-version` (`CORS_ALLOWED_HEADERS`), never an echo of what was
+asked (security review 2026-10-15, external M2).
+
 ### Client ID Metadata Documents
 
 Off unless `oauth.client_registration.metadata_documents` is true; no fetcher
@@ -981,7 +993,7 @@ Migration `0006` adds `oauth_clients.registration`,
 and the index `delegations_client`.
 
 Methods the authorization server added: `listClients`, `updateClientDocument`, `decideClient`,
-`deleteUnusedClients`, `listForClient`, `revoke(id, reason)`,
+`deleteUnusedClients`, `deleteUndecidedClients`, `listForClient`, `revoke(id, reason)`,
 `revokeIfActive(id, reason)` (the delegation when this call revoked it, else
 `null` — what makes an audit entry written once), `activityOf(ids)` (last
 token, latest live expiry), `findCode` and `findRefreshToken` (the row

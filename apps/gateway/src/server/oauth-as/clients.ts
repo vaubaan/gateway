@@ -77,6 +77,14 @@ export const MAX_REDIRECT_URIS = 10;
 export const UNNAMED_CLIENT = 'Unnamed client';
 /** An undecided client that nobody ever consented to is forgotten after this long. */
 export const UNUSED_CLIENT_RETENTION_MS = 30 * 86_400_000;
+/**
+ * A dynamic registration that waits for an operator is forgotten after this long
+ * (security review 2026-10-15, external M2): the operator's page is not a list an
+ * anonymous caller can grow for ever.
+ */
+export const PENDING_REGISTRATION_TTL_MS = 86_400_000;
+/** Dynamic registrations waiting for an operator at once; one more is refused. */
+export const MAX_PENDING_REGISTRATIONS = 50;
 /** Metadata documents one user may make the instance fetch, per window. */
 export const DOCUMENT_FETCHES_PER_WINDOW = 10;
 export const DOCUMENT_FETCH_WINDOW_MS = 60_000;
@@ -204,6 +212,9 @@ export class ClientRegistry {
     await this.deps.repo.deleteUnusedClients(
       toIso(new Date(now.getTime() - UNUSED_CLIENT_RETENTION_MS)),
     );
+    if (this.policyStatus(isLoopbackOnly(redirectUris)) === 'pending') {
+      await this.makeRoomForPending(now);
+    }
     const clientSecret = method === 'none' ? null : mintClientSecret();
     const client = await this.deps.repo.registerClient({
       clientId: mintClientId(),
@@ -222,6 +233,39 @@ export class ClientRegistry {
       auth_method: method,
     });
     return { client, status, clientSecret };
+  }
+
+  /**
+   * Expires the dynamic registrations that waited for an operator longer than
+   * `PENDING_REGISTRATION_TTL_MS`, then refuses a new one while
+   * `MAX_PENDING_REGISTRATIONS` still wait.
+   */
+  private async makeRoomForPending(now: Date): Promise<void> {
+    const waiting = (await this.deps.repo.listClients())
+      .map((client) => this.view(client))
+      .filter(
+        (view) =>
+          view.status === 'pending' &&
+          view.decidedBy === 'policy' &&
+          view.client.registration === 'dynamic',
+      );
+    const cutoff = toIso(new Date(now.getTime() - PENDING_REGISTRATION_TTL_MS));
+    const expired = waiting.filter((view) => view.client.createdAt < cutoff);
+    const removed =
+      expired.length > 0
+        ? await this.deps.repo.deleteUndecidedClients(expired.map((view) => view.client.id))
+        : 0;
+    if (removed > 0) this.deps.logger.info('pending oauth registrations expired', { removed });
+    if (waiting.length - removed >= MAX_PENDING_REGISTRATIONS) {
+      this.deps.logger.warn('oauth registration refused: too many registrations wait', {
+        waiting: waiting.length - removed,
+      });
+      throw new OAuthProtocolError(
+        'access_denied',
+        'Too many registrations are waiting for an administrator of this instance. Try again later, or ask one.',
+        429,
+      );
+    }
   }
 
   /**

@@ -84,7 +84,9 @@ describe('authorization server over HTTP', () => {
         },
       });
       expect(preflight.status).toBe(204);
-      expect(preflight.headers.get('access-control-allow-headers')).toBe('mcp-protocol-version');
+      expect(preflight.headers.get('access-control-allow-headers')).toBe(
+        'authorization, content-type, mcp-protocol-version',
+      );
 
       const post = await instance.fetch(`${PUBLIC_URL}${path}`, { method: 'POST' });
       expect(post.status).toBe(405);

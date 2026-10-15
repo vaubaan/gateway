@@ -123,6 +123,12 @@ export interface DelegationsRepo {
    * about and that never received a delegation. Returns how many went.
    */
   deleteUnusedClients(createdBefore: Iso): Promise<number>;
+  /**
+   * Deletes the named clients that no operator decided about and that never received a
+   * delegation (the expiry of pending registrations); any other id is left alone.
+   * Returns how many went.
+   */
+  deleteUndecidedClients(ids: readonly string[]): Promise<number>;
 
   create(input: CreateDelegationInput): Promise<DelegationRecord>;
   getById(id: string): Promise<DelegationRecord | null>;
@@ -376,6 +382,11 @@ export function createDelegationsRepo(ctx: RepoContext): DelegationsRepo {
      WHERE created_at < ? AND operator_decision IS NULL
        AND id NOT IN (SELECT client_id FROM delegations)`,
   );
+  const deleteUndecidedClientStmt = db.prepare<[string]>(
+    `DELETE FROM oauth_clients
+     WHERE id = ? AND operator_decision IS NULL
+       AND id NOT IN (SELECT client_id FROM delegations)`,
+  );
   const delegationById = db.prepare<[string], DelegationRow>(
     `SELECT ${DELEGATION_COLUMNS} FROM delegations WHERE id = ?`,
   );
@@ -615,6 +626,11 @@ export function createDelegationsRepo(ctx: RepoContext): DelegationsRepo {
     },
     async deleteUnusedClients(createdBefore) {
       return deleteUnusedClientsStmt.run(createdBefore).changes;
+    },
+    async deleteUndecidedClients(ids) {
+      return withImmediateTransaction(db, () =>
+        ids.reduce((count, id) => count + deleteUndecidedClientStmt.run(id).changes, 0),
+      );
     },
 
     async create(input) {
