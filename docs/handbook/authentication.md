@@ -587,10 +587,25 @@ browser applies the `__Host-` rules to the literal name, so
 `\u00a0__Host-vbn_session` is to it an ordinary cookie a sibling subdomain may
 set for the parent domain, and must not read as the session here. A name that
 appears twice in the header reads as no cookie at all.
-A cookie value that is not base64url is ignored. There is no sliding expiry: a
-session ends 8 hours after sign-in whatever the activity. A sign-in (IdP or
-bootstrap token) deletes the session the browser presented before it issues
-the new one.
+A cookie value that is not base64url is ignored. A session ends 8 hours after
+sign-in whatever the activity (`SESSION_TTL_MS`, never extended), and earlier
+after **one hour without a request** (`SESSION_IDLE_MS`): the record carries
+`seenAt`, rewritten with what is left of the absolute lifetime at most every
+five minutes (`SESSION_TOUCH_MS`); a record from an older build counts from
+`createdAt`. A sign-in (IdP or bootstrap token) deletes the session the browser
+presented before it issues the new one.
+
+**Sign out everywhere** (security review 2026-10-15, auth L1). Sessions are rows
+keyed by the digest of their id and cannot be listed per user; ending them all
+reuses `users.sessions_ended_at` (the instant before which a session of that user
+is refused, as for a deactivation): `UsersRepo.endSessions(id)` sets it to now
+for an active user, status untouched. `UserAdminService.endSessions` audits
+`user-sessions-ended` (`after.by`: `self` or `operator`). Two doors:
+`POST /logout/everywhere` (Settings → You → "Sign out everywhere", any signed-in
+person, origin-checked, clears the cookie and lands on `/login`) and
+`POST /admin/users/<id>/end-sessions` (Administration → People, operator, for
+someone else). Keys, connected apps and missions are not touched: deactivation
+is the act that stops those.
 
 **Records are guarded, not cast.** The port returns `unknown`;
 `isWebSessionRecord` and `isPendingLogin` (`session-service.ts`) prove the

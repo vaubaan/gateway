@@ -58,6 +58,12 @@ export interface UsersRepo {
    * many users were concerned.
    */
   endSessionsOfIssuer(issuer: string): Promise<number>;
+  /**
+   * Ends every web session of one active user ("sign out everywhere"):
+   * `sessions_ended_at` = now, the status untouched. Returns `false` when the user is
+   * unknown or not active (nothing was written).
+   */
+  endSessions(id: string): Promise<boolean>;
 }
 
 interface UserRow {
@@ -154,6 +160,9 @@ export function createUsersRepo(ctx: RepoContext): UsersRepo {
   const endSessions = db.prepare<[string, string, string]>(
     'UPDATE users SET sessions_ended_at = ? WHERE issuer = ? OR issuer = ?',
   );
+  const endSessionsOfUser = db.prepare<[string, string]>(
+    `UPDATE users SET sessions_ended_at = ? WHERE id = ? AND status = 'active'`,
+  );
   const restore = db.prepare<[string]>(
     `UPDATE users SET status = 'active', removed_at = NULL WHERE id = ? AND status = 'removed'`,
   );
@@ -180,6 +189,9 @@ export function createUsersRepo(ctx: RepoContext): UsersRepo {
         db,
         () => endSessions.run(nowIso(ctx), bare, `${bare}/`).changes,
       );
+    },
+    async endSessions(id) {
+      return endSessionsOfUser.run(nowIso(ctx), id).changes > 0;
     },
     async getById(id) {
       const row = getUserRow(ctx, id);

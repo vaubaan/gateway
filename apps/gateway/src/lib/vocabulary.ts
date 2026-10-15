@@ -190,6 +190,7 @@ export const ACTIONS = {
   copied: 'Copied',
   cancel: 'Cancel',
   signOut: 'Sign out',
+  signOutEverywhere: 'Sign out everywhere',
 } as const;
 
 /** Section headings several pages share. */
@@ -749,6 +750,7 @@ export const ACT_WORDS = {
   'oauth-client-disabled': 'disabled an app',
   'user-deactivated': 'deactivated a person',
   'user-reactivated': 'reactivated a person',
+  'user-sessions-ended': 'signed a person out everywhere',
   'invitation-added': 'invited an address',
   'invitation-removed': 'removed an invitation',
   'config-changed': 'changed the configuration',
@@ -808,6 +810,7 @@ export const SETTINGS_ACTIONS = {
   remove: 'Remove',
   deactivate: 'Deactivate',
   reactivate: 'Reactivate',
+  endSessions: 'Sign out everywhere',
   nameOwner: 'Name an owner',
   approve: 'Approve',
   disable: 'Disable',

@@ -434,6 +434,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     memberTokens: missions.team,
     connections,
     authenticator: auth.authenticator,
+    sessions: auth.sessions,
     logger,
   });
   const execution = createExecutionModule({

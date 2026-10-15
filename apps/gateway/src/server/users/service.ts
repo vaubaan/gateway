@@ -252,4 +252,28 @@ export class UserAdminService {
     });
     return { user: restoredUser, restored: settlement.restored.length };
   }
+  /**
+   * "Sign out everywhere": every web session of the user ends at its next request
+   * (`users.sessions_ended_at`), nothing else changes — keys, connected apps and
+   * missions stay. Done by the user for themselves, or by an operator for anyone
+   * active (security review 2026-10-15, auth L1). Audited `user-sessions-ended`.
+   */
+  async endSessions(actor: UserAdminActor, userId: string): Promise<UserRecord> {
+    const { store } = this.deps;
+    const user = await store.users.getById(userId);
+    if (!user) throw new UserAdminError('not-found');
+    if (!(await store.users.endSessions(user.id))) throw new UserAdminError('already-deactivated');
+    await this.deps.audit.write({
+      kind: 'admin',
+      ts: toIso(this.deps.clock.now()),
+      user_id: actor.actorId,
+      act: 'user-sessions-ended',
+      object: { type: 'user', id: user.id },
+      before: null,
+      after: { email: user.email, by: actor.userId === user.id ? 'self' : 'operator' },
+      delegated_client_id: null,
+    });
+    this.deps.logger.info('user sessions ended', { user_id: user.id, actor_id: actor.actorId });
+    return user;
+  }
 }

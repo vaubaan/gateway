@@ -10,7 +10,7 @@ import {
   serializeCookie,
   SESSION_COOKIE,
 } from './cookies';
-import { LOGIN_TTL_MS, SESSION_TTL_MS, SessionService } from './session-service';
+import { LOGIN_TTL_MS, SESSION_IDLE_MS, SESSION_TTL_MS, SessionService } from './session-service';
 
 function service() {
   const clock = new ManualClock();
@@ -123,13 +123,30 @@ describe('SessionService', () => {
     expect(await s.read(headers)).toBeNull();
   });
 
-  it('expires a session after SESSION_TTL_MS, absolutely (no sliding)', async () => {
+  it('expires a session after SESSION_TTL_MS, absolutely (use does not slide it)', async () => {
     const { clock, service: s } = service();
     const issued = await s.create({ kind: 'bootstrap' });
     const headers = new Headers({ cookie: issued.setCookie.split(';')[0] ?? '' });
-    clock.advance(SESSION_TTL_MS - 1);
+    const step = SESSION_IDLE_MS / 2;
+    for (let used = step; used < SESSION_TTL_MS; used += step) {
+      clock.advance(step);
+      expect(await s.read(headers), `after ${used} ms`).not.toBeNull();
+    }
+    clock.advance(SESSION_TTL_MS % step || step);
+    expect(await s.read(headers)).toBeNull();
+  });
+
+  it('ends a session unused for SESSION_IDLE_MS; a request within it keeps it', async () => {
+    const { clock, service: s } = service();
+    const issued = await s.create({ kind: 'bootstrap' });
+    const headers = new Headers({ cookie: issued.setCookie.split(';')[0] ?? '' });
+    clock.advance(SESSION_IDLE_MS - 1);
     expect(await s.read(headers)).not.toBeNull();
-    clock.advance(1);
+    clock.advance(SESSION_IDLE_MS - 1);
+    expect(await s.read(headers)).not.toBeNull();
+    clock.advance(SESSION_IDLE_MS);
+    expect(await s.read(headers)).toBeNull();
+    // Gone for good: a later request does not bring it back.
     expect(await s.read(headers)).toBeNull();
   });
 
