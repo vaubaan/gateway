@@ -37,7 +37,7 @@ export interface MissionsModule {
 }
 
 export interface MissionsModuleDeps {
-  readonly config: Pick<InstanceConfig, 'publicUrl'>;
+  readonly config: Pick<InstanceConfig, 'publicUrl' | 'selfResources'>;
   readonly store: Store;
   readonly registry: PluginRegistry;
   readonly authenticator: Authenticator;
@@ -68,6 +68,7 @@ export function createMissionsModule(deps: MissionsModuleDeps): MissionsModule {
     authority,
     grounds: deps.grounds,
     publicUrl: deps.config.publicUrl,
+    selfResources: deps.config.selfResources,
     clock: deps.clock ?? systemClock,
     logger: deps.logger.child({ component: 'missions' }),
     mint: deps.mint,

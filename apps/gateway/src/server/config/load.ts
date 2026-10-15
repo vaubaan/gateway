@@ -23,6 +23,7 @@ import {
 } from './sign-in';
 import { ConfigError, IssueList } from './errors';
 import { type EnvSource, type FileReader, defaultFileReader } from './secret-refs';
+import { readSelfResources } from './self-resources';
 import {
   type RawTree,
   envNamesFor,
@@ -97,7 +98,7 @@ export function loadInstanceConfig(options: LoadOptions = {}): LoadedConfig {
   const fromEnv = readEnvSource(env, issues, readFile);
   const fromFile = readFileSource(env, issues, readFile);
   const raw = fromFile ? mergeTrees(fromEnv, fromFile.tree) : fromEnv;
-  const config = validate(raw, issues);
+  const config = validate(raw, issues, env);
   issues.throwIfAny();
   if (!config) throw new ConfigError(issues.items); // unreachable: validate() reports every failure
   return { config, configFile: fromFile?.path ?? null };
@@ -220,12 +221,15 @@ class Reader {
   }
 }
 
-function validate(raw: RawTree, issues: IssueList): InstanceConfig | null {
+function validate(raw: RawTree, issues: IssueList, env: EnvSource): InstanceConfig | null {
   const r = new Reader(raw, issues);
   const before = issues.items.length;
 
   const publicUrl = readPublicUrl(r);
   const trustedProxies = readTrustedProxies(r);
+  const selfResources = readSelfResources(r.stringList('self_resources'), env, (message) =>
+    r.issues.add('self_resources', message, envNamesFor('self_resources')),
+  );
   const storePath = r.string('store.path', { required: isKeyRequired(keySpec('store.path')) });
   const encryption = readEncryption(r);
   const idp = readIdp(r);
@@ -259,6 +263,7 @@ function validate(raw: RawTree, issues: IssueList): InstanceConfig | null {
   return {
     publicUrl,
     trustedProxies,
+    selfResources,
     store: { path: storePath },
     encryption,
     idp,

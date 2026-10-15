@@ -133,6 +133,11 @@ export interface IssuanceResource {
   readonly hidden: boolean;
   /** No longer returned by discovery: never part of a new mission. */
   readonly stale: boolean;
+  /**
+   * One of this instance's own resources (`InstanceConfig.selfResources`, SEC
+   * 2026-10-15 H1): never part of a mission, whatever the selection says.
+   */
+  readonly self: boolean;
 }
 
 /** A connection the creator holds authority on, with everything issuance needs. */
@@ -191,6 +196,7 @@ export const PREVIEW_ISSUE_CODES = [
   'duplicate-provider',
   'resource-not-in-connection',
   'resource-stale',
+  'resource-self',
   'no-resource-selected',
   'unknown-preset',
   'unknown-risk',

@@ -721,6 +721,23 @@ write …)`), instead of GitHub's bare 403. The push token of
 
 ### Security
 
+- **No read returns a secret value under a permission that is not a secret read**
+  (security review 2026-10-15, C1). Supabase `list_function_secrets` returned every
+  edge-function secret value — the project's service-role key and database URL among
+  them — and `get_auth_config` the OAuth client secrets, SMTP password and hook
+  secrets, both under `supabase.read-data`, which every preset carries. Their answers
+  now keep an allow-list of non-secret fields; every other value reads
+  `[redacted by Vaubaan]`, a field the provider adds later included. The same rule
+  covers Vercel `list_env_vars` without `decrypt` (`plain` variables came back in
+  clear) and Upstash database answers (any credential-like field). Operators: an
+  agent that read those values no longer can; nothing to configure.
+- **The instance's own hosting is never reachable by a mission** (security review
+  2026-10-15, H1). On Railway the gateway reads `RAILWAY_PROJECT_ID` and refuses its
+  own project to every mission: not offered at creation (`resource-self`), refused at
+  call time even if an older mission selected it, tagged on the account page. Other
+  hosts list theirs in `self_resources` / `VAUBAAN_SELF_RESOURCES`
+  (`<provider>:<ref>`). ADR
+  [self-resources-never-reachable-by-a-mission](docs/decisions/self-resources-never-reachable-by-a-mission.md).
 - **Every change and every release passes supply-chain checks.** A secret scan of the
   whole history on every push, static analysis (Semgrep: pinned community security rules
   and rules of this codebase), a vulnerability scan of the image that fails on a known

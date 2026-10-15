@@ -52,6 +52,7 @@ import {
   Textarea,
 } from '@/components/ui';
 import {
+  ACCOUNT_WORDS,
   ACTIONS,
   count,
   expiresOn,
@@ -623,8 +624,9 @@ export function MissionForm({
                           <Checkbox
                             key={r.id}
                             checked={cs.resourceIds.includes(r.id)}
-                            // Discovery no longer returns it: never part of a new mission.
-                            disabled={r.stale}
+                            // Discovery no longer returns it, or it hosts this
+                            // instance: never part of a new mission.
+                            disabled={r.stale || r.self}
                             aria-label={`Resource ${r.ref}`}
                             onChange={(e) =>
                               patchConnection(
@@ -647,6 +649,7 @@ export function MissionForm({
                               <EnvTag env={r.env} />
                               {r.hidden && <Tag>hidden by its owner</Tag>}
                               {r.stale && <Tag tone="warn">no longer found</Tag>}
+                              {r.self && <Tag tone="warn">{ACCOUNT_WORDS.self}</Tag>}
                             </span>
                           </Checkbox>
                         ))}

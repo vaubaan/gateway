@@ -65,7 +65,7 @@ describe('missions: issue, rotate, revoke', () => {
       display: seeded.ada.email,
     });
     expect(verified.token.prefix).toBe(first.token.prefix);
-    const ctx = await loadMissionContext(root.store, verified.mission, verified.token);
+    const ctx = await loadMissionContext(root.store, verified.mission, verified.token, []);
     expect(checkMissionActive(ctx, new Date(first.mission.createdAt))).toBeNull();
 
     const rotated = await missions.rotate(seeded.ada, first.mission.id);
@@ -85,7 +85,7 @@ describe('missions: issue, rotate, revoke', () => {
     expect(after).toMatchObject({ outcome: 'retired', reason: 'revoked' });
     if (after.outcome !== 'retired') throw new Error('expected a retired token');
     const refusal = checkMissionActive(
-      await loadMissionContext(root.store, after.mission, after.token),
+      await loadMissionContext(root.store, after.mission, after.token, []),
       new Date(first.mission.createdAt),
     );
     expect(refusal).toMatchObject({ code: 'mission-inactive', status: 'revoked' });
@@ -163,11 +163,16 @@ describe('missions: issue, rotate, revoke', () => {
     ]);
 
     // The door: scope `all` with no stored id is "none known at issuance".
-    const ctx = await loadMissionContext(root.store, mission, {
-      id: 'token',
-      prefix: token.prefix,
-      holder: { kind: 'named', name: 'test' },
-    });
+    const ctx = await loadMissionContext(
+      root.store,
+      mission,
+      {
+        id: 'token',
+        prefix: token.prefix,
+        holder: { kind: 'named', name: 'test' },
+      },
+      [],
+    );
     expect(ctx.resources).toEqual([]);
     // The page and the kit say what the door enforces.
     const detail = await missions.get(seeded.bob, mission.id);
@@ -196,11 +201,16 @@ describe('missions: issue, rotate, revoke', () => {
       { ref: 'acme/app', displayName: 'acme/app' },
       { ref: 'acme/infra', displayName: 'acme/infra' },
     ]);
-    const ctx = await loadMissionContext(root.store, mission, {
-      id: 'token',
-      prefix: token.prefix,
-      holder: { kind: 'named', name: 'test' },
-    });
+    const ctx = await loadMissionContext(
+      root.store,
+      mission,
+      {
+        id: 'token',
+        prefix: token.prefix,
+        holder: { kind: 'named', name: 'test' },
+      },
+      [],
+    );
     const reachable = ctx.resources.map((r) => r.ref).sort();
     expect(reachable).toEqual(['acme/app', 'acme/infra']);
     const detail = await missions.get(seeded.ada, mission.id);
@@ -658,6 +668,7 @@ describe('missions: issue, rotate, revoke', () => {
       authority: root.missions.authority,
       grounds: root.authority.grounds,
       publicUrl: root.config.publicUrl,
+      selfResources: root.config.selfResources,
       clock,
       logger: root.logger,
     });
@@ -699,6 +710,7 @@ describe('missions: issue, rotate, revoke', () => {
       authority: root.missions.authority,
       grounds: root.authority.grounds,
       publicUrl: root.config.publicUrl,
+      selfResources: root.config.selfResources,
       clock: new ManualClock(new Date()),
       logger: root.logger,
       mint: async () => {

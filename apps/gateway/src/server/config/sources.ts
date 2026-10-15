@@ -105,6 +105,7 @@ const KEY_TABLE = [
     https: true,
   },
   { path: 'trusted_proxies', env: 'VAUBAAN_TRUSTED_PROXIES', kind: 'list' },
+  { path: 'self_resources', env: 'VAUBAAN_SELF_RESOURCES', kind: 'list' },
   { path: 'store.path', env: 'VAUBAAN_STORE_PATH', kind: 'string', required: 'always' },
   {
     path: 'encryption.master_key',

@@ -150,7 +150,7 @@ export const ACME_CATALOG: RiskCatalog = {
   ],
 };
 
-const LISTED = { hidden: false, stale: false } as const;
+const LISTED = { hidden: false, stale: false, self: false } as const;
 
 export const ACME_RESOURCES: readonly IssuanceResource[] = [
   {
@@ -172,6 +172,7 @@ export const ACME_HIDDEN: IssuanceResource = {
   env: 'prod',
   hidden: true,
   stale: false,
+  self: false,
 };
 export const ACME_STALE: IssuanceResource = {
   id: 'res-gone',
@@ -180,6 +181,7 @@ export const ACME_STALE: IssuanceResource = {
   env: 'staging',
   hidden: false,
   stale: true,
+  self: false,
 };
 
 /** The issuance context of an owner on one Acme connection. */

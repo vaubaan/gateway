@@ -2,7 +2,7 @@
 title: Instance configuration, crypto and composition root
 status: current
 date: 2026-10-13
-last_synced: 2026-10-14
+last_synced: 2026-10-15
 tracks:
   - apps/gateway/src/server/config/
   - apps/gateway/src/server/crypto/
@@ -49,6 +49,7 @@ apps/gateway/src/
       load.ts                   loadInstanceConfig(): merge, validate, ConfigError
       errors.ts                 ConfigIssue / ConfigError / IssueList
       duration.ts               "30s" | "10m" | "24h" | "7d" → seconds
+      self-resources.ts         readSelfResources(), isSelfResource(): the instance's own resources (RAILWAY_PROJECT_ID + self_resources)
       build-info.ts             buildInfoFromEnv(): the version and commit stamps frozen by next.config.ts
       telemetry-default.ts      the single default URL of the code base
       testing.ts                validEnv(), fakeFiles() for tests
@@ -351,6 +352,7 @@ default or a bound, change `KEYS` and this table together.
 | ------------------------------------------------- | ---------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `public_url`                                      | URL        | required                                   | https; no query or fragment; a trailing `/` is stripped, a sub-path is kept                                                                                                                                                                                                                                                                                                                                                                                                                | `VAUBAAN_PUBLIC_URL`                                                                                                                                                                                                                 | every module that builds an address: provider callbacks, request URLs, the bootstrap kit, the OAuth issuer and its endpoints, origin checks                                                                     |
 | `trusted_proxies`                                 | list       | —                                          | —; each entry an IP address or a CIDR block (prefix 0–32 for IPv4, 0–128 for IPv6)                                                                                                                                                                                                                                                                                                                                                                                                         | `VAUBAAN_TRUSTED_PROXIES`                                                                                                                                                                                                            | `http/client-ip.ts`, the one reading of `X-Forwarded-For`: execution door, request page, OAuth endpoints, management gate                                                                                       |
+| `self_resources`                                  | list       | —                                          | —; each entry `<provider>:<ref>` (a plugin id, then the resource ref as discovery stores it); `railway:$RAILWAY_PROJECT_ID` is always added when Railway sets that variable                                                                                                                                                                                                                                                                                                                | `VAUBAAN_SELF_RESOURCES`                                                                                                                                                                                                             | `config/self-resources.ts`: the instance's own resources, never reachable by a mission — refused at issuance (`resource-self`), left out of the mission context at execution, flagged on the account page       |
 | `store.path`                                      | string     | required                                   | —; not empty                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `VAUBAAN_STORE_PATH`                                                                                                                                                                                                                 | `compose/store.ts` (`openEmbeddedStore`)                                                                                                                                                                        |
 | `encryption.master_key`                           | secret     | required                                   | —; exactly 32 bytes, in base64 or base64url                                                                                                                                                                                                                                                                                                                                                                                                                                                | `VAUBAAN_MASTER_KEY`, `VAUBAAN_MASTER_KEY_FILE`                                                                                                                                                                                      | `crypto/encryptor.ts`                                                                                                                                                                                           |
 | `encryption.key_version`                          | integer    | `1`                                        | >= 1                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `VAUBAAN_MASTER_KEY_VERSION`                                                                                                                                                                                                         | `crypto/encryptor.ts`: the version stamped on new blobs                                                                                                                                                         |
@@ -440,6 +442,33 @@ Invalid instance configuration (2 problems):
   - encryption.master_key: missing required key (env: VAUBAAN_MASTER_KEY or VAUBAAN_MASTER_KEY_FILE)
   - public_url: must use https (got http) (env: VAUBAAN_PUBLIC_URL)
 ```
+
+### Self resources
+
+`InstanceConfig.selfResources` is the set of provider resources that host or
+run this instance (SEC 2026-10-15 H1: a Railway connection lists the project
+the gateway runs in, and `railway.read-variables` on it reads
+`VAUBAAN_MASTER_KEY`). It is host-level: no plugin, connection, preset or
+policy can add or remove one. Two sources, merged without duplicates:
+
+- the platform — Railway sets `RAILWAY_PROJECT_ID` in every container it
+  runs, so an instance on Railway always counts `railway:<its project id>`;
+  the configuration cannot take it out;
+- the `self_resources` key (`VAUBAAN_SELF_RESOURCES`, comma-separated), a
+  list of `<provider>:<ref>` for any other host (the Vercel project, the SSH
+  host, a Supabase project holding the backups). A malformed entry stops the
+  boot like any other configuration problem.
+
+Where it is enforced (each reads `config.selfResources` through
+`isSelfResource(provider, ref)`):
+
+| Where                                                  | What it does                                                                                                                                                                 |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Issuance (`missions/preview.ts`)                       | `IssuanceResource.self` is set; "all resources" leaves it out; an explicit selection is refused with `resource-self`                                                         |
+| Management door (`management/views.ts`)                | not listed among the selectable resources                                                                                                                                    |
+| Execution (`execution/mission-context.ts`)             | left out of the mission context whatever the stored policy says: the plugin binds no call to it, the resource stage refuses a call that cites it (`resource-not-in-mission`) |
+| Mission detail and kit (`missions/mission-service.ts`) | not listed; a duplicated mission drops it                                                                                                                                    |
+| Account page (`accounts/[id]/account-view.tsx`)        | tagged "this instance's own project: never reachable by a mission", not counted as reachable                                                                                 |
 
 ### Changing the identity provider
 

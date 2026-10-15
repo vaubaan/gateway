@@ -107,11 +107,14 @@ interface ResourceResolution {
   readonly issues: PreviewIssue[];
 }
 
-/** What "all resources" means: not hidden by the owner, still returned by discovery. */
+/**
+ * What "all resources" means: not hidden by the owner, still returned by
+ * discovery, and not one of the instance's own (never reachable by a mission).
+ */
 export function defaultResources(
   connection: Pick<IssuanceConnection, 'resources'>,
 ): IssuanceResource[] {
-  return connection.resources.filter((r) => !r.hidden && !r.stale);
+  return connection.resources.filter((r) => !r.hidden && !r.stale && !r.self);
 }
 
 /** The "M" of "N of M resources": the default set plus hidden resources picked on purpose. */
@@ -170,7 +173,23 @@ function resolveResources(
     });
     for (const r of stale) selected.delete(r.id);
   }
-  if (selected.size === 0 && foreign.length === 0 && stale.length === 0) {
+  // One of the instance's own resources (SEC 2026-10-15 H1): refused whoever
+  // selects it, the creator's authority on the connection notwithstanding.
+  const self = [...selected.values()].filter((r) => r.self);
+  if (self.length > 0) {
+    issues.push({
+      code: 'resource-self',
+      message: `${self.map((r) => r.ref).join(', ')} on "${connection.display_name}" ${
+        self.length === 1 ? 'hosts' : 'host'
+      } this instance: never reachable by a mission. Leave ${
+        self.length === 1 ? 'it' : 'them'
+      } out.`,
+      resource_refs: self.map((r) => r.ref),
+      ...where,
+    });
+    for (const r of self) selected.delete(r.id);
+  }
+  if (selected.size === 0 && foreign.length === 0 && stale.length === 0 && self.length === 0) {
     issues.push({
       code: 'no-resource-selected',
       message: `Connection "${connection.display_name}" has no resource selected: the mission could touch nothing on it.`,

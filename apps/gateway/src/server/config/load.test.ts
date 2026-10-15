@@ -683,3 +683,38 @@ describe('loadInstanceConfig — boolean and integer spellings per source', () =
     expect(paths(err)).toEqual(['retention_days']);
   });
 });
+
+describe('loadInstanceConfig — self resources (SEC 2026-10-15 H1)', () => {
+  it('has none off Railway and without the key', () => {
+    expect(loadInstanceConfig({ env: validEnv() }).config.selfResources).toEqual([]);
+  });
+
+  it("counts the Railway project the instance runs in, from the platform's variable", () => {
+    const { config } = loadInstanceConfig({
+      env: validEnv({ RAILWAY_PROJECT_ID: 'b6f0c3a2-1d2e-4f5a-8b9c-0d1e2f3a4b5c' }),
+    });
+    expect(config.selfResources).toEqual([
+      { provider: 'railway', ref: 'b6f0c3a2-1d2e-4f5a-8b9c-0d1e2f3a4b5c', source: 'railway' },
+    ]);
+  });
+
+  it('adds the configured <provider>:<ref> entries, without duplicating the platform one', () => {
+    const { config } = loadInstanceConfig({
+      env: validEnv({
+        RAILWAY_PROJECT_ID: 'proj-1',
+        VAUBAAN_SELF_RESOURCES: 'railway:proj-1, vercel:prj_gateway,supabase:abcdefghijklmnopqrst',
+      }),
+    });
+    expect(config.selfResources).toEqual([
+      { provider: 'railway', ref: 'proj-1', source: 'railway' },
+      { provider: 'vercel', ref: 'prj_gateway', source: 'config' },
+      { provider: 'supabase', ref: 'abcdefghijklmnopqrst', source: 'config' },
+    ]);
+  });
+
+  it('refuses an entry that is not <provider>:<ref>, naming the key and its variable', () => {
+    const err = failure(validEnv({ VAUBAAN_SELF_RESOURCES: 'proj-1,railway:' }));
+    expect(paths(err)).toEqual(['self_resources', 'self_resources']);
+    expect(err.issues[0]?.env).toContain('VAUBAAN_SELF_RESOURCES');
+  });
+});

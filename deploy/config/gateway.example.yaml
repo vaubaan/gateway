@@ -35,6 +35,14 @@
 # trusted_proxies:
 #   - 172.16.0.0/12
 
+# Provider resources that host or run this instance: never reachable by a
+# mission (not offered at issuance, refused at execution). Each entry is
+# <provider>:<ref>, the ref as the connection's discovery stores it. On
+# Railway the instance's own project (RAILWAY_PROJECT_ID) is always counted.
+# env: VAUBAAN_SELF_RESOURCES (comma-separated)
+# self_resources:
+#   - vercel:prj_xxx
+
 # store:
 #   # REQUIRED. SQLite database file; its directory must be writable and
 #   # persistent (the /data volume in the image).

@@ -156,11 +156,30 @@ export interface OAuthConfig {
   };
 }
 
+/** Where a self resource comes from: the `self_resources` key, or the platform the instance runs on. */
+export type SelfResourceSource = 'config' | 'railway';
+
+/**
+ * A provider resource that hosts or runs this instance (SEC 2026-10-15 H1):
+ * never a mission resource — not offered at issuance, left out of a
+ * mission's resources at execution, flagged on the account page. Host-level:
+ * no plugin can add or remove one.
+ */
+export interface SelfResource {
+  /** A plugin id (`railway`). */
+  readonly provider: string;
+  /** The resource ref as discovery stores it (a Railway project id). */
+  readonly ref: string;
+  readonly source: SelfResourceSource;
+}
+
 export interface InstanceConfig {
   /** Public origin of the instance, always https, no trailing slash. */
   readonly publicUrl: URL;
   /** IPs or CIDR blocks whose `X-Forwarded-For` is trusted. Empty: none. */
   readonly trustedProxies: readonly string[];
+  /** The resources of this instance's own hosting; see `SelfResource`. */
+  readonly selfResources: readonly SelfResource[];
   readonly store: { readonly path: string };
   readonly encryption: EncryptionConfig;
   /**

@@ -549,6 +549,8 @@ export const ACCOUNT_WORDS = {
   environment: 'Environment',
   hidden: 'hidden from new missions',
   gone: 'no longer found',
+  /** A resource of `InstanceConfig.selfResources` (SEC 2026-10-15 H1). */
+  self: "this instance's own project: never reachable by a mission",
   experimental: 'experimental',
   noLabel: 'without an environment label',
 } as const;

@@ -1,6 +1,7 @@
 export { loadInstanceConfig, MASTER_KEY_BYTES, type LoadOptions, type LoadedConfig } from './load';
 export { ConfigError, errorMessage, formatIssue, type ConfigIssue } from './errors';
 export { parseDuration } from './duration';
+export { RAILWAY_PROJECT_ENV, isSelfResource } from './self-resources';
 export { buildInfoFromEnv, type BuildInfo } from './build-info';
 export { DEFAULT_TELEMETRY_COLLECTOR_URL } from './telemetry-default';
 export {
@@ -35,5 +36,7 @@ export {
   type OAuthConfig,
   type ProviderAppConfig,
   type ProviderAppField,
+  type SelfResource,
+  type SelfResourceSource,
   type TelemetryConfig,
 } from './types';

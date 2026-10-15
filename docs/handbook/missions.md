@@ -2,7 +2,7 @@
 title: Missions — authority, issuance, presets, resources, members and tokens, bootstrap kit
 status: current
 date: 2026-10-13
-last_synced: 2026-10-14
+last_synced: 2026-10-15
 tracks:
   - apps/gateway/src/server/authority/
   - apps/gateway/src/server/missions/
@@ -230,6 +230,7 @@ risk_ids?, resource_refs? }`, so everything is fixed in one pass.
 | `duplicate-provider`         | two connections of one provider (see below)                                                                                                          |
 | `resource-not-in-connection` | a selected id or ref is not a resource of that connection                                                                                            |
 | `resource-stale`             | a selected resource is stale (discovery no longer returns it)                                                                                        |
+| `resource-self`              | a selected resource is one of the instance's own (`InstanceConfig.selfResources`, handbook [configuration](configuration.md) "Self resources")       |
 | `no-resource-selected`       | `selected` scope with an empty list                                                                                                                  |
 | `unknown-preset`             | not a preset of the plugin                                                                                                                           |
 | `unknown-risk`               | not an explicit id of that connection's catalog: wildcard, sentinel, other provider, base id of an env-scoped risk, env outside `acceptable_in_envs` |
@@ -313,6 +314,16 @@ select a hidden resource explicitly (the form lists it, unticked, with a
 is disabled), so it cannot resolve an env-qualified risk either.
 `resources_total` — the "M" of "N of M resources" — is the default set plus the
 hidden resources selected on purpose.
+
+**The instance's own resources** (SEC 2026-10-15 H1). `IssuanceResource.self`
+is set when `isSelfResource(config.selfResources, provider, ref)` holds — on
+Railway, the project the instance runs in. Such a resource is never part of a
+mission: left out of `defaultResources`, refused when selected
+(`resource-self`; its checkbox is disabled and tagged "this instance's own
+project: never reachable by a mission"), not listed by the management door,
+dropped by `draftFrom` (duplicate), and left out of the mission detail and
+the kit (`detailConnections`) — the same rule as `loadMissionContext` at the
+execution door, which leaves it out whatever the stored selection says.
 
 **One connection per provider.** `mission_policy` is keyed `(mission, risk_id)`
 and a `RiskId` starts with its provider: two GitHub connections in one mission

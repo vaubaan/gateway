@@ -521,6 +521,7 @@ describe('views', () => {
           env: 'staging',
           hidden: false,
           stale: false,
+          self: false,
         },
         {
           id: 'r2',
@@ -529,6 +530,7 @@ describe('views', () => {
           env: 'prod',
           hidden: false,
           stale: true,
+          self: false,
         },
       ],
     });
@@ -582,6 +584,7 @@ describe('views', () => {
           env: null,
           hidden: false,
           stale: false,
+          self: false,
         },
       ],
     });
@@ -600,7 +603,15 @@ describe('views', () => {
     const view = connectionView(
       acmeConnection({
         resources: [
-          { id: 'a', ref: 'gone', display_name: 'Gone', env: 'prod', hidden: false, stale: true },
+          {
+            id: 'a',
+            ref: 'gone',
+            display_name: 'Gone',
+            env: 'prod',
+            hidden: false,
+            stale: true,
+            self: false,
+          },
           {
             id: 'b',
             ref: 'archive',
@@ -608,6 +619,7 @@ describe('views', () => {
             env: null,
             hidden: true,
             stale: false,
+            self: false,
           },
         ],
       }),
@@ -615,6 +627,26 @@ describe('views', () => {
     expect(view.resources).toEqual([
       { ref: 'archive', display_name: 'Archive', env: null, hidden: true },
     ]);
+    expect(view.env_qualified_risks.labelled_envs).toEqual([]);
+  });
+
+  it("the instance's own resource is never offered, nor does its label count", () => {
+    const view = connectionView(
+      acmeConnection({
+        resources: [
+          {
+            id: 'h',
+            ref: 'gateway-host',
+            display_name: 'Gateway host',
+            env: 'prod',
+            hidden: false,
+            stale: false,
+            self: true,
+          },
+        ],
+      }),
+    );
+    expect(view.resources).toEqual([]);
     expect(view.env_qualified_risks.labelled_envs).toEqual([]);
   });
 
