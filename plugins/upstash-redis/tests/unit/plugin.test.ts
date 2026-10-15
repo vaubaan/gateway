@@ -546,6 +546,10 @@ describe('executeUpstashRedis with mockFetch', () => {
     ).toEqual({ a: 1 });
     expect(redactDatabases([{ rest_token: 't' }, 'OK'])).toEqual([{}, 'OK']);
     expect(redactDatabases('OK')).toBe('OK');
+    // A credential-like field Upstash may add later is stripped by its name.
+    expect(redactDatabases({ a: 1, admin_token: 'x', backup_secret: 'y', api_key: 'z' })).toEqual({
+      a: 1,
+    });
   });
 });
 

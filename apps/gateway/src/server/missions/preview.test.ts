@@ -307,6 +307,42 @@ describe('previewDraft — resource selection', () => {
     expect(stale.connections[0]?.resources.map((r) => r.ref)).toEqual(['app-prod']);
   });
 
+  it('never lets the instance\'s own resource into a mission: out of "all", refused when selected', () => {
+    const own = { ...ACME_RESOURCES[1]!, id: 'res-self', ref: 'gateway-host', self: true };
+    const withSelf = acmeConnection({ resources: [...ACME_RESOURCES, own] });
+
+    const all = preview([{ connection_id: 'conn-acme', preset: 'reader' }], [withSelf]);
+    expect(all.ok).toBe(true);
+    expect(all.resolved[0]?.resources.resource_ids).not.toContain('res-self');
+    expect(all.connections[0]?.resources_total).toBe(3);
+
+    for (const resources of [
+      { scope: 'selected', resource_ids: ['res-app-prod', 'res-self'] },
+      { scope: 'selected', resource_refs: ['app-prod', 'gateway-host'] },
+    ] as const) {
+      const picked = preview(
+        [{ connection_id: 'conn-acme', preset: 'reader', resources }],
+        [withSelf],
+      );
+      expect(picked.ok).toBe(false);
+      expect(codes(picked)).toEqual(['resource-self']);
+      expect(picked.issues[0]?.resource_refs).toEqual(['gateway-host']);
+      expect(picked.connections[0]?.resources.map((r) => r.ref)).toEqual(['app-prod']);
+    }
+
+    const onlySelf = preview(
+      [
+        {
+          connection_id: 'conn-acme',
+          preset: 'reader',
+          resources: { scope: 'selected', resource_ids: ['res-self'] },
+        },
+      ],
+      [withSelf],
+    );
+    expect(codes(onlySelf)).toEqual(['resource-self']);
+  });
+
   it('does not let a stale resource resolve an env-qualified risk', () => {
     const onlyStaleStaging = acmeConnection({
       resources: [ACME_RESOURCES[1]!, ACME_STALE],

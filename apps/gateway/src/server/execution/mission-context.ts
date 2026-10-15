@@ -16,6 +16,12 @@
  * `resource-not-in-mission`. A *hidden* one stays: hiding is a listing
  * preference of the owner, not a withdrawal.
  *
+ * A *self* resource (one of the instance's own hosting, `config.selfResources`,
+ * SEC 2026-10-15 H1) is left out too, whatever the mission stored: a policy
+ * issued before the instance knew it, or written by hand, still cannot reach
+ * it. The plugin then binds no call to it, and the resource stage refuses a
+ * call that cites it with `resource-not-in-mission`.
+ *
  * Nothing here is cached: the reads are local (SQLite) and a revocation, an
  * expired connection or a stale resource must be seen by the next call.
  */
@@ -28,6 +34,7 @@ import type {
 } from '@vaubaan/gateway-core';
 
 import { isStale, periodOf, policyEntryOf } from '../budget';
+import { isSelfResource, type SelfResource } from '../config';
 import {
   connectionCredentialKind,
   connectionOwnerOf,
@@ -72,6 +79,8 @@ export async function loadMissionContext(
   mission: MissionRecord,
   /** The verified token and its holder (`MissionService.verifyToken`): who is calling. */
   token: AuthenticatedToken,
+  /** The instance's own resources: never part of a mission's context. */
+  selfResources: readonly SelfResource[],
 ): Promise<MissionContext> {
   const connections: MissionConnection[] = [];
   const resources: MissionResource[] = [];
@@ -90,6 +99,7 @@ export async function loadMissionContext(
     if (selected.size === 0) continue;
     for (const record of await store.connections.listResources(connection.id)) {
       if (!selected.has(record.id) || isStale(record)) continue;
+      if (isSelfResource(selfResources, connection.provider, record.ref)) continue;
       resources.push(missionResourceOf(connection, record));
     }
   }

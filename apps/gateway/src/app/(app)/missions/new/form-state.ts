@@ -732,6 +732,10 @@ export function issueSentence(
       return refs
         ? `${account}: ${refs} can no longer be found there. Leave it out.`
         : issue.message;
+    case 'resource-self':
+      return refs
+        ? `${account}: ${refs} is this instance's own hosting. A mission can never reach it.`
+        : issue.message;
     case 'exceeds-authority':
       return ids
         ? `${account}: ${ids} ${several ? 'are' : 'is'} ${OUTSIDE_AUTHORITY} on this account.`

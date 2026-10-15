@@ -101,8 +101,9 @@ export interface ConnectionView {
 }
 
 /** The resources a new mission can select: the ones discovery still returns. */
+/** What a mission may select: still returned by discovery, and not one of the instance's own. */
 function selectable(connection: IssuanceConnection): IssuanceConnection['resources'] {
-  return connection.resources.filter((r) => !r.stale);
+  return connection.resources.filter((r) => !r.stale && !r.self);
 }
 
 function presetSummary(preset: Preset, connection: IssuanceConnection): PresetSummaryView {

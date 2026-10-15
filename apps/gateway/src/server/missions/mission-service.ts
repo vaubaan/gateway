@@ -55,6 +55,7 @@ import {
   type MissionState,
   type SessionService,
 } from '../budget';
+import { isSelfResource, type SelfResource } from '../config';
 import { connectionSummaryOf } from '../connections/mapping';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
@@ -116,6 +117,11 @@ export interface MissionServiceDeps {
   readonly grounds: Pick<MissionGrounds, 'inspect'>;
   /** `InstanceConfig.publicUrl` — the instance URL of the bootstrap kit. */
   readonly publicUrl: URL;
+  /**
+   * `InstanceConfig.selfResources` — the instance's own resources: flagged and
+   * never selectable at issuance, left out of a mission's detail and kit.
+   */
+  readonly selfResources: readonly SelfResource[];
   readonly clock: Clock;
   readonly logger: Logger;
   /** Tests inject a deterministic minter; production stores the SHA-256 digest. */
@@ -441,7 +447,7 @@ export interface MissionDetail extends MissionOverview {
 /** A user who may read the mission: `id`, and nothing else is trusted from the caller. */
 type Reader = AuthoritySubject;
 
-function toIssuanceResource(r: ConnectionResourceRecord): IssuanceResource {
+function toIssuanceResource(r: ConnectionResourceRecord, self: boolean): IssuanceResource {
   return {
     id: r.id,
     ref: r.ref,
@@ -449,6 +455,7 @@ function toIssuanceResource(r: ConnectionResourceRecord): IssuanceResource {
     env: r.env,
     hidden: r.hidden,
     stale: isStale(r),
+    self,
   };
 }
 
@@ -547,7 +554,7 @@ export class MissionService {
       experimental: plugin.experimental === true,
       derives_env: typeof plugin.envOf === 'function',
       basis: authority.basis,
-      resources: resources.map(toIssuanceResource),
+      resources: resources.map((r) => toIssuanceResource(r, this.isSelf(connection.provider, r))),
       risks: this.risksOf(connection.provider),
       authority: authority.riskIds,
       presets: this.deps.registry.presetsOf(connection.provider),
@@ -655,7 +662,7 @@ export class MissionService {
         resources:
           c.resourceScope === 'all'
             ? { scope: 'all' }
-            : { scope: 'selected', resource_ids: await this.survivingResources(c) },
+            : { scope: 'selected', resource_ids: await this.survivingResources(c, provider) },
         preset: null,
         policy: mission.policy
           .map(policyEntryOf)
@@ -670,11 +677,22 @@ export class MissionService {
     };
   }
 
-  private async survivingResources(c: MissionConnectionRecord): Promise<string[]> {
+  private async survivingResources(
+    c: MissionConnectionRecord,
+    provider: string,
+  ): Promise<string[]> {
     const current = await this.deps.store.connections.listResources(c.connectionId);
     // A stale resource would refuse the copy: it is dropped like a vanished one.
-    const known = new Set(current.filter((r) => !isStale(r)).map((r) => r.id));
+    // So is one of the instance's own resources, which no mission may reach.
+    const known = new Set(
+      current.filter((r) => !isStale(r) && !this.isSelf(provider, r)).map((r) => r.id),
+    );
     return c.resourceIds.filter((id) => known.has(id));
+  }
+
+  /** True when the resource is one of this instance's own (`selfResources`). */
+  private isSelf(provider: string, resource: Pick<ConnectionResourceRecord, 'ref'>): boolean {
+    return isSelfResource(this.deps.selfResources, provider, resource.ref);
   }
 
   /**
@@ -1508,7 +1526,8 @@ export class MissionService {
   /**
    * The connections of a mission with the resources it reaches — the same rule
    * as `loadMissionContext`: only the ids stored at issuance, never the
-   * connection's live list, and not the ones discovery no longer returns.
+   * connection's live list, and not the ones discovery no longer returns nor
+   * the instance's own.
    */
   private async detailConnections(mission: MissionRecord): Promise<MissionDetailConnection[]> {
     const details: MissionDetailConnection[] = [];
@@ -1520,13 +1539,13 @@ export class MissionService {
         selected.size === 0
           ? []
           : (await this.deps.store.connections.listResources(c.connectionId)).filter(
-              (r) => selected.has(r.id) && !isStale(r),
+              (r) => selected.has(r.id) && !isStale(r) && !this.isSelf(connection.provider, r),
             );
       details.push({
         ...connectionSummaryOf(connection),
         provider_label:
           this.deps.registry.get(connection.provider)?.plugin.displayName ?? connection.provider,
-        resources: reached.map(toIssuanceResource),
+        resources: reached.map((r) => toIssuanceResource(r, false)),
       });
     }
     return details;

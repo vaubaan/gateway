@@ -2,7 +2,7 @@
 title: Execution door — /mcp, the call pipeline's stages, the agent label, streaming, the catalog
 status: current
 date: 2026-10-13
-last_synced: 2026-10-14
+last_synced: 2026-10-15
 tracks:
   - apps/gateway/src/server/execution/
   - apps/gateway/src/server/git/paths.ts
@@ -322,17 +322,21 @@ that mission stays orphaned.
 
 ### Mission context (`mission-context.ts`)
 
-`loadMissionContext(store, mission, token)` builds gateway-core's
-`MissionContext` on every request; `token` is the verified one, with its
-holder (`{ id, prefix, holder }`):
+`loadMissionContext(store, mission, token, selfResources)` builds
+gateway-core's `MissionContext` on every request; `token` is the verified
+one, with its holder (`{ id, prefix, holder }`); `selfResources` is
+`config.selfResources` (the admission passes it):
 
 - `connections` — one `MissionConnection` per `mission.connections` entry, with
   the current `status` and `owner.display` (the user's email, or the group's
   name).
 - `resources` — the rows of `connections.listResources` whose id is in the
-  mission's `resourceIds` **and** whose `staleSince` is null. Scope `all` with
-  an empty list yields nothing: the selection is never hydrated from the live
-  list. Hidden resources stay.
+  mission's `resourceIds` **and** whose `staleSince` is null **and** that is
+  not one of the instance's own (`isSelfResource`, handbook
+  [configuration](configuration.md) "Self resources": a stored selection that
+  names it still cannot reach it). Scope `all` with an empty list yields
+  nothing: the selection is never hydrated from the live list. Hidden
+  resources stay.
 - `policy` — `mission.policy` through `policyEntryOf` (budget).
 - `session` — `sessions.getByMission`, or `null` before the first call.
 

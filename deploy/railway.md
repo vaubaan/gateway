@@ -61,6 +61,21 @@ A2 of the [threat model](../docs/handbook/threat-model.md)). Never set
 `0.0.0.0/0`: any client could then choose the address it is limited and
 audited under.
 
+**The instance's own project is never a mission resource.** Railway sets
+`RAILWAY_PROJECT_ID` in the container; the gateway reads it and refuses that
+project to every mission — not offered when a mission is created, refused at
+call time even if an older mission selected it, and tagged "this instance's
+own project: never reachable by a mission" on the account page. Without this,
+a Railway account connected to the gateway lists the project the gateway runs
+in, and a mission with `railway.read-variables` on it would read
+`VAUBAAN_MASTER_KEY` (security review 2026-10-15, H1). The refusal covers the
+project as a mission resource; it does not cover what the Railway credential
+reaches by other means (`railway.agent-action` hands Railway's own agent a
+free-text request), so still prefer **a separate Railway workspace** for the
+gateway, and never connect that workspace's token to the gateway itself. To
+protect another resource of the hosting (a backup bucket, a second service),
+list it in `VAUBAAN_SELF_RESOURCES` (`<provider>:<ref>`, comma-separated).
+
 ## 3. The GitHub OAuth App
 
 At GitHub, under the settings of your organisation (or of your account) →

@@ -148,6 +148,11 @@ const nextConfig: NextConfig = {
   // next.config values are frozen at build time and would not follow the
   // instance configuration (ADR docker-image-and-config-format).
   compress: false,
+  // No page uses `next/image`: the optimizer endpoint (`/_next/image`) would only
+  // be unauthenticated surface parsing attacker-chosen bytes through sharp and
+  // libvips (security review 2026-10-15, M1). Unoptimized, Next serves no
+  // optimizer route.
+  images: { unoptimized: true },
 };
 
 export default nextConfig;

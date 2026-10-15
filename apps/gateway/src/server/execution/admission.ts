@@ -63,7 +63,7 @@ export interface TokenUseRecorder {
 }
 
 export interface MissionAdmissionDeps {
-  readonly config: Pick<InstanceConfig, 'publicUrl' | 'trustedProxies' | 'mcp'>;
+  readonly config: Pick<InstanceConfig, 'publicUrl' | 'trustedProxies' | 'mcp' | 'selfResources'>;
   readonly store: Pick<Store, 'connections' | 'users' | 'groups' | 'sessions'>;
   readonly tokens: TokenVerifier;
   readonly tokenUse: TokenUseRecorder;
@@ -250,7 +250,12 @@ export class MissionAdmission {
               uncovered: orphan.uncovered,
             });
           }
-          const context = await loadMissionContext(this.deps.store, mission, verified.token);
+          const context = await loadMissionContext(
+            this.deps.store,
+            mission,
+            verified.token,
+            this.deps.config.selfResources,
+          );
           this.missionsByContext.set(context, mission);
           return { kind: 'mission-token', context };
         }

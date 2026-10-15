@@ -122,6 +122,8 @@ export interface AccountData {
   /** Empty when the account takes no owner act. */
   readonly transferTargets: readonly GroupRecord[];
   readonly validation: ValidationStatus | null;
+  /** Refs of this account's resources that host this instance: never reachable by a mission. */
+  readonly selfRefs: ReadonlySet<string>;
 }
 
 /** Everything the page shows. Throws the services' "not found" for anyone but an owner. */
@@ -144,6 +146,11 @@ export async function loadAccount(
     missions,
     transferTargets: root.connections.service.transferTargets(actor, detail.connection),
     validation,
+    selfRefs: new Set(
+      root.config.selfResources
+        .filter((self) => self.provider === detail.connection.provider)
+        .map((self) => self.ref),
+    ),
   };
 }
 
@@ -394,7 +401,7 @@ export function AccountView({
   /** The dialog drawn over the page ("Give access"). */
   overlay?: React.ReactNode;
 }) {
-  const { detail, context, holders, missions, transferTargets } = data;
+  const { detail, context, holders, missions, transferTargets, selfRefs } = data;
   const { connection, resources } = detail;
   const now = new Date();
   const base = connectionPath(connection.id);
@@ -492,7 +499,9 @@ export function AccountView({
     },
   ];
 
-  const reachable = resources.filter((resource) => resource.staleSince === null);
+  const reachable = resources.filter(
+    (resource) => resource.staleSince === null && !selfRefs.has(resource.ref),
+  );
   const showsEnvironment =
     resources.some((resource) => resource.env !== null) ||
     (!context.labelling.derivesEnv && context.risks.some((risk) => risk.env !== null));
@@ -509,6 +518,7 @@ export function AccountView({
         <span className={shared.namedText}>
           <span>
             <Mono>{resource.ref}</Mono> {resource.hidden && <Tag>{ACCOUNT_WORDS.hidden}</Tag>}{' '}
+            {selfRefs.has(resource.ref) && <Tag tone="warn">{ACCOUNT_WORDS.self}</Tag>}{' '}
             {resource.staleSince && (
               <Tag tone="warn">
                 {ACCOUNT_WORDS.gone} since {shortDate(resource.staleSince, now)}

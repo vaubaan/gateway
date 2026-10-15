@@ -2,7 +2,7 @@
 title: Vercel provider — plugin and risk model
 status: current
 date: 2026-10-13
-last_synced: 2026-10-14
+last_synced: 2026-10-15
 tracks:
   - plugins/vercel/src/index.ts
   - plugins/vercel/src/classify.ts
@@ -10,6 +10,7 @@ tracks:
   - plugins/vercel/src/custom-tools.ts
   - plugins/vercel/src/data-model.ts
   - plugins/vercel/src/execute.ts
+  - plugins/vercel/src/redact.ts
   - plugins/vercel/src/risk-catalog.yaml
   - plugins/vercel/src/tools.ts
   - plugins/vercel/src/upstream-tools.json
@@ -283,6 +284,15 @@ the list against the schemas, so a tool added later is covered or fails.
   classifier's `pathIdent` / `domainName` and interpolated as they are —
   nothing is percent-encoded, since `encodeURIComponent` leaves `.` and `..`
   untouched.
+- `list_env_vars` without `decrypt=true` (`src/redact.ts`, SEC 2026-10-15)
+  is the `read-env-var` risk (`data: metadata`, keys only), yet Vercel
+  answers with a `value` per entry — the value in clear for a `plain` var.
+  The answer keeps an allow-list of descriptive fields per entry
+  (`ENV_VAR_PUBLIC_FIELDS` : id, key, type, target, gitBranch, comment,
+  dates…) ; every other field holding a value (`value`, `vsmValue`,
+  `contentHint`, a field Vercel adds tomorrow) becomes
+  `[redacted by Vaubaan]`. With `decrypt=true` (`read-env-var-plaintext`,
+  `data: secret`) the answer is returned as it is.
 - Argument pinning (`pinArgs`, no network): an unknown tool and the five
   thread-addressed tools are refused; `teamId` is checked against the
   credential (§4); the project is resolved by `resolveProject`, the function
