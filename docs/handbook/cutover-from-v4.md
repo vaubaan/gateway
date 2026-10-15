@@ -2,23 +2,29 @@
 title: Cutover from the v4 SaaS — what to prepare, the checklist, the live checks
 status: current
 date: 2026-10-13
-last_synced: 2026-10-14
+last_synced: 2026-10-15
 tracks:
   - deploy/compose.yaml
   - deploy/config/
   - apps/gateway/src/server/missions/bootstrap-kit.ts
   - apps/gateway/tests/e2e/v5/cutover-smoke.spec.ts
   - plugins/github/src/credential.ts
+  - scripts/export-v4.mjs
+  - apps/gateway/src/server/import-v4/
 ---
 
 # Cutover from the v4 SaaS — what to prepare, the checklist, the live checks
 
-The procedure to move the one real user of the v4 SaaS onto a v5 instance and
-switch v4 off. There is no coexistence, no export / import and no migration
-code (ADR
+The procedure to move an organization of the v4 SaaS onto a v5 instance and
+switch v4 off. There is no long coexistence and no migration of the v4
+database's history. Since the amendment of 2026-10-15 to ADR
 [pivot-v4-to-v5-on-prem-mission-tokens](../decisions/pivot-v4-to-v5-on-prem-mission-tokens.md)
-D7): connections are re-created by hand, one mission is issued per code
-project, each project's `.mcp.json` is repointed, and v4 is extinguished once
+D7, the re-creation is an **import**: the accounts whose key can be carried
+as is (Cloudflare, Vercel, Stripe, SSH), the resources of the projects with
+their environment labels and one mission per working v4 token are created by
+the importer — procedure in [import-from-v4](import-from-v4.md); GitHub,
+Railway and Supabase are still connected by hand, then the importer is run
+again. Each project's `.mcp.json` is repointed, and v4 is extinguished once
 every project has moved.
 
 The scenario and its pass criterion are in
@@ -207,17 +213,33 @@ Preconditions: section 1 done; v4 untouched and serving.
 - [ ] **A3 — Provider apps.** Enter each app of §1.3 on Settings → Company
       apps; every row reads "registered" (GitHub also reads "installations
       verified").
-- [ ] **A4 — Connect each provider** of the inventory (Accounts → Connect an
-      account). Each ends "Connected" (`active`) with its resources. **Live checks L1, L2 and L3 happen here** (§4).
+- [ ] **A4 — Import, then connect what the import cannot carry.** Run the
+      importer's dry run, then `--apply` ([import-from-v4](import-from-v4.md)
+      §2.2–2.3): Cloudflare, Vercel, Stripe and SSH accounts are created
+      (each checked at the service), labels carried, missions issued for the
+      projects whose services are all there. Connect the accounts the report
+      lists "TO CONNECT" (Accounts → Connect an account: GitHub, Railway,
+      Supabase), then run `--apply` again until no mission is deferred. Each
+      account ends "Connected" (`active`) with its resources. **Live checks
+      L1, L2 and L3 happen here** (§4).
 - [ ] **A5 — Label environments** on the page of each account (Supabase and
       Railway projects: `staging`, `prod`), hide what no mission should see.
-- [ ] **A6 — Issue one mission per code project**: its connections, the
+      Do it **before the importer's run that issues the missions concerned**:
+      an imported v4 permission that became environment-scoped in v5 is
+      written out per label of the selected resources, and a mission issued
+      earlier does not gain it from a label added later.
+- [ ] **A6 — Check the imported missions; issue the others by hand.** The
+      importer issued one mission per working v4 token, with the v4
+      permissions translated one by one; read, in its report, what was
+      dropped and why. For a code project the import did not cover, issue a
+      mission by hand: its connections, the
       resources of that project only, the plugin's developer preset
       (`developer` for GitHub, Vercel, Railway; `staging-developer` for
       Supabase), recurring daily period, **no expiry**. Read the summary of the rail (Can,
       Asks you first, Cannot), the "left out here" lines, and the list of
       permissions "Create mission" asks you to confirm. Copy the setup kit —
-      the key is shown once.
+      the key is shown once (an imported mission's key was printed once by
+      the importer; open its page for the kit, rotate the key if it was lost).
 - [ ] **A7 — Repoint the project.** Export `VAUBAAN_MISSION_TOKEN` where
       Claude Code will read it, replace the v4 server entry of the project's
       `.mcp.json` with the kit's, paste the kit's agent instructions where the

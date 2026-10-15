@@ -2,7 +2,7 @@
 title: Connections — connect flows, resources, credential refresh, provider apps
 status: current
 date: 2026-10-13
-last_synced: 2026-10-14
+last_synced: 2026-10-15
 tracks:
   - apps/gateway/src/server/connections/
   - apps/gateway/src/server/provider-apps/
@@ -512,6 +512,23 @@ What the check proves: the account that authorized the app can reach the
 installation (for GitHub, `GET /user/installations` lists the installations
 the user has explicit read, write or admin access to through at least one
 repository). It does not prove that this account administers it.
+
+### Created by the v4 importer (`importPastedKey`, `importSshKey`)
+
+Two entries of `ConnectionService` serve only the operator's v4 import
+(handbook [import-from-v4](import-from-v4.md), ADR
+[import-from-v4-one-shot-importer](../decisions/import-from-v4-one-shot-importer.md)).
+`importPastedKey(actor, providerId, { displayName, fields, importedFrom })`
+runs the `api-key` path of the form (`connectPasted`: field check, the
+plugin's `verify`, first discovery **required**, seal, `connection-created`).
+`importSshKey(actor, { providerId, fields, keyPair, importedFrom })` stores an
+existing key pair (`importEd25519PrivateKey` converts a PKCS#8 or OpenSSH
+ed25519 key to the OpenSSH container) instead of generating one, and runs the
+first discovery at once — the key is already installed, so the probe checks
+the pinned host key and the pair, and a failure stores nothing. Both keep
+`imported_from = { system, org, source }` in the connection's metadata,
+which is how a second import run recognises them, and skip the connect rate
+limit (the command is not a web request).
 
 ### Ownership
 

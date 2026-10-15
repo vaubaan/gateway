@@ -2,7 +2,7 @@
 title: E2E tests
 status: current
 date: 2026-10-13
-last_synced: 2026-10-14
+last_synced: 2026-10-15
 tracks:
   - apps/gateway/tests/e2e/v5/playwright.config.ts
   - apps/gateway/tests/e2e/
@@ -33,7 +33,7 @@ coding agent, and nothing manual is ever run by CI.
 ## Cutover acceptance scenario (manual)
 
 > Acceptance criterion of milestone M1 and of the cutover from the v4 SaaS
-> (ADR D7): _connect every provider used today, issue one mission per code
+> (ADR D7, amended 2026-10-15: an import replaces the re-creation by hand): _connect every provider used today, issue one mission per code
 > project, run the daily workflow with Claude Code with no unexpected
 > refusal._ The step-by-step checklist with tick boxes, what to prepare and the
 > live checks is the handbook
@@ -61,12 +61,19 @@ the commit the image was built from.
    registered under the company's own account at that service — the GitHub
    App with "Create the GitHub App" (owner, name, permissions, confirmed at
    GitHub), the others by hand.
-4. **Connect an account** (Accounts → "Connect an account") at each service
-   the owner has a v4 connection for today. Each account ends "connected" with
+4. **Import, then connect an account** at each service the import leaves
+   out. Run the v4 importer's dry run then `--apply`
+   ([import-from-v4](../handbook/import-from-v4.md)): the Cloudflare, Vercel,
+   Stripe and SSH accounts are created and checked, labels carried, one
+   mission issued per working v4 token whose services are all there. Then
+   Accounts → "Connect an account" for every service the report lists "TO
+   CONNECT" (GitHub, Railway, Supabase), and `--apply` again until no
+   mission is deferred. Each account ends "connected" with
    its resources discovered; environments are labelled where the catalog holds
    permissions per environment.
-5. **Create one mission per code project** (Missions → "New mission"). For
-   each code project: its accounts, the resources of that project only, the
+5. **Check the imported missions, create the missing ones** (Missions →
+   "New mission"). Read, in the importer's report, every v4 permission that
+   was dropped and why. For each code project the import did not cover: its accounts, the resources of that project only, the
    plugin's developer preset for each account (`developer` for GitHub, Vercel
    and Railway, `staging-developer` for Supabase, and the equivalent for the
    others), limits that reset every day, **no expiry**. "Create mission"

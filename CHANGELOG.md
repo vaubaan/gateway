@@ -10,8 +10,9 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 ## [Unreleased]
 
 The first release of the on-prem gateway. It replaces the earlier hosted product
-(last release: tag `v4-final`) and shares no data with it: there is nothing to
-migrate, an instance starts empty. The notes below describe what the gateway does;
+(last release: tag `v4-final`) and shares no database with it: an instance starts
+empty, and a one-shot importer carries an organization of the hosted product into
+it (below). The notes below describe what the gateway does;
 "Changed" and "Removed" are written for a reader who knew the hosted product.
 
 **Words.** The interface speaks to people in its own words, and these notes use them
@@ -200,6 +201,22 @@ names, and the notes about them do too.
   affected; trying again once the identity provider answers is the remedy.
 
 ### Added
+
+- **Import from the hosted product (v4), once per organization.**
+  `scripts/export-v4.mjs --org <slug>` reads one organization of the v4 database
+  (read-only, through `psql`) and writes a bundle to stdout only; piped into
+  `node apps/gateway/import-v4.mjs --owner <email> [--apply]` inside the instance's
+  container (`docker compose exec -T`, or `railway ssh … -- vaubaan-entrypoint …`),
+  it creates under that person the Cloudflare, Vercel, Stripe and SSH accounts
+  (each key checked at the service first; the SSH host's fingerprint given by the
+  operator), carries the resources' environment labels when they are `prod`,
+  `staging`, `preview` or `dev`, and issues one mission per working v4 key with its
+  permissions translated one by one — never widened, limits from the plugin's
+  presets — printing each new mission key once on stdout. GitHub, Railway and
+  Supabase are connected by hand; a mission waits until its services are there and
+  the next run issues it. The default is a dry run; a second run never duplicates.
+  Every act is the owner's in Activity, marked `imported-from-v4`. Handbook
+  `import-from-v4`, ADR `import-from-v4-one-shot-importer`.
 
 - **The gateway is the agent's git remote.** With a mission key and git, and
   nothing else, an agent clones, fetches and pushes
