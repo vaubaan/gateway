@@ -9,7 +9,7 @@
  * private-key format SSH clients read — PKCS#8 PEM is refused — so the key is
  * encoded here from the raw seed rather than exported by `node:crypto`.
  */
-import { generateKeyPairSync, randomBytes } from 'node:crypto';
+import { createPrivateKey, generateKeyPairSync, randomBytes, type KeyObject } from 'node:crypto';
 
 const KEY_TYPE = 'ssh-ed25519';
 const AUTH_MAGIC = 'openssh-key-v1\0';
@@ -27,13 +27,52 @@ export interface SshKeyPair {
 }
 
 export function generateEd25519KeyPair(comment: string): SshKeyPair {
-  const { publicKey, privateKey } = generateKeyPairSync('ed25519');
-  const jwkPublic = publicKey.export({ format: 'jwk' });
+  const { privateKey } = generateKeyPairSync('ed25519');
+  return pairOf(privateKey, comment);
+}
+
+/** Why an existing private key cannot become the key of an `ssh-key` connection. */
+export class SshKeyImportError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SshKeyImportError';
+  }
+}
+
+/**
+ * The pair of an ed25519 private key that already exists (the importer from
+ * v4, ADR import-from-v4-one-shot-importer D5): a PKCS#8 PEM (what v4
+ * generated) or an unencrypted OpenSSH container. The private key is written
+ * again in the OpenSSH container, the one format SSH clients read, with this
+ * instance's comment. Any other key type, an encrypted key or a malformed one
+ * is refused; the message never quotes the key.
+ */
+export function importEd25519PrivateKey(pem: string, comment: string): SshKeyPair {
+  const text = pem.trim();
+  if (text.startsWith(`-----BEGIN ${PEM_LABEL}-----`)) {
+    const { seed } = decodeOpenSshPrivateKey(text);
+    return pairOf(ed25519KeyFromSeed(seed), comment);
+  }
+  let key: KeyObject;
+  try {
+    key = createPrivateKey({ key: text, format: 'pem' });
+  } catch {
+    throw new SshKeyImportError('the private key is neither a PEM key nor an OpenSSH key');
+  }
+  if (key.asymmetricKeyType !== 'ed25519') {
+    throw new SshKeyImportError(
+      `the private key is ${key.asymmetricKeyType ?? 'of an unknown type'}, not ed25519`,
+    );
+  }
+  return pairOf(key, comment);
+}
+
+function pairOf(privateKey: KeyObject, comment: string): SshKeyPair {
   const jwkPrivate = privateKey.export({ format: 'jwk' });
-  if (typeof jwkPublic.x !== 'string' || typeof jwkPrivate.d !== 'string') {
+  if (typeof jwkPrivate.x !== 'string' || typeof jwkPrivate.d !== 'string') {
     throw new Error('ssh key pair: the runtime did not export the ed25519 key material');
   }
-  const pub = Buffer.from(jwkPublic.x, 'base64url');
+  const pub = Buffer.from(jwkPrivate.x, 'base64url');
   const seed = Buffer.from(jwkPrivate.d, 'base64url');
   if (pub.length !== ED25519_KEY_BYTES || seed.length !== ED25519_KEY_BYTES) {
     throw new Error('ssh key pair: unexpected ed25519 key length');
@@ -43,6 +82,17 @@ export function generateEd25519KeyPair(comment: string): SshKeyPair {
     privateKeyPem: encodeOpenSshPrivateKey(seed, pub, safeComment),
     publicKey: `${KEY_TYPE} ${publicKeyBlob(pub).toString('base64')} ${safeComment}`,
   };
+}
+
+/** DER prefix of a PKCS#8 ed25519 private key (RFC 8410): the 32-byte seed follows. */
+const PKCS8_ED25519_PREFIX = Buffer.from('302e020100300506032b657004220420', 'hex');
+
+function ed25519KeyFromSeed(seed: Buffer): KeyObject {
+  return createPrivateKey({
+    key: Buffer.concat([PKCS8_ED25519_PREFIX, seed]),
+    format: 'der',
+    type: 'pkcs8',
+  });
 }
 
 function sshString(value: Buffer | string): Buffer {
@@ -81,4 +131,75 @@ function encodeOpenSshPrivateKey(seed: Buffer, pub: Buffer, comment: string): st
   ]);
   const body = container.toString('base64').match(new RegExp(`.{1,${PEM_LINE_LENGTH}}`, 'g')) ?? [];
   return [`-----BEGIN ${PEM_LABEL}-----`, ...body, `-----END ${PEM_LABEL}-----`, ''].join('\n');
+}
+
+/** Reads the length-prefixed strings of the OpenSSH container, refusing any overrun. */
+interface SshReader {
+  string(): Buffer;
+  uint32(): number;
+}
+
+function sshReader(data: Buffer): SshReader {
+  let offset = 0;
+  return {
+    string() {
+      if (offset + 4 > data.length) throw truncated();
+      const length = data.readUInt32BE(offset);
+      const start = offset + 4;
+      if (start + length > data.length) throw truncated();
+      offset = start + length;
+      return data.subarray(start, start + length);
+    },
+    uint32() {
+      if (offset + 4 > data.length) throw truncated();
+      const value = data.readUInt32BE(offset);
+      offset += 4;
+      return value;
+    },
+  };
+}
+
+function truncated(): SshKeyImportError {
+  return new SshKeyImportError('the OpenSSH private key is truncated');
+}
+
+/** The ed25519 seed of an unencrypted `openssh-key-v1` container holding one key. */
+function decodeOpenSshPrivateKey(text: string): { seed: Buffer } {
+  const body = text
+    .replace(`-----BEGIN ${PEM_LABEL}-----`, '')
+    .replace(`-----END ${PEM_LABEL}-----`, '')
+    .replace(/\s+/g, '');
+  const data = Buffer.from(body, 'base64');
+  const magic = Buffer.from(AUTH_MAGIC, 'binary');
+  if (data.length < magic.length || !data.subarray(0, magic.length).equals(magic)) {
+    throw new SshKeyImportError('the OpenSSH private key does not start with its magic');
+  }
+  const reader = sshReader(data.subarray(magic.length));
+  const cipher = reader.string().toString('utf8');
+  const kdf = reader.string().toString('utf8');
+  reader.string(); // kdf options
+  if (cipher !== 'none' || kdf !== 'none') {
+    throw new SshKeyImportError('the OpenSSH private key is encrypted with a passphrase');
+  }
+  if (reader.uint32() !== 1) {
+    throw new SshKeyImportError('the OpenSSH container holds more than one key');
+  }
+  reader.string(); // public key blob
+  const section = sshReader(reader.string());
+  if (section.uint32() !== section.uint32()) {
+    throw new SshKeyImportError('the OpenSSH private key fails its check bytes');
+  }
+  const type = section.string().toString('utf8');
+  if (type !== KEY_TYPE) {
+    throw new SshKeyImportError('the OpenSSH private key is not an ed25519 key');
+  }
+  const pub = section.string();
+  const secret = section.string();
+  if (pub.length !== ED25519_KEY_BYTES || secret.length !== 2 * ED25519_KEY_BYTES) {
+    throw new SshKeyImportError('the OpenSSH ed25519 key has an unexpected length');
+  }
+  if (!secret.subarray(ED25519_KEY_BYTES).equals(pub)) {
+    throw new SshKeyImportError('the OpenSSH ed25519 key does not match its public half');
+  }
+  return { seed: Buffer.from(secret.subarray(0, ED25519_KEY_BYTES)) };
 }

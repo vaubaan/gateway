@@ -448,7 +448,9 @@ order, the same on Postgres, where the transaction has to be `SERIALIZABLE` (or 
 per-object advisory lock) for the read and the insert to stay one step.
 
 Reads: `getById(id)` and `list(filter)` with `AuditFilter { missionId?, kind?,
-since?, until?, limit? }` (default limit 1000, ordered by `ts, id`).
+act?, userId?, since?, until?, limit? }` (default limit 1000, ordered by `ts, id`;
+`act` and `userId` narrow administrative entries — the v4 importer reads an
+owner's `mission-issued` entries with them, handbook [import-from-v4](import-from-v4.md)).
 `search(query)` is the query of the Activity page (`/activity`, handbook [audit](audit.md)): a
 mandatory `AuditScope` (missions created by one user, connections owned by some
 principals, optionally every administrative entry) applied before the filters

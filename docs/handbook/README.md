@@ -2,7 +2,7 @@
 title: Handbook — index
 status: current
 date: 2026-10-13
-last_synced: 2026-10-14
+last_synced: 2026-10-15
 tracks:
   - docs/handbook/
 ---
@@ -26,6 +26,7 @@ follow can be detected as drift.
 | [configuration](configuration.md)         | Instance configuration, crypto and the composition root: how the process starts from configuration alone.                                                                  |
 | [store](store.md)                         | The embedded SQLite store: one file on the mounted volume, schema and migrations applied at boot, repository interfaces.                                                   |
 | [cutover-from-v4](cutover-from-v4.md)     | The procedure to move the one real user of the v4 SaaS onto a v5 instance and switch v4 off: what to prepare, the checklist, live checks.                                  |
+| [import-from-v4](import-from-v4.md)       | The one-shot import of a v4 organization: the exporter, the importer in the image, the operator's procedure (dry run, apply, connect by hand, run again).                  |
 | [demo-mode](demo-mode.md)                 | `npm run demo`: the real application in a browser with a simulated identity provider, simulated services and seeded data.                                                  |
 | [threat-model](threat-model.md)           | What the gateway defends, against whom, with which control, and which test proves the control is still there: the security reading of the spec and of the other handbooks. |
 | [known-limitations](known-limitations.md) | What a reader should know before relying on this version: what has not been done, and what is not there.                                                                   |

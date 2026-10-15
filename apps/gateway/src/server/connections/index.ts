@@ -196,6 +196,9 @@ export {
   type ConnectionDetail,
   type ConnectionView,
   type DiscoveryRecord,
+  type ImportedFrom,
+  type ImportPastedInput,
+  type ImportSshInput,
   type InstallationBinding,
   type NewOwner,
   type ResourcePatch,
@@ -209,4 +212,9 @@ export {
   type ConnectionSummary,
   type ResolvedConnectionOwner,
 } from './mapping';
-export { generateEd25519KeyPair, type SshKeyPair } from './ssh-keypair';
+export {
+  generateEd25519KeyPair,
+  importEd25519PrivateKey,
+  SshKeyImportError,
+  type SshKeyPair,
+} from './ssh-keypair';

@@ -2,12 +2,13 @@
 title: Integration tests
 status: current
 date: 2026-10-13
-last_synced: 2026-10-14
+last_synced: 2026-10-15
 tracks:
   - vitest.config.ts
   - scripts/release-lib.test.mjs
   - scripts/audit-gate.test.mjs
   - scripts/lockfile-gate.test.mjs
+  - scripts/export-v4.test.mjs
   - packages/policy-engine/tests/
   - packages/plugin-sdk/tests/
   - plugins/_template/tests/
@@ -4009,6 +4010,85 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
   tests, dependencies and the build itself are not inputs; a matching stamp
   without a build is not fresh; the stamp lives inside the build directory
   and the inputs it names exist.
+
+## Scenarios — Import from v4
+
+> Covers: handbook [import-from-v4](../handbook/import-from-v4.md); ADR
+> [[import-from-v4-one-shot-importer]] (D1 to D11). No v4 database, no
+> instance, no service: the exporter's read is replaced by the JSON document
+> `psql` would return, services by a fake `fetch`, the SSH host by a fake
+> transport.
+
+- **`scripts/export-v4.test.mjs`** (16) — **arguments**: `--org`,
+  `--ssh-host` with its `--ssh-host-key` (a host without fingerprint, a
+  fingerprint without host, a bad slug, a bad fingerprint refused), an
+  unknown argument refused without being echoed. **`.env`**: quotes and
+  comments; the first missing key named. **v4 decryption** against a v4
+  sealing written independently in the test: opens; another organization,
+  another master key, a cut ciphertext refused without quoting it.
+  **Bundle**: only Cloudflare and Vercel tokens are decrypted (a Supabase
+  ciphertext is left alone), the SQL is read-only and selects no other
+  ciphertext and reads `denied_risks`; a Stripe account bound to two
+  projects keeps each project's v4 mode (`live ?? test`), two different keys
+  of one mode refused without quoting them; an SSH host from another organization with its plain-text key, a
+  sealed one opened with the holding organization's key, rows that disagree
+  and a slug nobody holds refused; an unknown organization refused; working
+  tokens kept with their string accepted and denied risk ids; the summary
+  holds no secret.
+- **`apps/gateway/src/server/import-v4/risk-translation.test.ts`** (16) —
+  with the real GitHub, Supabase and Vercel catalogs: an exact id kept with
+  the developer preset's line; a risk only another preset carries takes that
+  line; the fallback dropped (no preset budget); an unknown id dropped; an
+  env-qualified v4 id never widened to an account-scoped v5 one; an
+  account-scoped v4 id written out per environment of the selected
+  resources (`supabase.migration-write` → staging from `staging-developer`,
+  prod from `migration-operator`) and dropped when no resource is labelled;
+  a plugin deriving the environment needs no label; authority bounds the
+  result; a v4 denial drops the id even when accepted, and a written-out
+  environment the denial names by id or by base id; duplicates counted once;
+  every kept entry explicit with a numeric quota.
+- **`apps/gateway/src/server/import-v4/bundle.test.ts`** (23) — the
+  exporter's shape accepted; an unknown key anywhere refused by name; a
+  secret for GitHub refused; references to an unlisted project, a malformed
+  v4 risk id, a wrong format or version refused; a JSON syntax error and a
+  bad value reported without the value; `secretsOf` lists every secret. The
+  mapping holds to the Cloudflare, Vercel, Stripe and SSH plugins' forms;
+  GitHub and OAuth grants never mapped; a Vercel account without team id not
+  mapped. Duplicated bindings merged; hand-made connections recognised by
+  non-secret values only. `--owner`/`--apply`/`--allow-stale` parsing, no
+  echo; the audit marker on administrative entries, `v4_source` on the one
+  written inside `provenance.during`. A Stripe project's mode without its
+  key refused; a mission without `denied_risks` refused; a "secret" shorter
+  than 8 characters refused; mission names on one line, apart when two
+  projects share a name, within 120 characters.
+- **`apps/gateway/src/server/connections/codec-and-keypair.test.ts`** (+4)
+  — a v4 PKCS#8 ed25519 key and an OpenSSH container become an OpenSSH key
+  `ssh2` reads, the same key; another key type, text and a truncated
+  container refused without quoting the key.
+- **`apps/gateway/tests/integration/import-v4/import-v4.test.ts`** (11) — the
+  exporter's bundle piped into the command, real composition root on
+  `:memory:`, real plugins. **Dry run**: plan printed, stdout empty, the
+  database unchanged, no service and no SSH host contacted. **Apply**: four
+  connections created as the owner (each checked), the Vercel project
+  labelled `prod`, the junk Cloudflare label left out, the `ops` mission
+  issued with the one SSH risk that carries over, `web` deferred for GitHub,
+  one key on stdout only, no secret in the database's plain text or the
+  report, every administrative entry the owner's and marked. **Rerun** after
+  GitHub is connected by hand: nothing created again, no service asked,
+  `web` issued with its four services and translated policy (Stripe written
+  out to `stripe[test]`, an unknown id dropped), only its key printed; a
+  third run writes nothing. **Refusals**: a key the service rejects stored
+  nowhere and reported (exit 1); an owner who never signed in (67, nothing
+  written); root (77); no store (78); a bad bundle and garbage (65, not
+  echoed). **After the review**: a permission accepted and denied in v4 is
+  not imported; a test-mode Stripe project gets no `stripe[live]` permission
+  although the account holds a live key; a renamed imported mission is still
+  recognised and a hand-made namesake is not taken for the import; a bundle
+  older than an hour refused (65) unless `--allow-stale`, one from the future
+  refused; an unexpected failure prints one fixed line without its message.
+- **`apps/gateway/tests/integration/standalone-import-v4.test.ts`** (2,
+  after a build) — the bundled command runs from `.next/standalone` on a
+  store file: dry run of a bundle on stdin, exit 0; unknown owner, exit 67.
 
 ## Scenarios — Release
 

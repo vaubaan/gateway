@@ -58,6 +58,10 @@ export type AuditRecord =
 export interface AuditFilter {
   readonly missionId?: string;
   readonly kind?: 'call' | 'admin';
+  /** Administrative entries of this act only. */
+  readonly act?: AdminAct;
+  /** Administrative entries of this actor only. */
+  readonly userId?: string;
   readonly since?: Iso;
   readonly until?: Iso;
   readonly limit?: number;
@@ -809,6 +813,14 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
       if (filter.kind) {
         where.push('kind = ?');
         params.push(filter.kind);
+      }
+      if (filter.act) {
+        where.push('act = ?');
+        params.push(filter.act);
+      }
+      if (filter.userId) {
+        where.push('user_id = ?');
+        params.push(filter.userId);
       }
       if (filter.since) {
         where.push('ts >= ?');

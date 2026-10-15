@@ -351,6 +351,11 @@ and the smoke test loads both inside the image. Build-time argument:
 it is written, with its digest, on the first `FROM` line. Nothing else than
 `node` runs in the container: the package managers of the base image (npm,
 npx, corepack, yarn) are removed from it, and the smoke test checks it.
+Beside the server, `apps/gateway/import-v4.mjs` is the one-shot importer of
+a v4 organization, bundled into the standalone output at build time; it
+refuses to run as root, so on Railway it is started through
+`vaubaan-entrypoint` (handbook
+[import-from-v4](../docs/handbook/import-from-v4.md)).
 
 The Dockerfile has no `# syntax=` line: it is built by the frontend built
 into BuildKit (it uses no heredoc, no `--mount` and no `--link`), so no
