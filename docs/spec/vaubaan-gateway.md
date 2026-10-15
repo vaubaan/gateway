@@ -512,6 +512,13 @@ Rules:
   until the creator adds it. This is the v4 binding, carried by the
   mission instead of the project: least privilege by resource, not only
   by risk.
+- **The instance's own resources.** A resource that hosts or runs the
+  instance (on Railway, the project it runs in; elsewhere, what the
+  operator lists in the configuration) is never a mission resource,
+  whatever a connection lists or a policy names: it is not offered at
+  issuance, a draft that selects it is refused, a call that cites it is
+  refused with `resource-not-in-mission`, and the account page says why.
+  No plugin can change this set.
 
 ### 3.2 The budget
 
