@@ -26,7 +26,8 @@ rejected alternatives: ADR
 The rest of the cut-over (what to prepare, the checklist, the live checks)
 is [cutover-from-v4](cutover-from-v4.md).
 
-**State on 2026-10-15: built and tested on fixtures only.** Nothing below
+**State on 2026-10-15: built and tested on fixtures only; hardened after an
+adversarial review (v4 denials, Stripe modes, provenance, stale bundles).** Nothing below
 has been run against the real v4 database or a real instance.
 
 ## 1. The two halves
@@ -49,7 +50,7 @@ node scripts/export-v4.mjs --org fidi …  ──►  node apps/gateway/import-v
 | v4 risks → v5 policy      | `import-v4/risk-translation.ts` (`translateRisks`)                                         |
 | The three phases          | `import-v4/importer.ts` (`Importer.run`)                                                   |
 | Report                    | `import-v4/report.ts` (`renderReport`)                                                     |
-| Command (args, I/O, exit) | `import-v4/cli.ts` (`runImportCli`, `markImported`); entry `import-v4/main.ts`             |
+| Command (args, I/O, exit) | `import-v4/cli.ts` (`runImportCli`, `createImportMarker`); entry `import-v4/main.ts`       |
 | Connection creation       | `connections/service.ts` — `importPastedKey`, `importSshKey`                               |
 | SSH key conversion        | `connections/ssh-keypair.ts` — `importEd25519PrivateKey`                                   |
 | Bundling into the image   | `scripts/build-import-v4.mjs`, run by the `build` script of `apps/gateway/package.json`    |
@@ -71,7 +72,8 @@ node scripts/export-v4.mjs --org fidi …  ──►  node apps/gateway/import-v
    for `cloudflare-dns` and `vercel`), its `provider_bindings` (bash apart),
    its `stripe_bindings`, the slugs of its own SSH bindings, the SSH bindings
    asked by slug in any organization, its working tokens (root, active,
-   reusable, not consumed, not expired), and three counts.
+   reusable, not consumed, not expired) with their `accepted_risks` **and
+   `denied_risks`**, and three counts.
 3. Decrypts with the exact v4 scheme (`createV4Decryptor`): XChaCha20-Poly1305
    IETF, key `crypto_kdf_derive_from_key(32, sha256(org id)[0..4] & 0x7fffffff,
 'vaubaan_', master)`, associated data the org id, nonce first. Postgres'
@@ -82,7 +84,13 @@ node scripts/export-v4.mjs --org fidi …  ──►  node apps/gateway/import-v
    the binding. Every row of an asked slug must agree (address, port, user,
    key). `--ssh-host` needs its `--ssh-host-key`: v4 pinned no host key, the
    v5 plugin requires one.
-5. Writes the bundle (JSON, one line) on stdout and three summary lines
+5. Stripe: one entry per account, the account's keys, and per project the
+   **one mode** v4 used for it — its row's live key, else its test key
+   (`live ?? test`, as the v4 gateway did). Two rows of one account holding
+   different keys of the same mode stop the export.
+6. Refuses (64), before reading anything, a stdout that is a terminal or a
+   regular file: the bundle holds the decrypted secrets and goes into a pipe.
+7. Writes the bundle (JSON, one line) on stdout and three summary lines
    (counts, providers, what is left to connect by hand) on stderr. Exit 0,
    1 refused, 64 usage. Unexpected errors print no detail.
 
@@ -100,21 +108,30 @@ the standalone tree), a `require` shim for CommonJS dependencies.
 
 `runImportCli` (`cli.ts`), in order:
 
-1. arguments: `--owner <email>` (required), `--apply`, `--help`; anything
-   else is a usage error (64) that does not echo the argument;
+1. arguments: `--owner <email>` (required), `--apply`, `--allow-stale`,
+   `--help`; anything else is a usage error (64) that does not echo the
+   argument;
 2. refuses uid 0 (77) and a terminal on stdin (64);
-3. reads stdin up to 8 MiB, parses and validates the bundle whole (65 on any
-   problem, listed by path, never by value);
-4. loads the instance's configuration (78 with the named keys on failure) and
+3. loads the instance's configuration (78 with the named keys on failure) and
    refuses when `store.path` is `:memory:` or no file is there (78: it never
-   creates a database);
-5. builds the composition root with the store wrapped by `markImported`
+   creates a database) — before stdin is read, so a misconfigured container
+   never ingests the secrets;
+4. reads stdin up to 8 MiB, parses and validates the bundle whole (65 on any
+   problem, listed by path, never by value);
+5. refuses (65) a bundle exported more than an hour ago unless
+   `--allow-stale`, and one that claims to come from the future;
+6. builds the composition root with the store wrapped by `createImportMarker`
    (every administrative audit entry gets `after.marker = 'imported-from-v4'`
-   and `after.v4_org`) and the log reduced to `error` lines, redacted with
-   every secret of the bundle and of the configuration, on stderr;
-6. runs `Importer.run`; prints `renderReport` on stderr and the mission keys
-   on stdout; closes the root. Exit 0, or 1 when a connection or a mission was
-   refused, 67 when the owner is unknown (nothing written).
+   and `after.v4_org`; the `mission-issued` entry of an imported mission also
+   `after.v4_source = tokens/<v4 token id>`) and the log reduced to `error`
+   lines, redacted with every secret of the bundle and of the configuration,
+   on stderr;
+7. runs `Importer.run`; prints the bundle's age, `renderReport` on stderr
+   (control characters of v4 names blanked) and the mission keys on stdout;
+   closes the root. Exit 0, or 1 when a connection or a mission was refused,
+   67 when the owner is unknown (nothing written). Any unexpected failure —
+   here or escaping to `main.ts` — prints one fixed line, never its message
+   or a stack, and exits 1.
 
 `Importer.run` (`importer.ts`):
 
@@ -134,17 +151,24 @@ the standalone tree), a `require` shim for CommonJS dependencies.
 - **Resources** — `normalizeBindings` merges the duplicated rows (one per
   project, service and resource, every label kept) and adds the Stripe and SSH
   bindings. Each is matched on the owner's issuance connections
-  (`MissionService.issuanceContext`) to resource rows: ref, then ref ignoring
-  case; Stripe by `metadata.account_id`; SSH by the host address. Labels
+  (`MissionService.issuanceContext`) to resource rows: ref exactly (ignoring
+  case only for `CASE_INSENSITIVE_REF_PROVIDERS`, GitHub, and SSH host
+  names); Stripe by `metadata.account_id` and the project's mode
+  (`acct/test` or `acct/live`, never both); SSH by the host address. Labels
   (`planLabels`): `to-label` when exactly one v5 label (`V5_ENV_LABELS`) is
   asked and the resource is unlabelled, owned, not labelled by the plugin;
   otherwise `already-labelled`, `label-set-by-plugin`, `kept-owner-label`,
   `conflicting-labels`, `not-a-v5-label`, `not-owned`. Apply writes through
   `updateResource`. Bindings matched nowhere are listed.
 - **Missions** — per working v4 token, against the instance as the labels
-  left it (in a dry run: with the planned labels laid over). Name: the
-  project's, or `<project> — <token>` when the project has several. A
-  non-revoked mission of the owner with that name → `exists`. Per service of
+  left it (in a dry run: with the planned labels laid over). Name
+  (`missionNamesOf`): the project's on one line, cut to 120 characters, or
+  `<project> — <token>` when the project has several, `<project> —
+<slug>/<token>` when two projects share a name. A mission the owner issued
+  through an earlier import of this organization for this v4 token
+  (`provenance.issued`: the marked `mission-issued` entries) → `exists`,
+  whatever its name now; a revoked one is reported, not issued again. A
+  hand-made mission with the same name is not looked at. Per service of
   the project: the connection with the most matched resources (an import of
   the same organization wins a tie). None → `deferred` with what to do, or
   `after-connections` in a dry run when the run itself creates it. Then
@@ -153,20 +177,21 @@ the standalone tree), a `require` shim for CommonJS dependencies.
   `resources: { scope: 'selected', resource_ids }` and an explicit policy,
   period daily (`IMPORTED_MISSION_PERIOD_SECONDS`), the v4 expiry. Dry run →
   `preview` (`would-issue` or `refused` with the issues); apply → `issue`
-  (`issued`, the key collected).
+  (`issued`, the key collected) inside `provenance.during(tokens/<id>)`.
 
 ### Translating a v4 policy
 
-`translateRisks(v4Ids, connection, selectedResources)`:
+`translateRisks(v4Ids, connection, selectedResources, v4Denied)`:
 
-| v4 id                                      | Result                                                                                                       |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
-| exact explicit v5 id                       | kept (dropped if deprecated, or env-qualified and unresolvable)                                              |
-| account-scoped, v5 entry now env-scoped    | one id per environment a selected resource carries (all when the plugin derives the environment): `expanded` |
-| env-qualified without exact v5 counterpart | dropped, `no-exact-env-counterpart` — never widened                                                          |
-| unknown to the v5 catalog                  | dropped, `unknown-in-v5`                                                                                     |
-| outside the owner's authority              | dropped, `outside-authority`                                                                                 |
-| no preset line (the fallbacks among them)  | dropped, `no-preset-budget` — a quota is never invented                                                      |
+| v4 id                                           | Result                                                                                                       |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| exact explicit v5 id                            | kept (dropped if deprecated, or env-qualified and unresolvable)                                              |
+| account-scoped, v5 entry now env-scoped         | one id per environment a selected resource carries (all when the plugin derives the environment): `expanded` |
+| env-qualified without exact v5 counterpart      | dropped, `no-exact-env-counterpart` — never widened                                                          |
+| unknown to the v5 catalog                       | dropped, `unknown-in-v5`                                                                                     |
+| denied in v4 (the id, or a target's id or base) | dropped, `denied-in-v4` — v4 denials trump acceptance                                                        |
+| outside the owner's authority                   | dropped, `outside-authority`                                                                                 |
+| no preset line (the fallbacks among them)       | dropped, `no-preset-budget` — a quota is never invented                                                      |
 
 Budget and gate of a kept id: the first line naming it (exactly, then by its
 base id) in the developer-like presets (`developer`, `*-developer`), then in
@@ -217,11 +242,20 @@ node scripts/export-v4.mjs --org fidi --ssh-host vps-fidi --ssh-host-key vps-fid
 accounts to connect by hand, labels, missions and, per mission, every v4
 permission that does not carry over and why.
 
-> **Live check (not done yet):** that `railway ssh` forwards stdin and runs
-> with the service's variables in its environment. If it does not, run the
-> import from a shell where the instance's variables are set and its volume
-> is mounted, or ask before improvising: the bundle must not be written to a
-> file.
+What `railway ssh` needs and does (checked live on 2026-10-15):
+
+- an SSH key registered at Railway (personal, or for the workspace with
+  `--workspace`), and a pinned host key for `ssh.railway.com`. Railway
+  publishes no fingerprint: the first connection trusts the key it is shown
+  (TOFU); pin it once, from a network you trust, before the import;
+- it forwards stdin whole (a 266 KB payload went through intact) and the
+  command runs with the service's variables in its environment;
+- the shell runs as root, hence `vaubaan-entrypoint` in front of the command
+  (the importer refuses root, exit 77).
+
+Export and import in one pipe: the importer refuses a bundle older than an
+hour unless `--allow-stale` (v4 may have revoked a key or a token since), and
+the exporter refuses to write into a terminal or a file.
 
 ### 2.3 Apply, install the keys
 

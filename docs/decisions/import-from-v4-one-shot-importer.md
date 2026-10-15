@@ -14,6 +14,16 @@ extends:
 
 # A one-shot importer carries a v4 organization's keys, resources and working tokens into a v5 instance
 
+> **Amendment of 2026-10-15 — after the adversarial review**
+> (`.vaubaan/reports/import-v4/review.md`). v4 **denials** are carried and
+> honoured (D6); a Stripe project keeps the **one mode** v4 used for it (D7);
+> the exporter refuses a terminal or a file as stdout, the importer refuses a
+> bundle older than an hour without `--allow-stale`, checks the instance before
+> reading stdin, and prints one fixed line for any unexpected failure (D11);
+> an imported mission is recognised by **provenance**, never by name (D9);
+> names and refs are printed on one line, refs match ignoring case only for
+> GitHub. Not taken: `PGSSLMODE=verify-full` (see Consequences).
+
 > Product owner's decision of 2026-10-15 (brief PO): the v4 SaaS holds many
 > connections, resources and project setups for the organizations moving to
 > their own instance (Dalae, Fiabilis AI). Re-creating them by hand, as D7 of
@@ -171,6 +181,12 @@ For each v4 id of a service of the mission (`import-v4/risk-translation.ts`):
    deprecated entry, an id outside the owner's authority → **dropped and
    reported, never replaced by a wider id**. No wildcard is ever written.
 
+**v4 denials trump acceptance.** v4's risk runtime refuses a risk in
+`denied_risks` even when it is in `accepted_risks`, and nothing in v4 keeps
+the two apart. The bundle carries both lists; an accepted v4 id that is itself
+denied, and every translated target whose id or base id a denial names (v4
+denials may be env-qualified), are dropped and reported `denied-in-v4`.
+
 Each kept id takes quota, rate limit and gate from a preset line: the
 plugin's developer-like presets first (`developer`, `*-developer`), then its
 other presets in catalog order — the interface's own rule for a hand-ticked
@@ -180,16 +196,28 @@ to take and is dropped and reported: a quota is never invented. The period
 is the interface's default (quotas reload daily); the expiry is the v4
 token's (`null` stays `null`, as D7 of the pivot asked).
 
-One mission per working v4 token, named after the v4 project, or
-`<project> — <token name>` when the project has several. Its connections are
+One mission per working v4 token, named after the v4 project (on one line,
+cut to the interface's 120 characters), or `<project> — <token name>` when the
+project has several, or `<project> — <slug>/<token>` when two projects share a
+name. Its connections are
 the owner's connections that hold the project's resources (D7), one per
 service, each with exactly those resources selected.
 
 ### D7 — Resources and their environment labels
 
 A binding is matched to a discovered, non-stale resource of the owner's
-connections of that service: by ref (exact, then case-insensitive); a Stripe
-account by `metadata.account_id`; an SSH host by its address. Duplicated v4
+connections of that service: by ref, exactly — ignoring case only for
+services whose refs are case-insensitive (GitHub `owner/repo`) and for SSH
+host names; a Stripe account by `metadata.account_id` **and the project's
+mode**; an SSH host by its address.
+
+**Stripe: the mode is per project.** In v4 a project's Stripe row gave it ONE
+key, `live ?? test` (the v4 gateway's build step). The bundle records, per
+project, that mode; the importer keeps one connection per Stripe account
+(the v5 model, holding the account's keys) and selects for each mission only
+the resource of its project's mode: a project that acted in test mode never
+reaches live money, and a project that held both keys stays live only. Rows
+of one account holding two different keys of the same mode stop the export. Duplicated v4
 rows are merged first. A v4 label is carried only when it is a v5 label
 (`prod`, `staging`, `preview`, `dev`), only onto an unlabelled resource the
 owner owns; a label the plugin set or the owner chose is never overwritten,
@@ -218,7 +246,17 @@ creates is reported "issued at --apply".
   non-secret values (the Vercel team id; SSH host, user, fingerprint) and
   kept: nothing is created next to it. A provider whose form holds only a
   secret (Cloudflare, Stripe) is recognised by the marker only.
-- A mission is recognised by name among the owner's missions not revoked.
+- A mission is recognised by **provenance**: while it issues a mission, the
+  importer's audit wrapper adds `v4_source = tokens/<v4 token id>` to the
+  `mission-issued` entry; a later run reads the owner's `mission-issued`
+  entries marked for this organization and finds the mission by that source.
+  A renamed import is still recognised; a mission the owner made by hand
+  with the same name is not taken for it. A mission the owner revoked is
+  reported, not issued again. No schema change: the audit is the
+  append-only record of where a mission came from. Its retention (90 days by
+  default, `retention_days`) bounds how long a rerun recognises a mission;
+  an import is completed within days, and a rerun after the entry is purged
+  would issue the mission again (and say so, with a new key).
 - A label is written only on an unlabelled resource.
 
 A rerun creates what is missing and nothing else; the third run of a
@@ -244,6 +282,18 @@ without being echoed (it may be a secret pasted in the wrong place). Exit
 codes: 0 done, 1 something was refused, 64 usage, 65 bundle refused, 67 owner
 unknown, 77 root, 78 instance not configured.
 
+The **exporter refuses a terminal or a regular file as stdout** (64): the
+scrollback is a disk. The **importer reads the instance's configuration and
+store before it reads stdin**, so a misconfigured container never ingests the
+secrets; it **refuses a bundle older than an hour** (or claiming to come from
+the future) unless `--allow-stale` — v4 may have revoked a key or a token
+since, and an old bundle is a bundle someone kept. **Any unexpected failure**
+prints one fixed line, never its message or a stack (`main.ts` and
+`runImportCli` both catch). Names and refs from v4 are printed with control
+characters blanked, so a crafted name cannot forge a report line; a
+"secret" shorter than eight characters is refused (the redactor blanks every
+secret everywhere).
+
 ## Consequences
 
 - An organization moves in two commands (a dry run, then `--apply`), plus
@@ -264,6 +314,22 @@ unknown, 77 root, 78 instance not configured.
 - `npm run build` of the gateway also bundles the importer (a few seconds);
   the standalone smoke test runs it, the container smoke test checks it ships,
   refuses root and runs through the entrypoint.
+
+Accepted after the review, not changed:
+
+- `PGSSLMODE=require` encrypts but does not verify the pooler's certificate.
+  `verify-full` needs the Supabase CA on the operator's machine, which is
+  not trivial to ship and check from here; the exporter keeps `require`
+  (what v4's own scripts used). A follow-up may read `PGSSLMODE` and
+  `PGSSLROOTCERT` from `.env`.
+- The budget line is the developer-like preset's, not the most restrictive
+  across presets: v4 had no gates, so this widens nothing against v4; a later
+  catalog edit can change what a new import gives.
+- Connections owned by a group the owner belongs to count as the owner's
+  (the v5 authority model): a group's Vercel account with the same team id is
+  reused rather than duplicated.
+- Provider error text in the report is redacted for the bundle's exact
+  secrets only.
 
 ## Rejected alternatives
 

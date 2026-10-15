@@ -211,10 +211,11 @@ names, and the notes about them do too.
   (each key checked at the service first; the SSH host's fingerprint given by the
   operator), carries the resources' environment labels when they are `prod`,
   `staging`, `preview` or `dev`, and issues one mission per working v4 key with its
-  permissions translated one by one — never widened, limits from the plugin's
-  presets — printing each new mission key once on stdout. GitHub, Railway and
+  permissions translated one by one — never widened, v4 denials honoured, a Stripe
+  project kept to the mode it used, limits from the plugin's presets — printing each new mission key once on stdout. GitHub, Railway and
   Supabase are connected by hand; a mission waits until its services are there and
-  the next run issues it. The default is a dry run; a second run never duplicates.
+  the next run issues it. The default is a dry run; a bundle older than an hour is refused; a second run
+  never duplicates (missions are recognised by their v4 token, not their name).
   Every act is the owner's in Activity, marked `imported-from-v4`. Handbook
   `import-from-v4`, ADR `import-from-v4-one-shot-importer`.
 
