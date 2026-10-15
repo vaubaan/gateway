@@ -22,7 +22,7 @@ import { SessionService } from '../budget';
 import { createConnectionsModule, type ConnectionsModule } from '../connections';
 import {
   buildInfoFromEnv,
-  loadInstanceConfig,
+  loadProcessConfig,
   type BuildInfo,
   type InstanceConfig,
   type LoadedConfig,
@@ -132,7 +132,7 @@ export interface RootDeps {
 }
 
 export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
-  const { config, configFile } = (deps.loadConfig ?? loadInstanceConfig)();
+  const { config, configFile } = (deps.loadConfig ?? loadProcessConfig)();
   const logger = createLogger({
     level: config.log.level,
     redact: createRedactor(secretValues(config)),

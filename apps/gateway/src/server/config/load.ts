@@ -34,6 +34,7 @@ import {
   mergeTrees,
   readEnvSource,
   readFileSource,
+  secretEnvVariables,
   SIGN_IN_ENV_PREFIX,
 } from './sources';
 import {
@@ -88,6 +89,11 @@ export interface LoadedConfig {
   readonly config: InstanceConfig;
   /** Path of the YAML file that was merged in, or `null` for env-only. */
   readonly configFile: string | null;
+  /**
+   * The environment variables that carried a secret, or the path of one, into this
+   * configuration: what `scrubSecretEnv` deletes once the configuration is loaded.
+   */
+  readonly secretEnvNames: readonly string[];
 }
 
 export function loadInstanceConfig(options: LoadOptions = {}): LoadedConfig {
@@ -101,7 +107,35 @@ export function loadInstanceConfig(options: LoadOptions = {}): LoadedConfig {
   const config = validate(raw, issues, env);
   issues.throwIfAny();
   if (!config) throw new ConfigError(issues.items); // unreachable: validate() reports every failure
-  return { config, configFile: fromFile?.path ?? null };
+  const secretEnvNames = [
+    ...new Set([...secretEnvVariables(env), ...(fromFile?.secretVariables ?? [])]),
+  ].sort();
+  return { config, configFile: fromFile?.path ?? null, secretEnvNames };
+}
+
+/**
+ * Loads the configuration from `process.env`, then deletes from `process.env` every
+ * variable that carried a secret (the master keys, client secrets, private keys, the
+ * bootstrap token, their `_FILE` paths, and the variables the YAML file references at a
+ * secret key): the values live on in the returned configuration only, so a dump of
+ * `process.env` or a child process sees none of them. What it cannot reach: the
+ * process's initial environment block, which `/proc/<pid>/environ` keeps showing to its
+ * own user and to root (ADR secrets-leave-the-process-environment-after-load).
+ */
+export function loadProcessConfig(): LoadedConfig {
+  const loaded = loadInstanceConfig({ env: process.env });
+  scrubSecretEnv(process.env, loaded.secretEnvNames);
+  return loaded;
+}
+
+/** Deletes the named variables from `env` (`process.env` in production). */
+export function scrubSecretEnv(
+  env: Record<string, string | undefined>,
+  names: readonly string[],
+): void {
+  for (const name of names) {
+    delete env[name];
+  }
 }
 
 /* ------------------------------------------------------------------------ */

@@ -23,7 +23,7 @@ import { existsSync } from 'node:fs';
 import { buildShippedRegistry } from '../compose/shipped-plugins';
 import { RegistryCatalogIndex } from '../compose/registry';
 import { openEmbeddedStore, type StoreContext } from '../compose/store';
-import { ConfigError, loadInstanceConfig, secretValues, type LoadedConfig } from '../config';
+import { ConfigError, loadProcessConfig, secretValues, type LoadedConfig } from '../config';
 import { createEncryptor, type Encryptor } from '../crypto';
 import { createLogger, createRedactor } from '../logging';
 import type { CatalogIndex, Store } from '../store';
@@ -122,7 +122,7 @@ async function run(argv: readonly string[], io: ResealIo, deps: ResealDeps): Pro
 
   let loaded: LoadedConfig;
   try {
-    loaded = (deps.loadConfig ?? loadInstanceConfig)();
+    loaded = (deps.loadConfig ?? loadProcessConfig)();
   } catch (err) {
     if (err instanceof ConfigError) {
       io.stderr(`reseal: this instance is not configured:\n${err.message}\n`);

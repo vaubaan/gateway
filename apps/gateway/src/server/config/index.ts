@@ -1,4 +1,11 @@
-export { loadInstanceConfig, MASTER_KEY_BYTES, type LoadOptions, type LoadedConfig } from './load';
+export {
+  loadInstanceConfig,
+  loadProcessConfig,
+  MASTER_KEY_BYTES,
+  scrubSecretEnv,
+  type LoadOptions,
+  type LoadedConfig,
+} from './load';
 export { ConfigError, errorMessage, formatIssue, type ConfigIssue } from './errors';
 export { parseDuration } from './duration';
 export { RAILWAY_PROJECT_ENV, isSelfResource } from './self-resources';
@@ -11,9 +18,11 @@ export {
   SIGN_IN_ENV_PREFIX,
   SIGN_IN_FIELDS,
   envNamesFor,
+  isSecretKeyPath,
   parseProviderEnvName,
   parseSignInEnvName,
   providerEnvName,
+  secretEnvVariables,
   signInEnvName,
 } from './sources';
 export * from './sign-in';

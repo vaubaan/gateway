@@ -711,6 +711,20 @@ Nothing reads a secret from `process.env` outside `server/config`: the v4
 shim `lib/crypto/index.ts` and the v4 `lib/` code that read their own
 `*_SECRET` / `*_KEY` variables were deleted with the v4 application.
 
+**Secrets leave `process.env` once loaded** (ADR
+[secrets-leave-the-process-environment-after-load](../decisions/secrets-leave-the-process-environment-after-load.md)).
+`loadInstanceConfig()` returns `secretEnvNames`: the variables that carried a
+secret or its path — the `secret` / `secret-map` keys of the table and their
+`_FILE` siblings, `VAUBAAN_SIGN_IN_<ID>_CLIENT_SECRET[_FILE]`,
+`VAUBAAN_PROVIDER_<ID>_{CLIENT_SECRET,PRIVATE_KEY}[_FILE]`, and the variables
+the YAML file references with `${NAME}` at a secret key (`isSecretKeyPath`).
+`loadProcessConfig()`, the default loader of `buildRoot` and of the
+`import-v4` and `reseal` commands, deletes them from `process.env`
+(`scrubSecretEnv`); the values live on in `InstanceConfig` only, and a child
+process inherits none. The kernel still shows the initial environment in
+`/proc/<pid>/environ` to the same user and to root: anyone with a shell in the
+container reads the secrets there (threat model A1).
+
 ## Logging
 
 `createLogger({ level, redact })` writes one JSON object per line

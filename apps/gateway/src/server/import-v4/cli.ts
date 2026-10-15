@@ -24,7 +24,7 @@ import type { AuditEntry, AuditWriter } from '@vaubaan/gateway-core';
 
 import { buildRoot, type GatewayRoot, type RootDeps } from '../compose/root';
 import { openEmbeddedStore } from '../compose/store';
-import { ConfigError, loadInstanceConfig, secretValues, type LoadedConfig } from '../config';
+import { ConfigError, loadProcessConfig, secretValues, type LoadedConfig } from '../config';
 import { createRedactor } from '../logging';
 import type { Store } from '../store';
 import { MEMORY_PATH } from '../store/db';
@@ -327,7 +327,7 @@ async function run(argv: readonly string[], io: CliIo, deps: CliDeps): Promise<n
   // The instance first: a misconfigured container never reads the secrets at all.
   let loaded: LoadedConfig;
   try {
-    loaded = (deps.loadConfig ?? loadInstanceConfig)();
+    loaded = (deps.loadConfig ?? loadProcessConfig)();
   } catch (err) {
     if (err instanceof ConfigError) {
       io.stderr(`import-v4: this instance is not configured:\n${err.message}\n`);
