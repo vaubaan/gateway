@@ -17,6 +17,15 @@ export const BUNDLE_VERSION = 1;
 /** Largest bundle the importer reads from stdin. A v4 organization is far below. */
 export const MAX_BUNDLE_BYTES = 8 * 1024 * 1024;
 
+/**
+ * Oldest bundle the importer takes without `--allow-stale`: one export, one
+ * import, in one pipe. An older bundle may hold keys and tokens v4 revoked
+ * since, and is the sign of a bundle that was saved somewhere.
+ */
+export const MAX_BUNDLE_AGE_MS = 60 * 60 * 1000;
+/** A bundle "exported" further in the future than this is refused too (a clock off, or a forgery). */
+export const MAX_BUNDLE_CLOCK_SKEW_MS = 5 * 60 * 1000;
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 /** The v4 slug grammar (`organizations.slug`, `projects.slug`, token names). */
 const SLUG = /^[a-z0-9](-?[a-z0-9])*$/;
@@ -30,8 +39,12 @@ const iso = z
   .string()
   .max(64)
   .refine((value) => Number.isFinite(Date.parse(value)), 'not a date');
-/** A secret value: bounded, never echoed by the importer. */
-const secret = z.string().min(1).max(16_384);
+/**
+ * A secret value: bounded, never echoed by the importer. At least 8 characters:
+ * the report is redacted by blanking every secret, and a one-letter "secret"
+ * would blank that letter everywhere. Every real key is far longer.
+ */
+const secret = z.string().min(8).max(16_384);
 
 const organizationSchema = z.object({ id, slug, name }).strict();
 
@@ -72,18 +85,31 @@ const bindingSchema = z
   })
   .strict();
 
-/** One Stripe account of the organization, with the keys of `stripe_bindings`. */
+/**
+ * One Stripe account of the organization, with the keys of `stripe_bindings`
+ * and, per project, the ONE mode v4 used for it (`live ?? test` of its row):
+ * a project is given that mode's resource only, never the other one.
+ */
 const stripeAccountSchema = z
   .object({
     account_id: z.string().min(1).max(200),
-    project_ids: z.array(id).max(1000),
+    projects: z
+      .array(z.object({ project_id: id, mode: z.enum(['test', 'live']) }).strict())
+      .max(1000),
     test_key: secret.nullable(),
     live_key: secret.nullable(),
   })
   .strict()
   .refine((account) => account.test_key !== null || account.live_key !== null, {
     message: 'carries neither a test key nor a live key',
-  });
+  })
+  .refine(
+    (account) =>
+      account.projects.every((p) =>
+        p.mode === 'live' ? account.live_key !== null : account.test_key !== null,
+      ),
+    { message: 'gives a project a mode the account has no key for' },
+  );
 
 /** One SSH host asked with `--ssh-host`, from whichever organization holds it. */
 const sshHostSchema = z
@@ -108,6 +134,8 @@ const missionSchema = z
     project_id: id,
     token_name: slug,
     accepted_risks: z.array(z.string().max(200).regex(V4_RISK_ID)).max(2000),
+    /** v4 denials: they trump acceptance at every v4 call, so nothing they name is imported. */
+    denied_risks: z.array(z.string().max(200).regex(V4_RISK_ID)).max(2000),
     expires_at: iso.nullable(),
   })
   .strict();
@@ -150,7 +178,9 @@ export const bundleSchema = z
     bundle.bindings.forEach((b, i) => check(b.project_id, ['bindings', i, 'project_id']));
     bundle.missions.forEach((m, i) => check(m.project_id, ['missions', i, 'project_id']));
     bundle.stripe_accounts.forEach((a, i) =>
-      a.project_ids.forEach((p, j) => check(p, ['stripe_accounts', i, 'project_ids', j])),
+      a.projects.forEach((p, j) =>
+        check(p.project_id, ['stripe_accounts', i, 'projects', j, 'project_id']),
+      ),
     );
     bundle.ssh_hosts.forEach((h, i) =>
       h.project_ids.forEach((p, j) => check(p, ['ssh_hosts', i, 'project_ids', j])),
@@ -200,4 +230,9 @@ export function secretsOf(bundle: V4Bundle): string[] {
     ...bundle.ssh_hosts.map((h) => h.private_key),
   ];
   return values.filter((v): v is string => v !== null && v.length > 0);
+}
+
+/** How old the bundle is at `now`, in milliseconds (negative when it claims to come from the future). */
+export function bundleAgeMs(bundle: Pick<V4Bundle, 'exported_at'>, now: Date): number {
+  return now.getTime() - Date.parse(bundle.exported_at);
 }

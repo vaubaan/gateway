@@ -212,11 +212,13 @@ describe('the bundle', () => {
     expect(sql).toContain(`in (${PASTED_KEY_PROVIDERS.map((p) => `'${p}'`).join(', ')})`);
     expect(sql).not.toMatch(/refresh_token_encrypted/);
     expect(sql).toContain(":'org'");
+    expect(sql).toContain('t.denied_risks');
   });
 
-  it('merges a Stripe account bound to several projects, newest keys first', async () => {
+  it('keeps the one Stripe mode each v4 project used, the account holding both keys', async () => {
     const decryptor = await createV4Decryptor(MASTER);
     const second = '0b6a1a3e-0000-4000-8000-0000000000a2';
+    const testKey = await sealV4(ORG, 'test-key-value');
     const bundle = buildBundle(
       raw({
         projects: [
@@ -224,17 +226,19 @@ describe('the bundle', () => {
           { id: second, slug: 'api', name: 'api' },
         ],
         stripe: [
+          // Test key only: v4 gave this project test mode, never live.
           {
             project_id: second,
             account_id: 'acct_1',
-            test_key_sealed: await sealV4(ORG, 'newest'),
+            test_key_sealed: testKey,
             live_key_sealed: null,
           },
+          // Both keys: v4 used `live ?? test`, live mode.
           {
             project_id: PROJECT,
             account_id: 'acct_1',
-            test_key_sealed: await sealV4(ORG, 'older'),
-            live_key_sealed: null,
+            test_key_sealed: await sealV4(ORG, 'test-key-value'),
+            live_key_sealed: await sealV4(ORG, 'live-key-value'),
           },
         ],
       }),
@@ -243,8 +247,47 @@ describe('the bundle', () => {
       NOW,
     );
     expect(bundle.stripe_accounts).toEqual([
-      { account_id: 'acct_1', project_ids: [second, PROJECT], test_key: 'newest', live_key: null },
+      {
+        account_id: 'acct_1',
+        projects: [
+          { project_id: second, mode: 'test' },
+          { project_id: PROJECT, mode: 'live' },
+        ],
+        test_key: 'test-key-value',
+        live_key: 'live-key-value',
+      },
     ]);
+  });
+
+  it('refuses two different keys of one mode for one Stripe account, without quoting them', async () => {
+    const decryptor = await createV4Decryptor(MASTER);
+    const second = '0b6a1a3e-0000-4000-8000-0000000000a2';
+    const read = raw({
+      projects: [
+        { id: PROJECT, slug: 'web', name: 'web' },
+        { id: second, slug: 'api', name: 'api' },
+      ],
+      stripe: [
+        {
+          project_id: second,
+          account_id: 'acct_1',
+          test_key_sealed: await sealV4(ORG, 'first-test-key'),
+          live_key_sealed: null,
+        },
+        {
+          project_id: PROJECT,
+          account_id: 'acct_1',
+          test_key_sealed: await sealV4(ORG, 'other-test-key'),
+          live_key_sealed: null,
+        },
+      ],
+    });
+    expect(() => buildBundle(read, decryptor, options, NOW)).toThrow('two different test keys');
+    try {
+      buildBundle(read, decryptor, options, NOW);
+    } catch (error) {
+      expect(String(error)).not.toContain('first-test-key');
+    }
   });
 
   it('carries an asked SSH host from another organization, plain-text key as v4 kept it', async () => {
@@ -356,6 +399,7 @@ describe('the bundle', () => {
             project_id: PROJECT,
             name: 'web-agent',
             accepted_risks: ['github.read-code', 42],
+            denied_risks: ['github.create-pr'],
             expires_at: null,
           },
         ],
@@ -380,6 +424,7 @@ describe('the bundle', () => {
         project_id: PROJECT,
         token_name: 'web-agent',
         accepted_risks: ['github.read-code'],
+        denied_risks: ['github.create-pr'],
         expires_at: null,
       },
     ]);

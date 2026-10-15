@@ -2,19 +2,20 @@
  * `import-v4`: the command the container runs to import a v4 bundle (ADR
  * import-from-v4-one-shot-importer D1, D4). Built into
  * `apps/gateway/import-v4.mjs` beside the standalone server
- * (`apps/gateway/build-import-v4.mjs`).
+ * (`scripts/build-import-v4.mjs`).
  *
- *   <exporter> | node apps/gateway/import-v4.mjs --owner <email> [--apply]
+ *   <exporter> | node apps/gateway/import-v4.mjs --owner <email> [--apply] [--allow-stale]
  *
  * The bundle comes on stdin only: no file argument, no secret in argv. The
  * report goes to stderr; stdout carries nothing but the mission keys of an
  * `--apply`, one JSON object per line, so it can be piped on its own. The
  * instance's own configuration, master key and store are used — the command
- * refuses to run without them, and refuses to run as root.
+ * refuses to run without them (checked before stdin is read), and refuses to
+ * run as root. A bundle older than an hour is refused unless `--allow-stale`.
  *
- * Exit codes (sysexits): 0 done, 1 something the run tried was refused,
- * 64 usage, 65 invalid bundle, 67 unknown owner, 77 run as root, 78 the
- * instance is not configured.
+ * Exit codes (sysexits): 0 done, 1 something the run tried was refused or an
+ * unexpected failure, 64 usage, 65 invalid or stale bundle, 67 unknown owner,
+ * 77 run as root, 78 the instance is not configured.
  */
 import { existsSync } from 'node:fs';
 
@@ -26,8 +27,15 @@ import { ConfigError, loadInstanceConfig, secretValues, type LoadedConfig } from
 import { createRedactor } from '../logging';
 import type { Store } from '../store';
 import { MEMORY_PATH } from '../store/db';
-import { MAX_BUNDLE_BYTES, parseBundle, secretsOf } from './bundle';
-import { Importer, ImportRefused, type ImportReport } from './importer';
+import {
+  bundleAgeMs,
+  MAX_BUNDLE_AGE_MS,
+  MAX_BUNDLE_BYTES,
+  MAX_BUNDLE_CLOCK_SKEW_MS,
+  parseBundle,
+  secretsOf,
+} from './bundle';
+import { Importer, ImportRefused, type ImportReport, type MissionProvenance } from './importer';
 import { renderReport } from './report';
 
 export const EXIT_OK = 0;
@@ -41,13 +49,21 @@ export const EXIT_CONFIG = 78;
 /** The marker of every audit entry this command writes (`after.marker`). */
 export const IMPORT_AUDIT_MARKER = 'imported-from-v4';
 
-export const USAGE = `Usage: node apps/gateway/import-v4.mjs --owner <email> [--apply] < bundle.json
+/** The one line printed for a failure nobody foresaw: never its message, never a stack. */
+export const UNEXPECTED_FAILURE =
+  'import-v4: unexpected failure (details withheld: they may quote a secret). What was written before it stays; run the import again.\n';
+
+/** Most `mission-issued` entries of one owner the provenance lookup reads. */
+const PROVENANCE_SCAN_LIMIT = 100_000;
+
+export const USAGE = `Usage: node apps/gateway/import-v4.mjs --owner <email> [--apply] [--allow-stale] < bundle.json
 
 Imports the bundle written by scripts/export-v4.mjs (read on stdin) into this
 instance, under <email>, an active user who has signed in once.
 
   --owner <email>  the user every connection and mission is created for
   --apply          write; without it, print the plan and write nothing
+  --allow-stale    accept a bundle exported more than an hour ago
   --help           this text
 
 The report goes to stderr. With --apply, stdout carries the mission keys,
@@ -68,11 +84,14 @@ export interface CliDeps {
   readonly rootDeps?: Omit<RootDeps, 'logWrite'>;
   readonly loadConfig?: () => LoadedConfig;
   readonly storeExists?: (path: string) => boolean;
+  /** The clock the bundle's age is read with (tests). */
+  readonly now?: () => Date;
 }
 
 export interface CliArgs {
   readonly ownerEmail: string;
   readonly apply: boolean;
+  readonly allowStale: boolean;
 }
 
 export type ParsedArgs =
@@ -83,11 +102,16 @@ export type ParsedArgs =
 export function parseArgs(argv: readonly string[]): ParsedArgs {
   let ownerEmail: string | null = null;
   let apply = false;
+  let allowStale = false;
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--help' || arg === '-h') return { kind: 'help' };
     if (arg === '--apply') {
       apply = true;
+      continue;
+    }
+    if (arg === '--allow-stale') {
+      allowStale = true;
       continue;
     }
     if (arg === '--owner') {
@@ -109,7 +133,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   if (!ownerEmail || !ownerEmail.includes('@')) {
     return { kind: 'usage', problem: '--owner <email> is required' };
   }
-  return { kind: 'run', args: { ownerEmail, apply } };
+  return { kind: 'run', args: { ownerEmail, apply, allowStale } };
 }
 
 async function readAll(
@@ -128,26 +152,75 @@ async function readAll(
 }
 
 /**
- * Wraps the store so every administrative entry written during the import
- * carries the marker: the entries are written by the services themselves
- * (connection created, resource edited, mission issued), as the owner.
+ * The audit side of an import. `wrap` marks every administrative entry the
+ * services write during the run (connection created, resource edited,
+ * mission issued) with `marker` and `v4_org`, and — inside `during` — with
+ * `v4_source`, the v4 token a mission comes from. `issued` reads those
+ * `mission-issued` entries back: that is how a later run recognises a mission
+ * it issued, by provenance and never by name.
  */
-export function markImported(store: Store, org: string): Store {
-  const inner = store.auditWriter;
-  const auditWriter: AuditWriter = {
-    async write(entry: AuditEntry) {
-      if (entry.kind !== 'admin') return inner.write(entry);
-      const after =
-        typeof entry.after === 'object' && entry.after !== null && !Array.isArray(entry.after)
-          ? (entry.after as Record<string, unknown>)
-          : { value: entry.after };
-      return inner.write({
-        ...entry,
-        after: { ...after, marker: IMPORT_AUDIT_MARKER, v4_org: org },
-      });
+export function createImportMarker(org: string): {
+  wrap(store: Store): Store;
+  provenance(store: Pick<Store, 'audit'>): MissionProvenance;
+} {
+  let source: string | null = null;
+  return {
+    wrap(store) {
+      const inner = store.auditWriter;
+      const auditWriter: AuditWriter = {
+        async write(entry: AuditEntry) {
+          if (entry.kind !== 'admin') return inner.write(entry);
+          const after =
+            typeof entry.after === 'object' && entry.after !== null && !Array.isArray(entry.after)
+              ? (entry.after as Record<string, unknown>)
+              : { value: entry.after };
+          return inner.write({
+            ...entry,
+            after: {
+              ...after,
+              marker: IMPORT_AUDIT_MARKER,
+              v4_org: org,
+              ...(source !== null ? { v4_source: source } : {}),
+            },
+          });
+        },
+      };
+      return { ...store, auditWriter };
+    },
+    provenance(store) {
+      return {
+        async issued(ownerId) {
+          const entries = await store.audit.list({
+            kind: 'admin',
+            act: 'mission-issued',
+            userId: ownerId,
+            limit: PROVENANCE_SCAN_LIMIT,
+          });
+          const issued = new Map<string, string>();
+          for (const entry of entries) {
+            if (entry.kind !== 'admin') continue;
+            const after = entry.after as Record<string, unknown> | null;
+            if (
+              after?.marker === IMPORT_AUDIT_MARKER &&
+              after.v4_org === org &&
+              typeof after.v4_source === 'string'
+            ) {
+              issued.set(after.v4_source, entry.object.id);
+            }
+          }
+          return issued;
+        },
+        async during(next, act) {
+          source = next;
+          try {
+            return await act();
+          } finally {
+            source = null;
+          }
+        },
+      };
     },
   };
-  return { ...store, auditWriter };
 }
 
 export async function runImportCli(
@@ -155,6 +228,15 @@ export async function runImportCli(
   io: CliIo,
   deps: CliDeps = {},
 ): Promise<number> {
+  try {
+    return await run(argv, io, deps);
+  } catch {
+    io.stderr(UNEXPECTED_FAILURE);
+    return EXIT_PARTIAL;
+  }
+}
+
+async function run(argv: readonly string[], io: CliIo, deps: CliDeps): Promise<number> {
   const parsed = parseArgs(argv);
   if (parsed.kind === 'help') {
     io.stderr(USAGE);
@@ -177,20 +259,7 @@ export async function runImportCli(
     return EXIT_USAGE;
   }
 
-  const read = await readAll(io.stdin, MAX_BUNDLE_BYTES);
-  if (!read.ok) {
-    io.stderr(`import-v4: the bundle is larger than ${MAX_BUNDLE_BYTES} bytes.\n`);
-    return EXIT_DATA;
-  }
-  const bundle = parseBundle(read.text);
-  if (!bundle.ok) {
-    io.stderr(
-      `import-v4: the bundle is refused, nothing was written:\n${bundle.problems.map((p) => `  - ${p}\n`).join('')}`,
-    );
-    return EXIT_DATA;
-  }
-  const redact = createRedactor(secretsOf(bundle.bundle));
-
+  // The instance first: a misconfigured container never reads the secrets at all.
   let loaded: LoadedConfig;
   try {
     loaded = (deps.loadConfig ?? loadInstanceConfig)();
@@ -211,15 +280,43 @@ export async function runImportCli(
     return EXIT_CONFIG;
   }
 
+  const read = await readAll(io.stdin, MAX_BUNDLE_BYTES);
+  if (!read.ok) {
+    io.stderr(`import-v4: the bundle is larger than ${MAX_BUNDLE_BYTES} bytes.\n`);
+    return EXIT_DATA;
+  }
+  const bundle = parseBundle(read.text);
+  if (!bundle.ok) {
+    io.stderr(
+      `import-v4: the bundle is refused, nothing was written:\n${bundle.problems.map((p) => `  - ${p}\n`).join('')}`,
+    );
+    return EXIT_DATA;
+  }
+  const ageMs = bundleAgeMs(bundle.bundle, (deps.now ?? (() => new Date()))());
+  const minutes = Math.round(ageMs / 60_000);
+  if (ageMs < -MAX_BUNDLE_CLOCK_SKEW_MS) {
+    io.stderr('import-v4: the bundle claims to be exported in the future; nothing was written.\n');
+    return EXIT_DATA;
+  }
+  if (ageMs > MAX_BUNDLE_AGE_MS && !parsed.args.allowStale) {
+    io.stderr(
+      `import-v4: the bundle was exported ${minutes} minutes ago (more than ${MAX_BUNDLE_AGE_MS / 60_000}): ` +
+        'v4 may have revoked keys or tokens since. Export again and pipe it straight in, or pass --allow-stale. ' +
+        'Nothing was written.\n',
+    );
+    return EXIT_DATA;
+  }
+  const redact = createRedactor(secretsOf(bundle.bundle));
+
   const logRedact = createRedactor([...secretsOf(bundle.bundle), ...secretValues(loaded.config)]);
-  const org = bundle.bundle.organization.slug;
+  const marker = createImportMarker(bundle.bundle.organization.slug);
   const openStore = deps.rootDeps?.openStore ?? openEmbeddedStore;
   let root: GatewayRoot;
   try {
     root = await buildRoot({
       ...deps.rootDeps,
       loadConfig: () => loaded,
-      openStore: async (ctx) => markImported(await openStore(ctx), org),
+      openStore: async (ctx) => marker.wrap(await openStore(ctx)),
       // The gateway's own log lines: errors only (its boot warnings are about serving,
       // which this command does not do), on stderr, secrets blanked. Every refusal the
       // import meets is in its report.
@@ -238,7 +335,9 @@ export async function runImportCli(
       store: root.store,
       connections: root.connections.service,
       missions: root.missions.service,
+      provenance: marker.provenance(root.store),
     }).run(bundle.bundle, parsed.args);
+    io.stderr(`import-v4: bundle exported ${Math.max(minutes, 0)} minute(s) ago.\n`);
     io.stderr(redact(renderReport(report)));
     printKeys(report, io);
     return report.failed ? EXIT_PARTIAL : EXIT_OK;
@@ -247,10 +346,14 @@ export async function runImportCli(
       io.stderr(`import-v4: ${err.message}. Nothing was written.\n`);
       return EXIT_NO_USER;
     }
-    io.stderr(`import-v4: the import stopped: ${redact(errorText(err))}\n`);
+    io.stderr(UNEXPECTED_FAILURE);
     return EXIT_PARTIAL;
   } finally {
-    await root.close();
+    try {
+      await root.close();
+    } catch {
+      io.stderr('import-v4: the store did not close cleanly (details withheld).\n');
+    }
   }
 }
 

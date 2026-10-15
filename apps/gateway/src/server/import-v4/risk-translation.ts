@@ -14,6 +14,11 @@
  *      catalog does not know, a deprecated entry, an id outside the creator's
  *      authority → dropped and reported. Never replaced by a wider id.
  *
+ * v4 denials trump acceptance (v4's risk runtime refuses a denied risk even
+ * when it is accepted): an accepted v4 id that is itself denied, and every
+ * target whose id or base id a v4 denial names, are dropped and reported
+ * (`denied-in-v4`).
+ *
  * Each kept id takes its budget and gate from a preset line: the plugin's
  * developer preset first, then its other presets in catalog order (the
  * interface's rule for a hand-ticked risk, `defaultEntryFor`). An id no
@@ -26,6 +31,7 @@ import { isResolvable } from '../missions/catalog-view';
 import type { CatalogRisk, IssuanceConnection, IssuanceResource } from '../missions/model';
 
 export type DropReason =
+  | 'denied-in-v4'
   | 'unknown-in-v5'
   | 'deprecated-in-v5'
   | 'no-exact-env-counterpart'
@@ -77,7 +83,9 @@ export function translateRisks(
   v4RiskIds: readonly string[],
   connection: TranslatableConnection,
   selected: readonly Pick<IssuanceResource, 'env'>[],
+  v4Denied: readonly string[] = [],
 ): Translation {
+  const denied = new Set(v4Denied);
   const byId = new Map(connection.risks.map((risk) => [risk.risk_id, risk]));
   const held = new Set(connection.authority);
   const entries = new Map<RiskId, TranslatedEntry>();
@@ -85,6 +93,10 @@ export function translateRisks(
   const expanded: { v4RiskId: string; v5RiskIds: RiskId[] }[] = [];
 
   for (const v4RiskId of new Set(v4RiskIds)) {
+    if (denied.has(v4RiskId)) {
+      dropped.push({ v4RiskId, reason: 'denied-in-v4', v5RiskIds: [] });
+      continue;
+    }
     const targets = targetsOf(v4RiskId, connection, byId, selected);
     if ('reason' in targets) {
       dropped.push({ v4RiskId, reason: targets.reason, v5RiskIds: targets.v5RiskIds });
@@ -94,6 +106,10 @@ export function translateRisks(
       expanded.push({ v4RiskId, v5RiskIds: targets.risks.map((r) => r.risk_id) });
     for (const risk of targets.risks) {
       if (entries.has(risk.risk_id)) continue;
+      if (denied.has(risk.risk_id) || denied.has(risk.base_id)) {
+        dropped.push({ v4RiskId, reason: 'denied-in-v4', v5RiskIds: [risk.risk_id] });
+        continue;
+      }
       if (!held.has(risk.risk_id)) {
         dropped.push({ v4RiskId, reason: 'outside-authority', v5RiskIds: [risk.risk_id] });
         continue;

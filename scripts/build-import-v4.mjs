@@ -80,7 +80,8 @@ await build({
   banner: {
     js: "import { createRequire as __vaubaanCreateRequire } from 'node:module'; const require = __vaubaanCreateRequire(import.meta.url);",
   },
-  legalComments: 'none',
+  // Licence notices of the bundled packages are kept, at the end of the file.
+  legalComments: 'eof',
   logLevel: 'warning',
 });
 console.log(`build-import-v4: ${relative(repoRoot, outfile)}`);

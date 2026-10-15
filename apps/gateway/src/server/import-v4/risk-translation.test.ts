@@ -164,6 +164,40 @@ describe('v4 risk ids translated to the v5 catalog', () => {
     ]);
   });
 
+  it('drops what v4 denied, even when it was also accepted', () => {
+    const t = translateRisks(
+      ['github.read-code', 'github.create-pr'],
+      connectionOf(githubPlugin),
+      [],
+      ['github.create-pr'],
+    );
+    expect(t.entries.map((e) => e.risk_id)).toEqual(['github.read-code']);
+    expect(t.dropped).toEqual([
+      { v4RiskId: 'github.create-pr', reason: 'denied-in-v4', v5RiskIds: [] },
+    ]);
+  });
+
+  it('drops the written-out environment a v4 denial names, by id or by base id', () => {
+    const supabase = connectionOf(supabasePlugin);
+    const both = [{ env: 'staging' }, { env: 'prod' }];
+    const byEnv = translateRisks(['supabase.migration-write'], supabase, both, [
+      'supabase[prod].migration-write',
+    ]);
+    expect(byEnv.entries.map((e) => e.risk_id)).toEqual(['supabase[staging].migration-write']);
+    expect(byEnv.dropped).toEqual([
+      {
+        v4RiskId: 'supabase.migration-write',
+        reason: 'denied-in-v4',
+        v5RiskIds: ['supabase[prod].migration-write'],
+      },
+    ]);
+    const byBase = translateRisks(['supabase[staging].migration-write'], supabase, both, [
+      'supabase.migration-write',
+    ]);
+    expect(byBase.entries).toEqual([]);
+    expect(byBase.dropped[0]!.reason).toBe('denied-in-v4');
+  });
+
   it('counts a duplicated v4 id once', () => {
     const t = translateRisks(
       ['github.read-code', 'github.read-code'],

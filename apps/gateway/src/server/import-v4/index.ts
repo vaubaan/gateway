@@ -6,6 +6,8 @@ export {
   bundleSchema,
   BUNDLE_FORMAT,
   BUNDLE_VERSION,
+  bundleAgeMs,
+  MAX_BUNDLE_AGE_MS,
   MAX_BUNDLE_BYTES,
   parseBundle,
   secretsOf,
@@ -21,7 +23,8 @@ export {
   EXIT_PARTIAL,
   EXIT_USAGE,
   IMPORT_AUDIT_MARKER,
-  markImported,
+  createImportMarker,
+  UNEXPECTED_FAILURE,
   parseArgs,
   runImportCli,
   type CliDeps,
@@ -30,11 +33,14 @@ export {
 export {
   IMPORTED_MISSION_PERIOD_SECONDS,
   Importer,
+  missionNamesOf,
+  missionSourceOf,
   ImportRefused,
   normalizeBindings,
   sameVisibleFields,
   V5_ENV_LABELS,
   type ImportReport,
+  type MissionProvenance,
   type IssuedKey,
 } from './importer';
 export { renderReport } from './report';

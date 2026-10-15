@@ -6,9 +6,10 @@ import vercelPlugin from '@vaubaan/plugin-vercel';
 import { describe, expect, it } from 'vitest';
 
 import { parseBundle, secretsOf } from './bundle';
-import { markImported, parseArgs } from './cli';
+import type { Store } from '../store';
+import { createImportMarker, parseArgs } from './cli';
 import { pastedKeyFields, sshHostFields, stripeKeyFields } from './credential-mapping';
-import { normalizeBindings, sameVisibleFields } from './importer';
+import { missionNamesOf, normalizeBindings, sameVisibleFields } from './importer';
 import {
   CLOUDFLARE_TOKEN,
   fixtureBundle,
@@ -133,6 +134,7 @@ describe('bindings', () => {
     expect(bindings.find((b) => b.provider === 'stripe')?.matcher).toEqual({
       kind: 'stripe-account',
       accountId: 'acct_1Acme',
+      mode: 'test',
     });
     expect(bindings.find((b) => b.provider === 'ssh')?.label).toBe('vps-ops.example.com');
   });
@@ -151,11 +153,11 @@ describe('command line', () => {
   it('reads --owner and --apply', () => {
     expect(parseArgs(['--owner', 'a@example.com'])).toEqual({
       kind: 'run',
-      args: { ownerEmail: 'a@example.com', apply: false },
+      args: { ownerEmail: 'a@example.com', apply: false, allowStale: false },
     });
     expect(parseArgs(['--apply', '--owner=a@example.com'])).toEqual({
       kind: 'run',
-      args: { ownerEmail: 'a@example.com', apply: true },
+      args: { ownerEmail: 'a@example.com', apply: true, allowStale: false },
     });
   });
 
@@ -171,7 +173,7 @@ describe('command line', () => {
     expect(parseArgs(['--owner', 'nobody']).kind).toBe('usage');
   });
 
-  it('marks every administrative audit entry, and only those', async () => {
+  it('marks every administrative audit entry, the issuing one with its v4 source', async () => {
     const written: unknown[] = [];
     const store = {
       auditWriter: {
@@ -179,8 +181,9 @@ describe('command line', () => {
           written.push(entry);
         },
       },
-    } as unknown as Parameters<typeof markImported>[0];
-    const marked = markImported(store, 'acme');
+    } as unknown as Store;
+    const marker = createImportMarker('acme');
+    const marked = marker.wrap(store);
     const admin = {
       kind: 'admin' as const,
       ts: '2026-10-15T08:00:00.000Z',
@@ -191,10 +194,66 @@ describe('command line', () => {
       delegated_client_id: null,
     };
     await marked.auditWriter.write({ ...admin, after: { provider: 'vercel' } });
+    await marker
+      .provenance({ audit: {} as Store['audit'] })
+      .during('tokens/t1', () => marked.auditWriter.write({ ...admin, after: null }));
     await marked.auditWriter.write({ ...admin, after: null });
     expect(written).toEqual([
       { ...admin, after: { provider: 'vercel', marker: 'imported-from-v4', v4_org: 'acme' } },
+      {
+        ...admin,
+        after: { value: null, marker: 'imported-from-v4', v4_org: 'acme', v4_source: 'tokens/t1' },
+      },
       { ...admin, after: { value: null, marker: 'imported-from-v4', v4_org: 'acme' } },
     ]);
+  });
+
+  it('reads --allow-stale', () => {
+    expect(parseArgs(['--owner', 'a@example.com', '--allow-stale'])).toEqual({
+      kind: 'run',
+      args: { ownerEmail: 'a@example.com', apply: false, allowStale: true },
+    });
+  });
+});
+
+describe('the review’s hardening', () => {
+  it('a Stripe project gets only the mode v4 gave it; a mode without its key is refused', () => {
+    const bundle = fixtureBundle();
+    const account = bundle.stripe_accounts[0]!;
+    const live = { ...account, projects: [{ project_id: PROJECT_WEB, mode: 'live' as const }] };
+    const refused = parse({ ...bundle, stripe_accounts: [live] });
+    expect(refused.ok).toBe(false);
+    if (!refused.ok) expect(refused.problems.join('\n')).toContain('no key for');
+  });
+
+  it('carries the v4 denials and refuses a bundle without them', () => {
+    const bundle = fixtureBundle();
+    const { denied_risks: _dropped, ...withoutDenials } = bundle.missions[0]!;
+    expect(parse({ ...bundle, missions: [withoutDenials] }).ok).toBe(false);
+  });
+
+  it('refuses a secret too short to be one', () => {
+    const bundle = fixtureBundle();
+    const cloudflare = { ...bundle.accounts[1]!, access_token: 'a' };
+    expect(parse({ ...bundle, accounts: [bundle.accounts[0]!, cloudflare] }).ok).toBe(false);
+  });
+
+  it('names missions on one line, apart when projects share a name, within the limit', () => {
+    const bundle = fixtureBundle();
+    const [web, ops] = bundle.projects;
+    const projects = [
+      { ...web!, name: 'shared\nname  ' },
+      { ...ops!, name: 'shared name' },
+    ];
+    const names = missionNamesOf({ projects, missions: bundle.missions });
+    expect([...names.values()].sort()).toEqual([
+      'shared name — ops/ops-agent',
+      'shared name — web/web-agent',
+    ]);
+    const long = missionNamesOf({
+      projects: [{ ...web!, name: 'x'.repeat(400) }],
+      missions: [bundle.missions[0]!],
+    });
+    expect([...long.values()][0]!.length).toBeLessThanOrEqual(120);
   });
 });

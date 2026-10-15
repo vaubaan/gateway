@@ -12,6 +12,7 @@ import type {
   MissionOutcome,
   MissionStatus,
 } from './importer';
+import { withoutControlCharacters } from './control-characters';
 import type { DropReason } from './risk-translation';
 
 const CONNECTION_WORDS: Record<ConnectionStatus, string> = {
@@ -46,6 +47,7 @@ const MISSION_WORDS: Record<MissionStatus, string> = {
 };
 
 const DROP_WORDS: Record<DropReason, string> = {
+  'denied-in-v4': 'denied in v4 (a v4 denial trumps acceptance)',
   'unknown-in-v5': 'unknown to the v5 catalog',
   'deprecated-in-v5': 'deprecated in the v5 catalog',
   'no-exact-env-counterpart':
@@ -129,7 +131,9 @@ export function renderReport(report: ImportReport): string {
     );
   }
   lines.push(report.failed ? 'Finished with refusals: see above.' : 'Finished.');
-  return `${lines.join('\n')}\n`;
+  // Names and refs come from the v4 database: a newline or an escape sequence in
+  // one must not forge a line of the report the operator reads before --apply.
+  return `${lines.map(withoutControlCharacters).join('\n')}\n`;
 }
 
 function missionLines(m: MissionOutcome): string[] {

@@ -191,7 +191,7 @@ function decodeOpenSshPrivateKey(text: string): { seed: Buffer } {
   }
   const type = section.string().toString('utf8');
   if (type !== KEY_TYPE) {
-    throw new SshKeyImportError(`the private key is ${type.slice(0, 40)}, not ed25519`);
+    throw new SshKeyImportError('the OpenSSH private key is not an ed25519 key');
   }
   const pub = section.string();
   const secret = section.string();

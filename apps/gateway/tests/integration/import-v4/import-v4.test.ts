@@ -42,6 +42,16 @@ const V4_MASTER_KEY = randomBytes(32).toString('base64');
 const CLOUDFLARE_TOKEN = `cf${randomBytes(20).toString('hex')}`;
 const VERCEL_TOKEN = `vc${randomBytes(12).toString('hex')}`;
 const STRIPE_KEY = ['sk', 'test', randomBytes(12).toString('hex')].join('_');
+/** The parts of the bundle these tests edit. */
+interface V4BundleLike {
+  exported_at: string;
+  missions: { accepted_risks: string[]; denied_risks: string[] }[];
+  stripe_accounts: {
+    live_key: string | null;
+    projects: { project_id: string; mode: 'test' | 'live' }[];
+  }[];
+}
+
 const FINGERPRINT = `SHA256:${randomBytes(32).toString('base64').replace(/=+$/, '')}`;
 
 /** The v4 sealing (provider-secrets.ts at v4-final), written again here on purpose. */
@@ -258,7 +268,7 @@ describe('import of a v4 organization', () => {
       await fakeV4Read(sshKey),
       decryptor,
       { org: 'acme', sshHosts: ['vps-ops'], sshHostKeys: new Map([['vps-ops', FINGERPRINT]]) },
-      new Date('2026-10-15T08:00:00.000Z'),
+      new Date(),
     );
     bundleText = JSON.stringify(bundle);
   });
@@ -512,6 +522,120 @@ describe('import of a v4 organization', () => {
     expect(stderr).toContain('signs in once');
     expect(stdout).toBe('');
     expect(await store.connections.list()).toEqual([]);
+  });
+
+  /** The bundle of this suite, changed by `edit`. */
+  function bundleWith(edit: (bundle: Record<string, unknown> & V4BundleLike) => void): string {
+    const bundle = JSON.parse(bundleText) as Record<string, unknown> & V4BundleLike;
+    edit(bundle);
+    return JSON.stringify(bundle);
+  }
+
+  function missionPolicy(name: string) {
+    return async () => {
+      const missions = await store.missions.listForCreator(await ownerId());
+      return missions.find((m) => m.name === name)?.policy.map((p) => p.riskId) ?? null;
+    };
+  }
+
+  it('honours a v4 denial: an accepted and denied permission is not imported', async () => {
+    await connectGithubByHand();
+    const stdin = bundleWith((b) => {
+      b.missions[0]!.denied_risks = ['github.create-pr'];
+    });
+    const { code, stderr } = await run(['--owner', OWNER, '--apply'], { stdin });
+    expect(code).toBe(0);
+    expect(stderr).toContain('dropped github.create-pr: denied in v4');
+    const policy = await missionPolicy('web')();
+    expect(policy).toContain('github.read-code');
+    expect(policy).not.toContain('github.create-pr');
+  });
+
+  it('gives a Stripe project only the mode v4 gave it, never the other', async () => {
+    await connectGithubByHand();
+    const liveKey = ['sk', 'live', randomBytes(12).toString('hex')].join('_');
+    const stdin = bundleWith((b) => {
+      const account = b.stripe_accounts[0]!;
+      account.live_key = liveKey;
+      account.projects = [
+        { project_id: PROJECT_WEB, mode: 'test' },
+        { project_id: PROJECT_OPS, mode: 'live' },
+      ];
+      b.missions[0]!.accepted_risks.push('stripe.refund-create');
+    });
+    const { code, stderr } = await run(['--owner', OWNER, '--apply'], { stdin });
+    expect(code).toBe(0);
+    expect(stderr).not.toContain(liveKey);
+    const stripe = (await store.connections.list()).find((c) => c.provider === 'stripe')!;
+    const refs = (await store.connections.listResources(stripe.id)).map((r) => r.ref).sort();
+    expect(refs).toEqual(['acct_1Acme/live', 'acct_1Acme/test']);
+    const policy = (await missionPolicy('web')()) ?? [];
+    expect(policy.filter((id) => id.startsWith('stripe'))).toEqual(
+      expect.arrayContaining(['stripe[test].read-catalog']),
+    );
+    expect(policy.some((id) => id.startsWith('stripe[live]'))).toBe(false);
+  });
+
+  it('recognises an imported mission by its v4 token, not by its name', async () => {
+    const owner = await ownerId();
+    const first = await run(['--owner', OWNER, '--apply']);
+    expect(first.stderr).toContain('"ops" (v4 token ops-agent): issued');
+    const ops = (await store.missions.listForCreator(owner)).find((m) => m.name === 'ops')!;
+
+    // The owner renames the imported mission, and makes one by hand named like
+    // the v4 project still waiting for GitHub.
+    store.db.prepare('UPDATE missions SET name = ? WHERE id = ?').run('ops (renamed)', ops.id);
+    const vercel = (await store.connections.list()).find((c) => c.provider === 'vercel')!;
+    const handMade = await store.missions.create({
+      name: 'web',
+      creatorUserId: owner,
+      periodSeconds: null,
+      connections: [{ connectionId: vercel.id, resourceScope: 'all', resourceIds: [] }],
+      policy: [],
+    });
+    await connectGithubByHand();
+
+    const second = await run(['--owner', OWNER, '--apply']);
+    // The renamed one is still the import's; the hand-made namesake is not.
+    expect(second.stderr).toContain('"ops" (v4 token ops-agent): already exists');
+    expect(second.stderr).toContain(ops.id);
+    expect(second.stderr).toContain('"web" (v4 token web-agent): issued');
+    const webs = (await store.missions.listForCreator(owner)).filter((m) => m.name === 'web');
+    expect(webs).toHaveLength(2);
+    expect((await store.missions.getById(handMade.id))?.policy).toEqual([]);
+    const keys = second.stdout.trim().split('\n');
+    expect(keys).toHaveLength(1);
+    expect(JSON.parse(keys[0]!)).toMatchObject({ project: 'web' });
+  });
+
+  it('refuses a stale bundle unless asked, and one from the future', async () => {
+    const stale = bundleWith((b) => {
+      b.exported_at = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    });
+    const refused = await run(['--owner', OWNER, '--apply'], { stdin: stale });
+    expect(refused.code).toBe(65);
+    expect(refused.stderr).toContain('--allow-stale');
+    expect(await store.connections.list()).toEqual([]);
+    const allowed = await run(['--owner', OWNER, '--allow-stale'], { stdin: stale });
+    expect(allowed.code).toBe(0);
+    const future = bundleWith((b) => {
+      b.exported_at = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    });
+    expect((await run(['--owner', OWNER], { stdin: future })).code).toBe(65);
+  });
+
+  it('prints one fixed line for an unexpected failure, never its message', async () => {
+    const secretish = CLOUDFLARE_TOKEN;
+    const { code, stderr } = await run(['--owner', OWNER], {
+      deps: deps({
+        loadConfig: () => {
+          throw new Error(`boom ${secretish}`);
+        },
+      }),
+    });
+    expect(code).toBe(1);
+    expect(stderr).toContain('unexpected failure');
+    expect(stderr).not.toContain(secretish);
   });
 
   it('refuses root, a missing store and an invalid bundle', async () => {

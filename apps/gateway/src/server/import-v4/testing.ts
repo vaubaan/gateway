@@ -34,11 +34,11 @@ export const SSH_PRIVATE_KEY = generateKeyPairSync('ed25519', {
  *   Stripe in test mode; token `web-agent`;
  * - `ops`: the SSH host `vps-ops`; token `ops-agent`.
  */
-export function fixtureBundle(): V4Bundle {
+export function fixtureBundle(exportedAt: Date = new Date()): V4Bundle {
   return {
     format: BUNDLE_FORMAT,
     version: BUNDLE_VERSION,
-    exported_at: '2026-10-15T08:00:00.000Z',
+    exported_at: exportedAt.toISOString(),
     organization: { id: ORG_ID, slug: 'acme', name: 'Acme' },
     projects: [
       { id: PROJECT_WEB, slug: 'web', name: 'web' },
@@ -111,7 +111,7 @@ export function fixtureBundle(): V4Bundle {
     stripe_accounts: [
       {
         account_id: STRIPE_ACCOUNT,
-        project_ids: [PROJECT_WEB],
+        projects: [{ project_id: PROJECT_WEB, mode: 'test' }],
         test_key: STRIPE_TEST_KEY,
         live_key: null,
       },
@@ -142,6 +142,7 @@ export function fixtureBundle(): V4Bundle {
           'stripe.teleport',
           'supabase.read-data',
         ],
+        denied_risks: [],
         expires_at: null,
       },
       {
@@ -149,6 +150,7 @@ export function fixtureBundle(): V4Bundle {
         project_id: PROJECT_OPS,
         token_name: 'ops-agent',
         accepted_risks: ['ssh.exec-read', 'ssh.uncategorized-write'],
+        denied_risks: [],
         expires_at: null,
       },
     ],

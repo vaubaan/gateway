@@ -15,7 +15,8 @@
 #                                 and the server runs as 10001 with no capability (Railway's
 #                                 RAILWAY_RUN_UID=0)
 # 10. v4 importer shipped       -> apps/gateway/import-v4.mjs loads in the image, refuses root,
-#                                 and runs as 10001 through the entrypoint (handbook import-from-v4)
+#                                 runs as 10001 through the entrypoint, and opens the instance
+#                                 (a configured dry run refuses an unknown owner) (handbook import-from-v4)
 #
 # Optional expectations, set by the release pipeline (.github/workflows/release.yml),
 # which knows what it built:
@@ -219,5 +220,15 @@ set -e
 [ "$as_root" -eq 77 ] || fail "the importer run as root exited $as_root, expected 77"
 [ "$dropped" -eq 65 ] || fail "the importer run through the entrypoint exited $dropped, expected 65 (bundle refused)"
 pass "the v4 importer ships, refuses root, and runs as 10001 through the entrypoint"
+# The importer builds the root inside the image (plugin catalogs, migrations, native
+# addons from the standalone tree): a valid empty bundle for an owner nobody is exits 67.
+now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+bundle='{"format":"vaubaan-v4-export","version":1,"exported_at":"'"$now"'","organization":{"id":"0b6a1a3e-0000-4000-8000-000000000001","slug":"smoke","name":"Smoke"},"projects":[],"accounts":[],"bindings":[],"stripe_accounts":[],"ssh_hosts":[],"missions":[],"skipped":{"project_env_vars":0,"child_tokens":0,"bash_bindings":0,"ssh_hosts_not_exported":[]}}'
+set +e
+printf '%s' "$bundle" | docker exec -i "$NAME" node apps/gateway/import-v4.mjs --owner nobody@example.com >/dev/null 2>&1
+configured=$?
+set -e
+[ "$configured" -eq 67 ] || fail "the importer's configured dry run exited $configured, expected 67 (owner unknown)"
+pass "the v4 importer opens the instance inside the image (configured dry run, unknown owner refused)"
 
 echo "SMOKE PASSED"

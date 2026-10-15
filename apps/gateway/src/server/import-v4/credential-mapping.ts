@@ -20,6 +20,17 @@ export type PastedKeyProvider = (typeof PASTED_KEY_PROVIDERS)[number];
 export const STRIPE_PROVIDER = 'stripe';
 export const SSH_PROVIDER = 'ssh';
 
+/**
+ * Services whose resource refs are case-insensitive at the service (GitHub
+ * `owner/repo`): a v4 ref matches a discovered one ignoring case. Every other
+ * ref (Vercel and Supabase ids, Cloudflare zone ids) must match exactly.
+ */
+export const CASE_INSENSITIVE_REF_PROVIDERS = ['github'] as const;
+
+export function isCaseInsensitiveRefProvider(provider: string): boolean {
+  return (CASE_INSENSITIVE_REF_PROVIDERS as readonly string[]).includes(provider);
+}
+
 export function isPastedKeyProvider(provider: string): provider is PastedKeyProvider {
   return (PASTED_KEY_PROVIDERS as readonly string[]).includes(provider);
 }

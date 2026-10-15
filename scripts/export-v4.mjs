@@ -13,7 +13,7 @@
 // Exit codes: 0 written, 1 refused (message on stderr), 64 usage.
 
 import { spawn } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { fstatSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -95,6 +95,13 @@ async function main() {
     return 0;
   }
   const { org, sshHosts, sshHostKeys } = parsed.args;
+  // The bundle holds decrypted secrets: a terminal (its scrollback) or a file is
+  // a disk. It goes into a pipe or nowhere, checked before anything is read.
+  if (process.stdout.isTTY || fstatSync(1).isFile()) {
+    throw new UsageError(
+      'stdout is a terminal or a file: the bundle holds secrets, pipe this command into the importer',
+    );
+  }
   let envText;
   try {
     envText = readFileSync(resolve(ROOT, '.env'), 'utf8');

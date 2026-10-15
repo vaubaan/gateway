@@ -43,10 +43,13 @@ import type {
   MissionDraft,
   PreviewIssue,
 } from '../missions/model';
+import { MISSION_NAME_MAX_LENGTH } from '../missions/preview';
+import { withoutControlCharacters } from './control-characters';
 import type { Store } from '../store';
 import type { ConnectionRecord, ConnectionResourceRecord } from '../store/types';
 import type { V4Account, V4Bundle, V4Mission, V4Project } from './bundle';
 import {
+  isCaseInsensitiveRefProvider,
   isPastedKeyProvider,
   pastedKeyFields,
   SSH_PROVIDER,
@@ -80,6 +83,24 @@ export interface ImporterPorts {
     'importPastedKey' | 'importSshKey' | 'updateResource'
   >;
   readonly missions: Pick<MissionService, 'issuanceContext' | 'preview' | 'issue'>;
+  /**
+   * Where an imported mission came from (M2 of the review): the missions an
+   * earlier run issued, by v4 source (`tokens/<id>`), and the scope inside
+   * which an issuance is recorded with its source.
+   */
+  readonly provenance: MissionProvenance;
+}
+
+export interface MissionProvenance {
+  /** Mission id by v4 source, for the missions the owner issued through an import of this org. */
+  issued(ownerId: string): Promise<ReadonlyMap<string, string>>;
+  /** Runs `act` with `source` recorded on the audit entries it writes. */
+  during<T>(source: string, act: () => Promise<T>): Promise<T>;
+}
+
+/** The provenance of an imported mission: its v4 token. */
+export function missionSourceOf(mission: Pick<V4Mission, 'token_id'>): string {
+  return `tokens/${mission.token_id}`;
 }
 
 export interface ImportOptions {
@@ -231,8 +252,13 @@ interface Source {
 }
 
 type Matcher =
-  | { readonly kind: 'ref'; readonly ref: string }
-  | { readonly kind: 'stripe-account'; readonly accountId: string };
+  | { readonly kind: 'ref'; readonly ref: string; readonly ignoreCase: boolean }
+  | {
+      readonly kind: 'stripe-account';
+      readonly accountId: string;
+      /** The one mode v4 used for the project (`live ?? test`). */
+      readonly mode: 'test' | 'live';
+    };
 
 /** One v4 binding of a project, deduplicated. */
 interface Binding {
@@ -264,20 +290,24 @@ export function normalizeBindings(bundle: V4Bundle): Binding[] {
       {
         projectId: b.project_id,
         provider: b.provider,
-        matcher: { kind: 'ref', ref: b.resource_ref },
+        matcher: {
+          kind: 'ref',
+          ref: b.resource_ref,
+          ignoreCase: isCaseInsensitiveRefProvider(b.provider),
+        },
         label: b.resource_ref,
       },
       b.environment,
     );
   }
   for (const account of bundle.stripe_accounts) {
-    for (const projectId of account.project_ids) {
+    for (const { project_id: projectId, mode } of account.projects) {
       add(
         {
           projectId,
           provider: STRIPE_PROVIDER,
-          matcher: { kind: 'stripe-account', accountId: account.account_id },
-          label: account.account_id,
+          matcher: { kind: 'stripe-account', accountId: account.account_id, mode },
+          label: `${account.account_id}/${mode}`,
         },
         null,
       );
@@ -289,7 +319,7 @@ export function normalizeBindings(bundle: V4Bundle): Binding[] {
         {
           projectId,
           provider: SSH_PROVIDER,
-          matcher: { kind: 'ref', ref: host.host_address },
+          matcher: { kind: 'ref', ref: host.host_address, ignoreCase: true },
           label: host.host_address,
         },
         null,
@@ -304,15 +334,20 @@ export function normalizeBindings(bundle: V4Bundle): Binding[] {
 
 function matches(
   matcher: Matcher,
-  resource: Pick<ConnectionResourceRecord, 'ref' | 'metadata'>,
+  resource: Pick<ConnectionResourceRecord, 'ref' | 'metadata' | 'env'>,
 ): boolean {
   if (matcher.kind === 'stripe-account') {
-    return (
+    // The project's own mode only: a test-mode project never reaches live money.
+    const account =
       resource.metadata?.account_id === matcher.accountId ||
-      resource.ref.startsWith(`${matcher.accountId}/`)
+      resource.ref.startsWith(`${matcher.accountId}/`);
+    return (
+      account &&
+      (resource.env === matcher.mode || resource.ref === `${matcher.accountId}/${matcher.mode}`)
     );
   }
-  return resource.ref === matcher.ref || resource.ref.toLowerCase() === matcher.ref.toLowerCase();
+  if (resource.ref === matcher.ref) return true;
+  return matcher.ignoreCase && resource.ref.toLowerCase() === matcher.ref.toLowerCase();
 }
 
 function isV5Label(label: string): boolean {
@@ -360,14 +395,12 @@ export class Importer {
     const waiting = sources.filter((s) => pending.has(s.source));
     const missions: MissionOutcome[] = [];
     const keys: IssuedKey[] = [];
-    const perProject = countBy(bundle.missions, (m) => m.project_id);
+    const names = missionNamesOf(bundle);
+    const issued = await this.ports.provenance.issued(actor.user.id);
     for (const mission of bundle.missions) {
       const project = bundle.projects.find((p) => p.id === mission.project_id);
       if (!project) continue; // the schema refuses such a bundle
-      const name =
-        (perProject.get(project.id) ?? 0) > 1
-          ? `${project.name} — ${mission.token_name}`
-          : project.name;
+      const name = names.get(mission.token_id) ?? project.slug;
       const outcome = await this.mission(actor, {
         project,
         mission,
@@ -375,6 +408,7 @@ export class Importer {
         bindings: bindings.filter((b) => b.projectId === project.id),
         held: afterLabels,
         waiting,
+        issued,
         apply: options.apply,
       });
       missions.push(outcome.outcome);
@@ -480,7 +514,7 @@ export class Importer {
         displayName,
         revokedInV4: false,
         visibleFields: this.visibleFieldsOf(STRIPE_PROVIDER, 'api-key', fields),
-        projectIds: new Set(account.project_ids),
+        projectIds: new Set(account.projects.map((p) => p.project_id)),
         create: (actor) =>
           this.ports.connections.importPastedKey(actor, STRIPE_PROVIDER, {
             displayName,
@@ -685,6 +719,8 @@ export class Importer {
       readonly bindings: readonly Binding[];
       readonly held: readonly Held[];
       readonly waiting: readonly Source[];
+      /** Missions earlier imports issued, by v4 source. */
+      readonly issued: ReadonlyMap<string, string>;
       readonly apply: boolean;
     },
   ): Promise<{ readonly outcome: MissionOutcome; readonly key: IssuedKey | null }> {
@@ -705,10 +741,24 @@ export class Importer {
       key: null,
     });
 
-    const existing = (await this.ports.store.missions.listForCreator(actor.user.id)).find(
-      (m) => m.name === name && m.status !== 'revoked',
-    );
-    if (existing) return done('exists', { missionId: existing.id });
+    // Recognised by provenance, never by name: a mission the owner made by hand
+    // with the same name is not this one, and a renamed import still is.
+    const source = missionSourceOf(mission);
+    const existingId = input.issued.get(source);
+    if (existingId !== undefined) {
+      const existing = (await this.ports.store.missions.listForCreator(actor.user.id)).find(
+        (m) => m.id === existingId,
+      );
+      if (existing) {
+        return done('exists', {
+          missionId: existing.id,
+          reasons:
+            existing.status === 'revoked'
+              ? ['revoked by its owner since the import: not issued again']
+              : [],
+        });
+      }
+    }
 
     const providers = [...new Set(bindings.map((b) => b.provider))].filter((p) =>
       this.ports.registry.has(p),
@@ -756,7 +806,7 @@ export class Importer {
         records.some((record) => record.id === r.id),
       );
       const ids = mission.accepted_risks.filter((id) => providerOfV4Risk(id) === provider);
-      const translation = translateRisks(ids, h.issuance, selected);
+      const translation = translateRisks(ids, h.issuance, selected, mission.denied_risks);
       base.dropped.push(...translation.dropped.map((d) => ({ ...d, provider })));
       base.expanded.push(
         ...translation.expanded.map((e) => ({ v4RiskId: e.v4RiskId, v5RiskIds: [...e.v5RiskIds] })),
@@ -799,7 +849,9 @@ export class Importer {
         ? done('would-issue')
         : done('refused', { reasons: [...base.reasons, ...issueLines(preview.issues)] });
     }
-    const issued = await this.ports.missions.issue(subject, draft);
+    const issued = await this.ports.provenance.during(source, () =>
+      this.ports.missions.issue(subject, draft),
+    );
     if (!issued.ok) {
       return done('refused', {
         reasons: [
@@ -934,8 +986,41 @@ function issueLines(issues: readonly PreviewIssue[]): string[] {
   return issues.map((issue) => `${issue.code}: ${issue.message}`);
 }
 
-function countBy<T>(items: readonly T[], key: (item: T) => string): Map<string, number> {
-  const counts = new Map<string, number>();
-  for (const item of items) counts.set(key(item), (counts.get(key(item)) ?? 0) + 1);
-  return counts;
+/** Control characters and runs of blanks out: a name is one readable line. */
+export function oneLineName(value: string): string {
+  return withoutControlCharacters(value).replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * The name of each imported mission, by v4 token id: the project's name, or
+ * `<project> — <token>` when the project has several working tokens or
+ * another project shares its name. Cleaned to one line and cut to the
+ * interface's limit; still-equal names get the project's slug.
+ */
+export function missionNamesOf(
+  bundle: Pick<V4Bundle, 'projects' | 'missions'>,
+): Map<string, string> {
+  const projects = new Map(bundle.projects.map((p) => [p.id, p]));
+  const base = (projectId: string) => {
+    const project = projects.get(projectId);
+    return project ? oneLineName(project.name) || project.slug : projectId;
+  };
+  const tokensPerProject = new Map<string, number>();
+  const projectsPerName = new Map<string, Set<string>>();
+  for (const m of bundle.missions) {
+    tokensPerProject.set(m.project_id, (tokensPerProject.get(m.project_id) ?? 0) + 1);
+    const name = base(m.project_id);
+    projectsPerName.set(name, (projectsPerName.get(name) ?? new Set()).add(m.project_id));
+  }
+  const cut = (name: string) => name.slice(0, MISSION_NAME_MAX_LENGTH).trim();
+  const names = new Map<string, string>();
+  for (const m of bundle.missions) {
+    const project = base(m.project_id);
+    const shared = (projectsPerName.get(project)?.size ?? 0) > 1;
+    const several = (tokensPerProject.get(m.project_id) ?? 0) > 1;
+    const slug = projects.get(m.project_id)?.slug ?? '';
+    const qualifier = shared ? `${slug}/${m.token_name}` : m.token_name;
+    names.set(m.token_id, cut(shared || several ? `${project} — ${qualifier}` : project));
+  }
+  return names;
 }

@@ -231,8 +231,8 @@ select json_build_object(
       select pb.project_id, pb.provider, pb.resource_ref, pb.display_name, pb.environment
       from provider_bindings pb join prj on pb.project_id = prj.id
       where pb.provider <> 'bash') b),
-  'stripe', (select coalesce(json_agg(s order by s.updated_at desc), '[]'::json) from (
-      select sb.project_id, sb.account_id, sb.updated_at,
+  'stripe', (select coalesce(json_agg(s), '[]'::json) from (
+      select sb.project_id, sb.account_id,
              encode(sb.test_key_encrypted, 'base64') as test_key_sealed,
              encode(sb.live_key_encrypted, 'base64') as live_key_sealed
       from stripe_bindings sb join prj on sb.project_id = prj.id) s),
@@ -248,7 +248,7 @@ select json_build_object(
       join organizations o on o.id = p.organization_id
       where sb.host_slug = any(string_to_array(nullif(:'hosts', ''), ','))) h),
   'tokens', (select coalesce(json_agg(t), '[]'::json) from (
-      select t.id, t.project_id, t.name, t.accepted_risks, t.expires_at
+      select t.id, t.project_id, t.name, t.accepted_risks, t.denied_risks, t.expires_at
       from tokens t join org on t.organization_id = org.id
       where t.parent_id is null and t.status = 'active' and t.single_use = false
         and t.consumed_at is null and t.project_id is not null
@@ -275,14 +275,76 @@ select json_build_object(
  * @typedef {{ host_slug: string, host_address: string, port: number | string, ssh_user: string,
  *   private_key_bytes: string, org_id: string, org_slug: string }} RawSsh
  * @typedef {{ id: string, project_id: string, name: string, accepted_risks: unknown,
+ *   denied_risks?: unknown,
  *   expires_at: string | null }} RawToken
  * @typedef {{ organization: RawNamed | null, projects: RawNamed[], accounts: RawAccount[],
  *   bindings: RawBinding[], stripe: RawStripe[], org_ssh: RawOrgSsh[], ssh: RawSsh[],
  *   tokens: RawToken[], child_tokens: number | string, project_env_vars: number | string,
  *   bash_bindings: number | string }} RawExport
- * @typedef {{ account_id: string, project_ids: string[], test_key: string | null,
+ * @typedef {{ project_id: string, mode: 'test' | 'live' }} StripeProject
+ * @typedef {{ account_id: string, projects: StripeProject[], test_key: string | null,
  *   live_key: string | null }} StripeAccount
  */
+
+/**
+ * The string ids of a v4 `accepted_risks` / `denied_risks` jsonb array.
+ * @param {unknown} value
+ * @returns {string[]}
+ */
+function riskIdsOf(value) {
+  return Array.isArray(value) ? value.filter((id) => typeof id === 'string') : [];
+}
+
+/**
+ * One entry per Stripe account, with the mode each project used in v4. The
+ * v4 gateway gave a project ONE key: its row's live key, else its test key
+ * (`live ?? test`, packages/web/src/lib/gateway/build.ts at v4-final). A
+ * project keeps exactly that mode, never the other; the connection carries
+ * the account's keys. Rows of one account holding two different keys of the
+ * same mode stop the export: which one is right is the operator's call.
+ * @param {RawStripe[]} rows
+ * @param {Decryptor} decryptor
+ * @param {string} orgId
+ * @returns {StripeAccount[]}
+ */
+function stripeAccountsOf(rows, decryptor, orgId) {
+  /** @type {Map<string, StripeAccount>} */
+  const accounts = new Map();
+  for (const row of rows) {
+    const test = row.test_key_sealed
+      ? decryptor.decrypt(orgId, bytesOf(row.test_key_sealed))
+      : null;
+    const live = row.live_key_sealed
+      ? decryptor.decrypt(orgId, bytesOf(row.live_key_sealed))
+      : null;
+    if (test === null && live === null) continue;
+    const account = accounts.get(row.account_id) ?? {
+      account_id: row.account_id,
+      projects: [],
+      test_key: null,
+      live_key: null,
+    };
+    for (const [mode, key] of /** @type {const} */ ([
+      ['test', test],
+      ['live', live],
+    ])) {
+      if (key === null) continue;
+      const field = mode === 'test' ? 'test_key' : 'live_key';
+      if (account[field] !== null && account[field] !== key) {
+        throw new ExportError(
+          `the v4 Stripe bindings of account '${row.account_id}' hold two different ${mode} keys: make them agree in v4, or unbind one`,
+        );
+      }
+      account[field] = key;
+    }
+    const mode = live !== null ? 'live' : 'test';
+    if (!account.projects.some((p) => p.project_id === row.project_id)) {
+      account.projects.push({ project_id: row.project_id, mode });
+    }
+    accounts.set(row.account_id, account);
+  }
+  return [...accounts.values()];
+}
 
 /**
  * The bundle from the JSON document `exportSql()` returns.
@@ -310,23 +372,7 @@ export function buildBundle(raw, decryptor, options, now) {
         : null,
   }));
 
-  /** @type {Map<string, StripeAccount>} */
-  const stripe = new Map();
-  for (const row of raw.stripe) {
-    // Rows come newest first: the newest keys of an account win.
-    const account = stripe.get(row.account_id) ?? {
-      account_id: row.account_id,
-      project_ids: [],
-      test_key: row.test_key_sealed
-        ? decryptor.decrypt(org.id, bytesOf(row.test_key_sealed))
-        : null,
-      live_key: row.live_key_sealed
-        ? decryptor.decrypt(org.id, bytesOf(row.live_key_sealed))
-        : null,
-    };
-    if (!account.project_ids.includes(row.project_id)) account.project_ids.push(row.project_id);
-    stripe.set(row.account_id, account);
-  }
+  const stripe = stripeAccountsOf(raw.stripe, decryptor, org.id);
 
   const ssh = options.sshHosts.map((slug) => sshHostOf(slug, raw, decryptor, options, projectIds));
   const asked = new Set(options.sshHosts);
@@ -348,15 +394,14 @@ export function buildBundle(raw, decryptor, options, now) {
       display_name: b.display_name ?? null,
       environment: b.environment ?? null,
     })),
-    stripe_accounts: [...stripe.values()].filter((a) => a.test_key !== null || a.live_key !== null),
+    stripe_accounts: stripe,
     ssh_hosts: ssh,
     missions: raw.tokens.map((t) => ({
       token_id: t.id,
       project_id: t.project_id,
       token_name: t.name,
-      accepted_risks: Array.isArray(t.accepted_risks)
-        ? t.accepted_risks.filter((id) => typeof id === 'string')
-        : [],
+      accepted_risks: riskIdsOf(t.accepted_risks),
+      denied_risks: riskIdsOf(t.denied_risks),
       expires_at: t.expires_at ?? null,
     })),
     skipped: {
