@@ -234,7 +234,13 @@ async function executeManagementTool(
       return redactDatabases(await callManagementApi(call, 'GET', '/redis/databases'));
     case 'upstash_redis__get_database':
       return redactDatabases(
-        await callManagementApi(call, 'GET', `/redis/database/${databasePath(databaseId)}`),
+        // `credentials=hide`: Upstash leaves the credentials out of the answer
+        // itself; the redaction below stays (SEC 2026-10-15 re-check L-2).
+        await callManagementApi(
+          call,
+          'GET',
+          `/redis/database/${databasePath(databaseId)}?credentials=hide`,
+        ),
       );
     case 'upstash_redis__create_database': {
       const body: Record<string, unknown> = { name: args.name, region: args.region };
@@ -264,13 +270,19 @@ function databasePath(databaseId: string | null): string {
   return databaseId;
 }
 
-/** Strip the per-database credentials from a Management API answer (object or list). */
+/**
+ * Strip the per-database credentials from a Management API answer (object or list),
+ * at any depth: a credential nested in an object (`credentials: { rest: … }`) is
+ * caught by its name too (SEC 2026-10-15 re-check L-2).
+ */
 export function redactDatabases(payload: unknown): unknown {
   if (Array.isArray(payload)) return payload.map(redactDatabases);
   if (typeof payload !== 'object' || payload === null) return payload;
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(payload as Record<string, unknown>)) {
-    if (!REDACTED_DATABASE_FIELDS.includes(k) && !CREDENTIAL_LIKE_FIELD.test(k)) out[k] = v;
+    if (!REDACTED_DATABASE_FIELDS.includes(k) && !CREDENTIAL_LIKE_FIELD.test(k)) {
+      out[k] = redactDatabases(v);
+    }
   }
   return out;
 }

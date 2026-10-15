@@ -466,7 +466,9 @@ policy can add or remove one. Two sources, merged without duplicates:
 - the `self_resources` key (`VAUBAAN_SELF_RESOURCES`, comma-separated), a
   list of `<provider>:<ref>` for any other host (the Vercel project, the SSH
   host, a Supabase project holding the backups). A malformed entry stops the
-  boot like any other configuration problem.
+  boot like any other configuration problem, and so does an entry whose
+  provider is no registered plugin (`checkSelfResources`, `compose/registry.ts`:
+  it would match nothing and protect nothing).
 
 Where it is enforced (each reads `config.selfResources` through
 `isSelfResource(provider, ref)`):
@@ -478,6 +480,7 @@ Where it is enforced (each reads `config.selfResources` through
 | Execution (`execution/mission-context.ts`)             | left out of the mission context whatever the stored policy says: the plugin binds no call to it, the resource stage refuses a call that cites it (`resource-not-in-mission`) |
 | Mission detail and kit (`missions/mission-service.ts`) | not listed; a duplicated mission drops it                                                                                                                                    |
 | Account page (`accounts/[id]/account-view.tsx`)        | tagged "this instance's own project: never reachable by a mission", not counted as reachable                                                                                 |
+| Unbound tools (`execution/resource-stage.ts`)          | a connection that reaches one is `hosts_instance`: the plugin's `unboundTools` (Railway's agent) are refused on it and left out of `tools/list`; the account page says so    |
 
 ### Changing the identity provider
 

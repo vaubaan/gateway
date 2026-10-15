@@ -48,7 +48,7 @@ import { createUsersModule, type UsersModule } from '../users';
 import { createTelemetryModule, type TelemetryModule } from '../telemetry';
 import type { Store } from '../store';
 import type { CacheClient, RateLimiter, SessionStore } from './ports';
-import { checkProviderApps, RegistryCatalogIndex } from './registry';
+import { checkProviderApps, checkSelfResources, RegistryCatalogIndex } from './registry';
 import { wireManagementDoor, type ManagementDoorModule } from './management';
 import { buildShippedRegistry } from './shipped-plugins';
 import { openEmbeddedStore, type StoreContext } from './store';
@@ -149,6 +149,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
   // against the loaded catalogs, and the provider apps against the ids.
   const registry = await (deps.buildRegistry ?? buildShippedRegistry)(config, logger);
   checkProviderApps(config, registry, logger);
+  checkSelfResources(config, registry);
 
   const store = await (deps.openStore ?? openEmbeddedStore)({
     config,
