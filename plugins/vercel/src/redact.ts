@@ -35,11 +35,11 @@ export const ENV_VAR_PUBLIC_FIELDS: ReadonlySet<string> = new Set([
   'updatedBy',
 ]);
 
-function isEmpty(value: unknown): boolean {
+export function isEmpty(value: unknown): boolean {
   return value === null || value === undefined || value === '';
 }
 
-function redactEntry(entry: unknown): unknown {
+export function redactEntry(entry: unknown): unknown {
   if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
     return isEmpty(entry) ? entry : REDACTED_VALUE;
   }

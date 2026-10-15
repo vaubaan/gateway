@@ -63,6 +63,7 @@ import {
   VERCEL_ENVS,
 } from './classify.ts';
 import { vercelAuth } from './credential.ts';
+import { PROJECT_TOOLS, redactProjectResult } from './project-redact.ts';
 import { redactEncryptedEnvListing } from './redact.ts';
 import {
   ADD_DOMAIN,
@@ -154,7 +155,9 @@ export async function executeVercel(
 
   try {
     const finalArgs = await bindDeployments(call, tool, pinned.args, pinned.projectRef);
-    return toToolResult(await callVercelTool(call, tool, finalArgs));
+    const result = toToolResult(await callVercelTool(call, tool, finalArgs));
+    // A project object carries env values and deploy-hook URLs (`project-redact.ts`).
+    return PROJECT_TOOLS.has(tool) ? redactProjectResult(result) : result;
   } catch (e) {
     if (e instanceof ExecutorRefusal) return errorResult(e.message);
     throw e;

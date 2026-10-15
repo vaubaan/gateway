@@ -399,7 +399,8 @@ describe('executeVercel with mockFetch', () => {
       },
     ]);
     const result = await vercelPlugin.execute(ctx(fetch), 'vercel__list_projects', {});
-    expect(result).toEqual({ content: [{ type: 'text', text: '{"projects":[]}' }] });
+    // The project answer is re-serialized by the project filter (`project-redact.ts`).
+    expect(JSON.parse((result.content[0] as { text: string }).text)).toEqual({ projects: [] });
     const call = fetch.calls[0]!;
     expect(call.headers.authorization).toBe('Bearer vcp_secret');
     expect(call.headers.accept).toContain('text/event-stream');
