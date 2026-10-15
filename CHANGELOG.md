@@ -30,6 +30,9 @@ names, and the notes about them do too.
 **Upgrade notes** — only for an instance that already runs a build made from the
 `v5` branch:
 
+- **Signed-in sessions now end after an hour without a request** (eight hours at most,
+  as before). Nothing to configure. A self resource (`VAUBAAN_SELF_RESOURCES`) whose
+  provider is not a plugin id now stops the start (exit 78): check its spelling.
 - **The `developer` preset of GitHub no longer hands out tokens; the gateway is
   the git remote.** Schema migration `0015` applies at start. Missions issued
   before keep their policy (it is stored, not derived from the preset), mint risks
@@ -721,6 +724,39 @@ write …)`), instead of GitHub's bare 403. The push token of
 
 ### Security
 
+- **Rotating the master key now re-seals what is stored.** `node apps/gateway/reseal.mjs`
+  (dry run by default, `--apply` to write) seals every stored credential, configuration
+  secret and pending approval argument again under the current key, safely beside the
+  running gateway; once it reports every blob under the new version, remove
+  `VAUBAAN_MASTER_KEY_PREVIOUS`. Operators: after any suspicion that the key was seen,
+  follow `deploy/railway.md` §8.
+- **Secrets leave the process environment once loaded.** The master keys, client secrets,
+  private keys, the bootstrap token and their `_FILE` paths are deleted from `process.env`
+  after the configuration is read; a child process inherits none.
+- **A provider's error text is never logged, stored or shown.** Connect failures, discovery
+  state, its audit entry and the logs keep the provider's HTTP status in the gateway's own
+  words; unexpected errors are logged as class and stack frames; Next's own error printing
+  goes through the redactor with messages withheld. The calling agent still gets the
+  provider's message on a tool call.
+- **`.railwayignore`** keeps env files, keys, `.mcp.json`, the mounted YAML and the agent
+  directories out of a `railway up` upload; `.dockerignore` gains the key patterns.
+- **The sign-in start, the callbacks and the bootstrap endpoint are rate-limited**, per
+  client address when it is known and instance-wide always; 50 wrong bootstrap tokens
+  revoke the token.
+- **Trusted-edge mode**: `VAUBAAN_CLIENT_IP_HEADER=x-real-ip` reads the client address from
+  a header the edge overwrites (Railway). Off by default; verify it first
+  (`deploy/railway.md` §2).
+- **Pending OAuth registrations are capped (50) and expire after a day**; CORS preflights
+  answer a fixed list of headers.
+- **An OIDC provider can require a verified email**: `claims.email_verified` (Entra ID:
+  `xms_edov`) and `require_verified_email: true`. On Entra ID, make the admin rule a group
+  by object id.
+- **Sessions end after an hour without use**, and "Sign out everywhere" ends every session
+  of a person (Settings for oneself, People for an administrator).
+- **Vercel project reads return no env value and no deploy-hook URL**; Railway's agent is
+  unavailable on an account that can see the project hosting the gateway; a self resource
+  of an unknown provider stops the boot; Upstash database reads hide credentials at the
+  source.
 - **No read returns a secret value under a permission that is not a secret read**
   (security review 2026-10-15, C1). Supabase `list_function_secrets` returned every
   edge-function secret value — the project's service-role key and database URL among
