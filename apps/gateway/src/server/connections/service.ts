@@ -93,7 +93,7 @@ import {
 } from './oauth2';
 import { connectionCredentialKind, connectionOwnerOf } from './mapping';
 import type { PendingConnect, PendingConnectStore, PendingFlowKind } from './pending';
-import { generateEd25519KeyPair } from './ssh-keypair';
+import { generateEd25519KeyPair, type SshKeyPair } from './ssh-keypair';
 
 /** Connect attempts (starts, callbacks, form posts) one user may make per window. */
 export const CONNECT_RATE_LIMIT = 10;
@@ -292,6 +292,32 @@ export interface ResourcePatch {
   readonly hidden?: boolean;
   /** Raw list text per editable metadata key. */
   readonly metadata?: Readonly<Record<string, string>>;
+}
+
+/**
+ * Where an imported connection came from, kept in its metadata
+ * (`imported_from`): the system, the v4 organization and the v4 row.
+ */
+export interface ImportedFrom {
+  readonly system: 'vaubaan-v4';
+  readonly org: string;
+  readonly source: string;
+}
+
+export interface ImportPastedInput {
+  readonly displayName: string;
+  /** The values of the plugin's `api-key` form, by field name. */
+  readonly fields: Readonly<Record<string, string>>;
+  readonly importedFrom: ImportedFrom;
+}
+
+export interface ImportSshInput {
+  readonly providerId: string;
+  readonly displayName: string;
+  /** host, port, user, host_key_fingerprint: the plugin's `ssh-key` form. */
+  readonly fields: Readonly<Record<string, string>>;
+  readonly keyPair: SshKeyPair;
+  readonly importedFrom: ImportedFrom;
 }
 
 /** Who the operator hands an ownerless connection to: a user by email, or a group. */
@@ -532,6 +558,21 @@ export class ConnectionService {
     spec: ApiKeyCredentialSpec,
     input: StartInput,
   ): Promise<StartResult> {
+    const connected = await this.connectPasted(flow, spec, input, {});
+    return { kind: 'connected', ...connected };
+  }
+
+  /**
+   * The form values of an `api-key` way, checked by the plugin's `verify`
+   * then by a first discovery, before anything is stored. `extra` is merged
+   * into the connection's metadata (the importer's marker).
+   */
+  private async connectPasted(
+    flow: FlowStart,
+    spec: ApiKeyCredentialSpec,
+    input: StartInput,
+    extra: Readonly<Record<string, unknown>>,
+  ): Promise<Connected> {
     const read = this.readFormOrThrow(spec.fields, input);
     const secret: CredentialSecret = {
       kind: 'api-key',
@@ -539,18 +580,90 @@ export class ConnectionService {
       metadata: read.visible,
     };
     const check = await this.verifyPasted(flow.plugin, spec, secret);
-    const connected = await this.finalize(flow.actor, flow.plugin, secret, {
+    return this.finalize(flow.actor, flow.plugin, secret, {
       displayName: flow.displayName,
       reconnectId: flow.reconnectId,
       returnTo: flow.returnTo,
       discovery: 'required',
       metadata: {
+        ...extra,
         fields: read.visible,
         ...(check ? { account: check.account, expires_at: check.expiresAt } : {}),
       },
       expiresAt: check?.expiresAt ?? null,
     });
-    return { kind: 'connected', ...connected };
+  }
+
+  // ── Import from v4 (ADR import-from-v4-one-shot-importer) ────────────────
+
+  /**
+   * Creates a connection from a key taken from the v4 SaaS, through the same
+   * path as a key pasted in the form: the plugin's check, the first
+   * discovery (a failure refuses it, nothing is stored), the seal, the
+   * `connection-created` entry under `actor`. `importedFrom` is kept in the
+   * connection's metadata so a second run recognises it. No connect rate
+   * limit: the operator's command is not a web request.
+   */
+  async importPastedKey(
+    actor: Actor,
+    providerId: string,
+    input: ImportPastedInput,
+  ): Promise<Connected> {
+    const plugin = this.requirePlugin(providerId);
+    const spec = credentialSpecFor(plugin, 'api-key');
+    if (!spec) {
+      throw new ConnectError('invalid-input', `${plugin.displayName} takes no pasted key`);
+    }
+    return this.connectPasted(
+      this.importFlow(actor, plugin, input.displayName),
+      spec,
+      { fields: input.fields },
+      { imported_from: input.importedFrom },
+    );
+  }
+
+  /**
+   * Creates an `ssh-key` connection with a key pair that already exists
+   * (`importEd25519PrivateKey`) instead of a new one: the key is already in
+   * the host's `authorized_keys`, so the first discovery runs at once and is
+   * the probe — it verifies the pinned host key and the key pair, and a
+   * failure refuses the connection.
+   */
+  async importSshKey(actor: Actor, input: ImportSshInput): Promise<Connected> {
+    const plugin = this.requirePlugin(input.providerId);
+    const spec = credentialSpecFor(plugin, 'ssh-key');
+    if (!spec) {
+      throw new ConnectError('invalid-input', `${plugin.displayName} takes no ssh key`);
+    }
+    const read = this.readFormOrThrow(spec.fields, { fields: input.fields });
+    const secret: CredentialSecret = {
+      kind: 'ssh-key',
+      privateKeyPem: input.keyPair.privateKeyPem,
+      publicKey: input.keyPair.publicKey,
+      fields: read.values,
+      metadata: read.visible,
+    };
+    return this.finalize(actor, plugin, secret, {
+      displayName: cleanName(input.displayName) ?? plugin.displayName,
+      reconnectId: null,
+      returnTo: null,
+      discovery: 'required',
+      metadata: {
+        imported_from: input.importedFrom,
+        fields: read.visible,
+        public_key: input.keyPair.publicKey,
+      },
+    });
+  }
+
+  private importFlow(actor: Actor, plugin: ProviderPlugin, displayName: string): FlowStart {
+    return {
+      actor,
+      plugin,
+      displayName: cleanName(displayName) ?? plugin.displayName,
+      returnTo: null,
+      reconnectId: null,
+    };
   }
 
   /**
