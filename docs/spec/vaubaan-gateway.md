@@ -299,7 +299,14 @@ coding agents. v4 was a SaaS; v5 is a product you install.
 - **No high availability.** An instance is a single process with an
   embedded store. Cache, rate limit and budget counters are local to the
   process. Replication and failover are out of scope.
-- **No data migration from v4.** Cutover is manual (pivot ADR, D7).
+- **No data migration from v4.** No coexistence and no migration of the
+  v4 database's history. A one-shot importer carries what an organization
+  needs to work — the accounts whose key can be carried as is, the resources
+  with their environment labels, one mission per working v4 token with its
+  permissions translated one by one, never widened — under a named owner,
+  through the same checks as the interface; the other accounts are
+  connected by hand (pivot ADR, D7 as amended on 2026-10-15; ADR
+  [import-from-v4-one-shot-importer](../decisions/import-from-v4-one-shot-importer.md)).
 - **No CLI or SDK proxy.** Only MCP is intercepted, as in v4
   ([mcp-only-mvp-scope](../decisions/mcp-only-mvp-scope.md)).
 - **No general-purpose secret management.** The instance holds only the
@@ -1444,7 +1451,7 @@ automated suite. Trust comes from usage.
   on a mission that can no longer be granted expires on the same delay
   (ADR
   [request-expiry-on-orphaned-missions](../decisions/request-expiry-on-orphaned-missions.md)).
-- No v4 migration; manual cutover.
+- No v4 migration; a one-shot import of each organization, then the cutover.
 - A connection's owner is a principal, user or group; a mission always
   has a user creator.
 - Presets are shipped by plugins, one per connection at issuance, UI
