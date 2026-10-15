@@ -10,6 +10,7 @@ import {
   nearestLimit,
   perMinuteOf,
   reachOf,
+  shortId,
   yesOf,
 } from './mission-view';
 
@@ -131,6 +132,10 @@ describe('small sentences', () => {
     expect(createdBy(null, false)).toBe('Created by someone who left');
     expect(yesOf('Alice')).toBe('Alice’s yes');
     expect(yesOf(null)).toBe('the creator’s yes');
+  });
+
+  it('shows the first 8 characters of a mission id', () => {
+    expect(shortId('0192f3a4-5b6c-7d8e-9f00-112233445566')).toBe('0192f3a4');
   });
 
   it('says what a mission reaches in a few words', () => {

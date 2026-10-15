@@ -26,6 +26,12 @@ const PLUGINS = [
   fixturePlugin({ id: 'keyco', displayName: 'Key Co', credential: API_KEY_SPEC }),
   fixturePlugin({ id: 'sshco', credential: SSH_KEY_SPEC, experimental: true }),
   fixturePlugin({ id: 'verco', displayName: 'Verified Co', credential: APP_INSTALL_SPEC }),
+  fixturePlugin({
+    id: 'bothco',
+    displayName: 'Both Co',
+    credential: OAUTH_SPEC,
+    alternativeCredentials: [{ ...API_KEY_SPEC, label: 'workspace token' }],
+  }),
 ];
 
 function setup(fromFile: Record<string, FileProviderAppConfig> = {}) {
@@ -86,6 +92,7 @@ describe('ProviderAppsService', () => {
       ['keyco', false, true, 'none'],
       ['sshco', false, true, 'none'],
       ['verco', true, false, 'none'],
+      ['bothco', true, false, 'none'],
     ]);
     expect(list.map((a) => a.installVerification)).toEqual([
       null,
@@ -93,9 +100,24 @@ describe('ProviderAppsService', () => {
       null,
       null,
       'verified',
+      null,
     ]);
     expect(list[3]!.experimental).toBe(true);
     expect(list[0]!.missing).toEqual(['client_id', 'client_secret']);
+  });
+
+  it('says when a token connects the service too, making its app optional', async () => {
+    const { service } = setup();
+    const tokens = (await service.list()).map((a) => [a.providerId, a.token]);
+    expect(tokens).toEqual([
+      ['oauthco', null],
+      ['appco', null],
+      // A service that connects only with a key needs no app: nothing is optional.
+      ['keyco', null],
+      ['sshco', null],
+      ['verco', null],
+      ['bothco', { label: 'workspace token' }],
+    ]);
   });
 
   it('stores the secret sealed under its own associated data and never returns it', async () => {

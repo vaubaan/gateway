@@ -16,6 +16,13 @@
  * by hand stays one click away (`?by=hand`). An app created from here shows
  * its name, owner, link and permissions, and the next step: installing it
  * (ADR company-app-created-from-a-manifest).
+ *
+ * A service that also connects with a token (its plugin declares an `api-key`
+ * way beside the app: GitHub, Railway, Supabase today — read from the
+ * plugins, never listed here) says so: "not registered · optional" on its
+ * line, and, while no app is set, a note above its form that the app is
+ * optional, with the link to the token way of `/accounts/new/<service>` and
+ * its guide.
  */
 import { CredentialFieldInputs, NoticeBanner } from '@/components/connections/parts';
 import {
@@ -45,6 +52,7 @@ import {
   ACCOUNT_WORDS,
   ACTIONS,
   CONFIG_WORDS,
+  OPTIONAL_APP_WORDS,
   ROUTES,
   SETTINGS_ACTIONS,
   SETTINGS_PAGES,
@@ -55,6 +63,7 @@ import {
   PROVIDER_APPS_PAGE,
   providerAppPath,
   REFUSE_UNVERIFIED_ACTION,
+  tokenConnectPath,
 } from '@/server/connections';
 import type { AppRegistrationRecord, ProviderAppStatus } from '@/server/provider-apps';
 
@@ -90,8 +99,40 @@ function RegisteredAs({ app }: { app: ProviderAppStatus }) {
       </span>
     );
   }
-  if (app.source === 'none') return <span className={styles.quiet}>not registered</span>;
+  if (app.source === 'none') {
+    return (
+      <span className={styles.quiet}>
+        {app.token ? OPTIONAL_APP_WORDS.registeredAs : 'not registered'}
+      </span>
+    );
+  }
   return <StatusMark tone="warn">Incomplete: {app.missing.join(', ')} missing</StatusMark>;
+}
+
+/**
+ * Opens the line of a service that also connects with a token: the app is
+ * optional, and the token way — with the guide its plugin declares — is one
+ * link away. Said before any form, so that nobody registers an app they do not
+ * need.
+ */
+function OptionalApp({ app }: { app: ProviderAppStatus }) {
+  if (!app.token) return null;
+  return (
+    <div className={styles.block}>
+      <Callout
+        tone="info"
+        title={OPTIONAL_APP_WORDS.title(app.displayName)}
+        action={
+          <ButtonLink href={tokenConnectPath(app.providerId)} size="sm">
+            {OPTIONAL_APP_WORDS.tokenLink(app.displayName)}
+          </ButtonLink>
+        }
+        testId={`optional-app-${app.providerId}`}
+      >
+        {OPTIONAL_APP_WORDS.body(app.displayName, app.token.label)}
+      </Callout>
+    </div>
+  );
 }
 
 /**
@@ -147,6 +188,7 @@ function AppForm({
   const action = `${PROVIDER_APPS_PAGE}/${encodeURIComponent(app.providerId)}`;
   return (
     <div className={styles.detail} data-testid={`app-form-${app.providerId}`}>
+      {!app.configured && <OptionalApp app={app} />}
       {createHref && (
         <p className={styles.prose}>
           Registered the app yourself at {app.displayName}? Enter what it gave you below, or{' '}
@@ -221,6 +263,7 @@ export default async function CompanyAppsPage({
   const apps = await root.providerApps.list();
   const withApp = apps.filter((app) => app.needsApp);
   const withoutApp = apps.filter((app) => !app.needsApp);
+  const optional = withApp.filter((app) => app.token !== null);
   const opened = firstParam(params[APP_PARAM]);
   const byHand = firstParam(params[BY_PARAM]) === BY_HAND;
   const creatable = withApp.filter(
@@ -279,6 +322,11 @@ export default async function CompanyAppsPage({
           .
           {withoutApp.length > 0 &&
             ` ${listOf(withoutApp.map((app) => app.displayName))} connect with a key and need nothing here.`}
+          {optional.length > 0 &&
+            ` ${OPTIONAL_APP_WORDS.hint(
+              listOf(optional.map((app) => app.displayName)),
+              optional.length > 1,
+            )}`}
         </Hint>
       </Section>
     </>
@@ -309,6 +357,7 @@ async function AppDetail({
     const { plugin } = root.registry.require(app.providerId);
     return (
       <div className={styles.detail}>
+        <OptionalApp app={app} />
         <AppCreateForm
           providerId={app.providerId}
           displayName={app.displayName}

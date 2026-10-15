@@ -166,6 +166,14 @@ export function createdBy(creator: string | null, mine: boolean): string {
   return creator ? `Created by ${creator}` : 'Created by someone who left';
 }
 
+/** How many characters of a mission's id the pages show: enough to match a report or the audit. */
+export const SHORT_ID_LENGTH = 8;
+
+/** The first characters of a mission's id, as its page shows them; the whole id is the `title`. */
+export function shortId(id: string): string {
+  return id.slice(0, SHORT_ID_LENGTH);
+}
+
 /** "Alice’s yes": whose answer a waiting request needs, for a teammate. */
 export function yesOf(creator: string | null): string {
   return creator ? `${possessive(creator)} yes` : 'the creator’s yes';

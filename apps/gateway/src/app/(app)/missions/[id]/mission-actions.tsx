@@ -3,8 +3,8 @@
 /**
  * Everything a person does to a mission from its page (spec §7.8, §7.9 bis),
  * and the dialogs those acts open. One provider around the page holds the
- * dialogs, so that the header, the "···" menu and the rows of "People and
- * keys" open the same ones:
+ * dialogs, so that the header, the "···" menu, the rows of "People and
+ * keys" and the stop zone at the bottom open the same ones:
  *
  *   setup kit            the three snippets and the check, with the masked key
  *   add people           the creator picks a teammate among the people who signed in
@@ -524,6 +524,24 @@ export function ActButton({
   return (
     <Button type="button" variant={variant} onClick={() => acts.open({ kind: act })}>
       {children}
+    </Button>
+  );
+}
+
+/**
+ * The creator stops the mission from the zone at the bottom of its page too,
+ * not only from "···": the same dialog, where the name is typed.
+ */
+export function StopMissionButton() {
+  const acts = useMissionActs();
+  return (
+    <Button
+      type="button"
+      variant="danger"
+      onClick={() => acts.open({ kind: 'stop' })}
+      data-testid="stop-mission"
+    >
+      {MISSION_ACTIONS.stop}
     </Button>
   );
 }

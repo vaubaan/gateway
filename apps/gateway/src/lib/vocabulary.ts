@@ -826,6 +826,22 @@ export const CONFIG_WORDS = {
   fileReadOnly: 'Set in the mounted configuration: change it there and restart.',
 } as const;
 
+/**
+ * Settings → Company apps, for a service that also connects with a token
+ * (ADR token-connections-beside-the-integration-app): its app is optional.
+ */
+export const OPTIONAL_APP_WORDS = {
+  registeredAs: 'not registered · optional',
+  title: (service: string) => `The company app is optional for ${service}`,
+  body: (service: string, token: string | null) =>
+    `People can connect a ${service} account with ${token ? `a ${token}` : 'a token'} they create at ${service}, without anything here: the connect page guides them step by step. Register the app only if you want people to connect through ${service}’s own sign-in as well; both ways can stay.`,
+  tokenLink: (service: string) => `Connect ${service} with a token`,
+  hint: (services: string, several: boolean) =>
+    several
+      ? `${services} also connect with a token: their apps are optional.`
+      : `${services} also connects with a token: its app is optional.`,
+} as const;
+
 /** The state of a connected app (a delegation). Keyed by `DelegationState`. */
 export const APP_STATES = {
   active: { label: 'connected', tone: null },
@@ -1146,6 +1162,12 @@ export const MISSION_WORDS = {
   peopleLater: 'Just you for now; teammates and machine keys are added after creating.',
   keyAtTheEnd: 'Key shown once.',
   railTitle: 'What this mission will be able to do',
+  /** The zone at the bottom of a mission page where its creator stops it. */
+  stopTitle: 'Stop this mission',
+  stopWhat:
+    'Every key of the mission stops working at once: each call is refused from then on. This cannot be undone; to continue the work, duplicate the mission. What it did stays in its activity.',
+  /** The details line of a mission page: what a report or the audit names it by. */
+  missionId: 'Mission id',
 } as const;
 
 /** How often the limits of a mission start again, keyed by the period in seconds (`null`: never). */

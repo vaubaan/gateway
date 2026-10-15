@@ -129,6 +129,7 @@ export {
   OWNERLESS_CONNECTIONS_PAGE,
   PROVIDER_APPS_PAGE,
   providerAppPath,
+  tokenConnectPath,
   REFUSE_UNVERIFIED_ACTION,
   type ConnectionHandlers,
 } from './handlers';
