@@ -80,3 +80,22 @@ export function checkProviderApps(
   }));
   throw new ConfigError(issues);
 }
+
+/**
+ * Every configured self resource (`self_resources`) names a registered plugin: an entry
+ * of an unknown provider (a typo, `Railway` for `railway`) would match nothing and
+ * protect nothing, silently (SEC 2026-10-15 re-check L-1). Exit 78 like any invalid key.
+ */
+export function checkSelfResources(config: InstanceConfig, registry: PluginRegistry): void {
+  if (registry.size === 0) return;
+  const unknown = config.selfResources.filter((self) => !registry.has(self.provider));
+  if (unknown.length === 0) return;
+  const known = registry.ids.join(', ');
+  throw new ConfigError(
+    unknown.map((self) => ({
+      path: 'self_resources',
+      env: ['VAUBAAN_SELF_RESOURCES'],
+      message: `'${self.provider}' is not a registered plugin id (registered: ${known}); the entry would protect nothing`,
+    })),
+  );
+}

@@ -21,7 +21,7 @@ import type { RateLimiter } from '../compose/ports';
 import type { InstanceConfig } from '../config';
 import type { ConnectionsModule } from '../connections';
 import { gitRemoteBase } from '../git/paths';
-import type { Logger } from '../logging';
+import { stackFramesOf, type Logger } from '../logging';
 import type { MissionsModule } from '../missions';
 import type { Store } from '../store';
 import { systemClock, type Clock } from '../store/clock';
@@ -35,7 +35,10 @@ import { TokenVerifier } from './token-verifier';
 import { createUpstreamStage } from './upstream-stage';
 
 export interface ExecutionModuleDeps {
-  readonly config: Pick<InstanceConfig, 'publicUrl' | 'trustedProxies' | 'mcp' | 'selfResources'>;
+  readonly config: Pick<
+    InstanceConfig,
+    'publicUrl' | 'trustedProxies' | 'clientIpHeader' | 'mcp' | 'selfResources'
+  >;
   readonly store: Store;
   readonly registry: PluginRegistry;
   readonly auth: Pick<AuthModule, 'sessions'>;
@@ -74,18 +77,6 @@ export interface ExecutionModule {
   readonly tokens: TokenVerifier;
   readonly door: ExecutionDoor;
   readonly handlers: ExecutionHandlers;
-}
-
-const STACK_FRAMES_LOGGED = 12;
-
-/** The `at …` lines of an error's stack — where it was thrown, without its message. */
-function stackFramesOf(error: unknown): string[] {
-  if (!(error instanceof Error) || typeof error.stack !== 'string') return [];
-  return error.stack
-    .split('\n')
-    .map((frame) => frame.trim())
-    .filter((frame) => frame.startsWith('at '))
-    .slice(0, STACK_FRAMES_LOGGED);
 }
 
 export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModule {

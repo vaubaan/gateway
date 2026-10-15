@@ -148,10 +148,11 @@ export function mapClaims(
         'so the groups of this user are unknown; the sign-in is refused rather than read as "no groups"',
     );
   }
-  if (saysUnverified(raw[EMAIL_VERIFIED_CLAIM])) {
+  const verifiedClaim = mapping.emailVerified ?? EMAIL_VERIFIED_CLAIM;
+  if (saysUnverified(raw[verifiedClaim])) {
     throw new LoginError(
       'email-not-verified',
-      `the identity provider marks the email of subject '${subject}' as unverified ('${EMAIL_VERIFIED_CLAIM}' is false)`,
+      `the identity provider marks the email of subject '${subject}' as unverified ('${verifiedClaim}' is false)`,
     );
   }
   if (groupsMovedOutOfToken(raw, mapping.groups)) {
@@ -168,7 +169,7 @@ export function mapClaims(
     issuer,
     subject,
     email: email.toLowerCase(),
-    emailVerified: saysTrue(raw[EMAIL_VERIFIED_CLAIM]) ? true : null,
+    emailVerified: saysTrue(raw[verifiedClaim]) ? true : null,
     displayName: nonEmptyString(raw.name),
     groups: parseGroupsClaim(raw[mapping.groups]),
   };

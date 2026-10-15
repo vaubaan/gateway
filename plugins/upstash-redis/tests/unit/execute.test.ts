@@ -71,14 +71,24 @@ describe('executeUpstashRedis — management tools', () => {
     const { call, result } = await runManagement(
       {
         method: 'GET',
-        url: `${UPSTASH_MANAGEMENT_API}/redis/database/${DATABASE_ID}`,
-        body: { database_id: DATABASE_ID, database_name: 'my-cache', rest_token: 'secret' },
+        url: `${UPSTASH_MANAGEMENT_API}/redis/database/${DATABASE_ID}?credentials=hide`,
+        body: {
+          database_id: DATABASE_ID,
+          database_name: 'my-cache',
+          rest_token: 'secret',
+          nested: { credentials: { password: 'nested-secret' } },
+        },
       },
       'upstash_redis__get_database',
       { databaseId: DATABASE_ID },
     );
     expect(call.method).toBe('GET');
-    expect(textOf(result)).toEqual({ database_id: DATABASE_ID, database_name: 'my-cache' });
+    expect(textOf(result)).toEqual({
+      database_id: DATABASE_ID,
+      database_name: 'my-cache',
+      // A nested credential is dropped by its name too.
+      nested: { credentials: {} },
+    });
   });
 
   test('create_database POSTs /redis/database with name, region and the optional fields given', async () => {

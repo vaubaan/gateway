@@ -6,6 +6,7 @@
  * object (or a slice of it) through the composition root.
  */
 
+import type { ClientIpHeader } from '../http/client-ip';
 import type { SignInProvider } from './sign-in';
 
 export const LOG_LEVELS = ['debug', 'info', 'warn', 'error'] as const;
@@ -22,6 +23,11 @@ export interface IdpClaimMapping {
   readonly email: string;
   /** Claim carrying the group list (array or delimited string, resolved at sign-in). */
   readonly groups: string;
+  /**
+   * Claim saying the provider verified the email (`true`). Absent: `email_verified`
+   * (OpenID Connect Core §5.1). Entra ID: `xms_edov` ("email domain owner verified").
+   */
+  readonly emailVerified?: string;
 }
 
 export interface IdpConfig {
@@ -180,6 +186,12 @@ export interface InstanceConfig {
   readonly trustedProxies: readonly string[];
   /** The resources of this instance's own hosting; see `SelfResource`. */
   readonly selfResources: readonly SelfResource[];
+  /**
+   * Trusted-edge mode: the one header the edge in front of the instance overwrites
+   * with the client address (`x-real-ip` on Railway). `null` (the default): the address
+   * comes from `X-Forwarded-For` through `trustedProxies`, or is unknown.
+   */
+  readonly clientIpHeader: ClientIpHeader | null;
   readonly store: { readonly path: string };
   readonly encryption: EncryptionConfig;
   /**

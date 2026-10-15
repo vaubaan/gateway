@@ -4313,6 +4313,83 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
   missing or non-sha512 integrity, an entry without `resolved`, a link or a
   workspace outside the repository, and a lockfile without `packages`.
 
+## Scenarios — Production hardening of 2026-10-15 (SEC-FIX-2)
+
+> Covers: ADRs [[master-key-rotation-reseals-every-blob]],
+> [[secrets-leave-the-process-environment-after-load]],
+> [[provider-error-text-stays-with-the-agent]],
+> [[client-address-from-a-trusted-edge-header]],
+> [[sign-in-rate-limits-and-bootstrap-lockout]],
+> [[verified-email-for-a-company-directory]]; the security review of
+> 2026-10-15 and its re-check of `fix/v5-sec-1`. All on `:memory:` stores or
+> pure functions; no provider is contacted.
+
+- **`store/repositories/sealed-blobs.test.ts`** (7) — counts per table and
+  key version; a dry run opens every blob and writes nothing; `--apply` moves
+  every blob to the current version and they open without the previous key;
+  a second run is a no-op; a version with no key, or a wrong key under the
+  right version, is `unreadable` and left alone; a row the gateway rewrites
+  during the run is `changed` and keeps the gateway's value.
+- **`reseal/cli.test.ts`** (6) — arguments (`--apply`, `--help`, an unknown
+  argument never echoed); root refused (77); no store file (78); dry-run and
+  applied reports; "VAUBAAN_MASTER_KEY_PREVIOUS can now be removed"; no key
+  ever printed; exit 1 and "keep the previous key" when a blob does not open.
+  The image smoke test (`deploy/docker/smoke.sh` step 11) runs it as 10001.
+- **Re-check of the branch** — `reseal/cli.test.ts` (+2): the confirming dry run
+  after `--apply` prints "nothing to reseal … can now be removed" and not "run with
+  --apply"; a new key under the old version leaves current blobs unreadable
+  (`current unreadable`, exit 1, no verdict). `compose/sealed-keys-check.test.ts` (2):
+  the boot logs "stored secrets do not open with the configured master keys" for a
+  wrong key under its version and for a version with no key, and nothing when the
+  keys fit. `backup/cli.test.ts` (3): a read-only `VACUUM INTO` beside the store,
+  integrity `ok`, the key versions named, no key printed; never overwrites, no
+  directory in the name, root refused, no store refused. Smoke step 12 runs it in
+  the image.
+- **`config/secret-env.test.ts`** (5) — the secret variables of the key
+  table, sign-in and provider secrets and their `_FILE` siblings are named;
+  the YAML's `${NAME}` references at a secret key only; `loadProcessConfig`
+  keeps the values in the configuration and deletes them from `process.env`.
+- **`connections/failure-reason.test.ts`** (12) and the updated connect and
+  discovery tests — a provider failure is kept as its status in the
+  gateway's words, never its text; `logging/console-guard.test.ts` (3) —
+  Next's `console.error` prints an error's class and frames, never its
+  message, and redacts configured secrets.
+- **`unit/structural/upload-ignore-files.test.ts`** (3, invariant
+  `no-secret-in-a-build-upload`) — `.dockerignore` and `.railwayignore`
+  exclude env files, keys, the mounted YAML and the agent directories.
+- **`http/client-ip-edge.test.ts`** (5) — trusted-edge mode reads the declared
+  header alone (one IP, else unknown), is off by default, refuses an unknown
+  header and the combination with `trusted_proxies`.
+- **`integration/auth/sign-in-limits.test.ts`** (4) — per-address window on a
+  known address (another address is not held); the instance-wide window bounds
+  the pending rows when the address is unknown; the bootstrap window; 50 wrong
+  bootstrap tokens revoke it.
+- **`oauth-as/pending-registrations.test.ts`** (2) — a 51st waiting dynamic
+  registration is refused (429) while a loopback client is not held; waiting
+  registrations older than a day expire, decided ones stay. CORS preflights
+  answer a fixed header list (`http-surface.test.ts`).
+- **`auth/verified-email.test.ts`** (5) — `claims.email_verified` names the
+  claim (Entra: `xms_edov`); without `require_verified_email` the admin email
+  is admitted as before; with it, an unverified one is refused; read from the
+  environment; refused on a GitHub provider.
+- **`auth/session-service.test.ts`** (idle) and
+  **`integration/auth/sign-out-everywhere.test.ts`** (3) — a session unused
+  for an hour ends, use never extends the eight hours; "Sign out everywhere"
+  ends every session of the user (audited `user-sessions-ended`), refuses a
+  foreign origin, and a later sign-in works. `admin-mutations.test.ts` and
+  `mutation-guard.test.ts` classify the new acts and handlers.
+- **`plugins/vercel/tests/unit/project-redaction.test.ts`** (5, re-check
+  H-1) — the project object keeps its descriptive fields; env values, deploy
+  hook URLs and unknown fields are redacted in every shape and in
+  `structuredContent`; a text answer that is not JSON is replaced whole.
+- **`execution/unbound-tools.test.ts`** (4) and **`self-resources.test.ts`**
+  (re-check M-1) — Railway's agent is refused on an account that reaches the
+  hosting project, every other tool and every other account unaffected; the
+  mission context marks such a connection; the SDK validates the declaration.
+- **`compose/self-resources-check.test.ts`** (2, re-check L-1) and the
+  Upstash tests (L-2) — a self resource of an unknown provider stops the boot;
+  `get_database` sends `credentials=hide` and nested credentials are dropped.
+
 ## Out of scope for these tests
 
 - **E2E** (Playwright, container smoke) → [`e2e-tests.md`](./e2e-tests.md).

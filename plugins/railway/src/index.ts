@@ -57,6 +57,13 @@ export const railwayPlugin = definePlugin({
   // Beside the OAuth app : a workspace or account token pasted by hand, for
   // every tool (ADR token-connections-beside-the-integration-app, amended).
   alternativeCredentials: [railwayTokenCredential],
+  // Railway's agent takes a free-text request and acts with the whole
+  // credential: no resource check can keep it off the project hosting the
+  // gateway (SEC 2026-10-15 re-check M-1).
+  unboundTools: {
+    'railway__railway-agent':
+      "Railway's agent acts on a free-text request with the whole credential, so it cannot be kept away from the project that hosts this gateway.",
+  },
   classify: classifyRailway,
   execute: executeRailway,
   discoverResources: discoverRailwayResources,

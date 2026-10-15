@@ -91,14 +91,34 @@ function classifySafely(
  */
 export function toolUnavailableOn(
   plugin: ProviderPlugin,
-  connection: Pick<MissionConnection, 'display_name' | 'credential_kind'>,
+  connection: Pick<MissionConnection, 'display_name' | 'credential_kind' | 'hosts_instance'>,
   tool: string,
 ): string | null {
-  const kind = connection.credential_kind ?? plugin.credential.kind;
-  const reason = unavailableToolReason(plugin, kind, tool);
+  const reason = unavailableReason(plugin, connection, tool);
   return reason === null
     ? null
     : `tool '${tool}' is not available on the ${plugin.displayName} account '${connection.display_name}': ${reason}`;
+}
+
+/**
+ * Why the tool cannot run on this connection, or `null`: the way the connection
+ * was made (`unavailableTools`), or a connection that reaches a resource hosting
+ * this gateway and a tool that cannot be bound to one resource (`unboundTools`,
+ * SEC 2026-10-15 re-check M-1). One rule for the resource stage and `tools/list`.
+ */
+export function unavailableReason(
+  plugin: ProviderPlugin,
+  connection: Pick<MissionConnection, 'credential_kind' | 'hosts_instance'> | undefined,
+  tool: string,
+): string | null {
+  const kind = connection?.credential_kind ?? plugin.credential.kind;
+  const byWay = unavailableToolReason(plugin, kind, tool);
+  if (byWay !== null) return byWay;
+  const unbound = plugin.unboundTools?.[tool];
+  if (connection?.hosts_instance === true && unbound !== undefined) {
+    return `this account can reach the resource that hosts this gateway. ${unbound}`;
+  }
+  return null;
 }
 
 /**

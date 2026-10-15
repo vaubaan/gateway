@@ -85,6 +85,7 @@ import {
 import { providerGrantForecast, providerGrantReport } from '@/server/connections/provider-grant';
 import type { MissionOnConnection } from '@/server/missions/mission-service';
 import type { CatalogRisk } from '@/server/missions/model';
+import { toolTitleOf } from '@/server/providers/tool-titles';
 import { providerPath } from '@/server/providers/links';
 import {
   sharePath,
@@ -124,6 +125,12 @@ export interface AccountData {
   readonly validation: ValidationStatus | null;
   /** Refs of this account's resources that host this instance: never reachable by a mission. */
   readonly selfRefs: ReadonlySet<string>;
+  /**
+   * The tools of this service that cannot run on this account because it reaches a
+   * resource hosting this instance (`ProviderPlugin.unboundTools`), as titles; empty
+   * when it reaches none (SEC 2026-10-15 re-check M-1).
+   */
+  readonly unboundTools: readonly string[];
 }
 
 /** Everything the page shows. Throws the services' "not found" for anyone but an owner. */
@@ -139,6 +146,11 @@ export async function loadAccount(
     root.missions.service.onConnection(actor.user, connectionId),
     root.telemetry.stats.statusFor(detail.connection.provider),
   ]);
+  const selfRefs = new Set(
+    root.config.selfResources
+      .filter((self) => self.provider === detail.connection.provider)
+      .map((self) => self.ref),
+  );
   return {
     detail,
     context,
@@ -146,11 +158,12 @@ export async function loadAccount(
     missions,
     transferTargets: root.connections.service.transferTargets(actor, detail.connection),
     validation,
-    selfRefs: new Set(
-      root.config.selfResources
-        .filter((self) => self.provider === detail.connection.provider)
-        .map((self) => self.ref),
-    ),
+    selfRefs,
+    unboundTools: detail.resources.some((resource) => selfRefs.has(resource.ref))
+      ? Object.keys(root.registry.get(detail.connection.provider)?.plugin.unboundTools ?? {}).map(
+          (tool) => toolTitleOf(root.registry, tool) ?? tool,
+        )
+      : [],
   };
 }
 
@@ -690,6 +703,17 @@ export function AccountView({
                   <strong>{grant.title}.</strong> {grant.text}
                 </p>
               )}
+            </Callout>
+          )}
+          {data.unboundTools.length > 0 && !revoked && (
+            <Callout
+              tone="warn"
+              title="This account can reach the project that hosts this gateway"
+              testId="account-hosts-instance"
+            >
+              That project is never a mission resource, and these tools are unavailable on this
+              account, because they act beyond one resource: {data.unboundTools.join(', ')}. Prefer
+              connecting a separate workspace that does not hold the gateway.
             </Callout>
           )}
           {detail.discovery && !detail.discovery.ok && !revoked && (

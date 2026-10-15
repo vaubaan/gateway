@@ -145,6 +145,33 @@ configuration the token is optional: without one,
 given next to the IdP is kept and stays `active` until the first operator
 sign-in.
 
+**A guessed token is revoked.** `POST /api/auth/bootstrap` takes one slot of an
+instance-wide window (`AUTH_LIMITS.bootstrapPerInstance`: 10 attempts per 10
+minutes, then `?error=too-many-attempts`), and every wrong token is counted in
+`instance_config` (`bootstrap.misses`, `BootstrapService.recordMiss()`): at
+`BOOTSTRAP_MAX_MISSES` (50) the token is revoked for good (`bootstrap.revoked_at`,
+logged at `error`). The operator then signs in through a provider set in the
+configuration; an attacker can therefore end the bootstrap path of an instance
+that has no provider yet, which is why the deploy guides set the provider in
+the configuration first (ADR
+[sign-in-rate-limits-and-bootstrap-lockout](../decisions/sign-in-rate-limits-and-bootstrap-lockout.md)).
+
+**Recovering after a bootstrap lockout.** The page says "Bootstrap sign-in is no
+longer available". Either set a sign-in provider in the configuration
+(`VAUBAAN_SIGN_IN_<ID>_*`, with an admin rule) and redeploy — the way the deploy
+guides recommend; or, to use the token again, delete the two rows it left, from a
+shell in the container, as the image user, then restart:
+
+```bash
+vaubaan-entrypoint node -e "const db=require('/app/node_modules/better-sqlite3')(process.env.VAUBAAN_STORE_PATH);db.prepare(\"DELETE FROM instance_config WHERE key IN ('bootstrap.revoked_at','bootstrap.misses')\").run()"
+```
+
+(the module path is that of the standalone tree; check it once). Do this only after
+replacing the token with a new one of 32 characters or more: the old one was being
+guessed. **If nobody can start a sign-in** (`too-many-attempts` for everybody, no
+client address known): the instance-wide window slides — wait ten minutes, or
+restart (the limiter is in memory).
+
 The **admin rule** is `InstanceConfig.admin` (`admin.group` and/or
 `admin.emails`, required by the loader), resolved against the providers
 configured now (`resolveAdminRule`, `SignInProvidersService.adminRule()`):
@@ -175,6 +202,26 @@ directory's administrators. As a floor, a sign-in whose claims say
 `email_verified: false` is refused before anything is written (see "Claims"
 below), so an address the IdP itself calls unproven never decides operator
 status nor passes the domain filter.
+
+**Entra ID: make the admin rule a group, by object id.** Entra ID sends no
+`email_verified`, and the `email` claim of a member is the directory's `mail`
+attribute, which a tenant's User Administrators (not only its Global
+Administrators) can set to any address — including the one in
+`admin.emails`. On an Entra provider, set
+`VAUBAAN_ADMIN_GROUP=<provider id>:<group object id>` (the GUID Entra puts in
+the `groups` claim; assign the group to the application, Token configuration →
+groups claim → "Groups assigned to the application") and keep `admin.emails`
+empty or as a break-glass list. If an email rule must stay, request the
+optional claims `email` and `xms_edov` in the app registration and set
+`sign_in.<id>.claims.email_verified: xms_edov` with
+`sign_in.<id>.require_verified_email: true`
+(`VAUBAAN_SIGN_IN_<ID>_CLAIM_EMAIL_VERIFIED`,
+`VAUBAAN_SIGN_IN_<ID>_REQUIRE_VERIFIED_EMAIL`): the provider is then admitted
+like an open one, on a verified email only, and `xms_edov` is true only for an
+address in a domain the tenant verified (ADR
+[verified-email-for-a-company-directory](../decisions/verified-email-for-a-company-directory.md)).
+Both are off by default; they exist for OIDC providers (a GitHub provider always
+gives the primary verified address).
 
 ## Sign-in providers
 
@@ -233,7 +280,9 @@ refusal creates no user, syncs no group and revokes no bootstrap token.
    `https://login.microsoftonline.com/{common,organizations,consumers}/v2.0`
    and the personal-accounts tenant `9188040d-6c67-4c5b-b112-36a304b66dad` —
    must say the email is verified (`emailVerified: true`), else
-   `email-not-verified`.
+   `email-not-verified`. So must an OIDC provider set with
+   `require_verified_email: true`; its verification claim is
+   `claims.email_verified` (default `email_verified`; Entra ID: `xms_edov`).
 2. A company directory with no domain and not `invitationOnly` admits everyone
    it signs in (`everyone-of-the-directory`; never an open provider: the
    loader and `save` refuse such a provider).
@@ -381,6 +430,16 @@ missions and are reached by nobody. No tool moves an account to another
 issuer.
 
 ## Sign-in flow
+
+**Limits** (`AUTH_LIMITS` in `handlers.ts`, through the instance's `RateLimiter`):
+a sign-in start takes a slot per client address (20 per minute) when the address
+is known (`trusted_proxies` or `client_ip_header`), and always one of the
+instance-wide window (1 000 per 10 minutes, the life of a pending row: the live
+pending rows are bounded whatever the caller sends); a callback 30 per minute per
+address and 2 000 per minute for the instance. A refused attempt answers
+`303 /login?error=too-many-attempts` and writes nothing. Without a known address a
+flood holds every sign-in for up to ten minutes: the instance stays up and its
+store bounded, which is the trade (threat model A2).
 
 ```
 GET /auth/login?return_to=/x            none ▶ /login?error=idp-not-configured; several ▶ 303 /login?return_to=/x
@@ -544,10 +603,25 @@ browser applies the `__Host-` rules to the literal name, so
 `\u00a0__Host-vbn_session` is to it an ordinary cookie a sibling subdomain may
 set for the parent domain, and must not read as the session here. A name that
 appears twice in the header reads as no cookie at all.
-A cookie value that is not base64url is ignored. There is no sliding expiry: a
-session ends 8 hours after sign-in whatever the activity. A sign-in (IdP or
-bootstrap token) deletes the session the browser presented before it issues
-the new one.
+A cookie value that is not base64url is ignored. A session ends 8 hours after
+sign-in whatever the activity (`SESSION_TTL_MS`, never extended), and earlier
+after **one hour without a request** (`SESSION_IDLE_MS`): the record carries
+`seenAt`, rewritten with what is left of the absolute lifetime at most every
+five minutes (`SESSION_TOUCH_MS`); a record from an older build counts from
+`createdAt`. A sign-in (IdP or bootstrap token) deletes the session the browser
+presented before it issues the new one.
+
+**Sign out everywhere** (security review 2026-10-15, auth L1). Sessions are rows
+keyed by the digest of their id and cannot be listed per user; ending them all
+reuses `users.sessions_ended_at` (the instant before which a session of that user
+is refused, as for a deactivation): `UsersRepo.endSessions(id)` sets it to now
+for an active user, status untouched. `UserAdminService.endSessions` audits
+`user-sessions-ended` (`after.by`: `self` or `operator`). Two doors:
+`POST /logout/everywhere` (Settings → You → "Sign out everywhere", any signed-in
+person, origin-checked, clears the cookie and lands on `/login`) and
+`POST /admin/users/<id>/end-sessions` (Administration → People, operator, for
+someone else). Keys, connected apps and missions are not touched: deactivation
+is the act that stops those.
 
 **Records are guarded, not cast.** The port returns `unknown`;
 `isWebSessionRecord` and `isPendingLogin` (`session-service.ts`) prove the

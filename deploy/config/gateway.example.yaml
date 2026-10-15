@@ -43,6 +43,13 @@
 # self_resources:
 #   - vercel:prj_xxx
 
+# Trusted-edge mode, instead of trusted_proxies: the one header the edge in
+# front of the instance OVERWRITES with the client address on every request
+# (Railway: x-real-ip). One of x-real-ip, cf-connecting-ip, true-client-ip,
+# fly-client-ip. Never set it behind an edge that passes a client value through.
+# env: VAUBAAN_CLIENT_IP_HEADER
+# client_ip_header: x-real-ip
+
 # store:
 #   # REQUIRED. SQLite database file; its directory must be writable and
 #   # persistent (the /data volume in the image).
@@ -123,6 +130,12 @@
 #       sub: sub
 #       email: email
 #       groups: groups
+#       # The claim that says the email is verified. Entra ID sends no
+#       # email_verified: request the optional claim xms_edov and name it here.
+#       email_verified: xms_edov
+#     # Admit a verified email only, as on an open provider. Set it when the
+#     # admin rule uses emails on Entra ID (better: an admin group by object id).
+#     require_verified_email: true
 #     allowed_email_domains:
 #       - partner.example.com
 

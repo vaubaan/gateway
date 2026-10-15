@@ -41,7 +41,7 @@ import type { RateLimiter } from './ports';
 export const MANAGEMENT_RATE_KEY_PREFIX = 'mgmt:';
 
 export interface ManagementWiringDeps {
-  readonly config: Pick<InstanceConfig, 'publicUrl' | 'trustedProxies'>;
+  readonly config: Pick<InstanceConfig, 'publicUrl' | 'trustedProxies' | 'clientIpHeader'>;
   readonly gate: Pick<ManagementGateModuleDeps, 'oauth' | 'missionTokens' | 'webSessions'>;
   readonly missions: MissionService;
   readonly registry: PluginRegistry;

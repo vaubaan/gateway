@@ -14,6 +14,7 @@
  * way round; `keys-doc.test.ts` holds the handbook to it.
  */
 import { parse as parseYaml } from 'yaml';
+import { CLIENT_IP_HEADERS } from '../http/client-ip';
 
 import { errorMessage, type IssueList } from './errors';
 import {
@@ -86,8 +87,10 @@ export const SIGN_IN_FIELDS = [
   { field: 'claims.sub', env: 'CLAIM_SUB', kind: 'string' },
   { field: 'claims.email', env: 'CLAIM_EMAIL', kind: 'string' },
   { field: 'claims.groups', env: 'CLAIM_GROUPS', kind: 'string' },
+  { field: 'claims.email_verified', env: 'CLAIM_EMAIL_VERIFIED', kind: 'string' },
   { field: 'allowed_email_domains', env: 'ALLOWED_EMAIL_DOMAINS', kind: 'list' },
   { field: 'invitation_only', env: 'INVITATION_ONLY', kind: 'bool' },
+  { field: 'require_verified_email', env: 'REQUIRE_VERIFIED_EMAIL', kind: 'bool' },
 ] as const satisfies readonly {
   readonly field: string;
   readonly env: string;
@@ -106,6 +109,13 @@ const KEY_TABLE = [
   },
   { path: 'trusted_proxies', env: 'VAUBAAN_TRUSTED_PROXIES', kind: 'list' },
   { path: 'self_resources', env: 'VAUBAAN_SELF_RESOURCES', kind: 'list' },
+  {
+    path: 'client_ip_header',
+    env: 'VAUBAAN_CLIENT_IP_HEADER',
+    kind: 'string',
+    format: 'enum',
+    oneOf: CLIENT_IP_HEADERS,
+  },
   { path: 'store.path', env: 'VAUBAAN_STORE_PATH', kind: 'string', required: 'always' },
   {
     path: 'encryption.master_key',
@@ -322,6 +332,50 @@ export function envNamesFor(path: string): string[] {
     : [spec.env];
 }
 
+/**
+ * Whether a configuration path holds a secret: the keys whose variable accepts a
+ * `_FILE` sibling, every entry of `encryption.previous_keys`, the secret fields of a
+ * sign-in provider and of a provider app.
+ */
+export function isSecretKeyPath(path: string): boolean {
+  const signInMatch = /^sign_in\.([^.]+)\.(.+)$/.exec(path);
+  if (signInMatch) {
+    return SIGN_IN_FIELDS.some((f) => f.field === signInMatch[2] && f.kind === 'secret');
+  }
+  const providerMatch = /^providers\.([^.]+)\.([^.]+)$/.exec(path);
+  if (providerMatch) {
+    const field = providerMatch[2] ?? '';
+    return isProviderAppField(field) && SECRET_PROVIDER_FIELDS.has(field);
+  }
+  if (path.startsWith('encryption.previous_keys.')) return true;
+  const spec = KEYS.find((k) => k.path === path);
+  return spec !== undefined && (spec.kind === 'secret' || spec.kind === 'secret-map');
+}
+
+/**
+ * The variables of `env` that carry a secret or the path of one: the secret keys of
+ * the table and their `_FILE` siblings, `VAUBAAN_SIGN_IN_<ID>_CLIENT_SECRET[_FILE]`,
+ * `VAUBAAN_PROVIDER_<ID>_{CLIENT_SECRET,PRIVATE_KEY}[_FILE]`. The variables a YAML
+ * file references at a secret key are added by the loader (`FileSourceResult`).
+ */
+export function secretEnvVariables(env: EnvSource): string[] {
+  const out = new Set<string>();
+  for (const spec of KEYS) {
+    if (spec.kind !== 'secret' && spec.kind !== 'secret-map') continue;
+    for (const name of [spec.env, `${spec.env}_FILE`]) {
+      if (env[name] !== undefined) out.add(name);
+    }
+  }
+  for (const name of Object.keys(env)) {
+    if (env[name] === undefined) continue;
+    const base = name.endsWith('_FILE') ? name.slice(0, -'_FILE'.length) : name;
+    if (parseSignInEnvName(base)?.spec.kind === 'secret') out.add(name);
+    const provider = parseProviderEnvName(base);
+    if (provider && SECRET_PROVIDER_FIELDS.has(provider.field)) out.add(name);
+  }
+  return [...out].sort();
+}
+
 export function providerEnvName(providerId: string, field: string): string {
   return `${PROVIDER_ENV_PREFIX}${providerId.toUpperCase().replace(/-/g, '_')}_${field.toUpperCase()}`;
 }
@@ -523,7 +577,16 @@ export interface FileSourceResult {
   readonly tree: RawTree;
   /** Absolute or relative path that was read, for the boot log. */
   readonly path: string;
+  /** Environment variables the file references (`${NAME}`) at a secret key. */
+  readonly secretVariables: readonly string[];
 }
+
+/** What resolving the file needs beyond the source context: where secret references go. */
+interface FileContext extends SourceContext {
+  readonly secretVariables: Set<string>;
+}
+
+const VARIABLE_REF = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
 
 /**
  * Reads the YAML file named by `VAUBAAN_CONFIG_FILE`. Returns `null` when the
@@ -537,13 +600,13 @@ export function readFileSource(
 ): FileSourceResult | null {
   const path = env[CONFIG_FILE_ENV];
   if (path === undefined || path.trim() === '') return null;
-  const ctx: SourceContext = { env, readFile, issues };
+  const ctx: FileContext = { env, readFile, issues, secretVariables: new Set() };
   let text: string;
   try {
     text = readFile(path);
   } catch (err) {
     issues.add(CONFIG_FILE_ENV, `cannot read "${path}": ${errorMessage(err)}`, [CONFIG_FILE_ENV]);
-    return { tree: {}, path };
+    return { tree: {}, path, secretVariables: [] };
   }
   let parsed: unknown;
   try {
@@ -552,16 +615,17 @@ export function readFileSource(
     issues.add(CONFIG_FILE_ENV, `"${path}" is not valid YAML: ${errorMessage(err)}`, [
       CONFIG_FILE_ENV,
     ]);
-    return { tree: {}, path };
+    return { tree: {}, path, secretVariables: [] };
   }
-  if (parsed === null || parsed === undefined) return { tree: {}, path };
+  if (parsed === null || parsed === undefined) return { tree: {}, path, secretVariables: [] };
   if (!isPlainObject(parsed)) {
     issues.add(CONFIG_FILE_ENV, `"${path}" must contain a YAML mapping at the top level`, [
       CONFIG_FILE_ENV,
     ]);
-    return { tree: {}, path };
+    return { tree: {}, path, secretVariables: [] };
   }
-  return { tree: resolveTree(ctx, parsed, '', new Set([parsed])), path };
+  const tree = resolveTree(ctx, parsed, '', new Set([parsed]));
+  return { tree, path, secretVariables: [...ctx.secretVariables] };
 }
 
 /**
@@ -573,7 +637,7 @@ export function readFileSource(
 type Ancestors = ReadonlySet<object>;
 
 function resolveTree(
-  ctx: SourceContext,
+  ctx: FileContext,
   node: RawTree,
   prefix: string,
   ancestors: Ancestors,
@@ -594,12 +658,19 @@ function resolveTree(
 }
 
 function resolveValue(
-  ctx: SourceContext,
+  ctx: FileContext,
   value: unknown,
   path: string,
   ancestors: Ancestors,
 ): unknown {
-  if (typeof value === 'string') return resolveRefs(ctx, value, path);
+  if (typeof value === 'string') {
+    if (isSecretKeyPath(path)) {
+      for (const match of value.matchAll(VARIABLE_REF)) {
+        if (match[1] !== undefined) ctx.secretVariables.add(match[1]);
+      }
+    }
+    return resolveRefs(ctx, value, path);
+  }
   if (typeof value !== 'object' || value === null) return value;
   if (ancestors.has(value)) {
     ctx.issues.add(path, 'refers to itself (a YAML alias inside its own anchor)', [

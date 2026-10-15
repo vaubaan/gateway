@@ -192,18 +192,22 @@ function seeOther(location: string): Response {
   });
 }
 
+/**
+ * The request headers a browser-based client may send to a protocol endpoint: a fixed
+ * list, never an echo of what the preflight asked for (security review 2026-10-15,
+ * external M2).
+ */
+export const CORS_ALLOWED_HEADERS = 'authorization, content-type, mcp-protocol-version';
+
 /** The answer to a CORS preflight of a protocol endpoint. */
-function preflight(request: Request, methods: string): Response {
-  const requested = request.headers.get('access-control-request-headers');
+function preflight(methods: string): Response {
   return new Response(null, {
     status: 204,
     headers: {
       ...CORS,
       'Access-Control-Allow-Methods': methods,
+      'Access-Control-Allow-Headers': CORS_ALLOWED_HEADERS,
       'Access-Control-Max-Age': '600',
-      ...(requested === null
-        ? {}
-        : { 'Access-Control-Allow-Headers': requested, Vary: 'Access-Control-Request-Headers' }),
     },
   });
 }
@@ -253,7 +257,7 @@ async function readOAuthForm(request: Request): Promise<URLSearchParams> {
 
 /** A discovery document: `GET`/`HEAD` from any origin, never cached; `OPTIONS` is the preflight. */
 function metadata(request: Request, document: Record<string, unknown>): Response {
-  if (request.method === 'OPTIONS') return preflight(request, 'GET, HEAD, OPTIONS');
+  if (request.method === 'OPTIONS') return preflight('GET, HEAD, OPTIONS');
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     return methodNotAllowed('GET, HEAD, OPTIONS');
   }
@@ -352,7 +356,7 @@ export function createOAuthHandlers(deps: OAuthHandlerDeps): OAuthHandlers {
     },
 
     async register(request) {
-      if (request.method === 'OPTIONS') return preflight(request, 'POST, OPTIONS');
+      if (request.method === 'OPTIONS') return preflight('POST, OPTIONS');
       if (request.method !== 'POST') return methodNotAllowed('POST, OPTIONS');
       const stopped =
         (await limited(
@@ -507,7 +511,7 @@ export function createOAuthHandlers(deps: OAuthHandlerDeps): OAuthHandlers {
     },
 
     async token(request) {
-      if (request.method === 'OPTIONS') return preflight(request, 'POST, OPTIONS');
+      if (request.method === 'OPTIONS') return preflight('POST, OPTIONS');
       if (request.method !== 'POST') return methodNotAllowed('POST, OPTIONS');
       const stopped = await limited(
         `oauth:token:ip:${deps.clientIp(request.headers)}`,
@@ -554,7 +558,7 @@ export function createOAuthHandlers(deps: OAuthHandlerDeps): OAuthHandlers {
     },
 
     async revoke(request) {
-      if (request.method === 'OPTIONS') return preflight(request, 'POST, OPTIONS');
+      if (request.method === 'OPTIONS') return preflight('POST, OPTIONS');
       if (request.method !== 'POST') return methodNotAllowed('POST, OPTIONS');
       const stopped = await limited(
         `oauth:token:ip:${deps.clientIp(request.headers)}`,

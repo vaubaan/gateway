@@ -35,7 +35,10 @@ export interface RequestsModule {
 }
 
 export interface RequestsModuleDeps {
-  readonly config: Pick<InstanceConfig, 'publicUrl' | 'trustedProxies' | 'approvals'>;
+  readonly config: Pick<
+    InstanceConfig,
+    'publicUrl' | 'trustedProxies' | 'clientIpHeader' | 'approvals'
+  >;
   readonly store: Store;
   readonly registry: PluginRegistry;
   /** Derives `orphaned` on every mission read (handbook authority). */
@@ -63,7 +66,7 @@ export function createRequestsModule(deps: RequestsModuleDeps): RequestsModule {
     publicUrl: deps.config.publicUrl,
     authenticator: deps.authenticator,
     rateLimiter: deps.rateLimiter,
-    clientIp: clientIpResolver(deps.config.trustedProxies),
+    clientIp: clientIpResolver(deps.config.trustedProxies, deps.config.clientIpHeader),
     service,
   });
   const sweeper = startRequestSweeper({

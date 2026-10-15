@@ -5,6 +5,8 @@
  *
  *   POST /admin/users/<id>/deactivate    the user holds nothing from now on
  *   POST /admin/users/<id>/reactivate    the user may sign in again
+ *   POST /admin/users/<id>/end-sessions  every web session of the user ends
+ *   POST /logout/everywhere              the signed-in user ends all their own sessions
  *   POST /admin/users/invitations         invite an address (form field `email`)
  *   POST /admin/users/invitations/remove  remove an invitation (form field `email`)
  *
@@ -16,8 +18,10 @@ import {
   guardMutation,
   OPERATOR_REFUSALS,
   refusalResponse,
+  LOGIN_PAGE,
   type Authenticator,
   type Principal,
+  type SessionService,
 } from '../auth';
 import { notAFormResponse, readForm } from '../auth/handlers';
 import { createNoticeRedirect, type Notice, type NoticeStore } from '../connections';
@@ -31,6 +35,8 @@ export const USERS_PAGE = '/admin/users';
 export interface UserAdminHandlerDeps {
   readonly publicUrl: URL;
   readonly authenticator: Authenticator;
+  /** Clears the cookie of the browser that signs out everywhere. */
+  readonly sessions: Pick<SessionService, 'destroy'>;
   readonly users: UserAdminService;
   readonly invitations: InvitationService;
   readonly notices: NoticeStore;
@@ -40,6 +46,9 @@ export interface UserAdminHandlerDeps {
 export interface UserAdminHandlers {
   deactivate(request: Request, userId: string): Promise<Response>;
   reactivate(request: Request, userId: string): Promise<Response>;
+  endSessions(request: Request, userId: string): Promise<Response>;
+  /** The signed-in user ends every one of their sessions, this one included. */
+  signOutEverywhere(request: Request): Promise<Response>;
   invite(request: Request): Promise<Response>;
   removeInvitation(request: Request): Promise<Response>;
 }
@@ -168,6 +177,31 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
           tone: done.unowned > 0 ? 'warning' : 'success',
           title: `${done.user.email} deactivated`,
           lines,
+        };
+      });
+    },
+
+    async signOutEverywhere(request) {
+      const guard = await guardMutation(request, deps, 'user');
+      if (!guard.ok) return refusalResponse(guard, OPERATOR_REFUSALS);
+      const self = guard.principal.user.id;
+      await deps.users.endSessions({ actorId: self, userId: self }, self);
+      const cleared = await deps.sessions.destroy(request.headers);
+      return new Response(null, {
+        status: 303,
+        headers: { Location: LOGIN_PAGE, 'Set-Cookie': cleared, 'Cache-Control': 'no-store' },
+      });
+    },
+
+    endSessions(request, userId) {
+      return act(request, 'Sessions not ended', async (actor) => {
+        const user = await deps.users.endSessions(actor, userId);
+        return {
+          tone: 'success',
+          title: `${user.email} signed out everywhere`,
+          lines: [
+            'Every browser they were signed in with must sign in again. Their keys, connected apps and missions are unchanged: to stop those, deactivate them.',
+          ],
         };
       });
     },

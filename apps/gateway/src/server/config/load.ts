@@ -6,7 +6,7 @@
  * and throws one `ConfigError` naming each YAML path and its variable(s).
  */
 import { KEY_BYTES } from '../crypto/aead';
-import { isTrustedProxyEntry } from '../http/client-ip';
+import { isClientIpHeader, isTrustedProxyEntry, type ClientIpHeader } from '../http/client-ip';
 import { parseDuration } from './duration';
 import {
   admissionProblem,
@@ -34,6 +34,7 @@ import {
   mergeTrees,
   readEnvSource,
   readFileSource,
+  secretEnvVariables,
   SIGN_IN_ENV_PREFIX,
 } from './sources';
 import {
@@ -88,6 +89,11 @@ export interface LoadedConfig {
   readonly config: InstanceConfig;
   /** Path of the YAML file that was merged in, or `null` for env-only. */
   readonly configFile: string | null;
+  /**
+   * The environment variables that carried a secret, or the path of one, into this
+   * configuration: what `scrubSecretEnv` deletes once the configuration is loaded.
+   */
+  readonly secretEnvNames: readonly string[];
 }
 
 export function loadInstanceConfig(options: LoadOptions = {}): LoadedConfig {
@@ -101,7 +107,35 @@ export function loadInstanceConfig(options: LoadOptions = {}): LoadedConfig {
   const config = validate(raw, issues, env);
   issues.throwIfAny();
   if (!config) throw new ConfigError(issues.items); // unreachable: validate() reports every failure
-  return { config, configFile: fromFile?.path ?? null };
+  const secretEnvNames = [
+    ...new Set([...secretEnvVariables(env), ...(fromFile?.secretVariables ?? [])]),
+  ].sort();
+  return { config, configFile: fromFile?.path ?? null, secretEnvNames };
+}
+
+/**
+ * Loads the configuration from `process.env`, then deletes from `process.env` every
+ * variable that carried a secret (the master keys, client secrets, private keys, the
+ * bootstrap token, their `_FILE` paths, and the variables the YAML file references at a
+ * secret key): the values live on in the returned configuration only, so a dump of
+ * `process.env` or a child process sees none of them. What it cannot reach: the
+ * process's initial environment block, which `/proc/<pid>/environ` keeps showing to its
+ * own user and to root (ADR secrets-leave-the-process-environment-after-load).
+ */
+export function loadProcessConfig(): LoadedConfig {
+  const loaded = loadInstanceConfig({ env: process.env });
+  scrubSecretEnv(process.env, loaded.secretEnvNames);
+  return loaded;
+}
+
+/** Deletes the named variables from `env` (`process.env` in production). */
+export function scrubSecretEnv(
+  env: Record<string, string | undefined>,
+  names: readonly string[],
+): void {
+  for (const name of names) {
+    delete env[name];
+  }
 }
 
 /* ------------------------------------------------------------------------ */
@@ -230,6 +264,7 @@ function validate(raw: RawTree, issues: IssueList, env: EnvSource): InstanceConf
   const selfResources = readSelfResources(r.stringList('self_resources'), env, (message) =>
     r.issues.add('self_resources', message, envNamesFor('self_resources')),
   );
+  const clientIpHeader = readClientIpHeader(r, trustedProxies);
   const storePath = r.string('store.path', { required: isKeyRequired(keySpec('store.path')) });
   const encryption = readEncryption(r);
   const idp = readIdp(r);
@@ -264,6 +299,7 @@ function validate(raw: RawTree, issues: IssueList, env: EnvSource): InstanceConf
     publicUrl,
     trustedProxies,
     selfResources,
+    clientIpHeader,
     store: { path: storePath },
     encryption,
     idp,
@@ -317,6 +353,32 @@ function readTrustedProxies(r: Reader): string[] {
     }
   }
   return trustedProxies;
+}
+
+/**
+ * `client_ip_header`: the single-value header a trusted edge writes (trusted-edge mode,
+ * off by default). It replaces `X-Forwarded-For` reading, so it excludes `trusted_proxies`.
+ */
+function readClientIpHeader(r: Reader, trustedProxies: readonly string[]): ClientIpHeader | null {
+  const path = 'client_ip_header';
+  const raw = r.string(path);
+  if (raw === undefined) return null;
+  const header = raw.trim().toLowerCase();
+  if (!isClientIpHeader(header)) {
+    r.issues.add(path, `expected one of ${keySpec(path).oneOf.join(', ')}, got "${raw}"`, [
+      ...envNamesFor(path),
+    ]);
+    return null;
+  }
+  if (trustedProxies.length > 0) {
+    r.issues.add(
+      path,
+      'set either client_ip_header (an edge that overwrites one header) or trusted_proxies (proxies that append to X-Forwarded-For), not both',
+      [...envNamesFor(path), ...envNamesFor('trusted_proxies')],
+    );
+    return null;
+  }
+  return header;
 }
 
 /** Required while the configuration sets no sign-in provider; long enough to resist guessing. */
@@ -546,6 +608,13 @@ function readSignInProvider(r: Reader, id: string, base: string): SignInProvider
   const allowedEmailDomains = normalizeDomainsAt(r, `${base}.allowed_email_domains`);
   const invitationOnly = r.bool({ path: `${base}.invitation_only`, default: false });
   if (kind === 'github') {
+    if (r.has(`${base}.require_verified_email`)) {
+      r.issues.add(
+        `${base}.require_verified_email`,
+        'a GitHub provider admits the primary verified address only: the option does not apply',
+        envNamesFor(`${base}.require_verified_email`),
+      );
+    }
     if (r.has(`${base}.claims`)) {
       r.issues.add(
         `${base}.claims`,
@@ -576,7 +645,10 @@ function readSignInProvider(r: Reader, id: string, base: string): SignInProvider
     sub: r.string(`${base}.claims.sub`, { fallback: 'sub' }) ?? 'sub',
     email: r.string(`${base}.claims.email`, { fallback: 'email' }) ?? 'email',
     groups: r.string(`${base}.claims.groups`, { fallback: 'groups' }) ?? 'groups',
+    emailVerified:
+      r.string(`${base}.claims.email_verified`, { fallback: 'email_verified' }) ?? 'email_verified',
   };
+  const requireVerifiedEmail = r.bool({ path: `${base}.require_verified_email`, default: false });
   const name = r.string(`${base}.name`, { fallback: issuer?.hostname ?? id }) ?? id;
   if (kind !== 'oidc' || r.issues.items.length > before || !issuer || !clientId || !clientSecret) {
     return null;
@@ -591,6 +663,7 @@ function readSignInProvider(r: Reader, id: string, base: string): SignInProvider
     claims,
     allowedEmailDomains,
     invitationOnly,
+    requireVerifiedEmail,
   };
 }
 

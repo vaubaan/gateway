@@ -162,6 +162,15 @@ export interface ProviderPlugin {
    * stable.
    */
   readonly experimental?: boolean;
+  /**
+   * Tools whose effect cannot be bound to one resource (a free-text request to
+   * the provider's own agent, say), each with one sentence saying why. The host
+   * makes them unavailable on a connection that can reach a resource hosting
+   * the gateway itself (`self_resources`): no mission resource check could keep
+   * such a tool away from it (SEC 2026-10-15 re-check M-1). Keys are tool names
+   * of the plugin.
+   */
+  readonly unboundTools?: Readonly<Record<string, string>>;
 
   /**
    * The instance as this provider's git remote (spec vaubaan-gateway §4.1 ter) :

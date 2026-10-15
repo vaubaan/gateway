@@ -22,7 +22,7 @@ import { SessionService } from '../budget';
 import { createConnectionsModule, type ConnectionsModule } from '../connections';
 import {
   buildInfoFromEnv,
-  loadInstanceConfig,
+  loadProcessConfig,
   type BuildInfo,
   type InstanceConfig,
   type LoadedConfig,
@@ -48,7 +48,7 @@ import { createUsersModule, type UsersModule } from '../users';
 import { createTelemetryModule, type TelemetryModule } from '../telemetry';
 import type { Store } from '../store';
 import type { CacheClient, RateLimiter, SessionStore } from './ports';
-import { checkProviderApps, RegistryCatalogIndex } from './registry';
+import { checkProviderApps, checkSelfResources, RegistryCatalogIndex } from './registry';
 import { wireManagementDoor, type ManagementDoorModule } from './management';
 import { buildShippedRegistry } from './shipped-plugins';
 import { openEmbeddedStore, type StoreContext } from './store';
@@ -132,7 +132,7 @@ export interface RootDeps {
 }
 
 export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
-  const { config, configFile } = (deps.loadConfig ?? loadInstanceConfig)();
+  const { config, configFile } = (deps.loadConfig ?? loadProcessConfig)();
   const logger = createLogger({
     level: config.log.level,
     redact: createRedactor(secretValues(config)),
@@ -149,6 +149,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
   // against the loaded catalogs, and the provider apps against the ids.
   const registry = await (deps.buildRegistry ?? buildShippedRegistry)(config, logger);
   checkProviderApps(config, registry, logger);
+  checkSelfResources(config, registry);
 
   const store = await (deps.openStore ?? openEmbeddedStore)({
     config,
@@ -162,6 +163,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
   // a failed build, and a retry must not find a second handle on the same file.
   const opened: Closer[] = [() => store.close()];
   try {
+    await checkSealedKeys(store, config, logger);
     const modules = await wireModules({ config, logger, registry, store, build }, deps, opened);
     const root: GatewayRoot = {
       config,
@@ -188,6 +190,38 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
   }
 }
 
+/**
+ * Whether the configured master keys open what the store holds: one blob per table and
+ * key version is opened at boot. A version with no configured key, or whose key does
+ * not fit (a new key set without raising its version), is logged at `error`, once per
+ * version, naming the keys to fix. The instance still starts: what it cannot open fails
+ * call by call, and the operator needs the instance up to see it (ADR
+ * master-key-rotation-reseals-every-blob, amendment).
+ */
+export const SEALED_KEY_MISMATCH =
+  'stored secrets do not open with the configured master keys: fix VAUBAAN_MASTER_KEY / VAUBAAN_MASTER_KEY_VERSION / VAUBAAN_MASTER_KEY_PREVIOUS and redeploy';
+
+async function checkSealedKeys(
+  store: Store,
+  config: InstanceConfig,
+  logger: Logger,
+): Promise<void> {
+  const failing = (await store.sealedBlobs.probe()).filter((p) => !p.opens);
+  const versions = [...new Set(failing.map((p) => p.keyVersion))].sort((a, b) => a - b);
+  for (const version of versions) {
+    const configured =
+      version === config.encryption.keyVersion || config.encryption.previousKeys.has(version);
+    logger.error(SEALED_KEY_MISMATCH, {
+      key_version: version,
+      current_key_version: config.encryption.keyVersion,
+      cause: configured
+        ? 'a key is configured for this version but it is not the one that sealed these blobs'
+        : 'no key is configured for this version',
+      blobs: failing.filter((p) => p.keyVersion === version).map((p) => `${p.table}: ${p.count}`),
+    });
+  }
+}
+
 function logConfigurationSummary(
   logger: Logger,
   config: InstanceConfig,
@@ -207,6 +241,7 @@ function logConfigurationSummary(
         : 'disabled',
     key_version: config.encryption.keyVersion,
     trusted_proxies: config.trustedProxies.length,
+    client_ip_header: config.clientIpHeader ?? 'not set',
   });
   warnWithoutTrustedProxies(logger, config);
 }
@@ -222,7 +257,21 @@ function logConfigurationSummary(
 export const NO_TRUSTED_PROXY_WARNING =
   'trusted_proxies is empty: no client address is resolved, so the address-keyed limits are shared by all callers';
 
+/** Trusted-edge mode is a statement about the edge: said once at boot, with what it rests on. */
+export const EDGE_HEADER_NOTICE =
+  'client_ip_header is set: the client address is read from that header alone, which is safe only behind an edge that overwrites it on every request';
+
 function warnWithoutTrustedProxies(logger: Logger, config: InstanceConfig): void {
+  if (config.clientIpHeader !== null) {
+    logger.warn(EDGE_HEADER_NOTICE, {
+      key: 'client_ip_header',
+      env: 'VAUBAAN_CLIENT_IP_HEADER',
+      header: config.clientIpHeader,
+      check:
+        'send a request with a forged value of this header and confirm the instance sees your real address (deploy/railway.md)',
+    });
+    return;
+  }
   if (config.trustedProxies.length > 0) return;
   logger.warn(NO_TRUSTED_PROXY_WARNING, {
     key: 'trusted_proxies',
@@ -234,7 +283,7 @@ function warnWithoutTrustedProxies(logger: Logger, config: InstanceConfig): void
       'audit: client_ip is not recorded',
     ],
     remedy:
-      'set it to the address or CIDR block of the reverse proxy in front of the instance (deploy/README.md)',
+      'set it to the address or CIDR block of the reverse proxy in front of the instance (deploy/README.md), or, behind an edge that overwrites a client-address header (Railway: X-Real-IP), set client_ip_header',
   });
 }
 
@@ -288,12 +337,18 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
   // Authority reads the store only, so it is built first: the sign-in settles what a
   // changed membership did, and every module below checks, derives or watches through it.
   const authority = createAuthorityModule({ store, registry, logger });
+  // One sliding-window limiter, two faces: the budget's per-risk windows
+  // (`mission:<id>:risk:<id>`, probed and recorded inside the decision) and the
+  // surface limits (`mcp:mission:<id>`, `connect:<user>`, `auth:*`), on disjoint keys.
+  const windows = new SlidingWindowRateLimiter();
+  const rateLimiter = deps.rateLimiter ?? windows;
   const auth = createAuthModule({
     config,
     store,
     sessions,
     logger,
     oidc: deps.oidc,
+    rateLimiter,
     // The user themselves is the human behind a sign-in that changes their groups.
     membershipsChanging: async (user) => {
       const watch = await authority.membership.watch(user.id);
@@ -312,11 +367,6 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     logger,
   });
 
-  // One sliding-window limiter, two faces: the budget's per-risk windows
-  // (`mission:<id>:risk:<id>`, probed and recorded inside the decision) and the
-  // surface limits (`mcp:mission:<id>`, `connect:<user>`), on disjoint keys.
-  const windows = new SlidingWindowRateLimiter();
-  const rateLimiter = deps.rateLimiter ?? windows;
   const cache = deps.cache ?? new MemoryCacheClient();
   const providerApps = new ProviderAppsService(config.providers, store.config, registry);
   const connections = createConnectionsModule({
@@ -418,6 +468,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     memberTokens: missions.team,
     connections,
     authenticator: auth.authenticator,
+    sessions: auth.sessions,
     logger,
   });
   const execution = createExecutionModule({

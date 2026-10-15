@@ -189,27 +189,41 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
               }
               if (view.user.id === self) return null;
               return (
-                <ConfirmSubmit
-                  action={`${base}/deactivate`}
-                  label={SETTINGS_ACTIONS.deactivate}
-                  ariaLabel={`Deactivate ${view.user.email}`}
-                  variant="danger"
-                  tone="danger"
-                  title={`Deactivate ${nameOf(view)}?`}
-                  consequence={
-                    <>
-                      At once, without waiting for the identity provider: they can no longer sign
-                      in, their open sessions end, every key they hold is refused, the apps they
-                      connected lose their access, and they leave every team. The missions they
-                      created stop — every call is refused — and an account they were the last owner
-                      of is listed under “{SETTINGS_PAGES.ownerless.title}”, for you to name a new
-                      owner.
-                    </>
-                  }
-                  confirmLabel={SETTINGS_ACTIONS.deactivate}
-                  hint="You can reactivate them later; their missions then run again."
-                  testId={`deactivate-${view.user.id}`}
-                />
+                <>
+                  <form method="post" action={`${base}/end-sessions`}>
+                    <Button
+                      type="submit"
+                      size="sm"
+                      variant="secondary"
+                      aria-label={`Sign ${view.user.email} out everywhere`}
+                      title="Every browser they are signed in with must sign in again. Their keys, connected apps and missions are unchanged."
+                      data-testid={`end-sessions-${view.user.id}`}
+                    >
+                      {SETTINGS_ACTIONS.endSessions}
+                    </Button>
+                  </form>
+                  <ConfirmSubmit
+                    action={`${base}/deactivate`}
+                    label={SETTINGS_ACTIONS.deactivate}
+                    ariaLabel={`Deactivate ${view.user.email}`}
+                    variant="danger"
+                    tone="danger"
+                    title={`Deactivate ${nameOf(view)}?`}
+                    consequence={
+                      <>
+                        At once, without waiting for the identity provider: they can no longer sign
+                        in, their open sessions end, every key they hold is refused, the apps they
+                        connected lose their access, and they leave every team. The missions they
+                        created stop — every call is refused — and an account they were the last
+                        owner of is listed under “{SETTINGS_PAGES.ownerless.title}”, for you to name
+                        a new owner.
+                      </>
+                    }
+                    confirmLabel={SETTINGS_ACTIONS.deactivate}
+                    hint="You can reactivate them later; their missions then run again."
+                    testId={`deactivate-${view.user.id}`}
+                  />
+                </>
               );
             }}
             testId="people"

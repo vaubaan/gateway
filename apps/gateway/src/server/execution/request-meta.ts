@@ -29,7 +29,12 @@ import type { BlockList } from 'node:net';
 
 import type { ClientOrigin } from '@vaubaan/gateway-core';
 
-import { clientIpOf, trustedProxyList, UNKNOWN_CLIENT } from '../http/client-ip';
+import {
+  clientIpOf,
+  trustedProxyList,
+  UNKNOWN_CLIENT,
+  type ClientIpHeader,
+} from '../http/client-ip';
 import {
   AGENT_LABEL_HEADER,
   AGENT_LABEL_MAX_LENGTH,
@@ -119,10 +124,15 @@ export function agentLabelOf(headers: Headers, meta: unknown): string | null {
 
 export function clientOriginOf(
   headers: Headers,
-  trusted: { readonly proxies: BlockList; readonly configured: boolean },
+  trusted: {
+    readonly proxies: BlockList;
+    readonly configured: boolean;
+    /** `client_ip_header`: the edge header believed instead of `X-Forwarded-For`. */
+    readonly edgeHeader?: ClientIpHeader | null;
+  },
 ): ClientOrigin {
   const userAgent = headers.get('user-agent');
-  const ip = clientIpOf(headers, trusted.proxies, trusted.configured);
+  const ip = clientIpOf(headers, trusted.proxies, trusted.configured, trusted.edgeHeader ?? null);
   return {
     ip: ip === UNKNOWN_CLIENT ? null : ip,
     user_agent: userAgent ? userAgent.slice(0, USER_AGENT_MAX_LENGTH) : null,

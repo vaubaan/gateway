@@ -266,6 +266,15 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       rig.seeded.bob.id,
     ),
   ),
+  'users.handlers.endSessions': form('operator', 303, (rig, headers) =>
+    rig.root.users.handlers.endSessions(
+      post(`/admin/users/${rig.seeded.bob.id}/end-sessions`, headers, {}),
+      rig.seeded.bob.id,
+    ),
+  ),
+  'users.handlers.signOutEverywhere': form('user', 303, (rig, headers) =>
+    rig.root.users.handlers.signOutEverywhere(post('/logout/everywhere', headers, {})),
+  ),
   'users.handlers.reactivate': form('operator', 303, (rig, headers) =>
     rig.root.users.handlers.reactivate(post('/admin/users/none/reactivate', headers, {}), 'none'),
   ),

@@ -11,6 +11,7 @@ tracks:
   - plugins/vercel/src/data-model.ts
   - plugins/vercel/src/execute.ts
   - plugins/vercel/src/redact.ts
+  - plugins/vercel/src/project-redact.ts
   - plugins/vercel/src/risk-catalog.yaml
   - plugins/vercel/src/tools.ts
   - plugins/vercel/src/upstream-tools.json
@@ -293,6 +294,17 @@ the list against the schemas, so a tool added later is covered or fails.
   `contentHint`, a field Vercel adds tomorrow) becomes
   `[redacted by Vaubaan]`. With `decrypt=true` (`read-env-var-plaintext`,
   `data: secret`) the answer is returned as it is.
+- `get_project` and `list_projects` (`src/project-redact.ts`, SEC 2026-10-15
+  re-check H-1) are `read-account` (`data: metadata`), yet Vercel's project
+  object carries `env[]` with values and `link.deployHooks[].url` (a URL that
+  triggers a deploy). Every text part of the upstream answer is parsed and
+  filtered, and the `structuredContent` too: the project keeps an allow-list of
+  descriptive fields (`PROJECT_PUBLIC_FIELDS`: id, name, framework, commands,
+  directories, dates, `latestDeployments`, `targets`…), any other field holding
+  a value becomes `[redacted by Vaubaan]`; `env` entries go through
+  `ENV_VAR_PUBLIC_FIELDS`; `link` keeps `PROJECT_LINK_FIELDS` and each deploy
+  hook its id, name and ref, never its URL. A text part that is not JSON is
+  replaced whole (fail closed); `pagination` of a listing is kept.
 - Argument pinning (`pinArgs`, no network): an unknown tool and the five
   thread-addressed tools are refused; `teamId` is checked against the
   credential (§4); the project is resolved by `resolveProject`, the function

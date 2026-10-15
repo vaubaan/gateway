@@ -13,10 +13,10 @@ import { SettingsFrame } from '@/components/shell/AppShell';
 import { ADMIN_PAGES } from '@/components/shell/settings-nav';
 import { ThemeChoiceControl } from '@/components/shell/ThemeToggle';
 import { isOperatorPrincipal } from '@/components/auth/principal';
-import { ButtonLink, PageHeader, Row, Rows, Section } from '@/components/ui';
+import { Button, ButtonLink, PageHeader, Row, Rows, Section } from '@/components/ui';
 import { requirePrincipal } from '@/lib/auth/session';
 import { currentTheme } from '@/lib/theme-server';
-import { PAGES, ROUTES, SECTIONS, THEME_WORDS } from '@/lib/vocabulary';
+import { ACTIONS, PAGES, ROUTES, SECTIONS, THEME_WORDS } from '@/lib/vocabulary';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,6 +45,20 @@ export default async function SettingsPage() {
               </ButtonLink>
             }
           />
+          {principal.kind === 'user' && (
+            <Row
+              title={ACTIONS.signOutEverywhere}
+              description="Ends every session you have open, in every browser, this one included. Your keys, connected apps and missions are not touched. A session also ends after an hour without use."
+              end={
+                <form method="post" action="/logout/everywhere">
+                  <Button type="submit" size="sm" variant="secondary">
+                    {ACTIONS.signOutEverywhere}
+                  </Button>
+                </form>
+              }
+              testId="settings-sign-out-everywhere"
+            />
+          )}
         </Rows>
       </Section>
 

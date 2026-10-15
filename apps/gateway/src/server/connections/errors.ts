@@ -1,8 +1,9 @@
 /**
  * Errors of the connect flows. A `ConnectError` carries a closed code (what the
  * UI keys its sentence on), an HTTP status, and an optional `detail` that is
- * safe to show to the connecting user: the provider's own error message or a
- * validation sentence — never a credential, never a token.
+ * safe to show to the connecting user: a validation sentence, or the provider's
+ * status in the gateway's own words (`providerFailureReason`) — never the
+ * provider's text, never a credential, never a token.
  */
 import type { ConnectionStatus } from '@vaubaan/shared';
 

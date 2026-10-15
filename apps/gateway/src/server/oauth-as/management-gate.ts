@@ -57,7 +57,7 @@ export interface AdmittedDelegation {
 }
 
 export interface ManagementGateDeps {
-  readonly config: Pick<InstanceConfig, 'publicUrl' | 'trustedProxies'>;
+  readonly config: Pick<InstanceConfig, 'publicUrl' | 'trustedProxies' | 'clientIpHeader'>;
   readonly endpoints: OAuthEndpoints;
   readonly verifier: DelegatedTokenVerifier;
   /** Identifies mission tokens, so that one presented here is refused by kind. */
@@ -96,6 +96,7 @@ export class ManagementGate {
     const client = clientOriginOf(request.headers, {
       proxies: this.proxies,
       configured: this.deps.config.trustedProxies.length > 0,
+      edgeHeader: this.deps.config.clientIpHeader,
     });
 
     const authorization = request.headers.get('authorization');

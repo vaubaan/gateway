@@ -6,9 +6,10 @@
  * could read. Two record kinds live in the same store under distinct key
  * prefixes: `session:<id>` (a signed-in user, or the bootstrap operator) and
  * `login:<id>` (a sign-in attempt in flight: its provider, state, nonce, PKCE
- * verifier, return path). TTLs are absolute (no sliding window): a session ends
- * `SESSION_TTL_MS` after sign-in whatever the activity (spec §6 "web sessions
- * are short").
+ * verifier, return path). A session ends `SESSION_TTL_MS` after sign-in whatever
+ * the activity (spec §6 "web sessions are short"), and earlier after
+ * `SESSION_IDLE_MS` without a request: the record carries `seenAt`, written again
+ * at most every `SESSION_TOUCH_MS` (one write per active browser per five minutes).
  *
  * What comes back from the store is `unknown` until a type guard has proven
  * its shape: the rows outlive a restart and an upgrade, and the same store
@@ -25,6 +26,13 @@ const HOUR_MS = 3_600_000;
 const MINUTE_MS = 60_000;
 /** Absolute lifetime of a signed-in session: one working day. */
 export const SESSION_TTL_MS = 8 * HOUR_MS;
+/**
+ * A session nobody used for this long is over, within its absolute lifetime (security
+ * review 2026-10-15, auth L1): a cookie left in an unattended browser stops working.
+ */
+export const SESSION_IDLE_MS = 1 * HOUR_MS;
+/** How stale the recorded last use may get before a request writes it again. */
+export const SESSION_TOUCH_MS = 5 * MINUTE_MS;
 /** How long the browser has to come back from the IdP. */
 export const LOGIN_TTL_MS = 10 * MINUTE_MS;
 const ID_BYTES = 32;
@@ -33,6 +41,8 @@ export interface UserSessionRecord {
   readonly kind: 'user';
   readonly userId: string;
   readonly createdAt: string;
+  /** The last request seen with this session (to `SESSION_TOUCH_MS`); absent on an older record. */
+  readonly seenAt?: string;
   /** What the IdP said at sign-in, for the UI ("test login" result); authority is NOT read from it. */
   readonly login: {
     readonly email: string;
@@ -45,6 +55,7 @@ export interface UserSessionRecord {
 export interface BootstrapSessionRecord {
   readonly kind: 'bootstrap';
   readonly createdAt: string;
+  readonly seenAt?: string;
 }
 
 export type WebSessionRecord = UserSessionRecord | BootstrapSessionRecord;
@@ -89,6 +100,7 @@ function isStringArray(value: unknown): value is readonly string[] {
 
 export function isWebSessionRecord(value: unknown): value is WebSessionRecord {
   if (!isObject(value) || typeof value.createdAt !== 'string') return false;
+  if (value.seenAt !== undefined && typeof value.seenAt !== 'string') return false;
   if (value.kind === 'bootstrap') return true;
   if (value.kind !== 'user' || typeof value.userId !== 'string') return false;
   const { login } = value;
@@ -138,7 +150,23 @@ export class SessionService {
     const id = readCookie(headers, SESSION_COOKIE);
     if (!id) return null;
     const record = await this.readGuarded(sessionKey(id), isWebSessionRecord);
-    return record ? { id, record } : null;
+    if (!record) return null;
+    const now = this.clock.now().getTime();
+    const seen = Date.parse(record.seenAt ?? record.createdAt);
+    if (!Number.isFinite(seen) || now - seen >= SESSION_IDLE_MS) {
+      await this.destroyById(id);
+      return null;
+    }
+    if (now - seen < SESSION_TOUCH_MS) return { id, record };
+    // Written again with what is left of its absolute lifetime: idle use never extends it.
+    const left = Date.parse(record.createdAt) + SESSION_TTL_MS - now;
+    if (left <= 0) {
+      await this.destroyById(id);
+      return null;
+    }
+    const touched: WebSessionRecord = { ...record, seenAt: toIso(new Date(now)) };
+    await this.store.set(sessionKey(id), touched, left);
+    return { id, record: touched };
   }
 
   async destroyById(id: string): Promise<void> {

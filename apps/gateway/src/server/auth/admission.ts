@@ -9,7 +9,8 @@
  *
  *   1. is verified — an explicit "unverified" is refused earlier (`mapClaims`);
  *      an open provider must say "verified" outright, since anyone can hold an
- *      account there and claim any address;
+ *      account there and claim any address; so must a company directory set
+ *      with `require_verified_email` (Entra ID: `xms_edov`);
  *   2. and is in a domain the provider allows, or is invited, or is one of the
  *      admin emails (the configuration names those people);
  *   3. or the provider is a company directory with no allowed domain and not
@@ -36,6 +37,11 @@ export interface AdmissionContext {
 
 export type AdmissionReason = 'everyone-of-the-directory' | 'domain' | 'invitation' | 'admin-email';
 
+/** A company directory whose configuration asks for a verified email (`require_verified_email`). */
+function requiresVerifiedEmail(provider: SignInProvider): boolean {
+  return provider.kind === 'oidc' && provider.requireVerifiedEmail === true;
+}
+
 function domainOf(email: string): string {
   const at = email.lastIndexOf('@');
   return at >= 0 ? email.slice(at + 1).toLowerCase() : '';
@@ -52,6 +58,12 @@ export async function admit(
     throw new LoginError(
       'email-not-verified',
       `provider '${provider.id}' is open to anyone and did not say it verified the email of subject '${identity.subject}'`,
+    );
+  }
+  if (requiresVerifiedEmail(provider) && identity.emailVerified !== true) {
+    throw new LoginError(
+      'email-not-verified',
+      `provider '${provider.id}' requires a verified email and did not say it verified the email of subject '${identity.subject}'`,
     );
   }
   if (admitsEveryone(provider)) return 'everyone-of-the-directory';

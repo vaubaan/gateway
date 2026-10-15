@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 /**
- * Bundles the v4 importer (`apps/gateway/src/server/import-v4/main.ts`) into one ES module
- * placed inside the standalone output, beside `server.js`:
+ * Bundles the operator commands into one ES module each, placed inside the
+ * standalone output, beside `server.js`:
  *
- *   .next/standalone/apps/gateway/import-v4.mjs
+ *   .next/standalone/apps/gateway/import-v4.mjs   (src/server/import-v4/main.ts)
+ *   .next/standalone/apps/gateway/reseal.mjs      (src/server/reseal/main.ts)
+ *   .next/standalone/apps/gateway/backup.mjs      (src/server/backup/main.ts)
  *
  * The image copies the standalone tree whole (deploy/docker/Dockerfile), so
- * the command ships with the server, at `/app/apps/gateway/import-v4.mjs`
- * (ADR import-from-v4-one-shot-importer D1).
+ * the commands ship with the server, at `/app/apps/gateway/<name>.mjs`
+ * (ADR import-from-v4-one-shot-importer D1, ADR master-key-rotation-reseals-every-blob).
  *
  * - The native addons stay external: they are already in the standalone
  *   `node_modules` because the server needs them (better-sqlite3, argon2,
@@ -33,14 +35,20 @@ import { build } from 'esbuild';
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const appDir = resolve(repoRoot, 'apps/gateway');
 const standaloneApp = resolve(appDir, '.next/standalone/apps/gateway');
-const outfile = resolve(standaloneApp, 'import-v4.mjs');
+
+/** Each command: its entry in the source tree and the file it becomes. */
+const COMMANDS = [
+  { entry: 'src/server/import-v4/main.ts', out: 'import-v4.mjs' },
+  { entry: 'src/server/reseal/main.ts', out: 'reseal.mjs' },
+  { entry: 'src/server/backup/main.ts', out: 'backup.mjs' },
+];
 
 /** Native addons the standalone output already carries; never bundled. */
 const EXTERNAL = ['better-sqlite3', 'argon2', 'ssh2', 'cpu-features'];
 
 if (!existsSync(standaloneApp)) {
   console.error(
-    `build-import-v4: ${relative(repoRoot, standaloneApp)} is missing: run next build first`,
+    `build-commands: ${relative(repoRoot, standaloneApp)} is missing: run next build first`,
   );
   process.exit(1);
 }
@@ -66,22 +74,25 @@ const keepModuleUrl = {
   },
 };
 
-await build({
-  entryPoints: [resolve(appDir, 'src/server/import-v4/main.ts')],
-  outfile,
-  bundle: true,
-  platform: 'node',
-  format: 'esm',
-  target: 'node20',
-  tsconfig: resolve(appDir, 'tsconfig.json'),
-  external: EXTERNAL,
-  plugins: [keepModuleUrl],
-  // CommonJS dependencies call require(); an ES module has none of its own.
-  banner: {
-    js: "import { createRequire as __vaubaanCreateRequire } from 'node:module'; const require = __vaubaanCreateRequire(import.meta.url);",
-  },
-  // Licence notices of the bundled packages are kept, at the end of the file.
-  legalComments: 'eof',
-  logLevel: 'warning',
-});
-console.log(`build-import-v4: ${relative(repoRoot, outfile)}`);
+for (const command of COMMANDS) {
+  const outfile = resolve(standaloneApp, command.out);
+  await build({
+    entryPoints: [resolve(appDir, command.entry)],
+    outfile,
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    target: 'node20',
+    tsconfig: resolve(appDir, 'tsconfig.json'),
+    external: EXTERNAL,
+    plugins: [keepModuleUrl],
+    // CommonJS dependencies call require(); an ES module has none of its own.
+    banner: {
+      js: "import { createRequire as __vaubaanCreateRequire } from 'node:module'; const require = __vaubaanCreateRequire(import.meta.url);",
+    },
+    // Licence notices of the bundled packages are kept, at the end of the file.
+    legalComments: 'eof',
+    logLevel: 'warning',
+  });
+  console.log(`build-commands: ${relative(repoRoot, outfile)}`);
+}

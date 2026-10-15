@@ -20,6 +20,7 @@ export const LOGIN_ERROR_CODES = [
   'account-deactivated',
   'bootstrap-refused',
   'bootstrap-unavailable',
+  'too-many-attempts',
 ] as const;
 export type LoginErrorCode = (typeof LOGIN_ERROR_CODES)[number];
 
@@ -52,6 +53,8 @@ export const LOGIN_ERROR_MESSAGES: Readonly<Record<LoginErrorCode, string>> = {
     'This account was deactivated on this gateway by an administrator. Ask an administrator to reactivate it.',
   'bootstrap-refused': 'The bootstrap token was not accepted.',
   'bootstrap-unavailable': 'Bootstrap sign-in is no longer available on this gateway.',
+  'too-many-attempts':
+    'Too many sign-in attempts reached this gateway in the last minutes. Wait a few minutes, then try again.',
 };
 
 export class LoginError extends Error {

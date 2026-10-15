@@ -169,6 +169,9 @@ export type AdminAct =
   | 'user-deactivated'
   /** An operator let a deactivated user sign in again. Object: the user. */
   | 'user-reactivated'
+  /** Every web session of a user was ended ("sign out everywhere"): by the user,
+   *  or by an operator for them. Nothing else changes. Object: the user. */
+  | 'user-sessions-ended'
   /** An administrator allowed an email address to sign in (spec §0 "Invitation").
    *  Object: `instance-config` / `invitations`; `after.email` is the address. */
   | 'invitation-added'

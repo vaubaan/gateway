@@ -641,6 +641,21 @@ export const INVARIANTS: readonly Invariant[] = [
     ],
   },
   {
+    id: 'no-secret-in-a-build-upload',
+    statement:
+      'The image build context and the upload of `railway up` both exclude env files, keys, the mounted YAML configuration and the agent and operator directories.',
+    source: 'security review 2026-10-15 (secrets-and-infra M5); deploy/railway.md §5',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/upload-ignore-files.test.ts`,
+        tests: [
+          'build uploads exclude every secret-bearing path',
+          '.railwayignore excludes the root env files explicitly too',
+        ],
+      },
+    ],
+  },
+  {
     id: 'base-images-pinned',
     statement:
       'Every base image is pinned by full version and digest, the documentation quotes the pinned versions, and the refresh procedure is written down.',

@@ -17,6 +17,12 @@
 # 10. v4 importer shipped       -> apps/gateway/import-v4.mjs loads in the image, refuses root,
 #                                 runs as 10001 through the entrypoint, and opens the instance
 #                                 (a configured dry run refuses an unknown owner) (handbook import-from-v4)
+# 11. reseal shipped            -> apps/gateway/reseal.mjs loads in the image, refuses root, and a
+#                                 dry run through the entrypoint opens the instance's store
+#                                 (handbook configuration, "Rotating the master key")
+# 12. backup shipped            -> apps/gateway/backup.mjs refuses root, and through the entrypoint
+#                                 writes a copy of the store on /data that passes integrity_check
+#                                 (handbook store, "Backup")
 #
 # Optional expectations, set by the release pipeline (.github/workflows/release.yml),
 # which knows what it built:
@@ -230,5 +236,37 @@ configured=$?
 set -e
 [ "$configured" -eq 67 ] || fail "the importer's configured dry run exited $configured, expected 67 (owner unknown)"
 pass "the v4 importer opens the instance inside the image (configured dry run, unknown owner refused)"
+
+# 11. The master-key re-seal ships beside the server, refuses root, and its dry run
+#     opens the store as 10001 (the procedure of docs/handbook/configuration.md).
+help="$(docker exec "$NAME" node apps/gateway/reseal.mjs --help 2>&1)" \
+  || fail "reseal does not run inside the image:\n$help"
+grep -qF -- '--apply' <<<"$help" || fail "reseal printed no usage:\n$help"
+set +e
+docker exec -u 0 "$ROOT_NAME" node apps/gateway/reseal.mjs >/dev/null 2>&1
+as_root=$?
+dry="$(docker exec -u 0 "$ROOT_NAME" vaubaan-entrypoint node apps/gateway/reseal.mjs 2>&1)"
+dropped=$?
+set -e
+[ "$as_root" -eq 77 ] || fail "reseal run as root exited $as_root, expected 77"
+[ "$dropped" -eq 0 ] || fail "reseal's dry run through the entrypoint exited $dropped, expected 0:\n$dry"
+grep -qF 'dry run' <<<"$dry" || fail "reseal's dry run printed no report:\n$dry"
+pass "reseal ships, refuses root, and its dry run opens the store as 10001"
+
+# 12. The backup ships beside the server, refuses root, and copies the store on
+#     /data as 10001 with an integrity check (deploy/railway.md §6, §8 step 0).
+set +e
+docker exec -u 0 "$ROOT_NAME" node apps/gateway/backup.mjs >/dev/null 2>&1
+as_root=$?
+copied="$(docker exec -u 0 "$ROOT_NAME" vaubaan-entrypoint node apps/gateway/backup.mjs smoke-backup.sqlite 2>&1)"
+backed=$?
+again="$(docker exec -u 0 "$ROOT_NAME" vaubaan-entrypoint node apps/gateway/backup.mjs smoke-backup.sqlite 2>&1)"
+twice=$?
+set -e
+[ "$as_root" -eq 77 ] || fail "backup run as root exited $as_root, expected 77"
+[ "$backed" -eq 0 ] || fail "backup through the entrypoint exited $backed, expected 0:\n$copied"
+grep -qF 'integrity_check: ok' <<<"$copied" || fail "backup printed no integrity check:\n$copied"
+[ "$twice" -eq 73 ] || fail "a second backup to the same name exited $twice, expected 73:\n$again"
+pass "backup ships, refuses root, copies the store as 10001 and never overwrites"
 
 echo "SMOKE PASSED"

@@ -249,7 +249,10 @@ staging, prod]`) except `create-database`, which is account-rooted (the
 - Management API answers about a database are redacted (`rest_token`,
   `read_only_rest_token`, `password`, and any field whose name ends in
   `token`, `password`, `secret` or `_key` — `CREDENTIAL_LIKE_FIELD`, so a
-  credential Upstash adds later is stripped too) before reaching the agent.
+  credential Upstash adds later is stripped too) before reaching the agent,
+  at any depth (a credential nested in an object is caught by its name too).
+  `get_database` also asks Upstash to leave them out (`?credentials=hide`);
+  the plain read stays for the data tools, which need `rest_token`.
 - The database is resolved by the classifier's own `resolveDatabase` (§2):
   a `databaseId` that is not one path segment or not a mission resource, or
   a data tool on a mission holding several databases without `databaseId`,

@@ -42,6 +42,7 @@ import type { Clock } from '../store/clock';
 import type { ConnectionRecord, ProviderGrantOutcome } from '../store/types';
 import { parseSecret, serializeSecret } from './credential-codec';
 import { ConnectionUnavailableError, errorMessage, ProviderUnreachableError } from './errors';
+import { providerFailureReason } from './failure-reason';
 import {
   OAuth2TokenError,
   refreshGrant,
@@ -332,7 +333,7 @@ export class CredentialBroker {
       if (!(err instanceof UpstreamAuthError)) {
         if (err instanceof ProviderUnreachableError) throw err;
         throw new ProviderUnreachableError(
-          `${plugin.displayName}: the credential could not be refreshed (${errorMessage(err)})`,
+          `${plugin.displayName}: the credential could not be refreshed (${providerFailureReason(err)})`,
         );
       }
       const status = err.upstreamStatus;
@@ -341,7 +342,7 @@ export class CredentialBroker {
         connection_id: connectionId,
         provider: plugin.id,
         marked_expired: expired,
-        detail: errorMessage(err),
+        failure: providerFailureReason(err),
       });
       throw new UpstreamAuthError(
         `${plugin.displayName} rejected the credential of this connection and it could not be refreshed: ${errorMessage(err)}`,

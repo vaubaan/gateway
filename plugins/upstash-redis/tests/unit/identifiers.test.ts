@@ -177,7 +177,9 @@ describe('the database — a segment of the Management API path', () => {
       const management = fetch.calls.filter((c) => c.url.startsWith(UPSTASH_MANAGEMENT_API));
       expect(management).toHaveLength(1);
       expect(management[0]!.url).toMatch(
-        new RegExp(`^${UPSTASH_MANAGEMENT_API}/redis/(database|rename|stats)/${DATABASE_ID}$`),
+        new RegExp(
+          `^${UPSTASH_MANAGEMENT_API}/redis/(database|rename|stats)/${DATABASE_ID}(\\?credentials=hide)?$`,
+        ),
       );
       // What a URL parser resolves is what was written : nothing is collapsed.
       expect(new URL(management[0]!.url).href).toBe(management[0]!.url);
@@ -197,7 +199,7 @@ describe('the database — a segment of the Management API path', () => {
       args,
     );
     expect(fetch.calls.map((c) => c.url)).toEqual([
-      `${UPSTASH_MANAGEMENT_API}/redis/database/${DATABASE_ID}`,
+      `${UPSTASH_MANAGEMENT_API}/redis/database/${DATABASE_ID}?credentials=hide`,
     ]);
   });
 

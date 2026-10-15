@@ -1,4 +1,6 @@
 # Build context for deploy/docker/Dockerfile (repository root).
+# The upload of `railway up` has its own list, .railwayignore; both are checked by
+# apps/gateway/tests/unit/structural/upload-ignore-files.test.ts.
 .git
 .github
 .husky
@@ -35,6 +37,10 @@ node_modules
 **/.env.*
 !**/.env.example
 **/*.pem
+**/*.key
+**/id_rsa*
+**/id_ed25519*
+**/id_ecdsa*
 deploy/config/gateway.yaml
 
 docs

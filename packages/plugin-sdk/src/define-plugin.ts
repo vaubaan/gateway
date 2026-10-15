@@ -62,6 +62,7 @@ export function pluginIssues(plugin: ProviderPlugin): string[] {
     ...hookIssues(plugin),
     ...tokenHandoutIssues(plugin),
     ...gitRemoteIssues(plugin),
+    ...toolReasonIssues(plugin.unboundTools, declaredToolNames(plugin), 'unboundTools'),
   ];
 }
 
@@ -397,7 +398,7 @@ function oneSpecIssues(plugin: ProviderPlugin, spec: CredentialSpec, at: string)
   if (!isRecord(spec) || typeof spec.kind !== 'string') return issues;
   // The git remote's tools need permissions on a token too.
   const tools = declaredToolNames(plugin);
-  issues.push(...unavailableToolsIssues(spec.unavailableTools, tools, at));
+  issues.push(...toolReasonIssues(spec.unavailableTools, tools, `${at}.unavailableTools`));
   if (
     spec.manualRevocation !== undefined &&
     !isSentence(spec.manualRevocation, PLUGIN_MANUAL_REVOCATION_MAX_LENGTH)
@@ -421,19 +422,15 @@ function oneSpecIssues(plugin: ProviderPlugin, spec: CredentialSpec, at: string)
   return issues;
 }
 
-function unavailableToolsIssues(
-  unavailable: unknown,
-  tools: ReadonlySet<unknown>,
-  at: string,
-): string[] {
-  if (unavailable === undefined) return [];
-  if (!isRecord(unavailable)) return [`${at}.unavailableTools: expected a record tool → reason`];
+/** A record tool → one sentence (`unavailableTools`, `unboundTools`): every key a tool of the plugin. */
+function toolReasonIssues(reasons: unknown, tools: ReadonlySet<unknown>, label: string): string[] {
+  if (reasons === undefined) return [];
+  if (!isRecord(reasons)) return [`${label}: expected a record tool → reason`];
   const issues: string[] = [];
-  for (const [tool, reason] of Object.entries(unavailable)) {
-    if (!tools.has(tool))
-      issues.push(`${at}.unavailableTools: '${tool}' is not a tool of this plugin`);
+  for (const [tool, reason] of Object.entries(reasons)) {
+    if (!tools.has(tool)) issues.push(`${label}: '${tool}' is not a tool of this plugin`);
     if (!isSentence(reason, CREDENTIAL_SENTENCE_MAX_LENGTH)) {
-      issues.push(`${at}.unavailableTools.${tool}: expected one sentence saying why`);
+      issues.push(`${label}.${tool}: expected one sentence saying why`);
     }
   }
   return issues;

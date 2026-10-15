@@ -5,6 +5,7 @@
  * docs/handbook/authentication.md, "Deactivating a user".
  */
 import type { Authenticator } from '../auth/authenticator';
+import type { SessionService } from '../auth/session-service';
 import type { MembershipSettler } from '../authority';
 import type { InstanceConfig } from '../config/types';
 import type { ConnectionsModule } from '../connections';
@@ -25,6 +26,8 @@ export interface UsersModuleDeps {
   readonly memberTokens: Pick<MissionTeamService, 'revokeTokensOfDeactivated'>;
   readonly connections: Pick<ConnectionsModule, 'notices'>;
   readonly authenticator: Authenticator;
+  /** The web sessions: "sign out everywhere" clears the cookie of the browser it comes from. */
+  readonly sessions: Pick<SessionService, 'destroy'>;
   readonly logger: Logger;
   readonly clock?: Clock;
 }
@@ -56,6 +59,7 @@ export function createUsersModule(deps: UsersModuleDeps): UsersModule {
   const handlers = createUserAdminHandlers({
     publicUrl: deps.config.publicUrl,
     authenticator: deps.authenticator,
+    sessions: deps.sessions,
     users: service,
     invitations,
     notices: deps.connections.notices,

@@ -1169,6 +1169,9 @@ const RULES: Readonly<Record<string, Rule>> = {
   },
   'BootstrapService.state': READ,
   'BootstrapService.verify': READ,
+  'BootstrapService.recordMiss': exempt(
+    'counts a wrong bootstrap token presented anonymously (no actor to name); at the threshold it revokes the token through revoke(), which the instance logs at error',
+  ),
   'BootstrapService.revoke': {
     kind: 'mutation',
     target: (root) => root.auth.bootstrap,
@@ -1233,6 +1236,16 @@ const RULES: Readonly<Record<string, Rule>> = {
         rig.alice.user.id,
       ),
     writes: { act: 'user-reactivated', object: 'user', actor: 'operator' },
+  },
+  'UserAdminService.endSessions': {
+    kind: 'mutation',
+    target: (root) => root.users.service,
+    drive: async (rig) =>
+      rig.root.users.handlers.endSessions(
+        await rig.operatorPost(`/admin/users/${rig.alice.user.id}/end-sessions`, {}),
+        rig.alice.user.id,
+      ),
+    writes: { act: 'user-sessions-ended', object: 'user', actor: 'operator' },
   },
 
   // ── telemetry (the entry is written by the Administration handler) ────────
@@ -1465,6 +1478,7 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'share-revoked',
       'user-deactivated',
       'user-reactivated',
+      'user-sessions-ended',
     ]);
   });
 

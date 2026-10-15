@@ -22,7 +22,7 @@ import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import { ConnectionUnavailableError, type CredentialBroker } from '../connections';
 import type { ConnectionCredentialCache } from '../execution';
-import type { Logger } from '../logging';
+import { errorFields, type Logger } from '../logging';
 import type { PendingRefRecord, PendingRefsRepo } from '../store';
 import type { Clock } from '../store/clock';
 import { deleteTemporaryRefs, errorName } from './temporary-refs';
@@ -127,9 +127,7 @@ export function startPendingRefSweeper(deps: PendingRefSweeperDeps): PendingRefS
       }
       return dropped;
     } catch (err) {
-      deps.logger.error('temporary ref sweep failed', {
-        error: err instanceof Error ? err.message : String(err),
-      });
+      deps.logger.error('temporary ref sweep failed', errorFields(err));
       return 0;
     } finally {
       running = false;
