@@ -608,6 +608,13 @@ function readSignInProvider(r: Reader, id: string, base: string): SignInProvider
   const allowedEmailDomains = normalizeDomainsAt(r, `${base}.allowed_email_domains`);
   const invitationOnly = r.bool({ path: `${base}.invitation_only`, default: false });
   if (kind === 'github') {
+    if (r.has(`${base}.require_verified_email`)) {
+      r.issues.add(
+        `${base}.require_verified_email`,
+        'a GitHub provider admits the primary verified address only: the option does not apply',
+        envNamesFor(`${base}.require_verified_email`),
+      );
+    }
     if (r.has(`${base}.claims`)) {
       r.issues.add(
         `${base}.claims`,
@@ -638,7 +645,10 @@ function readSignInProvider(r: Reader, id: string, base: string): SignInProvider
     sub: r.string(`${base}.claims.sub`, { fallback: 'sub' }) ?? 'sub',
     email: r.string(`${base}.claims.email`, { fallback: 'email' }) ?? 'email',
     groups: r.string(`${base}.claims.groups`, { fallback: 'groups' }) ?? 'groups',
+    emailVerified:
+      r.string(`${base}.claims.email_verified`, { fallback: 'email_verified' }) ?? 'email_verified',
   };
+  const requireVerifiedEmail = r.bool({ path: `${base}.require_verified_email`, default: false });
   const name = r.string(`${base}.name`, { fallback: issuer?.hostname ?? id }) ?? id;
   if (kind !== 'oidc' || r.issues.items.length > before || !issuer || !clientId || !clientSecret) {
     return null;
@@ -653,6 +663,7 @@ function readSignInProvider(r: Reader, id: string, base: string): SignInProvider
     claims,
     allowedEmailDomains,
     invitationOnly,
+    requireVerifiedEmail,
   };
 }
 

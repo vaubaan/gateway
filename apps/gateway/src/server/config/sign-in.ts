@@ -58,6 +58,14 @@ export interface OidcSignInProvider extends SignInProviderBase {
   /** Discovery runs against `<issuer>/.well-known/openid-configuration`. */
   readonly issuer: URL;
   readonly claims: IdpClaimMapping;
+  /**
+   * Admit only an email the provider says it verified (`claims.email_verified` is
+   * `true`), as for an open provider, although this one is a company directory. For
+   * an admin rule by email on Entra ID, whose `email` claim a tenant's user
+   * administrators can set to anything (ADR verified-email-for-a-company-directory).
+   * Absent: `false`.
+   */
+  readonly requireVerifiedEmail?: boolean;
 }
 
 export interface GithubSignInProvider extends SignInProviderBase {

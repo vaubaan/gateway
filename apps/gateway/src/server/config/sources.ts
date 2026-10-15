@@ -87,8 +87,10 @@ export const SIGN_IN_FIELDS = [
   { field: 'claims.sub', env: 'CLAIM_SUB', kind: 'string' },
   { field: 'claims.email', env: 'CLAIM_EMAIL', kind: 'string' },
   { field: 'claims.groups', env: 'CLAIM_GROUPS', kind: 'string' },
+  { field: 'claims.email_verified', env: 'CLAIM_EMAIL_VERIFIED', kind: 'string' },
   { field: 'allowed_email_domains', env: 'ALLOWED_EMAIL_DOMAINS', kind: 'list' },
   { field: 'invitation_only', env: 'INVITATION_ONLY', kind: 'bool' },
+  { field: 'require_verified_email', env: 'REQUIRE_VERIFIED_EMAIL', kind: 'bool' },
 ] as const satisfies readonly {
   readonly field: string;
   readonly env: string;

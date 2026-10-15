@@ -23,6 +23,11 @@ export interface IdpClaimMapping {
   readonly email: string;
   /** Claim carrying the group list (array or delimited string, resolved at sign-in). */
   readonly groups: string;
+  /**
+   * Claim saying the provider verified the email (`true`). Absent: `email_verified`
+   * (OpenID Connect Core §5.1). Entra ID: `xms_edov` ("email domain owner verified").
+   */
+  readonly emailVerified?: string;
 }
 
 export interface IdpConfig {

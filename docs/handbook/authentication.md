@@ -187,6 +187,26 @@ directory's administrators. As a floor, a sign-in whose claims say
 below), so an address the IdP itself calls unproven never decides operator
 status nor passes the domain filter.
 
+**Entra ID: make the admin rule a group, by object id.** Entra ID sends no
+`email_verified`, and the `email` claim of a member is the directory's `mail`
+attribute, which a tenant's User Administrators (not only its Global
+Administrators) can set to any address — including the one in
+`admin.emails`. On an Entra provider, set
+`VAUBAAN_ADMIN_GROUP=<provider id>:<group object id>` (the GUID Entra puts in
+the `groups` claim; assign the group to the application, Token configuration →
+groups claim → "Groups assigned to the application") and keep `admin.emails`
+empty or as a break-glass list. If an email rule must stay, request the
+optional claims `email` and `xms_edov` in the app registration and set
+`sign_in.<id>.claims.email_verified: xms_edov` with
+`sign_in.<id>.require_verified_email: true`
+(`VAUBAAN_SIGN_IN_<ID>_CLAIM_EMAIL_VERIFIED`,
+`VAUBAAN_SIGN_IN_<ID>_REQUIRE_VERIFIED_EMAIL`): the provider is then admitted
+like an open one, on a verified email only, and `xms_edov` is true only for an
+address in a domain the tenant verified (ADR
+[verified-email-for-a-company-directory](../decisions/verified-email-for-a-company-directory.md)).
+Both are off by default; they exist for OIDC providers (a GitHub provider always
+gives the primary verified address).
+
 ## Sign-in providers
 
 An instance offers zero, one or several sign-in providers
@@ -244,7 +264,9 @@ refusal creates no user, syncs no group and revokes no bootstrap token.
    `https://login.microsoftonline.com/{common,organizations,consumers}/v2.0`
    and the personal-accounts tenant `9188040d-6c67-4c5b-b112-36a304b66dad` —
    must say the email is verified (`emailVerified: true`), else
-   `email-not-verified`.
+   `email-not-verified`. So must an OIDC provider set with
+   `require_verified_email: true`; its verification claim is
+   `claims.email_verified` (default `email_verified`; Entra ID: `xms_edov`).
 2. A company directory with no domain and not `invitationOnly` admits everyone
    it signs in (`everyone-of-the-directory`; never an open provider: the
    loader and `save` refuse such a provider).

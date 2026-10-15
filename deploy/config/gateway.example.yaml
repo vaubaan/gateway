@@ -130,6 +130,12 @@
 #       sub: sub
 #       email: email
 #       groups: groups
+#       # The claim that says the email is verified. Entra ID sends no
+#       # email_verified: request the optional claim xms_edov and name it here.
+#       email_verified: xms_edov
+#     # Admit a verified email only, as on an open provider. Set it when the
+#     # admin rule uses emails on Entra ID (better: an admin group by object id).
+#     require_verified_email: true
 #     allowed_email_domains:
 #       - partner.example.com
 
