@@ -63,6 +63,7 @@ import {
   VERCEL_ENVS,
 } from './classify.ts';
 import { vercelAuth } from './credential.ts';
+import { redactEncryptedEnvListing } from './redact.ts';
 import {
   ADD_DOMAIN,
   DELETE_ENV_VAR,
@@ -583,8 +584,16 @@ async function executeCustom(
     return callRest(call, 'POST', `/v10/projects/${project}/env`, query, body);
   }
   if (tool === LIST_ENV_VARS) {
-    if (args.decrypt === true) query.decrypt = 'true';
-    return callRest(call, 'GET', `/v10/projects/${project}/env`, query, null);
+    // `decrypt=true` is the plaintext read (`read-env-var-plaintext`,
+    // `data: secret`) : the answer is the point. Without it, the risk is the
+    // keys only, and `plain` vars would come back in clear : redact.
+    if (args.decrypt === true) {
+      query.decrypt = 'true';
+      return callRest(call, 'GET', `/v10/projects/${project}/env`, query, null);
+    }
+    return redactEncryptedEnvListing(
+      await callRest(call, 'GET', `/v10/projects/${project}/env`, query, null),
+    );
   }
   if (tool === DELETE_ENV_VAR) {
     if (args.id === undefined) {

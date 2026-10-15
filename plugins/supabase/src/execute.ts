@@ -31,6 +31,10 @@
  * `{ref}.supabase.co/auth/v1/admin` or `/storage/v1`. The plugin fetches the
  * project's `service_role` key through the Management API for the duration of
  * the call and never surfaces it (`get_anon_key` strips it from its answer).
+ *
+ * Project secrets : the edge-function secrets listing and the auth config
+ * answer with secret values ; `redact.ts` replaces each by a fixed marker
+ * (allow-list of non-secret fields), so no Supabase read returns one.
  */
 
 import {
@@ -50,6 +54,7 @@ import {
   tableSchemas,
   type ToolIdentifiers,
 } from './classify.ts';
+import { redactAuthConfig, redactFunctionSecrets } from './redact.ts';
 import { supabaseBearerOf } from './token.ts';
 import { SUPABASE_TOOL_NAMES } from './tools.ts';
 
@@ -308,13 +313,17 @@ async function callSupabase(
       });
 
     // ─── auth (Management API side) ─────────────────────────────────────────
+    // The auth config carries the project's OAuth client secrets, SMTP
+    // password, hook secrets… : `redactAuthConfig` keeps the settings only.
     case 'supabase__get_auth_config':
-      return mgmt(`/projects/${ref}/config/auth`);
+      return redactAuthConfig(await mgmt(`/projects/${ref}/config/auth`));
     case 'supabase__update_auth_config':
-      return mgmt(`/projects/${ref}/config/auth`, {
-        method: 'PATCH',
-        body: JSON.stringify(args.config ?? {}),
-      });
+      return redactAuthConfig(
+        await mgmt(`/projects/${ref}/config/auth`, {
+          method: 'PATCH',
+          body: JSON.stringify(args.config ?? {}),
+        }),
+      );
     case 'supabase__list_sso_providers':
       return mgmt(`/projects/${ref}/config/auth/sso/providers`);
     case 'supabase__get_sso_provider':
@@ -376,7 +385,8 @@ async function callSupabase(
         },
       );
     case 'supabase__list_function_secrets':
-      return mgmt(`/projects/${ref}/secrets`);
+      // Supabase answers `{ name, value, updated_at }` : names and dates only.
+      return redactFunctionSecrets(await mgmt(`/projects/${ref}/secrets`));
     case 'supabase__create_function_secrets':
       return mgmt(`/projects/${ref}/secrets`, {
         method: 'POST',

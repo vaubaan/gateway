@@ -65,4 +65,11 @@ export {
   SUPABASE_OAUTH_TOKEN_URL,
 } from './credential.ts';
 export { MAX_DISCOVERED_PROJECTS, SUPABASE_API_BASE, projectUrl } from './execute.ts';
+export {
+  AUTH_CONFIG_PUBLIC_FIELDS,
+  FUNCTION_SECRET_PUBLIC_FIELDS,
+  REDACTED_VALUE,
+  redactAuthConfig,
+  redactFunctionSecrets,
+} from './redact.ts';
 export { supabaseBearerOf, supabaseTokenCredential, verifySupabaseToken } from './token.ts';

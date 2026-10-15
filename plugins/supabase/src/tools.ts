@@ -122,7 +122,7 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
   {
     name: 'supabase__get_auth_config',
     description:
-      'Get the project auth config (JWT expiry, SMTP, password policy, external providers). Backed by GET /v1/projects/{ref}/config/auth.',
+      'Get the project auth config (JWT expiry, SMTP, password policy, external providers). Secret values (OAuth client secrets, SMTP password, hook secrets, SMS provider tokens) are never returned : the gateway replaces each by a fixed marker. Backed by GET /v1/projects/{ref}/config/auth.',
     inputSchema: { type: 'object', properties: { ...projectArg }, required: ['project_ref'] },
   },
   {
@@ -384,7 +384,7 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
   {
     name: 'supabase__list_function_secrets',
     description:
-      'List the project secret names available to edge functions (values are never returned). Backed by GET /v1/projects/{ref}/secrets.',
+      'List the project secret names available to edge functions, with their update date. Values are never returned : the gateway replaces each by a fixed marker. Backed by GET /v1/projects/{ref}/secrets.',
     inputSchema: { type: 'object', properties: { ...projectArg }, required: ['project_ref'] },
   },
   {

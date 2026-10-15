@@ -2,7 +2,7 @@
 title: Supabase provider — plugin on the v5 SDK
 status: current
 date: 2026-10-13
-last_synced: 2026-10-14
+last_synced: 2026-10-15
 tracks:
   - plugins/supabase/src/token.ts
   - plugins/supabase/src/
@@ -361,6 +361,24 @@ ctx.resources)` — the classifier's function, with the mission's
   project `service_role` key from `/projects/{ref}/api-keys`, then call
   `https://{ref}.supabase.co/{auth|storage}/v1/...` with it as Bearer and
   `apikey`. The key is never returned ; `get_anon_key` strips it.
+- **Answers that carry secrets** (`src/redact.ts`, SEC 2026-10-15 C1) :
+  `list_function_secrets` (`GET /projects/{ref}/secrets`, which answers
+  `{ name, value, updated_at }` — `SUPABASE_SERVICE_ROLE_KEY` and
+  `SUPABASE_DB_URL` among the values) and `get_auth_config` /
+  `update_auth_config` (`/config/auth` : OAuth client secrets, SMTP password,
+  hook secrets, SMS provider tokens, test OTPs) are priced as
+  `supabase.read-data` (resp. the auth-config write), so their answer is
+  redacted before it leaves `execute`. The rule is an **allow-list** of
+  non-secret fields (`FUNCTION_SECRET_PUBLIC_FIELDS` = `name`, `updated_at` ;
+  `AUTH_CONFIG_PUBLIC_FIELDS`, taken from the `AuthConfigResponse_Output`
+  schema of the public OpenAPI document minus every `*_secret`, `*_secrets`,
+  `*_pass`, `*_auth_token`, `*_api_key`, `*_api_secret`, `*_access_key` and
+  `sms_test_otp`) : every other field holding a value — a field Supabase
+  adds tomorrow included — becomes `[redacted by Vaubaan]`. An empty value
+  (`null`, `''`) stays, so an agent still sees whether a secret is set.
+  Reading those values is not modelled ; if it ever is, it is a dedicated
+  `data: secret` risk in no preset. When Supabase adds a non-secret field,
+  add it to the allow-list (it shows as redacted until then).
 - `execute_sql` and `apply_migration` with a `query` that is not a non-blank
   string are an `isError` result without any call ; so is `upload_object`
   without `content_base64`, or with one that is not base64 text. The upload
@@ -428,7 +446,7 @@ through it as before.
 
 ## Tests
 
-`npx vitest run plugins/supabase` — 1740 tests : `plugin.test.ts` (23 : SDK
+`npx vitest run plugins/supabase` — 1756 tests : `plugin.test.ts` (23 : SDK
 kit with samples per tool and `fallbackHits` empty, presets, credential
 spec, execute and discovery against `mockFetch`), `risk-catalog.test.ts`
 (46 : loaded catalog lint, coverage without the fallback, exact risks of the
@@ -446,6 +464,9 @@ preset call by call), `identifier-injection.test.ts` (1337 : hostile values
 in every identifier position of `classify` and `execute`, the dot-segment
 reproductions, one argument per target, legitimate dotted names, the query
 strings and SQL text the plugin builds, the project ref as a host label),
+`redact.test.ts` (8 : no secret value in the answers of
+`list_function_secrets`, `get_auth_config`, `update_auth_config`, an unknown
+field redacted by default, the allow-list holds no secret-looking name),
 `data-model.test.ts` (1).
 
 ## How to debug

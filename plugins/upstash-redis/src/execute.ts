@@ -69,6 +69,13 @@ export const REDACTED_DATABASE_FIELDS: readonly string[] = [
   'password',
 ];
 
+/**
+ * A field name that reads as a credential (SEC 2026-10-15) : stripped too,
+ * so a credential Upstash adds to the database answer tomorrow is not
+ * returned under the `data: metadata` management read.
+ */
+export const CREDENTIAL_LIKE_FIELD = /(token|password|secret|_key)$/i;
+
 /** What one upstream call needs, built from the context. */
 interface UpstashCall {
   readonly fetch: typeof fetch;
@@ -263,7 +270,7 @@ export function redactDatabases(payload: unknown): unknown {
   if (typeof payload !== 'object' || payload === null) return payload;
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(payload as Record<string, unknown>)) {
-    if (!REDACTED_DATABASE_FIELDS.includes(k)) out[k] = v;
+    if (!REDACTED_DATABASE_FIELDS.includes(k) && !CREDENTIAL_LIKE_FIELD.test(k)) out[k] = v;
   }
   return out;
 }
