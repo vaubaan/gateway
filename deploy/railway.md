@@ -131,6 +131,13 @@ local `.env`) and Railway builds it with the Dockerfile. Then open
 `https://<your domain>/healthz` (it answers the version and the commit) and
 sign in.
 
+Never run `railway up` from your working copy: it uploads the directory you
+are in. The repository's `.railwayignore` keeps `.env*`, keys (`*.pem`,
+`*.key`, `id_*`), `.mcp.json`, `deploy/config/gateway.yaml`, `.vaubaan/`,
+`.claude/` and the other agent directories out of that upload as a safety net
+(`.dockerignore` does the same for the image), but a file it does not name
+would still leave your machine; the clean archive above is the procedure.
+
 ## 6. Backups
 
 - **The volume**: use Railway's volume backups, or make a consistent copy
