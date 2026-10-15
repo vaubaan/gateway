@@ -90,14 +90,19 @@ export async function loadMissionContext(
     // Connections are never deleted (revocation keeps the row); a missing one
     // simply gives the mission nothing to call.
     if (!connection) continue;
+    const discovered = await store.connections.listResources(connection.id);
     connections.push({
       ...connectionSummaryOf(connection),
       owner: await ownerOf(store, connection),
       credential_kind: connectionCredentialKind(connection, null),
+      // Any resource it reaches, selected or not, stale or not: the credential still reaches it.
+      hosts_instance: discovered.some((r) =>
+        isSelfResource(selfResources, connection.provider, r.ref),
+      ),
     });
     const selected = new Set(selection.resourceIds);
     if (selected.size === 0) continue;
-    for (const record of await store.connections.listResources(connection.id)) {
+    for (const record of discovered) {
       if (!selected.has(record.id) || isStale(record)) continue;
       if (isSelfResource(selfResources, connection.provider, record.ref)) continue;
       resources.push(missionResourceOf(connection, record));

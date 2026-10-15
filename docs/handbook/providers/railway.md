@@ -82,6 +82,13 @@ Railway project this means:
 - **a label outside the list** (`production`, `prd`, `test`…) — same
   refusals. The four labels above are the only ones the catalog knows.
 
+`railway-agent` is also declared **unbound** (`unboundTools`): on an account that
+can see the project hosting the gateway (`self_resources`, `RAILWAY_PROJECT_ID`) it
+is unavailable whatever the mission — refused before the budget, left out of
+`tools/list`, and the account page says so — since a free-text request to
+Railway's agent cannot be held to the mission's projects (SEC 2026-10-15
+re-check M-1).
+
 The refusal is `risk-not-accepted`, its hint names the risk and says the
 resource has no environment label (or which label it has). The remedy is
 the owner's: label the project on the account's page (Accounts) with one of the four

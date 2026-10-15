@@ -63,7 +63,10 @@ apps/gateway/src/server/execution/      host-agnostic, never imports `next`
   resource-stage.ts   createResourceStage(), citedRefs(), toolUnavailableOn()
                                                                 → resource-not-in-mission; a tool the
                                                                   connection's way cannot run (a token where the
-                                                                  tool needs the company app: `unavailableTools`)
+                                                                  tool needs the company app: `unavailableTools`;
+                                                                  an unbound tool on a connection that reaches
+                                                                  the gateway's own hosting: `unboundTools`,
+                                                                  `hosts_instance`)
                                                                   is a structural refusal, before the budget
   risk-stage.ts       createRiskStage()                         → risk-not-accepted
   scope-caps.ts       ENFORCED_INFRA_LIMIT_KEYS, ENFORCED_CAP_KEYS, unenforcedLimitsOf() — no cap stage; what the catalogs may declare

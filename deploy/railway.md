@@ -71,7 +71,10 @@ in, and a mission with `railway.read-variables` on it would read
 `VAUBAAN_MASTER_KEY` (security review 2026-10-15, H1). The refusal covers the
 project as a mission resource; it does not cover what the Railway credential
 reaches by other means (`railway.agent-action` hands Railway's own agent a
-free-text request), so still prefer **a separate Railway workspace** for the
+free-text request). On an account that can see the gateway's own project,
+Railway's agent (`railway__railway-agent`) is therefore unavailable — refused
+at call time, left out of the tool list, and said on the account page — and
+every other tool stays bound to the mission's projects. Still prefer **a separate Railway workspace** for the
 gateway, and never connect that workspace's token to the gateway itself. To
 protect another resource of the hosting (a backup bucket, a second service),
 list it in `VAUBAAN_SELF_RESOURCES` (`<provider>:<ref>`, comma-separated).

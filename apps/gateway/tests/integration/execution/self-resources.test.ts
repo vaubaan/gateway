@@ -13,6 +13,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { loadMissionContext } from '../../../src/server/execution/mission-context';
 import { issueTokenTo } from '../../../src/server/missions/token-issuer';
 import { mintMissionToken } from '../../../src/server/missions/token';
 import {
@@ -113,6 +114,25 @@ describe('self resources: never reachable by a mission', () => {
     const allowed = await instance.call(mission, 'depot__read_item', { space: 'scratch' });
     expect(allowed.error).toBeUndefined();
     expect(instance.depot.calls.length).toBe(seen + 1);
+  });
+
+  it('marks the connection that reaches it, so its unbound tools are unavailable (re-check M-1)', async () => {
+    const { mission } = await storedWithSelf();
+    const { root } = instance;
+    const token = {
+      id: 't',
+      prefix: 'p',
+      holder: { kind: 'member' as const, userId: instance.ada.id },
+    };
+    const withSelf = await loadMissionContext(
+      root.store,
+      mission,
+      token as never,
+      root.config.selfResources,
+    );
+    expect(withSelf.connections[0]?.hosts_instance).toBe(true);
+    const without = await loadMissionContext(root.store, mission, token as never, []);
+    expect(without.connections[0]?.hosts_instance).toBe(false);
   });
 
   it('is not listed on the mission page nor in the kit', async () => {

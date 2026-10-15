@@ -89,6 +89,9 @@ export type MissionConnection = Pick<Connection, 'id' | 'provider' | 'display_na
    *  way: a tool its way cannot run is refused before the budget and left out
    *  of `tools/list`. Absent or `null`: the plugin's primary way. */
   readonly credential_kind?: CredentialKind | null;
+  /** The connection can reach a resource that hosts this gateway (`self_resources`):
+   *  the plugin's `unboundTools` are unavailable on it. Absent: false. */
+  readonly hosts_instance?: boolean;
 };
 
 /** One resource a mission may touch, hydrated from its selection (spec §0
