@@ -24,6 +24,7 @@ export {
   type InstallVerification,
   type ProviderAppSource,
   type ProviderAppStatus,
+  requiresApp,
 } from './service';
 export { registrationKey, type AppRegistrationRecord } from './service';
 export {

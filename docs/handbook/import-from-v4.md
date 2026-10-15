@@ -183,7 +183,12 @@ the standalone tree), a `require` shim for CommonJS dependencies.
   left out; none left → `nothing-to-issue`. The draft: each connection with
   `resources: { scope: 'selected', resource_ids }` and an explicit policy,
   period daily (`IMPORTED_MISSION_PERIOD_SECONDS`), the v4 expiry. Dry run →
-  `preview` (`would-issue` or `refused` with the issues); apply → `issue`
+  `preview` with `assumedEnvs` — the `to-label` plans by resource id
+  (`plannedEnvs`), read as set over the store's issuance context
+  (`withAssumedEnvs`), never written — so that a mission whose
+  env-qualified risks need a label the same run applies is `would-issue`, as
+  apply then issues it, and not `refused`; `would-issue` or `refused` with the
+  issues; apply → `issue`
   (`issued`, the key collected) inside `provenance.during(tokens/<id>)`.
 
 ### Translating a v4 policy
@@ -313,7 +318,7 @@ drops should come back under approval, 5 uses a day each:
 
 1. Dry run with `--reissue 83e35806-6201-47e5-8f03-c0ae2cd604a4
 --carry-unbudgeted 5`: the mission line reads `would be issued`, then
-   `! previous import <mission id> still active: …`, then one
+   `! previous import [<short id> · <mission id>] still active: …`, then one
    `~ carried under approval: <risk>` per brought-back permission. Other
    drops (denied in v4, outside the owner's authority, unknown,
    environment) are still listed as dropped.
@@ -337,12 +342,18 @@ alone.
   `scripts/export-v4.test.mjs` (arguments, `.env`, v4 decryption against an
   independent v4 sealing, bundle building, SSH rows, the SQL selects no other
   ciphertext).
+- A mission is named in the report by its short id — the last 8 characters,
+  as its page shows it (`shortId`) — and its whole id: `issued [33445566 ·
+0192f3a4-…-112233445566]`, `previous import [… · …] still active`.
 - Integration: `tests/integration/import-v4/import-v4.test.ts` — exporter
   output into the command, real root on `:memory:`, real plugins, fake
   services: dry run, apply, rerun, third run, rejected key, unknown owner,
   root, missing store, invalid bundle; `--carry-unbudgeted` (carried under
   approval, other drops kept); `--reissue` (dry run, apply beside the old
-  mission left active, newest recognised later, unknown id refused).
+  mission left active, newest recognised later, unknown id refused); a dry
+  run whose mission needs a label the run would set (Supabase project
+  labelled `prod` from v4) says `would be issued`, writes no label, and apply
+  agrees. `missions/assumed-envs.test.ts` covers `withAssumedEnvs`.
 - Standalone: `tests/integration/standalone-import-v4.test.ts` runs the
   bundle from `.next/standalone` on a store file (after a build).
 - Container: `deploy/docker/smoke.sh` step 10 — the command ships, refuses

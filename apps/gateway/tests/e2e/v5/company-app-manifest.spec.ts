@@ -96,6 +96,18 @@ test('an administrator creates the GitHub App from Company apps, then is told to
   await page.goto(`/auth/login?return_to=${encodeURIComponent(PAGE)}`);
   await expect(page.getByRole('heading', { name: 'Company apps', level: 1 })).toBeVisible();
 
+  // GitHub also connects with a token: its line says the app is optional, and the note
+  // above the form leads to the token way and its guide.
+  await expect(page.getByRole('row', { name: /GitHub/ }).first()).toContainText(
+    'not registered · optional',
+  );
+  const optional = page.getByTestId('optional-app-github');
+  await expect(optional).toContainText('The company app is optional for GitHub');
+  await expect(optional.getByRole('link', { name: 'Connect GitHub with a token' })).toHaveAttribute(
+    'href',
+    '/accounts/new/github?method=api-key',
+  );
+
   // No App yet: the line opens on creating one, the form by hand one click away.
   const create = page.getByTestId('app-create-github');
   await expect(create).toBeVisible();

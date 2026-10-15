@@ -43,7 +43,7 @@ import {
   type Column,
 } from '@/components/ui';
 import {
-  agoPhrase,
+  agoSentence,
   ANSWERS,
   count,
   delay,
@@ -522,7 +522,7 @@ function ApprovalAnswers({ view }: { view: ApprovalView }) {
 function ApprovalOutcome({ view, now }: { view: ApprovalView; now: Date }) {
   const { request, approval } = view;
   if (request.state === 'open') return null;
-  const when = request.decided_at ? agoPhrase(request.decided_at, now) : '';
+  const when = request.decided_at ? agoSentence(request.decided_at, now) : '';
   const resolution = request.decision?.resolution;
   return (
     <p className={styles.outcome} data-testid="approval-outcome">
@@ -768,7 +768,7 @@ function limitWords(limit: number, periodSeconds: number | null): string {
 function ClaimOutcome({ view, now }: { view: ClaimView; now: Date }) {
   const { request } = view;
   if (request.state === 'open') return null;
-  const when = request.decided_at ? agoPhrase(request.decided_at, now) : '';
+  const when = request.decided_at ? agoSentence(request.decided_at, now) : '';
   const decision = request.decision ?? {};
   const resolution = decision.resolution;
   const amount = typeof decision.amount === 'number' ? decision.amount : null;

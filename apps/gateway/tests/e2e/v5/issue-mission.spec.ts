@@ -299,6 +299,18 @@ test('create a three-account mission on one page, then replace its key and stop 
   expect(await page.content()).not.toContain(token);
   // A running mission is not labelled: only an exception gets a mark beside the title.
   await expect(page.getByTestId('mission-state')).toHaveCount(0);
+  // When it was created, relative, with the instant behind; its short id in the details line.
+  await expect(page.locator('p', { has: page.getByTestId('mission-created') })).toContainText(
+    /Created by you (just now|\d+ min ago)/,
+  );
+  await expect(page.getByTestId('mission-created')).toHaveAttribute('title', /\d{2}:\d{2} UTC$/);
+  await expect(page.getByTestId('mission-created')).toHaveAttribute('datetime', /^\d{4}-/);
+  const missionId = page.url().split('/missions/')[1]?.split(/[?#]/)[0] ?? '';
+  await expect(page.getByTestId('mission-details')).toHaveText(`Mission id ${missionId.slice(-8)}`);
+  await expect(page.getByTestId('mission-details').locator('[title]')).toHaveAttribute(
+    'title',
+    missionId,
+  );
   await expect(page.getByTestId('mission-allows')).toContainText('Can');
   await expect(page.getByTestId('mission-allows')).toContainText('Asks you first');
   await expect(page.getByTestId('mission-allows')).toContainText('Cannot');
@@ -360,8 +372,15 @@ test('create a three-account mission on one page, then replace its key and stop 
   await expect(page.getByTestId('reveal-dialog')).toBeVisible();
   await savedKey(page);
 
-  // Stop the mission: the person types its name; every key is refused from then on.
-  await missionMenu(page, 'Stop the mission');
+  // Stop the mission, from the zone at the bottom of its page (the "···" item opens the same
+  // dialog): the person types its name; every key is refused from then on.
+  await page.getByTestId('mission-menu').click();
+  await expect(page.getByRole('menuitem', { name: 'Stop the mission' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  const stopZone = page.getByTestId('mission-stop');
+  await expect(stopZone.getByRole('heading', { name: 'Stop this mission' })).toBeVisible();
+  await expect(stopZone).toContainText('This cannot be undone');
+  await stopZone.getByRole('button', { name: 'Stop the mission' }).click();
   await expect(page.getByRole('dialog')).toContainText('Every key of the mission stops working');
   await expect(
     page.getByRole('dialog').getByRole('button', { name: 'Stop the mission' }),
@@ -375,6 +394,7 @@ test('create a three-account mission on one page, then replace its key and stop 
   await expect(page.getByRole('menuitem', { name: 'Duplicate' })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: 'Add people' })).toHaveCount(0);
+  await expect(page.getByTestId('mission-stop')).toHaveCount(0);
   expect(await checkToken(request, rotated)).toMatchObject({
     outcome: 'retired',
     reason: 'revoked',
@@ -386,11 +406,14 @@ test('create a three-account mission on one page, then replace its key and stop 
     .getByRole('link', { name: 'Missions' })
     .click();
   await expect(page.getByRole('row', { name: /Ship the billing page/ })).toContainText('stopped');
-  // The list holds four columns by default; the key and the day of creation are details.
+  // Each row says when its mission was created; four columns by default, the key a detail.
+  await expect(page.getByRole('row', { name: /Ship the billing page/ })).toContainText(
+    /created (just now|\d+ min ago)/,
+  );
   const table = page.getByTestId('missions-created-table');
   await expect(table.locator('thead th:visible')).toHaveCount(4);
   await page.getByRole('button', { name: 'Show details' }).click();
-  await expect(table.locator('thead th:visible')).toHaveCount(6);
+  await expect(table.locator('thead th:visible')).toHaveCount(5);
   await page.getByRole('button', { name: 'Hide details' }).click();
 });
 

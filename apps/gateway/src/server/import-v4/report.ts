@@ -12,6 +12,7 @@ import type {
   MissionOutcome,
   MissionStatus,
 } from './importer';
+import { shortId } from '../missions/short-id';
 import { withoutControlCharacters } from './control-characters';
 import type { DropReason } from './risk-translation';
 
@@ -138,7 +139,7 @@ export function renderReport(report: ImportReport): string {
 
 function missionLines(m: MissionOutcome): string[] {
   const lines = [
-    `  - "${m.name}" (v4 token ${m.tokenName}): ${MISSION_WORDS[m.status]}${m.missionId ? ` [${m.missionId}]` : ''}`,
+    `  - "${m.name}" (v4 token ${m.tokenName}): ${MISSION_WORDS[m.status]}${m.missionId ? ` ${missionRef(m.missionId)}` : ''}`,
   ];
   if (m.previous) lines.push(`      ! ${previousLine(m.previous)}`);
   for (const c of m.connections) {
@@ -171,6 +172,14 @@ function missionLines(m: MissionOutcome): string[] {
 /** `--reissue`: the earlier import of the same v4 token, which the importer never revokes. */
 function previousLine(previous: NonNullable<MissionOutcome['previous']>): string {
   return previous.status === 'active'
-    ? `previous import ${previous.missionId} still active: revoke it once the new key is installed`
-    : `previous import ${previous.missionId} is ${previous.status}`;
+    ? `previous import ${missionRef(previous.missionId)} still active: revoke it once the new key is installed`
+    : `previous import ${missionRef(previous.missionId)} is ${previous.status}`;
+}
+
+/**
+ * A mission as the report names it: the short id the mission page shows
+ * ("Mission id", `shortId`), then the whole id — "[33445566 · 0192f3a4-…]".
+ */
+function missionRef(id: string): string {
+  return `[${shortId(id)} · ${id}]`;
 }

@@ -687,7 +687,7 @@ describe('import of a v4 organization', () => {
     expect(dry.stdout).toBe('');
     expect(dry.stderr).toContain('"ops" (v4 token ops-agent): would be issued');
     expect(dry.stderr).toContain(
-      `previous import ${old!.id} still active: revoke it once the new key is installed`,
+      `previous import [${old!.id.slice(-8)} · ${old!.id}] still active: revoke it once the new key is installed`,
     );
     expect(dry.stderr).toContain('~ carried under approval: ssh.uncategorized-write');
     expect(adminEntries()).toBe(entriesBefore);
@@ -711,8 +711,12 @@ describe('import of a v4 organization', () => {
       'ssh.exec-read',
       'ssh.uncategorized-write',
     ]);
-    expect(applied.stderr).toContain(`"ops" (v4 token ops-agent): issued [${fresh.id}]`);
-    expect(applied.stderr).toContain(`previous import ${old!.id} still active`);
+    expect(applied.stderr).toContain(
+      `"ops" (v4 token ops-agent): issued [${fresh.id.slice(-8)} · ${fresh.id}]`,
+    );
+    expect(applied.stderr).toContain(
+      `previous import [${old!.id.slice(-8)} · ${old!.id}] still active`,
+    );
     const keys = applied.stdout
       .trim()
       .split('\n')
@@ -728,6 +732,62 @@ describe('import of a v4 organization', () => {
     expect(
       (await store.missions.listForCreator(owner)).filter((m) => m.name === 'ops'),
     ).toHaveLength(2);
+  });
+
+  it('a dry run checks the issuance with the labels it would set, and agrees with --apply', async () => {
+    // The first apply creates the keyed accounts; GitHub and Supabase are then connected
+    // by hand, the Supabase project without a label. v4 bound it to `web` as `prod`.
+    await run(['--owner', OWNER, '--apply']);
+    await connectGithubByHand();
+    const supabase = await store.connections.create({
+      provider: 'supabase',
+      owner: { kind: 'user', id: await ownerId() },
+      displayName: 'Supabase',
+      credential: serializeSecret({
+        kind: 'api-key',
+        fields: { token: 'sbp_fake' },
+        metadata: {},
+      }),
+      metadata: { credential_kind: 'api-key', fields: {} },
+    });
+    await store.connections.syncDiscoveredResources(supabase.id, [
+      { ref: 'sbref01', displayName: 'web-db', env: null, metadata: null },
+    ]);
+    const bundle = JSON.parse(bundleText) as {
+      bindings: Record<string, unknown>[];
+      missions: { project_id: string; accepted_risks: string[] }[];
+    };
+    bundle.bindings.push({
+      project_id: PROJECT_WEB,
+      provider: 'supabase',
+      resource_ref: 'sbref01',
+      display_name: 'web-db',
+      environment: 'prod',
+    });
+    // Account-scoped in v4, env-scoped in v5: reachable only once the project is labelled.
+    bundle.missions
+      .find((m) => m.project_id === PROJECT_WEB)!
+      .accepted_risks.push('supabase.migration-write');
+    const stdin = JSON.stringify(bundle);
+
+    const entriesBefore = adminEntries();
+    const dry = await run(['--owner', OWNER], { stdin });
+    expect(dry.stderr).toContain('supabase sbref01: to label → prod');
+    expect(dry.stderr).toContain('"web" (v4 token web-agent): would be issued');
+    expect(dry.stderr).not.toContain('refused by the issuance check');
+    expect(dry.code).toBe(0);
+    // Read as set, never written.
+    expect((await store.connections.listResources(supabase.id))[0]?.env).toBeNull();
+    expect(adminEntries()).toBe(entriesBefore);
+
+    const applied = await run(['--owner', OWNER, '--apply'], { stdin });
+    expect(applied.code).toBe(0);
+    expect(applied.stderr).toContain('"web" (v4 token web-agent): issued');
+    expect((await store.connections.listResources(supabase.id))[0]?.env).toBe('prod');
+    const web = (await store.missions.listForCreator(await ownerId())).find(
+      (m) => m.name === 'web',
+    )!;
+    expect(web.policy.map((p) => p.riskId)).toContain('supabase[prod].migration-write');
   });
 
   it('refuses a --reissue id the bundle does not hold, before writing anything', async () => {

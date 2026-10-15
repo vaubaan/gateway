@@ -36,7 +36,7 @@ import {
   type ConnectionService,
   type ImportedFrom,
 } from '../connections';
-import type { MissionService } from '../missions';
+import { withAssumedEnvs, type MissionService } from '../missions';
 import type {
   IssuanceConnection,
   IssuanceResource,
@@ -432,8 +432,10 @@ export class Importer {
       resources.push(await this.label(actor, plan, options.apply));
     }
 
-    // Missions are planned against the instance as the labels left it.
-    const afterLabels = options.apply ? await this.held(actor, org) : withLabels(held, labels);
+    // Missions are planned against the instance as the labels left it; a dry run
+    // reads the labels it would set as set, so that it says what --apply does.
+    const assumedEnvs = options.apply ? new Map<string, string>() : plannedEnvs(labels);
+    const afterLabels = options.apply ? await this.held(actor, org) : withLabels(held, assumedEnvs);
     const pending = new Set(
       connections.filter((c) => c.status === 'to-create').map((c) => c.source),
     );
@@ -457,6 +459,7 @@ export class Importer {
         reissue: reissue.has(mission.token_id),
         carryUnbudgeted: options.carryUnbudgeted ?? null,
         apply: options.apply,
+        assumedEnvs,
       });
       missions.push(outcome.outcome);
       if (outcome.key) keys.push(outcome.key);
@@ -772,6 +775,8 @@ export class Importer {
       readonly reissue: boolean;
       readonly carryUnbudgeted: number | null;
       readonly apply: boolean;
+      /** Dry run: the labels the run would set, by resource id, read as set by the check. */
+      readonly assumedEnvs: ReadonlyMap<string, string>;
     },
   ): Promise<{ readonly outcome: MissionOutcome; readonly key: IssuedKey | null }> {
     const { project, mission, name, bindings, held } = input;
@@ -907,7 +912,9 @@ export class Importer {
     };
     const subject = { id: actor.user.id };
     if (!input.apply) {
-      const preview = await this.ports.missions.preview(subject, draft);
+      const preview = await this.ports.missions.preview(subject, draft, {
+        assumedEnvs: input.assumedEnvs,
+      });
       return preview.ok
         ? done('would-issue')
         : done('refused', { reasons: [...base.reasons, ...issueLines(preview.issues)] });
@@ -1009,23 +1016,25 @@ function bestConnection(
   return best;
 }
 
-/** The held connections with the labels the dry run would set. */
-function withLabels(held: readonly Held[], plans: readonly LabelPlan[]): Held[] {
-  const planned = new Map(
-    plans.filter((p) => p.status === 'to-label').map((p) => [p.resourceId, p.env]),
+/** The labels the run would set, by resource id. */
+function plannedEnvs(plans: readonly LabelPlan[]): Map<string, string> {
+  return new Map(
+    plans.flatMap((p) =>
+      p.status === 'to-label' && p.env !== null ? [[p.resourceId, p.env] as const] : [],
+    ),
   );
+}
+
+/** The held connections with the labels the dry run would set. */
+function withLabels(held: readonly Held[], planned: ReadonlyMap<string, string>): Held[] {
   if (planned.size === 0) return [...held];
   return held.map((h) => ({
     ...h,
-    issuance: {
-      ...h.issuance,
-      resources: h.issuance.resources.map((r) =>
-        planned.has(r.id) ? { ...r, env: planned.get(r.id) ?? null } : r,
-      ),
-    },
-    records: h.records.map((r) =>
-      planned.has(r.id) ? { ...r, env: planned.get(r.id) ?? null } : r,
-    ),
+    issuance: withAssumedEnvs([h.issuance], planned)[0] ?? h.issuance,
+    records: h.records.map((r) => {
+      const env = planned.get(r.id);
+      return env === undefined ? r : { ...r, env };
+    }),
   }));
 }
 

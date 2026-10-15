@@ -4073,7 +4073,7 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
   — a v4 PKCS#8 ed25519 key and an OpenSSH container become an OpenSSH key
   `ssh2` reads, the same key; another key type, text and a truncated
   container refused without quoting the key.
-- **`apps/gateway/tests/integration/import-v4/import-v4.test.ts`** (14) — the
+- **`apps/gateway/tests/integration/import-v4/import-v4.test.ts`** (15) — the
   exporter's bundle piped into the command, real composition root on
   `:memory:`, real plugins. **Dry run**: plan printed, stdout empty, the
   database unchanged, no service and no SSH host contacted. **Apply**: four
@@ -4101,7 +4101,15 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
   still active; with `--apply` a second `ops` mission is issued (its key
   only on stdout), the earlier one stays active, and a later run without
   the flag recognises the new one; a `--reissue` id not in the bundle is
-  refused (64) before anything is written.
+  refused (64) before anything is written. **Dry run and apply agree**
+  (UX-R4): a Supabase project connected by hand without a label, bound in v4
+  as `prod`, with `supabase.migration-write` accepted — the dry run says
+  "to label → prod" and `"web"` "would be issued" (never "refused by the
+  issuance check"), writes no label and no entry; apply labels it and issues
+  `web` with `supabase[prod].migration-write`. Unit:
+  `missions/assumed-envs.test.ts` (2) — `withAssumedEnvs` reads the named
+  resources under the assumed label, leaves the rest and the stored view
+  untouched.
 - **`apps/gateway/tests/integration/standalone-import-v4.test.ts`** (2,
   after a build) — the bundled command runs from `.next/standalone` on a
   store file: dry run of a bundle on stdin, exit 0; unknown owner, exit 67.

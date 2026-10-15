@@ -52,6 +52,17 @@
   margin-left: 6px;
 }
 
+/* The discreet details line right under the header: the mission's short id. */
+.details {
+  margin: -10px 0 22px;
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+}
+/* A head note after it keeps its own space only. */
+.details + .headNote {
+  margin-top: -14px;
+}
+
 /* A sentence right under the header: who else this mission concerns. */
 .headNote {
   max-width: var(--measure);

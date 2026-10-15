@@ -18,11 +18,12 @@
  * `provider_app_flags.<id>.accept_unverified_installations`, only from the
  * Admin page, whatever the source of the fields.
  */
-import type {
-  CredentialField,
-  CredentialSpec,
-  PluginRegistry,
-  ProviderAppConfig,
+import {
+  credentialSpecFor,
+  type CredentialField,
+  type CredentialSpec,
+  type PluginRegistry,
+  type ProviderAppConfig,
 } from '@vaubaan/plugin-sdk';
 import type { CredentialKind } from '@vaubaan/shared';
 
@@ -74,6 +75,33 @@ export interface ProviderAppStatus {
   readonly secretsSet: readonly string[];
   /** `null` for every kind but `app-install`. */
   readonly installVerification: InstallVerification | null;
+  /**
+   * Set when the service also connects with a token pasted by hand (an
+   * `api-key` way declared beside its app, ADR
+   * token-connections-beside-the-integration-app): the app is then optional.
+   * `label` is what the person creates, in the service's words; `null` when
+   * the plugin does not name it.
+   */
+  readonly token: { readonly label: string | null } | null;
+}
+
+/**
+ * Nobody connects this service until the company registers its app: it
+ * needs one and offers no token way. The one rule of Company apps, Setup and
+ * the home's checklist; a service whose app is optional is never "missing".
+ */
+export function requiresApp(app: Pick<ProviderAppStatus, 'needsApp' | 'token'>): boolean {
+  return app.needsApp && app.token === null;
+}
+
+/** The token way of a service whose company app is therefore optional; `null` otherwise. */
+function tokenBesideApp(
+  plugin: Parameters<typeof credentialSpecFor>[0],
+  needsApp: boolean,
+): ProviderAppStatus['token'] {
+  if (!needsApp) return null;
+  const token = credentialSpecFor(plugin, 'api-key');
+  return token ? { label: token.label ?? null } : null;
 }
 
 export class ProviderAppError extends Error {
@@ -157,6 +185,7 @@ export class ProviderAppsService {
       values: visible,
       secretsSet,
       installVerification: await this.installVerification(providerId),
+      token: tokenBesideApp(plugin, fields.length > 0),
     };
   }
 

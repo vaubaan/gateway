@@ -11,7 +11,15 @@
  *      creator changes "ask me first", and "Change limits", which opens the same
  *      table in edit mode for the limits only (`?edit=limits`);
  *   6. activity: a line of counts, the last calls one click away, the whole
- *      record on the mission's activity page.
+ *      record on the mission's activity page;
+ *   7. for the creator of a mission that is not stopped, the zone that stops
+ *      it — what stopping does, and the same confirmation as the "···" item.
+ *
+ * The header says when the mission was created, relative ("created 2 h ago",
+ * the instant in its `title`), and a details line under it its short id (the
+ * last 8 characters, the whole id in the `title`): two missions with the
+ * same name — an import reissued — are told apart, and matched with what a
+ * report or the audit names.
  *
  * The creator and the teammates of a mission read this page (spec §0 "Mission
  * member"). Each sees the acts the server would take from them and no other:
@@ -22,6 +30,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { NeedsUser } from '@/components/auth/NeedsUser';
+import { RelativeTime } from '@/components/RelativeTime';
 import {
   AllowSummary,
   AnswerList,
@@ -54,7 +63,6 @@ import {
   periodWord,
   ROUTES,
   SECTIONS,
-  shortDate,
   TERMS,
   until,
   waitingFor,
@@ -62,6 +70,7 @@ import {
 } from '@/lib/vocabulary';
 import { enumerateCatalog, groupVariants } from '@/server/missions/catalog-view';
 import { missionGitView } from '@/server/missions/git-view';
+import { shortId } from '@/server/missions/short-id';
 import { explainOrphan } from '@/server/missions/orphan-reason';
 import { riskExplainer } from '@/server/providers/reference';
 import { toolTitleOf } from '@/server/providers/tool-titles';
@@ -75,7 +84,13 @@ import styles from '../missions.module.css';
 import { allowLines, createdBy, missionMark, nearestLimit } from '../mission-view';
 import { ActivityTable } from './activity-table';
 import { LimitsEditor, type LimitGroup } from './limits-editor';
-import { ActButton, GenerateKeyButton, MissionActsProvider, MissionMenu } from './mission-actions';
+import {
+  ActButton,
+  GenerateKeyButton,
+  MissionActsProvider,
+  MissionMenu,
+  StopMissionButton,
+} from './mission-actions';
 import { PermissionsUsage } from './permissions-usage';
 import { TeamSection, type HolderCalls } from './team-section';
 
@@ -301,9 +316,8 @@ export default async function MissionPage({ params, searchParams }: Props) {
         }
         lede={
           <>
-            <span title={mission.createdAt}>
-              {createdBy(detail.creator.email, isCreator)} on {shortDate(mission.createdAt, now)}
-            </span>
+            {createdBy(detail.creator.email, isCreator)}{' '}
+            <RelativeTime at={mission.createdAt} now={now} testId="mission-created" />
             {detail.connections.map((connection) => (
               <span key={connection.id}>
                 {' · '}
@@ -349,6 +363,13 @@ export default async function MissionPage({ params, searchParams }: Props) {
           />
         }
       />
+
+      <p className={styles.details} data-testid="mission-details">
+        {MISSION_WORDS.missionId}{' '}
+        <span title={mission.id}>
+          <Mono quiet>{shortId(mission.id)}</Mono>
+        </span>
+      </p>
 
       {!isCreator && (
         <p className={styles.headNote} data-testid="shared-with-me">
@@ -597,6 +618,15 @@ export default async function MissionPage({ params, searchParams }: Props) {
           </div>
         )}
       </Section>
+
+      {stoppable && (
+        <Section id="stop" title={MISSION_WORDS.stopTitle} testId="mission-stop">
+          <p className={styles.quiet}>{MISSION_WORDS.stopWhat}</p>
+          <div className={styles.afterLine}>
+            <StopMissionButton />
+          </div>
+        </Section>
+      )}
     </MissionActsProvider>
   );
 }

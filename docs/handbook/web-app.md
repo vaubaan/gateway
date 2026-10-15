@@ -24,6 +24,7 @@ tracks:
   - apps/gateway/src/app/(app)/settings/connected-apps/layout.tsx
   - apps/gateway/src/components/settings/
   - apps/gateway/src/components/LocalDate.tsx
+  - apps/gateway/src/components/RelativeTime.tsx
   - apps/gateway/src/components/auth/NeedsUser.tsx
   - apps/gateway/src/components/auth/AuthPage.tsx
   - apps/gateway/src/app/(app)/_now/
@@ -457,7 +458,10 @@ reader's time zone. The cost is a handful of indexed reads per mission the
 person can read, no scan. `readSetup(setupDepsOf(root))` (`server/now/setup.ts`)
 is the checklist an administrator reads on a first run: the host of the
 identity provider, the services whose company app is registered or missing
-(`ProviderAppsService.list`, `needsApp`), and whether telemetry was decided.
+(`ProviderAppsService.list`, `requiresApp`: it needs an app and offers no token
+way), those whose app is optional (they also connect with a token: never
+"missing"), and whether telemetry was decided. Settings → Setup counts its
+"Company apps" step the same way.
 
 **The page has three forms** (`(app)/_now/`; style guide §1.1):
 
@@ -562,11 +566,12 @@ The protocol keeps its names; this file is the bridge, keyed by them.
 | `MISSION_STATES`, `ACCOUNT_STATES`, `REQUEST_STATES`, `DECISION_WORDS`               | a label and a tone per state, keyed by the protocol's state; the tone is `null` for the normal state                                                                               |
 | `WAITING`, `waitingFor(name)`, `ASKED_FIRST`, `reachedLimit`, `running`              | the sentences of "Waiting for you"                                                                                                                                                 |
 | `everyOf`, `periodNow`, `limitOf`, `missionReachedLimit`, `limitReachedOn`, `usedOf` | a limit said with its period, from a period length in seconds: "today", "its daily limit", "5,000 of 5,000"; "this period" for an unnamed length, "in all" when limits never reset |
-| `until`, `agoPhrase`, `delay`, `asker`                                               | "in 13 h", "4 min ago", "10 minutes"; who asks: "Carol · codex", "You · codex", "machine key nightly", "An agent"                                                                  |
+| `until`, `delay`, `asker`                                                            | "in 13 h", "4 min ago", "10 minutes"; who asks: "Carol · codex", "You · codex", "machine key nightly", "An agent"                                                                  |
 | `NOW`, `FIRST_RUN`, `ANSWERS`, `REQUEST_WORDS`                                       | the words of the home, of a first run (the model in five nodes, the steps), of the answers keyed by the protocol's resolution, and of a request's page                             |
 | `ago(from, now)`                                                                     | "now", "4 min", "1 h", "yesterday", "4 d"                                                                                                                                          |
 | `THEME_WORDS`                                                                        | System, Light, Dark                                                                                                                                                                |
 | `MISSION_ACTIONS`, `MISSION_WORDS`                                                   | the acts and the sentences of the mission pages ("Stop the mission", "Generate my key", "Shown once. Lost it? …")                                                                  |
+| `OPTIONAL_APP_WORDS`                                                                 | Company apps, for a service that also connects with a token: "not registered · optional", "The company app is optional for Railway", "Connect Railway with a token"                |
 | `limitsResetEvery`, `limitColumn`, `usedColumn`, `periodWord`                        | a period in words, from its length in seconds: "limits reset every week", "Per week", "Used this week", "this week"                                                                |
 | `shortDate`, `expiresOn`, `agoSentence`, `listed`                                    | "12 Nov" (UTC, the same on the server and in the browser), "expires 12 Nov", "4 min ago", "a, b and 3 more"                                                                        |
 
@@ -834,6 +839,11 @@ hydration (`zone: 'local'`), without a hydration mismatch:
   and `title`: "14 Oct, 01:48", `dateOnly` "14 Oct", `seconds` for a timeline
   read line by line (the last events of a mission). The mission pages, the
   request pages, Connected apps and the Administration pages use it;
+- `components/RelativeTime.tsx` — a server `<time>` said relative to the
+  page's `now` (`agoSentence`, with an optional word before it: "created 2 h
+  ago"), the exact instant as `dateTime` and its day and clock in UTC as
+  `title` ("15 Oct, 13:45 UTC"). The missions list and the mission header use
+  it, so that two missions of the same name are told apart;
 - `waiting/local-time.tsx` (`LocalTime`: "10:58"), `activity/when.tsx`
   (`When`: the clock to the second, the day under it), `_now/today.tsx`.
 

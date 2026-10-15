@@ -81,6 +81,11 @@ export function providerAppPath(providerId: string): string {
   const id = encodeURIComponent(providerId);
   return `${PROVIDER_APPS_PAGE}?app=${id}#${id}`;
 }
+/** The connect page of a service on its token way, with the guide the plugin declares. */
+export function tokenConnectPath(providerId: string): string {
+  const query = new URLSearchParams({ [METHOD_FIELD]: 'api-key' });
+  return `${NEW_CONNECTION_PATH}/${encodeURIComponent(providerId)}?${query.toString()}`;
+}
 /** Administration → Connections: the connections that have no owner left. */
 export const OWNERLESS_CONNECTIONS_PAGE = '/admin/connections';
 export const NOTICE_PARAM = 'notice';

@@ -30,6 +30,7 @@ import {
   CONFIG_WORDS,
   count,
   formatNumber,
+  OPTIONAL_APP_WORDS,
   SECTIONS,
   SETTINGS_ACTIONS,
   SETTINGS_PAGES,
@@ -38,6 +39,7 @@ import {
 } from '@/lib/vocabulary';
 import { isOperator } from '@/server/auth';
 import type { InstanceConfig } from '@/server/config';
+import { requiresApp } from '@/server/provider-apps';
 
 export const dynamic = 'force-dynamic';
 
@@ -100,9 +102,11 @@ export default async function SetupPage() {
       root.users.service.list(),
     ]);
 
-  const needApp = apps.filter((app) => app.needsApp);
+  // A service that also connects with a token is never missing: its app is optional.
+  const needApp = apps.filter(requiresApp);
   const registered = needApp.filter((app) => app.configured);
   const missing = needApp.filter((app) => !app.configured);
+  const optional = apps.filter((app) => app.needsApp && !requiresApp(app));
   const keyed = apps.filter((app) => !app.needsApp);
   const waiting = clients.filter((view) => view.status === 'pending');
   const administrators = users.filter(
@@ -162,6 +166,11 @@ export default async function SetupPage() {
               {missing.length === 1 ? 'it is' : 'they are'}.{' '}
             </>
           )}
+          {optional.length > 0 &&
+            `${OPTIONAL_APP_WORDS.hint(
+              listOf(optional.map((app) => app.displayName)),
+              optional.length > 1,
+            )} `}
           {keyed.length > 0 &&
             `${listOf(keyed.map((app) => app.displayName))} connect with a key and need none.`}
         </>

@@ -5,12 +5,15 @@
  * row. A mission an app prepared for me through the management door names the
  * app (spec §2.4, §7.10).
  *
- * Four columns by default; my key and the day of creation are details, behind
- * the page's "Show details".
+ * Under each mission's name, when it was created, relative ("created 2 h
+ * ago", the instant in its `title`): two missions with the same name — an
+ * import reissued — are told apart at a glance. Four columns by default; my
+ * key is a detail, behind the page's "Show details".
  */
 import Link from 'next/link';
 
 import { NeedsUser } from '@/components/auth/NeedsUser';
+import { RelativeTime } from '@/components/RelativeTime';
 import {
   ButtonLink,
   DataTable,
@@ -33,7 +36,6 @@ import {
   PAGES,
   ROUTES,
   SECTIONS,
-  shortDate,
   TERMS,
 } from '@/lib/vocabulary';
 import { maskedToken, type MissionOverview } from '@/server/missions';
@@ -57,7 +59,15 @@ function columnsFor(shared: boolean, now: Date): Column<ListedMission>[] {
           <Link href={`${ROUTES.missions}/${mission.id}`} className={styles.name}>
             {mission.name}
           </Link>
-          {shared && <span className={styles.sub}>by {creator.email ?? 'someone who left'}</span>}
+          <span className={styles.sub}>
+            {shared && `by ${creator.email ?? 'someone who left'} · `}
+            <RelativeTime
+              at={mission.createdAt}
+              now={now}
+              prefix="created"
+              testId={`created-${mission.id}`}
+            />
+          </span>
           {issuedVia && (
             <span className={styles.sub} data-testid={`issued-via-${mission.id}`}>
               prepared by {issuedVia.client_name} for you
@@ -104,15 +114,6 @@ function columnsFor(shared: boolean, now: Date): Column<ListedMission>[] {
         ) : (
           KEY_WORDS.notGenerated
         ),
-    },
-    {
-      id: 'created',
-      header: 'Created',
-      detail: true,
-      nowrap: true,
-      cell: ({ mission }) => (
-        <span title={mission.createdAt}>{shortDate(mission.createdAt, now)}</span>
-      ),
     },
   ];
 }

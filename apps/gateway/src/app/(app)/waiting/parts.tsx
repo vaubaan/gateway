@@ -6,7 +6,7 @@
  */
 import { Avatar, InboxItem, InboxList, Mono } from '@/components/ui';
 import {
-  agoPhrase,
+  agoSentence,
   asker,
   ASKED_FIRST,
   limitReachedOn,
@@ -167,8 +167,8 @@ export function WaitingList({
             }
             meta={
               request.kind === 'approval'
-                ? `${agoPhrase(request.created_at, now)} · expires ${until(request.expires_at, now)}`
-                : `${agoPhrase(request.created_at, now)}${reset ? ` · ${reset} anyway` : ''}`
+                ? `${agoSentence(request.created_at, now)} · expires ${until(request.expires_at, now)}`
+                : `${agoSentence(request.created_at, now)}${reset ? ` · ${reset} anyway` : ''}`
             }
             testId={`waiting-item-${request.id}`}
           />
