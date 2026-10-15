@@ -303,12 +303,18 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
   // Authority reads the store only, so it is built first: the sign-in settles what a
   // changed membership did, and every module below checks, derives or watches through it.
   const authority = createAuthorityModule({ store, registry, logger });
+  // One sliding-window limiter, two faces: the budget's per-risk windows
+  // (`mission:<id>:risk:<id>`, probed and recorded inside the decision) and the
+  // surface limits (`mcp:mission:<id>`, `connect:<user>`, `auth:*`), on disjoint keys.
+  const windows = new SlidingWindowRateLimiter();
+  const rateLimiter = deps.rateLimiter ?? windows;
   const auth = createAuthModule({
     config,
     store,
     sessions,
     logger,
     oidc: deps.oidc,
+    rateLimiter,
     // The user themselves is the human behind a sign-in that changes their groups.
     membershipsChanging: async (user) => {
       const watch = await authority.membership.watch(user.id);
@@ -327,11 +333,6 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     logger,
   });
 
-  // One sliding-window limiter, two faces: the budget's per-risk windows
-  // (`mission:<id>:risk:<id>`, probed and recorded inside the decision) and the
-  // surface limits (`mcp:mission:<id>`, `connect:<user>`), on disjoint keys.
-  const windows = new SlidingWindowRateLimiter();
-  const rateLimiter = deps.rateLimiter ?? windows;
   const cache = deps.cache ?? new MemoryCacheClient();
   const providerApps = new ProviderAppsService(config.providers, store.config, registry);
   const connections = createConnectionsModule({

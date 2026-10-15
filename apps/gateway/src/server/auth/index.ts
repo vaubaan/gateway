@@ -4,7 +4,8 @@
  * claims, admin rule. Built once by the composition root as `root.auth`.
  * Handbook: docs/handbook/authentication.md. ADR: oidc-relying-party-and-web-session.
  */
-import type { SessionStore } from '../compose/ports';
+import type { RateLimiter, SessionStore } from '../compose/ports';
+import { clientIpResolver } from '../http/client-ip';
 import type { InstanceConfig } from '../config/types';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
@@ -43,6 +44,8 @@ export interface AuthModuleDeps {
   readonly oidc?: OidcOptions;
   /** Watches the user's memberships across a sign-in (`MembershipSettler`, handbook authority). */
   readonly membershipsChanging?: LoginDeps['membershipsChanging'];
+  /** The limits of the sign-in start, the callbacks and the bootstrap endpoint. */
+  readonly rateLimiter: RateLimiter;
 }
 
 export interface AuthModule {
@@ -110,6 +113,8 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
     audit: deps.store.auditWriter,
     logger,
     clock,
+    rateLimiter: deps.rateLimiter,
+    clientIp: clientIpResolver(deps.config.trustedProxies, deps.config.clientIpHeader),
   });
   return { sessions, idp, providers, flows, bootstrap, relyingParties, authenticator, handlers };
 }
@@ -146,7 +151,13 @@ export {
   type Principal,
   type UserPrincipal,
 } from './authenticator';
-export { BOOTSTRAP_REVOKED_KEY, BootstrapService, type BootstrapState } from './bootstrap';
+export {
+  BOOTSTRAP_MAX_MISSES,
+  BOOTSTRAP_MISSES_KEY,
+  BOOTSTRAP_REVOKED_KEY,
+  BootstrapService,
+  type BootstrapState,
+} from './bootstrap';
 export {
   assertEmailDomainAllowed,
   mapClaims,
@@ -178,6 +189,7 @@ export {
 } from './guard';
 export {
   ADMIN_PAGE,
+  AUTH_LIMITS,
   adminSignInPage,
   BOOTSTRAP_PAGE,
   IDP_PAGE,

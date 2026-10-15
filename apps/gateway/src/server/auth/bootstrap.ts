@@ -14,6 +14,15 @@ import { systemClock, toIso, type Clock } from '../store/clock';
 import type { ConfigRepo } from '../store/repositories/config';
 
 export const BOOTSTRAP_REVOKED_KEY = 'bootstrap.revoked_at';
+/** How many wrong tokens were presented since the instance started counting. */
+export const BOOTSTRAP_MISSES_KEY = 'bootstrap.misses';
+/**
+ * Wrong tokens after which the token is revoked for good (security review
+ * 2026-10-15, auth M1 B): it is a one-time install secret, and a token that
+ * is being guessed is not one any more. The operator then signs in through a
+ * provider set in the configuration (handbook authentication).
+ */
+export const BOOTSTRAP_MAX_MISSES = 50;
 
 export type BootstrapState =
   /** No token in the configuration: the IdP is set there and bootstrap never applies. */
@@ -39,6 +48,20 @@ export class BootstrapService {
     if (this.token === null || presented.length === 0) return false;
     if ((await this.state()).status !== 'active') return false;
     return timingSafeEqual(digest(presented), digest(this.token));
+  }
+
+  /**
+   * Counts one wrong token; at `BOOTSTRAP_MAX_MISSES` the token is revoked. Returns
+   * whether this miss revoked it. The count is durable (`instance_config`), so a
+   * restart does not reset it.
+   */
+  async recordMiss(): Promise<boolean> {
+    if ((await this.state()).status !== 'active') return false;
+    const misses = Number((await this.config.get(BOOTSTRAP_MISSES_KEY)) ?? '0') + 1;
+    await this.config.set(BOOTSTRAP_MISSES_KEY, String(misses));
+    if (misses < BOOTSTRAP_MAX_MISSES) return false;
+    await this.revoke();
+    return true;
   }
 
   /** Idempotent: a second revocation keeps the first timestamp. */

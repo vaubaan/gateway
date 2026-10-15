@@ -19,6 +19,8 @@
  */
 import type { AuditWriter } from '@vaubaan/gateway-core';
 
+import type { RateLimiter } from '../compose/ports';
+import { UNKNOWN_CLIENT } from '../http/client-ip';
 import { LEGACY_PROVIDER_ID } from '../config/sign-in';
 import { resolveReturnTo } from '../http/return-to';
 import type { Logger } from '../logging';
@@ -27,7 +29,7 @@ import type { Clock } from '../store/clock';
 import { toIso } from '../store/clock';
 import { admit } from './admission';
 import { auditActorId, type Authenticator } from './authenticator';
-import type { BootstrapService } from './bootstrap';
+import { BOOTSTRAP_MAX_MISSES, type BootstrapService } from './bootstrap';
 import { IdpSettingsError, LoginError, type LoginErrorCode } from './errors';
 import { guardMutation, OPERATOR_REFUSALS, refusalResponse } from './guard';
 import { splitList } from './idp-settings';
@@ -58,6 +60,24 @@ export function signInStartPath(id: string): string {
   return `/auth/login/${encodeURIComponent(id)}`;
 }
 const RETURN_TO_PARAM = 'return_to';
+
+const MINUTE_MS = 60_000;
+/**
+ * Sign-in limits (security review 2026-10-15, auth M1). A sign-in start writes a
+ * pending row: per client address when the address is known (`trusted_proxies` or
+ * `client_ip_header`), and an instance-wide ceiling that bounds the live pending rows
+ * (`LOGIN_STARTS_PER_INSTANCE` per `LOGIN_TTL`, the life of one row) whatever the
+ * address. The callbacks cost a digest and a read: generous limits. The bootstrap
+ * token is a one-time secret: a hard instance-wide window, and a durable miss counter
+ * that revokes it (`BOOTSTRAP_MAX_MISSES`).
+ */
+export const AUTH_LIMITS = {
+  loginStartPerAddress: { limit: 20, windowMs: MINUTE_MS },
+  loginStartPerInstance: { limit: 1000, windowMs: 10 * MINUTE_MS },
+  callbackPerAddress: { limit: 30, windowMs: MINUTE_MS },
+  callbackPerInstance: { limit: 2000, windowMs: MINUTE_MS },
+  bootstrapPerInstance: { limit: 10, windowMs: 10 * MINUTE_MS },
+} as const;
 const SEE_OTHER = 303;
 const BAD_REQUEST = 400;
 
@@ -75,6 +95,10 @@ export interface AuthHandlerDeps {
   readonly audit: AuditWriter;
   readonly logger: Logger;
   readonly clock: Clock;
+  /** The instance's limiter (`compose/ports.ts`); single-process today, a shared store when hosted. */
+  readonly rateLimiter: RateLimiter;
+  /** The client address the per-address limits are keyed on (`http/client-ip.ts`). */
+  readonly clientIp: (headers: Headers) => string;
 }
 
 export interface AuthHandlers {
@@ -129,8 +153,50 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
     }
   }
 
+  /**
+   * Takes one slot of each window that applies: the per-address one only when the
+   * address is known (an unknown address would be one window for everybody, which the
+   * instance-wide window already is). `true` when every window had room.
+   */
+  async function admitted(
+    request: Request,
+    scope: string,
+    perAddress: { readonly limit: number; readonly windowMs: number } | null,
+    perInstance: { readonly limit: number; readonly windowMs: number },
+  ): Promise<boolean> {
+    const address = deps.clientIp(request.headers);
+    if (perAddress && address !== UNKNOWN_CLIENT) {
+      const taken = await deps.rateLimiter.take(
+        `auth:${scope}:ip:${address}`,
+        perAddress.limit,
+        perAddress.windowMs,
+      );
+      if (!taken.allowed) {
+        logger.warn('sign-in throttled', { scope, window: 'address' });
+        return false;
+      }
+    }
+    const taken = await deps.rateLimiter.take(
+      `auth:${scope}:instance`,
+      perInstance.limit,
+      perInstance.windowMs,
+    );
+    if (!taken.allowed) logger.warn('sign-in throttled', { scope, window: 'instance' });
+    return taken.allowed;
+  }
+
   return {
     async loginStart(request, providerId) {
+      if (
+        !(await admitted(
+          request,
+          'login-start',
+          AUTH_LIMITS.loginStartPerAddress,
+          AUTH_LIMITS.loginStartPerInstance,
+        ))
+      ) {
+        return loginError('too-many-attempts');
+      }
       const returnTo = safeReturnTo(
         new URL(request.url).searchParams.get(RETURN_TO_PARAM),
         deps.publicUrl,
@@ -166,6 +232,16 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
 
     async loginCallback(request, providerId = LEGACY_PROVIDER_ID) {
       const clearPending = deps.sessions.clearPendingCookie();
+      if (
+        !(await admitted(
+          request,
+          'callback',
+          AUTH_LIMITS.callbackPerAddress,
+          AUTH_LIMITS.callbackPerInstance,
+        ))
+      ) {
+        return loginError('too-many-attempts');
+      }
       const pending = await deps.sessions.takePending(request.headers);
       if (!pending) return loginError('login-expired', { 'Set-Cookie': clearPending });
       // The attempt was started for one provider: the callback of another never completes it.
@@ -229,10 +305,20 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
       if (state.status !== 'active') {
         return redirect(`${BOOTSTRAP_PAGE}?error=bootstrap-unavailable`);
       }
+      if (!(await admitted(request, 'bootstrap', null, AUTH_LIMITS.bootstrapPerInstance))) {
+        return redirect(`${BOOTSTRAP_PAGE}?error=too-many-attempts`);
+      }
       const form = await readForm(request);
       if (!form) return notAFormResponse();
       const token = stringField(form, 'token');
       if (!(await deps.bootstrap.verify(token))) {
+        const revoked = await deps.bootstrap.recordMiss();
+        if (revoked) {
+          logger.error('bootstrap token revoked after too many wrong tokens', {
+            misses: BOOTSTRAP_MAX_MISSES,
+          });
+          return redirect(`${BOOTSTRAP_PAGE}?error=bootstrap-unavailable`);
+        }
         logger.warn('bootstrap token refused');
         return redirect(`${BOOTSTRAP_PAGE}?error=bootstrap-refused`);
       }

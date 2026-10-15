@@ -145,6 +145,17 @@ configuration the token is optional: without one,
 given next to the IdP is kept and stays `active` until the first operator
 sign-in.
 
+**A guessed token is revoked.** `POST /api/auth/bootstrap` takes one slot of an
+instance-wide window (`AUTH_LIMITS.bootstrapPerInstance`: 10 attempts per 10
+minutes, then `?error=too-many-attempts`), and every wrong token is counted in
+`instance_config` (`bootstrap.misses`, `BootstrapService.recordMiss()`): at
+`BOOTSTRAP_MAX_MISSES` (50) the token is revoked for good (`bootstrap.revoked_at`,
+logged at `error`). The operator then signs in through a provider set in the
+configuration; an attacker can therefore end the bootstrap path of an instance
+that has no provider yet, which is why the deploy guides set the provider in
+the configuration first (ADR
+[sign-in-rate-limits-and-bootstrap-lockout](../decisions/sign-in-rate-limits-and-bootstrap-lockout.md)).
+
 The **admin rule** is `InstanceConfig.admin` (`admin.group` and/or
 `admin.emails`, required by the loader), resolved against the providers
 configured now (`resolveAdminRule`, `SignInProvidersService.adminRule()`):
@@ -381,6 +392,16 @@ missions and are reached by nobody. No tool moves an account to another
 issuer.
 
 ## Sign-in flow
+
+**Limits** (`AUTH_LIMITS` in `handlers.ts`, through the instance's `RateLimiter`):
+a sign-in start takes a slot per client address (20 per minute) when the address
+is known (`trusted_proxies` or `client_ip_header`), and always one of the
+instance-wide window (1 000 per 10 minutes, the life of a pending row: the live
+pending rows are bounded whatever the caller sends); a callback 30 per minute per
+address and 2 000 per minute for the instance. A refused attempt answers
+`303 /login?error=too-many-attempts` and writes nothing. Without a known address a
+flood holds every sign-in for up to ten minutes: the instance stays up and its
+store bounded, which is the trade (threat model A2).
 
 ```
 GET /auth/login?return_to=/x            none ▶ /login?error=idp-not-configured; several ▶ 303 /login?return_to=/x
