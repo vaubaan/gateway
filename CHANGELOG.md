@@ -223,6 +223,9 @@ names, and the notes about them do too.
   `--reissue <v4 token id>` issues a new mission for a v4 key already imported
   (to add permissions, which an issued mission never gains); the earlier mission
   keeps working and the report names it, to revoke once the new key is installed.
+  The dry run checks each mission as if the environment labels it would set were
+  set (it writes none), so a mission that needs such a label reads "would be
+  issued", as `--apply` then issues it.
 
 - **The gateway is the agent's git remote.** With a mission key and git, and
   nothing else, an agent clones, fetches and pushes
@@ -408,7 +411,11 @@ write …)`), instead of GitHub's bare 403. The push token of
   mission can start from a copy of another ("Start from a mission…", "Duplicate") or
   from a JSON proposal an agent wrote. Creation refuses anything beyond what its creator
   may allow, and the preview warns when a selected resource has no usable environment
-  label.
+  label. The missions list and the page of a mission say when it was created
+  ("created 2 h ago", the exact time on hover), and the page shows its short id, so
+  that two missions of the same name are told apart and matched with a report or
+  Activity. The creator stops a mission from the bottom of its page too ("Stop this
+  mission": what stopping does, then the same typed confirmation as in "···").
 - **Keys, teammates and the setup kit.** A mission has one or more keys (`vbn_live_…`,
   stored as a SHA-256 digest), each with one holder. The creator adds colleagues as
   **teammates**; each generates their own key, shown once with the setup kit — the
@@ -508,7 +515,8 @@ write …)`), instead of GitHub's bare 403. The push token of
 - **Company apps.** Administrators register the app the company holds at each service
   under Settings → Company apps (secrets encrypted in the store) or under
   `providers.<id>` in the mounted configuration, which wins and makes the page read-only
-  for that service.
+  for that service. A service that also connects with a token (GitHub, Railway,
+  Supabase) says that its app is optional and leads to the token way and its guide.
 - **Access, teams and ownership.** The owner of an account gives access to a person or
   a team ("Give access", a dialog over the account): who, then a checklist of the
   service's permissions. "Select all" ticks today's permissions one by one; what is

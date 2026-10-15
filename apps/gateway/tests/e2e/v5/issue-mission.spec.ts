@@ -300,7 +300,10 @@ test('create a three-account mission on one page, then replace its key and stop 
   // A running mission is not labelled: only an exception gets a mark beside the title.
   await expect(page.getByTestId('mission-state')).toHaveCount(0);
   // When it was created, relative, with the instant behind; its short id in the details line.
-  await expect(page.getByTestId('mission-created')).toHaveText(/^created (just now|\d+ min ago)$/);
+  await expect(page.locator('p', { has: page.getByTestId('mission-created') })).toContainText(
+    /Created by you (just now|\d+ min ago)/,
+  );
+  await expect(page.getByTestId('mission-created')).toHaveAttribute('title', /\d{2}:\d{2} UTC$/);
   await expect(page.getByTestId('mission-created')).toHaveAttribute('datetime', /^\d{4}-/);
   const missionId = page.url().split('/missions/')[1]?.split(/[?#]/)[0] ?? '';
   await expect(page.getByTestId('mission-details')).toHaveText(

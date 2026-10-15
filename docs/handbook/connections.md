@@ -174,7 +174,16 @@ per provider that needs an app: the service and what is registered
 ("registered", with the tag "set in the mounted configuration" for a
 file-sourced app; "not registered"; "Incomplete: … missing"), and a
 "Register" or "Edit" link that opens the form of that service under its row
-(`?app=<provider id>`). The form shows the URL to register at the provider
+(`?app=<provider id>`). A service whose plugin also declares a token way
+beside its app (`ProviderAppStatus.token`: an `api-key` spec among
+`credentialSpecsOf`, read from the plugins — GitHub, Railway and Supabase
+today) reads "not registered · optional", the hint under the table names
+those services, and while no app is set its form (or its creation form)
+opens on a note (`OptionalApp`, `data-testid="optional-app-<id>"`): the app
+is optional, people connect with a token they create at the service, and
+**Connect `<service>` with a token** leads to
+`tokenConnectPath(id)` = `/accounts/new/<id>?method=api-key`, the token way
+with the guide its plugin declares. The form shows the URL to register at the provider
 (`ConnectionService.callbackUrl(id)` = `<public_url>/connections/callback/<id>`
 — OAuth redirect URI; for an installed app, the callback URL of its user
 authorization when installations are verified, its setup URL otherwise),

@@ -24,6 +24,7 @@ tracks:
   - apps/gateway/src/app/(app)/settings/connected-apps/layout.tsx
   - apps/gateway/src/components/settings/
   - apps/gateway/src/components/LocalDate.tsx
+  - apps/gateway/src/components/RelativeTime.tsx
   - apps/gateway/src/components/auth/NeedsUser.tsx
   - apps/gateway/src/components/auth/AuthPage.tsx
   - apps/gateway/src/app/(app)/_now/
@@ -567,6 +568,7 @@ The protocol keeps its names; this file is the bridge, keyed by them.
 | `ago(from, now)`                                                                     | "now", "4 min", "1 h", "yesterday", "4 d"                                                                                                                                          |
 | `THEME_WORDS`                                                                        | System, Light, Dark                                                                                                                                                                |
 | `MISSION_ACTIONS`, `MISSION_WORDS`                                                   | the acts and the sentences of the mission pages ("Stop the mission", "Generate my key", "Shown once. Lost it? …")                                                                  |
+| `OPTIONAL_APP_WORDS`                                                                 | Company apps, for a service that also connects with a token: "not registered · optional", "The company app is optional for Railway", "Connect Railway with a token"                |
 | `limitsResetEvery`, `limitColumn`, `usedColumn`, `periodWord`                        | a period in words, from its length in seconds: "limits reset every week", "Per week", "Used this week", "this week"                                                                |
 | `shortDate`, `expiresOn`, `agoSentence`, `listed`                                    | "12 Nov" (UTC, the same on the server and in the browser), "expires 12 Nov", "4 min ago", "a, b and 3 more"                                                                        |
 
@@ -834,6 +836,11 @@ hydration (`zone: 'local'`), without a hydration mismatch:
   and `title`: "14 Oct, 01:48", `dateOnly` "14 Oct", `seconds` for a timeline
   read line by line (the last events of a mission). The mission pages, the
   request pages, Connected apps and the Administration pages use it;
+- `components/RelativeTime.tsx` — a server `<time>` said relative to the
+  page's `now` (`agoSentence`, with an optional word before it: "created 2 h
+  ago"), the exact instant as `dateTime` and its day and clock in UTC as
+  `title` ("15 Oct, 13:45 UTC"). The missions list and the mission header use
+  it, so that two missions of the same name are told apart;
 - `waiting/local-time.tsx` (`LocalTime`: "10:58"), `activity/when.tsx`
   (`When`: the clock to the second, the day under it), `_now/today.tsx`.
 

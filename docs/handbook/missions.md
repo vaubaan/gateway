@@ -911,7 +911,7 @@ before.
 | `new/custom-editor.tsx`                   | client: the permissions one by one (`PermissionTable` `editor`)                                                                                        |
 | `new/policy-lines.tsx`                    | client: `RailSummary` (the rail), `ExplicitList` (what is confirmed), `accountLines` (pure)                                                            |
 | `[id]/page.tsx`                           | `/missions/<id>`                                                                                                                                       |
-| `[id]/mission-actions.tsx`                | client: `MissionActsProvider` (every act of the page and its dialog), `ActButton`, `GenerateKeyButton`, `MissionMenu`                                  |
+| `[id]/mission-actions.tsx`                | client: `MissionActsProvider` (every act of the page and its dialog), `ActButton`, `GenerateKeyButton`, `MissionMenu`, `StopMissionButton`             |
 | `[id]/team-section.tsx`                   | client: "People and keys"                                                                                                                              |
 | `[id]/permissions-usage.tsx`              | "Permissions and usage" (`PermissionTable` `usage`), shared with the activity page                                                                     |
 | `[id]/gate-control.tsx`                   | client: the "ask me first" switch of one permission                                                                                                    |
@@ -922,12 +922,14 @@ before.
 ### The list (`/missions`)
 
 Two sections, "Yours" and "Shared with you", each a `DataTable` of four
-columns: the mission (its name; under it, who created it for a shared one, and
+columns: the mission (its name; under it, who created it for a shared one and
+when it was created, relative — "created 2 h ago", `RelativeTime`, the
+instant in its `datetime` and its day and clock in its `title` — so that two
+missions with the same name, an import reissued, are told apart; and
 "prepared by `<app>` for you" for one an app created through the management
 door), its **state**, what it **allows** ("26 permissions · 2 accounts") and
-when it **ends**. "Your key" (masked, or "no key yet") and the day of creation
-are detail columns, behind the page's "Show details" (`DetailScope`
-`missions:list`).
+when it **ends**. "Your key" (masked, or "no key yet") is a detail column,
+behind the page's "Show details" (`DetailScope` `missions:list`).
 
 The state is `missionMark(state, waiting)`:
 
@@ -1086,8 +1088,12 @@ Read by the creator and by the teammates. In the order a person needs it:
 
 1. **The header** — crumbs, the name, beside it the exception the mission is
    in (`missionMark`: nothing for a running mission), and one line: who
-   created it and when, each service with its resources and their environment
-   labels, how often the limits reset, when it ends. Under it, for a teammate,
+   created it and when, relative ("Created by you 2 h ago", `RelativeTime`
+   `data-testid="mission-created"`), each service with its resources and their
+   environment labels, how often the limits reset, when it ends. Under it, a
+   discreet details line (`data-testid="mission-details"`): "Mission id" and
+   the first 8 characters of its id (`shortId`), the whole id in the `title` —
+   what a report of the importer or the audit names it by. Then, for a teammate,
    one sentence (`data-testid="shared-with-me"`): they work on it as it is,
    with their own key, and its creator alone answers; for a mission an app
    created, who prepared it, its client id, and that the name is not verified
@@ -1136,9 +1142,15 @@ Read by the creator and by the teammates. In the order a person needs it:
    dialog.
 6. **Activity** — a line of counts for the period, a link to the activity
    page, and the last eight events one click away (`ActivityTable`).
+7. **Stop this mission** (`data-testid="mission-stop"`) — for the creator,
+   while the mission is not stopped: one sentence on what stopping does
+   (every key stops working at once, it cannot be undone, duplicate to
+   continue, the activity stays) and **Stop the mission**
+   (`StopMissionButton`), which opens the same typed confirmation as the
+   "···" item.
 
 **Who sees which act.** Every act and its dialog live in
-`MissionActsProvider`; the header, "···" and the rows open the same ones. An
+`MissionActsProvider`; the header, "···", the rows and the stop zone open the same ones. An
 act is shown when the server would take it, read from `MissionTeam`
 (`role`, `issuable`, `my_token`, `candidates`, `revocable`) and from the
 mission's state — never spelled again as a condition of the page.
@@ -1159,7 +1171,7 @@ mission's state — never spelled again as a condition of the page.
 | Change limits                  | permissions section, "···"       | the creator, while `limits_editable`       | `ConfirmDialog` listing each change, before → after                     |
 | Leave the mission              | "···"                            | a teammate (never the creator)             | `DangerConfirm`, typing the mission's name                              |
 | Duplicate                      | "···"                            | the creator                                | — (opens "New mission" on a copy)                                       |
-| Stop the mission               | "···"                            | the creator, until it is stopped           | `DangerConfirm`, typing the mission's name; says for how many holders   |
+| Stop the mission               | "···", stop zone                 | the creator, until it is stopped           | `DangerConfirm`, typing the mission's name; says for how many holders   |
 
 "Replace my key" and "Generate my key" both post to
 `/api/missions/<id>/tokens/mine`, for the creator too. Replacing a machine key
