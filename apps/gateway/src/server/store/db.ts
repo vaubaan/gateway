@@ -89,6 +89,34 @@ export function backupTo(db: StoreDb, destinationPath: string): void {
   db.prepare('VACUUM INTO ?').run(destinationPath);
 }
 
+/**
+ * Opens an existing database file read-only: no pragma written, no migration run. For
+ * the operator's `backup` command and for checking the copy it made.
+ */
+export function openReadonlyDb(path: string): StoreDb {
+  const db = new BetterSqlite3(path, { readonly: true, fileMustExist: true });
+  assertSqliteVersion(db);
+  return db;
+}
+
+/** `PRAGMA integrity_check`: `'ok'`, or the first problem SQLite names (sqlite:). */
+export function integrityOf(db: StoreDb): string {
+  const row = db.prepare<[], { integrity_check: string }>('PRAGMA integrity_check').get();
+  return row?.integrity_check ?? 'no answer';
+}
+
+/** The highest applied migration, or 0 (the runner's own table, read-only). */
+export function schemaVersionOf(db: StoreDb): number {
+  try {
+    const row = db
+      .prepare<[], { v: number | null }>('SELECT MAX(version) AS v FROM schema_migrations')
+      .get();
+    return row?.v ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
 /** Current `journal_mode`, exposed for tests and diagnostics. */
 export function journalMode(db: StoreDb): string {
   return String(db.pragma('journal_mode', { simple: true }));

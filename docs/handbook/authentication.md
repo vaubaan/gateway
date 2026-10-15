@@ -156,6 +156,22 @@ that has no provider yet, which is why the deploy guides set the provider in
 the configuration first (ADR
 [sign-in-rate-limits-and-bootstrap-lockout](../decisions/sign-in-rate-limits-and-bootstrap-lockout.md)).
 
+**Recovering after a bootstrap lockout.** The page says "Bootstrap sign-in is no
+longer available". Either set a sign-in provider in the configuration
+(`VAUBAAN_SIGN_IN_<ID>_*`, with an admin rule) and redeploy — the way the deploy
+guides recommend; or, to use the token again, delete the two rows it left, from a
+shell in the container, as the image user, then restart:
+
+```bash
+vaubaan-entrypoint node -e "const db=require('/app/node_modules/better-sqlite3')(process.env.VAUBAAN_STORE_PATH);db.prepare(\"DELETE FROM instance_config WHERE key IN ('bootstrap.revoked_at','bootstrap.misses')\").run()"
+```
+
+(the module path is that of the standalone tree; check it once). Do this only after
+replacing the token with a new one of 32 characters or more: the old one was being
+guessed. **If nobody can start a sign-in** (`too-many-attempts` for everybody, no
+client address known): the instance-wide window slides — wait ten minutes, or
+restart (the limiter is in memory).
+
 The **admin rule** is `InstanceConfig.admin` (`admin.group` and/or
 `admin.emails`, required by the loader), resolved against the providers
 configured now (`resolveAdminRule`, `SignInProvidersService.adminRule()`):

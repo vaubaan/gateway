@@ -254,11 +254,12 @@ export type {
 } from './repositories/audit.ts';
 export type { ConfigRepo, ConfigWrite } from './repositories/config.ts';
 export type { WebSessionsRepo } from './repositories/web-sessions.ts';
-export { SEALED_COLUMNS } from './repositories/sealed-blobs.ts';
+export { SEALED_COLUMNS, sealedVersionsOf } from './repositories/sealed-blobs.ts';
 export type {
   ResealReport,
   ResealTableReport,
   SealedBlobsRepo,
+  SealedProbe,
   SealedTable,
   SealedVersionCount,
 } from './repositories/sealed-blobs.ts';

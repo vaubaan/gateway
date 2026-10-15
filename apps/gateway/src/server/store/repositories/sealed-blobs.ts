@@ -20,7 +20,7 @@
  * `changed`. Run again to pick it up. The SQL is portable.
  */
 
-import { withImmediateTransaction } from '../db.ts';
+import { withImmediateTransaction, type StoreDb } from '../db.ts';
 import type { Encryptor } from '../encryptor.ts';
 import { secretAd } from './config.ts';
 import type { RepoContext } from './context.ts';
@@ -61,6 +61,11 @@ export interface ResealTableReport {
   readonly table: SealedTable;
   /** Blobs already under the current key version when the run started: left alone. */
   readonly current: number;
+  /**
+   * Of those, the ones the current key does not open: the current key is not the one
+   * that sealed them (a key pasted without raising its version, say). Never written.
+   */
+  readonly currentUnreadable: number;
   /** Blobs under another version that opened and were (or would be) sealed again. */
   readonly resealed: number;
   /** Blobs that did not open: no key for their version, or a key that does not fit. */
@@ -84,6 +89,20 @@ export interface SealedBlobsRepo {
    * report says whether the configured keys open them all.
    */
   reseal(options: { readonly apply: boolean }): Promise<ResealReport>;
+  /**
+   * One blob per table and key version, opened and dropped: whether the configured keys
+   * open what the store holds. Cheap enough for every boot (re-check M-1).
+   */
+  probe(): Promise<SealedProbe[]>;
+}
+
+/** What `probe` found for one table and key version. */
+export interface SealedProbe {
+  readonly table: SealedTable;
+  readonly keyVersion: number;
+  readonly count: number;
+  /** Whether the sampled blob opened with the key configured for its version. */
+  readonly opens: boolean;
 }
 
 interface SealedRow {
@@ -100,6 +119,22 @@ interface Resealed {
   readonly keyVersion: number;
 }
 
+/**
+ * Blob counts per table and key version of any database handle (the `backup` command
+ * reads its copy with it, read-only). No blob is opened.
+ */
+export function sealedVersionsOf(db: StoreDb): SealedVersionCount[] {
+  return SEALED_COLUMNS.flatMap((column) =>
+    db
+      .prepare<[], { key_version: number; count: number }>(
+        `SELECT key_version, COUNT(*) AS count FROM ${column.table}
+         WHERE ${column.blobColumn} IS NOT NULL GROUP BY key_version ORDER BY key_version`,
+      )
+      .all()
+      .map((row) => ({ table: column.table, keyVersion: row.key_version, count: row.count })),
+  );
+}
+
 export function createSealedBlobsRepo(ctx: RepoContext): SealedBlobsRepo {
   const { db, encryptor } = ctx;
 
@@ -110,8 +145,9 @@ export function createSealedBlobsRepo(ctx: RepoContext): SealedBlobsRepo {
       `SELECT key_version, COUNT(*) AS count FROM ${column.table}
        WHERE ${column.blobColumn} IS NOT NULL GROUP BY key_version ORDER BY key_version`,
     ),
-    current: db.prepare<[number], { count: number }>(
-      `SELECT COUNT(*) AS count FROM ${column.table}
+    current: db.prepare<[number], SealedRow>(
+      `SELECT ${column.idColumn} AS id, ${column.blobColumn} AS blob, key_version
+       FROM ${column.table}
        WHERE ${column.blobColumn} IS NOT NULL AND key_version = ?`,
     ),
     stale: db.prepare<[number], SealedRow>(
@@ -119,6 +155,12 @@ export function createSealedBlobsRepo(ctx: RepoContext): SealedBlobsRepo {
        FROM ${column.table}
        WHERE ${column.blobColumn} IS NOT NULL AND key_version <> ?
        ORDER BY ${column.idColumn}`,
+    ),
+    sample: db.prepare<[number], SealedRow>(
+      `SELECT ${column.idColumn} AS id, ${column.blobColumn} AS blob, key_version
+       FROM ${column.table}
+       WHERE ${column.blobColumn} IS NOT NULL AND key_version = ?
+       ORDER BY ${column.idColumn} LIMIT 1`,
     ),
     swap: db.prepare<[Buffer, number, string, number, Buffer]>(
       `UPDATE ${column.table} SET ${column.blobColumn} = ?, key_version = ?
@@ -137,11 +179,30 @@ export function createSealedBlobsRepo(ctx: RepoContext): SealedBlobsRepo {
       );
     },
 
+    async probe() {
+      const out: SealedProbe[] = [];
+      for (const { column, versions, sample } of statements) {
+        for (const { key_version: keyVersion, count } of versions.all()) {
+          const row = sample.get(keyVersion);
+          const ok =
+            row !== undefined && (await opens(encryptor, column.associatedData(row.id), row));
+          out.push({ table: column.table, keyVersion, count, opens: ok });
+        }
+      }
+      return out;
+    },
+
     async reseal({ apply }) {
       const target = encryptor.currentKeyVersion;
       const tables: ResealTableReport[] = [];
       for (const { column, current, stale, swap } of statements) {
-        const alreadyCurrent = current.get(target)?.count ?? 0;
+        // Every blob is opened, the current ones too: a wrong current key must not
+        // read as "nothing to do" (re-check M-1). They are only read, never written.
+        const currentRows = current.all(target);
+        let currentUnreadable = 0;
+        for (const row of currentRows) {
+          if (!(await opens(encryptor, column.associatedData(row.id), row))) currentUnreadable += 1;
+        }
         const ready: Resealed[] = [];
         let unreadable = 0;
         for (const row of stale.all(target)) {
@@ -164,7 +225,8 @@ export function createSealedBlobsRepo(ctx: RepoContext): SealedBlobsRepo {
         }
         tables.push({
           table: column.table,
-          current: alreadyCurrent,
+          current: currentRows.length,
+          currentUnreadable,
           resealed,
           unreadable,
           changed,
@@ -173,6 +235,20 @@ export function createSealedBlobsRepo(ctx: RepoContext): SealedBlobsRepo {
       return { apply, currentKeyVersion: target, tables };
     },
   };
+}
+
+/** Whether the blob opens with the key of its version (the plaintext is dropped at once). */
+async function opens(
+  encryptor: Encryptor,
+  associatedData: string,
+  row: SealedRow,
+): Promise<boolean> {
+  try {
+    await encryptor.decrypt(associatedData, { keyVersion: row.key_version, blob: row.blob });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** The blob opened with its own version's key and sealed with the current one; `null` if it does not open. */

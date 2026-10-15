@@ -676,19 +676,28 @@ Three columns hold sealed blobs (`store.sealedBlobs`,
 `instance_config.secret_blob` (`instance_config:<key>`) and
 `requests.args_blob` (`request:<id>`).
 
+0. Back up the store first (`node apps/gateway/backup.mjs`, handbook
+   [store](store.md#backup)) and keep the copy with the **current** key: it
+   opens with that key only.
 1. Generate a key (`npm run gen-master-key`, on a trusted machine). Set it as
    `VAUBAAN_MASTER_KEY`, raise `VAUBAAN_MASTER_KEY_VERSION` by one (the
    default is `1`), and put the old key in
    `VAUBAAN_MASTER_KEY_PREVIOUS=<old version>=<old key>`.
-2. Deploy (restart). The instance opens old blobs with the previous key and
-   seals new ones with the new key.
+2. Deploy (restart) **once**, with the three variables changed together: a
+   start with the new key and the old version opens nothing. The instance opens
+   old blobs with the previous key and seals new ones with the new key. At boot
+   it opens one blob per table and key version (`store.sealedBlobs.probe()`,
+   `checkSealedKeys` in `compose/root.ts`); a version with no configured key, or
+   whose key does not open it, is logged at `error` ("stored secrets do not open
+   with the configured master keys"), naming the version. The instance still
+   starts (ADR amendment).
 3. Inside the container, as the image user, run the dry run, then apply, then
    the dry run again:
 
    ```bash
    node apps/gateway/reseal.mjs           # opens every blob, writes nothing
    node apps/gateway/reseal.mjs --apply   # seals the stale blobs again
-   node apps/gateway/reseal.mjs           # "every blob is sealed under version N"
+   node apps/gateway/reseal.mjs           # "nothing to reseal: every blob is sealed under version N"
    ```
 
    On a platform that starts the container as root (Railway with
@@ -702,10 +711,17 @@ Three columns hold sealed blobs (`store.sealedBlobs`,
    old key with them, or destroy them.
 
 The report counts per table: `current` (already under the current version),
+`current unreadable` (of those, the ones the current key does not open: every blob
+is opened, the current ones too, so a new key set without raising its version is
+caught before `--apply`; exit 1),
 `resealed` / `to reseal`, `unreadable` (no key for its version, or the wrong
 key under that version: left as it is, exit 1) and `changed` (rewritten by
 the running gateway between the read and the write: left as the gateway wrote
-it, exit 1, run again). Each table is written in one `BEGIN IMMEDIATE`
+it, exit 1, run again). The last line is the verdict, in a dry run as after
+`--apply`: "nothing to reseal: every blob is sealed under version N and opens with
+the current key. VAUBAAN_MASTER_KEY_PREVIOUS can now be removed" only when no blob
+is stale, unreadable, current-unreadable or changed. Run it from the container that
+serves the store: it opens the store like the server does, migrations included. Each table is written in one `BEGIN IMMEDIATE`
 transaction, each row by compare-and-swap on the blob read, so the command is
 safe beside the running server and idempotent. It never prints a blob, an id
 or a key; an unexpected failure prints one fixed line. Exit codes: 0, 1, 64

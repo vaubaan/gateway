@@ -170,7 +170,9 @@ async function run(argv: readonly string[], io: ResealIo, deps: ResealDeps): Pro
         previousKeyVersions: [...config.encryption.previousKeys.keys()].sort((a, b) => a - b),
       }),
     );
-    const incomplete = report.tables.some((t) => t.unreadable > 0 || t.changed > 0);
+    const incomplete = report.tables.some(
+      (t) => t.currentUnreadable > 0 || t.unreadable > 0 || t.changed > 0,
+    );
     return incomplete ? EXIT_INCOMPLETE : EXIT_OK;
   } finally {
     try {

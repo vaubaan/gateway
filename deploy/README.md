@@ -243,11 +243,12 @@ environment.
   computed from is kept; decided requests and approvals are not purged.
 - **Data**: everything is in `/data` (`gateway.db` and its WAL files). Back
   it up with a volume snapshot or SQLite's `VACUUM INTO` (`store.backupTo()`
-  in the [store handbook](../docs/handbook/store.md#backup); there is no
-  operator CLI yet).
+  in the [store handbook](../docs/handbook/store.md#backup); inside the
+  container, `node apps/gateway/backup.mjs` makes that copy on the volume).
 - **Key rotation**: generate a new key, set `encryption.key_version` to
   `n+1`, move the old key under `encryption.previous_keys.<n>`, restart;
-  then run `node apps/gateway/reseal.mjs` inside the container (a dry run),
+  back up first (`node apps/gateway/backup.mjs` inside the container, handbook
+  store), then run `node apps/gateway/reseal.mjs` inside the container (a dry run),
   again with `--apply`, and remove the previous key once the report says
   every blob is under the new version (handbook
   [configuration](../docs/handbook/configuration.md#rotating-the-master-key)).

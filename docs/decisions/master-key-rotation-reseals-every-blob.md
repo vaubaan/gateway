@@ -11,6 +11,28 @@ extends:
 
 # A master-key rotation seals every stored blob again, with a command shipped in the image
 
+> **Amendment of 2026-10-15 (re-check of fix/v5-sec-2).** Four changes before the
+> first production run:
+>
+> - **Every blob is opened, the current ones too.** A blob already under the
+>   current version is opened (never written) and counted `current unreadable`
+>   when it does not open; exit 1. A new key set without raising its version
+>   otherwise read as "nothing to do".
+> - **The dry run states the verdict.** "nothing to reseal: every blob is sealed
+>   under version N … VAUBAAN_MASTER_KEY_PREVIOUS can now be removed" is printed
+>   by any run — dry or applied — that finds nothing stale, unreadable or changed;
+>   "run with --apply" only when something is left to reseal.
+> - **A boot check, a warning not a refusal.** At start the instance opens one
+>   blob per table and key version (`sealedBlobs.probe()`) and logs at `error`
+>   each version that no configured key opens. It does not refuse to start: the
+>   operator needs the instance up (health, logs, the reseal and backup
+>   commands) to see and fix the variables, what cannot be opened already fails
+>   call by call, and a refusal would turn one stale approval argument into an
+>   outage. Rejected: refusing to boot.
+> - **A backup command ships too** (`apps/gateway/backup.mjs`, read-only
+>   `VACUUM INTO` beside the store, never overwrites, integrity-checked, names the
+>   key versions its copy needs). The procedure starts with it (step 0).
+
 ## Context
 
 Three columns of the store hold AEAD blobs sealed with a key derived from the

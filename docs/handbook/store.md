@@ -741,6 +741,25 @@ copying the database file: in WAL mode a plain `cp` of `gateway.sqlite` without 
 `gateway.sqlite-wal` loses committed transactions. Block-level volume snapshots that
 capture both files atomically are also fine.
 
+**The operator's command.** The image has no `sqlite3`; it ships
+`apps/gateway/backup.mjs` (`server/backup/`, bundled by `scripts/build-commands.mjs`):
+
+```bash
+vaubaan-entrypoint node /app/apps/gateway/backup.mjs [<file name>]
+```
+
+It reads `store.path` from the instance's configuration, opens the database
+**read-only** (`openReadonlyDb`: no pragma written, no migration run) and runs
+`VACUUM INTO` a file in the same directory — `backup-<UTC timestamp>.sqlite`, or the
+plain file name given (letters, digits, `.`, `_`, `-`; no directory). It never
+overwrites a file (exit 73), never writes elsewhere, refuses root (77) and an
+unconfigured instance (78). It then opens the copy read-only and prints its path,
+size, schema version, `PRAGMA integrity_check` (exit 1 unless `ok`) and the
+master-key versions its blobs are sealed under (`sealedVersionsOf`): **the copy
+opens only with the keys of those versions, as they are when it is made.** The
+Docker smoke test runs it (step 12). Getting the file off a Railway volume:
+`deploy/railway.md` §6.
+
 ## Tests
 
 - `tests/unit/server/store/ids.test.ts` — UUIDv7 shape, embedded timestamp, ordering,

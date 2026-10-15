@@ -71,9 +71,30 @@ describe('sealed blobs: the master-key re-seal', () => {
     const report = await store.sealedBlobs.reseal({ apply: false });
     expect(report.apply).toBe(false);
     expect(report.tables).toEqual([
-      { table: 'connections', current: 0, resealed: 2, unreadable: 0, changed: 0 },
-      { table: 'instance_config', current: 0, resealed: 1, unreadable: 0, changed: 0 },
-      { table: 'requests', current: 0, resealed: 0, unreadable: 0, changed: 0 },
+      {
+        table: 'connections',
+        current: 0,
+        currentUnreadable: 0,
+        resealed: 2,
+        unreadable: 0,
+        changed: 0,
+      },
+      {
+        table: 'instance_config',
+        current: 0,
+        currentUnreadable: 0,
+        resealed: 1,
+        unreadable: 0,
+        changed: 0,
+      },
+      {
+        table: 'requests',
+        current: 0,
+        currentUnreadable: 0,
+        resealed: 0,
+        unreadable: 0,
+        changed: 0,
+      },
     ]);
     expect(versionsOf(await store.sealedBlobs.versions())).toEqual([
       'connections@1=2',
@@ -104,9 +125,30 @@ describe('sealed blobs: the master-key re-seal', () => {
     await store.sealedBlobs.reseal({ apply: true });
     const again = await store.sealedBlobs.reseal({ apply: true });
     expect(again.tables).toEqual([
-      { table: 'connections', current: 2, resealed: 0, unreadable: 0, changed: 0 },
-      { table: 'instance_config', current: 1, resealed: 0, unreadable: 0, changed: 0 },
-      { table: 'requests', current: 0, resealed: 0, unreadable: 0, changed: 0 },
+      {
+        table: 'connections',
+        current: 2,
+        currentUnreadable: 0,
+        resealed: 0,
+        unreadable: 0,
+        changed: 0,
+      },
+      {
+        table: 'instance_config',
+        current: 1,
+        currentUnreadable: 0,
+        resealed: 0,
+        unreadable: 0,
+        changed: 0,
+      },
+      {
+        table: 'requests',
+        current: 0,
+        currentUnreadable: 0,
+        resealed: 0,
+        unreadable: 0,
+        changed: 0,
+      },
     ]);
   });
 
@@ -157,6 +199,7 @@ describe('sealed blobs: the master-key re-seal', () => {
     expect(report.tables[0]).toEqual({
       table: 'connections',
       current: 0,
+      currentUnreadable: 0,
       resealed: 1,
       unreadable: 0,
       changed: 1,

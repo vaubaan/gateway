@@ -23,13 +23,14 @@ export function renderReseal({ report, remaining, previousKeyVersions }: ResealS
   lines.push(
     report.apply
       ? 'reseal: applied.'
-      : 'reseal: dry run, nothing written (every blob below was opened). Pass --apply to write.',
+      : 'reseal: dry run, nothing written (every blob below was opened, the current ones too).',
   );
   const verb = report.apply ? 'resealed' : 'to reseal';
-  const header = ['table', 'current', verb, 'unreadable', 'changed'];
+  const header = ['table', 'current', 'current unreadable', verb, 'unreadable', 'changed'];
   const rows = report.tables.map((t) => [
     t.table,
     String(t.current),
+    String(t.currentUnreadable),
     String(t.resealed),
     String(t.unreadable),
     String(t.changed),
@@ -43,6 +44,15 @@ export function renderReseal({ report, remaining, previousKeyVersions }: ResealS
   lines.push(format(header));
   for (const row of rows) lines.push(format(row));
 
+  const currentUnreadable = sum(report.tables.map((t) => t.currentUnreadable));
+  if (currentUnreadable > 0) {
+    lines.push(
+      `reseal: ${currentUnreadable} blob(s) under the current version ${target} do not open: the current ` +
+        'key (VAUBAAN_MASTER_KEY) is not the one that sealed them. Was a new key set without raising ' +
+        'VAUBAAN_MASTER_KEY_VERSION? Put the right key back and redeploy before anything else; do not ' +
+        'pass --apply.',
+    );
+  }
   const unreadable = sum(report.tables.map((t) => t.unreadable));
   const changed = sum(report.tables.map((t) => t.changed));
   if (unreadable > 0) {
@@ -62,20 +72,26 @@ export function renderReseal({ report, remaining, previousKeyVersions }: ResealS
 
   const stale = remaining.filter((r) => r.keyVersion !== target && r.count > 0);
   const staleVersions = [...new Set(stale.map((r) => r.keyVersion))].sort((a, b) => a - b);
-  if (!report.apply) {
-    lines.push('reseal: run with --apply, then again without it to confirm.');
-  } else if (staleVersions.length === 0) {
+  const clean = currentUnreadable === 0 && unreadable === 0 && changed === 0;
+  if (clean && staleVersions.length === 0) {
+    // The verdict the procedure waits for, in a dry run as after --apply (re-check H-2).
     lines.push(
       previousKeyVersions.length > 0
-        ? `reseal: every blob is sealed under version ${target}. VAUBAAN_MASTER_KEY_PREVIOUS can now be ` +
-            'removed from the configuration (then redeploy). Keep the old key out of every backup you keep.'
-        : `reseal: every blob is sealed under version ${target}; no previous key is configured.`,
+        ? `reseal: nothing to reseal: every blob is sealed under version ${target} and opens with the ` +
+            'current key. VAUBAAN_MASTER_KEY_PREVIOUS can now be removed from the configuration (then ' +
+            'redeploy). Keep the old key out of every backup you keep, or with the backups taken before.'
+        : `reseal: nothing to reseal: every blob is sealed under version ${target} and opens with the ` +
+            'current key; no previous key is configured.',
     );
-  } else {
+  } else if (!report.apply && currentUnreadable === 0 && staleVersions.length > 0) {
+    lines.push('reseal: run with --apply, then again without it to confirm.');
+  } else if (staleVersions.length > 0) {
     lines.push(
       `reseal: blobs remain under version(s) ${staleVersions.join(', ')}: keep their key in ` +
-        'VAUBAAN_MASTER_KEY_PREVIOUS until a run reports none.',
+        'VAUBAAN_MASTER_KEY_PREVIOUS until a run reports nothing to reseal.',
     );
+  } else {
+    lines.push('reseal: keep VAUBAAN_MASTER_KEY_PREVIOUS until a run reports nothing to reseal.');
   }
   return `${lines.join('\n')}\n`;
 }

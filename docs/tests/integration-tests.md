@@ -4335,6 +4335,16 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
   applied reports; "VAUBAAN_MASTER_KEY_PREVIOUS can now be removed"; no key
   ever printed; exit 1 and "keep the previous key" when a blob does not open.
   The image smoke test (`deploy/docker/smoke.sh` step 11) runs it as 10001.
+- **Re-check of the branch** — `reseal/cli.test.ts` (+2): the confirming dry run
+  after `--apply` prints "nothing to reseal … can now be removed" and not "run with
+  --apply"; a new key under the old version leaves current blobs unreadable
+  (`current unreadable`, exit 1, no verdict). `compose/sealed-keys-check.test.ts` (2):
+  the boot logs "stored secrets do not open with the configured master keys" for a
+  wrong key under its version and for a version with no key, and nothing when the
+  keys fit. `backup/cli.test.ts` (3): a read-only `VACUUM INTO` beside the store,
+  integrity `ok`, the key versions named, no key printed; never overwrites, no
+  directory in the name, root refused, no store refused. Smoke step 12 runs it in
+  the image.
 - **`config/secret-env.test.ts`** (5) — the secret variables of the key
   table, sign-in and provider secrets and their `_FILE` siblings are named;
   the YAML's `${NAME}` references at a secret key only; `loadProcessConfig`

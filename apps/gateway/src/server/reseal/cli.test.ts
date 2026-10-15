@@ -126,7 +126,7 @@ describe('reseal command', () => {
     const run = capture();
     expect(await runResealCli([], run.io, deps)).toBe(EXIT_OK);
     expect(run.out()).toContain('dry run');
-    expect(run.out()).toMatch(/connections\s+0\s+2\s+0\s+0/);
+    expect(run.out()).toMatch(/connections\s+0\s+0\s+2\s+0\s+0/);
     expect((await store.sealedBlobs.versions()).map((v) => v.keyVersion)).toEqual([1]);
   });
 
@@ -135,7 +135,7 @@ describe('reseal command', () => {
     const { deps, store } = await seededDeps(loaded);
     const run = capture();
     expect(await runResealCli(['--apply'], run.io, deps)).toBe(EXIT_OK);
-    expect(run.out()).toMatch(/connections\s+0\s+2\s+0\s+0/);
+    expect(run.out()).toMatch(/connections\s+0\s+0\s+2\s+0\s+0/);
     expect(run.out()).toContain('VAUBAAN_MASTER_KEY_PREVIOUS can now be removed');
     expect(run.out() + run.err()).not.toContain(OLD_KEY);
     expect(run.out() + run.err()).not.toContain(NEW_KEY);
@@ -143,7 +143,7 @@ describe('reseal command', () => {
 
     const again = capture();
     expect(await runResealCli(['--apply'], again.io, deps)).toBe(EXIT_OK);
-    expect(again.out()).toMatch(/connections\s+2\s+0\s+0\s+0/);
+    expect(again.out()).toMatch(/connections\s+2\s+0\s+0\s+0\s+0/);
   });
 
   it('exits 1 and keeps the previous key when a blob does not open', async () => {
@@ -153,5 +153,27 @@ describe('reseal command', () => {
     expect(await runResealCli(['--apply'], run.io, deps)).toBe(EXIT_INCOMPLETE);
     expect(run.out()).toContain('2 blob(s) did not open');
     expect(run.out()).toContain('blobs remain under version(s) 1');
+  });
+  it('the confirmation dry run states the verdict: nothing to reseal, PREVIOUS can go (re-check H-2)', async () => {
+    const loaded = rotatedConfig();
+    const { deps } = await seededDeps(loaded);
+    expect(await runResealCli(['--apply'], capture().io, deps)).toBe(EXIT_OK);
+    const confirm = capture();
+    expect(await runResealCli([], confirm.io, deps)).toBe(EXIT_OK);
+    expect(confirm.out()).toContain('nothing to reseal');
+    expect(confirm.out()).toContain('VAUBAAN_MASTER_KEY_PREVIOUS can now be removed');
+    expect(confirm.out()).not.toContain('run with --apply');
+  });
+
+  it('a new key set without raising its version: current blobs do not open, exit 1 (re-check M-1)', async () => {
+    const loaded = loadInstanceConfig({
+      env: validEnv({ VAUBAAN_MASTER_KEY: NEW_KEY, VAUBAAN_MASTER_KEY_VERSION: undefined }),
+    });
+    const { deps } = await seededDeps(loaded);
+    const run = capture();
+    expect(await runResealCli([], run.io, deps)).toBe(EXIT_INCOMPLETE);
+    expect(run.out()).toMatch(/connections\s+2\s+2\s+0\s+0\s+0/);
+    expect(run.out()).toContain('do not open: the current key');
+    expect(run.out()).not.toContain('can now be removed');
   });
 });

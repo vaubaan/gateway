@@ -163,6 +163,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
   // a failed build, and a retry must not find a second handle on the same file.
   const opened: Closer[] = [() => store.close()];
   try {
+    await checkSealedKeys(store, config, logger);
     const modules = await wireModules({ config, logger, registry, store, build }, deps, opened);
     const root: GatewayRoot = {
       config,
@@ -186,6 +187,38 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
   } catch (err) {
     await closeAfterFailedBuild(opened, logger);
     throw err;
+  }
+}
+
+/**
+ * Whether the configured master keys open what the store holds: one blob per table and
+ * key version is opened at boot. A version with no configured key, or whose key does
+ * not fit (a new key set without raising its version), is logged at `error`, once per
+ * version, naming the keys to fix. The instance still starts: what it cannot open fails
+ * call by call, and the operator needs the instance up to see it (ADR
+ * master-key-rotation-reseals-every-blob, amendment).
+ */
+export const SEALED_KEY_MISMATCH =
+  'stored secrets do not open with the configured master keys: fix VAUBAAN_MASTER_KEY / VAUBAAN_MASTER_KEY_VERSION / VAUBAAN_MASTER_KEY_PREVIOUS and redeploy';
+
+async function checkSealedKeys(
+  store: Store,
+  config: InstanceConfig,
+  logger: Logger,
+): Promise<void> {
+  const failing = (await store.sealedBlobs.probe()).filter((p) => !p.opens);
+  const versions = [...new Set(failing.map((p) => p.keyVersion))].sort((a, b) => a - b);
+  for (const version of versions) {
+    const configured =
+      version === config.encryption.keyVersion || config.encryption.previousKeys.has(version);
+    logger.error(SEALED_KEY_MISMATCH, {
+      key_version: version,
+      current_key_version: config.encryption.keyVersion,
+      cause: configured
+        ? 'a key is configured for this version but it is not the one that sealed these blobs'
+        : 'no key is configured for this version',
+      blobs: failing.filter((p) => p.keyVersion === version).map((p) => `${p.table}: ${p.count}`),
+    });
   }
 }
 

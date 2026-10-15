@@ -31,7 +31,9 @@ names, and the notes about them do too.
 `v5` branch:
 
 - **Signed-in sessions now end after an hour without a request** (eight hours at most,
-  as before). Nothing to configure. A self resource (`VAUBAAN_SELF_RESOURCES`) whose
+  as before). Nothing to configure; once, after the upgrade, everybody signed in more
+  than an hour earlier signs in again. At start, the instance now logs an error when
+  the configured master keys do not open what the store holds. A self resource (`VAUBAAN_SELF_RESOURCES`) whose
   provider is not a plugin id now stops the start (exit 78): check its spelling.
 - **The `developer` preset of GitHub no longer hands out tokens; the gateway is
   the git remote.** Schema migration `0015` applies at start. Missions issued
@@ -724,6 +726,9 @@ write …)`), instead of GitHub's bare 403. The push token of
 
 ### Security
 
+- **A backup command ships in the image**: `node apps/gateway/backup.mjs` makes a
+  consistent, integrity-checked copy of the store on the data volume, read-only, and
+  names the master-key versions the copy needs. Take one before a key rotation.
 - **Rotating the master key now re-seals what is stored.** `node apps/gateway/reseal.mjs`
   (dry run by default, `--apply` to write) seals every stored credential, configuration
   secret and pending approval argument again under the current key, safely beside the

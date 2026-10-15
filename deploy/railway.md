@@ -160,12 +160,31 @@ would still leave your machine; the clean archive above is the procedure.
 ## 6. Backups
 
 - **The volume**: use Railway's volume backups, or make a consistent copy
-  while the gateway runs (`railway ssh` into the service, then a
-  `VACUUM INTO` of `/data/gateway.db` — handbook
-  [store](../docs/handbook/store.md#backup)) and download it.
+  while the gateway runs, with the command the image ships:
+
+  ```bash
+  railway ssh
+  vaubaan-entrypoint node /app/apps/gateway/backup.mjs
+  # backup: /data/backup-2026-10-16T08-00-00-000Z.sqlite
+  # backup: 1234567 bytes, schema version 15, integrity_check: ok
+  # backup: its secrets are sealed under master key version(s) 1: …
+  ```
+
+  It copies `/data/gateway.db` with SQLite's `VACUUM INTO` next to it, never
+  overwrites a file, refuses root (`vaubaan-entrypoint` drops to the image
+  user) and checks the copy (handbook [store](../docs/handbook/store.md#backup)).
+  Copy it off the volume, for instance from your machine:
+  `railway ssh -- base64 /data/<file> > backup.b64 && base64 -d backup.b64 > backup.sqlite`
+  (check this once on your setup: the copy must open with `sqlite3` and pass
+  `PRAGMA integrity_check`), then delete it from the volume
+  (`railway ssh -- rm /data/<file>`).
+
 - **The master key**, separately and outside Railway: a copy of the volume
   without it opens no stored credential, and the key without the volume is
-  nothing. Losing the key loses every connection's credential.
+  nothing. Losing the key loses every connection's credential. **A copy opens
+  only with the keys of the versions it names** (the third line above), as
+  they were when it was made: keep those keys with it. After a rotation
+  (§8) the copies taken before need the old key.
 
 ## 7. The git remote
 
@@ -186,28 +205,49 @@ workspace member who left), rotate it **and reseal**: a rotation alone leaves
 every stored credential openable by the old key. Handbook
 [configuration](../docs/handbook/configuration.md#rotating-the-master-key),
 ADR [master-key-rotation-reseals-every-blob](../docs/decisions/master-key-rotation-reseals-every-blob.md).
+Every command below runs in a `railway ssh` session on the service that serves
+the store — never from another image or from your machine (a newer image would
+migrate the file). `railway ssh` is root: `vaubaan-entrypoint` drops to the
+image user. If a command answers "this instance is not configured" (exit 78),
+the session lacks the service variables: open it again with `railway ssh` on
+the right service and environment.
 
-1. On a trusted machine, `npm run gen-master-key`. In the service's
-   variables: `VAUBAAN_MASTER_KEY` = the new key,
+0. **Back up first**, while the current key is the only one:
+   `vaubaan-entrypoint node /app/apps/gateway/backup.mjs` (§6). Copy the file
+   off the volume and keep it **with the current key**: it opens with that key
+   only.
+1. On a trusted machine, `npm run gen-master-key`. Edit the **three**
+   variables of the service together: `VAUBAAN_MASTER_KEY` = the new key,
    `VAUBAAN_MASTER_KEY_VERSION` = the current version plus one (it is `1`
    when unset), `VAUBAAN_MASTER_KEY_PREVIOUS` = `<old version>=<old key>`.
-2. Deploy (the variables change triggers it, or `railway redeploy`); check
-   `/healthz`.
-3. `railway ssh` into the service, then:
+2. Deploy **once**, with the three staged changes applied together (never one
+   by one: a deploy with the new key and the old version opens nothing).
+   Check `/healthz`, and the log of the boot: a line "stored secrets do not
+   open with the configured master keys" means a variable is wrong — fix it
+   and deploy again before anything else.
+3. Dry run, apply, confirm:
 
    ```bash
-   vaubaan-entrypoint node apps/gateway/reseal.mjs           # dry run
-   vaubaan-entrypoint node apps/gateway/reseal.mjs --apply
-   vaubaan-entrypoint node apps/gateway/reseal.mjs           # nothing left to reseal
+   vaubaan-entrypoint node /app/apps/gateway/reseal.mjs           # dry run: every blob opened
+   vaubaan-entrypoint node /app/apps/gateway/reseal.mjs --apply
+   vaubaan-entrypoint node /app/apps/gateway/reseal.mjs           # "nothing to reseal: …"
    ```
 
-   (`railway ssh` is root: `vaubaan-entrypoint` drops to the image user.)
+   The dry run opens every blob, the current ones too: a non-zero
+   `current unreadable` column means `VAUBAAN_MASTER_KEY` is not the key that
+   sealed them — stop, do not pass `--apply`. Exit 1 with a non-zero
+   `changed` column is normal on a busy instance (the gateway refreshed a
+   token meanwhile): run `--apply` again.
 
-4. When the last run says every blob is under the new version, delete
+4. When the confirming run says **"nothing to reseal: every blob is sealed
+   under version N … VAUBAAN_MASTER_KEY_PREVIOUS can now be removed"**, delete
    `VAUBAAN_MASTER_KEY_PREVIOUS` and deploy again.
-5. Replace the copy of the key you keep outside Railway (§6). Volume backups
-   taken before step 3 open only with the old key: keep it with them, or
-   delete them.
+5. Replace the copy of the key you keep outside Railway (§6) with the key **as
+   Railway holds it** (copy it from the service's variables, not from the
+   terminal where you generated it), so a paste error at step 1 cannot leave
+   your offline copy useless. Backups taken before step 3 — yours from step 0
+   and Railway's own volume backups, if they are on — open only with the old
+   key: keep it with them, or delete them.
 
 ## What the image does on Railway
 
