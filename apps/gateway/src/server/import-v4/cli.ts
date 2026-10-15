@@ -5,6 +5,7 @@
  * (`scripts/build-import-v4.mjs`).
  *
  *   <exporter> | node apps/gateway/import-v4.mjs --owner <email> [--apply] [--allow-stale]
+ *                  [--carry-unbudgeted <quota>] [--reissue <v4 token id>]…
  *
  * The bundle comes on stdin only: no file argument, no secret in argv. The
  * report goes to stderr; stdout carries nothing but the mission keys of an
@@ -35,7 +36,13 @@ import {
   parseBundle,
   secretsOf,
 } from './bundle';
-import { Importer, ImportRefused, type ImportReport, type MissionProvenance } from './importer';
+import {
+  Importer,
+  ImportRefused,
+  unknownReissueIds,
+  type ImportReport,
+  type MissionProvenance,
+} from './importer';
 import { renderReport } from './report';
 
 export const EXIT_OK = 0;
@@ -56,7 +63,8 @@ export const UNEXPECTED_FAILURE =
 /** Most `mission-issued` entries of one owner the provenance lookup reads. */
 const PROVENANCE_SCAN_LIMIT = 100_000;
 
-export const USAGE = `Usage: node apps/gateway/import-v4.mjs --owner <email> [--apply] [--allow-stale] < bundle.json
+export const USAGE = `Usage: node apps/gateway/import-v4.mjs --owner <email> [--apply] [--allow-stale]
+         [--carry-unbudgeted <quota>] [--reissue <v4 token id>]... < bundle.json
 
 Imports the bundle written by scripts/export-v4.mjs (read on stdin) into this
 instance, under <email>, an active user who has signed in once.
@@ -64,6 +72,14 @@ instance, under <email>, an active user who has signed in once.
   --owner <email>  the user every connection and mission is created for
   --apply          write; without it, print the plan and write nothing
   --allow-stale    accept a bundle exported more than an hour ago
+  --carry-unbudgeted <quota>
+                   keep a v4 permission no preset gives a budget, with this
+                   quota per day and every use waiting for the owner's approval
+                   (otherwise it is dropped)
+  --reissue <v4 token id>
+                   issue that token's mission again, even if an earlier import
+                   issued it (repeatable); the earlier mission stays active:
+                   revoke it once the new key is installed
   --help           this text
 
 The report goes to stderr. With --apply, stdout carries the mission keys,
@@ -92,6 +108,28 @@ export interface CliArgs {
   readonly ownerEmail: string;
   readonly apply: boolean;
   readonly allowStale: boolean;
+  /** `--carry-unbudgeted <quota>`, a positive integer; `null` without it. */
+  readonly carryUnbudgeted: number | null;
+  /** `--reissue <v4 token id>`, repeatable. */
+  readonly reissue: readonly string[];
+}
+
+/** A v4 token id is a UUID: only such a value is ever echoed back. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The value of `--name <value>` or `--name=<value>` at `argv[i]`, and how many items it took. */
+function valueOf(
+  argv: readonly string[],
+  i: number,
+  name: string,
+): { readonly value: string | undefined; readonly taken: number } | null {
+  const arg = argv[i];
+  if (arg === name) {
+    const value = argv[i + 1];
+    return { value: value === undefined || value.startsWith('--') ? undefined : value, taken: 2 };
+  }
+  if (arg?.startsWith(`${name}=`)) return { value: arg.slice(name.length + 1), taken: 1 };
+  return null;
 }
 
 export type ParsedArgs =
@@ -103,6 +141,8 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   let ownerEmail: string | null = null;
   let apply = false;
   let allowStale = false;
+  let carryUnbudgeted: number | null = null;
+  const reissue: string[] = [];
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--help' || arg === '-h') return { kind: 'help' };
@@ -112,6 +152,26 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     }
     if (arg === '--allow-stale') {
       allowStale = true;
+      continue;
+    }
+    const carry = valueOf(argv, i, '--carry-unbudgeted');
+    if (carry) {
+      // Digits only: `Number('1e3')`, `'0x10'` or `' 5'` are not what the operator meant.
+      if (carry.value === undefined || !/^[1-9][0-9]{0,8}$/.test(carry.value)) {
+        return { kind: 'usage', problem: '--carry-unbudgeted needs a positive whole number' };
+      }
+      carryUnbudgeted = Number(carry.value);
+      i += carry.taken - 1;
+      continue;
+    }
+    const again = valueOf(argv, i, '--reissue');
+    if (again) {
+      // Never echoed unless it is a UUID: a secret pasted here must not reach the screen.
+      if (again.value === undefined || !UUID.test(again.value)) {
+        return { kind: 'usage', problem: '--reissue needs a v4 token id (a UUID)' };
+      }
+      reissue.push(again.value.toLowerCase());
+      i += again.taken - 1;
       continue;
     }
     if (arg === '--owner') {
@@ -133,7 +193,10 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   if (!ownerEmail || !ownerEmail.includes('@')) {
     return { kind: 'usage', problem: '--owner <email> is required' };
   }
-  return { kind: 'run', args: { ownerEmail, apply, allowStale } };
+  return {
+    kind: 'run',
+    args: { ownerEmail, apply, allowStale, carryUnbudgeted, reissue: [...new Set(reissue)] },
+  };
 }
 
 async function readAll(
@@ -200,6 +263,8 @@ export function createImportMarker(org: string): {
           for (const entry of entries) {
             if (entry.kind !== 'admin') continue;
             const after = entry.after as Record<string, unknown> | null;
+            // Oldest first (`ORDER BY ts, id`): a later entry of the same source
+            // overwrites, so the latest issuance — the one a `--reissue` made — wins.
             if (
               after?.marker === IMPORT_AUDIT_MARKER &&
               after.v4_org === org &&
@@ -306,6 +371,14 @@ async function run(argv: readonly string[], io: CliIo, deps: CliDeps): Promise<n
     );
     return EXIT_DATA;
   }
+  const unknown = unknownReissueIds(bundle.bundle, parsed.args.reissue);
+  if (unknown.length > 0) {
+    io.stderr(
+      `import-v4: --reissue names a token this bundle does not hold as a working v4 token: ${unknown.join(', ')}. ` +
+        'Nothing was written.\n',
+    );
+    return EXIT_USAGE;
+  }
   const redact = createRedactor(secretsOf(bundle.bundle));
 
   const logRedact = createRedactor([...secretsOf(bundle.bundle), ...secretValues(loaded.config)]);
@@ -344,7 +417,7 @@ async function run(argv: readonly string[], io: CliIo, deps: CliDeps): Promise<n
   } catch (err) {
     if (err instanceof ImportRefused) {
       io.stderr(`import-v4: ${err.message}. Nothing was written.\n`);
-      return EXIT_NO_USER;
+      return err.reason === 'reissue-unknown' ? EXIT_USAGE : EXIT_NO_USER;
     }
     io.stderr(UNEXPECTED_FAILURE);
     return EXIT_PARTIAL;

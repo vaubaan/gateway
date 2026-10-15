@@ -14,6 +14,33 @@ extends:
 
 # A one-shot importer carries a v4 organization's keys, resources and working tokens into a v5 instance
 
+> **Amendment of 2026-10-15 (second) — carrying unbudgeted risks, reissuing
+> one mission** (brief PO2, after the live run). The live run dropped many v4
+> permissions as "no preset gives it a budget" (catalog fallbacks such as
+> `github.uncategorized-write`, and entries like
+> `supabase[prod].auth-config-write`), and the owner wants them back on a
+> mission already issued. Two opt-in flags, both explained in D6 and D9:
+>
+> - `--carry-unbudgeted <quota>` keeps such a risk instead of dropping it,
+>   with that quota per period, a rate limit that adds nothing to the quota
+>   (`<quota or the catalog ceiling, the lower> per minute`: a budget always
+>   has a rate limit, spec §3.2) and the **`approval` gate, always** — every
+>   use waits for the owner's grant, so the quota is a ceiling on what the
+>   owner may be asked, not an amount the agent spends alone. Only the
+>   `no-preset-budget` reason is lifted; every other drop stays a drop, the
+>   owner's authority still bounds the line, and the policy stays an explicit
+>   enumeration of risk ids.
+> - `--reissue <v4 token id>` (repeatable) issues that token's mission again
+>   although an import issued one: a risk cannot be added to an issued
+>   mission (spec §3.2, "Changing the limits"), so the way to widen it is a
+>   new mission. Same name; its `mission-issued` entry carries the same
+>   `v4_source`, and a later run recognises the **newest** issuance. The
+>   importer **never revokes** the earlier mission: its key is installed
+>   somewhere and still working; the report names it ("previous import <id>
+>   still active: revoke it once the new key is installed"). An id that is not
+>   a working token of the bundle stops the command (64) before anything is
+>   written. The dry run shows what would be issued.
+
 > **Amendment of 2026-10-15 — after the adversarial review**
 > (`.vaubaan/reports/import-v4/review.md`). v4 **denials** are carried and
 > honoured (D6); a Stripe project keeps the **one mode** v4 used for it (D7);
@@ -192,7 +219,11 @@ plugin's developer-like presets first (`developer`, `*-developer`), then its
 other presets in catalog order — the interface's own rule for a hand-ticked
 risk (`defaultEntryFor`). The catalogs declare no per-risk default budget;
 an id no preset carries (every catalog's fallback among them) has no budget
-to take and is dropped and reported: a quota is never invented. The period
+to take and is dropped and reported: a quota is never invented — unless the
+operator gives one with `--carry-unbudgeted <quota>` (second amendment of
+2026-10-15): the id is then kept with that quota, a rate limit of
+`min(quota, catalog ceiling)` per minute (only the quota binds) and the
+`approval` gate, and reported `carried under approval`. The period
 is the interface's default (quotas reload daily); the expiry is the v4
 token's (`null` stays `null`, as D7 of the pivot asked).
 
@@ -257,6 +288,11 @@ creates is reported "issued at --apply".
   default, `retention_days`) bounds how long a rerun recognises a mission;
   an import is completed within days, and a rerun after the entry is purged
   would issue the mission again (and say so, with a new key).
+- `--reissue <v4 token id>` sets the recognition aside for that token: a
+  new mission is issued beside the one found, which stays active and is
+  named in the report. The provenance entries are read oldest first and a
+  later one overwrites, so the newest issuance of a source is the one a
+  later run recognises.
 - A label is written only on an unlabelled resource.
 
 A rerun creates what is missing and nothing else; the third run of a
@@ -354,6 +390,21 @@ Accepted after the review, not changed:
 - **A conservative default budget for risks no preset carries.** It would
   invent quotas the catalog's authors never wrote; dropping and reporting
   keeps every number in the persisted policy traceable to a preset line.
+- **Carrying unbudgeted risks with the `auto` gate, or by default** (second
+  amendment). The operator's quota is a number no catalog author wrote; under
+  `approval` each use is still the owner's decision, so the number only caps
+  how often the owner is asked. Off by default: a run without the flag keeps
+  the rule above.
+- **No rate limit at all on a carried line** (the brief's wording). A budget
+  without a rate limit cannot be persisted or enforced (spec §3.2,
+  `budgetIssues`); a per-minute rate equal to the quota is the closest
+  expressible form, and per minute keeps it editable and readable on the
+  mission's page, which shows and edits rates per minute.
+- **`--reissue` revoking the earlier mission.** Its key is installed in a
+  project or on a VPS; revoking it before the new key is in place would cut
+  the agent off. The owner revokes it from its page once the new key works.
+- **`--reissue` recognising the previous mission by name.** Provenance only,
+  as D9: a renamed import is still found, a hand-made namesake never is.
 - **One transaction for the whole import.** See D10.
 - **Shipping the importer as TypeScript run by `tsx`, or tracing it with
   Next.** The image carries neither the sources nor the dev dependencies, and

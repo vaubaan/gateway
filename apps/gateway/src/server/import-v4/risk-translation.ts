@@ -23,9 +23,21 @@
  * developer preset first, then its other presets in catalog order (the
  * interface's rule for a hand-ticked risk, `defaultEntryFor`). An id no
  * preset carries — every catalog's fallback among them — has no budget to
- * take: dropped and reported, since a quota is never invented.
+ * take: dropped and reported, since a quota is never invented — unless the
+ * operator asks for it with `carryUnbudgeted` (`--carry-unbudgeted <quota>`,
+ * ADR import-from-v4-one-shot-importer, amendment of 2026-10-15): the id is
+ * then kept with that quota, a rate limit that adds nothing to it, and the
+ * `approval` gate, always — every use waits for the owner's grant. Only that
+ * reason is lifted; every other drop stays a drop.
  */
-import { formatRiskId, parseRiskId, type PresetEntry, type RiskId } from '@vaubaan/shared';
+import { SECONDS_PER_MINUTE } from '@vaubaan/policy-engine';
+import {
+  formatRiskId,
+  parseRiskId,
+  type PresetEntry,
+  type RateLimit,
+  type RiskId,
+} from '@vaubaan/shared';
 
 import { isResolvable } from '../missions/catalog-view';
 import type { CatalogRisk, IssuanceConnection, IssuanceResource } from '../missions/model';
@@ -50,13 +62,30 @@ export interface DroppedRisk {
 export interface TranslatedEntry extends PresetEntry {
   /** The v4 id it comes from. */
   readonly from: string;
-  /** The preset whose line gave the budget. */
-  readonly presetId: string;
+  /** The preset whose line gave the budget; `null` for a line carried under approval. */
+  readonly presetId: string | null;
+}
+
+/**
+ * `--carry-unbudgeted <quota>`: a risk dropped only because no preset gives
+ * it a budget is kept with this quota per period, under approval.
+ */
+export interface CarryUnbudgeted {
+  /** A positive integer, actions per period (the mission's period). */
+  readonly quota: number;
+}
+
+/** A risk kept under approval by `CarryUnbudgeted` instead of being dropped. */
+export interface CarriedRisk {
+  readonly v4RiskId: string;
+  readonly v5RiskId: RiskId;
 }
 
 export interface Translation {
   readonly entries: readonly TranslatedEntry[];
   readonly dropped: readonly DroppedRisk[];
+  /** Ids no preset budgets, kept under approval (`CarryUnbudgeted`); also in `entries`. */
+  readonly carried: readonly CarriedRisk[];
   /** Account-scoped v4 ids written out per environment (rule 2), for the report. */
   readonly expanded: readonly {
     readonly v4RiskId: string;
@@ -84,12 +113,14 @@ export function translateRisks(
   connection: TranslatableConnection,
   selected: readonly Pick<IssuanceResource, 'env'>[],
   v4Denied: readonly string[] = [],
+  carry: CarryUnbudgeted | null = null,
 ): Translation {
   const denied = new Set(v4Denied);
   const byId = new Map(connection.risks.map((risk) => [risk.risk_id, risk]));
   const held = new Set(connection.authority);
   const entries = new Map<RiskId, TranslatedEntry>();
   const dropped: DroppedRisk[] = [];
+  const carried: CarriedRisk[] = [];
   const expanded: { v4RiskId: string; v5RiskIds: RiskId[] }[] = [];
 
   for (const v4RiskId of new Set(v4RiskIds)) {
@@ -115,6 +146,18 @@ export function translateRisks(
         continue;
       }
       const line = presetLineFor(connection, risk);
+      if (!line && carry !== null) {
+        entries.set(risk.risk_id, {
+          risk_id: risk.risk_id,
+          quota: carry.quota,
+          rate_limit: unbindingRateLimit(carry.quota, risk),
+          gate: 'approval',
+          from: v4RiskId,
+          presetId: null,
+        });
+        carried.push({ v4RiskId, v5RiskId: risk.risk_id });
+        continue;
+      }
       if (!line) {
         dropped.push({ v4RiskId, reason: 'no-preset-budget', v5RiskIds: [risk.risk_id] });
         continue;
@@ -129,7 +172,24 @@ export function translateRisks(
       });
     }
   }
-  return { entries: [...entries.values()], dropped, expanded };
+  return { entries: [...entries.values()], dropped, carried, expanded };
+}
+
+/**
+ * The rate limit of a carried line: as many per minute as the quota allows
+ * per period, so only the quota binds — a budget always has a rate limit
+ * (spec §3.2), this one adds nothing to the quota. Held under the catalog's
+ * ceiling when it has one.
+ */
+export function unbindingRateLimit(
+  quota: number,
+  risk: Pick<CatalogRisk, 'rate_ceiling_per_minute'>,
+): RateLimit {
+  const ceiling = risk.rate_ceiling_per_minute;
+  return {
+    max: ceiling === null ? quota : Math.min(quota, ceiling),
+    window_seconds: SECONDS_PER_MINUTE,
+  };
 }
 
 type Targets =

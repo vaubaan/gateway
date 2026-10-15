@@ -109,8 +109,9 @@ the standalone tree), a `require` shim for CommonJS dependencies.
 `runImportCli` (`cli.ts`), in order:
 
 1. arguments: `--owner <email>` (required), `--apply`, `--allow-stale`,
-   `--help`; anything else is a usage error (64) that does not echo the
-   argument;
+   `--carry-unbudgeted <quota>` (digits only, at least 1),
+   `--reissue <v4 token id>` (a UUID, repeatable, lower-cased), `--help`;
+   anything else is a usage error (64) that does not echo the argument;
 2. refuses uid 0 (77) and a terminal on stdin (64);
 3. loads the instance's configuration (78 with the named keys on failure) and
    refuses when `store.path` is `:memory:` or no file is there (78: it never
@@ -119,11 +120,15 @@ the standalone tree), a `require` shim for CommonJS dependencies.
 4. reads stdin up to 8 MiB, parses and validates the bundle whole (65 on any
    problem, listed by path, never by value);
 5. refuses (65) a bundle exported more than an hour ago unless
-   `--allow-stale`, and one that claims to come from the future;
+   `--allow-stale`, and one that claims to come from the future; refuses (64)
+   a `--reissue` id that is not a working token of the bundle
+   (`unknownReissueIds`), naming it, before the instance is opened;
 6. builds the composition root with the store wrapped by `createImportMarker`
    (every administrative audit entry gets `after.marker = 'imported-from-v4'`
    and `after.v4_org`; the `mission-issued` entry of an imported mission also
-   `after.v4_source = tokens/<v4 token id>`) and the log reduced to `error`
+   `after.v4_source = tokens/<v4 token id>`; `provenance.issued` reads those
+   entries oldest first, so the newest issuance of a source wins) and the
+   log reduced to `error`
    lines, redacted with every secret of the bundle and of the configuration,
    on stderr;
 7. runs `Importer.run`; prints the bundle's age, `renderReport` on stderr
@@ -167,8 +172,10 @@ the standalone tree), a `require` shim for CommonJS dependencies.
 <slug>/<token>` when two projects share a name. A mission the owner issued
   through an earlier import of this organization for this v4 token
   (`provenance.issued`: the marked `mission-issued` entries) → `exists`,
-  whatever its name now; a revoked one is reported, not issued again. A
-  hand-made mission with the same name is not looked at. Per service of
+  whatever its name now; a revoked one is reported, not issued again —
+  unless the token is named by `--reissue`: the mission is then planned and
+  issued anew, and the one found is reported in `previous` (id and status),
+  never revoked. A hand-made mission with the same name is not looked at. Per service of
   the project: the connection with the most matched resources (an import of
   the same organization wins a tie). None → `deferred` with what to do, or
   `after-connections` in a dry run when the run itself creates it. Then
@@ -192,6 +199,13 @@ the standalone tree), a `require` shim for CommonJS dependencies.
 | denied in v4 (the id, or a target's id or base) | dropped, `denied-in-v4` — v4 denials trump acceptance                                                        |
 | outside the owner's authority                   | dropped, `outside-authority`                                                                                 |
 | no preset line (the fallbacks among them)       | dropped, `no-preset-budget` — a quota is never invented                                                      |
+| no preset line, with `--carry-unbudgeted <q>`   | kept: quota `q`, rate `min(q, catalog ceiling)` per minute, gate `approval` always: `carried`                |
+
+The fifth argument of `translateRisks`, `{ quota }` or `null`, is
+`--carry-unbudgeted`; it lifts the `no-preset-budget` drop only, after the
+denial and authority checks (`unbindingRateLimit` gives the rate). The report
+prints a carried id as `~ carried under approval: <v5 id>` (with its v4 id
+when they differ).
 
 Budget and gate of a kept id: the first line naming it (exactly, then by its
 base id) in the developer-like presets (`developer`, `*-developer`), then in
@@ -281,13 +295,37 @@ somewhere it stays.
 ### 2.5 After
 
 - Each imported mission is a plain mission: its limits can be changed from
-  its page; a risk that was dropped is added by issuing a new mission.
+  its page; a risk that was dropped is added by issuing a new mission —
+  §2.6.
 - Activity → filter administrative entries: every act of the import is
   there, as the owner, with `marker: imported-from-v4`.
 - Once v4 is switched off ([cutover-from-v4](cutover-from-v4.md) §3.C):
   reconnect each imported SSH account (it generates a key pair of the
   instance's own; install the new public key, remove the v4 one), and rotate
   at the services the Cloudflare, Vercel and Stripe keys v4 also held.
+
+### 2.6 Bring back dropped permissions on an imported mission
+
+Risks cannot be added to an issued mission; the importer issues a new one.
+Example, the Transpay mission (v4 token `vscode`,
+`83e35806-6201-47e5-8f03-c0ae2cd604a4`), whose "no preset gives it a budget"
+drops should come back under approval, 5 uses a day each:
+
+1. Dry run with `--reissue 83e35806-6201-47e5-8f03-c0ae2cd604a4
+--carry-unbudgeted 5`: the mission line reads `would be issued`, then
+   `! previous import <mission id> still active: …`, then one
+   `~ carried under approval: <risk>` per brought-back permission. Other
+   drops (denied in v4, outside the owner's authority, unknown,
+   environment) are still listed as dropped.
+2. The same pipe with `--apply`: one key on stdout, for the new mission.
+3. Install the new key where the old one was, check the agent works, then
+   revoke the previous mission from its page. The importer never revokes it.
+4. A later run without `--reissue` recognises the new mission ("already
+   exists"); a run with `--reissue` again would issue a third one.
+
+`--carry-unbudgeted` applies to every mission the run issues (a deferred one
+included), not only the reissued ones; missions that already exist are left
+alone.
 
 ## 3. Tests
 
@@ -302,7 +340,9 @@ somewhere it stays.
 - Integration: `tests/integration/import-v4/import-v4.test.ts` — exporter
   output into the command, real root on `:memory:`, real plugins, fake
   services: dry run, apply, rerun, third run, rejected key, unknown owner,
-  root, missing store, invalid bundle.
+  root, missing store, invalid bundle; `--carry-unbudgeted` (carried under
+  approval, other drops kept); `--reissue` (dry run, apply beside the old
+  mission left active, newest recognised later, unknown id refused).
 - Standalone: `tests/integration/standalone-import-v4.test.ts` runs the
   bundle from `.next/standalone` on a store file (after a build).
 - Container: `deploy/docker/smoke.sh` step 10 — the command ships, refuses

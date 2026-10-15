@@ -218,6 +218,11 @@ names, and the notes about them do too.
   never duplicates (missions are recognised by their v4 token, not their name).
   Every act is the owner's in Activity, marked `imported-from-v4`. Handbook
   `import-from-v4`, ADR `import-from-v4-one-shot-importer`.
+  `--carry-unbudgeted <quota>` keeps, instead of dropping, a v4 permission no
+  preset gives limits: with that quota per day and **ask me first** on every use.
+  `--reissue <v4 token id>` issues a new mission for a v4 key already imported
+  (to add permissions, which an issued mission never gains); the earlier mission
+  keeps working and the report names it, to revoke once the new key is installed.
 
 - **The gateway is the agent's git remote.** With a mission key and git, and
   nothing else, an agent clones, fetches and pushes

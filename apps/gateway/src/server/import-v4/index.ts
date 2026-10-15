@@ -38,7 +38,9 @@ export {
   ImportRefused,
   normalizeBindings,
   sameVisibleFields,
+  unknownReissueIds,
   V5_ENV_LABELS,
+  type ImportOptions,
   type ImportReport,
   type MissionProvenance,
   type IssuedKey,
@@ -48,5 +50,8 @@ export {
   isDeveloperLike,
   providerOfV4Risk,
   translateRisks,
+  unbindingRateLimit,
+  type CarriedRisk,
+  type CarryUnbudgeted,
   type Translation,
 } from './risk-translation';

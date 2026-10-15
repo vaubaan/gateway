@@ -140,6 +140,7 @@ function missionLines(m: MissionOutcome): string[] {
   const lines = [
     `  - "${m.name}" (v4 token ${m.tokenName}): ${MISSION_WORDS[m.status]}${m.missionId ? ` [${m.missionId}]` : ''}`,
   ];
+  if (m.previous) lines.push(`      ! ${previousLine(m.previous)}`);
   for (const c of m.connections) {
     lines.push(
       `      ${c.provider} [${c.connectionId}] on ${c.refs.join(', ')}: ${c.riskIds.length} risk(s)`,
@@ -151,6 +152,10 @@ function missionLines(m: MissionOutcome): string[] {
       `      ~ ${e.v4RiskId} → ${e.v5RiskIds.join(', ')} (one per environment of the selected resources)`,
     );
   }
+  for (const c of m.carried) {
+    const from = c.v4RiskId === c.v5RiskId ? '' : ` (v4: ${c.v4RiskId})`;
+    lines.push(`      ~ carried under approval: ${c.v5RiskId}${from}`);
+  }
   for (const d of m.dropped) {
     const ids = d.v5RiskIds.length > 0 ? ` [${d.v5RiskIds.join(', ')}]` : '';
     lines.push(`      - dropped ${d.v4RiskId}: ${DROP_WORDS[d.reason]}${ids}`);
@@ -161,4 +166,11 @@ function missionLines(m: MissionOutcome): string[] {
     );
   }
   return lines;
+}
+
+/** `--reissue`: the earlier import of the same v4 token, which the importer never revokes. */
+function previousLine(previous: NonNullable<MissionOutcome['previous']>): string {
+  return previous.status === 'active'
+    ? `previous import ${previous.missionId} still active: revoke it once the new key is installed`
+    : `previous import ${previous.missionId} is ${previous.status}`;
 }

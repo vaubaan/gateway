@@ -153,11 +153,23 @@ describe('command line', () => {
   it('reads --owner and --apply', () => {
     expect(parseArgs(['--owner', 'a@example.com'])).toEqual({
       kind: 'run',
-      args: { ownerEmail: 'a@example.com', apply: false, allowStale: false },
+      args: {
+        ownerEmail: 'a@example.com',
+        apply: false,
+        allowStale: false,
+        carryUnbudgeted: null,
+        reissue: [],
+      },
     });
     expect(parseArgs(['--apply', '--owner=a@example.com'])).toEqual({
       kind: 'run',
-      args: { ownerEmail: 'a@example.com', apply: true, allowStale: false },
+      args: {
+        ownerEmail: 'a@example.com',
+        apply: true,
+        allowStale: false,
+        carryUnbudgeted: null,
+        reissue: [],
+      },
     });
   });
 
@@ -208,10 +220,70 @@ describe('command line', () => {
     ]);
   });
 
+  it('reads --carry-unbudgeted as a positive whole number only', () => {
+    expect(parseArgs(['--owner', 'a@example.com', '--carry-unbudgeted', '5'])).toMatchObject({
+      kind: 'run',
+      args: { carryUnbudgeted: 5 },
+    });
+    expect(parseArgs(['--owner', 'a@example.com', '--carry-unbudgeted=12'])).toMatchObject({
+      kind: 'run',
+      args: { carryUnbudgeted: 12 },
+    });
+    for (const bad of ['0', '-1', '1.5', '1e3', '0x10', ' 5', 'many']) {
+      expect(parseArgs(['--owner', 'a@example.com', '--carry-unbudgeted', bad]).kind).toBe('usage');
+    }
+    expect(parseArgs(['--owner', 'a@example.com', '--carry-unbudgeted']).kind).toBe('usage');
+  });
+
+  it('reads --reissue, repeatable, as v4 token ids without echoing anything else', () => {
+    const a = '83e35806-6201-47e5-8f03-c0ae2cd604a4';
+    const b = '0B6A1A3E-0000-4000-8000-0000000000C2';
+    expect(
+      parseArgs(['--owner', 'a@example.com', '--reissue', a, `--reissue=${b}`, '--reissue', a]),
+    ).toMatchObject({ kind: 'run', args: { reissue: [a, b.toLowerCase()] } });
+    const parsed = parseArgs(['--owner', 'a@example.com', '--reissue', CLOUDFLARE_TOKEN]);
+    expect(parsed.kind).toBe('usage');
+    if (parsed.kind === 'usage') expect(parsed.problem).not.toContain(CLOUDFLARE_TOKEN);
+    expect(parseArgs(['--owner', 'a@example.com', '--reissue']).kind).toBe('usage');
+  });
+
+  it('recognises the newest issuance of a v4 token, the one a reissue made', async () => {
+    const entry = (id: string, source: string, org = 'acme') => ({
+      kind: 'admin' as const,
+      ts: '2026-10-15T08:00:00.000Z',
+      user_id: 'u1',
+      act: 'mission-issued' as const,
+      object: { type: 'mission' as const, id },
+      before: null,
+      after: { marker: 'imported-from-v4', v4_org: org, v4_source: source },
+      delegated_client_id: null,
+    });
+    // `audit.list` returns the oldest first.
+    const audit = {
+      list: async () => [
+        entry('m-old', 'tokens/t1'),
+        entry('m-t2', 'tokens/t2'),
+        entry('m-new', 'tokens/t1'),
+        entry('m-other-org', 'tokens/t2', 'other'),
+      ],
+    } as unknown as Store['audit'];
+    const issued = await createImportMarker('acme').provenance({ audit }).issued('u1');
+    expect([...issued]).toEqual([
+      ['tokens/t1', 'm-new'],
+      ['tokens/t2', 'm-t2'],
+    ]);
+  });
+
   it('reads --allow-stale', () => {
     expect(parseArgs(['--owner', 'a@example.com', '--allow-stale'])).toEqual({
       kind: 'run',
-      args: { ownerEmail: 'a@example.com', apply: false, allowStale: true },
+      args: {
+        ownerEmail: 'a@example.com',
+        apply: false,
+        allowStale: true,
+        carryUnbudgeted: null,
+        reissue: [],
+      },
     });
   });
 });
