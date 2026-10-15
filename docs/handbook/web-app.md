@@ -2,7 +2,7 @@
 title: Web app — route map, layouts, shell, design system
 status: current
 date: 2026-10-13
-last_synced: 2026-10-14
+last_synced: 2026-10-15
 tracks:
   - apps/gateway/src/app/layout.tsx
   - apps/gateway/src/app/(app)/page.tsx
@@ -66,7 +66,7 @@ of that code exists any more.
 
 ## What the app is
 
-`apps/gateway` is one Next.js application (`next` 16.4.0, `react` 19.3.0, App
+`apps/gateway` is one Next.js application (`next` 16.4.1, `react` 19.3.0, App
 Router) built as a standalone server (`output: 'standalone'`,
 [configuration](configuration.md)). It serves the pages, the JSON and form
 endpoints behind them, and the agent-facing MCP door from the same process.

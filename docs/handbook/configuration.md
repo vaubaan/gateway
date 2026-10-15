@@ -279,8 +279,13 @@ module, the proxy and the consent documents write a CSP).
 
 ## Framework
 
-`apps/gateway` runs on **Next.js 16.4.0** with React 19.3.0 (from
-15.5.18 / 19.1.1). What the upgrade means for this module:
+`apps/gateway` runs on **Next.js 16.4.1** with React 19.3.0 (from
+15.5.18 / 19.1.1; 16.4.0 → 16.4.1 for the advisories of 2026-10-14, security
+review 2026-10-15 M1). What the upgrade means for this module:
+
+- `images: { unoptimized: true }`: no page uses `next/image`, so the image
+  optimizer (`/_next/image`, sharp and libvips parsing bytes an
+  unauthenticated caller chooses) is not served.
 
 - `next build` and `next dev` use **Turbopack**; nothing here depends on
   webpack. The standalone output keeps the same entry (`apps/gateway/server.js`,

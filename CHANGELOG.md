@@ -738,6 +738,11 @@ write …)`), instead of GitHub's bare 403. The push token of
   hosts list theirs in `self_resources` / `VAUBAAN_SELF_RESOURCES`
   (`<provider>:<ref>`). ADR
   [self-resources-never-reachable-by-a-mission](docs/decisions/self-resources-never-reachable-by-a-mission.md).
+- **Next.js 16.4.1** (security review 2026-10-15, M1): the advisories published on
+  2026-10-14 against 16.4.0 (image optimizer with SVG, `use cache`, Server Actions)
+  had no open path here, and the image optimizer is now off
+  (`images.unoptimized`): no page uses it, so `/_next/image` is no longer served.
+  Operators: redeploy.
 - **Every change and every release passes supply-chain checks.** A secret scan of the
   whole history on every push, static analysis (Semgrep: pinned community security rules
   and rules of this codebase), a vulnerability scan of the image that fails on a known
