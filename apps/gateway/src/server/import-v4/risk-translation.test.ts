@@ -9,6 +9,7 @@ import {
   isDeveloperLike,
   providerOfV4Risk,
   translateRisks,
+  unbindingRateLimit,
   type TranslatableConnection,
 } from './risk-translation';
 
@@ -236,5 +237,85 @@ describe('helpers', () => {
     expect(isDeveloperLike('staging-developer')).toBe(true);
     expect(isDeveloperLike('read-only')).toBe(false);
     expect(isDeveloperLike('developers')).toBe(false);
+  });
+});
+
+describe('--carry-unbudgeted: risks no preset budgets, kept under approval', () => {
+  const carry = { quota: 5 };
+
+  it('keeps the fallback with the given quota, the approval gate and no binding rate', () => {
+    const github = connectionOf(githubPlugin);
+    const t = translateRisks(['github.uncategorized-write'], github, [], [], carry);
+    expect(t.dropped).toEqual([]);
+    expect(t.carried).toEqual([
+      { v4RiskId: 'github.uncategorized-write', v5RiskId: 'github.uncategorized-write' },
+    ]);
+    const risk = github.risks.find((r) => r.risk_id === 'github.uncategorized-write')!;
+    expect(t.entries).toEqual([
+      {
+        risk_id: 'github.uncategorized-write',
+        quota: 5,
+        rate_limit: unbindingRateLimit(5, risk),
+        gate: 'approval',
+        from: 'github.uncategorized-write',
+        presetId: null,
+      },
+    ]);
+  });
+
+  it('carries an env-qualified risk with an exact v5 counterpart', () => {
+    const supabase = connectionOf(supabasePlugin);
+    const presetIds = new Set(
+      (supabasePlugin.catalog.presets ?? []).flatMap((p) => p.entries.map((e) => e.risk_id)),
+    );
+    const unbudgeted = supabase.risks.find(
+      (r) =>
+        r.env === 'prod' && !r.deprecated && !presetIds.has(r.risk_id) && !presetIds.has(r.base_id),
+    );
+    expect(unbudgeted).toBeDefined();
+    const t = translateRisks([unbudgeted!.risk_id], supabase, [{ env: 'prod' }], [], carry);
+    expect(t.carried.map((c) => c.v5RiskId)).toEqual([unbudgeted!.risk_id]);
+    expect(t.entries[0]).toMatchObject({ gate: 'approval', quota: 5 });
+  });
+
+  it('leaves a preset-budgeted risk on its preset line, gate included', () => {
+    const t = translateRisks(['github.create-pr'], connectionOf(githubPlugin), [], [], carry);
+    expect(t.carried).toEqual([]);
+    expect(t.entries[0]!.presetId).toBe('developer');
+  });
+
+  it('lifts no other reason: authority, denial, unknown and widening still drop', () => {
+    const github = connectionOf(githubPlugin, ['github.read-code']);
+    const t = translateRisks(
+      [
+        'github.uncategorized-write',
+        'github.teleport',
+        'github[feature].workflow-write-via-file',
+        'github.read-code',
+      ],
+      github,
+      [],
+      ['github.read-code'],
+      carry,
+    );
+    expect(t.entries).toEqual([]);
+    expect(t.carried).toEqual([]);
+    expect(t.dropped.map((d) => [d.v4RiskId, d.reason])).toEqual([
+      ['github.uncategorized-write', 'outside-authority'],
+      ['github.teleport', 'unknown-in-v5'],
+      ['github[feature].workflow-write-via-file', 'no-exact-env-counterpart'],
+      ['github.read-code', 'denied-in-v4'],
+    ]);
+  });
+
+  it('holds the rate limit under the catalog ceiling, per minute', () => {
+    expect(unbindingRateLimit(5, { rate_ceiling_per_minute: null })).toEqual({
+      max: 5,
+      window_seconds: 60,
+    });
+    expect(unbindingRateLimit(500, { rate_ceiling_per_minute: 30 })).toEqual({
+      max: 30,
+      window_seconds: 60,
+    });
   });
 });

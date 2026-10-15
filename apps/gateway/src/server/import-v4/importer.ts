@@ -25,7 +25,7 @@
  */
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 import { credentialSpecFor } from '@vaubaan/plugin-sdk';
-import type { RiskId } from '@vaubaan/shared';
+import type { MissionStatus as MissionState, RiskId } from '@vaubaan/shared';
 
 import { findActiveUserByEmail } from '../authority';
 import {
@@ -57,7 +57,12 @@ import {
   STRIPE_PROVIDER,
   stripeKeyFields,
 } from './credential-mapping';
-import { providerOfV4Risk, translateRisks, type DroppedRisk } from './risk-translation';
+import {
+  providerOfV4Risk,
+  translateRisks,
+  type CarriedRisk,
+  type DroppedRisk,
+} from './risk-translation';
 
 /** The environment labels a v4 binding carries over; any other v4 label is left behind. */
 export const V5_ENV_LABELS = ['prod', 'staging', 'preview', 'dev'] as const;
@@ -92,7 +97,10 @@ export interface ImporterPorts {
 }
 
 export interface MissionProvenance {
-  /** Mission id by v4 source, for the missions the owner issued through an import of this org. */
+  /**
+   * Mission id by v4 source, for the missions the owner issued through an
+   * import of this org: the newest one when a source was reissued.
+   */
   issued(ownerId: string): Promise<ReadonlyMap<string, string>>;
   /** Runs `act` with `source` recorded on the audit entries it writes. */
   during<T>(source: string, act: () => Promise<T>): Promise<T>;
@@ -107,12 +115,31 @@ export interface ImportOptions {
   readonly ownerEmail: string;
   /** False: the dry run, nothing is written and no provider is contacted. */
   readonly apply: boolean;
+  /**
+   * `--carry-unbudgeted <quota>`: keep, with this quota and the `approval`
+   * gate, a v4 risk no preset gives a budget instead of dropping it.
+   */
+  readonly carryUnbudgeted?: number | null;
+  /**
+   * `--reissue <v4 token id>`: issue these tokens' missions again even when
+   * an import already issued one. The earlier mission is left active.
+   */
+  readonly reissue?: readonly string[];
+}
+
+/** The `--reissue` ids that name no working v4 token of the bundle. */
+export function unknownReissueIds(
+  bundle: Pick<V4Bundle, 'missions'>,
+  reissue: readonly string[],
+): string[] {
+  const known = new Set(bundle.missions.map((m) => m.token_id));
+  return [...new Set(reissue)].filter((id) => !known.has(id));
 }
 
 /** Refused before anything was read from or written to the instance's domain. */
 export class ImportRefused extends Error {
   constructor(
-    readonly reason: 'owner-unknown' | 'owner-ambiguous',
+    readonly reason: 'owner-unknown' | 'owner-ambiguous' | 'reissue-unknown',
     message: string,
   ) {
     super(message);
@@ -203,6 +230,16 @@ export interface MissionOutcome {
   /** Why the mission waits, or what blocked it (deferred, refused). */
   readonly reasons: readonly string[];
   readonly dropped: readonly (DroppedRisk & { readonly provider: string })[];
+  /** v4 risks no preset budgets, kept under approval (`--carry-unbudgeted`). */
+  readonly carried: readonly (CarriedRisk & { readonly provider: string })[];
+  /**
+   * `--reissue`: the mission an earlier import issued for the same v4 token,
+   * which this run does not revoke.
+   */
+  readonly previous: {
+    readonly missionId: string;
+    readonly status: MissionState;
+  } | null;
   readonly expanded: readonly {
     readonly v4RiskId: string;
     readonly v5RiskIds: readonly RiskId[];
@@ -369,6 +406,14 @@ export class Importer {
   constructor(private readonly ports: ImporterPorts) {}
 
   async run(bundle: V4Bundle, options: ImportOptions): Promise<ImportReport> {
+    const reissue = new Set(options.reissue ?? []);
+    const unknown = unknownReissueIds(bundle, [...reissue]);
+    if (unknown.length > 0) {
+      throw new ImportRefused(
+        'reissue-unknown',
+        `--reissue names ${unknown.length} token(s) that are not working v4 tokens of this bundle`,
+      );
+    }
     const actor = await this.ownerOf(options.ownerEmail);
     const org = bundle.organization.slug;
     const sources = this.sourcesOf(bundle);
@@ -409,6 +454,8 @@ export class Importer {
         held: afterLabels,
         waiting,
         issued,
+        reissue: reissue.has(mission.token_id),
+        carryUnbudgeted: options.carryUnbudgeted ?? null,
         apply: options.apply,
       });
       missions.push(outcome.outcome);
@@ -721,6 +768,9 @@ export class Importer {
       readonly waiting: readonly Source[];
       /** Missions earlier imports issued, by v4 source. */
       readonly issued: ReadonlyMap<string, string>;
+      /** `--reissue`: issue again even when an earlier import issued it. */
+      readonly reissue: boolean;
+      readonly carryUnbudgeted: number | null;
       readonly apply: boolean;
     },
   ): Promise<{ readonly outcome: MissionOutcome; readonly key: IssuedKey | null }> {
@@ -733,6 +783,8 @@ export class Importer {
       connections: [] as MissionConnectionPlan[],
       reasons: [] as string[],
       dropped: [] as (DroppedRisk & { provider: string })[],
+      carried: [] as (CarriedRisk & { provider: string })[],
+      previous: null as MissionOutcome['previous'],
       expanded: [] as { v4RiskId: string; v5RiskIds: RiskId[] }[],
       unbound: [] as string[],
     };
@@ -749,7 +801,11 @@ export class Importer {
       const existing = (await this.ports.store.missions.listForCreator(actor.user.id)).find(
         (m) => m.id === existingId,
       );
-      if (existing) {
+      if (existing && input.reissue) {
+        // Named in the report, never revoked here: its key stays in use until
+        // the new one is installed (ADR amendment of 2026-10-15).
+        base.previous = { missionId: existing.id, status: existing.status };
+      } else if (existing) {
         return done('exists', {
           missionId: existing.id,
           reasons:
@@ -806,8 +862,15 @@ export class Importer {
         records.some((record) => record.id === r.id),
       );
       const ids = mission.accepted_risks.filter((id) => providerOfV4Risk(id) === provider);
-      const translation = translateRisks(ids, h.issuance, selected, mission.denied_risks);
+      const translation = translateRisks(
+        ids,
+        h.issuance,
+        selected,
+        mission.denied_risks,
+        input.carryUnbudgeted === null ? null : { quota: input.carryUnbudgeted },
+      );
       base.dropped.push(...translation.dropped.map((d) => ({ ...d, provider })));
+      base.carried.push(...translation.carried.map((c) => ({ ...c, provider })));
       base.expanded.push(
         ...translation.expanded.map((e) => ({ v4RiskId: e.v4RiskId, v5RiskIds: [...e.v5RiskIds] })),
       );

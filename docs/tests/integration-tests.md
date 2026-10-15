@@ -4035,7 +4035,7 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
   and a slug nobody holds refused; an unknown organization refused; working
   tokens kept with their string accepted and denied risk ids; the summary
   holds no secret.
-- **`apps/gateway/src/server/import-v4/risk-translation.test.ts`** (16) —
+- **`apps/gateway/src/server/import-v4/risk-translation.test.ts`** (21) —
   with the real GitHub, Supabase and Vercel catalogs: an exact id kept with
   the developer preset's line; a risk only another preset carries takes that
   line; the fallback dropped (no preset budget); an unknown id dropped; an
@@ -4046,8 +4046,13 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
   a plugin deriving the environment needs no label; authority bounds the
   result; a v4 denial drops the id even when accepted, and a written-out
   environment the denial names by id or by base id; duplicates counted once;
-  every kept entry explicit with a numeric quota.
-- **`apps/gateway/src/server/import-v4/bundle.test.ts`** (23) — the
+  every kept entry explicit with a numeric quota. **`--carry-unbudgeted`**:
+  the fallback kept with the given quota, gate `approval` and a per-minute
+  rate no higher than the quota; an env-qualified Supabase entry no preset
+  budgets carried on its exact id; a preset-budgeted risk keeps its preset
+  line; authority, denial, unknown and widening still drop; the rate held
+  under the catalog ceiling.
+- **`apps/gateway/src/server/import-v4/bundle.test.ts`** (26) — the
   exporter's shape accepted; an unknown key anywhere refused by name; a
   secret for GitHub refused; references to an unlisted project, a malformed
   v4 risk id, a wrong format or version refused; a JSON syntax error and a
@@ -4056,7 +4061,10 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
   GitHub and OAuth grants never mapped; a Vercel account without team id not
   mapped. Duplicated bindings merged; hand-made connections recognised by
   non-secret values only. `--owner`/`--apply`/`--allow-stale` parsing, no
-  echo; the audit marker on administrative entries, `v4_source` on the one
+  echo; `--carry-unbudgeted` digits only (`0`, `1e3`, `0x10`, ` 5` refused);
+  `--reissue` repeatable, UUIDs only, deduplicated, a secret in its place not
+  echoed; the provenance lookup keeps the newest issuance of a v4 token and
+  ignores another organization's; the audit marker on administrative entries, `v4_source` on the one
   written inside `provenance.during`. A Stripe project's mode without its
   key refused; a mission without `denied_risks` refused; a "secret" shorter
   than 8 characters refused; mission names on one line, apart when two
@@ -4065,7 +4073,7 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
   — a v4 PKCS#8 ed25519 key and an OpenSSH container become an OpenSSH key
   `ssh2` reads, the same key; another key type, text and a truncated
   container refused without quoting the key.
-- **`apps/gateway/tests/integration/import-v4/import-v4.test.ts`** (11) — the
+- **`apps/gateway/tests/integration/import-v4/import-v4.test.ts`** (14) — the
   exporter's bundle piped into the command, real composition root on
   `:memory:`, real plugins. **Dry run**: plan printed, stdout empty, the
   database unchanged, no service and no SSH host contacted. **Apply**: four
@@ -4086,6 +4094,14 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
   recognised and a hand-made namesake is not taken for the import; a bundle
   older than an hour refused (65) unless `--allow-stale`, one from the future
   refused; an unexpected failure prints one fixed line without its message.
+  **Carry and reissue** (brief PO2): `--carry-unbudgeted 5` issues `ops`
+  with `ssh.uncategorized-write` at quota 5, gate `approval`, reported
+  "carried under approval", while an unknown id stays dropped; `--reissue
+<ops token>` in a dry run writes nothing and names the earlier mission as
+  still active; with `--apply` a second `ops` mission is issued (its key
+  only on stdout), the earlier one stays active, and a later run without
+  the flag recognises the new one; a `--reissue` id not in the bundle is
+  refused (64) before anything is written.
 - **`apps/gateway/tests/integration/standalone-import-v4.test.ts`** (2,
   after a build) — the bundled command runs from `.next/standalone` on a
   store file: dry run of a bundle on stdin, exit 0; unknown owner, exit 67.

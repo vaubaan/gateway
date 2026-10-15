@@ -52,6 +52,7 @@ interface V4BundleLike {
   }[];
 }
 
+const OPS_TOKEN_ID = '0b6a1a3e-0000-4000-8000-0000000000c2';
 const FINGERPRINT = `SHA256:${randomBytes(32).toString('base64').replace(/=+$/, '')}`;
 
 /** The v4 sealing (provider-secrets.ts at v4-final), written again here on purpose. */
@@ -174,7 +175,7 @@ async function fakeV4Read(sshKeyPem: string) {
         expires_at: null,
       },
       {
-        id: '0b6a1a3e-0000-4000-8000-0000000000c2',
+        id: OPS_TOKEN_ID,
         project_id: PROJECT_OPS,
         name: 'ops-agent',
         accepted_risks: ['ssh.exec-read', 'ssh.uncategorized-write'],
@@ -651,5 +652,98 @@ describe('import of a v4 organization', () => {
     const garbage = await run(['--owner', OWNER], { stdin: `${CLOUDFLARE_TOKEN} {` });
     expect(garbage.code).toBe(65);
     expect(garbage.stderr).not.toContain(CLOUDFLARE_TOKEN);
+  });
+
+  it('--carry-unbudgeted keeps a risk no preset budgets, under approval only', async () => {
+    const { code, stderr } = await run(['--owner', OWNER, '--apply', '--carry-unbudgeted', '5']);
+    expect(code).toBe(0);
+    expect(stderr).toContain('~ carried under approval: ssh.uncategorized-write');
+    expect(stderr).not.toContain('dropped ssh.uncategorized-write');
+    const [ops] = await store.missions.listForCreator(await ownerId());
+    expect(ops!.policy.map((p) => [p.riskId, p.quota, p.gate]).sort()).toEqual([
+      ['ssh.exec-read', expect.any(Number), expect.stringMatching(/^(auto|approval)$/)],
+      ['ssh.uncategorized-write', 5, 'approval'],
+    ]);
+    const carried = ops!.policy.find((p) => p.riskId === 'ssh.uncategorized-write')!;
+    expect(carried.rateWindowSeconds).toBe(60);
+    expect(carried.rateLimit).toBeLessThanOrEqual(5);
+
+    // Every other reason stays a drop.
+    await connectGithubByHand();
+    const second = await run(['--owner', OWNER, '--apply', '--carry-unbudgeted', '5']);
+    expect(second.stderr).toContain('dropped stripe.teleport: unknown to the v5 catalog');
+  });
+
+  it('--reissue issues a token again beside the earlier import, which it never revokes', async () => {
+    const owner = await ownerId();
+    await run(['--owner', OWNER, '--apply']);
+    const [old] = await store.missions.listForCreator(owner);
+    expect(old!.name).toBe('ops');
+
+    // Dry run: shows the new issuance and names the earlier one; writes nothing.
+    const entriesBefore = adminEntries();
+    const dry = await run(['--owner', OWNER, '--reissue', OPS_TOKEN_ID, '--carry-unbudgeted', '3']);
+    expect(dry.code).toBe(0);
+    expect(dry.stdout).toBe('');
+    expect(dry.stderr).toContain('"ops" (v4 token ops-agent): would be issued');
+    expect(dry.stderr).toContain(
+      `previous import ${old!.id} still active: revoke it once the new key is installed`,
+    );
+    expect(dry.stderr).toContain('~ carried under approval: ssh.uncategorized-write');
+    expect(adminEntries()).toBe(entriesBefore);
+
+    const applied = await run([
+      '--owner',
+      OWNER,
+      '--apply',
+      '--reissue',
+      OPS_TOKEN_ID,
+      '--carry-unbudgeted',
+      '3',
+    ]);
+    expect(applied.code).toBe(0);
+    const missions = await store.missions.listForCreator(owner);
+    const opses = missions.filter((m) => m.name === 'ops');
+    expect(opses).toHaveLength(2);
+    const fresh = opses.find((m) => m.id !== old!.id)!;
+    expect((await store.missions.getById(old!.id))?.status).toBe('active');
+    expect(fresh.policy.map((p) => p.riskId).sort()).toEqual([
+      'ssh.exec-read',
+      'ssh.uncategorized-write',
+    ]);
+    expect(applied.stderr).toContain(`"ops" (v4 token ops-agent): issued [${fresh.id}]`);
+    expect(applied.stderr).toContain(`previous import ${old!.id} still active`);
+    const keys = applied.stdout
+      .trim()
+      .split('\n')
+      .map((l) => JSON.parse(l) as Record<string, string>);
+    expect(keys).toEqual([expect.objectContaining({ project: 'ops', mission_id: fresh.id })]);
+
+    // A later run without --reissue recognises the newest one.
+    const later = await run(['--owner', OWNER, '--apply']);
+    const opsLine = later.stderr.split('\n').find((l) => l.includes('(v4 token ops-agent)'));
+    expect(opsLine).toContain('already exists');
+    expect(opsLine).toContain(fresh.id);
+    expect(later.stdout).toBe('');
+    expect(
+      (await store.missions.listForCreator(owner)).filter((m) => m.name === 'ops'),
+    ).toHaveLength(2);
+  });
+
+  it('refuses a --reissue id the bundle does not hold, before writing anything', async () => {
+    const stranger = '83e35806-6201-47e5-8f03-c0ae2cd604a4';
+    const { code, stderr, stdout } = await run([
+      '--owner',
+      OWNER,
+      '--apply',
+      '--reissue',
+      stranger,
+    ]);
+    expect(code).toBe(64);
+    expect(stderr).toContain(stranger);
+    expect(stderr).toContain('Nothing was written');
+    expect(stdout).toBe('');
+    expect(await store.connections.list()).toEqual([]);
+    expect(adminEntries()).toBe(0);
   });
 });
