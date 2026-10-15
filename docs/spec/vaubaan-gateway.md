@@ -1118,7 +1118,10 @@ same for any agent, with no value of any mission.
 - **Encryption at rest.** Connection credentials are encrypted with a key
   derived from the master key, unique to each connection, with the
   connection identifier as authenticated data. The master key never
-  lives in the store.
+  lives in the store, and leaves the process environment once the
+  configuration is read. Rotating it seals every stored secret again
+  under the new key, after which the previous key is removed: a leaked
+  key stops opening the current store.
 - **No credential to the executor.** Invariant §2.4.
 - **Transport.** The instance exposes plain HTTP on the local network and
   requires being placed behind a TLS termination held by the company.
@@ -1132,8 +1135,16 @@ same for any agent, with no value of any mission.
   provider's allowed domains, the invitation list or the admin emails —
   or, for a tenant provider without allowed domains, any user of the
   tenant. An unverified email never admits and never makes an
-  administrator. Web sessions are short and bound to the instance's
-  origin. Every mutation requires a valid session and an origin check.
+  administrator; a tenant provider may be configured to require the
+  provider's verified-email signal too. Web sessions are short (an
+  absolute lifetime and an idle timeout) and bound to the instance's
+  origin; a person, or an administrator for them, can end every session
+  of that person at once. Every mutation requires a valid session and an
+  origin check. The sign-in endpoints are rate-limited like every other
+  anonymous surface.
+- **What a provider says stays with the agent.** A provider's error text
+  reaches the calling agent only; the instance logs, stores and shows the
+  provider's status in its own words.
 - **Browser hardening set by the instance itself.** Every response carries
   the security headers — a Content-Security-Policy that admits only the
   instance's own scripts (a per-request nonce) and forbids framing,
