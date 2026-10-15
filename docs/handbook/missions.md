@@ -265,6 +265,12 @@ callable, complete `MissionPolicyEntry` lines), `exceeds`, `unknown`,
 `unresolvable`, `missing_budget`, `skipped_from_preset`, the explicit
 `resources` and `resources_total`. `resolved` is the passing part of the draft
 with every alias resolved; the form loads it after a proposal or a duplicate.
+`MissionService.preview(user, draft, { assumedEnvs })` builds the context from
+the store (`issuanceContext`) and calls `previewDraft`; `assumedEnvs` (resource
+id → label, `withAssumedEnvs`) reads some resources under a label that is not
+written yet — the v4 importer's dry run, so that it checks the issuance its
+apply will run (handbook [import-from-v4](import-from-v4.md)). Nothing else
+changes and nothing is written; `issue` never takes it.
 The management door answers `preview_policy` with this shape
 (`management/views.ts` `previewView`; handbook [management-door](management-door.md)).
 

@@ -128,6 +128,30 @@ export interface MissionServiceDeps {
   readonly budget?: Pick<SessionService, 'stateOf'>;
 }
 
+export interface PreviewOptions {
+  /**
+   * Environment labels to read as set, by resource id, without writing them.
+   * Only the label changes: the connections, the authority and the catalog are
+   * the store's.
+   */
+  readonly assumedEnvs?: ReadonlyMap<string, string>;
+}
+
+/** The issuance context with some resources read under the labels a dry run would set. */
+export function withAssumedEnvs(
+  connections: IssuanceConnection[],
+  assumed: ReadonlyMap<string, string> | undefined,
+): IssuanceConnection[] {
+  if (!assumed || assumed.size === 0) return connections;
+  return connections.map((connection) => ({
+    ...connection,
+    resources: connection.resources.map((resource) => {
+      const env = assumed.get(resource.id);
+      return env === undefined ? resource : { ...resource, env };
+    }),
+  }));
+}
+
 /**
  * Set when the act comes through the management door (spec §4.1 bis): the
  * delegation the agent acts under. The user stays the actor and, for an
@@ -539,9 +563,18 @@ export class MissionService {
     return rows;
   }
 
-  /** What passes, what exceeds the authority, what becomes callable. Writes nothing. */
-  async preview(user: AuthoritySubject, draft: MissionDraft): Promise<MissionPreview> {
-    const connections = await this.issuanceContext(user);
+  /**
+   * What passes, what exceeds the authority, what becomes callable. Writes
+   * nothing. `assumedEnvs` reads some resources as if they carried another
+   * environment label — a dry run that would set those labels first (the v4
+   * importer) — so that the preview and the later issuance agree.
+   */
+  async preview(
+    user: AuthoritySubject,
+    draft: MissionDraft,
+    options: PreviewOptions = {},
+  ): Promise<MissionPreview> {
+    const connections = withAssumedEnvs(await this.issuanceContext(user), options.assumedEnvs);
     return previewDraft({ connections, now: this.deps.clock.now() }, draft);
   }
 

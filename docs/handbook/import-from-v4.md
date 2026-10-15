@@ -183,7 +183,12 @@ the standalone tree), a `require` shim for CommonJS dependencies.
   left out; none left → `nothing-to-issue`. The draft: each connection with
   `resources: { scope: 'selected', resource_ids }` and an explicit policy,
   period daily (`IMPORTED_MISSION_PERIOD_SECONDS`), the v4 expiry. Dry run →
-  `preview` (`would-issue` or `refused` with the issues); apply → `issue`
+  `preview` with `assumedEnvs` — the `to-label` plans by resource id
+  (`plannedEnvs`), read as set over the store's issuance context
+  (`withAssumedEnvs`), never written — so that a mission whose
+  env-qualified risks need a label the same run applies is `would-issue`, as
+  apply then issues it, and not `refused`; `would-issue` or `refused` with the
+  issues; apply → `issue`
   (`issued`, the key collected) inside `provenance.during(tokens/<id>)`.
 
 ### Translating a v4 policy
@@ -342,7 +347,10 @@ alone.
   services: dry run, apply, rerun, third run, rejected key, unknown owner,
   root, missing store, invalid bundle; `--carry-unbudgeted` (carried under
   approval, other drops kept); `--reissue` (dry run, apply beside the old
-  mission left active, newest recognised later, unknown id refused).
+  mission left active, newest recognised later, unknown id refused); a dry
+  run whose mission needs a label the run would set (Supabase project
+  labelled `prod` from v4) says `would be issued`, writes no label, and apply
+  agrees. `missions/assumed-envs.test.ts` covers `withAssumedEnvs`.
 - Standalone: `tests/integration/standalone-import-v4.test.ts` runs the
   bundle from `.next/standalone` on a store file (after a build).
 - Container: `deploy/docker/smoke.sh` step 10 — the command ships, refuses

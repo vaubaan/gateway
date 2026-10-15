@@ -137,6 +137,7 @@ export {
   type MissionOverview,
   type MissionRole,
   type MissionServiceDeps,
+  type PreviewOptions,
   type RevealedToken,
   type RevokeResult,
   type RotateResult,
@@ -145,6 +146,7 @@ export {
   type TokenRetirement,
   type TokenVerification,
   type VerifiedToken,
+  withAssumedEnvs,
 } from './mission-service';
 export { createTeamHandlers, type TeamHandlers } from './team-handlers';
 export {
