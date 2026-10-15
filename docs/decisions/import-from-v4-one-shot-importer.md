@@ -95,7 +95,7 @@ complete the first, never duplicate it.
   stops it by name. The pooler host, hard-coded in v4's `scripts/lib/env.ts`,
   becomes a key.
 - **Importer**, `apps/gateway/src/server/import-v4/`, bundled by
-  `scripts/build-import-v4.mjs` (esbuild, already in the lockfile) into
+  `scripts/build-commands.mjs` (esbuild, already in the lockfile) into
   `.next/standalone/apps/gateway/import-v4.mjs` after `next build`. The image
   copies the standalone tree whole, so it lands at
   `/app/apps/gateway/import-v4.mjs` with no Dockerfile change. The native

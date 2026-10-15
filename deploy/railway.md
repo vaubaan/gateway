@@ -153,6 +153,36 @@ of upload to send 200 MiB in 5 minutes) and `VAUBAAN_GIT_REQUEST_TIMEOUT=10m`
 (under the 15 minutes). A push larger than the agent's link can send in 5
 minutes fails at Railway's edge: push fewer commits at a time.
 
+## 8. Rotating the master key
+
+After any suspicion that the key was seen (a transcript, a screen share, a
+workspace member who left), rotate it **and reseal**: a rotation alone leaves
+every stored credential openable by the old key. Handbook
+[configuration](../docs/handbook/configuration.md#rotating-the-master-key),
+ADR [master-key-rotation-reseals-every-blob](../docs/decisions/master-key-rotation-reseals-every-blob.md).
+
+1. On a trusted machine, `npm run gen-master-key`. In the service's
+   variables: `VAUBAAN_MASTER_KEY` = the new key,
+   `VAUBAAN_MASTER_KEY_VERSION` = the current version plus one (it is `1`
+   when unset), `VAUBAAN_MASTER_KEY_PREVIOUS` = `<old version>=<old key>`.
+2. Deploy (the variables change triggers it, or `railway redeploy`); check
+   `/healthz`.
+3. `railway ssh` into the service, then:
+
+   ```bash
+   vaubaan-entrypoint node apps/gateway/reseal.mjs           # dry run
+   vaubaan-entrypoint node apps/gateway/reseal.mjs --apply
+   vaubaan-entrypoint node apps/gateway/reseal.mjs           # nothing left to reseal
+   ```
+
+   (`railway ssh` is root: `vaubaan-entrypoint` drops to the image user.)
+
+4. When the last run says every blob is under the new version, delete
+   `VAUBAAN_MASTER_KEY_PREVIOUS` and deploy again.
+5. Replace the copy of the key you keep outside Railway (§6). Volume backups
+   taken before step 3 open only with the old key: keep it with them, or
+   delete them.
+
 ## What the image does on Railway
 
 Started as root (`RAILWAY_RUN_UID=0`), the entrypoint gives `/data` to the

@@ -31,7 +31,7 @@ export interface ConfigRepo {
   keys(): Promise<string[]>;
 }
 
-function secretAd(key: string): string {
+export function secretAd(key: string): string {
   return `instance_config:${key}`;
 }
 

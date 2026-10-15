@@ -26,6 +26,7 @@ import { createInvitationsRepo, type InvitationsRepo } from './repositories/invi
 import { createPendingRefsRepo, type PendingRefsRepo } from './repositories/pending-refs.ts';
 import { createMissionsRepo, type MissionsRepo } from './repositories/missions.ts';
 import { createRequestsRepo, type RequestsRepo } from './repositories/requests.ts';
+import { createSealedBlobsRepo, type SealedBlobsRepo } from './repositories/sealed-blobs.ts';
 import { createSessionsRepo, type SessionsRepo } from './repositories/sessions.ts';
 import { createSharesRepo, type SharesRepo } from './repositories/shares.ts';
 import { createUsersRepo, type UsersRepo } from './repositories/users.ts';
@@ -65,6 +66,8 @@ export interface Store {
   readonly config: ConfigRepo;
   /** Web sessions keyed by the digest of their id; satisfies the root's `SessionStore` port. */
   readonly webSessions: WebSessionsRepo;
+  /** Every sealed column, for the master-key re-seal (`reseal` command). */
+  readonly sealedBlobs: SealedBlobsRepo;
   readonly auditWriter: AuditWriter;
   /** Highest migration version applied. */
   readonly schemaVersion: number;
@@ -116,6 +119,7 @@ export function openStore(options: StoreOptions): Store {
     audit,
     config: createConfigRepo(ctx),
     webSessions: createWebSessionsRepo(ctx),
+    sealedBlobs: createSealedBlobsRepo(ctx),
     auditWriter: new SqliteAuditWriter(audit),
     schemaVersion: currentVersion,
     db,
@@ -250,3 +254,11 @@ export type {
 } from './repositories/audit.ts';
 export type { ConfigRepo, ConfigWrite } from './repositories/config.ts';
 export type { WebSessionsRepo } from './repositories/web-sessions.ts';
+export { SEALED_COLUMNS } from './repositories/sealed-blobs.ts';
+export type {
+  ResealReport,
+  ResealTableReport,
+  SealedBlobsRepo,
+  SealedTable,
+  SealedVersionCount,
+} from './repositories/sealed-blobs.ts';

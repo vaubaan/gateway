@@ -227,7 +227,7 @@ function toRecord(row: RequestRow): RequestRecord {
   };
 }
 
-function requestAd(id: string): string {
+export function requestAd(id: string): string {
   return `request:${id}`;
 }
 

@@ -6,7 +6,7 @@ last_synced: 2026-10-15
 tracks:
   - scripts/export-v4.mjs
   - scripts/export-v4-lib.mjs
-  - scripts/build-import-v4.mjs
+  - scripts/build-commands.mjs
   - apps/gateway/src/server/import-v4/
   - apps/gateway/src/server/connections/service.ts
   - apps/gateway/src/server/connections/ssh-keypair.ts
@@ -53,7 +53,7 @@ node scripts/export-v4.mjs --org fidi …  ──►  node apps/gateway/import-v
 | Command (args, I/O, exit) | `import-v4/cli.ts` (`runImportCli`, `createImportMarker`); entry `import-v4/main.ts`       |
 | Connection creation       | `connections/service.ts` — `importPastedKey`, `importSshKey`                               |
 | SSH key conversion        | `connections/ssh-keypair.ts` — `importEd25519PrivateKey`                                   |
-| Bundling into the image   | `scripts/build-import-v4.mjs`, run by the `build` script of `apps/gateway/package.json`    |
+| Bundling into the image   | `scripts/build-commands.mjs`, run by the `build` script of `apps/gateway/package.json`     |
 
 ### The exporter
 
@@ -97,7 +97,7 @@ node scripts/export-v4.mjs --org fidi …  ──►  node apps/gateway/import-v
 ### The importer
 
 `node apps/gateway/import-v4.mjs --owner <email> [--apply]` — in the image,
-beside `server.js`. `scripts/build-import-v4.mjs` bundles
+beside `server.js`. `scripts/build-commands.mjs` bundles
 `import-v4/main.ts` with esbuild into
 `.next/standalone/apps/gateway/import-v4.mjs` after `next build`: everything
 bundled but the native addons (`better-sqlite3`, `argon2`, `ssh2`,

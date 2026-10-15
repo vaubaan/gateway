@@ -703,7 +703,7 @@ transaction takes the delegation from the code or from the rotated token.
 
 ## Repository methods at a glance
 
-Every method of the thirteen repository interfaces, as declared in `repositories/*.ts`.
+Every method of the fourteen repository interfaces, as declared in `repositories/*.ts`.
 Some early primitives are called by the store suites and the fixtures only (in production a
 request or an approval is born inside a decision transaction and a share through
 `replaceForTarget`); they are listed all the same: the list is the interface.
@@ -723,6 +723,7 @@ request or an approval is born inside a decision transaction and a share through
 | `config` (`ConfigRepo`)           | `get`, `set`, `getSecret`, `setSecret`, `delete`, `apply`, `keys`                                                                                                                                                                                                                                                                                                                                                                            |
 | `pendingRefs` (`PendingRefsRepo`) | `add`, `extend`, `listExpired`, `listFor`, `remove`                                                                                                                                                                                                                                                                                                                                                                                          |
 | `webSessions` (`WebSessionsRepo`) | `get`, `set`, `delete`, `count`                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `sealedBlobs` (`SealedBlobsRepo`) | `versions`, `reseal` (the three sealed columns and their associated data, `SEALED_COLUMNS`: handbook [configuration](configuration.md#rotating-the-master-key))                                                                                                                                                                                                                                                                              |
 
 `MissionsRepo.setStatus` is the mission's (it takes a `StoredMissionStatus`, see above);
 no other repository has a method that sets a status it is given. A request is decided

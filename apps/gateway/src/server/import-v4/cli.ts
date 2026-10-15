@@ -2,7 +2,7 @@
  * `import-v4`: the command the container runs to import a v4 bundle (ADR
  * import-from-v4-one-shot-importer D1, D4). Built into
  * `apps/gateway/import-v4.mjs` beside the standalone server
- * (`scripts/build-import-v4.mjs`).
+ * (`scripts/build-commands.mjs`).
  *
  *   <exporter> | node apps/gateway/import-v4.mjs --owner <email> [--apply] [--allow-stale]
  *                  [--carry-unbudgeted <quota>] [--reissue <v4 token id>]…

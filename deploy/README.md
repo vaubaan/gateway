@@ -246,8 +246,12 @@ environment.
   in the [store handbook](../docs/handbook/store.md#backup); there is no
   operator CLI yet).
 - **Key rotation**: generate a new key, set `encryption.key_version` to
-  `n+1`, move the old key under `encryption.previous_keys.<n>`, restart.
-  Old credentials still open; new ones use the new key.
+  `n+1`, move the old key under `encryption.previous_keys.<n>`, restart;
+  then run `node apps/gateway/reseal.mjs` inside the container (a dry run),
+  again with `--apply`, and remove the previous key once the report says
+  every blob is under the new version (handbook
+  [configuration](../docs/handbook/configuration.md#rotating-the-master-key)).
+  Until the reseal, the old key still opens every credential stored before.
 - **Upgrade**: read the release notes, pull the new image and restart;
   schema migrations run at boot (forward-only, checksummed; see the
   [store handbook](../docs/handbook/store.md)). A patch or a minor release

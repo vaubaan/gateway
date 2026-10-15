@@ -5,8 +5,10 @@
  *
  * Key rotation: the operator adds a new `master_key` with a higher
  * `key_version` and keeps the old one under `previous_keys`. New blobs carry
- * the new version; old blobs still open; a re-encryption sweep (later
- * feature) rewrites them and the old key can then be dropped.
+ * the new version; old blobs still open; the `reseal` command
+ * (`apps/gateway/reseal.mjs`, `server/reseal/`) seals them again under the
+ * current key, after which the old key is dropped (ADR
+ * master-key-rotation-reseals-every-blob).
  */
 import type { EncryptionConfig } from '../config/types';
 import { CryptoError, deriveConnectionKey, open, seal, sodiumReady, wipe } from './aead';

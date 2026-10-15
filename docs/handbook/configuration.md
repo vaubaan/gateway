@@ -6,6 +6,9 @@ last_synced: 2026-10-15
 tracks:
   - apps/gateway/src/server/config/
   - apps/gateway/src/server/crypto/
+  - apps/gateway/src/server/reseal/
+  - apps/gateway/src/server/store/repositories/sealed-blobs.ts
+  - scripts/build-commands.mjs
   - apps/gateway/src/server/logging/
   - apps/gateway/src/server/compose/
   - apps/gateway/src/server/http/
@@ -657,7 +660,52 @@ store's business (a column next to the blob): on rotation the operator sets
 a new `master_key` with `key_version: n+1` and keeps the old key under
 `previous_keys`; blobs written under an older version still open, new blobs
 carry the new version. A blob whose version has no key fails with a message
-naming `encryption.previous_keys`.
+naming `encryption.previous_keys`. The `reseal` command then seals every old
+blob again under the new key, after which the old key is removed (below).
+
+### Rotating the master key
+
+ADR [master-key-rotation-reseals-every-blob](../decisions/master-key-rotation-reseals-every-blob.md).
+Three columns hold sealed blobs (`store.sealedBlobs`,
+`store/repositories/sealed-blobs.ts`, is the one list of them):
+`connections.credential_blob` (associated data: the connection id),
+`instance_config.secret_blob` (`instance_config:<key>`) and
+`requests.args_blob` (`request:<id>`).
+
+1. Generate a key (`npm run gen-master-key`, on a trusted machine). Set it as
+   `VAUBAAN_MASTER_KEY`, raise `VAUBAAN_MASTER_KEY_VERSION` by one (the
+   default is `1`), and put the old key in
+   `VAUBAAN_MASTER_KEY_PREVIOUS=<old version>=<old key>`.
+2. Deploy (restart). The instance opens old blobs with the previous key and
+   seals new ones with the new key.
+3. Inside the container, as the image user, run the dry run, then apply, then
+   the dry run again:
+
+   ```bash
+   node apps/gateway/reseal.mjs           # opens every blob, writes nothing
+   node apps/gateway/reseal.mjs --apply   # seals the stale blobs again
+   node apps/gateway/reseal.mjs           # "every blob is sealed under version N"
+   ```
+
+   On a platform that starts the container as root (Railway with
+   `RAILWAY_RUN_UID=0`), prefix each command with `vaubaan-entrypoint`, which
+   drops to the image user; run as root the command exits 77. With Compose:
+   `docker compose exec gateway node apps/gateway/reseal.mjs`.
+
+4. Once the report says every blob is under the new version, remove
+   `VAUBAAN_MASTER_KEY_PREVIOUS` and deploy again.
+5. Backups taken before step 3 are still sealed under the old key: keep the
+   old key with them, or destroy them.
+
+The report counts per table: `current` (already under the current version),
+`resealed` / `to reseal`, `unreadable` (no key for its version, or the wrong
+key under that version: left as it is, exit 1) and `changed` (rewritten by
+the running gateway between the read and the write: left as the gateway wrote
+it, exit 1, run again). Each table is written in one `BEGIN IMMEDIATE`
+transaction, each row by compare-and-swap on the blob read, so the command is
+safe beside the running server and idempotent. It never prints a blob, an id
+or a key; an unexpected failure prints one fixed line. Exit codes: 0, 1, 64
+usage, 77 root, 78 not configured or no store file.
 
 Nothing reads a secret from `process.env` outside `server/config`: the v4
 shim `lib/crypto/index.ts` and the v4 `lib/` code that read their own

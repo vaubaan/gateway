@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
-    "build": "next build && node ../../scripts/build-import-v4.mjs",
+    "build": "next build && node ../../scripts/build-commands.mjs",
     "start": "next start",
     "type-check": "tsc --noEmit"
   },
