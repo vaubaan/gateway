@@ -17,7 +17,7 @@
  *
  * The header says when the mission was created, relative ("created 2 h ago",
  * the instant in its `title`), and a details line under it its short id (the
- * first 8 characters, the whole id in the `title`): two missions with the
+ * last 8 characters, the whole id in the `title`): two missions with the
  * same name — an import reissued — are told apart, and matched with what a
  * report or the audit names.
  *
@@ -70,6 +70,7 @@ import {
 } from '@/lib/vocabulary';
 import { enumerateCatalog, groupVariants } from '@/server/missions/catalog-view';
 import { missionGitView } from '@/server/missions/git-view';
+import { shortId } from '@/server/missions/short-id';
 import { explainOrphan } from '@/server/missions/orphan-reason';
 import { riskExplainer } from '@/server/providers/reference';
 import { toolTitleOf } from '@/server/providers/tool-titles';
@@ -80,7 +81,7 @@ import { parseRiskId } from '@vaubaan/shared';
 import { CallHeadline } from '../../waiting/parts';
 
 import styles from '../missions.module.css';
-import { allowLines, createdBy, missionMark, nearestLimit, shortId } from '../mission-view';
+import { allowLines, createdBy, missionMark, nearestLimit } from '../mission-view';
 import { ActivityTable } from './activity-table';
 import { LimitsEditor, type LimitGroup } from './limits-editor';
 import {

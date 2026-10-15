@@ -85,6 +85,15 @@ export interface ProviderAppStatus {
   readonly token: { readonly label: string | null } | null;
 }
 
+/**
+ * Nobody connects this service until the company registers its app: it
+ * needs one and offers no token way. The one rule of Company apps, Setup and
+ * the home's checklist; a service whose app is optional is never "missing".
+ */
+export function requiresApp(app: Pick<ProviderAppStatus, 'needsApp' | 'token'>): boolean {
+  return app.needsApp && app.token === null;
+}
+
 /** The token way of a service whose company app is therefore optional; `null` otherwise. */
 function tokenBesideApp(
   plugin: Parameters<typeof credentialSpecFor>[0],

@@ -183,7 +183,9 @@ opens on a note (`OptionalApp`, `data-testid="optional-app-<id>"`): the app
 is optional, people connect with a token they create at the service, and
 **Connect `<service>` with a token** leads to
 `tokenConnectPath(id)` = `/accounts/new/<id>?method=api-key`, the token way
-with the guide its plugin declares. The form shows the URL to register at the provider
+with the guide its plugin declares. `requiresApp(app)` (`needsApp` and no
+token way) is the one rule of what is "missing": Settings → Setup and the
+home's checklist count only those services, and name the optional ones apart. The form shows the URL to register at the provider
 (`ConnectionService.callbackUrl(id)` = `<public_url>/connections/callback/<id>`
 — OAuth redirect URI; for an installed app, the callback URL of its user
 authorization when installations are verified, its setup URL otherwise),

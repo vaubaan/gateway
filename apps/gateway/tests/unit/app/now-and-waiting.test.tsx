@@ -14,7 +14,7 @@ import { eventWords } from '@/app/(app)/waiting/event-words';
 import { shortTitleOf, titleOf, whoOf } from '@/app/(app)/waiting/parts';
 import { RequestView } from '@/app/(app)/waiting/request-view';
 import {
-  agoPhrase,
+  agoSentence,
   asker,
   delay,
   everyOf,
@@ -275,9 +275,9 @@ describe('the words of a limit, a delay and who asks', () => {
     expect(until(at(4 * 24 * 60), NOW_AT)).toBe('in 4 d');
     // Already past: never a negative figure.
     expect(until(at(-10), NOW_AT)).toBe('now');
-    expect(agoPhrase(at(-4), NOW_AT)).toBe('4 min ago');
-    expect(agoPhrase(at(-0.2), NOW_AT)).toBe('just now');
-    expect(agoPhrase(at(-30 * 60), NOW_AT)).toBe('yesterday');
+    expect(agoSentence(at(-4), NOW_AT)).toBe('4 min ago');
+    expect(agoSentence(at(-0.2), NOW_AT)).toBe('just now');
+    expect(agoSentence(at(-30 * 60), NOW_AT)).toBe('yesterday');
     expect(delay(600)).toBe('10 minutes');
     expect(delay(90)).toBe('90 seconds');
     expect(delay(7200)).toBe('2 hours');
@@ -813,7 +813,7 @@ describe('the home, when nothing waits', () => {
 describe('the first run', () => {
   const setup: SetupView = {
     sign_in: 'login.acme.example',
-    company_apps: { registered: [], missing: ['GitHub', 'Supabase'] },
+    company_apps: { registered: [], missing: ['Gmail'], optional: ['GitHub', 'Supabase'] },
     telemetry: { enabled: false, decided: false },
   };
 
@@ -890,13 +890,14 @@ describe('the first run', () => {
       'Set up this gateway',
       'Sign-in through login.acme.example',
       'Company apps',
-      'GitHub and Supabase',
+      'Register your company’s app for Gmail',
+      'GitHub and Supabase also connect with a token: their apps are optional.',
       'Telemetry',
       'Then, like everyone',
       'Connect an account',
     ]);
     expect(html.match(/v_primary/g)).toHaveLength(1);
-    expect(text(html)).toContain('Register GitHub');
+    expect(text(html)).toContain('Register Gmail');
   });
 });
 

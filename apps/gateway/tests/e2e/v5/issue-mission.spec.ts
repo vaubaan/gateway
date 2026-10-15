@@ -306,9 +306,7 @@ test('create a three-account mission on one page, then replace its key and stop 
   await expect(page.getByTestId('mission-created')).toHaveAttribute('title', /\d{2}:\d{2} UTC$/);
   await expect(page.getByTestId('mission-created')).toHaveAttribute('datetime', /^\d{4}-/);
   const missionId = page.url().split('/missions/')[1]?.split(/[?#]/)[0] ?? '';
-  await expect(page.getByTestId('mission-details')).toHaveText(
-    `Mission id ${missionId.slice(0, 8)}`,
-  );
+  await expect(page.getByTestId('mission-details')).toHaveText(`Mission id ${missionId.slice(-8)}`);
   await expect(page.getByTestId('mission-details').locator('[title]')).toHaveAttribute(
     'title',
     missionId,

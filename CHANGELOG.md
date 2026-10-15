@@ -412,9 +412,9 @@ write …)`), instead of GitHub's bare 403. The push token of
   from a JSON proposal an agent wrote. Creation refuses anything beyond what its creator
   may allow, and the preview warns when a selected resource has no usable environment
   label. The missions list and the page of a mission say when it was created
-  ("created 2 h ago", the exact time on hover), and the page shows its short id, so
-  that two missions of the same name are told apart and matched with a report or
-  Activity. The creator stops a mission from the bottom of its page too ("Stop this
+  ("created 2 h ago", the exact time on hover), and the page shows its short id (the
+  last 8 characters of its id, as the importer's report names it too), so that two
+  missions of the same name are told apart and matched with a report or Activity. The creator stops a mission from the bottom of its page too ("Stop this
   mission": what stopping does, then the same typed confirmation as in "···").
 - **Keys, teammates and the setup kit.** A mission has one or more keys (`vbn_live_…`,
   stored as a SHA-256 digest), each with one holder. The creator adds colleagues as
@@ -516,7 +516,8 @@ write …)`), instead of GitHub's bare 403. The push token of
   under Settings → Company apps (secrets encrypted in the store) or under
   `providers.<id>` in the mounted configuration, which wins and makes the page read-only
   for that service. A service that also connects with a token (GitHub, Railway,
-  Supabase) says that its app is optional and leads to the token way and its guide.
+  Supabase) says that its app is optional and leads to the token way and its guide;
+  Setup and the home's checklist no longer count such a service as missing.
 - **Access, teams and ownership.** The owner of an account gives access to a person or
   a team ("Give access", a dialog over the account): who, then a checklist of the
   service's permissions. "Select all" ticks today's permissions one by one; what is

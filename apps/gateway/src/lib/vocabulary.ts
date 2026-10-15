@@ -949,13 +949,6 @@ export function until(to: Date | string, now: Date = new Date()): string {
   return `in ${Math.floor(left / DAY)} d`;
 }
 
-/** "4 min ago", "yesterday", "just now" — `ago` as a phrase. */
-export function agoPhrase(from: Date | string, now: Date = new Date()): string {
-  const short = ago(from, now);
-  if (short === 'now') return 'just now';
-  return short === 'yesterday' ? short : `${short} ago`;
-}
-
 /** "10 minutes", "90 seconds", "2 hours" — the largest unit that divides a delay. */
 export function delay(seconds: number): string {
   const unit = (n: number, word: string): string =>

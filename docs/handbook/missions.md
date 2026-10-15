@@ -1092,7 +1092,9 @@ Read by the creator and by the teammates. In the order a person needs it:
    `data-testid="mission-created"`), each service with its resources and their
    environment labels, how often the limits reset, when it ends. Under it, a
    discreet details line (`data-testid="mission-details"`): "Mission id" and
-   the first 8 characters of its id (`shortId`), the whole id in the `title` —
+   the last 8 characters of its id (`shortId`, `server/missions/short-id.ts`:
+   a UUIDv7 starts with its timestamp, the end is random), the whole id in the
+   `title` —
    what a report of the importer or the audit names it by. Then, for a teammate,
    one sentence (`data-testid="shared-with-me"`): they work on it as it is,
    with their own key, and its creator alone answers; for a mission an app

@@ -458,7 +458,10 @@ reader's time zone. The cost is a handful of indexed reads per mission the
 person can read, no scan. `readSetup(setupDepsOf(root))` (`server/now/setup.ts`)
 is the checklist an administrator reads on a first run: the host of the
 identity provider, the services whose company app is registered or missing
-(`ProviderAppsService.list`, `needsApp`), and whether telemetry was decided.
+(`ProviderAppsService.list`, `requiresApp`: it needs an app and offers no token
+way), those whose app is optional (they also connect with a token: never
+"missing"), and whether telemetry was decided. Settings → Setup counts its
+"Company apps" step the same way.
 
 **The page has three forms** (`(app)/_now/`; style guide §1.1):
 
@@ -563,7 +566,7 @@ The protocol keeps its names; this file is the bridge, keyed by them.
 | `MISSION_STATES`, `ACCOUNT_STATES`, `REQUEST_STATES`, `DECISION_WORDS`               | a label and a tone per state, keyed by the protocol's state; the tone is `null` for the normal state                                                                               |
 | `WAITING`, `waitingFor(name)`, `ASKED_FIRST`, `reachedLimit`, `running`              | the sentences of "Waiting for you"                                                                                                                                                 |
 | `everyOf`, `periodNow`, `limitOf`, `missionReachedLimit`, `limitReachedOn`, `usedOf` | a limit said with its period, from a period length in seconds: "today", "its daily limit", "5,000 of 5,000"; "this period" for an unnamed length, "in all" when limits never reset |
-| `until`, `agoPhrase`, `delay`, `asker`                                               | "in 13 h", "4 min ago", "10 minutes"; who asks: "Carol · codex", "You · codex", "machine key nightly", "An agent"                                                                  |
+| `until`, `delay`, `asker`                                                            | "in 13 h", "4 min ago", "10 minutes"; who asks: "Carol · codex", "You · codex", "machine key nightly", "An agent"                                                                  |
 | `NOW`, `FIRST_RUN`, `ANSWERS`, `REQUEST_WORDS`                                       | the words of the home, of a first run (the model in five nodes, the steps), of the answers keyed by the protocol's resolution, and of a request's page                             |
 | `ago(from, now)`                                                                     | "now", "4 min", "1 h", "yesterday", "4 d"                                                                                                                                          |
 | `THEME_WORDS`                                                                        | System, Light, Dark                                                                                                                                                                |

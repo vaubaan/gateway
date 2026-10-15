@@ -309,11 +309,21 @@ describe('the home and the inbox: read models', () => {
   describe('readSetup', () => {
     it('says what is configured: the sign-in, the company apps, telemetry', async () => {
       const setup = await readSetup(setupDepsOf(rig.root));
-      // Every service that needs an app of the company is in one list or the other.
-      const needing = (await rig.root.providerApps.list()).filter((app) => app.needsApp);
-      expect([...setup.company_apps.registered, ...setup.company_apps.missing].sort()).toEqual(
-        needing.map((app) => app.displayName).sort(),
-      );
+      // Every service that needs an app of the company is in one list or another; one that
+      // also connects with a token is optional, never missing.
+      const apps = await rig.root.providerApps.list();
+      const needing = apps.filter((app) => app.needsApp);
+      expect(
+        [
+          ...setup.company_apps.registered,
+          ...setup.company_apps.missing,
+          ...setup.company_apps.optional,
+        ].sort(),
+      ).toEqual(needing.map((app) => app.displayName).sort());
+      const withToken = apps.filter((app) => app.token !== null).map((app) => app.displayName);
+      expect(withToken.length).toBeGreaterThan(0);
+      expect(setup.company_apps.optional).toEqual(expect.arrayContaining(withToken));
+      for (const name of withToken) expect(setup.company_apps.missing).not.toContain(name);
       expect(setup.telemetry).toEqual({ enabled: false, decided: false });
     });
   });

@@ -687,7 +687,7 @@ describe('import of a v4 organization', () => {
     expect(dry.stdout).toBe('');
     expect(dry.stderr).toContain('"ops" (v4 token ops-agent): would be issued');
     expect(dry.stderr).toContain(
-      `previous import ${old!.id} still active: revoke it once the new key is installed`,
+      `previous import [${old!.id.slice(-8)} · ${old!.id}] still active: revoke it once the new key is installed`,
     );
     expect(dry.stderr).toContain('~ carried under approval: ssh.uncategorized-write');
     expect(adminEntries()).toBe(entriesBefore);
@@ -711,8 +711,12 @@ describe('import of a v4 organization', () => {
       'ssh.exec-read',
       'ssh.uncategorized-write',
     ]);
-    expect(applied.stderr).toContain(`"ops" (v4 token ops-agent): issued [${fresh.id}]`);
-    expect(applied.stderr).toContain(`previous import ${old!.id} still active`);
+    expect(applied.stderr).toContain(
+      `"ops" (v4 token ops-agent): issued [${fresh.id.slice(-8)} · ${fresh.id}]`,
+    );
+    expect(applied.stderr).toContain(
+      `previous import [${old!.id.slice(-8)} · ${old!.id}] still active`,
+    );
     const keys = applied.stdout
       .trim()
       .split('\n')
