@@ -29,9 +29,10 @@ import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
 import { memoryStoreDeps } from '../../../src/server/compose/testing';
 import { loadInstanceConfig } from '../../../src/server/config';
 import { validEnv } from '../../../src/server/config/testing';
-import type { Actor } from '../../../src/server/connections';
+import { generateEd25519KeyPair, type Actor } from '../../../src/server/connections';
 import {
   API_KEY_SPEC,
+  SSH_KEY_SPEC,
   fixturePlugin,
   OAUTH_SPEC,
   stateOf,
@@ -238,6 +239,13 @@ async function openRig(): Promise<Rig> {
           credential: API_KEY_SPEC,
           discoverResources: async () => [
             { provider: 'keyco', ref: 'acct-a', displayName: 'Account A' },
+          ],
+        }),
+        fixturePlugin({
+          id: 'sshco',
+          credential: SSH_KEY_SPEC,
+          discoverResources: async () => [
+            { provider: 'sshco', ref: 'vps.example.com', displayName: 'VPS' },
           ],
         }),
         fixturePlugin({ id: 'oauthco', credential: OAUTH_SPEC }),
@@ -477,6 +485,30 @@ const RULES: Readonly<Record<string, Rule>> = {
     kind: 'mutation',
     target: connections,
     drive: (rig) => rig.connectByKey(),
+    writes: { act: 'connection-created', object: 'connection', actor: 'alice' },
+  },
+  'ConnectionService.importPastedKey': {
+    kind: 'mutation',
+    target: connections,
+    drive: (rig) =>
+      rig.root.connections.service.importPastedKey(rig.alice, 'keyco', {
+        displayName: 'Imported key',
+        fields: { token: 'key-0123456789', team_id: 'team_abc' },
+        importedFrom: { system: 'vaubaan-v4', org: 'acme', source: 'provider_admins/1' },
+      }),
+    writes: { act: 'connection-created', object: 'connection', actor: 'alice' },
+  },
+  'ConnectionService.importSshKey': {
+    kind: 'mutation',
+    target: connections,
+    drive: (rig) =>
+      rig.root.connections.service.importSshKey(rig.alice, {
+        providerId: 'sshco',
+        displayName: 'vps',
+        fields: { host: 'vps.example.com', user: 'dev' },
+        keyPair: generateEd25519KeyPair('v4'),
+        importedFrom: { system: 'vaubaan-v4', org: 'acme', source: 'ssh_bindings/acme/vps' },
+      }),
     writes: { act: 'connection-created', object: 'connection', actor: 'alice' },
   },
   'ConnectionService.complete': {
@@ -1388,6 +1420,8 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'config-changed',
       'config-changed',
       'config-changed',
+      'connection-created',
+      'connection-created',
       'connection-created',
       'connection-created',
       'connection-reassigned',

@@ -134,25 +134,29 @@ function encodeOpenSshPrivateKey(seed: Buffer, pub: Buffer, comment: string): st
 }
 
 /** Reads the length-prefixed strings of the OpenSSH container, refusing any overrun. */
-class SshReader {
-  private offset = 0;
-  constructor(private readonly data: Buffer) {}
+interface SshReader {
+  string(): Buffer;
+  uint32(): number;
+}
 
-  string(): Buffer {
-    if (this.offset + 4 > this.data.length) throw truncated();
-    const length = this.data.readUInt32BE(this.offset);
-    const start = this.offset + 4;
-    if (start + length > this.data.length) throw truncated();
-    this.offset = start + length;
-    return this.data.subarray(start, start + length);
-  }
-
-  uint32(): number {
-    if (this.offset + 4 > this.data.length) throw truncated();
-    const value = this.data.readUInt32BE(this.offset);
-    this.offset += 4;
-    return value;
-  }
+function sshReader(data: Buffer): SshReader {
+  let offset = 0;
+  return {
+    string() {
+      if (offset + 4 > data.length) throw truncated();
+      const length = data.readUInt32BE(offset);
+      const start = offset + 4;
+      if (start + length > data.length) throw truncated();
+      offset = start + length;
+      return data.subarray(start, start + length);
+    },
+    uint32() {
+      if (offset + 4 > data.length) throw truncated();
+      const value = data.readUInt32BE(offset);
+      offset += 4;
+      return value;
+    },
+  };
 }
 
 function truncated(): SshKeyImportError {
@@ -170,7 +174,7 @@ function decodeOpenSshPrivateKey(text: string): { seed: Buffer } {
   if (data.length < magic.length || !data.subarray(0, magic.length).equals(magic)) {
     throw new SshKeyImportError('the OpenSSH private key does not start with its magic');
   }
-  const reader = new SshReader(data.subarray(magic.length));
+  const reader = sshReader(data.subarray(magic.length));
   const cipher = reader.string().toString('utf8');
   const kdf = reader.string().toString('utf8');
   reader.string(); // kdf options
@@ -181,7 +185,7 @@ function decodeOpenSshPrivateKey(text: string): { seed: Buffer } {
     throw new SshKeyImportError('the OpenSSH container holds more than one key');
   }
   reader.string(); // public key blob
-  const section = new SshReader(reader.string());
+  const section = sshReader(reader.string());
   if (section.uint32() !== section.uint32()) {
     throw new SshKeyImportError('the OpenSSH private key fails its check bytes');
   }

@@ -274,6 +274,8 @@ describe('authority is recomputed, never snapshotted', () => {
         'reads the period anchor and length only, to know which period is the current one',
       'oauth-as/delegations.ts':
         'lists through the reads the composition root hands it (`derivedMissionReads`)',
+      'import-v4/importer.ts':
+        'reads the names of the owner’s missions and the stored `revoked` only, to recognise what an earlier import issued; an orphaned mission is still that mission and is not issued twice',
     };
     const LOADS =
       /missions\s*\.\s*(?:getById|listForCreator|listForMember|listForConnection|findTokenByPrefix)\b/;
