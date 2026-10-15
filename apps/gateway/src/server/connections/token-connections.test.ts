@@ -120,7 +120,7 @@ describe('two ways to connect one service', () => {
       rejected.service.start(alice, 'dual', { method: 'api-key', fields: { token: TOKEN } }),
       'credential-rejected',
     );
-    expect(err.detail).toContain('Bad credentials');
+    expect(err.detail).toBe('Dual: the provider rejected the credential (HTTP 401)');
     expect(await rejected.store.connections.list()).toHaveLength(0);
 
     const expired = dualHarness(async () => ({ account: 'x', expiresAt: '2020-01-01T00:00:00Z' }));

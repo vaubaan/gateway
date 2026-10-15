@@ -737,6 +737,16 @@ without padding, base64url), so the form the operator configured is the one
 redacted. `child()` adds
 bindings. `silentLogger` is for tests.
 
+An unexpected error is logged as `errorFields(err)` — `error_class` and
+`stack_frames`, never its message (`logging/error-fields.ts`). Next.js prints
+the errors of route handlers itself, with `console.error`: after a successful
+boot `instrumentation.ts` calls `guardFrameworkLogging()`, which installs
+`guardConsole` (`logging/console-guard.ts`): `console.error` and
+`console.warn` print through the redactor, an `Error` argument as its class,
+its digest and its frames with `[message withheld]`. A provider's error text
+never reaches a log line, the store or a page: ADR
+[provider-error-text-stays-with-the-agent](../decisions/provider-error-text-stays-with-the-agent.md).
+
 ## Ports and their single-process implementations
 
 | Port             | Today                                                                                                                                                                                          | Hosted replacement                                 |

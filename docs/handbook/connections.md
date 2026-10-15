@@ -428,8 +428,13 @@ Basic` with form-encoded id and secret (RFC 6749 §2.3.1),
   | `best-effort`         | `oauth2`      | keeps the connection, records the error (the authorization code is spent)                  |
   | `deferred`            | `ssh-key`     | is not attempted: the public key is not installed yet                                      |
 
-  The provider's own message is the `detail` of the error (Resend answers
-  that a sending-only key cannot list domains; the user reads exactly that).
+  The `detail` of the error is the provider's status in the gateway's own
+  words (`providerFailureReason`, `connections/failure-reason.ts`: "the
+  provider rejected the credential (HTTP 401)"), never the provider's text: a
+  provider's error body can echo the credential it was given, and the detail is
+  shown, logged and stored (`discovery.error`, audit). The calling agent still
+  receives the provider's message on a tool call (ADR
+  [provider-error-text-stays-with-the-agent](../decisions/provider-error-text-stays-with-the-agent.md)).
 
 - **What is stored.** `connections.create({ provider, owner: {kind:'user'},
 displayName, credential: serializeSecret(secret), credentialExpiresAt,
@@ -1100,11 +1105,13 @@ by feature", the section on connecting).
   client_id, client_secret missing" on `/admin/provider-apps`), or its plugin cannot verify
   installations and nobody accepted that.
 - **"Connected, but looking for what it reaches failed"** — the connection
-  exists; the second line of the notice is the plugin's message. Fix the cause
+  exists; the second line of the notice is the provider's status in the
+  gateway's words (the provider's own text is shown nowhere). Fix the cause
   and use "Refresh" on the page of the account.
   The log line is `resource discovery failed` (component `connections`).
 - **A connection turned `expired`** — log line `credential refresh
-rejected` with `detail` (the provider's error) and `marked_expired`.
+rejected` with `failure` (the status in the gateway's words, never the
+  provider's text) and `marked_expired`.
   "Reconnect" on the page of the account; the id and the missions are kept.
 - **Calls fail but the connection stays `active`** —
   `ProviderUnreachableError`: the token endpoint answered 5xx, timed out,

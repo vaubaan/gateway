@@ -6,8 +6,19 @@
  * configuration error here means the container stops with a non-zero exit
  * code and a message naming every missing or invalid key (spec §4.3).
  */
-import { ConfigError } from '../config';
+import { ConfigError, secretValues } from '../config';
+import { createRedactor, guardConsole } from '../logging';
 import { getRoot, type RootDeps } from './root';
+
+/**
+ * Routes Next.js's own error printing through the redactor of the built root, with
+ * error messages withheld (`logging/console-guard.ts`). Called by `instrumentation.ts`
+ * after a successful boot; a failed boot has exited before.
+ */
+export async function guardFrameworkLogging(): Promise<void> {
+  const root = await getRoot();
+  guardConsole(createRedactor(secretValues(root.config)));
+}
 
 export interface BootIo {
   readonly stderr: (text: string) => void;

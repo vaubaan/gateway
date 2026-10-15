@@ -35,7 +35,7 @@ import {
 } from '@vaubaan/plugin-sdk';
 
 import type { SessionStore } from '../compose/ports';
-import type { Logger } from '../logging';
+import { errorFields, type Logger } from '../logging';
 import { toIso, type Clock } from '../store/clock';
 import { ProviderAppError, type AppRegistrationRecord, type ProviderAppsService } from './service';
 
@@ -329,9 +329,10 @@ export class AppRegistrationService {
         redirect: 'error',
       });
     } catch (err) {
-      this.deps.logger.error('company app: the code exchange did not reach the service', {
-        detail: err instanceof Error ? err.message : String(err),
-      });
+      this.deps.logger.error(
+        'company app: the code exchange did not reach the service',
+        errorFields(err),
+      );
       throw refusal('exchange-failed');
     }
     if (!res.ok) {

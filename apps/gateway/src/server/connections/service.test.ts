@@ -343,7 +343,7 @@ describe('oauth2 — authorization code with PKCE and a single-use state', () =>
     expect(done.discovery).toMatchObject({
       ok: false,
       count: 0,
-      error: 'GET /projects answered 500',
+      error: 'the provider call failed (Error)',
     });
     expect((await h.service.get(alice, done.connection.id)).discovery?.ok).toBe(false);
   });
@@ -670,7 +670,7 @@ describe('app-install — installation bound to the user who authorized it', () 
       h.service.complete(alice, 'appco', query),
       'credential-rejected',
     );
-    expect(rejected.detail).toContain('installation 111 is not accessible');
+    expect(rejected.detail).toBe('appco: the provider rejected the credential (HTTP 404)');
     await expectConnectError(h.service.complete(alice, 'appco', query), 'state-invalid');
 
     await expectConnectError(
@@ -828,9 +828,9 @@ describe('api-key — form checked by a first discovery', () => {
       h.service.start(alice, 'keyco', { fields: { token: 'tok-secret-123', team_id: 'team_a' } }),
       'credential-rejected',
     );
-    expect(rejected.detail).toBe(
-      'Key Co: GET /domains answered 401: This API key is restricted to only send emails',
-    );
+    // The provider's own text is not shown: it can echo the key (ADR
+    // provider-error-text-stays-with-the-agent).
+    expect(rejected.detail).toBe('Key Co: the provider rejected the credential (HTTP 401)');
     expect(rejected.detail).not.toContain('tok-secret-123');
     expect(await h.store.connections.list()).toEqual([]);
     expect(h.audit.admin).toEqual([]);
@@ -1242,7 +1242,7 @@ describe('resources — discovery merge and owner edits', () => {
 
     state.failWith = new Error('GET /projects answered 500');
     const outcome = await h.service.discover(alice, connection.id);
-    expect(outcome).toMatchObject({ ok: false, error: 'GET /projects answered 500' });
+    expect(outcome).toMatchObject({ ok: false, error: 'the provider call failed (Error)' });
     const detail = await h.service.get(alice, connection.id);
     expect(detail.connection.status).toBe('active');
     expect(detail.resources.map((r) => [r.ref, r.staleSince])).toEqual([['proj-a', null]]);
@@ -1258,7 +1258,7 @@ describe('resources — discovery merge and owner edits', () => {
     state.failWith = new UpstreamAuthError('401 token revoked', 401);
     const outcome = await h.service.discover(alice, connection.id);
     expect(outcome.ok).toBe(false);
-    expect(outcome.error).toContain('401 token revoked');
+    expect(outcome.error).toBe('the provider rejected the credential (HTTP 401)');
     expect((await h.store.connections.getById(connection.id))!.status).toBe('expired');
   });
 });

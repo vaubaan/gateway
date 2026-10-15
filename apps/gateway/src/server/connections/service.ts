@@ -68,7 +68,8 @@ import type {
 import { serializeSecret } from './credential-codec';
 import type { CredentialBroker } from './credentials';
 import { canWithdraw } from './credentials';
-import { ConnectError, errorMessage, oneLine } from './errors';
+import { ConnectError } from './errors';
+import { providerFailureReason } from './failure-reason';
 import {
   cleanName,
   editableMetadataKeys,
@@ -691,7 +692,7 @@ export class ConnectionService {
       const rejected = err instanceof UpstreamAuthError || !isTransportFailure(err);
       throw new ConnectError(
         rejected ? 'credential-rejected' : 'provider-unreachable',
-        `${plugin.displayName}: ${errorMessage(err)}`,
+        `${plugin.displayName}: ${providerFailureReason(err)}`,
       );
     }
     const expiresAt = check.expiresAt === null ? null : Date.parse(check.expiresAt);
@@ -995,10 +996,10 @@ export class ConnectionService {
       if (policy === 'required' || (policy === 'reject-auth-failure' && rejected)) {
         throw new ConnectError(
           rejected || !isTransportFailure(err) ? 'credential-rejected' : 'provider-unreachable',
-          `${plugin.displayName}: ${errorMessage(err)}`,
+          `${plugin.displayName}: ${providerFailureReason(err)}`,
         );
       }
-      return { resources: null, error: oneLine(errorMessage(err)) };
+      return { resources: null, error: providerFailureReason(err) };
     }
   }
 
@@ -1086,9 +1087,9 @@ export class ConnectionService {
       this.deps.logger.warn('resource discovery failed', {
         connection_id: connection.id,
         provider: connection.provider,
-        detail: errorMessage(err),
+        failure: providerFailureReason(err),
       });
-      const record = await this.recordDiscovery(connection.id, 0, oneLine(errorMessage(err)));
+      const record = await this.recordDiscovery(connection.id, 0, providerFailureReason(err));
       await this.auditDiscovery(actor, connection, record);
       return record;
     }

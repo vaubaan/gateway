@@ -40,7 +40,7 @@ import {
 } from '../auth/guard';
 import { notAFormResponse, readForm } from '../auth/handlers';
 import { resolveReturnTo } from '../http/return-to';
-import type { Logger } from '../logging';
+import { errorFields, type Logger } from '../logging';
 import {
   AppRegistrationError,
   type AppRegistrationService,
@@ -49,7 +49,7 @@ import {
   type ProviderAppStatus,
 } from '../provider-apps';
 import { toIso, type Clock } from '../store/clock';
-import { CONNECT_ERROR_MESSAGES, ConnectError, errorMessage } from './errors';
+import { CONNECT_ERROR_MESSAGES, ConnectError } from './errors';
 import { echoOfForm } from './input';
 import type { Notice, NoticeStore } from './pending';
 import { providerGrantReport } from './provider-grant';
@@ -163,7 +163,7 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
       if (err.detail) lines.push(err.detail);
       return { tone: 'danger', title, lines };
     }
-    logger.error('connections: unexpected failure', { detail: errorMessage(err) });
+    logger.error('connections: unexpected failure', errorFields(err));
     return {
       tone: 'danger',
       title,
@@ -590,7 +590,7 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
         });
       } catch (err) {
         if (!(err instanceof AppRegistrationError)) {
-          logger.error('company app: unexpected failure', { detail: errorMessage(err) });
+          logger.error('company app: unexpected failure', errorFields(err));
           return redirectWithNotice(guard.principal, back, {
             tone: 'danger',
             title: 'The app was not created',
