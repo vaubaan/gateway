@@ -14,8 +14,29 @@
  * is ignored altogether and every caller shares one key, so a limit keyed on
  * the address still holds (as a global one) instead of being bypassed by a
  * forged header.
+ *
+ * Trusted-edge mode (`client_ip_header`, ADR client-address-from-a-trusted-edge-header):
+ * some platforms publish no address range for their edge (Railway) but document
+ * a single-value header the edge writes itself (`X-Real-IP`). When the operator
+ * names that header, its value is the client address — believed only because
+ * the operator declared that the edge overwrites it; a value that is not one IP
+ * address reads as unknown. It excludes `trusted_proxies` (the loader refuses
+ * both) and is off by default.
  */
 import { BlockList, isIP } from 'node:net';
+
+/** The single-value headers an edge can be declared to write (`client_ip_header`). */
+export const CLIENT_IP_HEADERS = [
+  'x-real-ip',
+  'cf-connecting-ip',
+  'true-client-ip',
+  'fly-client-ip',
+] as const;
+export type ClientIpHeader = (typeof CLIENT_IP_HEADERS)[number];
+
+export function isClientIpHeader(value: string): value is ClientIpHeader {
+  return (CLIENT_IP_HEADERS as readonly string[]).includes(value);
+}
 
 /** Key used when no client address can be trusted. */
 export const UNKNOWN_CLIENT = 'unknown';
@@ -77,7 +98,19 @@ function bareAddress(raw: string): string {
   return withPort?.[1] ?? value;
 }
 
-export function clientIpOf(headers: Headers, trusted: BlockList, hasTrusted: boolean): string {
+/** The address in a declared edge header: exactly one IP address, or unknown. */
+export function clientIpFromEdgeHeader(headers: Headers, header: ClientIpHeader): string {
+  const value = bareAddress(headers.get(header) ?? '');
+  return value !== '' && family(value) !== null ? value : UNKNOWN_CLIENT;
+}
+
+export function clientIpOf(
+  headers: Headers,
+  trusted: BlockList,
+  hasTrusted: boolean,
+  edgeHeader: ClientIpHeader | null = null,
+): string {
+  if (edgeHeader !== null) return clientIpFromEdgeHeader(headers, edgeHeader);
   if (!hasTrusted) return UNKNOWN_CLIENT;
   const hops = (headers.get('x-forwarded-for') ?? '')
     .split(',')
@@ -93,9 +126,12 @@ export function clientIpOf(headers: Headers, trusted: BlockList, hasTrusted: boo
   return UNKNOWN_CLIENT;
 }
 
-/** `clientIpOf` bound to the configuration's `trusted_proxies`. */
-export function clientIpResolver(trustedProxies: readonly string[]): (headers: Headers) => string {
+/** `clientIpOf` bound to the configuration's `trusted_proxies` and `client_ip_header`. */
+export function clientIpResolver(
+  trustedProxies: readonly string[],
+  edgeHeader: ClientIpHeader | null = null,
+): (headers: Headers) => string {
   const list = trustedProxyList(trustedProxies);
   const hasTrusted = trustedProxies.length > 0;
-  return (headers) => clientIpOf(headers, list, hasTrusted);
+  return (headers) => clientIpOf(headers, list, hasTrusted, edgeHeader);
 }

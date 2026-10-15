@@ -63,7 +63,10 @@ export interface TokenUseRecorder {
 }
 
 export interface MissionAdmissionDeps {
-  readonly config: Pick<InstanceConfig, 'publicUrl' | 'trustedProxies' | 'mcp' | 'selfResources'>;
+  readonly config: Pick<
+    InstanceConfig,
+    'publicUrl' | 'trustedProxies' | 'clientIpHeader' | 'mcp' | 'selfResources'
+  >;
   readonly store: Pick<Store, 'connections' | 'users' | 'groups' | 'sessions'>;
   readonly tokens: TokenVerifier;
   readonly tokenUse: TokenUseRecorder;
@@ -127,6 +130,7 @@ export class MissionAdmission {
     return clientOriginOf(request.headers, {
       proxies: this.proxies,
       configured: this.deps.config.trustedProxies.length > 0,
+      edgeHeader: this.deps.config.clientIpHeader,
     });
   }
 

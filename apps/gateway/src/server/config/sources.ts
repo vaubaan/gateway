@@ -14,6 +14,7 @@
  * way round; `keys-doc.test.ts` holds the handbook to it.
  */
 import { parse as parseYaml } from 'yaml';
+import { CLIENT_IP_HEADERS } from '../http/client-ip';
 
 import { errorMessage, type IssueList } from './errors';
 import {
@@ -106,6 +107,13 @@ const KEY_TABLE = [
   },
   { path: 'trusted_proxies', env: 'VAUBAAN_TRUSTED_PROXIES', kind: 'list' },
   { path: 'self_resources', env: 'VAUBAAN_SELF_RESOURCES', kind: 'list' },
+  {
+    path: 'client_ip_header',
+    env: 'VAUBAAN_CLIENT_IP_HEADER',
+    kind: 'string',
+    format: 'enum',
+    oneOf: CLIENT_IP_HEADERS,
+  },
   { path: 'store.path', env: 'VAUBAAN_STORE_PATH', kind: 'string', required: 'always' },
   {
     path: 'encryption.master_key',

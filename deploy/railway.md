@@ -76,6 +76,22 @@ gateway, and never connect that workspace's token to the gateway itself. To
 protect another resource of the hosting (a backup bucket, a second service),
 list it in `VAUBAAN_SELF_RESOURCES` (`<provider>:<ref>`, comma-separated).
 
+**`VAUBAAN_CLIENT_IP_HEADER=x-real-ip`: only after you verified it.** The
+trusted-edge mode reads the client address from `X-Real-IP` alone (ADR
+[client-address-from-a-trusted-edge-header](../docs/decisions/client-address-from-a-trusted-edge-header.md)).
+It is safe only if Railway's edge **overwrites** that header on every request;
+if the edge passes a client's value through, any client picks the address it
+is limited and audited under. It is off by default. To verify on your
+instance, once:
+
+1. Set `VAUBAAN_CLIENT_IP_HEADER=x-real-ip`, deploy, and sign in.
+2. Make one tool call through `/mcp` with a mission key **and** the header
+   `X-Real-IP: 192.0.2.1` added by hand (for instance with `curl`, a
+   `tools/call` of any read tool of the mission).
+3. Open Activity on that entry: its client address must be your real public
+   address. If it reads `192.0.2.1`, the edge passes the header through:
+   unset the variable at once and redeploy.
+
 ## 3. The GitHub OAuth App
 
 At GitHub, under the settings of your organisation (or of your account) →

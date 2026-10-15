@@ -35,7 +35,10 @@ import { TokenVerifier } from './token-verifier';
 import { createUpstreamStage } from './upstream-stage';
 
 export interface ExecutionModuleDeps {
-  readonly config: Pick<InstanceConfig, 'publicUrl' | 'trustedProxies' | 'mcp' | 'selfResources'>;
+  readonly config: Pick<
+    InstanceConfig,
+    'publicUrl' | 'trustedProxies' | 'clientIpHeader' | 'mcp' | 'selfResources'
+  >;
   readonly store: Store;
   readonly registry: PluginRegistry;
   readonly auth: Pick<AuthModule, 'sessions'>;

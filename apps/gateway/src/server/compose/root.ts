@@ -207,6 +207,7 @@ function logConfigurationSummary(
         : 'disabled',
     key_version: config.encryption.keyVersion,
     trusted_proxies: config.trustedProxies.length,
+    client_ip_header: config.clientIpHeader ?? 'not set',
   });
   warnWithoutTrustedProxies(logger, config);
 }
@@ -222,7 +223,21 @@ function logConfigurationSummary(
 export const NO_TRUSTED_PROXY_WARNING =
   'trusted_proxies is empty: no client address is resolved, so the address-keyed limits are shared by all callers';
 
+/** Trusted-edge mode is a statement about the edge: said once at boot, with what it rests on. */
+export const EDGE_HEADER_NOTICE =
+  'client_ip_header is set: the client address is read from that header alone, which is safe only behind an edge that overwrites it on every request';
+
 function warnWithoutTrustedProxies(logger: Logger, config: InstanceConfig): void {
+  if (config.clientIpHeader !== null) {
+    logger.warn(EDGE_HEADER_NOTICE, {
+      key: 'client_ip_header',
+      env: 'VAUBAAN_CLIENT_IP_HEADER',
+      header: config.clientIpHeader,
+      check:
+        'send a request with a forged value of this header and confirm the instance sees your real address (deploy/railway.md)',
+    });
+    return;
+  }
   if (config.trustedProxies.length > 0) return;
   logger.warn(NO_TRUSTED_PROXY_WARNING, {
     key: 'trusted_proxies',
@@ -234,7 +249,7 @@ function warnWithoutTrustedProxies(logger: Logger, config: InstanceConfig): void
       'audit: client_ip is not recorded',
     ],
     remedy:
-      'set it to the address or CIDR block of the reverse proxy in front of the instance (deploy/README.md)',
+      'set it to the address or CIDR block of the reverse proxy in front of the instance (deploy/README.md), or, behind an edge that overwrites a client-address header (Railway: X-Real-IP), set client_ip_header',
   });
 }
 

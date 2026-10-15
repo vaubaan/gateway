@@ -43,6 +43,13 @@
 # self_resources:
 #   - vercel:prj_xxx
 
+# Trusted-edge mode, instead of trusted_proxies: the one header the edge in
+# front of the instance OVERWRITES with the client address on every request
+# (Railway: x-real-ip). One of x-real-ip, cf-connecting-ip, true-client-ip,
+# fly-client-ip. Never set it behind an edge that passes a client value through.
+# env: VAUBAAN_CLIENT_IP_HEADER
+# client_ip_header: x-real-ip
+
 # store:
 #   # REQUIRED. SQLite database file; its directory must be writable and
 #   # persistent (the /data volume in the image).

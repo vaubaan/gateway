@@ -6,6 +6,7 @@
  * object (or a slice of it) through the composition root.
  */
 
+import type { ClientIpHeader } from '../http/client-ip';
 import type { SignInProvider } from './sign-in';
 
 export const LOG_LEVELS = ['debug', 'info', 'warn', 'error'] as const;
@@ -180,6 +181,12 @@ export interface InstanceConfig {
   readonly trustedProxies: readonly string[];
   /** The resources of this instance's own hosting; see `SelfResource`. */
   readonly selfResources: readonly SelfResource[];
+  /**
+   * Trusted-edge mode: the one header the edge in front of the instance overwrites
+   * with the client address (`x-real-ip` on Railway). `null` (the default): the address
+   * comes from `X-Forwarded-For` through `trustedProxies`, or is unknown.
+   */
+  readonly clientIpHeader: ClientIpHeader | null;
   readonly store: { readonly path: string };
   readonly encryption: EncryptionConfig;
   /**

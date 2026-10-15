@@ -35,7 +35,10 @@ import { TokenService } from './token-service';
 import { DelegatedTokenVerifier } from './verifier';
 
 export interface OAuthAsModuleDeps {
-  readonly config: Pick<InstanceConfig, 'publicUrl' | 'trustedProxies' | 'oauth'>;
+  readonly config: Pick<
+    InstanceConfig,
+    'publicUrl' | 'trustedProxies' | 'clientIpHeader' | 'oauth'
+  >;
   readonly store: Pick<Store, 'delegations' | 'users' | 'missions' | 'auditWriter'>;
   /** Where a consent waits for its answer: the root's `SessionStore` port. */
   readonly sessions: SessionStore;
@@ -130,7 +133,7 @@ export function createOAuthAsModule(deps: OAuthAsModuleDeps): OAuthAsModule {
     endpoints,
     authenticator: deps.authenticator,
     rateLimiter: deps.rateLimiter,
-    clientIp: clientIpResolver(config.trustedProxies),
+    clientIp: clientIpResolver(config.trustedProxies, config.clientIpHeader),
     clients,
     authorization,
     tokens,
@@ -146,7 +149,7 @@ export function createOAuthAsModule(deps: OAuthAsModuleDeps): OAuthAsModule {
 }
 
 export interface ManagementGateModuleDeps {
-  readonly config: Pick<InstanceConfig, 'publicUrl' | 'trustedProxies'>;
+  readonly config: Pick<InstanceConfig, 'publicUrl' | 'trustedProxies' | 'clientIpHeader'>;
   readonly oauth: Pick<OAuthAsModule, 'endpoints' | 'verifier'>;
   /** The execution door's verifier: a mission token presented here is refused by kind. */
   readonly missionTokens: Pick<TokenVerifier, 'verify'>;
