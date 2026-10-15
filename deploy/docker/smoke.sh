@@ -14,6 +14,8 @@
 # 9. started as root           -> on a root-owned volume, the entrypoint gives /data to uid 10001
 #                                 and the server runs as 10001 with no capability (Railway's
 #                                 RAILWAY_RUN_UID=0)
+# 10. v4 importer shipped       -> apps/gateway/import-v4.mjs loads in the image, refuses root,
+#                                 and runs as 10001 through the entrypoint (handbook import-from-v4)
 #
 # Optional expectations, set by the release pipeline (.github/workflows/release.yml),
 # which knows what it built:
@@ -202,5 +204,20 @@ caps="$(docker exec "$ROOT_NAME" awk '/^CapEff:/{print $2}' /proc/1/status)"
 owner="$(docker exec "$ROOT_NAME" stat -c %u /data /data/left-by-root /data/gateway.db | sort -u)"
 [ "$owner" = "10001" ] || fail "started as root, /data is not owned by 10001: $owner"
 pass "started as root on a root-owned volume: /data given to 10001, server runs as 10001 with no capability"
+
+# 10. The v4 importer ships beside the server, refuses root, and runs through the
+#     entrypoint as 10001 (the `railway ssh` form of docs/handbook/import-from-v4.md).
+help="$(docker exec "$NAME" node apps/gateway/import-v4.mjs --help 2>&1)" \
+  || fail "the importer does not run inside the image:\n$help"
+grep -qF -- '--owner <email>' <<<"$help" || fail "the importer printed no usage:\n$help"
+set +e
+printf '{}' | docker exec -i -u 0 "$ROOT_NAME" node apps/gateway/import-v4.mjs --owner ops@example.com >/dev/null 2>&1
+as_root=$?
+printf '{}' | docker exec -i -u 0 "$ROOT_NAME" vaubaan-entrypoint node apps/gateway/import-v4.mjs --owner ops@example.com >/dev/null 2>&1
+dropped=$?
+set -e
+[ "$as_root" -eq 77 ] || fail "the importer run as root exited $as_root, expected 77"
+[ "$dropped" -eq 65 ] || fail "the importer run through the entrypoint exited $dropped, expected 65 (bundle refused)"
+pass "the v4 importer ships, refuses root, and runs as 10001 through the entrypoint"
 
 echo "SMOKE PASSED"
