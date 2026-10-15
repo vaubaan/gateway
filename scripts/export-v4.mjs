@@ -72,14 +72,9 @@ function runPsql(sql, variables, pgEnv) {
       }
       const text = Buffer.concat(out).toString('utf8').trim();
       try {
-        resolvePromise(
-          JSON.parse(
-            text
-              .split('\n')
-              .filter((l) => l.trim() !== '')
-              .pop() ?? '',
-          ),
-        );
+        // The whole output is the document: `-q` silences the `set`, and
+        // json_agg breaks its arrays over several lines.
+        resolvePromise(JSON.parse(text));
       } catch {
         reject(new ExportError('psql did not return the expected JSON document'));
       }
