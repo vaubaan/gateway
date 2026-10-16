@@ -15,17 +15,22 @@ import { redirect } from 'next/navigation';
 import { AdminShell, AppShell } from '@/components/shell/AppShell';
 import { ButtonLink, EmptyState, PageHeader, SummaryLine } from '@/components/ui';
 import { adminDecision } from '@/lib/auth/session';
+import { instanceMetadata } from '@/lib/instance';
 import { PAGES, ROUTES } from '@/lib/vocabulary';
 import { adminSignInPage } from '@/server/auth';
 
 export const dynamic = 'force-dynamic';
 
+/** Every tab of Administration carries the instance's name (spec §4.2). */
+export const generateMetadata = instanceMetadata;
+
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const { root, decision, principal } = await adminDecision();
+  const instance = await root.instance.name.identity();
   if (!decision.ok) {
     if (decision.status === 401 || !principal) redirect(await adminSignInPage(root.auth));
     return (
-      <AppShell principal={principal} instance={root.config.publicUrl.host}>
+      <AppShell principal={principal} instance={instance}>
         <PageHeader title="Administration" />
         <EmptyState
           testId="not-administrator"
@@ -54,7 +59,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     );
   }
   return (
-    <AdminShell principal={decision.principal} instance={root.config.publicUrl.host}>
+    <AdminShell principal={decision.principal} instance={instance}>
       {children}
     </AdminShell>
   );

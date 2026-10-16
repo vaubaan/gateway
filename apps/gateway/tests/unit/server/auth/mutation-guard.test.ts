@@ -328,6 +328,11 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       post('/api/admin/telemetry', headers, { enabled: 'true' }),
     ),
   ),
+  'instance.handlers.setName': form('operator', 303, (rig, headers) =>
+    rig.root.instance.handlers.setName(
+      post('/api/admin/instance-name', headers, { name: 'Dalae prod' }),
+    ),
+  ),
   'oauth.handlers.decide': form('user', 303, (rig, headers) =>
     rig.root.oauth.handlers.decide(
       post('/oauth/authorize/decision', headers, { consent: rig.consentId, decision: 'approve' }),
@@ -389,6 +394,7 @@ const SURFACES = [
   'missions',
   'requests',
   'telemetry',
+  'instance',
   'shares',
   'groups',
   'users',

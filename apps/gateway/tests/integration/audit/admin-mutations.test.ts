@@ -4,7 +4,7 @@
  * enumerates the service methods").
  *
  * The public methods of every class under `server/{connections,
- * provider-apps,missions,auth,requests,telemetry,authority,shares,groups,users,oauth-as,management}` are
+ * provider-apps,missions,auth,requests,telemetry,instance,authority,shares,groups,users,oauth-as,management}` are
  * read from the source with the TypeScript
  * parser and each must be classified below as a read, a mutation or an
  * exemption with its reason. A method added tomorrow fails the first test
@@ -58,6 +58,7 @@ const SCANNED = [
   'auth',
   'requests',
   'telemetry',
+  'instance',
   'authority',
   'shares',
   'groups',
@@ -1266,6 +1267,23 @@ const RULES: Readonly<Record<string, Rule>> = {
       actor: 'operator',
     },
   },
+  // ── instance name (the entry is written by the Administration handler) ───
+  'InstanceNameService.isLocked': READ,
+  'InstanceNameService.identity': READ,
+  'InstanceNameService.setName': {
+    kind: 'mutation',
+    target: (root) => root.instance.name,
+    drive: async (rig) =>
+      rig.root.instance.handlers.setName(
+        await rig.operatorPost('/api/admin/instance-name', { name: 'Dalae prod' }),
+      ),
+    writes: {
+      act: 'config-changed',
+      object: 'instance-config',
+      objectId: 'instance-name',
+      actor: 'operator',
+    },
+  },
   'PluginStatsReader.statusFor': READ,
   'PluginStatsReader.refresh': exempt(
     'refreshes the cached copy of the public plugin statistics read from the collector: nothing of the instance is created, changed or revoked',
@@ -1423,6 +1441,7 @@ describe('every administrative mutation writes an admin audit entry', () => {
   it('covers every mutating act the services can perform', () => {
     expect(MUTATIONS.map((m) => m.rule.writes.act).sort()).toEqual([
       'approval-granted',
+      'config-changed',
       'config-changed',
       'config-changed',
       'config-changed',

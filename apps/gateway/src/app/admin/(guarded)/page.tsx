@@ -7,15 +7,24 @@
  * Each line is read from the service that owns the fact: sign-in from the
  * identity-provider settings, company apps from `ProviderAppsService`, the
  * accounts without owner from `ConnectionService.listOwnerless`, the apps that
- * wait from the client registry, telemetry from its overview. Nothing is
- * decided here.
+ * wait from the client registry, telemetry from its overview, the name from
+ * `InstanceNameService`. Nothing is decided here.
+ *
+ * The one field of the page is the instance's name (spec §4.2, §4.3): saved
+ * by `POST /api/admin/instance-name`, read-only when the mounted
+ * configuration sets `instance_name` (the file wins).
  */
 import { LocalDate } from '@/components/LocalDate';
 import styles from '@/components/settings/settings.module.css';
 import {
   Avatar,
+  Button,
   ButtonLink,
+  Callout,
   CheckMark,
+  Field,
+  Hint,
+  Input,
   KeyValue,
   Mono,
   PageHeader,
@@ -38,10 +47,38 @@ import {
   TERMS,
 } from '@/lib/vocabulary';
 import { isOperator } from '@/server/auth';
-import type { InstanceConfig } from '@/server/config';
+import {
+  INSTANCE_NAME_MAX_LENGTH,
+  INSTANCE_NAME_PROBLEMS,
+  type InstanceConfig,
+} from '@/server/config';
+import {
+  INSTANCE_NAME_ACTION,
+  INSTANCE_NAME_ANCHOR,
+  NAME_FIELD,
+  NAME_PROBLEM_PARAM,
+  type InstanceNameProblem,
+} from '@/server/instance';
 import { requiresApp } from '@/server/provider-apps';
 
 export const dynamic = 'force-dynamic';
+
+interface Props {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
+
+const NAME_PROBLEMS: Readonly<Record<InstanceNameProblem, string>> = {
+  locked:
+    'The mounted configuration sets instance_name; change it there. The name is read-only here.',
+  invalid: 'The request carried no name.',
+  empty: `The name ${INSTANCE_NAME_PROBLEMS.empty}.`,
+  'too-long': `The name ${INSTANCE_NAME_PROBLEMS['too-long']}.`,
+  'control-character': `The name ${INSTANCE_NAME_PROBLEMS['control-character']}.`,
+};
+
+function isNameProblem(value: unknown): value is InstanceNameProblem {
+  return typeof value === 'string' && Object.hasOwn(NAME_PROBLEMS, value);
+}
 
 interface Step {
   readonly key: string;
@@ -88,9 +125,11 @@ function ruleWords(admin: InstanceConfig['admin']): React.ReactNode {
   return parts.length > 0 ? parts : 'nobody: no rule is set';
 }
 
-export default async function SetupPage() {
+export default async function SetupPage({ searchParams }: Props) {
   const { root } = await requireOperator();
-  const [providers, rule, bootstrap, apps, ownerless, clients, telemetry, users] =
+  const params = await searchParams;
+  const nameProblem = isNameProblem(params[NAME_PROBLEM_PARAM]) ? params[NAME_PROBLEM_PARAM] : null;
+  const [providers, rule, bootstrap, apps, ownerless, clients, telemetry, users, identity] =
     await Promise.all([
       root.auth.providers.views(),
       root.auth.providers.adminRule(),
@@ -100,6 +139,7 @@ export default async function SetupPage() {
       root.oauth.clients.list(),
       root.telemetry.overview(),
       root.users.service.list(),
+      root.instance.name.identity(),
     ]);
 
   // A service that also connects with a token is never missing: its app is optional.
@@ -316,6 +356,53 @@ export default async function SetupPage() {
             },
           ]}
         />
+      </Section>
+
+      <Section
+        title="Name"
+        note={identity.source === 'config' ? CONFIG_WORDS.fileReadOnly : undefined}
+        id={INSTANCE_NAME_ANCHOR}
+        testId="instance-name-section"
+      >
+        {nameProblem && (
+          <div className={styles.notes}>
+            <Callout tone="bad" title="Not changed" testId="instance-name-problem">
+              {NAME_PROBLEMS[nameProblem]}
+            </Callout>
+          </div>
+        )}
+        {identity.source === 'config' ? (
+          <KeyValue items={[{ term: 'Name', value: identity.label }]} />
+        ) : (
+          <form method="post" action={INSTANCE_NAME_ACTION} className={styles.lineForm}>
+            <Field
+              label="Name of this gateway"
+              shape={`up to ${INSTANCE_NAME_MAX_LENGTH} characters`}
+              optional
+              htmlFor="instance-name-field"
+            >
+              <Input
+                id="instance-name-field"
+                name={NAME_FIELD}
+                defaultValue={identity.name ?? ''}
+                placeholder={identity.host}
+                maxLength={INSTANCE_NAME_MAX_LENGTH}
+                autoComplete="off"
+              />
+            </Field>
+            <Button type="submit">{SETTINGS_ACTIONS.save}</Button>
+          </form>
+        )}
+        <Hint>
+          Shown at the top of the navigation and in the browser tab, so that someone with several
+          gateways open can tell them apart; the address stays in its tooltip.
+          {identity.source !== 'config' && (
+            <>
+              {' '}
+              Leave it blank to show the address instead: <Mono>{identity.host}</Mono>.
+            </>
+          )}
+        </Hint>
       </Section>
 
       <Section title="This gateway" note={CONFIG_WORDS.fileReadOnly} id="gateway">

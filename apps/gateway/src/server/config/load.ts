@@ -8,6 +8,7 @@
 import { KEY_BYTES } from '../crypto/aead';
 import { isClientIpHeader, isTrustedProxyEntry, type ClientIpHeader } from '../http/client-ip';
 import { parseDuration } from './duration';
+import { checkInstanceName, INSTANCE_NAME_PROBLEMS } from './instance-name';
 import {
   admissionProblem,
   adminGroupProblem,
@@ -260,6 +261,7 @@ function validate(raw: RawTree, issues: IssueList, env: EnvSource): InstanceConf
   const before = issues.items.length;
 
   const publicUrl = readPublicUrl(r);
+  const instanceName = readInstanceName(r);
   const trustedProxies = readTrustedProxies(r);
   const selfResources = readSelfResources(r.stringList('self_resources'), env, (message) =>
     r.issues.add('self_resources', message, envNamesFor('self_resources')),
@@ -297,6 +299,7 @@ function validate(raw: RawTree, issues: IssueList, env: EnvSource): InstanceConf
 
   return {
     publicUrl,
+    instanceName,
     trustedProxies,
     selfResources,
     clientIpHeader,
@@ -339,6 +342,22 @@ function readPublicUrl(r: Reader): URL | undefined {
   }
   publicUrl.pathname = publicUrl.pathname.replace(/\/+$/, '');
   return publicUrl;
+}
+
+/**
+ * `instance_name`: optional, trimmed, within the bounds of `checkInstanceName`.
+ * An absent or blank value is not a decision: Administration decides then.
+ */
+function readInstanceName(r: Reader): string | null {
+  const path = 'instance_name';
+  const raw = r.string(path);
+  if (raw === undefined) return null;
+  const check = checkInstanceName(raw);
+  if (!check.ok) {
+    r.issues.add(path, INSTANCE_NAME_PROBLEMS[check.problem], envNamesFor(path));
+    return null;
+  }
+  return check.name;
 }
 
 function readTrustedProxies(r: Reader): string[] {

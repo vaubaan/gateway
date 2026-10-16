@@ -2,7 +2,7 @@
 title: Authentication — sign-in providers (OIDC, GitHub), admission, web session, bootstrap token, admin rule
 status: current
 date: 2026-10-13
-last_synced: 2026-10-14
+last_synced: 2026-10-16
 tracks:
   - apps/gateway/src/server/auth/
   - apps/gateway/src/server/users/
@@ -870,9 +870,14 @@ millisecond of a deactivation is refused.
   Under it, **Administrators**: the rule in words with the emails it lists
   (`config.admin`), who it resolves to today (`isOperator` applied to
   `UserAdminService.list()`), what an administrator can and cannot do, and
-  the state of the install token; and **This gateway**: the public address,
-  the retention, the build. Both are read-only: the mounted configuration
-  sets them.
+  the state of the install token; then **Name** (`#instance-name`): the
+  instance's name, one field and "Save" posting to
+  `/api/admin/instance-name`, blank to show the host again, read-only when
+  the configuration sets `instance_name`; a refusal comes back as
+  `?name-problem=<code>` and is shown above the field (handbook
+  [configuration](configuration.md), "Instance name"); and **This gateway**:
+  the public address, the retention, the build. Administrators and This
+  gateway are read-only: the mounted configuration sets them.
   Administration is part of Settings: the application's shell and its global
   navigation, with the local navigation of Settings beside the page
   (`AdminShell`, `SettingsFrame` and `settingsNav` in `components/shell/`,

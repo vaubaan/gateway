@@ -2,7 +2,7 @@
 title: E2E tests
 status: current
 date: 2026-10-13
-last_synced: 2026-10-15
+last_synced: 2026-10-16
 tracks:
   - apps/gateway/tests/e2e/v5/playwright.config.ts
   - apps/gateway/tests/e2e/
@@ -679,8 +679,35 @@ stopped after 1 part: the caller was gone`.
 Run it again after a change of Next.js version, of the MCP SDK, of
 `next.config.ts` (`compress`), or of the proxy configuration.
 
+### Naming the instance
+
+> Covers: spec §4.2 (the name above the navigation and in the tab title),
+> §4.3 (`instance_name`). Handbook [configuration](../handbook/configuration.md),
+> "Instance name". The Administration POST is driven by the integration
+> suite (`tests/integration/instance/instance-name.test.ts`); what a browser
+> shows is checked here, by hand, until a browser spec is written.
+
+1. An instance without `VAUBAAN_INSTANCE_NAME`: the shell shows "Vaubaan"
+   and the host of the public URL under it; the tab reads "<host> ·
+   Vaubaan".
+2. Settings → Setup → Name: type "Dalae prod", Save → the page comes back
+   on the field; the shell, the tab title and the sign-in page (in a private
+   window: "Sign in to Dalae prod") show the name; hovering the brand shows
+   "Vaubaan · Dalae prod · <host>". Activity lists one configuration change.
+3. In the narrow window (the navigation collapsed to icons) the brand's
+   tooltip still names the instance and its host.
+4. Save `<b>x</b>`: the shell prints the characters, not bold text. Save 65
+   characters (or paste a name with a line break): "Not changed" with the
+   reason, the old name kept.
+5. Clear the field, Save → the host is shown again.
+6. Restart with `VAUBAAN_INSTANCE_NAME=Fiabilis AI`: that name everywhere,
+   the field replaced by the value and "Set in the mounted configuration".
+
 ## Known gaps
 
+- **No browser test of the instance name**: the brand, the tab title and
+  the Setup field are checked by hand ("Naming the instance" above); the
+  handler is driven by the integration suite.
 - **No browser test of the bootstrap token and of Settings → Sign-in**, nor
   of an administrator approving an app under Settings → Registered apps (see
   "Scenarios still to write"), nor of deactivating and reactivating a person

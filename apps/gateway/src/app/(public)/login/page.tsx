@@ -103,13 +103,13 @@ export default async function LoginPage({ searchParams }: Props) {
   if (principal?.kind === 'user' && !failed) redirect(ROUTES.home);
   const providers = await root.auth.providers.views();
   const bootstrap = await root.auth.bootstrap.state();
-  const instance = root.config.publicUrl.host;
+  const instance = await root.instance.name.identity();
   // Where the sign-in lands: the address that sent the person here, else the home.
   const returnTo = safeReturnTo(first(params.return_to), root.config.publicUrl, ROUTES.home);
 
   return (
     <AuthPage instance={instance} footer={<BuildFooter />}>
-      <AuthHeading title={principal ? 'You are signed in' : `Sign in to ${instance}`}>
+      <AuthHeading title={principal ? 'You are signed in' : `Sign in to ${instance.label}`}>
         {principal
           ? principal.kind === 'user'
             ? 'The attempt below failed; the session you already had is still open.'

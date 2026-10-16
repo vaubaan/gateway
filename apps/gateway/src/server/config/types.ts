@@ -182,6 +182,13 @@ export interface SelfResource {
 export interface InstanceConfig {
   /** Public origin of the instance, always https, no trailing slash. */
   readonly publicUrl: URL;
+  /**
+   * The instance's name (`instance_name`), trimmed and checked
+   * (`checkInstanceName`). `null` when the configuration does not set it:
+   * Administration may then set it, and without either the interface shows
+   * the host of `publicUrl` (`server/instance`).
+   */
+  readonly instanceName: string | null;
   /** IPs or CIDR blocks whose `X-Forwarded-For` is trusted. Empty: none. */
   readonly trustedProxies: readonly string[];
   /** The resources of this instance's own hosting; see `SelfResource`. */

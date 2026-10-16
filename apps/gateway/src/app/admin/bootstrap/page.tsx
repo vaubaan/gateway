@@ -11,9 +11,12 @@ import styles from '@/components/auth/auth.module.css';
 import { BuildFooter } from '@/components/shell/BuildFooter';
 import { Button, ButtonLink, Callout, Field, Input, Mono } from '@/components/ui';
 import { currentPrincipal } from '@/lib/auth/session';
+import { instanceMetadata } from '@/lib/instance';
 import { isLoginErrorCode, LOGIN_ERROR_MESSAGES } from '@/server/auth';
 
 export const dynamic = 'force-dynamic';
+
+export const generateMetadata = instanceMetadata;
 
 interface Props {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -28,7 +31,7 @@ export default async function BootstrapPage({ searchParams }: Props) {
 
   return (
     // Outside every layout: the page carries the build line itself.
-    <AuthPage instance={root.config.publicUrl.host} footer={<BuildFooter />}>
+    <AuthPage instance={await root.instance.name.identity()} footer={<BuildFooter />}>
       <AuthHeading title="Set up this gateway">
         Sign in once with the bootstrap token of the configuration to connect the identity provider
         of your company. The token stops working as soon as the first administrator signs in through

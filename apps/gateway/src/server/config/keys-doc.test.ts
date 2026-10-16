@@ -129,7 +129,13 @@ function expectedBounds(spec: KeySpec): string {
   }
   if (spec.maxSeconds !== undefined) parts.push(`at most ${spec.maxSeconds} s`);
   if (spec.oneOf) parts.push(spec.oneOf.join(', '));
-  if (spec.minLength !== undefined) parts.push(`at least ${spec.minLength} characters`);
+  if (spec.minLength !== undefined && spec.maxLength !== undefined) {
+    parts.push(`${spec.minLength} to ${spec.maxLength} characters`);
+  } else if (spec.minLength !== undefined) {
+    parts.push(`at least ${spec.minLength} characters`);
+  } else if (spec.maxLength !== undefined) {
+    parts.push(`at most ${spec.maxLength} characters`);
+  }
   return parts.length === 0 ? NONE : parts.join(', ');
 }
 

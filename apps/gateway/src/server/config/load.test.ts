@@ -174,6 +174,42 @@ describe('loadInstanceConfig — required keys', () => {
   });
 });
 
+describe('loadInstanceConfig — instance name', () => {
+  const FILE = '/config/gateway.yaml';
+  const name = (env: Record<string, string | undefined>, file?: string) =>
+    loadInstanceConfig({
+      env: validEnv(file === undefined ? env : { ...env, [CONFIG_FILE_ENV]: FILE }),
+      readFile: fakeFiles(file === undefined ? {} : { [FILE]: file }),
+    }).config.instanceName;
+
+  it('is not set by default, nor by a blank value: Administration decides then', () => {
+    expect(name({})).toBeNull();
+    expect(name({ VAUBAAN_INSTANCE_NAME: '   ' })).toBeNull();
+    expect(name({}, 'instance_name:\n')).toBeNull();
+  });
+
+  it('is read from the environment and trimmed', () => {
+    expect(name({ VAUBAAN_INSTANCE_NAME: '  Dalae · prod  ' })).toBe('Dalae · prod');
+  });
+
+  it('is read from the mounted file, which wins over the environment', () => {
+    expect(name({ VAUBAAN_INSTANCE_NAME: 'from env' }, 'instance_name: Fiabilis AI\n')).toBe(
+      'Fiabilis AI',
+    );
+  });
+
+  it('refuses a name too long or with a control character, naming the key and its variable', () => {
+    const long = failure(validEnv({ VAUBAAN_INSTANCE_NAME: 'x'.repeat(65) }));
+    expect(paths(long)).toEqual(['instance_name']);
+    expect(long.message).toContain('VAUBAAN_INSTANCE_NAME');
+    expect(long.message).toContain('64 characters or fewer');
+    expect(name({ VAUBAAN_INSTANCE_NAME: 'x'.repeat(64) })).toHaveLength(64);
+
+    const control = failure(validEnv({ VAUBAAN_INSTANCE_NAME: 'prod\u0007' }));
+    expect(paths(control)).toEqual(['instance_name']);
+  });
+});
+
 describe('loadInstanceConfig — admin rule', () => {
   it('accepts a group name alone', () => {
     const { config } = loadInstanceConfig({

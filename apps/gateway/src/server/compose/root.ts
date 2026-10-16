@@ -36,6 +36,7 @@ import {
 } from '../execution';
 import { createGitModule, type GitModule } from '../git';
 import { createGroupsModule, type GroupsModule } from '../groups';
+import { createInstanceModule, type InstanceModule } from '../instance';
 import { publishHttps } from '../http/security-headers';
 import { createLogger, createRedactor, type Logger, type LoggerOptions } from '../logging';
 import { ProviderAppsService } from '../provider-apps';
@@ -92,6 +93,8 @@ export interface GatewayRoot {
   readonly git: GitModule;
   /** Community telemetry: the pipeline's sink, the operator's toggle, the validation status. */
   readonly telemetry: TelemetryModule;
+  /** How the interface names this instance: the configuration's name, else the administrator's. */
+  readonly instance: InstanceModule;
   /** Authorization server of the management door: clients, consent, delegated tokens. */
   readonly oauth: OAuthAsModule;
   /** Administration → Users: the operator's deactivation and reactivation of a user. */
@@ -230,6 +233,7 @@ function logConfigurationSummary(
   logger.info('configuration loaded', {
     source: configFile ? `file ${configFile} over environment` : 'environment',
     public_url: config.publicUrl.origin,
+    instance_name: config.instanceName ?? 'not set (Administration decides; the host by default)',
     idp: config.idp ? config.idp.issuer.origin : 'not configured',
     sign_in: config.signIn.map((provider) => `${provider.id} (${provider.kind})`),
     admin_rule: config.admin.group ? 'group' : `emails (${config.admin.emails.length})`,
@@ -317,6 +321,7 @@ type RootModules = Pick<
   | 'execution'
   | 'git'
   | 'telemetry'
+  | 'instance'
   | 'oauth'
   | 'users'
   | 'management'
@@ -439,6 +444,12 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     fetch: deps.telemetryFetch,
   });
   opened.push(() => telemetry.stop());
+  const instance = createInstanceModule({
+    config,
+    store,
+    authenticator: auth.authenticator,
+    logger,
+  });
   // The authorization server comes before the doors: the execution door refuses
   // a delegated token by kind, the management door admits nothing else.
   const oauth = createOAuthAsModule({
@@ -525,6 +536,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     execution,
     git,
     telemetry,
+    instance,
     oauth,
     users,
     management,

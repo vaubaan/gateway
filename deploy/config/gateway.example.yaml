@@ -27,6 +27,14 @@
 # env: VAUBAAN_PUBLIC_URL
 # public_url: https://gateway.example.com
 
+# Optional. The name the interface shows at the top of the navigation and in
+# the browser tab, to tell this instance from your others (1 to 64
+# characters, no control characters). Set here, it is read-only on the
+# Administration page; not set, an administrator may name the instance there,
+# and without a name the host of public_url is shown.
+# env: VAUBAAN_INSTANCE_NAME
+# instance_name: Acme production
+
 # Reverse proxies whose X-Forwarded-For header is trusted for client IPs
 # (surface rate limits, audit). IP addresses or CIDR blocks. Default: none.
 # 172.16.0.0/12 is Docker's default address pool (the Caddy container of
