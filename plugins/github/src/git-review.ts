@@ -130,22 +130,8 @@ class BaseFinder {
     private readonly rest: GithubRest,
   ) {}
 
-  /** The object ids the repository's branches point at now (its upload-pack advertisement). */
   private branchHeads(): Promise<ReadonlySet<string>> {
-    this.heads ??= (async () => {
-      const remote = await upstream(this.ctx, this.repository, 'read');
-      const res = await this.ctx.fetch(`${remote.url}/info/refs?service=${UPLOAD_PACK_SERVICE}`, {
-        method: 'GET',
-        headers: { Authorization: remote.authorization },
-        ...(this.ctx.signal ? { signal: this.ctx.signal } : {}),
-      });
-      if (!res.ok) {
-        await res.body?.cancel();
-        throw new UpstreamHttpError(`github info/refs answered HTTP ${res.status}`, res.status);
-      }
-      const ad = parseAdvertisement(new Uint8Array(await res.arrayBuffer()));
-      return new Set(ad.refs.filter((r) => r.name.startsWith(BRANCH_PREFIX)).map((r) => r.oid));
-    })();
+    this.heads ??= branchHeads(this.ctx, this.repository);
     return this.heads;
   }
 
@@ -171,6 +157,29 @@ class BaseFinder {
 }
 
 const BRANCH_PREFIX = 'refs/heads/';
+
+/**
+ * The object ids the repository's branches point at now, as GitHub lists
+ * them (its upload-pack advertisement): `refs/heads/*` only — never a tag,
+ * never a temporary ref of the gateway.
+ */
+export async function branchHeads(
+  ctx: ExecuteContext,
+  repository: string,
+): Promise<ReadonlySet<string>> {
+  const remote = await upstream(ctx, repository, 'read');
+  const res = await ctx.fetch(`${remote.url}/info/refs?service=${UPLOAD_PACK_SERVICE}`, {
+    method: 'GET',
+    headers: { Authorization: remote.authorization },
+    ...(ctx.signal ? { signal: ctx.signal } : {}),
+  });
+  if (!res.ok) {
+    await res.body?.cancel();
+    throw new UpstreamHttpError(`github info/refs answered HTTP ${res.status}`, res.status);
+  }
+  const ad = parseAdvertisement(new Uint8Array(await res.arrayBuffer()));
+  return new Set(ad.refs.filter((r) => r.name.startsWith(BRANCH_PREFIX)).map((r) => r.oid));
+}
 
 /** The reviewable comparison that brings the fewest commits, or the first refusal. */
 function narrowest(comparisons: readonly Comparison[]): Comparison {

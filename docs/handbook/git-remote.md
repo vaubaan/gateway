@@ -2,7 +2,7 @@
 title: Git remote — /git/<owner>/<repo>.git, the second door of the execution surface
 status: current
 date: 2026-10-14
-last_synced: 2026-10-14
+last_synced: 2026-10-16
 tracks:
   - apps/gateway/src/server/git/
   - apps/gateway/src/app/git/
@@ -23,6 +23,7 @@ tracks:
   - plugins/github/src/git-credential.ts
   - plugins/github/src/git-rest.ts
   - plugins/github/src/git-review.ts
+  - plugins/github/src/git-inspect.ts
   - plugins/github/src/git-moves.ts
   - plugins/github/src/git-call.ts
   - plugins/github/src/permission-check.ts
@@ -63,9 +64,11 @@ apps/gateway/src/server/git/                  host-agnostic, never imports `next
   scope.ts          Scope (one admitted request), fetchCall/pushCall, targetOf, refsRefusal, the refusal answers
   fetch.ts          FetchSide: the upload-pack advertisement and ls-refs (filtered), the decided pack relay, the v2 head
   push-side.ts      PushSide: the receive-pack advertisement, the push's first checks (pushRisk), then Push
-  push.ts           Push: one receive-pack request, the steps below
+  push.ts           Push: one receive-pack request, the steps below; withInspection()
+  pack-buffer.ts    readPack(): the pack read whole, at most git.max_pack_mb
+  push-stop.ts      PushStop, tooLarge(), interrupted()
   command-list.ts   readPushCommands(), commandListIssue(), provisional(), ACCEPTED_PUSH_CAPABILITIES
-  temporary-refs.ts TemporaryRefs (store, keepForApproval, cleanUp), deleteTemporaryRefs(), temporaryRefName(), PushStop
+  temporary-refs.ts TemporaryRefs (store, keepForApproval, cleanUp), deleteTemporaryRefs(), temporaryRefName()
   report.ts         reportOf(), refuseAll(), messagesOf(), refOutcomes()
   in-flight.ts      InFlightPushes, inMemoryInFlightPushes() (single-process only)
   constants.ts      HTTP statuses, units, every bound of the door
@@ -83,12 +86,14 @@ packages/plugin-sdk/src/git/
   receive-pack.ts  readCommandList() (a feature list on any line), encodeCommandList(), emptyPack(), report-status, sendRefUpdates()
   upload-pack.ts   readV2RequestHead() (exactly one command), advertisementWithout(), lsRefsWithout()
   advertisement.ts parse/encodeAdvertisement() (v0/v1)
-  remote.ts        GitRemoteCapability (pushRisk, abilities, insteadOf…), GitRefUpdate, GitReviewedUpdate, GIT_TEMPORARY_REF_PREFIX
+  pack.ts          readPackObjects() (bounded, hashed, never throws), parseCommit/Tree/Tag(), applyDelta()
+  remote.ts        GitRemoteCapability (pushRisk, inspectPack, abilities, insteadOf…), GitRefUpdate, GitInspectedUpdate, GitReviewedUpdate, GIT_TEMPORARY_REF_PREFIX
 plugins/github/src/
   git-remote.ts      githubGitRemote: the capability, assembled from the modules below
   git-credential.ts  gitGrant(), upstream(), repositoryOf(), GIT_TOKEN_PERMISSIONS
-  git-rest.ts        GithubRest: refValue, defaultBranch, compare (with its commits), commitPaths, request
-  git-review.ts      review(): stale info, kind, net files, every commit's workflow paths, permissions; compareUrl()
+  git-rest.ts        GithubRest: refValue, defaultBranch, compare (with its commits), commitPaths, gitObject, gitTree, request
+  git-inspect.ts     inspectPack(): what each pushed tip changes under .github/workflows/, before the pack leaves
+  git-review.ts      review(): stale info, kind, net files, every commit's workflow paths, permissions; compareUrl(); branchHeads()
   git-moves.ts       executeGit(): REST create and fast-forward, receive-pack compare-and-swap for force and delete
   git-call.ts        GIT_FETCH_TOOL, GIT_PUSH_TOOL, readGitCall(), pushedRef() — shared by classify and execute
   permission-check.ts  gitFetchNeeds(), gitPushNeeds(), missingPermissionSentence()
@@ -190,14 +195,27 @@ write credential exists. Then `Push.handle()`:
    `refs/vaubaan/*`, `git-push` spent — is refused and audited before any
    byte leaves. **Every ref** is classified: one `github__git_push` call
    carries all of them.
-4. **Store** (`TemporaryRefs.store`) the pack at GitHub under temporary refs
+4. **Inspect** (ADR
+   [git-push-inspected-before-it-leaves](../decisions/git-push-inspected-before-it-leaves.md)):
+   the pack is read whole into memory (`readPack`, `pack-buffer.ts`; beyond
+   `git.max_pack_mb`, refused, nothing sent), its objects read by the SDK's
+   `readPackObjects` (commits, trees and tags kept under the SHA-1 computed
+   from their content, blobs hashed and dropped; bounded, never throws), and
+   the plugin's `inspectPack` says, per update, which paths under
+   `.github/workflows/` the pushed tip changes (`git-inspect.ts`, below in
+   [providers/github](providers/github.md)). When one does, the precheck runs
+   again with those paths: a mission without `workflow-write-via-file` is
+   refused by the permission's name, audited, **before any byte leaves**. A
+   plugin that throws or leaves an update out refuses the push. Nothing is
+   inspected for a push of deletions only.
+5. **Store** (`TemporaryRefs.store`) the pack at GitHub under temporary refs
    `refs/vaubaan/<32 random hex>` (`temporaryRefName`; no mission id: every
    reader of the repository at GitHub can list them): first the mission's
    ceiling (`MAX_TEMPORARY_REFS_PER_MISSION`, 100), then each ref recorded in
    `git_pending_refs` with the ref it stands for and the deadline
-   `now + git.request_timeout + 5 min`, then the pack streamed untouched
-   through `capped()`, which errors once `git.max_pack_mb` is passed.
-5. **Review** (`gitRemote.review`, `git-review.ts`): for each ref, its value
+   `now + git.request_timeout + 5 min`, then the pack sent untouched (the
+   command list and the buffered pack, two chunks).
+6. **Review** (`gitRemote.review`, `git-review.ts`): for each ref, its value
    at GitHub (`GET git/ref/<ref>`) must equal the client's `old` — a client
    that claims a later `old` is refused as _stale info_ —; the **base** is
    what no branch already holds (`BaseFinder`, ADR D4 ter): the nearest
@@ -215,10 +233,12 @@ write credential exists. Then `Push.handle()`:
    history, an empty repository: refused. Then the App's permissions: the push
    token must hold `contents: write`, and `workflows: write` when a workflow
    file changes, or the push is refused by the permission's name.
-6. **Decide**: one `github__git_push { repository, updates[] }`, the reviewed
-   updates as arguments: one decision, one request when gated, one audit
-   entry; every ref refused when one is.
-7. **Move**, allowed (`executeGit`, `git-moves.ts`), per ref, in order,
+7. **Decide**: one `github__git_push { repository, updates[] }`, the reviewed
+   updates as arguments, each with the inspection's workflow paths added
+   (`withInspection`: the union, so neither can make a push look smaller): one
+   decision, one request when gated, one audit entry; every ref refused when
+   one is.
+8. **Move**, allowed (`executeGit`, `git-moves.ts`), per ref, in order,
    reported per ref like git without `--atomic`: create `POST git/refs`;
    fast-forward `PATCH git/refs/<ref> force:false` (GitHub refuses a
    non-fast-forward); force (an accepted `force-push`) and delete: one
@@ -226,7 +246,7 @@ write credential exists. Then `Push.handle()`:
    compare-and-swap GitHub checks under the ref's lock. A provider failure on
    one ref reports that ref (`GitHub did not apply this update`) and the next
    ones are tried; a failure before any ref fails the call.
-8. **Clean up** (`TemporaryRefs.cleanUp`) on every path — success, refusal,
+9. **Clean up** (`TemporaryRefs.cleanUp`) on every path — success, refusal,
    provider failure, a client gone mid-pack: `deleteTemporaryRefs`
    (receive-pack, compare-and-swap on the object id, per ref; a ref GitHub
    refused is re-read in the advertisement and counts as gone only when it is
@@ -247,8 +267,11 @@ sweep: a second delete of a deleted ref is reported gone.
 
 ### What the door advertises
 
-`report-status`, `delete-refs`, `side-band-64k`, `quiet`, then `ofs-delta` and
-`object-format=sha1` when GitHub advertises them, `agent=vaubaan-gateway`.
+`report-status`, `delete-refs`, `side-band-64k`, `quiet`, `no-thin` (git then
+sends a self-contained pack, every object of which the inspection can read;
+a thin pack anyway is read, and what it cannot resolve counts as a workflow
+change), then `ofs-delta` and `object-format=sha1` when GitHub advertises
+them, `agent=vaubaan-gateway`.
 Never `atomic`, `push-options`, `push-cert`, `report-status-v2`: git itself
 then refuses `--atomic`, `-o` and `--signed` with its own sentence, and a
 client that asks anyway is refused. A repository in another object format is
@@ -271,10 +294,10 @@ fails to compile).
 
 ## Configuration
 
-| Key                   | Default | Where                                                            |
-| --------------------- | ------- | ---------------------------------------------------------------- |
-| `git.max_pack_mb`     | `200`   | `git/push.ts` (`capped`): a larger push is cut, refused, audited |
-| `git.request_timeout` | `10m`   | `git/door.ts`: the request's `AbortSignal`                       |
+| Key                   | Default | Where                                                                                                                             |
+| --------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `git.max_pack_mb`     | `200`   | `git/pack-buffer.ts` (`readPack`): the pack is read whole into memory up to this; a larger push is refused, audited, nothing sent |
+| `git.request_timeout` | `10m`   | `git/door.ts`: the request's `AbortSignal`                                                                                        |
 
 Railway (checked 2026-10-14, docs.railway.com "Specs and limits"): a request
 body must finish uploading within 5 minutes; a request may last 15 minutes
@@ -324,6 +347,19 @@ http-backend` over bare repositories, a REST API for tokens, refs and
 - `packages/plugin-sdk/tests/unit/git-wire.test.ts` also: a feature list on
   any line, `prependChunk`, the v2 head (with a property test over 3000
   generated heads), the listing filters.
+- `apps/gateway/tests/integration/git/git-remote-workflows.test.ts` — the
+  defect of 2026-10-16 and its fix: a mission without
+  `workflow-write-via-file` modifying, adding, deleting or reverting a
+  workflow, a garbled pack, GitHub's git database down — refused by the
+  permission's name with no receive-pack at GitHub; a change outside the
+  directory and a mission holding the permission pass.
+- `packages/plugin-sdk/tests/unit/git-pack.test.ts` — the pack reader over
+  packs of the real `git pack-objects`: offset and ref deltas, a thin pack,
+  garbled, truncated and foreign bytes, every limit, a zip bomb; tree, commit
+  and tag bodies; `applyDelta` bounds.
+- `plugins/github/tests/unit/git-inspect.test.ts` — `inspectPack` against a
+  real bare repository behind a fake git database (below in
+  [providers/github](providers/github.md)).
 - `apps/gateway/tests/unit/server/git/command-list.test.ts` — a property test
   of `readPushCommands` over 3000 generated command lists and 2000 mutated
   byte strings; the in-flight bound.

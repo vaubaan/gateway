@@ -258,6 +258,18 @@ export class FakeGithubHost {
     if (commitRead && method === 'GET') {
       return this.commitFiles(`${commitRead[1]}/${commitRead[2]}`, commitRead[3] ?? '');
     }
+    const database = /^\/repos\/([^/]+)\/([^/]+)\/git\/(commits|trees|tags)\/([0-9a-f]{40})$/.exec(
+      url.pathname,
+    );
+    if (database && method === 'GET') {
+      if (this.databaseStatus !== null)
+        return json({ message: 'unavailable' }, this.databaseStatus);
+      return this.gitDatabase(
+        `${database[1]}/${database[2]}`,
+        database[3] as 'commits' | 'trees' | 'tags',
+        database[4] ?? '',
+      );
+    }
     const compare = /^\/repos\/([^/]+)\/([^/]+)\/compare\/(.+)$/.exec(url.pathname);
     if (compare && method === 'GET') {
       if (this.compareStatus !== null) return json({ message: 'unavailable' }, this.compareStatus);
@@ -419,6 +431,47 @@ export class FakeGithubHost {
         .map((oid) => ({ sha: oid })),
     );
   }
+
+  /**
+   * `GET git/commits|trees|tags/{sha}`: GitHub's git database over the bare
+   * repository — every object it holds, reachable or not, as GitHub does.
+   */
+  private async gitDatabase(
+    repository: string,
+    kind: 'commits' | 'trees' | 'tags',
+    sha: string,
+  ): Promise<Response> {
+    const type = await this.git(repository, ['cat-file', '-t', sha]).catch(() => null);
+    const expected = { commits: 'commit', trees: 'tree', tags: 'tag' }[kind];
+    if (type !== expected) return json({ message: 'Not Found' }, 404);
+    if (kind === 'trees') {
+      const out = await this.git(repository, ['ls-tree', sha]);
+      const tree = out
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => {
+          const [meta = '', path = ''] = line.split('\t');
+          const [mode = '', entryType = '', oid = ''] = meta.split(' ');
+          return { path, mode, type: entryType, sha: oid };
+        });
+      return json({ sha, tree, truncated: false });
+    }
+    const body = await this.git(repository, ['cat-file', '-p', sha]);
+    const header = body.split('\n\n')[0]?.split('\n') ?? [];
+    const field = (name: string) =>
+      header.filter((l) => l.startsWith(`${name} `)).map((l) => l.slice(name.length + 1));
+    if (kind === 'commits') {
+      return json({
+        sha,
+        tree: { sha: field('tree')[0] },
+        parents: field('parent').map((p) => ({ sha: p })),
+      });
+    }
+    return json({ sha, object: { sha: field('object')[0], type: field('type')[0] } });
+  }
+
+  /** When set, the git database API answers this status (a GitHub outage). */
+  databaseStatus: number | null = null;
 
   /** How many `GET commits/{sha}` the review made. */
   commitReads = 0;

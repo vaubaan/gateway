@@ -10,6 +10,8 @@
  *
  *   upstream   git-credential.ts  the repository's smart HTTP endpoint and the
  *                                 credential to present there, in memory
+ *   inspect    git-inspect.ts     whether each update's tip changes the CI
+ *                                 workflows, before the pack leaves the gateway
  *   review     git-review.ts      what each ref update brings, read at GitHub
  *   execute    git-moves.ts       the reviewed refs moved, each reported
  *   REST       git-rest.ts        the reads and writes both of them use
@@ -21,6 +23,7 @@ import type { GitRemoteCapability, RiskCatalog } from '@vaubaan/plugin-sdk';
 import { GITHUB_WEB_BASE } from './credential.ts';
 import { GIT_FETCH_TOOL, GIT_PUSH_TOOL } from './git-call.ts';
 import { repositoryOf, upstream } from './git-credential.ts';
+import { inspectPack } from './git-inspect.ts';
 import { compareUrl, review } from './git-review.ts';
 
 export { GIT_TOKEN_PERMISSIONS } from './git-credential.ts';
@@ -56,6 +59,7 @@ export const githubGitRemoteOf = (catalog: RiskCatalog): GitRemoteCapability => 
   pushRisk: 'github.git-push',
   repositoryOf,
   upstream,
+  inspectPack,
   review,
   compareUrl,
   insteadOf: `${GITHUB_WEB_BASE}/`,

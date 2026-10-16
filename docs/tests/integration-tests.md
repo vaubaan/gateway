@@ -2753,8 +2753,10 @@ real `git http-backend` over bare repositories behind a loopback listener, and
 a REST API for installation tokens (with per-installation permissions and
 GitHub's 422), `GET /repos`, `git/ref`, `git/refs` (create, `force:false`
 checked with `merge-base --is-ancestor`, delete), `compare` (with its
-`commits`), `commits/{sha}` and `commits?sha=` (the history, `rev-list`)
-computed with git on the same repositories. The agent's git has an empty configuration, the
+`commits`), `commits/{sha}` and `commits?sha=` (the history, `rev-list`), and the git
+database `git/commits|trees|tags/{sha}` (`cat-file`, `ls-tree`; every object
+the bare repository holds, reachable or not, as GitHub does; `databaseStatus`
+plays an outage) computed with git on the same repositories. The agent's git has an empty configuration, the
 setup kit's credential helper and the key in `VAUBAAN_MISSION_TOKEN`. Nothing
 reaches github.com.
 
@@ -2826,6 +2828,33 @@ reaches github.com.
   request naming two commands refused and audited, `ls-refs` with its
   capabilities first free and filtered; **an SSH-signed commit arrives at
   GitHub byte for byte, signature intact**.
+- **`tests/integration/git/git-remote-workflows.test.ts`** (8) — **the
+  defect of 2026-10-16 and its fix** (ADR
+  `git-push-inspected-before-it-leaves`): a mission holding `git-push` and
+  `feature-branch-write` but not `workflow-write-via-file` **modifying
+  `ci.yml` and `release.yml`**, adding a workflow, deleting one, **reverting
+  the workflows to an older tree**, sending a garbled pack, or pushing plain
+  code while GitHub's git database is down — each refused by the permission's
+  name, the branch absent, **no receive-pack at GitHub** (not even the
+  temporary ref), the risk in the audit entry; the same mission pushes a
+  change outside `.github/workflows/`; a mission holding the permission pushes
+  the workflow change (allowed, risk touched).
+- **`packages/plugin-sdk/tests/unit/git-pack.test.ts`** (9) — the pack
+  reader over packs of the real `git pack-objects`: offset deltas (every
+  commit, tree and tag under the id git gives it, blobs dropped), ref deltas,
+  a thin pack (the delta against a left-out object missing, incomplete), an
+  empty body; garbled, truncated and foreign bytes never throw and never
+  yield an object whose content does not hash to its id; each limit; an
+  object inflating beyond its declared size; tree, commit and tag bodies;
+  `applyDelta` out of bounds.
+- **`plugins/github/tests/unit/git-inspect.test.ts`** (19) — `inspectPack`
+  against a real bare repository behind a fake git database: no change
+  outside the directory; modify, add, delete, rename in and out, mode change,
+  another case, a revert (also with the old tree absent from the pack), a
+  merge with an old commit that is no head — changes; a merge running what a
+  current head runs, a branch on another head, a deletion — none; creates,
+  annotated tags, every ref of a push; fail closed on a garbled pack, a thin
+  pack, a GitHub failure, an unknown `old`.
 - **`tests/unit/server/git/command-list.test.ts`** (3) — **a property test of
   `readPushCommands` over 3000 generated command lists** (capabilities on any
   line, hostile ref names, duplicates, 51 commands): whatever is accepted is
