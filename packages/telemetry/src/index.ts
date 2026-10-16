@@ -61,6 +61,9 @@ export {
 export {
   BATCH_KEYS,
   batchSize,
+  isTelemetryLevel,
+  TELEMETRY_LEVELS,
+  type TelemetryLevel,
   MAX_PROFILES_PER_BATCH,
   MAX_REPORTS_PER_BATCH,
   parseBatch,

@@ -1408,7 +1408,7 @@ automated suite. Trust comes from usage.
     (environment labels are chosen by the company), and whether a gate
     applied (`approval`, none);
   - one **instance profile** per UTC day: gateway version, deployment kind
-    (`docker`, `railway`, `other`), runtime version and architecture, the
+    (`docker`, `railway`, `fly`, `other`), runtime version and architecture, the
     plugins enabled with their versions, the kinds of sign-in providers
     configured (`oidc`, `github`), and bucketed counts (users, accounts per
     plugin, active missions, calls of the day). It carries a **day

@@ -123,7 +123,7 @@ export const INSTANCE_PROFILE_KEYS = [
 
 export const PROFILE_PLUGIN_KEYS = ['plugin', 'plugin_version', 'accounts'] as const;
 
-export const DEPLOYMENT_KINDS = ['docker', 'railway', 'other'] as const;
+export const DEPLOYMENT_KINDS = ['docker', 'railway', 'fly', 'other'] as const;
 export type DeploymentKind = (typeof DEPLOYMENT_KINDS)[number];
 
 export const ARCHES = ['x64', 'arm64', 'other'] as const;

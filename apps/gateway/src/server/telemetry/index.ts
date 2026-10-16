@@ -13,14 +13,16 @@ import type { AuditWriter, CacheClient } from '@vaubaan/gateway-core';
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 import {
   collectorEndpoint,
+  createDecisionReport,
   createPluginReport,
   isPlaceholderCollector,
   serializeBatch,
   TelemetryClient,
-  type PluginReport,
   type QueueStats,
   type ReportQueueOptions,
   type TelemetryClientState,
+  type TelemetryLevel,
+  type TelemetryReport,
 } from '@vaubaan/telemetry';
 
 import type { Authenticator } from '../auth/authenticator';
@@ -34,9 +36,18 @@ import { createTelemetryHandlers, type TelemetryHandlers } from './handlers';
 import { reportOf } from './outcome';
 import { TelemetrySettingsService, type TelemetryState } from './settings';
 import { PluginStatsReader } from './stats';
+import {
+  decisionReportOf,
+  InstanceProfiler,
+  utcDayOf,
+  type InstanceProfilerDeps,
+  type ProfileSource,
+} from './usage';
 
 export interface TelemetryModuleDeps {
-  readonly config: Pick<InstanceConfig, 'publicUrl' | 'telemetry'>;
+  readonly config: Pick<InstanceConfig, 'publicUrl' | 'telemetry' | 'signIn'>;
+  /** Counts for the daily instance profile (level `usage-stats`). */
+  readonly profileSource: ProfileSource;
   readonly store: { readonly config: ConfigRepo; readonly auditWriter: AuditWriter };
   readonly registry: PluginRegistry;
   readonly authenticator: Authenticator;
@@ -48,6 +59,9 @@ export interface TelemetryModuleDeps {
   readonly clock?: Clock;
   /** Queue tuning and timers (tests). */
   readonly queue?: Omit<ReportQueueOptions, 'send'>;
+  /** The profile check's timer (tests pass `null` and call `profileNow`). Default: every hour. */
+  readonly profileIntervalMs?: number | null;
+  readonly profiler?: Partial<Pick<InstanceProfilerDeps, 'env' | 'randomBytes' | 'inDocker'>>;
 }
 
 /** What Admin → Telemetry shows. */
@@ -63,7 +77,9 @@ export interface TelemetryOverview {
   readonly collectorKeySet: boolean;
   /** The collector URL is still the placeholder default: nothing is sent. */
   readonly placeholderCollector: boolean;
-  /** The exact request body of one report, as this instance would send it. */
+  /** What an enabled instance sends (`telemetry.level`). */
+  readonly level: TelemetryLevel;
+  /** The exact request body of one report of each kind the level sends, as this instance would send it. */
   readonly samplePayload: string;
   readonly queue: QueueStats;
 }
@@ -77,20 +93,26 @@ export interface TelemetryModule {
   overview(): Promise<TelemetryOverview>;
   /** Sends what is queued now (tests, shutdown paths). */
   flush(): Promise<void>;
+  /** Queues today's instance profile if the level sends it and none was queued today (tests). */
+  profileNow(): Promise<void>;
   stop(): void;
 }
 
 /**
- * A report of this instance's own shape, for the Admin page: the first tool
- * of the first registered plugin, reported as a success. `null` when no
- * plugin declares a tool.
+ * Reports of this instance's own shape, for the Admin page: the first tool of
+ * the first registered plugin, reported as an allowed success; with
+ * `usage-stats`, its decision and a profile with a placeholder day identifier.
  */
-function sampleReport(registry: PluginRegistry, gatewayVersion: string): PluginReport | null {
+function sampleReports(
+  registry: PluginRegistry,
+  gatewayVersion: string,
+  level: TelemetryLevel,
+): TelemetryReport[] {
   for (const id of registry.ids) {
     const plugin = registry.get(id)?.plugin;
     const tool = plugin?.tools[0];
     if (!plugin || !tool) continue;
-    const report = createPluginReport({
+    const health = createPluginReport({
       plugin: plugin.id,
       plugin_version: plugin.version,
       gateway_version: gatewayVersion,
@@ -99,16 +121,30 @@ function sampleReport(registry: PluginRegistry, gatewayVersion: string): PluginR
       error_class: null,
       duration_bucket: 'lt_1s',
     });
-    if (report) return report;
+    if (!health) continue;
+    const out: TelemetryReport[] = [{ kind: 'plugin-health', report: health }];
+    if (level === 'usage-stats') {
+      const decision = createDecisionReport({
+        plugin: plugin.id,
+        tool: tool.name,
+        gateway_version: gatewayVersion,
+        decision: 'allowed',
+        risks: [],
+        gate: 'none',
+      });
+      if (decision) out.push({ kind: 'decision', report: decision });
+    }
+    return out;
   }
-  return null;
+  return [];
 }
 
-/** The body of a one-report batch, indented for display; the same serializer as the client. */
-function displayPayload(report: PluginReport | null): string {
-  const queued = report ? [{ kind: 'plugin-health' as const, report }] : [];
-  return JSON.stringify(JSON.parse(serializeBatch(queued)), null, 2);
+/** The body of a sample batch, indented for display; the same serializer as the client. */
+function displayPayload(reports: readonly TelemetryReport[]): string {
+  return JSON.stringify(JSON.parse(serializeBatch(reports)), null, 2);
 }
+
+const PROFILE_CHECK_MS = 60 * 60 * 1000;
 
 export async function createTelemetryModule(deps: TelemetryModuleDeps): Promise<TelemetryModule> {
   const logger = deps.logger.child({ component: 'telemetry' });
@@ -147,6 +183,16 @@ export async function createTelemetryModule(deps: TelemetryModuleDeps): Promise<
     collector: placeholderCollector ? 'placeholder (nothing is sent)' : 'configured',
   });
 
+  const { level } = deps.config.telemetry;
+  const usage = level === 'usage-stats';
+  const profiler = new InstanceProfiler({
+    registry: deps.registry,
+    gatewayVersion: deps.build.version,
+    signInKinds: [...new Set(deps.config.signIn.map((provider) => provider.kind))],
+    source: deps.profileSource,
+    ...deps.profiler,
+  });
+
   const sink: TelemetrySink = {
     pluginExecuted(execution) {
       try {
@@ -158,7 +204,48 @@ export async function createTelemetryModule(deps: TelemetryModuleDeps): Promise<
         // Telemetry never fails a call, and an error here may carry provider text: not logged.
       }
     },
+    callDecided(decision) {
+      try {
+        if (!usage || client.state === 'disabled') return;
+        profiler.countCall();
+        const report = decisionReportOf(decision, deps.registry, deps.build.version);
+        if (report) client.record({ kind: 'decision', report });
+      } catch {
+        // Telemetry never fails a call.
+      }
+    },
   };
+
+  // One profile per UTC day, checked every hour: the first check of a day
+  // that finds telemetry sending queues it.
+  let profiledDay: string | null = null;
+  let profiling: Promise<void> | null = null;
+  async function profileNow(): Promise<void> {
+    if (!usage || client.state !== 'sending') return;
+    const now = clock.now();
+    const day = utcDayOf(now);
+    if (profiledDay === day) return;
+    const profile = await profiler.profile(now);
+    if (profile) {
+      client.record({ kind: 'instance-profile', report: profile });
+      profiledDay = day;
+    }
+  }
+  const tick = (): void => {
+    profiling ??= profileNow()
+      .catch((error: unknown) =>
+        logger.warn('telemetry: the instance profile could not be built', {
+          error: error instanceof Error ? error.name : 'non_error_throw',
+        }),
+      )
+      .finally(() => {
+        profiling = null;
+      });
+  };
+  const intervalMs =
+    deps.profileIntervalMs === undefined ? PROFILE_CHECK_MS : deps.profileIntervalMs;
+  const timer = intervalMs === null ? null : setInterval(tick, intervalMs);
+  timer?.unref();
 
   const stats = new PluginStatsReader({
     isActive: () => client.state === 'sending',
@@ -179,7 +266,7 @@ export async function createTelemetryModule(deps: TelemetryModuleDeps): Promise<
   });
 
   const endpoint = collectorEndpoint(collectorUrl);
-  const samplePayload = displayPayload(sampleReport(deps.registry, deps.build.version));
+  const samplePayload = displayPayload(sampleReports(deps.registry, deps.build.version, level));
 
   return {
     sink,
@@ -195,12 +282,17 @@ export async function createTelemetryModule(deps: TelemetryModuleDeps): Promise<
         collectorUrl: endpoint.url.href,
         collectorKeySet: endpoint.key !== null,
         placeholderCollector,
+        level,
         samplePayload,
         queue: client.stats,
       };
     },
     flush: () => client.flush(),
-    stop: () => client.stop(),
+    profileNow,
+    stop: () => {
+      if (timer) clearInterval(timer);
+      client.stop();
+    },
   };
 }
 
@@ -213,6 +305,14 @@ export {
   type TelemetryProblem,
 } from './handlers';
 export { classifyOutcome, reportOf } from './outcome';
+export {
+  decisionReportOf,
+  deploymentKindOf,
+  InstanceProfiler,
+  utcDayOf,
+  type InstanceProfilerDeps,
+  type ProfileSource,
+} from './usage';
 export {
   REFRESH_MS,
   TELEMETRY_CONFIG_OBJECT_ID,

@@ -199,14 +199,20 @@
 # (or `${file:/run/secrets/vaubaan_bootstrap_token}` with a secrets mount)
 # bootstrap_token: ${VAUBAAN_BOOTSTRAP_TOKEN}
 
-# Community telemetry (spec §9): anonymous plugin success/failure counts,
-# six fields per report (shown on Administration → Telemetry). Off by default.
+# Community telemetry (spec §9): anonymous reports, every field from a closed
+# vocabulary or a bucket (shown on Administration → Telemetry). Off by default.
 # telemetry:
 #   # env: VAUBAAN_TELEMETRY_ENABLED
 #   # Leave this key out to let an operator decide on Administration →
 #   # Telemetry. Setting it, to true or to false, decides here and makes that
 #   # page read-only; `false` guarantees nothing is ever sent.
 #   enabled: false
+#   # env: VAUBAAN_TELEMETRY_LEVEL
+#   # What enabled telemetry sends: `plugin-health` (whether each call a plugin
+#   # executed worked, and how long it took) or `usage-stats` (that, plus each
+#   # call's decision and risks without their environment, and one profile a
+#   # day with bucketed counts). Default: usage-stats.
+#   level: usage-stats
 #   # env: VAUBAAN_TELEMETRY_COLLECTOR_URL (example value; must be https)
 #   # The built-in default is a placeholder: no collector is published yet,
 #   # and the gateway sends nothing while the URL is that default, even when

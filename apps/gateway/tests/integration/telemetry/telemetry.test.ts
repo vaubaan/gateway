@@ -41,6 +41,8 @@ interface Rig {
   readonly logs: Record<string, unknown>[];
   /** Bodies of the batches POSTed to the collector, flattened. */
   reports(): Record<string, unknown>[];
+  /** The batches POSTed to the collector, as sent. */
+  bodies(): Record<string, Record<string, unknown>[]>[];
   mission(): Promise<IssuedMission>;
   /** A same-origin form POST of the toggle, carrying an operator session. */
   toggle(enabled: string, options?: { as?: 'operator' | 'user' | 'nobody' }): Promise<Response>;
@@ -64,7 +66,14 @@ describe('community telemetry', () => {
       respond(new URL(String(input)), init ?? {}),
     );
     const instance = await executionInstance({
-      env: { VAUBAAN_ADMIN_EMAILS: OPERATOR_EMAIL, VAUBAAN_LOG_LEVEL: 'debug', ...env },
+      // The plugin-health level unless a test asks for usage-stats (the default of the
+      // configuration): the scenarios below count plugin-health reports.
+      env: {
+        VAUBAAN_ADMIN_EMAILS: OPERATOR_EMAIL,
+        VAUBAAN_LOG_LEVEL: 'debug',
+        VAUBAAN_TELEMETRY_LEVEL: 'plugin-health',
+        ...env,
+      },
       deps: {
         telemetryFetch: collector as unknown as typeof fetch,
         logWrite: (_level, line) => {
@@ -90,6 +99,17 @@ describe('community telemetry', () => {
             return rest;
           });
         }),
+      bodies: () =>
+        collector.mock.calls.flatMap(([url, init]) =>
+          new URL(String(url)).pathname.endsWith('/plugin_reports')
+            ? [
+                JSON.parse(String((init as RequestInit).body)) as Record<
+                  string,
+                  Record<string, unknown>[]
+                >,
+              ]
+            : [],
+        ),
       mission: () => instance.issue({ policy: [line(READ, 1_000)] }),
       async toggle(enabled, options = {}) {
         const as = options.as ?? 'operator';
@@ -497,6 +517,100 @@ describe('community telemetry', () => {
       expect(overview.collectorUrl).toBe('https://collector.example.net/rest/v1/plugin_reports');
       expect(overview.collectorKeySet).toBe(true);
       expect(overview.client).toBe('sending');
+    });
+  });
+
+  describe('the usage-stats level', () => {
+    async function usage(): Promise<{ r: Rig; mission: IssuedMission }> {
+      const r = await open({
+        VAUBAAN_TELEMETRY_ENABLED: 'true',
+        VAUBAAN_TELEMETRY_COLLECTOR_URL: COLLECTOR_URL,
+        VAUBAAN_TELEMETRY_LEVEL: 'usage-stats',
+      });
+      return { r, mission: await r.mission() };
+    }
+
+    const decisionsOf = (r: Rig) => r.bodies().flatMap((body) => body.decisions ?? []);
+    const profilesOf = (r: Rig) => r.bodies().flatMap((body) => body.instance_profiles ?? []);
+
+    it('reports one decision per audited call, allowed or refused, with account-scoped risks', async () => {
+      const { r, mission } = await usage();
+      const { instance } = r;
+      await instance.call(mission, 'depot__read_item', { space: 'scratch' });
+      await instance.call(mission, 'depot__purge', { space: 'scratch' });
+      // Refused without a code (the plugin denies a space outside the mission, a tool
+      // no plugin declares): not a decision report.
+      await instance.call(mission, 'depot__read_item', { space: 'somewhere-else' });
+      await instance.call(mission, 'depot__no_such_tool', {});
+      await r.drain();
+
+      const decisions = decisionsOf(r);
+      expect(decisions.map((d) => [d.tool, d.decision, d.gate])).toEqual([
+        ['depot__read_item', 'allowed', 'none'],
+        ['depot__purge', 'risk-not-accepted', 'none'],
+      ]);
+      for (const decision of decisions) {
+        expect(decision.plugin).toBe('depot');
+        for (const risk of decision.risks as string[]) expect(risk).toMatch(/^depot\.[a-z.-]+$/);
+      }
+      // The plugin-health level is part of usage-stats.
+      expect(r.reports()).toHaveLength(1);
+    });
+
+    it('sends neither decisions nor a profile at the plugin-health level', async () => {
+      const r = await open({
+        VAUBAAN_TELEMETRY_ENABLED: 'true',
+        VAUBAAN_TELEMETRY_COLLECTOR_URL: COLLECTOR_URL,
+      });
+      const mission = await r.mission();
+      await r.instance.call(mission, 'depot__read_item', { space: 'scratch' });
+      await r.instance.root.telemetry.profileNow();
+      await r.drain();
+      expect(r.bodies().flatMap((body) => Object.keys(body))).toEqual(['plugin_health']);
+    });
+
+    it('queues one profile a day, bucketed, with a day identifier and nothing that names the instance', async () => {
+      const { r, mission } = await usage();
+      const { instance } = r;
+      await instance.call(mission, 'depot__read_item', { space: 'scratch' });
+      await instance.call(mission, 'depot__read_item', { space: 'scratch', item: 'b' });
+      await instance.root.telemetry.profileNow();
+      await instance.root.telemetry.profileNow();
+      await r.drain();
+
+      const profiles = profilesOf(r);
+      expect(profiles).toHaveLength(1);
+      const [profile] = profiles;
+      expect(profile?.day_id).toMatch(/^[0-9a-f]{32}$/);
+      expect(profile).toMatchObject({ calls: '2-5', active_missions: '1' });
+      expect(profile?.plugins).toEqual([
+        expect.objectContaining({ plugin: 'depot', accounts: '1' }),
+      ]);
+      const wire = JSON.stringify(r.bodies());
+      for (const forbidden of [
+        new URL(TEST_PUBLIC_URL).host,
+        instance.ada.email,
+        instance.ada.id,
+        mission.mission.id,
+        OPERATOR_EMAIL,
+      ]) {
+        expect(wire, forbidden).not.toContain(forbidden);
+      }
+      // The day identifier travels with the profile only.
+      const others = r
+        .bodies()
+        .flatMap((body) => [...(body.plugin_health ?? []), ...(body.decisions ?? [])]);
+      expect(JSON.stringify(others)).not.toContain(String(profile?.day_id));
+    });
+
+    it('shows the exact body of each kind on the Admin overview', async () => {
+      const { r } = await usage();
+      const overview = await r.instance.root.telemetry.overview();
+      expect(overview.level).toBe('usage-stats');
+      expect(Object.keys(JSON.parse(overview.samplePayload) as object)).toEqual([
+        'plugin_health',
+        'decisions',
+      ]);
     });
   });
 

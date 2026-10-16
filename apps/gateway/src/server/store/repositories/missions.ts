@@ -88,6 +88,12 @@ export interface MissionsRepo {
   create(input: CreateMissionInput): Promise<MissionRecord>;
   getById(id: string): Promise<MissionRecord | null>;
   listForCreator(userId: string): Promise<MissionRecord[]>;
+  /**
+   * How many missions are active at `now`: stored `active` and not past their
+   * expiry. Orphaned ones are derived elsewhere and still counted here: the
+   * figure is the instance profile's bucket (spec §9), not an authority check.
+   */
+  countActive(now: Iso): Promise<number>;
   /** The missions this user is a current member of (never the ones they created). */
   listForMember(userId: string): Promise<MissionRecord[]>;
   listForConnection(connectionId: string): Promise<MissionRecord[]>;
@@ -420,6 +426,10 @@ function validatePolicy(ctx: RepoContext, policy: readonly MissionPolicyEntry[])
 export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
   const { db } = ctx;
   const byId = db.prepare<[string], MissionRow>(`SELECT ${COLUMNS} FROM missions WHERE id = ?`);
+  const activeCount = db.prepare<[string], { readonly n: number }>(
+    `SELECT COUNT(*) AS n FROM missions
+      WHERE status = 'active' AND (expires_at IS NULL OR expires_at > ?)`,
+  );
   const byCreator = db.prepare<[string], MissionRow>(
     `SELECT ${COLUMNS} FROM missions WHERE creator_user_id = ? ORDER BY created_at`,
   );
@@ -657,6 +667,9 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
     async getById(id) {
       const row = byId.get(id);
       return row ? toRecord(row) : null;
+    },
+    async countActive(now) {
+      return activeCount.get(now)?.n ?? 0;
     },
     async listForCreator(userId) {
       return byCreator.all(userId).map(toRecord);

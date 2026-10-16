@@ -12,8 +12,8 @@
  * What must hold for everything that reached the collector (URL, headers and
  * body of every request):
  *
- *   1. every report has exactly the seven allowed keys, and the batch
- *      holds plugin-health reports only (the usage level is not wired yet);
+ *   1. every report has exactly the keys of its kind (plugin health, decision,
+ *      instance profile), at the usage-stats level, the widest one;
  *   2. every value belongs to a universe fixed before the first call: the
  *      plugin's declaration, the build stamp and the closed vocabularies —
  *      so no value can be derived from a call;
@@ -32,6 +32,12 @@
 import { fingerprintArguments } from '@vaubaan/gateway-core';
 import { UpstreamAuthError } from '@vaubaan/shared';
 import {
+  createInstanceProfile,
+  DECISION_GATES,
+  DECISION_OUTCOMES,
+  DECISION_REPORT_KEYS,
+  INSTANCE_PROFILE_KEYS,
+  type InstanceProfileInput,
   DURATION_BUCKETS,
   ERROR_CLASSES_BY_OUTCOME,
   isPluginReport,
@@ -400,17 +406,27 @@ describe('structural: a telemetry report contains none of the forbidden fields (
     const session = await root.store.sessions.getByMission(mission.mission.id);
     if (session) forbidden.add(session.id);
 
+    await root.telemetry.profileNow();
     let overview = await root.telemetry.overview();
     for (let guard = 0; overview.queue.queued > 0 && guard < ITERATIONS; guard += 1) {
       await root.telemetry.flush();
       overview = await root.telemetry.overview();
     }
-    expect(overview.queue).toMatchObject({ queued: 0, dropped: 0, delivered: expected.length });
 
-    const reports = wire.flatMap((request) => {
-      const body = JSON.parse(request.body) as Record<string, unknown[]>;
-      expect(Object.keys(body)).toEqual(['plugin_health']);
-      return body.plugin_health ?? [];
+    const bodies = wire.map((request) => JSON.parse(request.body) as Record<string, unknown[]>);
+    const reports = bodies.flatMap((body) => body.plugin_health ?? []);
+    const decisions = bodies.flatMap((body) => body.decisions ?? []);
+    const profiles = bodies.flatMap((body) => body.instance_profiles ?? []);
+    // One decision per audited call that has a decision word (allowed, or a refusal code).
+    const audited = (await root.store.audit.list({ kind: 'call', missionId: mission.mission.id }))
+      .filter((e) => e.kind === 'call')
+      .filter((e) => e.decision === 'allowed' || e.refusal_code !== null);
+    expect(decisions).toHaveLength(audited.length);
+    expect(profiles).toHaveLength(1);
+    expect(overview.queue).toMatchObject({
+      queued: 0,
+      dropped: 0,
+      delivered: expected.length + decisions.length + profiles.length,
     });
 
     // Every holder made calls, and the instance itself did record who: the property
@@ -446,7 +462,24 @@ describe('structural: a telemetry report contains none of the forbidden fields (
       }
     }
 
+    for (const decision of decisions) {
+      const d = decision as Record<string, unknown>;
+      expect(Object.keys(d)).toEqual([...DECISION_REPORT_KEYS]);
+      expect(d.plugin).toBe(depot.plugin.id);
+      expect(d.tool === null || declaredTools.includes(String(d.tool))).toBe(true);
+      expect((DECISION_OUTCOMES as readonly unknown[]).includes(d.decision)).toBe(true);
+      expect((DECISION_GATES as readonly unknown[]).includes(d.gate)).toBe(true);
+      expect(d.gateway_version).toBe(root.build.version);
+      // Account-scoped risks of the plugin only: never an environment label.
+      for (const risk of d.risks as string[]) expect(risk).toMatch(/^depot\.[a-z][a-z0-9-]*$/);
+    }
+    for (const profile of profiles) {
+      expect(Object.keys(profile as object)).toEqual([...INSTANCE_PROFILE_KEYS]);
+      expect(createInstanceProfile(profile as InstanceProfileInput)).not.toBeNull();
+    }
+
     // 3. Nothing forbidden anywhere on the wire: URL, headers, body.
+    forbidden.add('[staging]').add('[prod]');
     expect(wire.length).toBeGreaterThan(1);
     const everythingSent = wire.map((w) => `${w.url}\n${w.headers}\n${w.body}`).join('\n');
     const leaked = [...forbidden].filter((value) => everythingSent.includes(value));

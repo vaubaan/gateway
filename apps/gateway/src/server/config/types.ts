@@ -6,6 +6,8 @@
  * object (or a slice of it) through the composition root.
  */
 
+import type { TelemetryLevel } from '@vaubaan/telemetry';
+
 import type { ClientIpHeader } from '../http/client-ip';
 import type { SignInProvider } from './sign-in';
 
@@ -112,6 +114,12 @@ export interface TelemetryConfig {
    * (handbook telemetry, "Who decides").
    */
   readonly enabledSetByConfig: boolean;
+  /**
+   * What an enabled instance sends (`telemetry.level`, default `usage-stats`):
+   * plugin-health reports only, or also the decision reports and the daily
+   * instance profile (spec §9; ADR telemetry-two-levels-behind-a-vercel-collector).
+   */
+  readonly level: TelemetryLevel;
   readonly collectorUrl: URL;
 }
 

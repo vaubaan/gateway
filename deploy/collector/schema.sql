@@ -219,7 +219,7 @@ alter table public.instance_profiles
       or gateway_version ~ '^[0-9]{1,5}\.[0-9]{1,5}\.[0-9]{1,5}(-[0-9A-Za-z.-]{1,32})?(\+[0-9A-Za-z.-]{1,32})?$'
     ),
   add constraint instance_profiles_deployment_known
-    check (deployment in ('docker', 'railway', 'other')),
+    check (deployment in ('docker', 'railway', 'fly', 'other')),
   add constraint instance_profiles_runtime_shape
     check (runtime ~ '^node-[0-9]{1,3}$'),
   add constraint instance_profiles_arch_known

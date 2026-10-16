@@ -42,7 +42,7 @@ packages/telemetry/src/            @vaubaan/telemetry — no I/O but the injecte
   report.ts                        PluginReport (frozen, seven keys), vocabularies, createPluginReport,
                                    isPluginReport, durationBucket
   usage.ts                         level usage-stats: DecisionReport, InstanceProfile, their
-                                   constructors, countBucket (not emitted by the gateway yet)
+                                   constructors, countBucket
   wire.ts                          the request body: serializeBatch (instance), parseBatch (collector)
   queue.ts                         ReportQueue: bounded, batched, backoff; ReportBuffer port
   client.ts                        TelemetryClient: the three gates, the POST, the collector headers
@@ -53,6 +53,8 @@ apps/gateway/src/server/
     index.ts                       createTelemetryModule → root.telemetry (sink, settings, stats,
                                    handlers, overview, flush, stop)
     outcome.ts                     classifyOutcome / reportOf: outcome → closed vocabulary
+    usage.ts                       decisionReportOf, InstanceProfiler (day identifier, buckets),
+                                   deploymentKindOf
     settings.ts                    TelemetrySettingsService: configuration vs operator toggle
     stats.ts                       PluginStatsReader: validation status from plugin_stats, cached
     handlers.ts                    POST /api/admin/telemetry
@@ -89,10 +91,32 @@ or an unvetted value. The collector parses the same body with `parseBatch`,
 which also refuses a report with an extra key. No timestamp, no instance
 identifier, no host name is ever part of a report or of the request.
 
-The reports of the `usage-stats` level (`usage.ts`: one decision report per
-decided call, one instance profile per UTC day) are defined, tested and
-accepted by the collector; the gateway does not emit them yet (ADR
-telemetry-two-levels-behind-a-vercel-collector, D7).
+## The `usage-stats` level
+
+`telemetry.level` (`VAUBAAN_TELEMETRY_LEVEL`, default `usage-stats`) says what
+an enabled instance sends; `plugin-health` sends the reports above only. At
+`usage-stats` (`server/telemetry/usage.ts`, `packages/telemetry/src/usage.ts`):
+
+- **one decision report per audited call** that has a decision word:
+  `decisionReportOf` names the plugin by the tool it declares or by its tool
+  prefix (`cloudflare_dns__` → `cloudflare-dns`), keeps the tool name only if
+  the plugin declares it, takes `allowed` or the refusal code, the risks
+  touched through `baseRiskId` (the environment label is the company's and
+  never leaves), and `gate: approval` when the call consumed an approval or
+  was refused for want of one. A refusal without a code (an unknown tool, a
+  plugin's denial, a stage that threw) and `wrong-credential-kind` give no
+  report;
+- **one instance profile per UTC day**: a timer checks every hour
+  (`profileNow()`, also exposed for tests) and queues the day's profile once,
+  while the client is sending. `InstanceProfiler` draws the day identifier
+  (16 random bytes, hex) at the first use of a UTC day and keeps it in memory
+  only; it is put on the profile and on nothing else. Counts come from the
+  composition root's `ProfileSource`: active users, missions stored `active`
+  and not expired (`missions.countActive`), accounts per provider that are not
+  revoked, and the decisions counted since the previous profile (lost on a
+  restart). All of them travel as buckets. `deploymentKindOf`: `railway` when
+  `RAILWAY_PROJECT_ID` is set, `fly` when `FLY_APP_NAME` is, `docker` when
+  `/.dockerenv` exists, else `other`.
 
 The same vocabularies and shapes are `CHECK` constraints of the collector's
 table; `telemetry-collector-schema.test.ts` compares the SQL text with the
@@ -135,7 +159,7 @@ rewrapped MCP server, an unusable answer) is `unspecified`, and a rewrapped
 MCP tool whose **upstream** answers `isError: true` is passed through and
 counted `executor_refused`.
 
-## The hook in the pipeline
+## The hooks in the pipeline
 
 `execution/telemetry-sink.ts` defines the port:
 
@@ -147,8 +171,23 @@ interface TelemetrySink {
     outcome: { ok: true; result: unknown } | { ok: false; error: unknown };
     durationMs: number; // first execute → final outcome, retries included
   }): void;
+  callDecided(decision: {
+    tool: string;
+    decision: 'allowed' | RefusalCode | null; // null: refused without a code
+    risksTouched: readonly RiskId[];
+    gated: boolean;
+  }): void;
 }
 ```
+
+`callDecided` is fed by `withDecisionTelemetry(auditWriter, sink, onError)`,
+the audit writer of the stages (`execution/index.ts`): after each call entry
+is written, the entry is reduced to those four facts. The execution door and
+the git remote share the stages, so both report; nothing else of the entry
+(mission, token, holder, resource, hash) reaches the sink. A sink that throws
+is logged by class name and never fails the write.
+
+`pluginExecuted`:
 
 `createUpstreamStage` takes `telemetry?: TelemetrySink` (default
 `NOOP_TELEMETRY_SINK`). `forward()` records, in a `WeakMap` keyed by the
