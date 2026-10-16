@@ -5,9 +5,9 @@
  *
  *   stale        the client's `old` is a claim: the ref is read at GitHub and
  *                a different value refuses the push ("stale info");
- *   base         what the push brings is reviewed from the nearest existing
- *                branch it was built on (`BaseFinder`, reasoning there), or
- *                from the default branch (a create) / `old` (an update);
+ *   base         what the push brings is reviewed from the narrowest of: the
+ *                nearest existing branches it was built on (`BaseFinder`,
+ *                reasoning there), the default branch, and `old` (an update);
  *   kind         create, fast-forward, force (a non-fast-forward, or any tag
  *                move), delete;
  *   files        the net change of the tip, from GitHub's comparison (both
@@ -17,18 +17,16 @@
  *                a workflow added then removed inside one push still asks
  *                for `workflow-write-via-file`. Each commit of the range is
  *                read (`GET commits/{sha}`), at most `COMMITS_REVIEWED_MAX`
- *                per push;
+ *                per push; one listing 300 files or more (a large merge) is
+ *                read by its trees: its workflows against its parents';
  *   permissions  the push token covers what the updates need, or the push is
  *                refused by the permission's name.
  *
  * Limits fail closed: over 300 files or 250 commits per comparison, over
- * `COMMITS_REVIEWED_MAX` commits per push, a commit with 300 or more files,
- * an unrelated history, an empty repository — the push is refused.
+ * `COMMITS_REVIEWED_MAX` commits per push, an unrelated history, an empty
+ * repository — the push is refused.
  */
 import {
-  parseAdvertisement,
-  UPLOAD_PACK_SERVICE,
-  UpstreamHttpError,
   type ExecuteContext,
   type GitRefUpdate,
   type GitReview,
@@ -39,8 +37,10 @@ import {
 import { isUnderWorkflowDirectory, repoFullName } from './call.ts';
 import { GITHUB_WEB_BASE } from './credential.ts';
 import { GIT_PUSH_TOOL, pushedRef } from './git-call.ts';
-import { gitGrant, targetOf, upstream } from './git-credential.ts';
-import { ANCESTORS_PAGE_SIZE, COMMIT_MAX_FILES, GithubRest, type Comparison } from './git-rest.ts';
+import { gitGrant, targetOf } from './git-credential.ts';
+import { branchHeads } from './git-heads.ts';
+import { workflowPathsOfCommit } from './git-inspect.ts';
+import { ANCESTORS_PAGE_SIZE, GithubRest, type Comparison } from './git-rest.ts';
 import { gitPushNeeds, missingPermissionSentence } from './permission-check.ts';
 
 /** Commits of one push read one by one for workflow changes (one request each). */
@@ -62,30 +62,32 @@ async function staleRef(rest: GithubRest, update: GitRefUpdate): Promise<string 
     : `${update.ref} has moved at GitHub since your last fetch (stale info); fetch first, then push again`;
 }
 
-/** The workflow paths each commit of `shas` changes, read `COMMIT_READS_IN_PARALLEL` at a time. */
+/**
+ * The workflow paths each commit of `shas` changes, read
+ * `COMMIT_READS_IN_PARALLEL` at a time. A commit whose file list GitHub
+ * truncates (`COMMIT_MAX_FILES`: a large merge of a branch already at
+ * GitHub, a vendored directory) is read by its trees instead
+ * (`workflowPathsOfCommit`): whether its workflows differ from those of
+ * every parent — fail closed when they cannot be read.
+ */
 async function workflowPathsByCommit(
   rest: GithubRest,
   shas: readonly string[],
-): Promise<
-  | { readonly ok: true; readonly paths: ReadonlyMap<string, readonly string[]> }
-  | { readonly ok: false; readonly reason: string }
-> {
+): Promise<ReadonlyMap<string, readonly string[]>> {
   const paths = new Map<string, readonly string[]>();
   for (let at = 0; at < shas.length; at += COMMIT_READS_IN_PARALLEL) {
     const batch = shas.slice(at, at + COMMIT_READS_IN_PARALLEL);
-    const read = await Promise.all(batch.map((sha) => rest.commitPaths(sha)));
-    for (const [i, changed] of read.entries()) {
-      const sha = batch[i]!;
-      if (changed === null) {
-        return {
-          ok: false,
-          reason: `commit ${sha.slice(0, 12)} changes ${COMMIT_MAX_FILES} or more files and cannot be reviewed; split it`,
-        };
-      }
-      paths.set(sha, changed.filter(isUnderWorkflowDirectory));
-    }
+    const read = await Promise.all(
+      batch.map(async (sha) => {
+        const changed = await rest.commitPaths(sha);
+        return changed === null
+          ? workflowPathsOfCommit(rest, sha)
+          : changed.filter(isUnderWorkflowDirectory);
+      }),
+    );
+    for (const [i, changed] of read.entries()) paths.set(batch[i]!, changed);
   }
-  return { ok: true, paths };
+  return paths;
 }
 
 interface Reviewing {
@@ -130,22 +132,8 @@ class BaseFinder {
     private readonly rest: GithubRest,
   ) {}
 
-  /** The object ids the repository's branches point at now (its upload-pack advertisement). */
   private branchHeads(): Promise<ReadonlySet<string>> {
-    this.heads ??= (async () => {
-      const remote = await upstream(this.ctx, this.repository, 'read');
-      const res = await this.ctx.fetch(`${remote.url}/info/refs?service=${UPLOAD_PACK_SERVICE}`, {
-        method: 'GET',
-        headers: { Authorization: remote.authorization },
-        ...(this.ctx.signal ? { signal: this.ctx.signal } : {}),
-      });
-      if (!res.ok) {
-        await res.body?.cancel();
-        throw new UpstreamHttpError(`github info/refs answered HTTP ${res.status}`, res.status);
-      }
-      const ad = parseAdvertisement(new Uint8Array(await res.arrayBuffer()));
-      return new Set(ad.refs.filter((r) => r.name.startsWith(BRANCH_PREFIX)).map((r) => r.oid));
-    })();
+    this.heads ??= branchHeads(this.ctx, this.repository);
     return this.heads;
   }
 
@@ -169,8 +157,6 @@ class BaseFinder {
     return found;
   }
 }
-
-const BRANCH_PREFIX = 'refs/heads/';
 
 /** The reviewable comparison that brings the fewest commits, or the first refusal. */
 function narrowest(comparisons: readonly Comparison[]): Comparison {
@@ -200,21 +186,30 @@ async function compareOne(
     );
   };
 
+  /**
+   * The default branch's comparison, always a candidate: it is a branch
+   * like the others, and the nearest heads by commit date can be stale
+   * branches whose range holds commits the default branch already has (the
+   * dogfood of 2026-10-16: three old v5 branches, each range holding the
+   * 1762-file merge of v5 into main, while main itself brought one commit).
+   */
+  const fromDefaultBranch = async (): Promise<Comparison | null> => {
+    const base = await defaultBranch();
+    return base === null ? null : rest.compare(base, update.new!, label);
+  };
+
   if (update.old === null) {
-    // A create brings what no branch holds: compared with the nearest branch it
-    // was built on, or — none found — with the default branch.
-    const nearest = await fromNearestBranch(null);
-    let forward = nearest;
-    if (forward === null || !forward.ok) {
-      const base = await defaultBranch();
-      if (base === null && forward === null) {
-        return {
-          reason: `${label} cannot be reviewed: the repository has no branch to compare it with`,
-        };
-      }
-      const fromDefault = base === null ? null : await rest.compare(base, update.new, label);
-      forward = narrowest([forward, fromDefault].filter((c): c is Comparison => c !== null));
+    // A create brings what no branch holds: compared with the nearest branches
+    // it was built on and with the default branch, the narrowest kept.
+    const candidates = [await fromNearestBranch(null), await fromDefaultBranch()].filter(
+      (c): c is Comparison => c !== null,
+    );
+    if (candidates.length === 0) {
+      return {
+        reason: `${label} cannot be reviewed: the repository has no branch to compare it with`,
+      };
     }
+    const forward = narrowest(candidates);
     if (!forward.ok) return { reason: forward.reason };
     return { update, kind: 'create', compared: [forward] };
   }
@@ -228,8 +223,8 @@ async function compareOne(
   // merge of another branch, a rebase onto it) the nearest branch may hold most
   // of what the range lists.
   const broad = !fromOld.ok || fromOld.commits > 1;
-  const nearest = broad ? await fromNearestBranch(update.old) : null;
-  const forward = narrowest([fromOld, ...(nearest ? [nearest] : [])]);
+  const others = broad ? [await fromNearestBranch(update.old), await fromDefaultBranch()] : [];
+  const forward = narrowest([fromOld, ...others.filter((c): c is Comparison => c !== null)]);
   if (!forward.ok) return { reason: forward.reason };
   if (fastForward) return { update, kind, compared: [forward] };
   // A rewrite can also take back what the old history had: both sides count.
@@ -271,13 +266,12 @@ export async function review(
     };
   }
   const perCommit = await workflowPathsByCommit(rest, shas);
-  if (!perCommit.ok) return perCommit;
   const reviewed: GitReviewedUpdate[] = [];
   for (const r of reviewing) {
     const files = [...new Set(r.compared.flatMap((c) => c.files))].sort();
     const workflows = new Set(files.filter(isUnderWorkflowDirectory));
     for (const sha of r.compared[0]?.shas ?? []) {
-      for (const path of perCommit.paths.get(sha) ?? []) workflows.add(path);
+      for (const path of perCommit.get(sha) ?? []) workflows.add(path);
     }
     reviewed.push({
       ...r.update,

@@ -9,6 +9,8 @@
  * so a future Postgres adapter replaces this file and keeps the repositories' SQL.
  */
 
+import { existsSync } from 'node:fs';
+
 import BetterSqlite3 from 'better-sqlite3';
 import { StoreError } from './errors.ts';
 
@@ -97,6 +99,28 @@ export function openReadonlyDb(path: string): StoreDb {
   const db = new BetterSqlite3(path, { readonly: true, fileMustExist: true });
   assertSqliteVersion(db);
   return db;
+}
+
+/**
+ * Whether another connection holds the database file (the running gateway): opens it,
+ * checkpoints its WAL, closes it. SQLite deletes the `-wal` file when the last
+ * connection of a WAL database closes; when it survives our close, someone else has
+ * the file open. Best-effort (sqlite:): the `restore --force` guard, never a lock.
+ */
+export function heldByAnotherConnection(path: string): boolean {
+  const db = new BetterSqlite3(path, { fileMustExist: true, timeout: 0 });
+  let busy = false;
+  try {
+    const row = db.pragma('wal_checkpoint(TRUNCATE)') as { busy?: number }[];
+    busy = (row[0]?.busy ?? 0) !== 0;
+  } catch (err) {
+    // Locked is held; a file that is not a database (`SQLITE_NOTADB`) holds no connection.
+    const code = (err as { code?: unknown }).code;
+    busy = typeof code === 'string' && /^SQLITE_(BUSY|LOCKED)/.test(code);
+  } finally {
+    db.close();
+  }
+  return busy || existsSync(/* turbopackIgnore: true */ `${path}-wal`);
 }
 
 /** `PRAGMA integrity_check`: `'ok'`, or the first problem SQLite names (sqlite:). */

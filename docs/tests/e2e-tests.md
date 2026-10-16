@@ -415,6 +415,20 @@ possible (spec §4, §5, §7):
    import from a test helper would carry tests, fixtures, the simulated
    identity provider or the demo launcher into production. The step also
    fails when the search looked at no file at all.
+10. **Operator commands** (`smoke.sh` steps 10–12) — the v4 importer, `reseal`
+    and `backup` load in the image, refuse root (77) and run as 10001 through
+    `vaubaan-entrypoint`; the backup's copy passes `integrity_check` and a
+    second backup to the same name exits 73.
+11. **Restore** (`smoke.sh` step 13) — `restore.mjs` refuses root (77); its
+    dry run of the step-12 copy passes and names the key versions; it never
+    replaces the live store (73) nor forces over it while the gateway holds it
+    (75); an http source exits 64 without echoing the URL. At first boot on an
+    empty volume with `VAUBAAN_RESTORE_FROM` (the copy, mounted read-only): a
+    wrong `VAUBAAN_RESTORE_SHA256` stops the boot (exit 1) and leaves the volume
+    empty; an http source exits 78 naming `restore.from` without echoing it; the
+    right hash restores (`store restored` with the copy's hash), `/healthz`
+    answers, and after a restart the log has one restore and one "restore.from
+    is set but the store exists" warning.
 
 Optional, when the caller knows what it built (the release pipeline sets
 the three): `SMOKE_EXPECT_VERSION` and `SMOKE_EXPECT_COMMIT` — `/healthz`

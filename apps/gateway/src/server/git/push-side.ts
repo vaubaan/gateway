@@ -34,8 +34,20 @@ import { isTemporaryRef, type TemporaryRefsDeps } from './temporary-refs';
 import { callUpstream, executeContextFor } from './upstream';
 import { errPacket, gitText } from './wire';
 
-/** What a push may ask of the door: only what the door implements (ADR D4 bis). */
-const PUSH_CAPABILITIES = ['report-status', 'delete-refs', 'side-band-64k', 'quiet'] as const;
+/**
+ * What a push may ask of the door: only what the door implements (ADR D4
+ * bis). `no-thin` asks git for a self-contained pack — no delta against an
+ * object the pack leaves out — so that the gateway can read every object it
+ * carries before anything is sent (ADR git-push-inspected-before-it-leaves);
+ * a thin pack is still read, and what it cannot resolve counts as unknown.
+ */
+const PUSH_CAPABILITIES = [
+  'report-status',
+  'delete-refs',
+  'side-band-64k',
+  'quiet',
+  'no-thin',
+] as const;
 
 export interface PushSideDeps extends TemporaryRefsDeps {
   readonly pipeline: CallPipeline;

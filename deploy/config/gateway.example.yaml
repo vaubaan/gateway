@@ -64,6 +64,23 @@
 #   # env: VAUBAAN_STORE_PATH
 #   path: /data/gateway.db
 
+# Restore at first boot: when the store file above does not exist yet, the
+# server puts this copy (made by apps/gateway/backup.mjs) in place before it
+# opens the store, after checking its SHA-256, its integrity, its schema and
+# that this instance's master keys open its secrets. Ignored, with one
+# warning, once the store exists. docs/handbook/store.md, "Restore".
+# restore:
+#   # An absolute file path, or an https URL (a presigned URL is a secret:
+#   # prefer the variable or ${file:...}; it is never logged). http is refused.
+#   # env: VAUBAAN_RESTORE_FROM (or VAUBAAN_RESTORE_FROM_FILE)
+#   from: https://storage.example.com/backup.sqlite?signature=...
+#   # Required with `from`: the SHA-256 of the copy, 64 hex characters.
+#   # env: VAUBAAN_RESTORE_SHA256
+#   sha256: 0000000000000000000000000000000000000000000000000000000000000000
+#   # The largest copy accepted, in MiB (1 to 65536).
+#   # env: VAUBAAN_RESTORE_MAX_MB
+#   max_mb: 1024
+
 # encryption:
 #   # REQUIRED. 32 random bytes, base64 (`npm run gen-master-key`). Every
 #   # connection credential is encrypted with a key derived from it.

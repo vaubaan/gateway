@@ -249,6 +249,70 @@ the right service and environment.
    and Railway's own volume backups, if they are on — open only with the old
    key: keep it with them, or delete them.
 
+## 9. Moving an instance
+
+To another Railway service, to a Fly machine, to a server of your own: the new
+instance starts from this one's store, and nobody drops a file on its volume
+by hand. ADR
+[restore-verifies-before-it-replaces-and-runs-at-first-boot](../docs/decisions/restore-verifies-before-it-replaces-and-runs-at-first-boot.md),
+handbook [store](../docs/handbook/store.md#restore).
+
+1. **Back up the source** (§6) and note the copy's hash in the same session:
+
+   ```bash
+   vaubaan-entrypoint node /app/apps/gateway/backup.mjs move.sqlite
+   sha256sum /data/move.sqlite
+   ```
+
+   Copy the file off the volume (§6) and check the hash on your machine
+   (`sha256sum move.sqlite`). Note the master-key versions the backup named:
+   the new instance needs those keys.
+
+2. **Stop the source from changing**: what it writes after the backup —
+   audit entries, and above all a provider token it refreshes (a provider that
+   rotates refresh tokens invalidates the one in the copy) — is not in the copy.
+   Take the backup as late as you can, and stop the source (remove its domain,
+   or its deployment) as soon as the file is off the volume.
+3. **Put the copy where the new host can fetch it**: an object storage bucket
+   and a presigned GET URL that expires within the hour (S3:
+   `aws s3 presign s3://<bucket>/move.sqlite --expires-in 3600`). The URL is a
+   credential to the whole store (whose secrets the master key still
+   protects): give it only as a secret of the new service. A self-hosted target
+   can use a file path instead (a volume mounted read-only beside `/data`).
+4. **Configure the new instance** with the source's variables (the same
+   `VAUBAAN_PUBLIC_URL` if the domain moves with it, the same sign-in providers
+   and company apps) and:
+   - a **new master key** (`npm run gen-master-key`) in `VAUBAAN_MASTER_KEY`,
+     `VAUBAAN_MASTER_KEY_VERSION` = the source's version plus one, and
+     `VAUBAAN_MASTER_KEY_PREVIOUS` = `<source version>=<source key>` (every
+     version the backup named);
+   - `VAUBAAN_RESTORE_FROM` = the presigned URL (or the path), as a secret
+     (Fly: `fly secrets set`), and `VAUBAAN_RESTORE_SHA256` = the hash.
+5. **Deploy it, with an empty volume.** Before it opens the store the server
+   downloads the copy, checks the hash, SQLite's integrity check, that its
+   schema is not newer than the image, and that its keys open every stored
+   secret, then puts it in place and migrates it. The boot log says
+   `store restored` (bytes, hash, schema version, key versions; never the URL).
+   A refusal stops the boot with the reason and writes nothing: fix the
+   variable and deploy again. A restart after a successful restore only logs a
+   warning. The first boot lasts as long as the download: the health check may
+   fail meanwhile.
+6. **Reseal on the new instance** (§8 step 3): dry run, `--apply`, confirming
+   run. Once it says `VAUBAAN_MASTER_KEY_PREVIOUS can now be removed`, remove
+   it **and** `VAUBAAN_RESTORE_FROM` and `VAUBAAN_RESTORE_SHA256`, and deploy.
+   Delete the copy from the bucket.
+7. **Point the domain at the new instance.** If the public URL changes, update
+   the callback of every company app (`<public_url>/connections/callback/<provider>`,
+   the sign-in callbacks) and the addresses the agents use (MCP, the remote of
+   their repositories). Keep the source's volume until the new instance has run
+   for a while, then delete it; the source's key opens only the backups taken
+   before the move: keep it with them, or delete them.
+
+The same restore runs as a command, with the gateway stopped since it replaces
+the store: `node apps/gateway/restore.mjs <file or https URL> --sha256 <hex>`
+(`--dry-run` to check a copy first, `--force` to replace a store that exists;
+the old one is kept as `<name>.replaced-<time>`).
+
 ## What the image does on Railway
 
 Started as root (`RAILWAY_RUN_UID=0`), the entrypoint gives `/data` to the

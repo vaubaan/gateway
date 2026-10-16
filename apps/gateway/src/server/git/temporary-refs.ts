@@ -1,7 +1,10 @@
 /**
  * The temporary refs of a push (spec §4.1 ter; ADR gateway-as-git-remote D4,
  * D5): the pack stored at the provider under `refs/vaubaan/<random>` so that
- * the provider can say what it brings, then deleted — on every path.
+ * the provider can say what it brings, then deleted — on every path. The pack
+ * reaches this module read whole, inspected and decided on (`push.ts`, ADR
+ * git-push-inspected-before-it-leaves): a push its mission refuses for what
+ * its objects change never gets here.
  *
  *   names     random, carrying no mission id: every reader of the repository
  *             can list them while they exist (the fetch listings of the door
@@ -26,7 +29,6 @@ import {
   parseAdvertisement,
   parseReceivePackResult,
   pktLine,
-  prependChunk,
   RECEIVE_PACK_REQUEST_TYPE,
   RECEIVE_PACK_RESULT_TYPE,
   RECEIVE_PACK_SERVICE,
@@ -35,7 +37,6 @@ import {
   type ExecuteContext,
   type GitReviewedUpdate,
   type GitUpstream,
-  type PktLineReader,
   type RefCommand,
 } from '@vaubaan/plugin-sdk';
 
@@ -43,7 +44,6 @@ import type { InstanceConfig } from '../config';
 import type { Logger } from '../logging';
 import type { PendingRefsRepo } from '../store';
 import {
-  BYTES_PER_MEGABYTE,
   CLEANUP_TIMEOUT_MS,
   GIT_AGENT,
   HTTP_UNAUTHORIZED,
@@ -51,6 +51,7 @@ import {
   MAX_TEMPORARY_REFS_PER_MISSION,
   MS_PER_SECOND,
 } from './constants';
+import { interrupted, PushStop } from './push-stop';
 import { callUpstream, executeContextFor, type GitTarget, type UpstreamDeps } from './upstream';
 
 /** Random bytes of a temporary ref's name. */
@@ -65,23 +66,7 @@ export function isTemporaryRef(name: string): boolean {
   return name.startsWith(GIT_TEMPORARY_REF_PREFIX);
 }
 
-/** The push could not go on: what git is told, what the audit keeps. */
-export class PushStop extends Error {
-  constructor(
-    readonly reason: string,
-    readonly audited: string,
-  ) {
-    super(reason);
-    this.name = 'PushStop';
-  }
-}
-
-class PackTooLarge extends Error {
-  constructor() {
-    super('pack too large');
-    this.name = 'PackTooLarge';
-  }
-}
+export { PushStop } from './push-stop';
 
 /** A command whose pack was stored under a temporary ref. */
 export interface StoredRef {
@@ -190,8 +175,11 @@ export class TemporaryRefs {
     }
   }
 
-  /** Stream the pack to the provider under one temporary ref per created or moved ref. */
-  async store(reader: PktLineReader, list: CommandList): Promise<void> {
+  /**
+   * Send the pack — already read whole, inspected and decided on — to the
+   * provider under one temporary ref per created or moved ref.
+   */
+  async store(pack: Uint8Array, list: CommandList): Promise<void> {
     const { ctx, target, signal } = this.scope;
     const toStore = list.commands.filter((c): c is RefCommand & { new: string } => c.new !== null);
     if (toStore.length === 0) return;
@@ -232,8 +220,6 @@ export class TemporaryRefs {
         expiresAt: deadline,
       })),
     );
-    const limit = this.deps.config.git.maxPackBytes;
-    const pack = capped(reader.rest(), limit);
     // From here the provider may hold the refs: they are cleaned up whatever follows.
     this.storedRefs = stored;
     let answer: Response;
@@ -245,15 +231,18 @@ export class TemporaryRefs {
           'content-type': RECEIVE_PACK_REQUEST_TYPE,
           accept: RECEIVE_PACK_RESULT_TYPE,
         }),
-        body: prependChunk(head, pack.stream),
+        // Two chunks, the pack not copied.
+        body: new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(head);
+            if (pack.length > 0) controller.enqueue(pack);
+            controller.close();
+          },
+        }),
         signal,
       });
     } catch (err) {
-      throw this.uploadFailure(err, pack.exceeded(), limit);
-    }
-    if (pack.exceeded()) {
-      await answer.body?.cancel();
-      throw this.uploadFailure(new PackTooLarge(), true, limit);
+      throw this.uploadFailure(err);
     }
     if (!answer.ok) {
       await answer.body?.cancel();
@@ -269,7 +258,7 @@ export class TemporaryRefs {
     try {
       report = parseReceivePackResult(new Uint8Array(await answer.arrayBuffer()), true);
     } catch (err) {
-      throw this.uploadFailure(err, pack.exceeded(), limit);
+      throw this.uploadFailure(err);
     }
     const failed = stored.map((s) => report.refs.get(s.temporary)).find((r) => !r || !r.ok);
     if (report.unpack !== 'ok' || failed !== undefined) {
@@ -297,24 +286,9 @@ export class TemporaryRefs {
     );
   }
 
-  private uploadFailure(err: unknown, exceeded: boolean, limit: number): PushStop {
-    if (exceeded) {
-      const mb = Math.floor(limit / BYTES_PER_MEGABYTE);
-      return new PushStop(
-        `this push is larger than the ${mb} MB this gateway accepts; push fewer commits at a time`,
-        `the push is larger than the ${mb} MB limit`,
-      );
-    }
-    const { signal } = this.scope;
-    if (signal.aborted) {
-      const timedOut = (signal.reason as { name?: unknown } | undefined)?.name === 'TimeoutError';
-      return timedOut
-        ? new PushStop(
-            'this push took longer than this gateway allows; push fewer commits at a time',
-            'the push exceeded the request timeout',
-          )
-        : new PushStop('the push was interrupted: the client went away', 'the client went away');
-    }
+  private uploadFailure(err: unknown): PushStop {
+    const stopped = interrupted(this.scope.signal);
+    if (stopped) return stopped;
     return new PushStop(
       `the pack could not be sent to ${this.scope.target.plugin.displayName} (${errorName(err)}); push again`,
       `the pack could not be sent to the provider (${errorName(err)})`,
@@ -383,40 +357,6 @@ export class TemporaryRefs {
       });
     }
   }
-}
-
-/** `stream`, cut with an error once more than `limit` bytes went through. */
-function capped(
-  stream: ReadableStream<Uint8Array>,
-  limit: number,
-): { readonly stream: ReadableStream<Uint8Array>; readonly exceeded: () => boolean } {
-  let seen = 0;
-  let over = false;
-  const reader = stream.getReader();
-  return {
-    exceeded: () => over,
-    stream: new ReadableStream<Uint8Array>({
-      async pull(controller) {
-        const { done, value } = await reader.read();
-        if (done) {
-          controller.close();
-          return;
-        }
-        seen += value.length;
-        if (seen > limit) {
-          // The rest of the body is left unread: the server discards it once the
-          // answer is sent, so git reads the refusal instead of a broken pipe.
-          over = true;
-          controller.error(new PackTooLarge());
-          return;
-        }
-        controller.enqueue(value);
-      },
-      cancel(reason) {
-        return reader.cancel(reason);
-      },
-    }),
-  };
 }
 
 export function errorName(err: unknown): string {

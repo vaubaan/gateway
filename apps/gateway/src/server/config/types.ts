@@ -9,6 +9,7 @@
 import type { TelemetryLevel } from '@vaubaan/telemetry';
 
 import type { ClientIpHeader } from '../http/client-ip';
+import type { RestoreSource } from './restore-source';
 import type { SignInProvider } from './sign-in';
 
 export const LOG_LEVELS = ['debug', 'info', 'warn', 'error'] as const;
@@ -187,6 +188,18 @@ export interface SelfResource {
   readonly source: SelfResourceSource;
 }
 
+/**
+ * Restore at first boot (ADR restore-verifies-before-it-replaces-and-runs-at-first-boot):
+ * where a store copy comes from, its expected SHA-256, and the largest copy accepted.
+ * `from` is `null` when nothing is to be restored.
+ */
+export interface RestoreConfig {
+  readonly from: RestoreSource | null;
+  /** 64 lower-case hexadecimal characters; required whenever `from` is set. */
+  readonly sha256: string | null;
+  readonly maxBytes: number;
+}
+
 export interface InstanceConfig {
   /** Public origin of the instance, always https, no trailing slash. */
   readonly publicUrl: URL;
@@ -208,6 +221,7 @@ export interface InstanceConfig {
    */
   readonly clientIpHeader: ClientIpHeader | null;
   readonly store: { readonly path: string };
+  readonly restore: RestoreConfig;
   readonly encryption: EncryptionConfig;
   /**
    * The single-provider keys (`idp.*`): the provider `idp` (`LEGACY_PROVIDER_ID`),
@@ -246,6 +260,9 @@ export function secretValues(config: InstanceConfig): string[] {
   if (config.idp) out.push(config.idp.clientSecret);
   for (const provider of config.signIn) out.push(provider.clientSecret);
   if (config.bootstrapToken) out.push(config.bootstrapToken);
+  // A presigned URL is the credential itself; a file path is harmless but treated alike.
+  const from = config.restore.from;
+  if (from) out.push(from.kind === 'url' ? from.url.href : from.path);
   for (const app of config.providers.values()) {
     if (app.clientSecret) out.push(app.clientSecret);
     if (app.privateKey) out.push(app.privateKey);

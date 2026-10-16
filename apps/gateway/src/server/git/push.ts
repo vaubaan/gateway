@@ -7,11 +7,17 @@
  *   3. precheck with the updates as git sent them (fast-forward assumed, no
  *               files), the limits included: a push its mission or its budget
  *               refuses is refused, and audited, before any byte leaves
- *   4. store    the pack at the provider under temporary refs (`temporary-refs.ts`)
- *   5. review   each update at the provider (`gitRemote.review`)
- *   6. decide   one call, the reviewed updates as arguments
- *   7. move     allowed: the plugin's `execute` moves the real refs
- *   8. clean    the temporary refs are deleted — except while the push waits
+ *   4. inspect  the pack read whole (at most `git.max_pack_mb`), its objects
+ *               hashed here, and the plugin asked what each tip changes in the
+ *               CI workflows (`gitRemote.inspectPack`); a change found is
+ *               prechecked again: a mission that may not change CI is refused
+ *               before any byte leaves (ADR git-push-inspected-before-it-leaves)
+ *   5. store    the pack at the provider under temporary refs (`temporary-refs.ts`)
+ *   6. review   each update at the provider (`gitRemote.review`), the
+ *               inspection's workflow paths added to it
+ *   7. decide   one call, the reviewed updates as arguments
+ *   8. move     allowed: the plugin's `execute` moves the real refs
+ *   9. clean    the temporary refs are deleted — except while the push waits
  *               for an approval
  *
  * Every refusal reaches git as `ng <ref> <reason>` on each ref of the push
@@ -26,8 +32,10 @@ import type {
 } from '@vaubaan/gateway-core';
 import {
   PktLineReader,
+  readPackObjects,
   RECEIVE_PACK_SERVICE,
   type CommandList,
+  type GitInspectedUpdate,
   type GitReview,
   type GitReviewedUpdate,
 } from '@vaubaan/plugin-sdk';
@@ -35,6 +43,7 @@ import {
 import type { Logger } from '../logging';
 import { provisional, readPushCommands } from './command-list';
 import type { InFlightPushes } from './in-flight';
+import { readPack } from './pack-buffer';
 import { refuseAll, reportOf } from './report';
 import { errorName, PushStop, TemporaryRefs, type TemporaryRefsDeps } from './temporary-refs';
 import type { GitTarget } from './upstream';
@@ -123,8 +132,19 @@ export class Push {
 
     const refs = new TemporaryRefs(this.deps, this.input);
     try {
-      await refs.store(reader, list);
-      const review = await this.review(refs, list);
+      const pack = await readPack(reader, this.deps.config.git.maxPackBytes, this.input.signal);
+      const inspected = await this.inspect(refs, list, pack);
+      if (inspected.some((u) => u.workflow_files.length > 0)) {
+        // What the push's own objects change, decided before a byte leaves.
+        const refused = await this.deps.pipeline.precheck(
+          ctx,
+          this.call({ repository: target.repository, updates: [...inspected] }),
+          { limits: true },
+        );
+        if (refused) return this.answer(refused, list, format);
+      }
+      await refs.store(pack, list);
+      const review = withInspection(await this.review(refs, list), inspected);
       const outcome = await this.deps.pipeline.execute(
         ctx,
         this.call({ repository: target.repository, updates: [...review] }),
@@ -141,6 +161,45 @@ export class Push {
       if (!(err instanceof PushStop)) throw err;
       return this.stopped(list, format, err);
     }
+  }
+
+  /**
+   * The provisional updates with what the plugin found in the push's own
+   * objects (ADR git-push-inspected-before-it-leaves). Fail closed: a pack
+   * whose objects cannot be read leaves them unknown, which the plugin counts
+   * as changed; a plugin that fails refuses the push.
+   */
+  private async inspect(
+    refs: TemporaryRefs,
+    list: CommandList,
+    pack: Uint8Array,
+  ): Promise<readonly GitReviewedUpdate[]> {
+    const { target } = this.input;
+    const updates = list.commands.map(provisional);
+    const inspectPack = target.remote.inspectPack?.bind(target.remote);
+    if (!inspectPack || list.commands.every((c) => c.new === null)) return updates;
+    const objects = await readPackObjects(pack);
+    const { execCtx } = await refs.upstream();
+    let found: readonly GitInspectedUpdate[];
+    try {
+      found = await inspectPack(execCtx, target.repository, list.commands, objects);
+    } catch (err) {
+      throw new PushStop(
+        `the gateway could not tell whether this push changes CI workflows (${errorName(err)}); push again`,
+        `the inspection of the push failed (${errorName(err)})`,
+      );
+    }
+    return updates.map((u) => {
+      const own = found.find((f) => f.ref === u.ref);
+      if (own === undefined && u.new !== null) {
+        // An update the plugin did not answer for is unknown: refused.
+        throw new PushStop(
+          'the gateway could not tell whether this push changes CI workflows; push again',
+          'the inspection of the push left an update out',
+        );
+      }
+      return { ...u, workflow_files: [...(own?.workflow_files ?? [])] };
+    });
   }
 
   private async review(
@@ -209,6 +268,22 @@ export class Push {
       agent_label: outcome.audit.agent_label,
     });
   }
+}
+
+/**
+ * The review's updates, each with the workflow paths the inspection found
+ * added: the decision covers both, so neither a review that misses a change
+ * nor an inspection that misses one can make a push look smaller.
+ */
+export function withInspection(
+  review: readonly GitReviewedUpdate[],
+  inspected: readonly GitReviewedUpdate[],
+): readonly GitReviewedUpdate[] {
+  return review.map((u) => {
+    const found = inspected.find((i) => i.ref === u.ref)?.workflow_files ?? [];
+    if (found.length === 0) return u;
+    return { ...u, workflow_files: [...new Set([...u.workflow_files, ...found])].sort() };
+  });
 }
 
 function hasContentEncoding(request: Request): boolean {

@@ -128,6 +128,18 @@ const KEY_TABLE = [
     oneOf: CLIENT_IP_HEADERS,
   },
   { path: 'store.path', env: 'VAUBAAN_STORE_PATH', kind: 'string', required: 'always' },
+  // A presigned URL is a credential: `restore.from` is a secret (ADR
+  // restore-verifies-before-it-replaces-and-runs-at-first-boot).
+  { path: 'restore.from', env: 'VAUBAAN_RESTORE_FROM', kind: 'secret' },
+  { path: 'restore.sha256', env: 'VAUBAAN_RESTORE_SHA256', kind: 'string' },
+  {
+    path: 'restore.max_mb',
+    env: 'VAUBAAN_RESTORE_MAX_MB',
+    kind: 'int',
+    default: 1024,
+    min: 1,
+    max: 65_536,
+  },
   {
     path: 'encryption.master_key',
     env: 'VAUBAAN_MASTER_KEY',

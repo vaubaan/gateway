@@ -2758,8 +2758,10 @@ real `git http-backend` over bare repositories behind a loopback listener, and
 a REST API for installation tokens (with per-installation permissions and
 GitHub's 422), `GET /repos`, `git/ref`, `git/refs` (create, `force:false`
 checked with `merge-base --is-ancestor`, delete), `compare` (with its
-`commits`), `commits/{sha}` and `commits?sha=` (the history, `rev-list`)
-computed with git on the same repositories. The agent's git has an empty configuration, the
+`commits`), `commits/{sha}` and `commits?sha=` (the history, `rev-list`), and the git
+database `git/commits|trees|tags/{sha}` (`cat-file`, `ls-tree`; every object
+the bare repository holds, reachable or not, as GitHub does; `databaseStatus`
+plays an outage) computed with git on the same repositories. The agent's git has an empty configuration, the
 setup kit's credential helper and the key in `VAUBAAN_MISSION_TOKEN`. Nothing
 reaches github.com.
 
@@ -2831,16 +2833,52 @@ reaches github.com.
   request naming two commands refused and audited, `ls-refs` with its
   capabilities first free and filtered; **an SSH-signed commit arrives at
   GitHub byte for byte, signature intact**.
+- **`tests/integration/git/git-remote-workflows.test.ts`** (8) — **the
+  defect of 2026-10-16 and its fix** (ADR
+  `git-push-inspected-before-it-leaves`): a mission holding `git-push` and
+  `feature-branch-write` but not `workflow-write-via-file` **modifying
+  `ci.yml` and `release.yml`**, adding a workflow, deleting one, **reverting
+  the workflows to an older tree**, sending a garbled pack, or pushing plain
+  code while GitHub's git database is down — each refused by the permission's
+  name, the branch absent, **no receive-pack at GitHub** (not even the
+  temporary ref), the risk in the audit entry; the same mission pushes a
+  change outside `.github/workflows/`; a mission holding the permission pushes
+  the workflow change (allowed, risk touched).
+- **`packages/plugin-sdk/tests/unit/git-pack.test.ts`** (9) — the pack
+  reader over packs of the real `git pack-objects`: offset deltas (every
+  commit, tree and tag under the id git gives it, blobs dropped), ref deltas,
+  a thin pack (the delta against a left-out object missing, incomplete), an
+  empty body; garbled, truncated and foreign bytes never throw and never
+  yield an object whose content does not hash to its id; each limit; an
+  object inflating beyond its declared size; tree, commit and tag bodies;
+  `applyDelta` out of bounds.
+- **`plugins/github/tests/unit/git-inspect.test.ts`** (19) — `inspectPack`
+  against a real bare repository behind a fake git database: no change
+  outside the directory; modify, add, delete, rename in and out, mode change,
+  another case, a revert (also with the old tree absent from the pack), a
+  merge with an old commit that is no head — changes; a merge running what a
+  current head runs, a branch on another head, a deletion — none; creates,
+  annotated tags, every ref of a push; fail closed on a garbled pack, a thin
+  pack, a GitHub failure, an unknown `old`.
 - **`tests/unit/server/git/command-list.test.ts`** (3) — **a property test of
   `readPushCommands` over 3000 generated command lists** (capabilities on any
   line, hostile ref names, duplicates, 51 commands): whatever is accepted is
   what the door implements, with `report-status`, unique and well-formed
   refs; 2000 mutated byte strings answered, never thrown; the in-flight bound.
-- **`plugins/github/tests/unit/git-moves.test.ts`** (6) — a force-push and a
+- **`plugins/github/tests/unit/git-moves.test.ts`** (7) — a force-push and a
   delete as receive-pack compare-and-swap on the reviewed old id; a provider
   failure on the second ref reported on that ref, before any ref fails the
-  call; an intermediate commit's workflow path counted; a commit of 300 files
-  refused.
+  call; an intermediate commit's workflow path counted; a commit GitHub lists
+  300 files of read by its trees — the same workflows as its parent: none;
+  different: the changed path.
+- **`tests/integration/git/git-remote-base-merge.test.ts`** (1) — **the
+  dogfood refusal of 2026-10-16**: a new branch cut from `main` just after a
+  320-file merge of `v5`, pushed once `main` moved on, with old `v5` work
+  branches as the nearest heads by date — allowed, reviewed from the default
+  branch on its one commit (refused before: "changes 300 or more files and
+  cannot be reviewed"). The stand-in's `commits/{sha}` now lists a merge
+  against its first parent, as GitHub does; with it, `git-remote-base`'s
+  "merge of a moved v5" exercises the tree-based reading of a large merge.
 - **`src/server/missions/bootstrap-kit.test.ts`** (21) — the kit's git step:
   absent without a served repository; the helper reading the variable for the
   instance's origin, never the secret, a store or a URL credential; the
@@ -4552,6 +4590,45 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
 - **`compose/self-resources-check.test.ts`** (2, re-check L-1) and the
   Upstash tests (L-2) — a self resource of an unknown provider stops the boot;
   `get_database` sends `credentials=hide` and nested credentials are dropped.
+
+## Scenarios — Restore and moving an instance
+
+> Covers: ADR [[restore-verifies-before-it-replaces-and-runs-at-first-boot]];
+> handbook [[store]] ("Restore"), [[configuration]] (`restore.*` keys, boot
+> sequence); `deploy/railway.md` §9. Real SQLite files in a temporary directory;
+> the copy is made as `backup.mjs` makes it (`VACUUM INTO` of a store holding a
+> sealed secret); an https source is served by a fake `fetch` (no network).
+
+- **`integration/restore/restore.test.ts`** (22) — a good copy from a file is
+  verified and renamed into place (mode `0600`, its secret opens); a dry run
+  writes nothing; a wrong SHA-256 is refused before anything else is read and
+  leaves no file; a tampered copy is refused by its hash, and by SQLite when the
+  hash is the tampered file's; a file that is not SQLite and a database without
+  `schema_migrations` are refused; a copy recording a migration this image does not
+  ship is refused naming it, an older one passes; a key version with no key and a
+  wrong key under the right version are refused with the per-version report, the
+  old key as previous passes; an existing store is never overwritten without
+  `force`, and with it is moved aside as `.replaced-<timestamp>`; an empty file is
+  no store; `force` is refused (in use) while another connection holds the store;
+  the size cap on a local file, on `Content-Length` and while streaming; an https
+  download through an https redirect; the hash required for a URL; a redirect to
+  http refused without naming the URL; a network failure named by its code only;
+  configuration: an http source refused naming `restore.from` without echoing the
+  value, the hash required with the source and well-formed, the source a secret
+  (scrubbed from the environment, fed to the redactor); first boot: the copy
+  restored before the store opens, migrated, the URL in no log line, the next boot
+  skips with exactly one warning and no download; a refused restore stops the boot
+  and leaves no store; a local-file source.
+- **`src/server/restore/cli.test.ts`** (7) — argument parsing never echoes a value;
+  exit codes 0 (restored, dry run), 73 (store exists), 65 (wrong hash), 66 (no
+  file), 64 (http, URL without hash, no source), 77 (root), 78 (not configured);
+  the configured source used when none is given, the URL never printed; no key
+  printed.
+- **`config/keys-doc.test.ts`, `config/load.test.ts`** — the three `restore.*`
+  keys are rows of the handbook table and appear in both example files.
+- The container smoke (`deploy/docker/smoke.sh` step 13,
+  [e2e-tests](./e2e-tests.md)) runs the command and the first-boot restore in the
+  image.
 
 ## Scenarios — The public site
 

@@ -6,6 +6,7 @@
  *   .next/standalone/apps/gateway/import-v4.mjs   (src/server/import-v4/main.ts)
  *   .next/standalone/apps/gateway/reseal.mjs      (src/server/reseal/main.ts)
  *   .next/standalone/apps/gateway/backup.mjs      (src/server/backup/main.ts)
+ *   .next/standalone/apps/gateway/restore.mjs     (src/server/restore/main.ts)
  *
  * The image copies the standalone tree whole (deploy/docker/Dockerfile), so
  * the commands ship with the server, at `/app/apps/gateway/<name>.mjs`
@@ -41,6 +42,7 @@ const COMMANDS = [
   { entry: 'src/server/import-v4/main.ts', out: 'import-v4.mjs' },
   { entry: 'src/server/reseal/main.ts', out: 'reseal.mjs' },
   { entry: 'src/server/backup/main.ts', out: 'backup.mjs' },
+  { entry: 'src/server/restore/main.ts', out: 'restore.mjs' },
 ];
 
 /** Native addons the standalone output already carries; never bundled. */

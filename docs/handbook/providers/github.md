@@ -20,6 +20,10 @@ tracks:
   - plugins/github/src/permission-check.ts
   - plugins/github/src/credential-keys.ts
   - plugins/github/src/git-remote.ts
+  - plugins/github/src/git-inspect.ts
+  - plugins/github/src/git-rest.ts
+  - plugins/github/src/git-review.ts
+  - plugins/github/src/git-heads.ts
   - plugins/github/src/git-call.ts
   - plugins/github/src/tool-titles.ts
   - plugins/github/tests/unit/
@@ -189,24 +193,25 @@ repository and organisation of its account with coarse scopes.
 
 ## Files
 
-| File                      | Role                                                                                                                                                                                                                                                                                                                 |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/index.ts`            | `definePlugin` → `githubPlugin` v3.2.0.                                                                                                                                                                                                                                                                              |
-| `src/risk-catalog.yaml`   | 18 risks + fallback, 3 presets, `catalog_version: 7`.                                                                                                                                                                                                                                                                |
-| `src/data-model.ts`       | Plane `repo`, 17 entities (`delete` under `release` is a verb leaf); `branch` is `envScopable`.                                                                                                                                                                                                                      |
-| `src/tools.ts`            | 26 tools. Retired by risk-model §7.2 #1 and not declared: `dispatch_workflow`, `cancel_workflow_run`, `rerun_workflow_run`.                                                                                                                                                                                          |
-| `src/call.ts`             | The grammar of every identifier (`ownerName`, `repoName`, `repoFullName`, `repoPath`, `revision`, `branchName`, `tagName`, `pullRequestHead`, `positiveInteger`, `workflowRef`) and `readGithubCall`, the one reader `classify` and `execute` share; the refusal wording (`repositoryNotSelectedMessage`).           |
-| `src/classify.ts`         | `classifyGithub(tool, args, resources)` = `readGithubCall` then `slicesOf(call)`; `isWorkflowPath`.                                                                                                                                                                                                                  |
-| `src/credential.ts`       | `githubCredential` (app-install spec), `installationTokenFor(ctx, scope)`.                                                                                                                                                                                                                                           |
-| `src/app-install.ts`      | `buildAppJwt`, `mintInstallationToken`, `installationIdOf`, `GITHUB_API_BASE`, `GITHUB_API_HEADERS`.                                                                                                                                                                                                                 |
-| `src/execute.ts`          | `executeGithub` (the body run under the SDK's `declining`), `discoverGithubResources`, `MINT_PERMISSIONS`, discovery paging constants (100 per page, 10 pages at most).                                                                                                                                              |
-| `src/app-manifest.ts`     | `GITHUB_APP_PERMISSIONS`, `githubManifestRegistration`, `buildGithubManifest`, `githubRegisteredApp`, `GITHUB_LOGIN_PATTERN`.                                                                                                                                                                                        |
-| `src/permission-check.ts` | `needsOf(call)`, `assertAppPermissions(call, granted)`, `assertGranted`, `missingPermissionSentence`, `declineMissingPermissions`, `mintPermissions`, `MINT_NEEDS`, `gitFetchNeeds`, `gitPushNeeds`.                                                                                                                 |
-| `src/credential-keys.ts`  | `GITHUB_APP_CONFIG`, `GITHUB_WEB_BASE` (shared by the credential spec and the manifest flow).                                                                                                                                                                                                                        |
-| `src/token-cache.ts`      | `installationTokenForCall(ctx, repo)`: per-call token served from `ctx.credentialCache`, 50 min at most, 5 min expiry margin.                                                                                                                                                                                        |
-| `src/octokit-dispatch.ts` | `dispatchGithubTool(octokit, call, args)`: checked call → Octokit call; reads the pull request before a merge and declines (`ExecutorRefusal`) a base other than the declared one.                                                                                                                                   |
-| `src/git-call.ts`         | `GIT_FETCH_TOOL`, `GIT_PUSH_TOOL`, `readGitCall` (the one reader of the git tools' arguments, shared by `classify` and `execute`), `pushedRef` (branches and tags only, `refs/vaubaan/` reserved).                                                                                                                   |
-| `src/git-remote.ts`       | `githubGitRemoteOf(catalog)` (the plugin's `gitRemote`, built in `index.ts` as `githubGitRemote`): `upstream` (credential per access), `review`, `compareUrl`, `insteadOf`, `abilities`; `workingBranchesOf(catalog)` (the branch list of `feature-branch-write`, read from the YAML); `executeGit` (the ref moves). |
+| File                      | Role                                                                                                                                                                                                                                                                                                                                |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/index.ts`            | `definePlugin` → `githubPlugin` v3.2.0.                                                                                                                                                                                                                                                                                             |
+| `src/risk-catalog.yaml`   | 18 risks + fallback, 3 presets, `catalog_version: 7`.                                                                                                                                                                                                                                                                               |
+| `src/data-model.ts`       | Plane `repo`, 17 entities (`delete` under `release` is a verb leaf); `branch` is `envScopable`.                                                                                                                                                                                                                                     |
+| `src/tools.ts`            | 26 tools. Retired by risk-model §7.2 #1 and not declared: `dispatch_workflow`, `cancel_workflow_run`, `rerun_workflow_run`.                                                                                                                                                                                                         |
+| `src/call.ts`             | The grammar of every identifier (`ownerName`, `repoName`, `repoFullName`, `repoPath`, `revision`, `branchName`, `tagName`, `pullRequestHead`, `positiveInteger`, `workflowRef`) and `readGithubCall`, the one reader `classify` and `execute` share; the refusal wording (`repositoryNotSelectedMessage`).                          |
+| `src/classify.ts`         | `classifyGithub(tool, args, resources)` = `readGithubCall` then `slicesOf(call)`; `isWorkflowPath`.                                                                                                                                                                                                                                 |
+| `src/credential.ts`       | `githubCredential` (app-install spec), `installationTokenFor(ctx, scope)`.                                                                                                                                                                                                                                                          |
+| `src/app-install.ts`      | `buildAppJwt`, `mintInstallationToken`, `installationIdOf`, `GITHUB_API_BASE`, `GITHUB_API_HEADERS`.                                                                                                                                                                                                                                |
+| `src/execute.ts`          | `executeGithub` (the body run under the SDK's `declining`), `discoverGithubResources`, `MINT_PERMISSIONS`, discovery paging constants (100 per page, 10 pages at most).                                                                                                                                                             |
+| `src/app-manifest.ts`     | `GITHUB_APP_PERMISSIONS`, `githubManifestRegistration`, `buildGithubManifest`, `githubRegisteredApp`, `GITHUB_LOGIN_PATTERN`.                                                                                                                                                                                                       |
+| `src/permission-check.ts` | `needsOf(call)`, `assertAppPermissions(call, granted)`, `assertGranted`, `missingPermissionSentence`, `declineMissingPermissions`, `mintPermissions`, `MINT_NEEDS`, `gitFetchNeeds`, `gitPushNeeds`.                                                                                                                                |
+| `src/credential-keys.ts`  | `GITHUB_APP_CONFIG`, `GITHUB_WEB_BASE` (shared by the credential spec and the manifest flow).                                                                                                                                                                                                                                       |
+| `src/token-cache.ts`      | `installationTokenForCall(ctx, repo)`: per-call token served from `ctx.credentialCache`, 50 min at most, 5 min expiry margin.                                                                                                                                                                                                       |
+| `src/octokit-dispatch.ts` | `dispatchGithubTool(octokit, call, args)`: checked call → Octokit call; reads the pull request before a merge and declines (`ExecutorRefusal`) a base other than the declared one.                                                                                                                                                  |
+| `src/git-call.ts`         | `GIT_FETCH_TOOL`, `GIT_PUSH_TOOL`, `readGitCall` (the one reader of the git tools' arguments, shared by `classify` and `execute`), `pushedRef` (branches and tags only, `refs/vaubaan/` reserved).                                                                                                                                  |
+| `src/git-remote.ts`       | `githubGitRemoteOf(catalog)` (the plugin's `gitRemote`, built in `index.ts` as `githubGitRemote`): `upstream` (credential per access), `inspectPack`, `review`, `compareUrl`, `insteadOf`, `abilities`; `workingBranchesOf(catalog)` (the branch list of `feature-branch-write`, read from the YAML); `executeGit` (the ref moves). |
+| `src/git-inspect.ts`      | `inspectPack`: what each pushed tip changes under `.github/workflows/`, decided before the pack leaves the gateway; `workflowPathsOfCommit` (a commit GitHub lists 300 files of, read by its trees); `WORKFLOWS_UNVERIFIED`, `INSPECT_HEAD_BASES_MAX`, `INSPECT_WALK_MAX`.                                                          |
 
 ## The git remote
 
@@ -229,6 +234,25 @@ review.
   token) presents its token; its permissions are unknown, nothing is
   declined on a guess. The git transport is `Basic x-access-token:<token>` to
   `https://github.com/<owner>/<repo>.git`.
+- **Inspect** (`inspectPack`, `git-inspect.ts`; ADR
+  [git-push-inspected-before-it-leaves](../../decisions/git-push-inspected-before-it-leaves.md)),
+  before the pack leaves the gateway. For each created or moved ref, the
+  **guarded state** of its tip — every root entry named `.github` (any
+  case) and every `workflows` (any case) in it, as name, mode and object id —
+  read from the push's own objects (hashed by the host) or, when the pack
+  does not carry them, from GitHub's git database (`GET git/commits|tags|trees/{sha}`,
+  annotated tags peeled, 4 at most). Compared with the ref's current tip
+  (`old`), or for a create the default branch's head (`GET /repos`,
+  `GET git/ref`; none: no workflows); equal → no change. Otherwise the tip
+  still passes when it equals a **current branch head** among what the push
+  builds on directly (parents of its own commits the pack does not carry,
+  walk of 10 000 commits, 5 heads; heads from the upload-pack advertisement,
+  `branchHeads()`, shared with the review). A change is reported by path
+  (`.github/workflows/<name>`: the names whose mode or id differ, both sides
+  of a rename into or out of the directory); what cannot be read — an object
+  neither in the pack nor at GitHub, an API error, a truncated tree —
+  reports `.github/workflows/` (`WORKFLOWS_UNVERIFIED`). Only tips: GitHub
+  runs the workflows of the pushed tip. A deletion changes nothing.
 - **Review** (`review`, `git-review.ts`). For each ref: `GET git/ref/<ref>`
   must equal the client's `old` (else stale info — a lie about `old` would
   keep commits out of the review); `GET compare/<base>...<head>` gives the
@@ -236,14 +260,20 @@ review.
   a non-fast-forward is compared both ways. The base is the nearest existing
   branch head in the pushed commit's history (`BaseFinder`: the upload-pack
   advertisement's `refs/heads/*`, `GET commits?sha=`, up to 3 candidates, the
-  narrowest comparison): a created ref is compared with it, or with the
-  default branch when none is found; an update with `old`, or with a nearer
-  head when `old..new` brings more than one commit (ADR D4 ter). Each commit the range brings is read
+  narrowest comparison), and the default branch, always a candidate
+  (`branchHeads()` in `git-heads.ts`): a created ref is compared with them;
+  an update with `old`, or with a nearer head or the default branch when
+  `old..new` brings more than one commit (ADR D4 ter and its amendment of
+  2026-10-16). Each commit the range brings is read
   (`GET commits/{sha}`, at most 100 per push): its paths under
   `.github/workflows/` are workflow files of the update even when the tip
-  takes them back. Workflow files: anything under `.github/workflows/`. 300
-  files or 250 commits per comparison, a commit listing 300 files, an
-  unrelated history, an empty repository: not reviewable, refused. Then the push
+  takes them back. A commit GitHub lists 300 files of (a large merge) is read
+  by its trees (`workflowPathsOfCommit`, `git-inspect.ts`): none when its
+  `.github`/`workflows` entries equal one parent's, else the paths that
+  differ from the first parent, `.github/workflows/` when unreadable.
+  Workflow files: anything under `.github/workflows/`. 300 files or 250
+  commits per comparison, an unrelated history, an empty repository: not
+  reviewable, refused. Then the push
   token's permissions must cover `gitPushNeeds(updates)` (`contents: write`,
   plus `workflows: write` when a workflow file changes), or the push is
   refused by the permission's name.
@@ -454,7 +484,7 @@ policy is stored, not derived from the preset.
 
 ## Tests
 
-`npx vitest run plugins/github` — 639 tests, no network:
+`npx vitest run plugins/github` — 676 tests, no network:
 
 - `plugin.test.ts` (17): kit assertions, coverage with samples per tool
   and per git tool (the 18 named risks touched, `fallbackHits` empty), the fallback catching
@@ -502,6 +532,20 @@ policy is stored, not derived from the preset.
   not); nothing declined when GitHub did not report the permissions; the push
   token's 422 fallback and its refusal; the git remote's two tools in the
   declaration.
+
+- `git-inspect.test.ts` (19): `inspectPack` over packs of the real
+  `git pack-objects` (every upstream ref left out, as `git push` does) and a
+  real bare repository behind a fake git database: a change outside the
+  directory is none; modify, add, delete, a rename into and out of
+  `.github/workflows/`, a mode change, a directory in another case, a revert
+  to an old workflows tree (also with the old tree absent from the pack), a
+  merge with an old commit that is no branch head — each a change; a merge
+  running what a current head runs, a new branch on another head, a deletion
+  — none; creates against the default branch, an old commit, annotated tags,
+  every ref of a push; fail closed: a garbled pack, a thin pack, GitHub
+  failing, an `old` GitHub does not hold.
+- `git-moves.test.ts` (7): the ref moves and the review against `mockFetch`
+  (a commit of 300 files read by its trees: unchanged, changed).
 
 The git remote end to end (review, ref moves, permissions, token
 connection) is tested by the host against a git-backed stand-in of GitHub:

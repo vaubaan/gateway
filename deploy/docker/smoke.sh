@@ -23,6 +23,14 @@
 # 12. backup shipped            -> apps/gateway/backup.mjs refuses root, and through the entrypoint
 #                                 writes a copy of the store on /data that passes integrity_check
 #                                 (handbook store, "Backup")
+# 13. restore shipped           -> apps/gateway/restore.mjs refuses root; through the entrypoint a dry
+#                                 run of the step-12 copy passes and names its key versions; it never
+#                                 replaces the live store (73), nor forces over it while the gateway
+#                                 holds it (75); http is refused (64). At first boot, a new volume with
+#                                 VAUBAAN_RESTORE_FROM: a wrong hash stops the boot (exit 1) and writes
+#                                 no store, an http source exits 78 without echoing it, the right hash
+#                                 restores and serves /healthz, and a restart only warns
+#                                 (handbook store, "Restore")
 #
 # Optional expectations, set by the release pipeline (.github/workflows/release.yml),
 # which knows what it built:
@@ -41,12 +49,14 @@ PORT="${SMOKE_PORT:-3999}"
 NAME="vaubaan-smoke-$$"
 ROOT_NAME="vaubaan-smoke-root-$$"
 VOLUME="vaubaan-smoke-data-$$"
+RESTORE_NAME="vaubaan-smoke-restore-$$"
+RESTORE_VOLUME="vaubaan-smoke-restore-data-$$"
 MASTER_KEY="$(head -c 32 /dev/urandom | base64 | tr -d '\n')"
 BOOTSTRAP="smoke-$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
 
 cleanup() {
-  docker rm -f "$NAME" "$ROOT_NAME" >/dev/null 2>&1 || true
-  docker volume rm -f "$VOLUME" >/dev/null 2>&1 || true
+  docker rm -f "$NAME" "$ROOT_NAME" "$RESTORE_NAME" >/dev/null 2>&1 || true
+  docker volume rm -f "$VOLUME" "$RESTORE_VOLUME" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -268,5 +278,85 @@ set -e
 grep -qF 'integrity_check: ok' <<<"$copied" || fail "backup printed no integrity check:\n$copied"
 [ "$twice" -eq 73 ] || fail "a second backup to the same name exited $twice, expected 73:\n$again"
 pass "backup ships, refuses root, copies the store as 10001 and never overwrites"
+
+# 13. The restore ships beside the server: the command checks the step-12 copy and never
+#     replaces a live store; a new instance restores it at first boot from its
+#     configuration (ADR restore-verifies-before-it-replaces-and-runs-at-first-boot).
+SHA="$(docker exec "$ROOT_NAME" sha256sum /data/smoke-backup.sqlite | cut -d' ' -f1)"
+WRONG_SHA="$(printf '0%.0s' $(seq 1 64))"
+set +e
+docker exec -u 0 "$ROOT_NAME" node apps/gateway/restore.mjs /data/smoke-backup.sqlite >/dev/null 2>&1
+as_root=$?
+dry="$(docker exec -u 0 "$ROOT_NAME" vaubaan-entrypoint node apps/gateway/restore.mjs /data/smoke-backup.sqlite --sha256 "$SHA" --dry-run 2>&1)"
+dry_code=$?
+live="$(docker exec -u 0 "$ROOT_NAME" vaubaan-entrypoint node apps/gateway/restore.mjs /data/smoke-backup.sqlite 2>&1)"
+live_code=$?
+forced="$(docker exec -u 0 "$ROOT_NAME" vaubaan-entrypoint node apps/gateway/restore.mjs /data/smoke-backup.sqlite --force 2>&1)"
+forced_code=$?
+plain="$(docker exec -u 0 "$ROOT_NAME" vaubaan-entrypoint node apps/gateway/restore.mjs 'http://storage.example.com/x?sig=smoke-leak' --sha256 "$SHA" 2>&1)"
+plain_code=$?
+set -e
+[ "$as_root" -eq 77 ] || fail "restore run as root exited $as_root, expected 77"
+[ "$dry_code" -eq 0 ] || fail "restore's dry run exited $dry_code, expected 0:\n$dry"
+grep -qF 'integrity_check: ok' <<<"$dry" || fail "restore's dry run printed no integrity check:\n$dry"
+grep -qE 'master key version 1:|holds no sealed secret' <<<"$dry" || fail "restore's dry run named no key version:\n$dry"
+[ "$live_code" -eq 73 ] || fail "restore over the live store exited $live_code, expected 73:\n$live"
+[ "$forced_code" -eq 75 ] || fail "a forced restore over the running gateway exited $forced_code, expected 75:\n$forced"
+[ "$plain_code" -eq 64 ] || fail "restore from http exited $plain_code, expected 64:\n$plain"
+if grep -qF 'smoke-leak' <<<"$plain"; then fail "restore echoed the source URL"; fi
+pass "restore ships, refuses root, checks a copy as 10001, never replaces a live store, refuses http"
+
+docker volume create "$RESTORE_VOLUME" >/dev/null
+restore_env=(
+  -e VAUBAAN_PUBLIC_URL=https://gateway.example.com
+  -e VAUBAAN_STORE_PATH=/data/gateway.db
+  -e VAUBAAN_MASTER_KEY="$MASTER_KEY"
+  -e VAUBAAN_ADMIN_EMAILS=ops@example.com
+  -e VAUBAAN_BOOTSTRAP_TOKEN="$BOOTSTRAP"
+  -e VAUBAAN_RESTORE_FROM=/restore/smoke-backup.sqlite
+)
+set +e
+out="$(timeout "$FAIL_FAST_TIMEOUT_SECONDS" docker run --rm -v "$VOLUME:/restore:ro" -v "$RESTORE_VOLUME:/data" \
+  "${restore_env[@]}" -e VAUBAAN_RESTORE_SHA256="$WRONG_SHA" "$IMAGE" 2>&1)"
+wrong_code=$?
+http_out="$(timeout "$FAIL_FAST_TIMEOUT_SECONDS" docker run --rm -v "$RESTORE_VOLUME:/data" \
+  "${restore_env[@]}" -e VAUBAAN_RESTORE_FROM='http://storage.example.com/x?sig=smoke-leak' \
+  -e VAUBAAN_RESTORE_SHA256="$SHA" "$IMAGE" 2>&1)"
+http_code=$?
+set -e
+[ "$wrong_code" -eq 1 ] || fail "a first boot with a wrong hash exited $wrong_code, expected 1:\n$out"
+grep -qF 'restore at first boot refused (verify)' <<<"$out" || fail "the refused first boot did not say why:\n$out"
+left="$(docker run --rm --entrypoint sh -v "$RESTORE_VOLUME:/data" "$IMAGE" -c 'ls -A /data')"
+[ -z "$left" ] || fail "a refused first-boot restore left files on the volume: $left"
+[ "$http_code" -eq "$EXIT_CONFIG_ERROR" ] || fail "an http restore source exited $http_code, expected $EXIT_CONFIG_ERROR:\n$http_out"
+grep -qF 'restore.from: must use https' <<<"$http_out" || fail "the http restore source was not named:\n$http_out"
+if grep -qF 'smoke-leak' <<<"$http_out"; then fail "the boot echoed the restore source URL"; fi
+docker run -d --name "$RESTORE_NAME" -v "$VOLUME:/restore:ro" -v "$RESTORE_VOLUME:/data" \
+  "${restore_env[@]}" -e VAUBAAN_RESTORE_SHA256="$SHA" "$IMAGE" >/dev/null
+wait_healthy() {
+  for _ in $(seq 1 30); do
+    if docker exec "$1" node -e "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" 2>/dev/null; then
+      return 0
+    fi
+    if [ "$(docker inspect -f '{{.State.Running}}' "$1")" != "true" ]; then
+      docker logs "$1" >&2 || true
+      fail "$2"
+    fi
+    sleep 1
+  done
+  fail "$2 (no /healthz in 30 s)"
+}
+wait_healthy "$RESTORE_NAME" "the container restoring at first boot stopped before /healthz answered"
+logs="$(docker logs "$RESTORE_NAME" 2>&1)"
+grep -qF '"msg":"store restored"' <<<"$logs" || fail "the first boot logged no restore:\n$logs"
+grep -qF "\"sha256\":\"$SHA\"" <<<"$logs" || fail "the restore log does not carry the copy's hash:\n$logs"
+docker restart "$RESTORE_NAME" >/dev/null
+wait_healthy "$RESTORE_NAME" "the restored instance did not come back after a restart"
+logs="$(docker logs "$RESTORE_NAME" 2>&1)"
+restored="$(grep -cF '"msg":"store restored"' <<<"$logs" || true)"
+skipped="$(grep -cF 'restore.from is set but the store exists' <<<"$logs" || true)"
+[ "$restored" = "1" ] || fail "the store was restored $restored times, expected once:\n$logs"
+[ "$skipped" = "1" ] || fail "the restart logged the skipped restore $skipped times, expected once:\n$logs"
+pass "a new instance restores the copy at first boot (wrong hash and http refused), a restart only warns"
 
 echo "SMOKE PASSED"
