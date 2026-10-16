@@ -1,0 +1,20 @@
+{
+  "name": "@vaubaan/plugin-supabase",
+  "version": "4.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Vaubaan Gateway provider plugin for Supabase — Postgres, storage, auth and edge functions through the Management API",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "type-check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@vaubaan/plugin-sdk": "*"
+  },
+  "devDependencies": {
+    "@vaubaan/policy-engine": "*"
+  }
+}

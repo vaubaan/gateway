@@ -1,0 +1,355 @@
+# Risk catalog of the `railway` provider.
+#
+# Spec : docs/spec/gateway-risk-model.md §4 (schema), docs/spec/vaubaan-gateway.md §3.2 (presets).
+# ADR  : docs/decisions/railway-rewrap-remote-mcp.md ; docs/decisions/plugin-contract-and-credential-spec.md.
+# Handbook : docs/handbook/providers/railway.md.
+#
+# Loaded by the plugin SDK at boot (`loadCatalogFile`) ; this file is the only
+# catalog artefact. Rules the loader enforces : `provider` is the plugin id,
+# every risk id starts with it, every `matches` pattern parses as a slice of
+# this provider, a `railway.uncategorized-*` fallback exists, at least one
+# preset, every preset entry an explicit risk of THIS catalog with a numeric
+# quota, a rate limit and a gate — never a wildcard.
+#
+# Adding a risk : append an entry, bump `catalog_version`, update `catalog_date`.
+# Changing a `matches` pattern : same bump (v3 repointed `bulk-variables-replace`).
+# Removing or renaming a risk : forbidden — mark it `deprecated: true` and
+# point `replaced_by` at its successor, so existing missions keep working.
+#
+# 9 risks + 1 fallback. Environments are the owner's labels on the Railway
+# *project* resource (`prod`, `staging`, `preview`, `dev`), not Railway's own
+# environment names : the classifier stamps the label of the project a call
+# touches into the `environment[...]` segment of the slice.
+
+provider: railway
+catalog_version: 4
+catalog_date: 2026-10-14
+
+risks:
+  # ───── Reads ────────────────────────────────────────────────────────────────
+  - id: railway.read-account
+    label: 'Read the account and the list of projects'
+    reason: >-
+      Account metadata only (`whoami`, `list-projects`). No secret is
+      returned ; the blast radius is the whole workspace because the call is
+      not scoped to a project.
+    matches: 'railway.account[**].R'
+    vector:
+      reversibility: reversible
+      blast: account
+      data: metadata
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: railway.read-runtime
+    label: 'Read services, deployments and statuses'
+    reason: >-
+      Runtime metadata of a project (services, deployments, status). No
+      secret payload. Broad by design : it co-matches every project-scoped
+      read, so a more specific read permission (logs, variables) is required on
+      top of it.
+    matches: 'railway.project[**].R'
+    vector:
+      reversibility: reversible
+      blast: env
+      data: metadata
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: railway.read-logs
+    label: 'Read the logs of a deployment'
+    reason: >-
+      Application logs often contain printed secrets (DSN, JWT, stack traces
+      with PII). Classified `data` rather than `secret` because a well-run
+      project does not log its secrets ; a strict creator leaves it out.
+    matches: 'railway.project[**].environment[**].service[**].deployment[**].logs.R'
+    vector:
+      reversibility: reversible
+      blast: env
+      data: data
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: railway.read-variables
+    label: 'Read environment variables (including secrets)'
+    reason: >-
+      Returns variable values in clear by default. The main exfiltration
+      surface for production credentials, hence env-scoped : holding it on
+      staging says nothing about prod.
+    matches: 'railway.project[**].environment[**].service-var[**].R'
+    acceptable_in_envs: [staging, preview, dev, prod]
+    vector:
+      reversibility: reversible
+      blast: env
+      data: secret
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  # ───── Deploys ──────────────────────────────────────────────────────────────
+  - id: railway.deploy
+    label: 'Redeploy a service or accept staged changes (deploy)'
+    reason: >-
+      Reversible : a new deploy fixes a bad one, and Railway bills usage.
+      On prod the deployed state is visible to customers until reverted,
+      hence the per-env vector override.
+    matches: 'railway.project[**].environment[**].service[**].deployment.W'
+    acceptable_in_envs: [staging, preview, dev, prod]
+    vector:
+      reversibility: reversible
+      blast: env
+      data: data
+      cost: moderate
+      visibility: internal
+      persistence: session
+    vector_overrides:
+      prod:
+        reversibility: costly
+        visibility: public
+
+  # ───── Variables ────────────────────────────────────────────────────────────
+  - id: railway.upsert-variable
+    label: 'Create, modify or delete an environment variable'
+    reason: >-
+      Scalar change of named variables (upsert or delete). Triggers an
+      implicit redeploy unless `skipDeploys` is set. On prod a wrong value
+      breaks the service immediately.
+    matches: 'railway.project[**].environment[**].service-var[**].W'
+    acceptable_in_envs: [staging, preview, dev, prod]
+    vector:
+      reversibility: reversible
+      blast: env
+      data: secret
+      cost: moderate
+      visibility: internal
+      persistence: posture
+    vector_overrides:
+      prod:
+        reversibility: costly
+
+  - id: railway.bulk-variables-replace
+    label: 'Replace every environment variable in bulk (replace=true)'
+    reason: >-
+      DESTRUCTIVE : every variable absent from the payload is deleted.
+      Detected from `replace` set on `upsert-variables`, from an empty or
+      malformed variable payload, and on every `railway-agent` call. Any
+      environment, prod or not.
+    # The classifier emits this marker slice for the replace case only : a
+    # write of named variables touches `railway.upsert-variable` alone.
+    matches: 'railway.project[**].environment[**].service-var-replace.W'
+    vector:
+      reversibility: irreversible
+      blast: env
+      data: secret
+      cost: moderate
+      visibility: internal
+      persistence: posture
+
+  # ───── Account ──────────────────────────────────────────────────────────────
+  - id: railway.create-project
+    label: 'Create a new Railway project'
+    reason: >-
+      Account-level write. Not reversible from the MCP surface (deleting a
+      project needs the dashboard) and may generate unbounded cost.
+    matches: 'railway.account[**].project.W'
+    vector:
+      reversibility: costly
+      blast: account
+      data: metadata
+      cost: unbounded
+      visibility: internal
+      persistence: posture
+
+  # ───── Agent (meta-tool) ────────────────────────────────────────────────────
+  - id: railway.agent-action
+    label: 'Invoke the Railway agent (conversational meta-tool)'
+    reason: >-
+      The upstream agent decides alone what to mutate ; no fine
+      classification is possible. Catch-all by construction : the classifier
+      also emits the deployment, variable write and variable replace slices,
+      so a mission must hold those permissions too. Explicit opt-in only ; absent from every preset.
+    matches: 'railway.account[**].agent-session.W'
+    vector:
+      reversibility: costly
+      blast: account
+      data: secret
+      cost: unbounded
+      visibility: internal
+      persistence: posture
+
+  # ───── Fallback — must exist ────────────────────────────────────────────────
+  - id: railway.uncategorized-write
+    label: 'Uncategorized Railway write'
+    reason: >-
+      Catch-all for writes without a dedicated entry. Seen in production, it
+      means a tool classifies to a slice no fine-grained entry covers : add
+      the entry.
+    matches: 'railway.**.W'
+    fallback: true
+    vector:
+      reversibility: costly
+      blast: env
+      data: data
+      cost: moderate
+      visibility: internal
+      persistence: session
+
+# Presets are UI sugar : the issuance form pre-fills a mission policy from one
+# of them and the creator adjusts risk by risk ; the persisted policy is always
+# the explicit enumeration. Values are default suggestions (ADR plugin-contract
+# D5) ; `approval` is suggested on production deploys and production variable
+# writes, and on every destructive bulk replace or project creation.
+presets:
+  - id: read-only
+    label: Read-only
+    description: Inspect projects, services, deployments and logs. No variable values, no write.
+    entries:
+      - risk_id: railway.read-account
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: railway.read-runtime
+        quota: 2000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: railway.read-logs
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+
+  - id: developer
+    label: Developer
+    description: One mission per code project — deploy, redeploy and manage variables on non-production environments freely; read logs; production deploys and variable writes ask first.
+    entries:
+      - risk_id: railway.read-account
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: railway.read-runtime
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: railway.read-logs
+        quota: 2000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: railway[dev].read-variables
+        quota: 200
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: railway[preview].read-variables
+        quota: 200
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: railway[staging].read-variables
+        quota: 200
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: railway[dev].deploy
+        quota: 300
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: railway[preview].deploy
+        quota: 300
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: railway[staging].deploy
+        quota: 300
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: railway[prod].deploy
+        quota: 20
+        rate_limit: { max: 2, window_seconds: 60 }
+        gate: approval
+      - risk_id: railway[dev].upsert-variable
+        quota: 200
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: railway[preview].upsert-variable
+        quota: 200
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: railway[staging].upsert-variable
+        quota: 200
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: railway[prod].upsert-variable
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+
+  - id: operator
+    label: Operator
+    description: Run production — every read including production variables, deploys everywhere, destructive variable replacement and project creation asking first.
+    entries:
+      - risk_id: railway.read-account
+        quota: 2000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: railway.read-runtime
+        quota: 10000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: railway.read-logs
+        quota: 5000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: railway[dev].read-variables
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: railway[preview].read-variables
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: railway[staging].read-variables
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: railway[prod].read-variables
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: auto
+      - risk_id: railway[dev].deploy
+        quota: 500
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: railway[preview].deploy
+        quota: 500
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: railway[staging].deploy
+        quota: 500
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: railway[prod].deploy
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+      - risk_id: railway[dev].upsert-variable
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: railway[preview].upsert-variable
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: railway[staging].upsert-variable
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: railway[prod].upsert-variable
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+      - risk_id: railway.bulk-variables-replace
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+        gate: approval
+      - risk_id: railway.create-project
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+        gate: approval

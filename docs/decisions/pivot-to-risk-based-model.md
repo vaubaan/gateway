@@ -10,6 +10,8 @@ partially-supersedes:
   - env-less-grant-fan-out-with-binding-exclude
 ---
 
+> **Pre-v5 document (French).** Not translated; read with the mapping in [[legacy-status-of-v4-adrs-and-handbooks]].
+
 # Pivot vers le modèle risk-based
 
 > **ACCEPTED 2026-06-15** par Renaud ("vas-y fais tout"). Décisions

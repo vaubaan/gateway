@@ -1,0 +1,96 @@
+.frame {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr);
+  gap: var(--space-10);
+  align-items: start;
+}
+.content {
+  min-width: 0;
+}
+.subnav {
+  position: sticky;
+  top: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-half);
+  font-size: var(--text-sm);
+}
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-half);
+}
+.groupLabel {
+  padding: 10px var(--space-2) var(--space-1);
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+}
+.group:first-child .groupLabel {
+  padding-top: 0;
+}
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 28px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-md);
+  color: var(--ink-2);
+}
+.item:hover {
+  background: var(--fill);
+  text-decoration: none;
+}
+.itemOn {
+  background: var(--fill);
+  color: var(--ink);
+  font-weight: var(--weight-strong);
+}
+
+/* A narrow window: the column becomes a wrapping line above the content. */
+@media (max-width: 900px) {
+  .frame {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-5);
+  }
+  .subnav {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-4);
+  }
+  .group {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .groupLabel {
+    padding: 0 var(--space-1) 0 0;
+  }
+}
+
+/* A phone: one labelled row of chips per group — a run-on line of words is
+   not a navigation. The label sits above its row; each entry is a target a
+   finger can hit. */
+@media (max-width: 640px) {
+  .subnav {
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  .group {
+    gap: 6px;
+  }
+  .groupLabel {
+    flex-basis: 100%;
+    padding: 0;
+  }
+  .item {
+    min-height: var(--control-lg);
+    padding: 0 var(--space-3);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-full);
+  }
+  .itemOn {
+    border-color: var(--ink);
+  }
+}

@@ -1,0 +1,86 @@
+# Version updates, proposed as pull requests once a week (docs/workflow/coding-workflow.md,
+# "Dependency updates"). Dependabot reads this file from the default branch only:
+# it takes effect when `v5` is cut over to `main`.
+#
+# Cooldown: a version is proposed only once it has been public for some days —
+# never one published in the last 72 hours. A malicious release is usually found
+# and pulled within that window. Security updates (an advisory with a fixed
+# version) are not delayed by the cooldown: Dependabot opens them at once, when
+# Dependabot security updates are enabled in the repository settings.
+#
+# Grouped so that a week is a handful of pull requests: minor and patch updates
+# together, per ecosystem; a major stays alone, it is a decision.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Europe/Paris
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+      semver-minor-days: 7
+      semver-patch-days: 4
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore(deps)
+    groups:
+      npm-production:
+        dependency-type: production
+        update-types: [minor, patch]
+      npm-development:
+        dependency-type: development
+        update-types: [minor, patch]
+
+  # The base image of deploy/docker/Dockerfile (node, pinned by version and
+  # digest). A new version also needs the documentation that quotes it: the
+  # structural test base-images-pinned fails until deploy/README.md and the
+  # coding workflow are updated on the same branch.
+  - package-ecosystem: docker
+    directory: /deploy/docker
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Europe/Paris
+    cooldown:
+      default-days: 4
+    commit-message:
+      prefix: chore(deps)
+    ignore:
+      # The Node major is the ABI of the prebuilt native addons: a decision, not a bump.
+      - dependency-name: node
+        update-types: [version-update:semver-major]
+
+  # Caddy in the reference Compose file, pinned the same way.
+  - package-ecosystem: docker-compose
+    directory: /deploy
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Europe/Paris
+    cooldown:
+      default-days: 4
+    commit-message:
+      prefix: chore(deps)
+
+  # The actions of the workflows, pinned by commit: Dependabot moves the commit
+  # and the version comment together.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Europe/Paris
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: chore(deps)
+    groups:
+      github-actions:
+        patterns: ['*']

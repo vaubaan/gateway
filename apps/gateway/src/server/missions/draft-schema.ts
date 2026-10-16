@@ -1,0 +1,142 @@
+/**
+ * Shape check of a mission draft arriving as JSON (the creation form, a
+ * pasted agent proposal, the management door). It only answers "is this a
+ * draft?"; whether the draft may be issued is `previewDraft`'s question.
+ * Unknown keys are refused so a typo never silently drops a restriction.
+ *
+ * `missionDraftSchema` is also the input schema of the management door's
+ * `preview_policy` and `issue_mission` tools: the descriptions below are what
+ * an agent reads when it composes a draft, so they state the rules of
+ * issuance, not only the types.
+ */
+import { GATES } from '@vaubaan/shared';
+import { z } from 'zod';
+
+import type { MissionDraft } from './model';
+
+const MAX_CONNECTIONS = 32;
+const MAX_ENTRIES = 2000;
+const MAX_RESOURCES = 5000;
+
+const text = z.string().min(1).max(300);
+
+const rateLimitSchema = z
+  .object({
+    max: z.number().describe('Actions allowed per window.'),
+    window_seconds: z.number().describe('Length of the window, in seconds.'),
+  })
+  .strict()
+  .describe('Short-window cap on one risk, inside its quota.');
+
+const entrySchema = z
+  .object({
+    risk_id: text.describe(
+      'One explicit RiskId of the connection’s catalog, exactly as `get_catalog` lists it, e.g. `github.pr-write` or `supabase[staging].bulk-row-write`. Never a wildcard, never a pattern.',
+    ),
+    quota: z
+      .number()
+      .optional()
+      .describe(
+        'Actions allowed per period on this risk. Mandatory unless the connection names a `preset` that has an entry for this risk.',
+      ),
+    rate_limit: rateLimitSchema.optional(),
+    gate: z
+      .enum(GATES)
+      .optional()
+      .describe(
+        '`auto` (default): calls pass within the budget. `approval`: every call waits for the mission creator to approve it in the interface.',
+      ),
+  })
+  .strict();
+
+const resourcesSchema = z.discriminatedUnion('scope', [
+  z
+    .object({ scope: z.literal('all') })
+    .strict()
+    .describe('Every resource of the connection known now (not the ones discovered later).'),
+  z
+    .object({
+      scope: z.literal('selected'),
+      resource_ids: z.array(text).max(MAX_RESOURCES).optional(),
+      resource_refs: z
+        .array(text)
+        .max(MAX_RESOURCES)
+        .optional()
+        .describe('Resource refs as `list_my_connections` shows them, e.g. `acme/app`.'),
+    })
+    .strict(),
+]);
+
+const connectionSchema = z
+  .object({
+    connection_id: text
+      .optional()
+      .describe('Id of one of the user’s connections (`list_my_connections`).'),
+    provider: text
+      .optional()
+      .describe(
+        'Instead of `connection_id`, when the user holds exactly one usable connection of that provider.',
+      ),
+    resources: resourcesSchema
+      .optional()
+      .describe('The resources the mission may touch on this connection. Default: all.'),
+    preset: text
+      .nullable()
+      .optional()
+      .describe(
+        'Id of one preset of the connection’s provider. Alone, it is the whole policy of the connection (bounded by the user’s authority). With `policy`, it only supplies the budget of the risks that give none.',
+      ),
+    policy: z
+      .array(entrySchema)
+      .max(MAX_ENTRIES)
+      .optional()
+      .describe('Exactly the risks the mission accepts on this connection, each with its budget.'),
+  })
+  .strict();
+
+const periodSchema = z.discriminatedUnion('kind', [
+  z
+    .object({ kind: z.literal('one-off') })
+    .strict()
+    .describe('One budget for the life of the mission.'),
+  z
+    .object({
+      kind: z.literal('recurring'),
+      length_seconds: z.number().describe('Period length in seconds, e.g. 86400 for a day.'),
+    })
+    .strict()
+    .describe('Quotas reload at every period.'),
+]);
+
+/** A mission draft: name, connections with their policy, period, expiry. */
+export const missionDraftSchema = z
+  .object({
+    name: z.string().max(1000).describe('What the mission is for, as the user will read it.'),
+    connections: z
+      .array(connectionSchema)
+      .max(MAX_CONNECTIONS)
+      .describe('At least one connection; at most one connection per provider.'),
+    period: periodSchema,
+    expires_at: z
+      .string()
+      .max(64)
+      .nullable()
+      .describe('ISO-8601 instant in the future, or null for a mission that does not expire.'),
+  })
+  .strict();
+
+export type ParsedDraft =
+  | { readonly ok: true; readonly draft: MissionDraft }
+  | { readonly ok: false; readonly problems: readonly string[] };
+
+export function parseMissionDraft(raw: unknown): ParsedDraft {
+  const result = missionDraftSchema.safeParse(raw);
+  if (result.success) return { ok: true, draft: result.data };
+  return {
+    ok: false,
+    problems: result.error.issues.map((issue) => {
+      const path = issue.path.join('.');
+      return path ? `${path}: ${issue.message}` : issue.message;
+    }),
+  };
+}

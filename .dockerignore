@@ -1,0 +1,46 @@
+# Build context for deploy/docker/Dockerfile (repository root).
+# The upload of `railway up` has its own list, .railwayignore; both are checked by
+# apps/gateway/tests/unit/structural/upload-ignore-files.test.ts.
+.git
+.github
+.husky
+.vscode
+.claude
+.codex
+.opencode
+.vaubaan
+.agents
+.build
+.harness-overrides
+.harness-manifest.json
+.mcp.json
+AGENTS.md
+CLAUDE.md
+
+node_modules
+**/node_modules
+**/.next
+**/out
+**/dist
+**/coverage
+**/playwright-report
+**/test-results
+**/.turbo
+**/.cache
+*.log
+*.tsbuildinfo
+
+# Secrets never enter the image; configuration is mounted or injected at run time.
+# Patterns are anchored at the context root unless prefixed with **: Next copies
+# apps/gateway/.env* into the standalone output, so every nested env file is excluded.
+**/.env
+**/.env.*
+!**/.env.example
+**/*.pem
+**/*.key
+**/id_rsa*
+**/id_ed25519*
+**/id_ecdsa*
+deploy/config/gateway.yaml
+
+docs

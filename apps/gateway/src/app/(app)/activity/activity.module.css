@@ -1,0 +1,123 @@
+/* The record: filters on one line, the counts, then rows. */
+
+.quiet {
+  color: var(--ink-3);
+}
+.sub {
+  display: block;
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+}
+.problems {
+  margin-bottom: var(--space-4);
+}
+
+/* ── Filters ───────────────────────────────────────────────────────────── */
+.filters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+.filterRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.select {
+  width: auto;
+  max-width: 220px;
+}
+.tool {
+  width: 190px;
+}
+.clear {
+  color: var(--accent);
+  font-size: var(--text-sm);
+}
+.moreFilters {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-3) var(--space-4);
+  max-width: 980px;
+  padding-bottom: var(--space-2);
+}
+.counts {
+  margin-bottom: 10px;
+}
+
+/* ── Cells ─────────────────────────────────────────────────────────────── */
+.time {
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  /* The line a link opens stays clear of the top of the window. */
+  scroll-margin-top: var(--space-12);
+}
+.who {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.whoText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.onText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.onText .sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.permission {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--ink-3);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.when {
+  display: inline-flex;
+  flex-direction: column;
+}
+.decision {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) 6px;
+}
+.refused {
+  color: var(--bad);
+}
+.detailLink {
+  color: var(--accent);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+.detailLink:hover {
+  text-decoration: underline;
+}
+
+/* ── The detail of a line ──────────────────────────────────────────────── */
+.touched {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-half);
+}
+.told {
+  display: block;
+  max-width: 78ch;
+  margin-top: var(--space-half);
+  color: var(--ink-2);
+}
+.state {
+  max-width: 860px;
+  margin-top: var(--space-3);
+}

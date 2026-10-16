@@ -1,0 +1,189 @@
+/* The pages under /accounts: what the design system does not lay out itself. */
+
+/* The connect form: one column, the measure of a form. */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 560px;
+}
+.formActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.formHint {
+  margin-left: auto;
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+}
+.prose {
+  max-width: var(--measure);
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+}
+.prose p {
+  margin: 0;
+}
+.prose p + p {
+  margin-top: var(--space-2);
+}
+.prose a {
+  color: var(--accent);
+}
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* The account page ─────────────────────────────────────────────────────── */
+
+/* Notes about the state of the account, between the header and the lists. */
+.notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+/* What the detailed view adds under the header: the facts of the account. */
+.facts {
+  margin-bottom: var(--space-6);
+}
+
+/* A person or a team in the first cell of "Who has access". */
+.holder {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.holderName {
+  font-weight: var(--weight-strong);
+}
+.holderNote {
+  color: var(--ink-3);
+}
+
+/* The row of a resource being edited. */
+.editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: var(--space-3) var(--space-5);
+  max-width: 760px;
+}
+.editorWide {
+  grid-column: 1 / -1;
+}
+.editorActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  grid-column: 1 / -1;
+}
+@media (max-width: 720px) {
+  .editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* A button that is a sentence's link: "Refresh" in a section note. */
+.inlineForm {
+  display: inline;
+}
+.linkButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: var(--text-sm);
+}
+.linkButton:hover {
+  text-decoration: underline;
+}
+.dangerLink {
+  color: var(--bad);
+}
+
+/* The last line of the page: what disconnecting does, and the act. */
+.closing {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--section-gap);
+  color: var(--ink-3);
+  font-size: var(--text-sm);
+}
+
+/* The public key of an SSH account. */
+.key {
+  max-width: 760px;
+}
+
+/* The Give access dialog ──────────────────────────────────────────────── */
+.target {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+}
+.starts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: var(--space-4);
+  color: var(--ink-3);
+  font-size: var(--text-sm);
+}
+.startsEnd {
+  display: inline-flex;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+/* The list is as long as it is: the dialog keeps itself inside the window and
+   scrolls its body between its head and its buttons (`Dialog`). */
+.checklist {
+  margin-top: var(--space-2);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.presetOn {
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+.summary {
+  margin: var(--space-3) 0 0;
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+}
+.dialogNotes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.restores {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-5);
+  font-size: var(--text-sm);
+}
+.restores li + li {
+  margin-top: var(--space-1);
+}
+@media (max-width: 560px) {
+  .target {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* The guide to a token created by hand, its steps then the form as the last one. */
+.guided {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}

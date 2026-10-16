@@ -1,0 +1,618 @@
+# Risk catalog of the `supabase` provider — four planes under one project.
+#
+# Spec : docs/spec/gateway-risk-model.md §4 (schema), docs/spec/vaubaan-gateway.md §3.2 (presets).
+# Handbook : docs/handbook/providers/supabase.md.
+#
+# Loaded by the plugin SDK at boot (`loadCatalogFile`) ; the loader refuses
+# unknown keys, malformed ids, patterns of another provider, a missing
+# fallback, zero presets, a preset entry that is not an explicit risk of this
+# catalog, a deprecated risk in a preset, a non-numeric budget.
+#
+# Cardinality convention (see classify.ts) :
+#   row[one]    bounded write on one identified row ;
+#   row[bulk]   unbounded write (UPDATE/DELETE without a bounded WHERE, TRUNCATE, COPY, mass INSERT) ;
+#   object[one] / object[bulk] : idem for storage paths ;
+#   user[one]   / user[bulk]   : idem for GoTrue users.
+# The markers are literal identifiers, so `row[one]` and `row[bulk]` are
+# mutually exclusive at match time.
+#
+# Environments : a Supabase project is the resource the owner labels (`staging`,
+# `prod`, `preview`), so every write risk is env-scoped : a mission accepts
+# `supabase[staging].migration-write`, never a bare `supabase.migration-write`.
+# Reads stay account-scoped except `auth.read-users` (PII) and
+# `read-managed-schemas` (identities, secrets).
+#
+# The runtime REFUSES a call that touches an env-scoped risk on a project
+# whose label is absent or outside `acceptable_in_envs` — the risk is not
+# dropped, and no mission can hold it there. Two consequences :
+#   - on a project the owner has not labelled, every write, every user read
+#     and every SQL read of a managed schema is refused ; only the
+#     account-scoped reads go through ;
+#   - the three bulk risks exclude `prod`, so a bulk write is refused on a
+#     prod project whatever the mission accepted : a migration embedding DML
+#     or dropping a table, a migration the classifier cannot read, a bucket
+#     delete.
+#
+# The fallback `supabase.uncategorized-write` counts only when no specific
+# entry matched the write (policy-engine rule) ; presets never
+# carry it. Seen in production, it means a tool classifies to a slice no
+# fine-grained entry covers : add the entry.
+#
+# Adding a risk : append an entry, bump `catalog_version`, update `catalog_date`.
+# Removing or renaming a risk : forbidden — mark it `deprecated: true` and
+# point `replaced_by` at its successor.
+#
+# Risk count : 25 named risks + 1 fallback.
+
+provider: supabase
+catalog_version: 5
+catalog_date: 2026-10-14
+
+risks:
+  # ───────────────────────────────────────────────────────────────────────
+  # Plane `db`
+  # ───────────────────────────────────────────────────────────────────────
+
+  - id: supabase.read-data
+    label: Read data and schema
+    reason: >-
+      SELECT and schema inspection, including `execute_sql`, which runs on
+      the Management API read-only endpoint. Can leak PII held in
+      application tables. Deliberately broad : every Supabase read fires it,
+      and the more specific read permissions (`read-managed-schemas`,
+      `auth.read-users`, `storage.signed-url-read`, `functions.read`)
+      co-fire to harden the policy. Alone, it lets `execute_sql` run only a
+      plain query that names no schema Supabase manages.
+    matches: supabase.**.R
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: supabase.read-managed-schemas
+    label: Read the schemas Supabase manages, through SQL
+    reason: >-
+      `execute_sql` on what Supabase keeps for itself : `auth` (users,
+      identities, sessions, refresh tokens), `vault` (secrets and their
+      decrypted view), `storage` internals, `pgsodium` keys, `net` and
+      `cron` queues, and the catalog relations that hold password hashes or
+      other sessions' queries. Decided by what the SQL names, not by what
+      the database role may read. Also touched by any query the classifier
+      cannot read with confidence : a statement that is not a plain query,
+      a function outside the list it knows to be inert, dollar quoting,
+      prefixed strings. No read-only preset carries it.
+    matches: supabase.project[**].schema[managed].row[**].R
+    vector:
+      reversibility: reversible
+      blast: account
+      data: secret
+      cost: free
+      visibility: internal
+      persistence: stateless
+    acceptable_in_envs: [preview, staging, prod]
+
+  - id: supabase.row-write-one
+    label: Write rows one by one (bounded target) — deprecated, no tool touches it
+    reason: >-
+      Deprecated : matches no call. No tool of this plugin writes rows one
+      by one (`execute_sql` runs on the read-only endpoint, and a migration
+      that writes rows is a bulk write). Holding it grants nothing ; it
+      has no successor. Kept so the id stays resolvable in the accesses and
+      missions that name it.
+    matches: supabase.project[**].schema[**].table[**].row[one].W
+    deprecated: true
+    vector:
+      reversibility: costly
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: session
+    acceptable_in_envs: [preview, staging, prod]
+
+  - id: supabase.bulk-row-write
+    label: Bulk write on a table
+    reason: >-
+      Mass INSERT, UPDATE/DELETE without or with a wide WHERE, TRUNCATE,
+      DROP TABLE or COLUMN inside a migration. No automatic rollback, high
+      blast. Not acceptable on prod : a call touching it there is refused.
+    matches: supabase.project[**].schema[**].table[**].row[bulk].W
+    vector:
+      reversibility: costly
+      blast: bulk
+      data: data
+      cost: moderate
+      visibility: internal
+      persistence: session
+    acceptable_in_envs: [preview, staging]
+
+  - id: supabase.migration-write
+    label: Apply a migration (DDL)
+    reason: >-
+      CREATE/ALTER TABLE or INDEX. Costly to revert (manual down migration)
+      and can break the applications that read the schema. Touched by every
+      migration ; a migration that also writes rows, drops a table or a
+      column, changes RLS, privileges or extensions needs the matching
+      permission too, and one the classifier cannot read (function body, dynamic
+      SQL) touches all of them. Matches the schema/table-level write
+      strictly (no row segment), so a row write never fires it by accident.
+    matches: supabase.project[**].schema[*].table[*].W
+    vector:
+      reversibility: costly
+      blast: env
+      data: metadata
+      cost: free
+      visibility: internal
+      persistence: posture
+    acceptable_in_envs: [preview, staging, prod]
+
+  - id: supabase.policy-write
+    label: Change RLS (CREATE/ALTER/DROP POLICY)
+    reason: >-
+      Critical posture shift : opens or closes data access for every role.
+      One mistake is a public data leak.
+    matches: supabase.project[**].policy[**].W
+    vector:
+      reversibility: costly
+      blast: account
+      data: data
+      cost: free
+      visibility: public
+      persistence: posture
+    acceptable_in_envs: [preview, staging, prod]
+
+  - id: supabase.db-role-write
+    label: Create or modify Postgres roles
+    reason: >-
+      Credential posture : CREATE / ALTER / DROP ROLE, GRANT, REVOKE,
+      default privileges. Reached through `apply_migration`.
+    matches: supabase.project[**].db-role[**].W
+    vector:
+      reversibility: reversible
+      blast: account
+      data: metadata
+      cost: free
+      visibility: internal
+      persistence: posture
+    acceptable_in_envs: [preview, staging, prod]
+
+  - id: supabase.extension-write
+    label: Enable or disable a Postgres extension
+    reason: >-
+      Shifts the available SQL surface. Some extensions (`pg_net`, `http`)
+      open outbound exfiltration. Reached through `apply_migration`.
+    matches: supabase.project[**].extension[**].W
+    vector:
+      reversibility: reversible
+      blast: account
+      data: metadata
+      cost: free
+      visibility: internal
+      persistence: posture
+    acceptable_in_envs: [preview, staging, prod]
+
+  # ───────────────────────────────────────────────────────────────────────
+  # Plane `storage`
+  # ───────────────────────────────────────────────────────────────────────
+
+  - id: supabase.storage.object-read
+    label: List or download storage objects
+    reason: >-
+      Reads user files, which may be PII (identity documents, photos,
+      exports). Served through the service key regardless of bucket ACL.
+    matches: supabase.project[**].bucket[**].object[**].R
+    vector:
+      reversibility: reversible
+      blast: single
+      data: pii
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: supabase.storage.object-write-one
+    label: Upload or delete one object
+    reason: >-
+      Mutation of one precise path. Reversible when the agent keeps a copy
+      before overwriting.
+    matches: supabase.project[**].bucket[**].object[one].W
+    vector:
+      reversibility: costly
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: session
+    acceptable_in_envs: [preview, staging, prod]
+
+  - id: supabase.storage.bulk-object-write
+    label: Bulk upload or delete of objects
+    reason: >-
+      Prefix-wide or glob deletes, bucket cascade. Supabase Storage has no
+      versioning by default : a bulk delete is irreversible. Structurally not
+      grantable on prod.
+    matches: supabase.project[**].bucket[**].object[bulk].W
+    vector:
+      reversibility: irreversible
+      blast: bulk
+      data: pii
+      cost: moderate
+      visibility: internal
+      persistence: session
+    acceptable_in_envs: [preview, staging]
+
+  - id: supabase.storage.signed-url-read
+    label: Issue a signed URL
+    reason: >-
+      A read on the bucket that may exfiltrate the object to an external
+      recipient through a temporary signed URL. Distinct from a plain
+      list/download : the recipient is chosen by the agent.
+    matches: supabase.project[**].bucket[**].object[**].signed-url[**].R
+    vector:
+      reversibility: reversible
+      blast: single
+      data: pii
+      cost: free
+      visibility: public
+      persistence: session
+
+  - id: supabase.bucket-write
+    label: Create, modify or delete a bucket
+    reason: >-
+      Posture shift : a public bucket leaks misclassified private objects ;
+      a delete cascades irreversibly over the objects. Matches the
+      bucket-level write strictly (no object segment).
+    matches: supabase.project[**].bucket[*].W
+    vector:
+      reversibility: irreversible
+      blast: env
+      data: pii
+      cost: free
+      visibility: public
+      persistence: posture
+    acceptable_in_envs: [preview, staging, prod]
+
+  - id: supabase.storage-config-write
+    label: Change the project storage configuration
+    reason: >-
+      Quotas, transformations, CDN. Affects the whole project and every
+      application consuming storage.
+    matches: supabase.project[**].storage-config.W
+    vector:
+      reversibility: reversible
+      blast: env
+      data: metadata
+      cost: free
+      visibility: internal
+      persistence: posture
+    acceptable_in_envs: [preview, staging, prod]
+
+  # ───────────────────────────────────────────────────────────────────────
+  # Plane `auth`
+  # ───────────────────────────────────────────────────────────────────────
+
+  - id: supabase.auth.read-users
+    label: List or read users
+    reason: >-
+      PII : emails, providers, last sign-in, user metadata ; the volume can
+      be large. Through the auth admin API only : a SELECT on `auth.users`
+      through `execute_sql` is `read-managed-schemas`.
+    matches: supabase.project[**].user[**].R
+    vector:
+      reversibility: reversible
+      blast: bulk
+      data: pii
+      cost: free
+      visibility: internal
+      persistence: stateless
+    acceptable_in_envs: [preview, staging, prod]
+
+  - id: supabase.auth.user-write-one
+    label: Create, modify or delete one user
+    reason: >-
+      Affects one identity. Reversible (re-create) except delete, which
+      cascades on the rows the user owns (FK ON DELETE CASCADE).
+    matches: supabase.project[**].user[one].W
+    vector:
+      reversibility: costly
+      blast: single
+      data: pii
+      cost: free
+      visibility: internal
+      persistence: posture
+    acceptable_in_envs: [preview, staging, prod]
+
+  - id: supabase.auth.bulk-user-write
+    label: Bulk user manipulation
+    reason: >-
+      Mass creation or deletion. Risk of locking real users out.
+      Structurally not grantable on prod.
+    matches: supabase.project[**].user[bulk].W
+    vector:
+      reversibility: irreversible
+      blast: bulk
+      data: pii
+      cost: moderate
+      visibility: internal
+      persistence: posture
+    acceptable_in_envs: [preview, staging]
+
+  - id: supabase.auth.generate-link
+    label: Generate a magic link, recovery or invite
+    reason: >-
+      The returned URL signs in as that user. If it leaks (logs, audit,
+      wrong recipient), account takeover.
+    matches: supabase.project[**].user[**].link[**].W
+    vector:
+      reversibility: reversible
+      blast: single
+      data: secret
+      cost: free
+      visibility: internal
+      persistence: session
+    acceptable_in_envs: [preview, staging, prod]
+
+  - id: supabase.sso-provider-write
+    label: Configure a SAML / OIDC identity provider
+    reason: >-
+      Federated identity posture. A wrong configuration lets anyone with an
+      account on that IdP sign in.
+    matches: supabase.project[**].sso-provider[**].W
+    vector:
+      reversibility: reversible
+      blast: account
+      data: metadata
+      cost: free
+      visibility: internal
+      persistence: posture
+    acceptable_in_envs: [preview, staging, prod]
+
+  - id: supabase.third-party-auth-write
+    label: Configure a third-party auth provider (Firebase, Auth0, …)
+    reason: >-
+      Same as SSO : identity posture, federates an external JWT issuer for
+      authentication.
+    matches: supabase.project[**].third-party-auth[**].W
+    vector:
+      reversibility: reversible
+      blast: account
+      data: metadata
+      cost: free
+      visibility: internal
+      persistence: posture
+    acceptable_in_envs: [preview, staging, prod]
+
+  - id: supabase.auth-config-write
+    label: Change the project auth configuration
+    reason: >-
+      JWT secret, expiries, redirect allow-list, signup policy. The smallest
+      mistake opens or breaks authentication for everyone.
+    matches: supabase.project[**].auth-config.W
+    vector:
+      reversibility: costly
+      blast: account
+      data: secret
+      cost: free
+      visibility: internal
+      persistence: posture
+    acceptable_in_envs: [preview, staging, prod]
+
+  # ───────────────────────────────────────────────────────────────────────
+  # Plane `functions`
+  # ───────────────────────────────────────────────────────────────────────
+
+  - id: supabase.functions.read
+    label: List or read Edge Functions (metadata and body)
+    reason: >-
+      The body may contain inline secrets when the author hard-coded a key
+      (a frequent anti-pattern).
+    matches: supabase.project[**].edge-function[**].R
+    vector:
+      reversibility: reversible
+      blast: single
+      data: secret
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: supabase.functions.body-write
+    label: Create, modify or delete the code of an Edge Function
+    reason: >-
+      Changing the code injects custom behaviour into every invocation.
+      Reversible when the source is in git. Bounded to `edge-function[*]`
+      strictly so child writes such as `function-deployment` do not fire it.
+    matches: supabase.project[**].edge-function[*].W
+    vector:
+      reversibility: costly
+      blast: env
+      data: data
+      cost: free
+      visibility: internal
+      persistence: posture
+    acceptable_in_envs: [preview, staging, prod]
+
+  - id: supabase.functions.deploy
+    label: Deploy a new version of an Edge Function
+    reason: >-
+      Switches the runtime to the new version. On prod, an immediate change
+      of public behaviour.
+    matches: supabase.project[**].edge-function[**].function-deployment[**].W
+    vector:
+      reversibility: costly
+      blast: env
+      data: data
+      cost: moderate
+      visibility: public
+      persistence: posture
+    acceptable_in_envs: [preview, staging, prod]
+
+  - id: supabase.function-secret-write
+    label: Create, modify or delete a function secret
+    reason: >-
+      Secrets consumed by Edge Functions at runtime. A delete can break the
+      function immediately ; a create or update can poison it.
+    matches: supabase.project[**].function-secret[**].W
+    vector:
+      reversibility: costly
+      blast: env
+      data: secret
+      cost: free
+      visibility: internal
+      persistence: posture
+    acceptable_in_envs: [preview, staging, prod]
+
+  # ───────────────────────────────────────────────────────────────────────
+  # Fallback — must exist. Counts only when no specific entry matched.
+  # ───────────────────────────────────────────────────────────────────────
+
+  - id: supabase.uncategorized-write
+    label: Uncategorized Supabase write
+    reason: >-
+      Catch-all for writes without a dedicated entry. A mission holding it
+      for an environment allows every uncategorized write of the service there ; its limits and “ask me first” bound it. A tool needing only this permission is a catalog bug.
+    matches: supabase.**.W
+    fallback: true
+    vector:
+      reversibility: costly
+      blast: env
+      data: data
+      cost: free
+      visibility: internal
+      persistence: session
+    acceptable_in_envs: [preview, staging, prod]
+
+# ─────────────────────────────────────────────────────────────────────────
+# Presets — UI sugar : pre-fill a mission policy, the creator adjusts, the
+# persisted policy is always the explicit enumeration (spec §3.2).
+# Quotas are actions per mission period ; rate limits per sliding window.
+# ─────────────────────────────────────────────────────────────────────────
+
+presets:
+  - id: read-only-analyst
+    label: Read-only analyst
+    description: Query application data and schema, list buckets and objects, on every selected project. No write, no user listing, no SQL on the schemas Supabase manages (auth, vault, storage).
+    entries:
+      - risk_id: supabase.read-data
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: supabase.storage.object-read
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+
+  - id: staging-developer
+    label: Staging developer
+    description: One mission per application. Day-to-day development on staging-labelled projects — migrations of any kind, RLS, buckets and objects, users one by one, edge functions and their secrets. Reads data, schema, objects and functions on every selected project. No auth, storage or SSO configuration, no signed URL, nothing written outside staging.
+    entries:
+      - risk_id: supabase.read-data
+        quota: 10000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: supabase.storage.object-read
+        quota: 2000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: supabase.functions.read
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: supabase[staging].auth.read-users
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: supabase[staging].bulk-row-write
+        quota: 200
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: supabase[staging].migration-write
+        quota: 200
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: supabase[staging].policy-write
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      # Needed with the three above by any migration the classifier cannot
+      # read (function body, trigger, dynamic SQL) : it touches every class.
+      - risk_id: supabase[staging].db-role-write
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: supabase[staging].extension-write
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: supabase[staging].bucket-write
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: supabase[staging].storage.object-write-one
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: supabase[staging].storage.bulk-object-write
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: supabase[staging].auth.user-write-one
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: supabase[staging].auth.generate-link
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: supabase[staging].functions.body-write
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: supabase[staging].functions.deploy
+        quota: 200
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: supabase[staging].function-secret-write
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+
+  - id: migration-operator
+    label: Migration operator
+    description: Apply migrations. Any migration on staging-labelled projects. On prod, only plain schema changes (create or alter tables and indexes) and RLS changes, each asking first; a prod migration that writes rows, drops a table or a column, grants privileges, enables an extension or defines a function is refused.
+    entries:
+      - risk_id: supabase.read-data
+        quota: 2000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: supabase[staging].migration-write
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: supabase[staging].bulk-row-write
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: supabase[staging].policy-write
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      # Needed with the three above by any migration the classifier cannot
+      # read (function body, trigger, dynamic SQL) : it touches every class.
+      - risk_id: supabase[staging].db-role-write
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: supabase[staging].extension-write
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: supabase[prod].migration-write
+        quota: 20
+        rate_limit: { max: 2, window_seconds: 60 }
+        gate: approval
+      - risk_id: supabase[prod].policy-write
+        quota: 10
+        rate_limit: { max: 2, window_seconds: 60 }
+        gate: approval

@@ -1,0 +1,710 @@
+/**
+ * The structural suite — its index.
+ *
+ * A structural test holds a property of the whole product that no single
+ * feature owns: "nothing persists a wildcard", "every mutation is audited",
+ * "the three credentials never cross". Such a property is lost quietly — by a
+ * new table, a new handler, a new plugin — so each one is proven by a test
+ * that enumerates what exists (handlers from the source, plugins from the
+ * import list, columns from the schema) instead of listing it by hand.
+ *
+ * The tests live where their harness lives: here for the ones that read the
+ * source or the schema, under `tests/integration/**` for the ones that need a
+ * running instance, beside the code for a few. This file is what makes them
+ * one suite: every invariant the spec names (§10 "Structural", §6) and every
+ * one added since, each with the test that proves it. `index.test.ts` fails
+ * when
+ *
+ *   - an invariant has no proof, or a proof names a file that is gone;
+ *   - a proof names a test title its file no longer contains (renamed away or
+ *     deleted: the invariant would silently lose its proof);
+ *   - a test file of this folder is in no invariant (a structural test nobody
+ *     can find from the index);
+ *   - a bullet of the spec's "Structural" list has no invariant here.
+ *
+ * To add an invariant: write the test, add the entry, run `index.test.ts`.
+ * Handbook: docs/handbook/threat-model.md lists, per threat, the control and
+ * the proof; the ids below are the ones it cites.
+ */
+
+export interface Proof {
+  /** Path from the repository root. */
+  readonly file: string;
+  /**
+   * Titles (or distinctive fragments of a title) of the tests in `file` that
+   * prove the invariant. Each must still be the title of a test (or of a
+   * `describe`) that RUNS in that file: not a comment, not a skipped or
+   * to-do test (`index.test.ts` parses the file).
+   */
+  readonly tests: readonly string[];
+  /**
+   * Set when a named test sits under a condition (`describe.skipIf(…)`,
+   * `it.runIf(…)`): what it needs, and who runs it with that. The index
+   * refuses a conditional proof that does not say so, and the reverse.
+   */
+  readonly conditional?: string;
+}
+
+export interface Invariant {
+  readonly id: string;
+  /** The property, in one sentence a reader can check a change against. */
+  readonly statement: string;
+  /** Where it comes from: a spec section, an ADR, or both. */
+  readonly source: string;
+  /**
+   * For an invariant of the spec's §10 "Structural" list: a fragment of that
+   * bullet, as written in `docs/spec/vaubaan-gateway.md`.
+   */
+  readonly specBullet?: string;
+  readonly proofs: readonly Proof[];
+}
+
+const STRUCTURAL = 'apps/gateway/tests/unit/structural';
+const INTEGRATION = 'apps/gateway/tests/integration';
+const UNIT = 'apps/gateway/tests/unit';
+const SERVER = 'apps/gateway/src/server';
+
+export const INVARIANTS: readonly Invariant[] = [
+  // ── Spec §10 "Structural" ──────────────────────────────────────────────────
+  {
+    id: 'telemetry-shape',
+    statement:
+      'A telemetry report carries the fields of its kind and nothing else: no argument, no resource ref, no token, no token holder (member id, member email, token name), no label, no stable instance identifier — whatever a plugin returns or throws.',
+    source:
+      'spec §9, §10; ADRs telemetry-collector-shape, telemetry-two-levels-behind-a-vercel-collector',
+    specBullet: 'no telemetry report, of either level, contains a forbidden field',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/telemetry-report-shape.test.ts`,
+        tests: ['structural: a telemetry report contains none of the forbidden fields (spec §9)'],
+      },
+      {
+        file: `${STRUCTURAL}/telemetry-collector-schema.test.ts`,
+        tests: [
+          'never reads a request header, never stores an address',
+          'publishes aggregates only: anon reads the views, which run with their owner rights',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'git-remote-shares-the-admission',
+    statement:
+      'The git remote admits a request with the very admission object of the execution door — one key check, one mission, one set of budgets and one audit for both doors, never a second implementation.',
+    source: 'spec §4.1 ter, §10; ADR gateway-as-git-remote',
+    specBullet: 'the git remote admits with the execution door',
+    proofs: [
+      {
+        file: `${INTEGRATION}/git/git-remote-limits.test.ts`,
+        tests: ['the git door admits with the MCP door’s own admission'],
+      },
+    ],
+  },
+  {
+    id: 'counters-agree-with-audit',
+    statement:
+      'For every risk of every mission, the session counters equal the number of allowed touches in the audit, under random concurrent load.',
+    source: 'spec §3.3, §6 "authoritative, atomic counting", §10; ADR atomic-budget-accounting',
+    specBullet: 'session counters agree with the audit',
+    proofs: [
+      {
+        file: `${INTEGRATION}/execution/counters-vs-audit.test.ts`,
+        tests: ['structural: session counters agree with the audit'],
+      },
+      {
+        file: `${INTEGRATION}/budget/pipeline-consistency.test.ts`,
+        tests: ['after a mixed run, SUM(session_counters) == COUNT(audit allowed) per risk'],
+      },
+      {
+        file: `${INTEGRATION}/store/sessions.test.ts`,
+        tests: ['counters and audit agree after a mixed run (structural check)'],
+      },
+    ],
+  },
+  {
+    id: 'no-hardcoded-config',
+    statement:
+      'No URL, secret, token or project reference is written in the application, the deployment files, the scripts or the workflows; the one default URL lives in one file.',
+    source: 'spec §4.3, §10',
+    specBullet: 'no configuration value is hard-coded',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/no-hardcoded-config.test.ts`,
+        tests: [
+          'scans a meaningful set of files',
+          'allows the telemetry default URL only in telemetry-default.ts',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'enumerations-persisted',
+    statement:
+      'Every persisted restriction and every accepted-risk list is one row per explicit RiskId of the loaded catalog: never a wildcard, never a preset reference.',
+    source: 'spec §3.1 "Enumeration", §10; pivot ADR D3',
+    specBullet: 'every persisted restriction and `accepted_risks` is an enumerated',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/persisted-enumerations.test.ts`,
+        tests: [
+          'one row per risk, and the column refuses "" and any wildcard',
+          'refuses the risk id %j at the database, behind every repository',
+          'no table has a column that could hold a preset',
+        ],
+      },
+      {
+        file: `${INTEGRATION}/store/connections-shares.test.ts`,
+        tests: [
+          'refuses a risk id that is not in the loaded catalog (no wildcard can be persisted)',
+          'the schema itself rejects a wildcard even if the catalog check were bypassed',
+        ],
+      },
+      {
+        file: `${INTEGRATION}/missions/mission-lifecycle.test.ts`,
+        tests: [
+          'persists the explicit enumeration: resource ids, policy entries, no preset reference',
+        ],
+      },
+      {
+        file: `${SERVER}/shares/service.test.ts`,
+        tests: ['and stores nothing: a restriction is explicit ids of this catalog'],
+      },
+    ],
+  },
+  {
+    id: 'presets-within-own-catalog',
+    statement:
+      'Every shipped plugin ships at least one preset, and every preset entry names a risk of its own catalog, never a wildcard.',
+    source: 'spec §10, §11.2 "Preset values"',
+    specBullet: 'every plugin ships at least one preset',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/shipped-presets.test.ts`,
+        tests: [
+          'ships at least one preset, each with at least one entry',
+          'references only risks of its own catalog',
+          'never says "everything": no wildcard in a preset id or in an entry',
+        ],
+      },
+      {
+        file: 'packages/plugin-sdk/tests/unit/testing-kit.test.ts',
+        tests: ['explicit lists pass, wildcards and sentinels fail'],
+      },
+    ],
+  },
+  {
+    id: 'authority-never-snapshotted',
+    statement:
+      'A user’s authority is recomputed from the store at every question — issuance, the owner check, the execution door, the admin rule — and `orphaned` is derived from it at every read, never stored.',
+    source: 'spec §2.3, §10; ADR orphaned-missions-and-ownerless-connections',
+    specBullet: 'authority on a connection is recomputed',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/authority-not-snapshotted.test.ts`,
+        tests: [
+          'issuance follows the membership on the very next question',
+          'the web session of the last sign-in does not keep an authority alive',
+          'the execution door re-reads the creator’s authority on every request',
+          'no production source writes the status',
+          'every reader of a mission record derives the state or does not read it',
+        ],
+      },
+      {
+        file: `${STRUCTURAL}/persisted-enumerations.test.ts`,
+        tests: ['`missions.status` cannot hold `orphaned`: the state is derived, never stored'],
+      },
+      {
+        file: `${INTEGRATION}/store/ownership-and-orphans.test.ts`,
+        tests: ['missions: `orphaned` is never stored (migration 0007)'],
+      },
+      {
+        file: `${INTEGRATION}/auth/oidc-login.test.ts`,
+        tests: ['structural: authority is recomputed from current membership'],
+      },
+    ],
+  },
+
+  // ── Spec §6 and §8, and what was added since ───────────────────────────────
+  {
+    id: 'every-mutation-audited',
+    statement:
+      'Every public method of every service that changes something leaves the administrative entry of its act, naming the human behind it (and the delegated client when there is one).',
+    source: 'spec §8',
+    proofs: [
+      {
+        file: `${INTEGRATION}/audit/admin-mutations.test.ts`,
+        tests: [
+          'every public service method is classified: read, mutation or exempt with a reason',
+          'covers every mutating act the services can perform',
+          '$name writes $rule.writes.act',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'every-mutation-guarded',
+    statement:
+      'Every mutating route goes through one guard — origin, then session, then role — or is an MCP door or an OAuth protocol endpoint that reads no session; every Administration page and route authorizes by itself.',
+    source: 'spec §6 "Every mutation requires a valid session and an origin check"',
+    proofs: [
+      {
+        file: `${UNIT}/server/auth/mutation-guard.test.ts`,
+        tests: [
+          'classifies every handler of the human surfaces',
+          'finds the mutating routes of the app',
+          'delegates to a guarded mutation only',
+          'refuses a caller with no session, and writes nothing',
+          'refuses a session of the wrong role, and writes nothing',
+        ],
+      },
+      {
+        file: `${UNIT}/app/admin-guard.test.ts`,
+        tests: [
+          'finds the pages and the routes of the surface',
+          'calls requireOperator() and never reads the bare decision',
+        ],
+      },
+      {
+        file: `${UNIT}/app/app-guard.test.ts`,
+        tests: ['the human surface authenticates in every page and route'],
+      },
+    ],
+  },
+  {
+    id: 'three-credentials-never-cross',
+    statement:
+      'A mission token opens the execution door only, a delegated token the management door only, a human session the interface only; a request is granted in a human session and nowhere else.',
+    source: 'spec §2.4, §6 "Separation of the three credentials", §10',
+    proofs: [
+      {
+        file: `${INTEGRATION}/oauth-as/credential-separation.test.ts`,
+        tests: [
+          'the three credentials never cross over',
+          'each credential opens its own door',
+          'refuses every kind of mission token alike: a member’s own and a named one open the execution door only',
+          'requests are granted only in a human session',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'calls-attributed-to-token-holder',
+    statement:
+      'Every call through the execution door is attributed to the holder of the token it presented — a member, or a named token — in the audit entry and in the session event, from the authenticated token and never from what the caller declares; every token of a mission draws from one budget; and a token whose member was removed or deactivated, or that was rotated or revoked on its own, is refused at the next call, cache hit or miss.',
+    source:
+      'spec §0 "Mission token", §3.2, §7.9 bis, §8; ADR mission-members-and-per-holder-tokens',
+    proofs: [
+      {
+        file: `${INTEGRATION}/execution/team-door.test.ts`,
+        tests: [
+          'two members and a named token share one counter and are attributed separately',
+          'the holder is the token’s: nothing a caller sends changes who called',
+          'refuses a removed member at the next call; the others keep working',
+          'refuses a member the moment their membership row says removed, even if their token row still reads active',
+          'refuses a deactivated member at once; reactivated, they generate a new token',
+          'refuses a member the moment their user row says removed, before anything else is written',
+        ],
+      },
+      {
+        file: `${SERVER}/execution/execution.test.ts`,
+        tests: ['remembers nothing: every call asks what the token is worth now'],
+      },
+      {
+        file: 'packages/gateway-core/tests/unit/pipeline.test.ts',
+        tests: ['happy path: allowed, result returned, one audit entry with the §8 fields'],
+      },
+    ],
+  },
+  {
+    id: 'member-token-secret-stays-with-member',
+    statement:
+      'The secret of a member token is returned once, to the member who generated it, and to nobody else: no API answer read by the creator, no audit entry and no row of the store carries it (the store keeps a hash); a member reads and uses the mission and changes nothing of it, nor answers its requests.',
+    source: 'spec §0 "Mission member", "Mission token"; ADR mission-members-and-per-holder-tokens',
+    proofs: [
+      {
+        file: `${INTEGRATION}/missions/team.test.ts`,
+        tests: [
+          'no answer of any API read by the creator, and no row of the store, carries it',
+          'over HTTP: the secret is in the answer to the member who generated it, and in no answer to the creator',
+          'cannot %s: not-found, and nothing is written',
+          'cannot see or answer the requests of the mission: they are the creator’s',
+        ],
+      },
+      {
+        file: `${INTEGRATION}/store/missions.test.ts`,
+        tests: [
+          'stores a hash, never a secret: no column of a token row can give the bearer back',
+          'removing a member revokes their token in the same step, and only theirs',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'management-door-hard-deny',
+    statement:
+      'The management door cannot answer a request, open a gate, touch a connection or a share, or execute a tool: nothing of the instance but seven mission methods, static catalogs and its own rate-limit keys is reachable from it. Rotation reaches only the missions the calling delegation issued.',
+    source:
+      'spec §4.1 bis; ADR management-door-authorization-server; ADR management-door-rotation-scope-and-replay-trace',
+    proofs: [
+      {
+        file: `${INTEGRATION}/management/hard-deny.test.ts`,
+        tests: [
+          'nothing of the instance is reachable from the door, its tools or its handler',
+          'the mission port is a frozen object of exactly the seven methods, bound to the service',
+        ],
+      },
+      {
+        file: `${INTEGRATION}/management/management-door.test.ts`,
+        tests: ['rotates only what its own delegation issued'],
+      },
+    ],
+  },
+  {
+    id: 'no-test-file-in-the-build',
+    statement:
+      'The standalone output, and therefore the image, carries no test, fixture, simulated identity provider or demo launcher of this repository.',
+    source: 'ADR plugin-catalog-path-and-standalone-tracing; deploy/docker/smoke.sh step 7',
+    proofs: [
+      {
+        file: `${INTEGRATION}/standalone-plugin-catalogs.test.ts`,
+        tests: ['ships no test file: no trace names one and the standalone tree holds none'],
+        conditional:
+          'needs the standalone build (`npm run build`): `npm run ci` and the CI job `check` build before they test',
+      },
+      {
+        file: 'deploy/docker/smoke.sh',
+        tests: ['no test, spec, fixture or demo file inside the image'],
+      },
+    ],
+  },
+  {
+    id: 'catalog-declares-only-enforced-limits',
+    statement:
+      'A shipped catalog declares no limit the door does not enforce: an operator never reads a control they do not have.',
+    source: 'ADR scope-caps-not-enforced-in-v5-0',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/catalog-caps-enforced.test.ts`,
+        tests: [
+          '%s declares no unenforced cap',
+          'the enforced list is exactly what the code enforces today',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'config-examples-match-the-loader',
+    statement:
+      'The documented configuration is the accepted one: the handbook’s key table and the two deployment examples name exactly the keys and provider-app fields the loader and the shipped plugins take.',
+    source: 'spec §4.3; ADR docker-image-and-config-format',
+    proofs: [
+      {
+        file: `${SERVER}/config/keys-doc.test.ts`,
+        tests: [
+          'has a row for every key the loader accepts',
+          'has no row the loader does not accept',
+        ],
+      },
+      {
+        file: `${STRUCTURAL}/example-config-providers.test.ts`,
+        tests: ['the two examples show the same providers', 'refuse an unknown provider'],
+      },
+    ],
+  },
+  {
+    id: 'one-version-source',
+    statement:
+      'The gateway version has one source, the root package.json: the build stamp, /healthz, the footer and telemetry all read it.',
+    source: 'docs/workflow/coding-workflow.md "One version"',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/version-single-source.test.ts`,
+        tests: [
+          'is stamped into the build from the root package.json',
+          'has the same value in the lockfile',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'no-secret-no-argument-in-logs',
+    statement:
+      'No log line is handed call arguments or a secret: tokens by prefix, arguments by hash, and the redactor removes every configured secret.',
+    source: 'spec §6 "No secret in logs"',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/no-arguments-in-logs.test.ts`,
+        tests: [
+          'no logger call names call arguments, a request body or a secret',
+          'the scan sees what it is meant to see (a planted offence is reported)',
+        ],
+      },
+      {
+        file: `${INTEGRATION}/execution/door-http.test.ts`,
+        tests: ['writes no secret and no argument to the logs: token by prefix, arguments by hash'],
+      },
+      {
+        file: 'packages/gateway-core/tests/unit/pipeline.test.ts',
+        tests: ['the agent reads it whole, the audit entry holds no argument value'],
+      },
+      {
+        file: `${SERVER}/logging/logging.test.ts`,
+        tests: ['replaces every configured secret, longest first, also when JSON-escaped'],
+      },
+    ],
+  },
+  {
+    id: 'audit-immutable',
+    statement:
+      'The application cannot update or delete an audit entry; only the retention purge removes entries, and only those older than the cutoff.',
+    source: 'spec §6 "Immutable audit", §8',
+    proofs: [
+      {
+        file: `${INTEGRATION}/store/audit.test.ts`,
+        tests: [
+          'rejects an UPDATE on audit rows',
+          'rejects a DELETE outside the retention purge',
+          'cannot delete rows newer than the cutoff even inside a purge window',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'surface-rate-limits',
+    statement:
+      'Every surface an unauthenticated or automated caller reaches is rate-limited on the key the spec names: the execution door per mission, connect flows per user, the request page per client address, the token and registration endpoints per client address, the management door per delegation.',
+    source: 'spec §6 "Surface rate limits"',
+    proofs: [
+      {
+        file: `${INTEGRATION}/execution/door-http.test.ts`,
+        tests: [
+          'applies the surface rate limit per mission, not per agent',
+          'throttles the argon2id check of wrong secrets on a legacy prefix',
+          'does not lock the agent of a legacy token out when another address floods its prefix, and the move ends the throttle',
+        ],
+      },
+      {
+        file: `${SERVER}/connections/service.test.ts`,
+        tests: ['rate-limits connect attempts per user'],
+      },
+      {
+        file: `${INTEGRATION}/requests/request-handlers.test.ts`,
+        tests: [
+          'answers 429 with Retry-After once the window is spent, before looking at anything',
+        ],
+      },
+      {
+        file: `${INTEGRATION}/oauth-as/http-surface.test.ts`,
+        tests: ['is rate-limited per client address'],
+      },
+      {
+        file: `${INTEGRATION}/management/management-door.test.ts`,
+        tests: [
+          'the surface limit is per delegation, through the RateLimiter port, on keys of the door',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'approval-binds-what-was-read',
+    statement:
+      'What an approver reads is what runs: arguments JSON cannot carry are rejected before the fingerprint is taken, and an approval is bound to mission, risk, tool and fingerprint, once.',
+    source: 'spec §3.5; packages/gateway-core/src/fingerprint.ts',
+    proofs: [
+      {
+        file: 'packages/gateway-core/tests/unit/pipeline.test.ts',
+        tests: ['an argument JSON cannot carry (Infinity) is rejected before any stage'],
+      },
+      {
+        file: 'packages/gateway-core/tests/unit/fingerprint.test.ts',
+        tests: [
+          'is why the fingerprint cannot be trusted on such a value: Infinity and null collide',
+        ],
+      },
+      {
+        file: `${INTEGRATION}/execution/door-http.test.ts`,
+        tests: ['rejects a call whose arguments JSON cannot carry (`1e999`)'],
+      },
+    ],
+  },
+  {
+    id: 'every-slice-covered',
+    statement:
+      'A call is allowed only when every slice it executes matches a catalog entry and every risk touched is accepted: no slice, no risk, an uncovered slice and a missing catalog all refuse (a classifier that throws: see every-refused-call-audited).',
+    source: 'spec §3.1, §6; ADR execution-door-json-faithful-arguments-and-shared-throttle',
+    proofs: [
+      {
+        file: 'packages/policy-engine/tests/unit/risk-runtime.test.ts',
+        tests: [
+          'a slice no catalog entry matches denies the call, although another slice is covered and accepted',
+          'a slice of another provider is not dropped: it denies',
+          'no slice → deny (classification gap)',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'every-refused-call-audited',
+    statement:
+      'Every call the execution door refuses leaves its audit entry, including the one refused because a decision stage threw (a classifier that is not total, a store failure): the entry names the stage and the class of the error, never its text.',
+    source: 'spec §8 ("one immutable entry per MCP call, allowed or refused"); spec §6',
+    proofs: [
+      {
+        file: 'packages/gateway-core/tests/unit/pipeline.test.ts',
+        tests: [
+          'a classifier that throws: one audit entry, no budget, no upstream, no message kept',
+          'the resource stage throws: audited with no target',
+          'the budget stage throws: audited with the risks the call touched, nothing forwarded',
+          'the audit write of that refusal failing still propagates',
+        ],
+      },
+      {
+        file: `${INTEGRATION}/execution/pipeline.test.ts`,
+        tests: [
+          'a classifier that throws: the call is refused, AUDITED, counted nowhere, and its text reaches neither the audit nor the log',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'plugin-identifiers-shared-grammar',
+    statement:
+      'In every plugin, an identifier that reaches a path, a query, a header, a GraphQL variable, an SQL text or a command is validated by one grammar shared by classify and execute, which refuses instead of escaping: what is executed is what was classified.',
+    source: 'ADR plugin-identifiers-one-grammar-for-classify-and-execute',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/plugin-identifier-tests.test.ts`,
+        tests: [
+          '%s has a test feeding hostile identifiers to classify and to execute',
+          '%s runs the identifier proof of the SDK kit',
+        ],
+      },
+      {
+        file: 'packages/plugin-sdk/tests/unit/identifiers-kit.test.ts',
+        tests: [
+          'passes a plugin whose classify and execute share one grammar, and says what it ran',
+          'finds a grammar applied in classify only : refused, yet sent',
+          'finds a dot segment that escaping left in place, and accepts what escaping names exactly',
+          'refuses to pass on nothing : no identifier seen in a path must be stated, with its reason',
+        ],
+      },
+      {
+        file: 'plugins/github/tests/unit/injection.test.ts',
+        tests: ['identifier positions — classify and execute agree on every hostile value'],
+      },
+      {
+        file: 'plugins/gmail/tests/unit/injection.test.ts',
+        tests: ['identifier positions — hostile values'],
+      },
+      {
+        file: 'plugins/ssh/tests/unit/injection.test.ts',
+        tests: ['cmd — what is sent is what was classified'],
+      },
+      {
+        file: 'plugins/vercel/tests/unit/identifier-injection.test.ts',
+        tests: ['vercel identifiers — the dot-segment reproductions'],
+      },
+      {
+        file: 'plugins/railway/tests/unit/identifier-injection.test.ts',
+        tests: ['railway identifiers — execute runs on the target the classifier resolved'],
+      },
+      {
+        file: 'plugins/supabase/tests/unit/identifier-injection.test.ts',
+        tests: ['supabase identifiers — the dot-segment reproductions'],
+      },
+      {
+        file: 'plugins/stripe/tests/unit/identifiers.test.ts',
+        tests: ['`id` — a segment of the request path'],
+      },
+      {
+        file: 'plugins/resend/tests/unit/identifiers.test.ts',
+        tests: ['a contact selector — an id or an email address in the request path'],
+      },
+      {
+        file: 'plugins/resend/tests/unit/addresses.test.ts',
+        tests: ['a string that could carry a second recipient is not an address'],
+      },
+      {
+        file: 'plugins/cloudflare-dns/tests/unit/identifiers.test.ts',
+        tests: ['`record_id` — the record segment of the request path'],
+      },
+      {
+        file: 'plugins/upstash-redis/tests/unit/identifiers.test.ts',
+        tests: ['the database — a segment of the Management API path'],
+      },
+      {
+        file: 'plugins/_template/tests/unit/plugin.test.ts',
+        tests: [
+          'an identifier that is not one path segment is refused, never escaped',
+          "execute applies the classifier's identifier check : nothing is sent for an unsafe id",
+        ],
+      },
+    ],
+  },
+  {
+    id: 'no-secret-in-a-build-upload',
+    statement:
+      'The image build context and the upload of `railway up` both exclude env files, keys, the mounted YAML configuration and the agent and operator directories.',
+    source: 'security review 2026-10-15 (secrets-and-infra M5); deploy/railway.md §5',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/upload-ignore-files.test.ts`,
+        tests: [
+          'build uploads exclude every secret-bearing path',
+          '.railwayignore excludes the root env files explicitly too',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'base-images-pinned',
+    statement:
+      'Every base image is pinned by full version and digest, the documentation quotes the pinned versions, and the refresh procedure is written down.',
+    source: 'ADR docker-image-and-config-format; docs/workflow/coding-workflow.md',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/base-images-pinned.test.ts`,
+        tests: [
+          'the Dockerfile builds every stage from the one pinned base image',
+          'the Compose file pins every image it pulls',
+          'the refresh procedure is written down where the pins point to',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'dependency-audit-reviewed',
+    statement:
+      'A production advisory fails CI unless a dated, reasoned allowlist entry names it; an entry is never a wildcard and lapses after about a quarter; a registry outage is never read as an advisory.',
+    source: 'docs/workflow/coding-workflow.md "Dependency audit"',
+    proofs: [
+      {
+        file: 'scripts/audit-gate.test.mjs',
+        tests: [
+          'fails on a gated advisory the allowlist does not name; a low one is a notice',
+          'fails once the review date has passed: an allowlist entry is a dated decision, not a mute',
+          'registry-error, to retry',
+          'is valid: every entry has a reason and a review date',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'cookies-host-prefixed',
+    statement:
+      'The session and pending sign-in cookies carry the __Host- prefix with what it requires (Secure, Path=/, no Domain), HttpOnly and SameSite=Lax.',
+    source:
+      'spec §6 "Web sessions are short and bound to the instance’s origin"; ADR sign-in-hardening-host-cookies-group-overage',
+    proofs: [
+      {
+        file: `${SERVER}/auth/session-service.test.ts`,
+        tests: [
+          'names both cookies with the __Host- prefix and keeps what the prefix requires',
+          'refuses to write a __Host- cookie on another path',
+          'matches the cookie name exactly: a look-alike name a sibling subdomain can set is not the session',
+          'reads no session when the name appears twice',
+        ],
+      },
+    ],
+  },
+];

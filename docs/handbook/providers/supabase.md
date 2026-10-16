@@ -1,1101 +1,510 @@
 ---
-title: Supabase provider — modélisation v4 risk-based
+title: Supabase provider — plugin on the v5 SDK
 status: current
-date: 2026-06-15
+date: 2026-10-13
+last_synced: 2026-10-15
 tracks:
-  - packages/providers/supabase/src/data-model.ts
-  - packages/providers/supabase/src/risk-catalog.ts
-  - packages/providers/supabase/src/risk-catalog.yaml
-  - packages/providers/supabase/src/risk-classifier.ts
+  - plugins/supabase/src/token.ts
+  - plugins/supabase/src/
+  - plugins/supabase/tests/unit/
 ---
 
-# Supabase provider — modélisation v4 (4 planes)
+# Supabase provider
 
-> Cible : spec [`docs/spec/gateway-risk-model.md`](../../spec/gateway-risk-model.md) v4 (risk-based).
-> Source code : [`packages/providers/supabase/src/`](../../../packages/providers/supabase/src/)
-> (`classify.ts`, `sql-classify.ts`, `tools.ts`, `execute.ts`).
-> Statut : draft de modélisation, à intégrer en Phase 0/1/2 de la migration v4.
+`@vaubaan/plugin-supabase` (`plugins/supabase`), on `@vaubaan/plugin-sdk`
+since P1.2c. Spec : [`vaubaan-gateway.md`](../../spec/vaubaan-gateway.md)
+§5, [`gateway-risk-model.md`](../../spec/gateway-risk-model.md) §2, §4, §7.
+ADRs : [[plugin-contract-and-credential-spec]],
+[`plugin-identifiers-one-grammar-for-classify-and-execute`](../../decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md),
+[`plugin-arguments-closed-surface-and-typed-refusals`](../../decisions/plugin-arguments-closed-surface-and-typed-refusals.md).
+Contributor view :
+[`plugins/supabase/README.md`](../../../plugins/supabase/README.md). The v4
+modelling rationale (research, edge cases) is preserved in git history
+(`docs/handbook/providers/supabase.md` before 2026-10-13).
 
-## 0. Préambule — Supabase est un provider "multi-plane"
+## Shape
 
-> _"Un provider est une BDD mutable de `(entité_1, entité_2, …)` avec des
-> side effects observables via `read` sur certaines entités."_ (spec §2)
+| Member              | Where                   | Facts                                                                                                                                                                                                                                 |
+| ------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id` / `version`    | `src/index.ts`          | `supabase`, `4.1.0`. Default export `supabasePlugin`.                                                                                                                                                                                 |
+| `tools`             | `src/tools.ts`          | 44, prefix `supabase__`. The three v4 `*_to_venv` tools are gone (plan §8-Q5).                                                                                                                                                        |
+| `dataModel`         | `src/data-model.ts`     | 4 planes (`db`, `storage`, `auth`, `functions` : 14 / 6 / 8 / 6 entities, 34 in all) rooted on `project` (`envScopable`). Also the one list of the schemas Supabase manages (`SUPABASE_MANAGED_SCHEMAS`), which both SQL readers use. |
+| `catalog`           | `src/risk-catalog.yaml` | `catalog_version: 5`, 24 live risks + the deprecated `supabase.row-write-one` + `supabase.uncategorized-write`, 3 presets. Loaded by `loadCatalogFile` at import.                                                                     |
+| `credential`        | `src/credential.ts`     | `oauth2`, PKCE, `client_secret_basic`, scope `all`, `refreshable: true`.                                                                                                                                                              |
+| `classify`          | `src/classify.ts`       | Pure ; identifiers validated, missing identifiers denied, undeclared arguments denied. Exports `resolveProjectRef`, `readIdentifiers` and `tableSchemas`, which `execute` shares, and the grammar `base64Text`.                       |
+| migration reading   | `src/migration-sql.ts`  | Pure allow-list reader of the SQL of `apply_migration` : the write classes it takes, every class when a statement is not recognised.                                                                                                  |
+| query reading       | `src/query-sql.ts`      | Pure allow-list reader of the SQL of `execute_sql` : whether the read reaches the managed schemas, and yes when it cannot tell.                                                                                                       |
+| SQL tokeniser       | `src/sql-tokens.ts`     | Shared by the two readers : comments and literals removed, statements of tokens, `null` on any construct whose extent it will not guess.                                                                                              |
+| `execute`           | `src/execute.ts`        | Management API + per-project data plane ; `UpstreamAuthError` on 401/403 ; `fetch` and `signal` from the context ; target from `resolveProjectRef`, identifiers from `readIdentifiers`.                                               |
+| `discoverResources` | `src/execute.ts`        | One `Resource` per project of every organization, capped at 200.                                                                                                                                                                      |
+| `refresh`           | —                       | None : the standard `refresh_token` grant (Basic client auth) is performed by the host from the spec.                                                                                                                                 |
 
-Supabase fédère sous un même `project_ref` **4 sous-systèmes hétérogènes** :
-
-| Plane       | Sous-système                               | API physique        |
-| ----------- | ------------------------------------------ | ------------------- |
-| `db`        | Postgres + RLS + migrations                | mgmt-api + libpq    |
-| `storage`   | Object storage S3-like avec buckets + ACL  | storage REST + mgmt |
-| `auth`      | GoTrue : users, SSO, third-party providers | mgmt + admin REST   |
-| `functions` | Edge Functions (Deno) + secrets de runtime | mgmt-api            |
-
-Chaque plane a sa propre surface entités / cardinalités / risques. **Le
-data-model v4 doit donc être déclaré plane-par-plane** ; le catalogue de
-risques est unique au niveau provider mais namespacé par plane dans les
-`RiskId`.
-
-L'env est résolu par binding (un `project_ref` distinct par env :
-`staging` vs `prod` sont des projets Supabase différents). Cf. spec §4.4
-et `classify.ts` ligne 162-163.
-
-## 1. Data-models — un graphe d'entités par plane
-
-### 1.1 Plane `db` (Postgres + RLS)
+## Classification rules
 
 ```mermaid
-flowchart TB
-  project_db[project]
-  project_db --> schema[schema]
-  schema --> table[table]
-  table --> row[row]
-  table --> index[index]
-  schema --> db_function[db-function]
-  schema --> sequence[sequence]
-  schema --> view[view]
-  project_db --> policy[policy/RLS]
-  project_db --> db_role[db-role]
-  project_db --> publication[publication]
-  project_db --> extension[extension]
-  project_db --> migration[migration]
-  project_db --> project_settings[project-settings]
+flowchart LR
+  args["(tool, args, resources)"] --> alias{projectRef present ?}
+  alias -->|yes| d0[denied]
+  alias -->|no| ref{project_ref ?}
+  ref -->|"string of ref characters, in resources"| ok[ref]
+  ref -->|"not a string, or unsafe characters"| d1[denied]
+  ref -->|"well-formed, not in resources"| d1
+  ref -->|"absent, one supabase resource"| ok
+  ref -->|"absent, 0 or 2+ resources"| d2[denied]
+  ok --> prod["per-tool producer"]
+  prod -->|"missing / malformed identifier"| d3[denied]
+  prod -->|"argument the tool does not declare"| d4[denied]
+  prod --> slices["slices supabase.project[ref]…"]
+  ok --> exec["execute : every URL built from ref"]
 ```
 
-**Cardinalités déclarées** :
-
-| Entité                                     | Cardinalité typique       | Inférence depuis selecteur                |
-| ------------------------------------------ | ------------------------- | ----------------------------------------- |
-| `project`                                  | `one` par binding         | `project_ref` exact (résolu via binding)  |
-| `schema`                                   | `bounded`                 | nom (`public`, `auth`, `storage`, custom) |
-| `table`                                    | `bounded`                 | nom dans schema                           |
-| `row`                                      | `unbounded`               | `*` (toujours wildcard côté slice)        |
-| `index`, `db-function`, `view`, `sequence` | `bounded`                 | nom                                       |
-| `policy`                                   | `bounded`                 | nom × table                               |
-| `db-role`                                  | `bounded`                 | nom (`anon`, `authenticated`, custom)     |
-| `extension`                                | `bounded`                 | nom (`pg_stat_statements`, `vector`, …)   |
-| `migration`                                | `unbounded` (append-only) | version timestamp                         |
-| `project-settings`                         | `one`                     | n/a                                       |
-
-**Containment** : project → schema → table → row, le reste = enfants
-directs de `project` (ou `schema` pour `db-function`, `view`,
-`sequence`).
-
-> Note v4 vs v1 : le `level` v1 (`rows`/`tables`/`rls`/`project`) **disparaît
-> du wire**. Il reste utile uniquement au plugin pour ranker un statement
-> SQL (cf. `sql-classify.ts`) mais ce ranking devient sans objet une fois
-> `execute_sql` strictement read-only (§7.2 #2 de la spec).
-
-### 1.2 Plane `storage`
-
-```mermaid
-flowchart TB
-  project_st[project]
-  project_st --> bucket[bucket]
-  bucket --> object[object]
-  bucket --> bucket_policy[bucket-policy]
-  project_st --> storage_config[storage-config]
-```
-
-**Cardinalités** :
-
-| Entité           | Cardinalité      | Inférence                     |
-| ---------------- | ---------------- | ----------------------------- |
-| `bucket`         | `bounded`        | nom (`avatars`, `uploads`, …) |
-| `object`         | `unbounded`      | path glob ou wildcard         |
-| `bucket-policy`  | `bounded`        | RLS storage par bucket        |
-| `storage-config` | `one` par projet | n/a                           |
-
-**Note** : `bucket-policy` n'apparaît pas dans le code actuel (pas de
-tool exposé) mais doit être déclaré pour la complétude du data-model et
-pour anticiper un futur `supabase__update_bucket_policy`.
-
-### 1.3 Plane `auth` (GoTrue)
-
-```mermaid
-flowchart TB
-  project_au[project]
-  project_au --> user[user]
-  project_au --> sso_provider[sso-provider]
-  project_au --> third_party_auth[third-party-auth]
-  project_au --> auth_config[auth-config]
-  user --> link[magic-link / reset-link]
-  user --> mfa_factor[mfa-factor]
-  user --> identity[oauth-identity]
-```
-
-**Cardinalités** :
-
-| Entité             | Cardinalité            | Inférence                            |
-| ------------------ | ---------------------- | ------------------------------------ |
-| `user`             | `unbounded`            | `id` (uuid) ou `email`               |
-| `sso-provider`     | `bounded`              | `id` (SAML / OIDC tenant)            |
-| `third-party-auth` | `bounded`              | `id` (provider : firebase, auth0, …) |
-| `auth-config`      | `one`                  | n/a (singleton par projet)           |
-| `link`             | `unbounded` (éphémère) | n/a — émis par `generate_link`       |
-| `mfa-factor`       | `bounded` par user     | n/a (pas de tool encore)             |
-| `identity`         | `bounded` par user     | n/a (pas de tool encore)             |
-
-**Note** : `mfa-factor` et `identity` sont déclarés pour le data-model
-mais pas couverts par les tools actuels. Le data-model doit anticiper.
-
-### 1.4 Plane `functions` (Edge Functions)
-
-```mermaid
-flowchart TB
-  project_fn[project]
-  project_fn --> edge_function[edge-function]
-  edge_function --> function_deployment[function-deployment]
-  edge_function --> function_body[function-body]
-  project_fn --> function_secret[function-secret]
-  project_fn --> functions_config[functions-config]
-```
-
-**Cardinalités** :
-
-| Entité                | Cardinalité   | Inférence                        |
-| --------------------- | ------------- | -------------------------------- |
-| `edge-function`       | `bounded`     | `slug`                           |
-| `function-deployment` | `unbounded`   | version timestamp                |
-| `function-body`       | `one` par fct | n/a (le code TS courant)         |
-| `function-secret`     | `bounded`     | nom (`STRIPE_WEBHOOK_SECRET`, …) |
-| `functions-config`    | `one`         | n/a (singleton)                  |
-
-**Note importante** : Supabase ne sépare pas `function-secret` par
-fonction — c'est un namespace partagé au niveau projet. Le data-model
-reflète ce containment (`project → function-secret`, pas
-`edge-function → function-secret`).
-
-## 2. Mapping tool → slice(s)
-
-Les 44 tools Supabase actuels mappés en slices v4. Le format de slice :
-
-```
-supabase.project[<ref>].<plane-path...>.<R|W>
-```
-
-Le segment `[<ref>]` est résolu à partir du `project_ref` (arg explicite
-ou binding unique). L'env est porté par le **binding**, pas par la slice
-(cf. spec §4.4 : qualification par binding au mint).
-
-### 2.1 Plane `db` — 6 tools statiques + 1 dynamique
-
-| Tool                        | Slice(s) émise(s)                                                                 | Notes                                 |
-| --------------------------- | --------------------------------------------------------------------------------- | ------------------------------------- |
-| `supabase__get_project`     | `supabase.project[X].project-settings.R`                                          | metadata du projet                    |
-| `supabase__get_anon_key`    | `supabase.project[X].project-settings.R`                                          | leak potentiel d'une clé (low : anon) |
-| `supabase__list_tables`     | `supabase.project[X].schema[*].table[*].R`                                        | discovery                             |
-| `supabase__list_migrations` | `supabase.project[X].migration[*].R`                                              | discovery historique                  |
-| `supabase__get_advisors`    | `supabase.project[X].project-settings.R`                                          | linter de sécurité                    |
-| `supabase__apply_migration` | `supabase.project[X].schema[*].table[*].W` + `supabase.project[X].migration[*].W` | **DDL — cf. edge case §5.2**          |
-| `supabase__execute_sql`     | `supabase.project[X].schema[*].row[*].R` **(uniquement R post-§7.2 #2)**          | **cf. §3 & §5.1 — read-only forced**  |
-
-### 2.2 Plane `storage` — 11 tools
-
-| Tool                              | Slice                                                 | Notes                              |
-| --------------------------------- | ----------------------------------------------------- | ---------------------------------- |
-| `supabase__list_buckets`          | `supabase.project[X].bucket[*].R`                     | discovery                          |
-| `supabase__get_storage_config`    | `supabase.project[X].storage-config.R`                |                                    |
-| `supabase__update_storage_config` | `supabase.project[X].storage-config.W`                | **posture-shift**                  |
-| `supabase__create_bucket`         | `supabase.project[X].bucket[<name>].W`                |                                    |
-| `supabase__update_bucket`         | `supabase.project[X].bucket[<name>].W`                | peut basculer public ⇄ private     |
-| `supabase__delete_bucket`         | `supabase.project[X].bucket[<name>].W`                | + cascade objets                   |
-| `supabase__list_objects`          | `supabase.project[X].bucket[<name>].object[*].R`      |                                    |
-| `supabase__upload_object`         | `supabase.project[X].bucket[<name>].object[<path>].W` | one path → `row-write-one`-like    |
-| `supabase__delete_object`         | `supabase.project[X].bucket[<name>].object[<path>].W` | irréversible                       |
-| `supabase__create_signed_url`     | `supabase.project[X].bucket[<name>].object[<path>].R` | **cf. edge case §5.4 (leak risk)** |
-
-### 2.3 Plane `auth` — 14 tools
-
-| Tool                                | Slice                                          | Notes                                      |
-| ----------------------------------- | ---------------------------------------------- | ------------------------------------------ |
-| `supabase__get_auth_config`         | `supabase.project[X].auth-config.R`            |                                            |
-| `supabase__update_auth_config`      | `supabase.project[X].auth-config.W`            | **govern strict** (vecteur posture+secret) |
-| `supabase__list_sso_providers`      | `supabase.project[X].sso-provider[*].R`        |                                            |
-| `supabase__get_sso_provider`        | `supabase.project[X].sso-provider[<id>].R`     |                                            |
-| `supabase__create_sso_provider`     | `supabase.project[X].sso-provider[<id>].W`     | **posture : ajoute un IdP fédéré**         |
-| `supabase__update_sso_provider`     | `supabase.project[X].sso-provider[<id>].W`     |                                            |
-| `supabase__delete_sso_provider`     | `supabase.project[X].sso-provider[<id>].W`     |                                            |
-| `supabase__list_third_party_auth`   | `supabase.project[X].third-party-auth[*].R`    |                                            |
-| `supabase__get_third_party_auth`    | `supabase.project[X].third-party-auth[<id>].R` |                                            |
-| `supabase__create_third_party_auth` | `supabase.project[X].third-party-auth[<id>].W` | **posture**                                |
-| `supabase__delete_third_party_auth` | `supabase.project[X].third-party-auth[<id>].W` |                                            |
-| `supabase__list_users`              | `supabase.project[X].user[*].R`                | **data: pii**                              |
-| `supabase__get_user`                | `supabase.project[X].user[<id>].R`             | **data: pii**                              |
-| `supabase__create_user`             | `supabase.project[X].user[<id>].W`             | **cf. edge case §5.3**                     |
-| `supabase__update_user`             | `supabase.project[X].user[<id>].W`             |                                            |
-| `supabase__delete_user`             | `supabase.project[X].user[<id>].W`             | **irréversible**                           |
-| `supabase__generate_link`           | `supabase.project[X].user[<id>].link[*].W`     | **cf. edge case §5.3 (= reset)**           |
-
-### 2.4 Plane `functions` — 9 tools
-
-| Tool                                | Slice                                                             | Notes                                            |
-| ----------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------ |
-| `supabase__list_functions`          | `supabase.project[X].edge-function[*].R`                          |                                                  |
-| `supabase__get_function`            | `supabase.project[X].edge-function[<slug>].R`                     | metadata                                         |
-| `supabase__get_function_body`       | `supabase.project[X].edge-function[<slug>].function-body.R`       | **data: peut leaker logic + secrets inline**     |
-| `supabase__list_function_secrets`   | `supabase.project[X].function-secret[*].R`                        | names only (Supabase ne renvoie pas les valeurs) |
-| `supabase__create_function`         | `supabase.project[X].edge-function[<slug>].W`                     |                                                  |
-| `supabase__update_function`         | `supabase.project[X].edge-function[<slug>].W`                     |                                                  |
-| `supabase__delete_function`         | `supabase.project[X].edge-function[<slug>].W`                     | **irréversible si pas commit git**               |
-| `supabase__deploy_function`         | `supabase.project[X].edge-function[<slug>].function-deployment.W` | **runtime mutation prod**                        |
-| `supabase__create_function_secrets` | `supabase.project[X].function-secret[<name>].W`                   | **data: secret**                                 |
-| `supabase__delete_function_secrets` | `supabase.project[X].function-secret[<name>].W`                   | **peut casser la fct en prod**                   |
-
-### 2.5 Récap — couverture des 44 tools
-
-| Plane       | Reads | Writes | Total                                |
-| ----------- | ----- | ------ | ------------------------------------ |
-| `db`        | 5     | 1      | 6 + `execute_sql` (R only) = **7**   |
-| `storage`   | 4     | 6      | **10**                               |
-| `auth`      | 7     | 7      | **14**                               |
-| `functions` | 4     | 6      | **10**                               |
-| **Total**   | 20    | 20     | **44 (avec `execute_sql` = R only)** |
-
-## 3. Décision spec v4 §7.2 #2 — `execute_sql` strictement read-only
-
-> Historique : la première itération avait essayé une classification
-> syntaxique du SQL (ADR [[sql-classification-syntactic-only]]), avant
-> que [[pivot-to-risk-based-model]] ne la remplace par le read-only
-> strict. Les failure modes ci-dessous justifient le pivot.
-
-### 3.1 Motivation
-
-Le parser `classifySql` actuel (`sql-classify.ts`, ~300 lignes) tente de
-ranker statiquement chaque statement SQL en `{rows, tables, rls,
-project} × {read, write}`. Failure modes connus :
-
-- **Faux négatifs** : un statement obscur (ex. `WITH x AS (DELETE …
-RETURNING …) INSERT INTO y SELECT * FROM x`) qui passe pour `rows:read`
-  parce que la tête est `WITH`. Mitigé par le default `project:write`
-  sur unknown verb, mais reste fragile.
-- **Faux positifs** : un statement légitime classé trop strict, friction
-  pour l'agent.
-- **Coût de maintenance** : 300 lignes de parser à maintenir + tests pour
-  chaque verbe Postgres ajouté.
-
-### 3.2 Nouvelle conception
-
-**Postgres porte la garantie read-only**, pas notre parser. Deux options
-d'implémentation (au runtime, dans `execute.ts`) :
-
-1. **Wrapper transaction** : avant chaque query, `BEGIN; SET TRANSACTION
-READ ONLY; <query>; COMMIT;` — Postgres refusera tout statement
-   muteur (INSERT/UPDATE/DELETE/DDL) avec `ERROR: cannot execute … in
-a read-only transaction`.
-2. **Role read-only** : connecter avec un rôle Postgres dédié
-   (`pg_read_all_data` built-in en Postgres 14+, ou rôle custom
-   `vaubaan_readonly` avec `GRANT SELECT ON ALL TABLES IN SCHEMA …`).
-
-**Option 1 recommandée** car portable, pas de SQL setup côté projet
-Supabase, et compatible avec n'importe quel `service_role` ou Postgres
-URL. Option 2 plus stricte (impossible d'écrire même si bug dans le
-wrapper) mais demande un seed côté DB de chaque projet.
-
-### 3.3 Conséquence catalog
-
-`execute_sql` ne classe **plus jamais** en `W`. Une seule slice possible :
-
-```
-supabase.project[X].schema[*].row[*].R
-```
-
-Le tool tombe sous le risk `supabase.read-data`. On peut **supprimer** :
-
-- `sql-classify.ts` complet (300 lignes),
-- `supabaseToolCapabilities(tool)` branche `execute_sql` (lignes 108-117
-  de `classify.ts`),
-- le ranking multi-level `LEVEL_RANK`,
-- l'attribut `EnvResolution` dynamique pour `execute_sql`.
-
-Net : ~400 lignes en moins, surface d'attaque réduite, fail-closed garanti
-par Postgres au lieu du parser.
-
-### 3.4 Risque résiduel
-
-Un `SELECT pg_sleep(99999)` ou `SELECT * FROM pg_stat_activity` reste
-possible — donc `read-data` n'est pas zéro-risk (DoS / exfil metadata
-serveur). À traiter via `statement_timeout` côté connection string +
-risk distinct `supabase.read-internal-catalog` si besoin (Phase 2).
-
-## 4. Risk catalog YAML — 4 planes namespacés
-
-Format : un seul fichier `packages/providers/supabase/src/risk-catalog.yaml`,
-~20 risks au total, namespacés par plane via le `RiskId`.
-
-```yaml
-supabase:
-  risks:
-    # ──────────────────────────────────────────────────────────────────
-    # Plane `db`
-    # ──────────────────────────────────────────────────────────────────
-
-    - id: supabase.read-data
-      label: 'Lire les données et le schéma'
-      reason: 'Lectures SELECT + schema inspection. Peuvent leak PII via
-        tables auth.users / app users si schema mal cloisonné.'
-      matches: 'supabase.project[**].schema[**].**.R'
-      vector:
-        {
-          reversibility: reversible,
-          blast: single,
-          data: data,
-          cost: free,
-          visibility: internal,
-          persistence: stateless,
-        }
-
-    - id: supabase.row-write-one
-      label: 'Écrire row par row (one or bounded)'
-      reason: "INSERT/UPDATE/DELETE ciblé (par id, par clause WHERE
-        bornée). Reversible via re-écriture si l'agent a tracé
-        les valeurs avant."
-      matches: 'supabase.project[**].schema[**].table[**].row[<bounded>].W'
-      vector:
-        {
-          reversibility: costly,
-          blast: single,
-          data: data,
-          cost: free,
-          visibility: internal,
-          persistence: session,
-        }
-      acceptable_in_envs: [preview, staging, prod]
-
-    - id: supabase.bulk-row-write
-      label: 'Écrire en bulk sur une table'
-      reason: 'INSERT massif, UPDATE/DELETE sans WHERE ou WHERE large,
-        TRUNCATE, COPY. Pas de rollback automatique. Blast élevé.'
-      matches: 'supabase.project[**].schema[**].table[**].row[*].W'
-      vector:
-        {
-          reversibility: costly,
-          blast: bulk,
-          data: data,
-          cost: moderate,
-          visibility: internal,
-          persistence: session,
-        }
-      acceptable_in_envs: [preview, staging]
-      # → structurellement non-grantable sur prod via le restrictor
-      #   `acceptable_in_envs`.
-
-    - id: supabase.migration.W
-      label: 'Apply migration (DDL)'
-      reason: 'CREATE/DROP/ALTER TABLE/INDEX. Costly à reverter (down
-        migration manuelle). Peut casser les apps qui lisent.'
-      matches: 'supabase.project[**].schema[**].table[**].W'
-      vector:
-        {
-          reversibility: costly,
-          blast: env,
-          data: metadata,
-          cost: free,
-          visibility: internal,
-          persistence: posture,
-        }
-
-    - id: supabase.policy.W
-      label: 'Modifier la RLS (CREATE/ALTER POLICY)'
-      reason: "Posture-shift critique : ouvre/ferme l'accès aux données
-        pour tous les rôles. Une erreur ici = data leak public."
-      matches: 'supabase.project[**].policy[**].W'
-      vector:
-        {
-          reversibility: costly,
-          blast: account,
-          data: data,
-          cost: free,
-          visibility: public,
-          persistence: posture,
-        }
-
-    - id: supabase.db-role.W
-      label: 'Créer/modifier des rôles Postgres'
-      reason: 'Posture credentials. CREATE ROLE / GRANT / REVOKE.'
-      matches: 'supabase.project[**].db-role[**].W'
-      vector:
-        {
-          reversibility: reversible,
-          blast: account,
-          data: metadata,
-          cost: free,
-          visibility: internal,
-          persistence: posture,
-        }
-
-    - id: supabase.extension.W
-      label: 'Activer/désactiver une extension Postgres'
-      reason: "Posture-shift de la surface SQL disponible. Certaines
-        extensions (pg_net, http) ouvrent l'exfiltration sortante."
-      matches: 'supabase.project[**].extension[**].W'
-      vector:
-        {
-          reversibility: reversible,
-          blast: account,
-          data: metadata,
-          cost: free,
-          visibility: internal,
-          persistence: posture,
-        }
-
-    # ──────────────────────────────────────────────────────────────────
-    # Plane `storage`
-    # ──────────────────────────────────────────────────────────────────
-
-    - id: supabase.storage.object.R
-      label: 'Lister / télécharger des objets storage'
-      reason: "Lectures de fichiers users (peut être PII : pièces d'ID,
-        photos, exports). Selon ACL bucket, accès via clé service."
-      matches: 'supabase.project[**].bucket[**].object[**].R'
-      vector:
-        {
-          reversibility: reversible,
-          blast: single,
-          data: pii,
-          cost: free,
-          visibility: internal,
-          persistence: stateless,
-        }
-
-    - id: supabase.storage.object-write-one
-      label: "Upload/delete d'un objet ciblé"
-      reason: "Mutation d'un path précis. Reversible si le path est
-        bien identifié et l'agent garde une copie."
-      matches: 'supabase.project[**].bucket[**].object[<bounded>].W'
-      vector:
-        {
-          reversibility: costly,
-          blast: single,
-          data: data,
-          cost: free,
-          visibility: internal,
-          persistence: session,
-        }
-      acceptable_in_envs: [preview, staging, prod]
-
-    - id: supabase.storage.bulk-object-write
-      label: "Upload/delete bulk d'objets"
-      reason: 'List + delete via glob ou prefix-wide. Pas de
-        retention/versioning par défaut côté Supabase Storage.'
-      matches: 'supabase.project[**].bucket[**].object[*].W'
-      vector:
-        {
-          reversibility: irreversible,
-          blast: bulk,
-          data: pii,
-          cost: moderate,
-          visibility: internal,
-          persistence: session,
-        }
-      acceptable_in_envs: [preview, staging]
-
-    - id: supabase.storage.signed-url.R
-      label: 'Générer une URL signée'
-      reason: 'READ sur le bucket MAIS exfiltre potentiellement la data
-        vers un destinataire externe via URL temporaire. Risk
-        distinct du simple list/download.'
-      matches: 'supabase.project[**].bucket[**].object[**].signed-url[*].R'
-      vector:
-        {
-          reversibility: reversible,
-          blast: single,
-          data: pii,
-          cost: free,
-          visibility: public,
-          persistence: session,
-        }
-      # → l'URL est signée, donc auditable, mais le destinataire est
-      #   choisi par l'agent → on ne traite pas ça comme un simple R.
-
-    - id: supabase.bucket.W
-      label: 'Créer/modifier/supprimer un bucket'
-      reason: 'Posture-shift : un bucket public peut leaker des objets
-        privés mal classés. Delete = cascade irréversible.'
-      matches: 'supabase.project[**].bucket[**].W'
-      vector:
-        {
-          reversibility: irreversible,
-          blast: env,
-          data: pii,
-          cost: free,
-          visibility: public,
-          persistence: posture,
-        }
-
-    - id: supabase.storage-config.W
-      label: 'Modifier la storage config globale'
-      reason: 'Quotas, transformations, CDN. Affecte tout le projet.'
-      matches: 'supabase.project[**].storage-config.W'
-      vector:
-        {
-          reversibility: reversible,
-          blast: env,
-          data: metadata,
-          cost: free,
-          visibility: internal,
-          persistence: posture,
-        }
-
-    # ──────────────────────────────────────────────────────────────────
-    # Plane `auth`
-    # ──────────────────────────────────────────────────────────────────
-
-    - id: supabase.auth.read-users
-      label: 'Lister/lire les utilisateurs'
-      reason: 'PII : emails, providers, last_sign_in_at, metadata user.
-        Volume potentiellement gros.'
-      matches: 'supabase.project[**].user[**].R'
-      vector:
-        {
-          reversibility: reversible,
-          blast: bulk,
-          data: pii,
-          cost: free,
-          visibility: internal,
-          persistence: stateless,
-        }
-      acceptable_in_envs: [preview, staging, prod]
-
-    - id: supabase.auth.user-write-one
-      label: 'Créer/modifier/supprimer un user ciblé'
-      reason: 'Affecte une identité unique. Reversible (re-create) sauf
-        delete qui cascade sur owned rows.'
-      matches: 'supabase.project[**].user[<bounded>].W'
-      vector:
-        {
-          reversibility: costly,
-          blast: single,
-          data: pii,
-          cost: free,
-          visibility: internal,
-          persistence: posture,
-        }
-
-    - id: supabase.auth.bulk-user-write
-      label: "Manipulation bulk d'utilisateurs"
-      reason: "Création / suppression massive. Risque d'exclusion accidentelle
-        de vrais users en prod."
-      matches: 'supabase.project[**].user[*].W'
-      vector:
-        {
-          reversibility: irreversible,
-          blast: bulk,
-          data: pii,
-          cost: moderate,
-          visibility: internal,
-          persistence: posture,
-        }
-
-    - id: supabase.auth.generate-link
-      label: 'Générer un magic-link / reset password'
-      reason: "L'URL retournée permet de se connecter en tant que cet
-        utilisateur. Si elle leak (logs, audit), account takeover."
-      matches: 'supabase.project[**].user[**].link[**].W'
-      vector:
-        {
-          reversibility: reversible,
-          blast: single,
-          data: secret,
-          cost: free,
-          visibility: internal,
-          persistence: session,
-        }
-
-    - id: supabase.sso-provider.W
-      label: 'Configurer un IdP SAML / OIDC'
-      reason: 'Posture identité fédérée. Une mauvaise config = toute
-        personne avec un compte sur cet IdP peut se logger.'
-      matches: 'supabase.project[**].sso-provider[**].W'
-      vector:
-        {
-          reversibility: reversible,
-          blast: account,
-          data: metadata,
-          cost: free,
-          visibility: internal,
-          persistence: posture,
-        }
-
-    - id: supabase.third-party-auth.W
-      label: 'Configurer un provider tiers (Firebase, Auth0, etc.)'
-      reason: "Idem SSO : posture identité, accepte de fédérer un IdP
-        externe pour l'auth."
-      matches: 'supabase.project[**].third-party-auth[**].W'
-      vector:
-        {
-          reversibility: reversible,
-          blast: account,
-          data: metadata,
-          cost: free,
-          visibility: internal,
-          persistence: posture,
-        }
-
-    - id: supabase.auth-config.W
-      label: 'Modifier la config auth globale'
-      reason: "JWT secret, expirations, allowed redirect URLs, signup
-        policy. La moindre erreur ouvre/casse l'auth pour tous."
-      matches: 'supabase.project[**].auth-config.W'
-      vector:
-        {
-          reversibility: costly,
-          blast: account,
-          data: secret,
-          cost: free,
-          visibility: internal,
-          persistence: posture,
-        }
-
-    # ──────────────────────────────────────────────────────────────────
-    # Plane `functions`
-    # ──────────────────────────────────────────────────────────────────
-
-    - id: supabase.functions.read
-      label: 'Lister / lire les Edge Functions (metadata + body)'
-      reason: "Le body peut contenir des secrets inline si l'auteur a
-        commit une clé en dur (anti-pattern fréquent)."
-      matches: 'supabase.project[**].edge-function[**].R'
-      vector:
-        {
-          reversibility: reversible,
-          blast: single,
-          data: secret,
-          cost: free,
-          visibility: internal,
-          persistence: stateless,
-        }
-
-    - id: supabase.functions.body.W
-      label: "Créer/modifier/supprimer le code d'une Edge Function"
-      reason: 'Modifier le code = injecter un comportement custom à
-        chaque invocation. Reversible si la source est en git.'
-      matches: 'supabase.project[**].edge-function[**].W'
-      vector:
-        {
-          reversibility: costly,
-          blast: env,
-          data: data,
-          cost: free,
-          visibility: internal,
-          persistence: posture,
-        }
-
-    - id: supabase.functions.deploy
-      label: "Deploy d'une nouvelle version d'Edge Function"
-      reason: 'Bascule le runtime sur la nouvelle version. En prod = mutation
-        immédiate du comportement public.'
-      matches: 'supabase.project[**].edge-function[**].function-deployment.W'
-      vector:
-        {
-          reversibility: costly,
-          blast: env,
-          data: data,
-          cost: moderate,
-          visibility: public,
-          persistence: posture,
-        }
-      acceptable_in_envs: [preview, staging, prod]
-
-    - id: supabase.function-secret.W
-      label: 'Créer/modifier/supprimer un function-secret'
-      reason: 'Secret prod consommé par les Edge Functions à runtime.
-        Delete = peut casser la fct immédiatement.'
-      matches: 'supabase.project[**].function-secret[**].W'
-      vector:
-        {
-          reversibility: costly,
-          blast: env,
-          data: secret,
-          cost: free,
-          visibility: internal,
-          persistence: posture,
-        }
-
-    # ──────────────────────────────────────────────────────────────────
-    # Fallback
-    # ──────────────────────────────────────────────────────────────────
-
-    - id: supabase.uncategorized-write
-      label: 'Écriture Supabase non catégorisée'
-      reason: "Catch-all pour les writes qui n'ont pas été explicitement
-        catégorisés. Signale qu'il manque une entrée au catalogue
-        (lint CI doit pour empêcher d'arriver en prod)."
-      matches: 'supabase.**.W'
-      vector:
-        {
-          reversibility: costly,
-          blast: env,
-          data: data,
-          cost: free,
-          visibility: internal,
-          persistence: session,
-        }
-```
-
-### 4.1 Qualification par binding — exemples
-
-Au mint, le moteur expose au manager **une entrée par binding** pour
-les risks env-sensibles. Pour un projet avec bindings
-`supabase(staging)` + `supabase(prod)` :
-
-| RiskId catalogue               | RiskId(s) exposé(s) au mint                                                                                              |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| `supabase.row-write-one`       | `supabase[staging].row-write-one`, `supabase[prod].row-write-one`                                                        |
-| `supabase.bulk-row-write`      | `supabase[staging].bulk-row-write` (grantable), `supabase[prod].bulk-row-write` (non-grantable via `acceptable_in_envs`) |
-| `supabase.policy.W`            | `supabase[staging].policy.W`, `supabase[prod].policy.W`                                                                  |
-| `supabase.auth-config.W`       | `supabase[staging].auth-config.W`, `supabase[prod].auth-config.W`                                                        |
-| `supabase.read-data`           | `supabase[staging].read-data`, `supabase[prod].read-data`                                                                |
-| `supabase.uncategorized-write` | `supabase[staging].uncategorized-write`, `supabase[prod].uncategorized-write`                                            |
-
-> Pour les risks **account-scoped** (ex. modif d'un SSO provider qui
-> n'a de sens qu'à l'échelle de l'organisation Supabase), on peut
-> envisager une qualification `supabase[<org_ref>].sso-provider.W`
-> sans `env`. À trancher en Phase 1.
-
-### 4.2 Grantabilité structurelle (`acceptable_in_envs`)
-
-Post drop-confirm, la décision est binaire : un risk est dans
-`accepted_risks` (allow) ou non (deny). Le seul garde-fou structurel
-est `acceptable_in_envs`, qui empêche au mint de grant un risk sur
-un env où il n'a structurellement pas de sens.
-
-| Risk                                 | preview   | staging   | prod                                     |
-| ------------------------------------ | --------- | --------- | ---------------------------------------- |
-| `supabase.bulk-row-write`            | grantable | grantable | **non-grantable** (`acceptable_in_envs`) |
-| `supabase.storage.bulk-object-write` | grantable | grantable | **non-grantable**                        |
-
-Tous les autres risks sont grantables sur n'importe quel env — c'est
-au manager de cocher ou non au mint selon la session.
-
-> 22 risks utilisateurs + 1 fallback = 23 entrées au catalogue.
-
-## 5. Lint coverage — matrice tool × risk
-
-Vérifie qu'**aucun tool n'orphelin** (catch-all par `uncategorized-write`
-est OK pour les writes mais doit être un signal, pas une norme).
-
-| Tool                                | Risk principal                      | Risks alternatifs (selon args)                                                                                 |
-| ----------------------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `supabase__get_project`             | `supabase.read-data`                | —                                                                                                              |
-| `supabase__get_anon_key`            | `supabase.read-data`                | —                                                                                                              |
-| `supabase__list_tables`             | `supabase.read-data`                | —                                                                                                              |
-| `supabase__list_migrations`         | `supabase.read-data`                | —                                                                                                              |
-| `supabase__get_advisors`            | `supabase.read-data`                | —                                                                                                              |
-| `supabase__apply_migration`         | `supabase.migration.W`              | + `supabase.policy.W` si la migration crée des policies (cf. §6.2) ; + `supabase.bulk-row-write` si DML inclus |
-| `supabase__execute_sql`             | `supabase.read-data`                | — (read-only forced par §7.2 #2)                                                                               |
-| `supabase__list_buckets`            | `supabase.read-data`                | —                                                                                                              |
-| `supabase__get_storage_config`      | `supabase.read-data`                | —                                                                                                              |
-| `supabase__update_storage_config`   | `supabase.storage-config.W`         | —                                                                                                              |
-| `supabase__create_bucket`           | `supabase.bucket.W`                 | —                                                                                                              |
-| `supabase__update_bucket`           | `supabase.bucket.W`                 | —                                                                                                              |
-| `supabase__delete_bucket`           | `supabase.bucket.W`                 | + `supabase.storage.bulk-object-write` (cascade)                                                               |
-| `supabase__list_objects`            | `supabase.storage.object.R`         | —                                                                                                              |
-| `supabase__upload_object`           | `supabase.storage.object-write-one` | —                                                                                                              |
-| `supabase__delete_object`           | `supabase.storage.object-write-one` | —                                                                                                              |
-| `supabase__create_signed_url`       | `supabase.storage.signed-url.R`     | —                                                                                                              |
-| `supabase__get_auth_config`         | `supabase.read-data`                | —                                                                                                              |
-| `supabase__update_auth_config`      | `supabase.auth-config.W`            | —                                                                                                              |
-| `supabase__list_sso_providers`      | `supabase.read-data`                | —                                                                                                              |
-| `supabase__get_sso_provider`        | `supabase.read-data`                | —                                                                                                              |
-| `supabase__create_sso_provider`     | `supabase.sso-provider.W`           | —                                                                                                              |
-| `supabase__update_sso_provider`     | `supabase.sso-provider.W`           | —                                                                                                              |
-| `supabase__delete_sso_provider`     | `supabase.sso-provider.W`           | —                                                                                                              |
-| `supabase__list_third_party_auth`   | `supabase.read-data`                | —                                                                                                              |
-| `supabase__get_third_party_auth`    | `supabase.read-data`                | —                                                                                                              |
-| `supabase__create_third_party_auth` | `supabase.third-party-auth.W`       | —                                                                                                              |
-| `supabase__delete_third_party_auth` | `supabase.third-party-auth.W`       | —                                                                                                              |
-| `supabase__list_users`              | `supabase.auth.read-users`          | —                                                                                                              |
-| `supabase__get_user`                | `supabase.auth.read-users`          | —                                                                                                              |
-| `supabase__create_user`             | `supabase.auth.user-write-one`      | —                                                                                                              |
-| `supabase__update_user`             | `supabase.auth.user-write-one`      | —                                                                                                              |
-| `supabase__delete_user`             | `supabase.auth.user-write-one`      | — (single uid → "one", pas bulk)                                                                               |
-| `supabase__generate_link`           | `supabase.auth.generate-link`       | —                                                                                                              |
-| `supabase__list_functions`          | `supabase.functions.read`           | —                                                                                                              |
-| `supabase__get_function`            | `supabase.functions.read`           | —                                                                                                              |
-| `supabase__get_function_body`       | `supabase.functions.read`           | —                                                                                                              |
-| `supabase__list_function_secrets`   | `supabase.read-data`                | (names only, pas valeur)                                                                                       |
-| `supabase__create_function`         | `supabase.functions.body.W`         | —                                                                                                              |
-| `supabase__update_function`         | `supabase.functions.body.W`         | —                                                                                                              |
-| `supabase__delete_function`         | `supabase.functions.body.W`         | —                                                                                                              |
-| `supabase__deploy_function`         | `supabase.functions.deploy`         | + `supabase.functions.body.W` si nouveau body                                                                  |
-| `supabase__create_function_secrets` | `supabase.function-secret.W`        | —                                                                                                              |
-| `supabase__delete_function_secrets` | `supabase.function-secret.W`        | —                                                                                                              |
-
-### 5.1 Couverture du lint
-
-Le lint CI doit vérifier pour chaque tool `supabase__*` :
-
-1. `toolCoverage(tool)` renvoie au moins un `RiskId` du catalogue.
-2. Le pattern `matches` du risk couvre toutes les slices que `classify(tool, *)` peut émettre.
-3. Aucun tool ne tombe uniquement sur `supabase.uncategorized-write`
-   (sinon = bug du catalogue).
-
-**Tools potentiellement multi-risk** (slice plurale au call) :
-
-- `supabase__apply_migration` : selon le contenu, `migration.W` +
-  potentiellement `policy.W` (CREATE POLICY) + `bulk-row-write` (DML
-  embarqué). Le plugin doit retourner un `Slice[]` (cf. spec §7.1).
-  Cf. §6.2 pour la stratégie de classification.
-- `supabase__delete_bucket` : `bucket.W` + `bulk-object-write` (cascade).
-- `supabase__deploy_function` : si appelé avec `body` (ré-upload),
-  `functions.body.W` + `functions.deploy`.
-
-## 6. Edge cases
-
-### 6.1 `execute_sql` post-§7.2 #2 — comment le plugin garantit R-only ?
-
-**Question** : quelle slice exacte au runtime ? Comment le plugin sait
-que c'est `R` only ?
-
-**Réponse** : c'est **par construction au niveau du provider Supabase
-(pas au niveau plugin)**.
-
-1. **Au call** : `classifySupabase('supabase__execute_sql', args, bindings)`
-   retourne **systématiquement** :
-
-   ```
-   supabase.project[<ref>].schema[*].row[*].R
-   ```
-
-   Plus de parsing SQL, plus de dispatch sur level/action.
-
-2. **À l'execute** : `executeSupabase` (dans `execute.ts`) **enforce**
-   le read-only :
-   - Connection à libpq avec wrapper `BEGIN ISOLATION LEVEL SERIALIZABLE
-READ ONLY; <query>; COMMIT;`,
-   - Si le statement contient un write, Postgres erreur immédiatement :
-     `ERROR: cannot execute INSERT in a read-only transaction`. Le tool
-     renvoie cette erreur au call.
-
-3. **Au catalog** : le risk `supabase.read-data` couvre cette slice.
-   `execute_sql` tombe naturellement sous ce risk.
-
-**Garantie de sécurité** : si jamais le wrapper Postgres rate (bug code),
-le risk effectif resterait `supabase.read-data` même pour un statement
-mutant — donc le token avec uniquement `read-data` accepté serait
-"trompé". **Mitigation** : ajouter un test E2E qui envoie un `DELETE`
-via `execute_sql` et vérifie qu'il est rejeté côté Postgres. Si on veut
-defense-in-depth, classifier le 1er token de la query (regex simple,
-pas un parser) et bloquer côté gateway si `INSERT|UPDATE|DELETE|TRUNCATE|
-COPY|CREATE|DROP|ALTER|GRANT|REVOKE`. Mais c'est belt-and-braces.
-
-### 6.2 `apply_migration` — DDL + DML mélangés
-
-**Question** : une migration peut faire `ALTER TABLE … ADD COLUMN` (DDL,
-= `schema.W` / `migration.W`) **et aussi** `UPDATE table SET …` (DML,
-backfill). Comment classer ?
-
-**Options** :
-
-1. **Slice unique strict** = `supabase.project[X].schema[*].table[*].W`
-   (matché par `migration.W` qui couvre le containment `schema/table`).
-   Le risk `bulk-row-write` ne fire pas, le manager ne voit pas la
-   différence avec une migration pure DDL.
-2. **Multi-slice** = le plugin parse le SQL de la migration et émet
-   `[migration.W, bulk-row-write]` si DML détecté. Le token doit
-   couvrir les deux risks. **Recommandé** car explicite et aligné avec
-   le fait que beaucoup de migrations réelles font du backfill.
-3. **Migration agnostique** = on traite `migration.W` comme
-   sur-ensemble (couvre forcément DDL + DML). Le risk `migration.W`
-   absorbe alors `bulk-row-write`. Simple mais moins fin pour le manager.
-
-**Recommandation** : option 2 — réutiliser un mini-parser (subset du
-ex-`sql-classify`) **uniquement** pour détecter la présence de DML
-dans une migration. Si DML détecté → émet `[migration.W, bulk-row-write]`.
-Le manager qui n'accepte que `migration.W` (DDL only) est protégé d'une
-migration qui ferait un `UPDATE` accidentel sur prod.
-
-> Ironie : on supprime `sql-classify.ts` pour `execute_sql` (§3) mais
-> on garde un sous-ensemble pour `apply_migration`. La nuance : on n'a
-> plus besoin d'un parser **complet** (juste "y a-t-il un mot
-> INSERT/UPDATE/DELETE/MERGE/TRUNCATE/COPY hors string ?").
-
-### 6.3 `create_user` vs `generate_link` — même risk ou distincts ?
-
-**Question** : `create_user` crée un compte ; `generate_link` génère un
-lien magique (reset password, magic-link, etc.). Sont-ils du même risk ?
-
-**Réponse** : **distincts**. Argumentation :
-
-- `create_user` = pose une identité **persistante** dans le système.
-  Risk = `auth.user-write-one` (data: pii, persistence: posture).
-  Réversibilité difficile si l'agent a fait des liens FK ailleurs.
-- `generate_link` = produit un **secret éphémère** qui permet à
-  quelqu'un (le destinataire de l'URL) de **se connecter en tant que
-  cet utilisateur**. Risk = `auth.generate-link` (data: secret,
-  persistence: session). Le destinataire est choisi **par l'agent** dans
-  les args. **C'est un canal d'exfiltration potentiel** (account
-  takeover si l'URL leak).
-
-**Conséquence catalog** : deux risks distincts (`auth.user-write-one`
-et `auth.generate-link`). Le manager peut accepter l'un sans l'autre
-("OK pour créer un user de test, pas OK pour générer un link prod qui
-pourrait leak un compte client").
-
-### 6.4 `create_signed_url` — R sur bucket mais leak via URL signée
-
-**Question** : `create_signed_url` est techniquement `bucket.object.R`
-(le plugin lit le path pour vérifier qu'il existe). Mais l'**effet de
-bord** est de produire une URL accessible à n'importe qui, expirante
-mais valide pendant la TTL signée. **C'est un risk d'exfiltration**.
-
-**Réponse** : risk distinct du simple `storage.object.R`.
-
-- Slice émise : `supabase.project[X].bucket[Y].object[Z].signed-url[*].R`
-  (ajout d'un segment `signed-url[*]` pour le différencier d'un
-  download direct).
-- Risk : `supabase.storage.signed-url.R`, `visibility: public` dans le
-  vecteur (l'URL fonctionne hors-session — le destinataire n'est pas dans
-  l'audit).
-- Mitigations runtime : capper le TTL signé côté gateway (ex. max
-  15 min) ; auditer le path exfiltré ; ne jamais signer un path glob
-  (`*`) — toujours un path concret.
-
-### 6.5 `function-secret` — observer la couplée create + delete
-
-**Question** : `create_function_secrets` et `delete_function_secrets`
-sont marqués `function-secret.W` (vecteur `data: secret` + `posture`).
-Mais un **rollover** légitime (rotation Stripe key) doit pouvoir
-s'exécuter.
-
-**Réponse** : un manager qui accepte `supabase.function-secret.W` au
-mint le sait — c'est un risk explicite. À Phase 2 on pourrait
-introduire un risk `supabase.function-secret.rotate` plus fin
-(matché par un pattern `[create + delete consécutifs du même nom]`)
-mais c'est du context-aware classification, hors scope MVP.
-
-### 6.6 `apply_migration` créant une policy
-
-Si une migration contient `CREATE POLICY` (RLS), c'est à la fois
-`migration.W` et `policy.W`. Le plugin doit émettre les deux slices.
-Si le token n'a pas accepté `supabase.policy.W` (risk distinct côté
-catalogue), le call est denied — même si `migration.W` est accepté.
-
-**Implémentation** : le mini-parser de §6.2 détecte aussi les mots-clés
-`POLICY`, `RLS`, `ROW LEVEL SECURITY` et déclenche `[migration.W,
-policy.W]`. Le détecteur n'a pas besoin d'être exhaustif — un faux
-positif (ex. nom de colonne `policy_id`) sur-protège, ce qui est OK.
-
-## 7. Trous — tools sans catégorie naturelle
-
-### 7.1 Tools couverts mais sous-spécifiés
-
-- `supabase__get_anon_key` : aujourd'hui `read-data`. Mais c'est **un
-  secret** (la clé anon est connue publiquement par construction, mais
-  reste un identifiant exploitable pour rate-limiting / fingerprinting).
-  À considérer : risk dédié `supabase.read-credentials` distinct
-  (audit explicite). Phase 2.
-- `supabase__list_function_secrets` : renvoie les **noms** mais pas les
-  valeurs. Aujourd'hui `read-data`. Sémantiquement un peu plus sensible
-  (révèle quelles intégrations le projet utilise → reco recon). Idem :
-  risk fin `supabase.function-secret.read` distinct. Phase 2.
-
-### 7.2 Entités déclarées dans le data-model mais sans tool MCP
-
-- `db-role`, `extension`, `publication` (plane db) : pas de tool dédié,
-  seulement accessible historiquement via `execute_sql` muteur. Avec
-  §7.2 #2 (read-only), ces opérations deviennent **impossibles via la
-  gateway** sans ajouter de tool dédié. C'est OK pour MVP. Si besoin
-  futur : ajouter `supabase__create_extension`, etc. → tomberont sur
-  `extension.W`, `db-role.W` déjà déclarés.
-- `mfa-factor`, `identity` (plane auth) : Supabase admin API les
-  expose ; pas wrappé par les tools MCP actuels. Anticipé dans le
-  data-model.
-- `bucket-policy` (plane storage) : pas de tool actuel ; anticipé.
-
-### 7.3 Risks orphelins (catalog → mais pas de tool qui les déclenche
-
-aujourd'hui)
-
-- `supabase.db-role.W` : pas de tool. Conservé pour cohérence + futur.
-- `supabase.extension.W` : idem.
-
-Ces entrées du catalogue sont **muettes** au runtime tant qu'aucun tool
-ne les classifie. Pas un bug ; un capability pré-arrangé.
-
-## 8. Récap décisions actées (référence v4)
-
-| #   | Décision                                                                                                  | Source spec       |
-| --- | --------------------------------------------------------------------------------------------------------- | ----------------- |
-| 1   | `execute_sql` devient **R only**, enforced par Postgres `READ ONLY`                                       | §7.2 #2           |
-| 2   | `classifySql` (300 lignes) **supprimé** ; on garde un mini-detector DML pour `apply_migration` uniquement | §7.2 #2 + §6.2    |
-| 3   | Plugin émet `Slice[]`, **plus** `Capability` mono                                                         | §7.1, §13 Phase 2 |
-| 4   | Catalog YAML versionné dans `packages/providers/supabase/src/risk-catalog.yaml`                           | §13 Phase 1       |
-| 5   | RiskId qualifié par binding au mint : `supabase[<env>].<name>`                                            | §4.4, §16 Q2      |
-| 6   | `acceptable_in_envs` interdit d'accepter un risk sur prod (ex. `bulk-row-write`)                          | §4.1, §16 Q5      |
-| 7   | Tools `dispatch_workflow`-like (côté GitHub) retirés ; **pas concerné Supabase** mais cohérent            | §7.2 #1           |
-| 8   | Strict-fail au call : pas de step-up runtime au MVP                                                       | §8                |
-
-## 9. Décisions résiduelles à acter pour Supabase
-
-**Q1 — `apply_migration` : multi-slice (option 2) ou single super-risk (option 3) ?**
-Reco : **option 2** (multi-slice). Le manager qui n'accepte que DDL
-doit être protégé d'un DML embarqué.
-
-**Q2 — `signed-url` : extension du data-model (`object → signed-url`) ou
-risk standalone matché par tool name ?**
-Reco : **extension du data-model**. Plus propre pour le lint et la
-slice est explicite.
-
-**Q3 — `read-data` vs `read-pii` — split sur les tables auth.users /
-storage.objects qui contiennent de la PII ?**
-Aujourd'hui `read-data` couvre tout. On peut imaginer un split
-`auth.read-users` (déjà fait, vector PII) vs `db.read-tables`. À
-trancher Phase 1 : le risk `auth.read-users` couvre déjà l'admin API
-des users ; un SELECT direct sur `auth.users` via `execute_sql` tombe
-sur `read-data` → **inconsistance**. Reco : Le risk `auth.read-users`
-doit aussi couvrir `supabase.project[**].schema[auth].table[users].row[**].R`.
-
-**Q4 — `apply_migration` sur prod : risk distinct
-`supabase.migration-prod.W` ou simplement risk unique `migration.W` ?**
-Reco : risk unique. Le manager qui ne veut pas autoriser la migration
-prod ne coche pas `supabase[prod].migration.W` au mint. Post drop-confirm
-plus de project policy override — la sévérité vit dans le catalog
-(vecteur) et la décision au mint (cocher ou non).
-
-**Q5 — `acceptable_in_envs` sur `bulk-row-write` : `[preview, staging]`
-ou autoriser prod aussi ?**
-Reco : `[preview, staging]` strict. Si un opérateur veut accepter
-`bulk-row-write` en prod, il doit ouvrir un PR sur le catalogue (review
-humain). Évite le "j'ai cliqué accept sur prod, je ne savais pas".
-
-**Q6 — Risk `auth.generate-link` par type de link (magic vs recovery
-vs invite) ?**
-Aujourd'hui un seul risk. Supabase distingue `type: magiclink | recovery
-| invite | signup`. Magic-link sur user existant = potential takeover.
-Invite = création + invite (proche de `create_user`). Reco : un seul
-risk pour MVP ; split en Phase 2 si demandes opérationnelles.
-
----
-
-## Résumé final
-
-Le provider Supabase v4 modélisé en **4 planes** (`db`, `storage`, `auth`,
-`functions`) chacun avec son data-model mermaid. Au total **44 tools MCP**
-mappés en slices via le DSL spec §3, avec containment explicite
-`project → schema → table → row` (db) ou `project → bucket → object`
-(storage) etc. Décision clé spec v4 §7.2 #2 actée : `execute_sql` devient
-**strictement read-only enforced par Postgres** (`BEGIN READ ONLY`
-wrapper) — le parser SQL `sql-classify.ts` (~300 lignes) est supprimé,
-une seule slice possible `schema[*].row[*].R`. Le mini-parser reste
-juste pour `apply_migration` afin de détecter du DML embarqué (multi-slice
-`[migration.W, bulk-row-write]`). Le catalog YAML compte **23 risks**
-namespacés `supabase.<plane>.<name>` + 1 fallback `uncategorized-write` ;
-qualifiés par binding au mint (`supabase[staging].bulk-row-write` vs
-`supabase[prod].bulk-row-write`). Les risks à vecteur critique
-(`persistence: posture` + `data: secret/pii`) couvrent la posture
-sensible : `policy.W` (RLS), `auth-config.W`, `sso-provider.W`,
-`third-party-auth.W`, `function-secret.W`, `db-role.W`, `extension.W`,
-`storage-config.W`, `auth.bulk-user-write` — un manager ne les coche
-au mint qu'en connaissance de cause. Les risks env-restrictifs
-(`acceptable_in_envs: [preview, staging]`) empêchent
-structurellement d'accepter `bulk-row-write` ou `bulk-object-write` sur
-prod. Trois edge cases doc : (1) `apply_migration` peut émettre
-multi-slice si DDL+DML, (2) `create_signed_url` est un R mais avec
-canal d'exfiltration → risk dédié `signed-url.R`, (3) `generate_link`
-est distinct de `create_user` (secret éphémère vs identité persistante).
-Trous identifiés : entités déclarées sans tool (`db-role`, `extension`,
-`mfa-factor`, `bucket-policy`), à wirer en Phase 2 si besoin. Six
-décisions résiduelles à trancher avec les opérateurs (multi-slice
-migration, signed-url placement, read-pii split, prod migration scope,
-acceptable_in_envs strictness, generate_link split par type).
+- **One project resolution.** `resolveProjectRef(args, resources)`
+  (`src/classify.ts`) is called by `classifySupabase` and, with
+  `ctx.resources`, by `executeSupabase` ; `execute` builds every URL from its
+  answer and never reads `args.project_ref`. A `project_ref` that is present
+  must be a host label (`projectRefIdent` : lowercase letters, digits and
+  inner hyphens, 63 characters at most — it becomes a path segment and the
+  host label of `https://{ref}.supabase.co`) and one of the mission's
+  Supabase resources ; an array, an object, a number or an unsafe string is a
+  denial, never coerced and never skipped. The ref of the mission's single
+  project goes through the same grammar. The camelCase `projectRef` is not
+  an argument of any tool : a call carrying it is denied. When `execute`
+  gets a denial it returns an `isError` result and sends nothing.
+- **Cardinality markers** are literal identifiers : `row[bulk]`,
+  `object[one]` / `object[bulk]`, `user[one]` / `user[bulk]`. Catalog
+  patterns use the same literals (`storage.object-write-one` vs
+  `storage.bulk-object-write` are mutually exclusive). `any` stands for a
+  value that does not matter for the risk ; the catalog uses `[*]` there.
+- **Only declared arguments.** After the project and the identifiers, the
+  classifier calls the SDK's `undeclaredArgumentDenial` over the tool's input
+  schema : an argument the schema does not declare is a denial,
+  `<name>: not an argument of '<tool>' — nothing classifies it, so it is not sent.`
+  `execute` builds most request bodies from the arguments, so an undeclared
+  one would be priced by no rule and forwarded all the same. A call wrong on
+  both counts is told about the identifier first. A tool name that is only
+  an inherited property (`constructor`) is an unknown tool.
+- **An identifier the slice grammar cannot carry is classified as "any".**
+  Bucket ids, object paths, secret names and e-mail addresses may hold
+  characters a slice has no place for (`@`, `+`, `:`). The value is still
+  validated by its own grammar and still sent as it is ; in the slice it is
+  written `[*]` (`isSliceIdent` of the SDK), so the slice reads back as
+  itself and the call is classified on every instance of the entity. An
+  e-mail address always holds `@` : `generate_link` emits
+  `user[*].link[<type>].W`.
+- **Single-user and single-object writes emit the marker slice alone** :
+  `create_user`, `update_user`, `delete_user` → `user[one].W` ;
+  `upload_object`, `delete_object` → `bucket[<id>].object[one].W`. The user
+  id and the object path are validated (a malformed one is a denial) but are
+  not slice segments : no catalog entry names an arbitrary id there, so the
+  slice would land on the fallback, and an id spelled `bulk` would read as
+  the bulk marker.
+- **`execute_sql` → `schema[any].row[bulk].R`, plus
+  `schema[managed].row[bulk].R` when the query names a schema Supabase
+  manages or cannot be read with confidence** — see "Reading a query"
+  below. Read slices only, whatever the SQL says : the read-only guarantee
+  is enforced at execution by the Management API read-only endpoint
+  (`/database/query/read-only`) ; `list_tables` and `list_migrations` use it
+  too. Nothing writes rows one by one : `supabase.row-write-one` is
+  `deprecated: true` (below). A `query` that is not a non-blank string is
+  denied (and refused again by `execute`).
+- **`apply_migration`** → `schema[any].table[any].W`, plus one slice per
+  write class its SQL takes — see "Reading a migration" below.
+- **Cascades** : `delete_bucket` adds `object[bulk].W`. `deploy_function`
+  **always** emits two writes, `edge-function[slug].function-deployment[any].W`
+  and `edge-function[slug].W` : a deployment replaces what runs (the code,
+  in whatever shape the caller gave `files`) and how it is exposed
+  (`verify_jwt`, the entrypoint), which is what `update_function` prices as a
+  body write. It touches `functions.deploy` and `functions.body-write`
+  whether or not `files` is given ; a `files` that is not an array is a
+  denial.
+- **Identifiers** have one grammar per kind — see "Identifiers" below ; a
+  missing or malformed required identifier is a denial, never `any`.
+- **No sample lands on the fallback** : `plugin.test.ts` asserts
+  `fallbackHits` of the SDK kit is empty.
+
+### Identifiers
+
+Every argument that lands in a URL path, a query string, a host, a header
+or the SQL text the plugin writes is read by `readIdentifiers(tool, args)`
+(and `tableSchemas(args)` for `list_tables`), with the grammar of its kind.
+It is the only place that reads them : `classifySupabase` builds its slices
+from the answer and `executeSupabase` its paths, query strings and headers,
+never from `args` ; a JSON body is built from `args` once the same reader
+has accepted the call, and holds declared arguments only (above). A value
+outside its grammar is a denial (`<arg>: missing or malformed.`) and an
+`isError` refusal before any request — never escaped, never replaced by
+another argument (ADR
+[`plugin-identifiers-one-grammar-for-classify-and-execute`](../../decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md)).
+
+| Argument                                                                    | Grammar                                                                                                                                                                          | Where it lands                                                                                                                                                                                |
+| --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `project_ref`, the project resource ref                                     | `projectRefIdent` — a host label : `[a-z0-9]`, inner hyphens, ≤ 63 characters                                                                                                    | URL path and host `https://{ref}.supabase.co`, slice `project[ref]`                                                                                                                           |
+| `user_id`, `provider_id`, `tpa_id`, `function_slug`, `slug`                 | `pathIdent` — `PATH_IDENT = ^[A-Za-z0-9_-]{1,64}$`                                                                                                                               | URL path segment, as it is — except `slug`, never a path segment (`create_function` : JSON body ; `deploy_function` : query) ; slice ident, except `user_id` of `update_user` / `delete_user` |
+| `type` of `create_sso_provider`, `create_third_party_auth`, `generate_link` | `pathIdent`                                                                                                                                                                      | JSON body ; slice ident                                                                                                                                                                       |
+| `type` of `get_advisors`                                                    | closed set `security` \| `performance` (`security` when absent)                                                                                                                  | URL path segment                                                                                                                                                                              |
+| bucket `id`, `bucket`                                                       | `bucketId` — one segment of `[A-Za-z0-9_.@+:~-]`, ≤ 100 characters, never dots alone                                                                                             | URL path segment, percent-encoded (`create_bucket` : JSON body) ; slice `bucket[id]`, or `bucket[*]` when the id holds `@`, `+` or `:`                                                        |
+| object `path`                                                               | `objectPath` — `/`-separated segments of the same characters, none empty, none dots alone, ≤ 1024 characters                                                                     | URL path, each segment percent-encoded ; slice of `create_signed_url`                                                                                                                         |
+| `email` of `generate_link`                                                  | `emailAddress` — a local part, one `@`, a dotted domain, ≤ 254 characters                                                                                                        | JSON body ; slice `user[*]` (an address always holds `@`)                                                                                                                                     |
+| `content_type` of `upload_object`                                           | a media type (`image/png`, `text/plain; charset=utf-8`) ; `application/octet-stream` when absent                                                                                 | `Content-Type` request header                                                                                                                                                                 |
+| `content_base64` of `upload_object`                                         | `base64Text` — a string of the standard base64 alphabet, padded or not, possibly empty ; a length no encoding produces (one symbol over a multiple of four) is refused. Required | the request body, decoded : the bytes stored                                                                                                                                                  |
+| `page`, `per_page` of `list_users`                                          | a positive integer up to 1 000 000 (1 and 50 when absent)                                                                                                                        | query string                                                                                                                                                                                  |
+| `schemas` of `list_tables`                                                  | `tableSchemas` — unquoted SQL identifiers `[A-Za-z_][A-Za-z0-9_$]{0,62}` ; `public` when absent or empty                                                                         | SQL text of the read-only query, between quotes as they are                                                                                                                                   |
+| secret names (`create_function_secrets`, `delete_function_secrets`)         | slice-safe name, `[a-zA-Z0-9_.@+:/~-]{1,256}` — not a path identifier                                                                                                            | JSON body ; slice `function-secret[name]`, or `function-secret[*]` when the name holds `@`, `+` or `:`                                                                                        |
+
+`create_bucket` names the bucket after `id`, and after `name` only when
+`id` is absent : a malformed `id` is a denial, `name` is not a second
+chance. `get_function` and `get_function_body` read `function_slug` only.
+`content_base64` is read by the same reader as the identifiers because of
+what the absence of a check would store : `String(undefined)` is six
+characters of valid base64, and would be uploaded over the object.
+Why refuse rather than escape : `encodeURIComponent` leaves `.` and `..`
+untouched and a URL parser removes them, so `delete_function` with `..`
+would be classified as a function write and sent to the project endpoint,
+and a `delete_object` path with a `..` segment would leave its bucket.
+
+### Reading a migration
+
+A migration is arbitrary SQL run as the database owner. `readMigrationSql`
+(`src/migration-sql.ts`) is not a parser and not a keyword filter : it is an
+**allow-list**. It strips comments and literals, splits on `;`, and
+recognises a statement only when its leading keywords name one of the shapes
+below and nothing in it can embed another command. A line comment (`--`)
+ends at `\n` **or** `\r`, as it does for PostgreSQL : waiting for `\n` alone
+would hide from the reader everything after a bare carriage return, which
+the server executes.
+
+| Slice added to `schema[any].table[any].W` | Risk              | Recognised statements                                                                                                                                                                                                                                                                  |
+| ----------------------------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| none                                      | `migration-write` | `CREATE TABLE` (not `AS`), `ALTER TABLE` `ADD` / `ALTER` (not a type change) / `RENAME` / `VALIDATE` / `DROP CONSTRAINT`, `CREATE` / `DROP INDEX`, `CREATE SCHEMA`, `CREATE SEQUENCE`, `CREATE TYPE … AS`, `DROP SEQUENCE` / `TYPE` without `CASCADE`, `COMMENT ON`, `BEGIN`, `COMMIT` |
+| `…table[any].row[bulk].W`                 | `bulk-row-write`  | `INSERT`, `UPDATE`, `DELETE`, `TRUNCATE`, `DROP TABLE`, `ALTER TABLE … DROP [COLUMN]`, `ALTER TABLE … ALTER [COLUMN] c [SET DATA] TYPE t [USING expr]`, `DROP SEQUENCE` / `TYPE … CASCADE`                                                                                             |
+| `policy[any].W`                           | `policy-write`    | `CREATE` / `ALTER` / `DROP POLICY`, `ALTER TABLE … ENABLE` / `DISABLE` / `FORCE ROW LEVEL SECURITY`                                                                                                                                                                                    |
+| `db-role[any].W`                          | `db-role-write`   | `GRANT`, `REVOKE`, `CREATE` / `ALTER` / `DROP ROLE` / `USER` / `GROUP`, `ALTER DEFAULT PRIVILEGES`                                                                                                                                                                                     |
+| `extension[any].W`                        | `extension-write` | `CREATE` / `ALTER` / `DROP EXTENSION`                                                                                                                                                                                                                                                  |
+
+**Anything else makes the whole migration unrecognised, and the classifier
+then emits all five slices**, so the mission needs every one of the five
+risks : `DO` blocks and any dollar-quoted text, function, procedure,
+trigger, view and rule definitions, CTEs (`WITH`), a bare `SELECT` (it calls
+functions), `MERGE`, `COPY`, `SET`, `PREPARE` / `EXECUTE`, `CREATE TABLE …
+AS`, `PARTITION OF` / `INHERITS`, ownership changes, `DROP SCHEMA`, any
+command not listed, prefixed strings (`E'…'`, `U&"…"`), a backslash inside a
+string, a control character, an unterminated string or comment. A
+table-level statement (DDL or DML, policies excepted) whose target sits in a
+schema Supabase manages (`auth`, `storage`, `vault`, `cron`, `net`,
+`extensions`, `pg_*`, `supabase_*`, …) is unrecognised too : writing
+`auth.users` is not an application row write.
+
+A column type change is a bulk row write because it rewrites the column in
+every row, and `USING` overwrites the values with any expression : the same
+loss as dropping the column. The reader looks for `TYPE` or `USING` as a
+bare word anywhere after the column name of an `ALTER [COLUMN]` action (a
+column called "type" is quoted, hence never a keyword) ; anything else that
+happens to carry the word is priced as one too, the costly side.
+
+Known limit, by construction : a recognised statement may evaluate an
+expression (`DEFAULT f()`, `CHECK (…)`, `SET a = f()`) and so run a function
+that already exists in the database. Creating such a function is never a
+recognised statement.
+
+### Reading a query
+
+`execute_sql` cannot write : that is the provider's guarantee. What it can
+read is another matter. A project database also holds what Supabase keeps
+for itself, and reading it is the risk `supabase.read-managed-schemas`,
+distinct from `supabase.read-data`. `readQuerySql` (`src/query-sql.ts`)
+decides **by what the SQL names, never by what the database role may read**
+: the plugin does not know the grants of the role behind the read-only
+endpoint (the provider documentation names it, `supabase_read_only_user`,
+and does not list what it can select), and does not need to.
+
+The one list is in `src/data-model.ts` :
+
+| Kind         | Schemas                                                                                                                                                                                                                      | A query that names one            |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| `sensitive`  | `auth`, `vault`, `storage`, `pgsodium`, `pgsodium_masks`, `net`, `cron`, `realtime`, `pgbouncer`, and any schema whose name starts with `supabase_`, `_`, `pg_toast` or `pg_temp`                                            | touches `read-managed-schemas`    |
+| `inspection` | `information_schema`, `pg_catalog`, `extensions`, `graphql`, `graphql_public`                                                                                                                                                | is an ordinary read (`read-data`) |
+| —            | the catalog relations of `SUPABASE_SENSITIVE_CATALOG_RELATIONS` (`pg_authid`, `pg_shadow`, `pg_user_mappings`, `pg_largeobject`, `pg_stats`, `pg_stat_activity`, `pg_stat_statements`, `pg_settings`, …), by their bare name | touches `read-managed-schemas`    |
+
+The reader answers one of three things :
+
+- **names a managed schema** — a `schema.` qualifier, bare or quoted,
+  folded to lower case (`"AUTH".users` is priced as `auth`, the costly
+  side), anywhere in any statement, or one of the catalog relations above ;
+- **unread** — the reader cannot vouch for the query : text the tokeniser
+  refuses (dollar quoting, `E'…'` and `U&"…"`, a backslash in a string, a
+  positional parameter `$1`, a control character, anything unterminated),
+  no statement at all, a statement that does not start with `SELECT`,
+  `WITH`, `VALUES`, `TABLE`, `EXPLAIN` or `SHOW` (`SET` changes how names
+  resolve, `DO` and `PREPARE` run SQL held in a string), and **any call to
+  a function outside the inert list** of `query-sql.ts`. A function is how
+  a query reads a relation it does not name : `query_to_xml('select …')`,
+  `set_config('search_path', …)`, `dblink(…)`, or a function somebody
+  defined in the database. A name under a qualifier other than
+  `pg_catalog`, a quoted function name and a column list after an alias
+  (`with c (a, b) as`, `as t (a, b)`) are unread too ;
+- **an application read** — everything else.
+
+The first two emit the second slice, so the mission needs
+`read-managed-schemas` for the project's environment ; only the third
+passes with `read-data` alone. Text inside a string literal or a comment
+names nothing (`select 'auth.users'` is an application read) : a string
+becomes a relation only through a function, and the function is what is
+checked.
+
+Known limits, by construction : a relation the query names may itself be a
+view over a managed schema (`public.all_users` defined as a select on
+`auth.users`), and an operator may be user-defined. Creating either is a
+migration, priced on its own.
+
+What it costs a caller : a query that calls a function of the application,
+or a built-in the list does not hold, is refused to a mission that has
+`read-data` alone, with `risk-not-accepted` naming
+`supabase[<env>].read-managed-schemas`. The inert list is a list of names in
+one file ; adding a built-in that computes from its arguments alone is a
+one-line change, reviewed like the catalog.
+
+## Catalog decisions (v5)
+
+- Ids are the v4 ids, unchanged. **Every write risk is env-scoped**
+  (`acceptable_in_envs`) ; reads are account-scoped except `auth.read-users`
+  (PII) and `read-managed-schemas` (identities, secrets). The three bulk risks (`bulk-row-write`, `storage.bulk-object-write`,
+  `auth.bulk-user-write`) are acceptable on `preview` and `staging` only.
+- The fallback `supabase.uncategorized-write` is env-scoped and **counts only
+  when no specific entry matched** the write (policy-engine rule) ;
+  no preset carries it and no tool reaches it today.
+- **`supabase.read-managed-schemas`** (catalog v4, product owner's decision
+  of 2026-10-13) is the read of `auth`, `vault`, `storage` internals and
+  the other managed schemas through `execute_sql`, and of any query the
+  reader cannot read. Env-scoped on `preview`, `staging` and `prod`. **No
+  shipped preset carries it** (catalog v5, product owner's decision of
+  2026-10-14: `staging-developer` carried it on `[staging]` until then). A
+  person who needs it ticks it on purpose in the mission's editor; without
+  it, a query that calls an application function is refused with the
+  missing risk named.
+  `auth.read-users` is the auth admin API only : it no longer claims to
+  cover a SELECT on `auth.users`, which it never did.
+- `db-role-write` and `extension-write` are reached through
+  `apply_migration` (they had no tool before the migration reader).
+- `supabase.row-write-one` is `deprecated: true` and matches no call : no
+  tool writes rows one by one (`execute_sql` runs on the read-only endpoint,
+  and a migration that writes rows is a bulk write). Accepting it grants
+  nothing and it has no successor ; the entry stays so that the id resolves
+  in the shares and missions that name it. No preset carries it (the loader
+  refuses a deprecated risk in a preset).
+
+### Environment rule : refused, not dropped
+
+The policy engine (`packages/policy-engine/src/risk-runtime.ts`) refuses a
+call that touches an env-scoped risk on a project whose environment label is
+absent or outside the risk's `acceptable_in_envs`. The risk is not removed
+from the touched set, and no mission can hold it there. For Supabase :
+
+| Project label                 | What goes through                                                                                                   | What is refused, whatever the mission accepted                                                                                                                                                     |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| none (owner has not labelled) | Account-scoped reads : `get_project`, `list_tables`, `execute_sql`, `list_buckets`, `list_objects`, config reads, … | **Every write**, `list_users` / `get_user` (`auth.read-users` is env-scoped), and an `execute_sql` that names a managed schema or is unread.                                                       |
+| `prod`                        | Reads, and the writes whose risks list `prod`, when the mission accepted them on `[prod]`.                          | **Every bulk write** : a migration that writes rows, drops a table or a column or changes a column type, a migration the reader does not recognise (it touches `bulk-row-write`), `delete_bucket`. |
+| `preview`, `staging`          | Everything the mission accepted for that label.                                                                     | —                                                                                                                                                                                                  |
+| any other label (`dev`, …)    | Account-scoped reads.                                                                                               | Every write, user read and managed-schema read : no Supabase risk lists that label.                                                                                                                |
+
+Before this rule, `supabase__list_users` on an unlabelled project passed
+with `read-data` alone, and a migration embedding DML on a prod project
+passed with `migration-write` alone. Both are pinned as refusals in
+`mission-evaluation.test.ts`, through the real catalog and `evaluateCall`
+with the resolver the gateway builds.
+
+So on prod a migration is limited to what the reader recognises as plain
+schema changes and RLS statements. A function, a trigger, a backfill, a
+dropped column or a column type change has to be shipped another way, or the
+project is not `prod`.
+The refusal hint names the risk and the environments it is acceptable in ;
+the owner's remedy for an unlabelled project is to label it on the
+account's page (Accounts).
+
+### Presets
+
+| Preset               | Entries                                                                                                                                                                                                                                                                                                                                                                                   | Allows                                                                                                                                                                                                          | Does not allow                                                                                                                    |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `read-only-analyst`  | `read-data`, `storage.object-read`                                                                                                                                                                                                                                                                                                                                                        | Queries, schema and config reads, bucket and object listing on every selected project, labelled or not.                                                                                                         | Any write, user listing, signed URLs, function reads.                                                                             |
+| `staging-developer`  | `read-data`, `storage.object-read`, `functions.read` ; on `[staging]`, all `auto` : `auth.read-users`, `bulk-row-write`, `migration-write`, `policy-write`, `db-role-write`, `extension-write`, `bucket-write`, `storage.object-write-one`, `storage.bulk-object-write`, `auth.user-write-one`, `auth.generate-link`, `functions.body-write`, `functions.deploy`, `function-secret-write` | On staging : any migration (unrecognised ones included), buckets and objects, users one by one, links, edge functions and secrets, user listing. Reads of data, schema, objects and functions on every project. | Auth, storage, SSO and third-party-auth configuration, bulk user writes, signed URLs ; any write or user listing outside staging. |
+| `migration-operator` | `read-data` ; on `[staging]`, `auto` : `migration-write`, `bulk-row-write`, `policy-write`, `db-role-write`, `extension-write` ; on `[prod]`, `approval` : `migration-write`, `policy-write`                                                                                                                                                                                              | Any migration on staging. On prod, plain schema changes and RLS statements, each behind an approval.                                                                                                            | On prod : row writes, dropped tables or columns, grants, extensions, functions, anything unrecognised. Every non-migration write. |
+
+`db-role-write` and `extension-write` sit in the two migration presets
+because an unrecognised migration (a function body, a trigger) touches all
+five db write risks : without them the presets would refuse the ordinary
+Supabase migration on staging. Each row of the table is asserted call by
+call in `mission-evaluation.test.ts`. Values provisional until ADR
+`mission-presets-default-values`.
+
+## Execution
+
+- Management API base `https://api.supabase.com/v1` (constant of the plugin).
+  Bearer = the OAuth access token.
+- **Fail closed** : `executeSupabase` first runs `classifySupabase(tool,
+args, ctx.resources)` and returns whatever it denies as an `isError`
+  result, before any request — the `service_role` key lookup included. That
+  is also the second lock of the argument rule : a caller of `execute` that
+  did not go through `classify` cannot add an undeclared argument to a body
+  either. Every refusal of the executor is an `isError` result carrying the
+  classifier's sentence ; nothing it declines is thrown.
+- **Identifiers** : every path segment, query parameter and header value
+  that names something comes from `readIdentifiers` / `tableSchemas` (see
+  "Identifiers"). An opaque id or a slug is interpolated as it is ; a bucket
+  id and the segments of an object path are percent-encoded.
+- **Target project** : `executeSupabase` calls `resolveProjectRef(args,
+ctx.resources)` — the classifier's function, with the mission's
+  resources — and passes the resolved ref down. A denial (project outside
+  the mission, non-string `project_ref`, `projectRef` alias, several
+  projects and no ref) is an `isError` result with the classifier's message
+  and zero request. Without `project_ref` and with one project in the
+  mission, that project is called.
+- Data-plane tools (users, buckets, objects, signed URLs) first read the
+  project `service_role` key from `/projects/{ref}/api-keys`, then call
+  `https://{ref}.supabase.co/{auth|storage}/v1/...` with it as Bearer and
+  `apikey`. The key is never returned ; `get_anon_key` strips it.
+- **Answers that carry secrets** (`src/redact.ts`, SEC 2026-10-15 C1) :
+  `list_function_secrets` (`GET /projects/{ref}/secrets`, which answers
+  `{ name, value, updated_at }` — `SUPABASE_SERVICE_ROLE_KEY` and
+  `SUPABASE_DB_URL` among the values) and `get_auth_config` /
+  `update_auth_config` (`/config/auth` : OAuth client secrets, SMTP password,
+  hook secrets, SMS provider tokens, test OTPs) are priced as
+  `supabase.read-data` (resp. the auth-config write), so their answer is
+  redacted before it leaves `execute`. The rule is an **allow-list** of
+  non-secret fields (`FUNCTION_SECRET_PUBLIC_FIELDS` = `name`, `updated_at` ;
+  `AUTH_CONFIG_PUBLIC_FIELDS`, taken from the `AuthConfigResponse_Output`
+  schema of the public OpenAPI document minus every `*_secret`, `*_secrets`,
+  `*_pass`, `*_auth_token`, `*_api_key`, `*_api_secret`, `*_access_key` and
+  `sms_test_otp`) : every other field holding a value — a field Supabase
+  adds tomorrow included — becomes `[redacted by Vaubaan]`. An empty value
+  (`null`, `''`) stays, so an agent still sees whether a secret is set.
+  Reading those values is not modelled ; if it ever is, it is a dedicated
+  `data: secret` risk in no preset. When Supabase adds a non-secret field,
+  add it to the allow-list (it shows as redacted until then).
+- `execute_sql` and `apply_migration` with a `query` that is not a non-blank
+  string are an `isError` result without any call ; so is `upload_object`
+  without `content_base64`, or with one that is not base64 text. The upload
+  sends the decoded bytes (an empty string stores an empty object).
+- 204 → `{ ok: true }` text result ; unknown tool → `isError` result without
+  any call ; wrong credential kind → `CredentialKindMismatch` before any call.
+
+## Credential and discovery
+
+The company registers an OAuth app in its Supabase organization (dashboard →
+OAuth Apps) with the instance callback URL, and enters the client id and
+secret in the instance configuration. The host runs the authorization-code
+flow from `supabaseCredential` and the refresh : Supabase's is the standard
+RFC 6749 `refresh_token` grant with Basic client authentication, so the
+plugin declares `refreshable: true` and implements nothing (the alignment of the plugins on the v5 SDK
+removed `refreshSupabaseCredential` and `shouldRefreshSupabaseCredential`).
+`discoverResources` reads `/organizations` and `/projects` (unpaged upstream,
+capped at `MAX_DISCOVERED_PROJECTS` with a logger warning) and returns
+`{ ref, displayName: "<org> / <project>", metadata: { organization,
+organization_name, region, status } }` ; the owner labels `env`. A project
+whose ref is not a host label (`projectRefIdent`) fails discovery : no call
+could name it.
+
+**Revoking the grant at Supabase.** On disconnection the host sends
+`POST https://api.supabase.com/v1/oauth/revoke` (`SUPABASE_OAUTH_REVOKE_URL`,
+format `client-credentials-json`): `Content-Type: application/json`, body
+`{ client_id, client_secret, refresh_token }`, no `Authorization` header; any
+2xx counts as withdrawn. Checked on 2026-10-14 against the Management API's
+OpenAPI document (`https://api.supabase.com/api/v1-json`, operation
+`v1-revoke-token`, "Revoke oauth app authorization and it's corresponding
+tokens"): method `POST`, body `application/json` schema `OAuthRevokeTokenBody`
+with the three fields **required** and `additionalProperties: false`
+(`client_id` a UUID), no `security` on the operation, success `204`, errors
+`401`, `403`, `429`. The implementation matches; nothing was changed. The
+operation is marked **Beta / experimental** by Supabase: a change of it shows
+as `failed` on the disconnected account (the person is told to remove the app
+by hand), never as a silent success. _Fallback, Context7 missing — check by
+hand at the next review_: Context7 (`/supabase/supabase`,
+`/websites/supabase`, `/websites/api_supabase_api_v1`) returned nothing for this
+operation, only the project-level OAuth server's `revokeGrant`, which is a
+different API.
+
+## Connecting with a personal access token
+
+Beside the OAuth app, `src/token.ts` declares a **personal access token**
+(`sbp_…`) pasted by hand, the way offered when no Supabase app is registered
+(ADR [token-connections-beside-the-integration-app](../../decisions/token-connections-beside-the-integration-app.md)). Every tool runs with it: the Management API takes it as the same
+`Authorization: Bearer` (`supabaseBearerOf` returns the OAuth access token
+or the pasted one), and the data-plane tools read the `service_role` key
+through it as before.
+
+- **Check at paste** (`verifySupabaseToken`): `GET /v1/organizations` → the
+  organisation names, kept as the account ("Acme, Side and 2 more"). Supabase
+  exposes no expiry for a token in what was read: the expiry is the one the
+  person chose. 401 or 403 refuses the token.
+- **Guide**: a scoped token (the guide says so; a classic token, "Legacy" in
+  the dashboard, carries the account's full access), and the dashboard
+  permission names per tool group: Project Settings, API Keys, API Key
+  Secrets (the data-plane tools read the service role key), Database,
+  Migrations, Advisors, Storage Config, Auth Config, Edge Functions, Secrets.
+  Names read in the scoped-token documentation on 2026-10-14; Edge Functions,
+  Secrets and Storage Config were not each confirmed endpoint by endpoint.
+- **Removal**: no endpoint deletes a personal access token; the person
+  deletes it under Account preferences, Access tokens.
+
+## Tests
+
+`npx vitest run plugins/supabase` — 1756 tests : `plugin.test.ts` (23 : SDK
+kit with samples per tool and `fallbackHits` empty, presets, credential
+spec, execute and discovery against `mockFetch`), `risk-catalog.test.ts`
+(46 : loaded catalog lint, coverage without the fallback, exact risks of the
+single-user / single-object writes and of migrations, cardinality exclusion,
+spot checks), `classify.test.ts` (134 : the security suite of
+`classifySupabase`, including the adversarial SQL table — the comment that
+ends at a carriage return, the column type changes —, the project-ref
+denials, the two writes of `deploy_function`, the undeclared arguments and
+the identifiers written as `[*]`), `execute.test.ts` (42 : request shapes
+sent to the Management API and the per-project data plane, the
+target-project resolution — zero request on a denial —, and the body built
+from declared arguments only, `upload_object` included), `query-sql.test.ts` (118 : the reader of `execute_sql` — plain queries, every spelling of a managed schema, and the adversarial table of what must be unread), `mission-evaluation.test.ts` (39 : the managed-schema read per preset and per label, and the engine decision
+through the real catalog — unlabelled project, bulk writes on prod, each
+preset call by call), `identifier-injection.test.ts` (1337 : hostile values
+in every identifier position of `classify` and `execute`, the dot-segment
+reproductions, one argument per target, legitimate dotted names, the query
+strings and SQL text the plugin builds, the project ref as a host label),
+`redact.test.ts` (8 : no secret value in the answers of
+`list_function_secrets`, `get_auth_config`, `update_auth_config`, an unknown
+field redacted by default, the allow-list holds no secret-looking name),
+`data-model.test.ts` (1).
+
+## How to debug
+
+- **`Invalid risk catalog` at boot** — read every bullet ; paths are exact.
+  An env-qualified preset entry on a risk without `acceptable_in_envs` is
+  the usual cause after adding a risk.
+- **A write is refused with `risk-not-accepted` on `uncategorized-write`** —
+  the tool emits a slice no fine-grained entry covers : add the catalog
+  entry rather than accepting the fallback.
+- **Refused with "is touched on a resource with no environment label"** —
+  the project is not labelled : the owner labels it on the account's
+  page (Accounts). **"… labelled 'prod', but is acceptable only in [preview,
+  staging]"** — a bulk write on prod ; nothing to accept, restrict the
+  operation.
+- **A migration asks for `db-role-write`, `extension-write`,
+  `policy-write` and `bulk-row-write` at once** — one statement is not on
+  the allow-list of `migration-sql.ts` (a `$$` body, a CTE, `SET`, a
+  command not listed). Split the migration, or run it where the mission
+  holds the five risks.
+- **An `execute_sql` is refused with `risk-not-accepted` on
+  `read-managed-schemas` although it reads an application table** — the
+  query is unread : it calls a function outside the inert list of
+  `query-sql.ts`, uses `$$`, a parameter, a CTE column list, or is not a
+  plain query. Rewrite it, or run it on a mission that holds the risk.
+- **`projectRef: unknown argument`** — the tool argument is `project_ref`.
+- **`<name>: not an argument of '<tool>'`** — the call carries an argument
+  the tool's schema does not declare (a field of Supabase's own API, a
+  typo). Remove it ; to support it, declare it in `tools.ts` and classify it.
+- **A slice shows `bucket[*]`, `user[*]` or `function-secret[*]` for a call
+  that named one** — the name holds a character the slice grammar cannot
+  carry. The request still targets that one object ; the mission needs a
+  pattern that covers every instance.
+- **A migration that only changes a column type asks for `bulk-row-write`** —
+  by design : the change rewrites every row (see "Reading a migration").
+- **`assertCatalogCoverage` lists a new untouched risk** — either the tool's
+  sample is missing in `plugin.test.ts` or the pattern does not match the
+  emitted slice (compare with `serializeSlice` output in
+  `classify.test.ts`).
+- **`mockFetch: unexpected POST …/database/query`** — a read tool must use
+  `/database/query/read-only` ; only `apply_migration` posts elsewhere.

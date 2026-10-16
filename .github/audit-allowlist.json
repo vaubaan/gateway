@@ -1,0 +1,4 @@
+{
+  "$comment": "Advisories of `npm audit --omit=dev` that were looked at and do not apply to what this repository ships. Read by scripts/audit-gate.mjs (CI job `audit`). Each entry: the GHSA id, the package the advisory is about, why it does not apply here, the day it was reviewed and the day by which it must be looked at again (the gate fails after it). Cadence and procedure: docs/workflow/coding-workflow.md, \"Dependency audit\".",
+  "advisories": []
+}

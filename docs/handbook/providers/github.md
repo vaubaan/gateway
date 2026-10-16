@@ -1,1014 +1,594 @@
 ---
-title: GitHub provider — modélisation v4 risk-based
+title: GitHub provider plugin
 status: current
-date: 2026-06-15
+date: 2026-10-13
+last_synced: 2026-10-14
 tracks:
-  - packages/providers/github/src/data-model.ts
-  - packages/providers/github/src/risk-catalog.ts
-  - packages/providers/github/src/risk-catalog.yaml
-  - packages/providers/github/src/risk-classifier.ts
+  - plugins/github/src/token.ts
+  - plugins/github/src/index.ts
+  - plugins/github/src/risk-catalog.yaml
+  - plugins/github/src/data-model.ts
+  - plugins/github/src/tools.ts
+  - plugins/github/src/call.ts
+  - plugins/github/src/classify.ts
+  - plugins/github/src/credential.ts
+  - plugins/github/src/app-install.ts
+  - plugins/github/src/execute.ts
+  - plugins/github/src/octokit-dispatch.ts
+  - plugins/github/src/token-cache.ts
+  - plugins/github/src/app-manifest.ts
+  - plugins/github/src/permission-check.ts
+  - plugins/github/src/credential-keys.ts
+  - plugins/github/src/git-remote.ts
+  - plugins/github/src/git-call.ts
+  - plugins/github/src/tool-titles.ts
+  - plugins/github/tests/unit/
 ---
 
-# GitHub provider — modélisation v4 (risk-based)
+# GitHub provider plugin — `@vaubaan/plugin-github`
 
-> Document de modélisation pour appliquer la spec v4
-> [`gateway-risk-model.md`](../../spec/gateway-risk-model.md) au
-> provider GitHub. Couvre : (1) data-model du plane `repo`, (2) mapping
-> tool → slice, (3) catalogue de risks YAML, (4) lint coverage, (5) edge
-> cases, (6) trous identifiés.
->
-> **Premier énoncé** (spec v4 §2) :
-> _"Un provider est une BDD mutable de `(entité_1, entité_2, …)` avec des
-> side effects observables via `read` sur certaines entités."_
->
-> Pour GitHub, le plane est unique : `repo`. Pas de plane `org` (les tools
-> actuels ne touchent pas la surface compte/org). Les writes account-level
-> rentreraient dans un futur plane `account` — hors scope ici.
+The GitHub plugin on the v5 SDK (feature P1.2a). Contract:
+[[plugin-sdk]] and ADR [[plugin-contract-and-credential-spec]]. Spec:
+[`vaubaan-gateway.md`](../../spec/vaubaan-gateway.md) §0 (Provider,
+Connection, Resource, Preset), §3.2, §5;
+[`gateway-risk-model.md`](../../spec/gateway-risk-model.md) §2, §4, §7.
+Contributor guide: [`plugins/github/README.md`](../../../plugins/github/README.md).
 
----
+The v4 modelling document this file replaces (French, 2026-06-15) is
+superseded; its decisions that survive are restated here, the rest lives
+in git history.
 
-## 1. Data-model — plane `repo`
+## What one connection is
 
-### 1.1 Graphe d'entités
+A **GitHub App installation** on the company's organisation. An administrator
+creates the App once — from Settings → Administration → Company apps through
+GitHub's App manifest flow ("The company's App, created from the page"
+below), or by hand at GitHub with "Request user authorization (OAuth) during
+installation" enabled — and the instance holds five app-config keys
+(`app_id`, `private_key`, `app_slug`, `client_id`, `client_secret`); a user
+connects by installing the App and the host stores the `installation_id` as
+the connection's secret (`app-install` credential kind) — once it has
+checked that this user can reach that installation. Resources are the
+repositories the installation can reach, discovered as `owner/repo`; a
+repository whose `full_name` is not `owner/repo` by the grammar of the
+calls (`repoFullName`) is left out with a logger warning, since no call
+could name it.
+
+### Installation binding
+
+`githubCredential.userVerification` (`src/credential.ts`) is the
+declaration the host runs on the callback
+([connections](../connections.md), "Installation binding"; the plugin
+executes none of it):
+
+| Member                   | Value                                                               |
+| ------------------------ | ------------------------------------------------------------------- |
+| `codeParam`              | `code`                                                              |
+| `tokenUrl`               | `https://github.com/login/oauth/access_token`                       |
+| `clientAuthMethod`       | `client_secret_post` (`client_id`, `client_secret`, `code` in body) |
+| `installationsUrl`       | `https://api.github.com/user/installations`                         |
+| `installationsHeaders`   | `GITHUB_API_HEADERS` (`Accept`, `User-Agent`, API version)          |
+| `installationsListField` | `installations`                                                     |
+| `installationIdField`    | `id`                                                                |
+| `pagination`             | `page` / `per_page`, 100 per page                                   |
+
+With the checkbox enabled, GitHub starts its web application flow right
+after the installation and redirects to the App's first **callback URL**
+with `code` next to `installation_id` (and no setup URL can be set). The
+host exchanges the code for a user access token and calls
+`GET /user/installations`, which lists the installations of this App the
+token's user can reach; the claimed id must be among them. The user token
+is then dropped. `client_secret` is used by the host only and is not in the
+`ctx.appConfig` this plugin receives; `GITHUB_APP_CONFIG.clientId` /
+`.clientSecret` name the keys for the spec, not for a reader.
 
 ```mermaid
-flowchart TB
-  org["org/account<br/>(implicit — owner segment)"] --> repo["repo<br/>[owner/name]"]
-
-  repo --> branch["branch<br/>[name]"]
-  branch --> file["file<br/>[path]"]
-  branch --> commit["commit<br/>[sha]"]
-
-  repo --> tag["tag<br/>[name]"]
-  repo --> release["release<br/>[id]"]
-
-  repo --> pull_request["pull_request<br/>[number]"]
-  pull_request --> pr_comment["comment(pr)<br/>[id]"]
-
-  repo --> issue["issue<br/>[number]"]
-  issue --> issue_comment["comment(issue)<br/>[id]"]
-
-  repo --> workflow["workflow<br/>[id|filename]"]
-  workflow --> workflow_run["workflow-run<br/>[run_id]"]
-
-  repo --> branch_protection["branch-protection<br/>[branch_name]"]
-
-  repo --> collaborator["collaborator<br/>[user]"]
-  repo --> secret["secret<br/>[name]"]
-  repo --> repo_settings["repo-settings<br/>(singleton)"]
-
-  repo --> install_token["install-token<br/>(ephemeral cred)"]
-
-  classDef readonly fill:#e8f4ff,stroke:#3a7;
-  classDef write fill:#fff2e8,stroke:#d63;
-  classDef sensitive fill:#ffe0e0,stroke:#c33;
-  class issue,issue_comment,workflow,workflow_run readonly;
-  class branch,file,commit,pull_request,pr_comment,release,tag write;
-  class branch_protection,collaborator,secret,install_token,repo_settings sensitive;
+sequenceDiagram
+  participant Host
+  participant Plugin
+  participant GitHub
+  Host->>Plugin: execute(ctx{credential: installationId, appConfig, fetch}, tool, args)
+  Plugin->>Plugin: buildAppJwt(app_id, private_key) — RS256, 9 min
+  Plugin->>GitHub: POST /app/installations/{id}/access_tokens {repositories:[repo]}
+  GitHub-->>Plugin: installation token (1 h)
+  Plugin->>GitHub: REST call via Octokit, fetch = ctx.fetch
+  GitHub-->>Plugin: data
+  Plugin-->>Host: McpToolResult (JSON text)
 ```
 
-### 1.2 Tableau des entités
-
-| Entité              | Parent           | Cardinalité             | Lecture (R) actuelle                     | Écriture (W) actuelle                                                         | Notes containment                                                            |
-| ------------------- | ---------------- | ----------------------- | ---------------------------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `org`               | (root, implicit) | `one`                   | implicit dans le selector `[owner/...]`  | non exposé                                                                    | Pas une entité matchable seule — toujours préfixe.                           |
-| `repo`              | `org`            | `one` (par binding)     | `list_*` agrègent dessus, `get_*`        | non créable via nos tools (création hors-scope, manuelle ou via App install)  | Sélecteur de toutes les sous-entités. 1 binding = 1 repo (`owner/repo`).     |
-| `branch`            | `repo`           | `bounded`/`unbounded`   | `list_branches`                          | `create_branch`                                                               | Cardinalité émerge du selector : `[main]` = one ; `[feature/*]` = unbounded. |
-| `file`              | `branch`         | `unbounded`             | `get_file_contents` (env `ref`)          | `create_or_update_file`, `push_files`, `delete_file`                          | Le PARENT est la branche, pas le repo (spec v4 §2 — env = branche).          |
-| `commit`            | `branch`         | `unbounded`             | `list_commits`, `get_commit`             | implicite (créé via `push_files`, `create_or_update_file`)                    | Read-only direct ; mutation observable seulement via parent branch.          |
-| `tag`               | `repo`           | `bounded`               | `list_tags`                              | implicite via `create_release` (peut créer le tag)                            | Pas de tool `delete_tag` actuellement (cf. trous §6).                        |
-| `release`           | `repo`           | `bounded`               | `list_releases`                          | `create_release`, `delete_release`                                            | Référence un tag. `create_release(generate_release_notes=true)` lit commits. |
-| `pull_request`      | `repo`           | `bounded`               | `list_pull_requests`, `get_pull_request` | `create_pull_request`, `merge_pull_request`                                   | `merge_pull_request` est un **write sur branche cible** (env = `args.base`). |
-| `comment(pr)`       | `pull_request`   | `unbounded`             | indirect (via `get_pull_request`)        | `add_issue_comment` (GitHub fait union issue/PR)                              | GitHub traite issue.number et pr.number dans le même espace pour comments.   |
-| `issue`             | `repo`           | `bounded`               | `list_issues`, `get_issue`               | non exposé en write direct (cf. trous §6 — pas de `create_issue`)             |                                                                              |
-| `comment(issue)`    | `issue`          | `unbounded`             | indirect                                 | `add_issue_comment`                                                           |                                                                              |
-| `workflow`          | `repo`           | `bounded`               | `list_workflows`                         | **non exposé en W** (décision spec §7.2 #1)                                   | Le YAML lui-même est un `file` sous `.github/workflows/`.                    |
-| `workflow-run`      | `workflow`       | `unbounded`             | `list_workflow_runs`                     | **retiré** : `dispatch_workflow`, `cancel_workflow_run`, `rerun_workflow_run` | Voir §5 Edge cases et §6 Trous.                                              |
-| `branch-protection` | `repo`           | `bounded` (par branche) | `get_branch_protection`                  | `update_branch_protection`                                                    | Sélecteur = nom de branche protégée. Posture-shift.                          |
-| `collaborator`      | `repo`           | `unbounded`             | non exposé                               | non exposé                                                                    | Présent dans le data-model pour exhaustivité (cf. trous §6).                 |
-| `secret`            | `repo`           | `bounded`               | non exposé                               | non exposé                                                                    | Idem — réservé pour entrée future.                                           |
-| `install-token`     | `repo`           | `bounded` (1 par mint)  | n/a (credential)                         | `mint_install_token` (purpose=clone OU push)                                  | Entité **éphémère** ; output = credential opaque utilisable hors-gateway.    |
-| `repo-settings`     | `repo`           | `one` (singleton)       | non exposé direct                        | non exposé                                                                    | Inclut visibility, default-branch, archived, etc. Hors scope actuel.         |
-
-### 1.3 Containment et env
-
-Conformément à la spec v4 §2.4 et au choix existant (handbook
-github-provider §"Capability surface"), **la branche EST l'env du file**.
-Donc :
-
-- `github.repo[X].branch[main].file[Y].W` ≠ `github.repo[X].branch[feature/Y].file[Y].W`
-- Le selector de cardinalité émerge du chemin : `branch[main]` est un
-  `one`, `branch[feature/*]` est `unbounded`.
-
-Pour les entités sans hiérarchie branche (release, tag, PR, workflow,
-issue), le chemin est `repo[X].<entity>[id].action`.
-
-### 1.4 Side-effects non-observables
-
-Slice émise par un tool peut avoir un **effet collatéral** observable
-ailleurs (spec v4 §7.1) :
-
-- `create_or_update_file@main` sur un fichier `.github/workflows/*.yml`
-  → modifie le **workflow** (entité distincte) sans appeler de tool
-  `workflow.W`. **Risk dérivé** : `github.workflow-write-via-file`.
-- `merge_pull_request` → trigge CI/CD aval (Vercel, etc.). Effet
-  cross-provider — capturé par le risk `github.merge-protected`. La
-  protection des branches `main`/`master`/`release-*` reste portée
-  par ce risk, qui a remplacé l'ancien mécanisme `env_less_exclude_protected`
-  par-binding (cf. [[env-less-grant-fan-out-with-binding-exclude]],
-  partiellement superseded par [[pivot-to-risk-based-model]]).
-- `create_release` non-draft + non-prerelease → publication publique,
-  notifications watchers, déclenche workflows `on: release`.
-- `push_files` ou `create_or_update_file` sur un fichier touchant le
-  CI (`.github/workflows/*`) trigge des runs.
-
-Ces effets sont capturés par des **risks** dédiés au catalogue,
-indépendants des entités primaires touchées.
-
----
-
-## 2. Mapping tool → slice(s)
-
-Tous les ~27 tools MCP GitHub actuellement définis dans
-[`tools.ts`](../../../packages/providers/github/src/tools.ts), avec leur
-slice(s) émise(s) au call et leur env-resolution.
-
-Notation : `slices` = liste de patterns DSL (spec v4 §3) émis par le
-plugin pour ce call. `env-res` = `static` (pas de runtime arg pour
-résoudre) ou `runtime` (le selecteur de branche/env vient d'un arg).
-
-### 2.1 Reads (10 tools)
-
-| Tool                            | Slices émises                                                    | env-res   | Notes                                                      |
-| ------------------------------- | ---------------------------------------------------------------- | --------- | ---------------------------------------------------------- |
-| `github__list_branches`         | `github.repo[O/R].branch[*].R`                                   | `static`  |                                                            |
-| `github__list_commits`          | `github.repo[O/R].branch[sha?].commit[*].R`                      | `runtime` | `args.sha` peut être branche ou commit.                    |
-| `github__list_pull_requests`    | `github.repo[O/R].pull_request[*].R`                             | `static`  |                                                            |
-| `github__list_issues`           | `github.repo[O/R].issue[*].R`                                    | `static`  |                                                            |
-| `github__get_file_contents`     | `github.repo[O/R].branch[args.ref?].file[args.path].R`           | `runtime` | `ref` peut être branche/tag/sha ; défaut = default branch. |
-| `github__get_pull_request`      | `github.repo[O/R].pull_request[args.pull_number].R`              | `runtime` |                                                            |
-| `github__get_issue`             | `github.repo[O/R].issue[args.issue_number].R`                    | `runtime` |                                                            |
-| `github__get_commit`            | `github.repo[O/R].commit[args.sha].R`                            | `runtime` |                                                            |
-| `github__list_workflows`        | `github.repo[O/R].workflow[*].R`                                 | `static`  |                                                            |
-| `github__list_workflow_runs`    | `github.repo[O/R].workflow[args.workflow_id?].workflow-run[*].R` | `runtime` | Filtré par workflow_id ou branche optionnellement.         |
-| `github__get_branch_protection` | `github.repo[O/R].branch-protection[args.branch].R`              | `runtime` |                                                            |
-| `github__list_releases`         | `github.repo[O/R].release[*].R`                                  | `static`  |                                                            |
-| `github__list_tags`             | `github.repo[O/R].tag[*].R`                                      | `static`  |                                                            |
-
-### 2.2 Searches globaux (2 tools)
-
-| Tool                    | Slices émises            | env-res  | Notes                                                                  |
-| ----------------------- | ------------------------ | -------- | ---------------------------------------------------------------------- |
-| `github__search_code`   | `github.search.code.R`   | `static` | NB : techniquement **non bornée aux bindings**, peut lire code public. |
-| `github__search_issues` | `github.search.issues.R` | `static` | Idem.                                                                  |
-
-> **Décision modélisation** : un nouveau préfixe `github.search.<kind>` distinct de `repo`
-> car ces recherches **ne sont pas scopées à un repo bound**. À discuter §6 Trous.
-
-### 2.3 Writes branch/files/commits (4 tools)
-
-| Tool                            | Slices émises                                                                                                                                                        | env-res   | Notes                                                                             |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | --------------------------------------------------------------------------------- |
-| `github__create_branch`         | `github.repo[O/R].branch[args.branch].W`                                                                                                                             | `runtime` | Crée la branche, ne touche pas encore le file/commit.                             |
-| `github__create_or_update_file` | `github.repo[O/R].branch[args.branch].file[args.path].W` <br/> + si `args.path` ∈ `.github/workflows/*` : `github.repo[O/R].branch[args.branch].workflow-via-file.W` | `runtime` | **Slice dérivée** quand on touche un workflow file. Edge case majeur §5.          |
-| `github__push_files`            | `github.repo[O/R].branch[args.branch].file[*].W` (file[*] = bulk, cardinalité unbounded) <br/> + dérivée workflow si tout `path` matche `.github/workflows/*`        | `runtime` | Cardinalité `bulk` émerge du `files[]`.                                           |
-| `github__delete_file`           | `github.repo[O/R].branch[args.branch].file[args.path].W` (delete = sous-cas du W)                                                                                    | `runtime` | Pas de distinction `delete` vs `update` au niveau slice ; capturé via risk dédié. |
-
-### 2.4 Writes PR / comments (3 tools)
-
-| Tool                          | Slices émises                                                                                                           | env-res   | Notes                                                                      |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------- | --------- | -------------------------------------------------------------------------- |
-| `github__create_pull_request` | `github.repo[O/R].pull_request[*].W` <br/> + `github.repo[O/R].branch[args.head].propose-to[args.base].W`               | `runtime` | Slice dérivée capture l'intention "proposer un merge vers `base`".         |
-| `github__merge_pull_request`  | `github.repo[O/R].pull_request[args.pull_number].W` <br/> + `github.repo[O/R].branch[args.base ?? 'main'].merge-into.W` | `runtime` | Le merge produit un commit sur la base branch — slice secondaire critique. |
-| `github__add_issue_comment`   | `github.repo[O/R].issue[args.issue_number].comment[*].W`                                                                | `runtime` | Espace `issue` couvre aussi les PR (GitHub union).                         |
-
-### 2.5 Writes releases / tags (2 tools)
-
-| Tool                     | Slices émises                                                                                       | env-res   | Notes                                                                                      |
-| ------------------------ | --------------------------------------------------------------------------------------------------- | --------- | ------------------------------------------------------------------------------------------ |
-| `github__create_release` | `github.repo[O/R].release[*].W` <br/> + `github.repo[O/R].tag[args.tag_name].W` (si tag inexistant) | `runtime` | Publication publique si `draft=false && prerelease=false`. Trigge `on: release` workflows. |
-| `github__delete_release` | `github.repo[O/R].release[args.release_id].W` (delete sous-cas)                                     | `runtime` | Ne supprime PAS le tag sous-jacent. **Irréversible côté audit/notifications**.             |
-
-### 2.6 Writes CI — workflow-run (3 tools, **retirés** v4)
-
-| Tool                          | Slices émises (théoriques)                                      | env-res   | Décision spec v4 §7.2 #1                                                      |
-| ----------------------------- | --------------------------------------------------------------- | --------- | ----------------------------------------------------------------------------- |
-| `github__dispatch_workflow`   | `github.repo[O/R].workflow[args.workflow_id].workflow-run[*].W` | `runtime` | **RETIRÉ.** Pas exposé. Voie de privilege escalation via secrets de workflow. |
-| `github__cancel_workflow_run` | `github.repo[O/R].workflow-run[args.run_id].W`                  | `runtime` | **RETIRÉ.** Cohérence avec dispatch.                                          |
-| `github__rerun_workflow_run`  | `github.repo[O/R].workflow-run[args.run_id].W`                  | `runtime` | **RETIRÉ.** Idem.                                                             |
-
-> Le code actuel (`classify.ts`, `tools.ts`, `execute.ts`) **expose
-> encore** ces 3 tools. Phase 6 de la migration (spec v4 §13) doit les
-> retirer. Pour la modélisation v4 ci-dessous, ces tools sont
-> **omis du catalogue** — le runtime renverra `unknown github tool` car
-> ils n'existeront plus dans `availableTools`.
-
-### 2.7 Writes rules — branch protection (1 tool)
-
-| Tool                               | Slices émises                                       | env-res   | Notes                                        |
-| ---------------------------------- | --------------------------------------------------- | --------- | -------------------------------------------- |
-| `github__update_branch_protection` | `github.repo[O/R].branch-protection[args.branch].W` | `runtime` | Posture-shift. Persistance après la session. |
-
-### 2.8 Credential mint (1 tool)
-
-| Tool                         | Slices émises                                                                                                                                                   | env-res   | Notes                                                                                                                         |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `github__mint_install_token` | si `purpose=clone` : `github.repo[args.repoFullName?].install-token[clone].W` <br/> si `purpose=push` : `github.repo[args.repoFullName?].install-token[push].W` | `runtime` | **2 slices possibles distinctes** selon `purpose`. Le scope du credential fan-out à tous les bindings si `repoFullName` omis. |
-
-### 2.9 Récap mapping (vue compacte)
-
-**Total tools actifs après Phase 6 = 24** (27 - 3 workflow-run writes retirés).
-
-| Tool                               | Slice principale (compactée)                                  |
-| ---------------------------------- | ------------------------------------------------------------- |
-| `github__list_branches`            | `repo[X].branch[*].R`                                         |
-| `github__list_commits`             | `repo[X].commit[*].R`                                         |
-| `github__list_pull_requests`       | `repo[X].pull_request[*].R`                                   |
-| `github__list_issues`              | `repo[X].issue[*].R`                                          |
-| `github__get_file_contents`        | `repo[X].branch[ref].file[path].R`                            |
-| `github__get_pull_request`         | `repo[X].pull_request[N].R`                                   |
-| `github__get_issue`                | `repo[X].issue[N].R`                                          |
-| `github__get_commit`               | `repo[X].commit[sha].R`                                       |
-| `github__list_workflows`           | `repo[X].workflow[*].R`                                       |
-| `github__list_workflow_runs`       | `repo[X].workflow-run[*].R`                                   |
-| `github__get_branch_protection`    | `repo[X].branch-protection[branch].R`                         |
-| `github__list_releases`            | `repo[X].release[*].R`                                        |
-| `github__list_tags`                | `repo[X].tag[*].R`                                            |
-| `github__search_code`              | `search.code.R`                                               |
-| `github__search_issues`            | `search.issues.R`                                             |
-| `github__create_branch`            | `repo[X].branch[branch].W`                                    |
-| `github__create_or_update_file`    | `repo[X].branch[branch].file[path].W` (+ workflow-via-file)   |
-| `github__push_files`               | `repo[X].branch[branch].file[*].W` (+ workflow-via-file bulk) |
-| `github__delete_file`              | `repo[X].branch[branch].file[path].W`                         |
-| `github__create_pull_request`      | `repo[X].pull_request[*].W` + `propose-to[base].W`            |
-| `github__merge_pull_request`       | `repo[X].pull_request[N].W` + `branch[base].merge-into.W`     |
-| `github__add_issue_comment`        | `repo[X].issue[N].comment[*].W`                               |
-| `github__create_release`           | `repo[X].release[*].W` (+ `tag[name].W`)                      |
-| `github__delete_release`           | `repo[X].release[id].W`                                       |
-| `github__update_branch_protection` | `repo[X].branch-protection[branch].W`                         |
-| `github__mint_install_token`       | `repo[X?].install-token[clone\|push].W`                       |
-
----
-
-## 3. Risk catalog (YAML) — spec v4 §4.1
-
-> 14 risks fins + 1 catch-all (15 entrées) couvrant toutes les slices
-> émises par le mapping §2. Chaque entry conforme au schéma `RiskEntry`
-> de spec v4 §4.1. Vecteur 6D + `acceptable_in_envs` quand pertinent.
-
-```yaml
-github:
-  catalog_version: 1
-  catalog_date: 2026-06-15
-
-  risks:
-    # ---------------------------------------------------------------
-    # READS
-    # ---------------------------------------------------------------
-    - id: github.read-code
-      label: 'Lire le code, branches, commits, files'
-      reason: |
-        Lectures peuvent leak des secrets via .env commit (rare mais
-        non-nul). Le contenu des fichiers est injectable côté agent
-        (OWASP LLM01) — un README malicieux peut influencer un modèle.
-      matches:
-        - 'github.repo[**].branch[**].R'
-        - 'github.repo[**].branch[**].file[**].R'
-        - 'github.repo[**].commit[**].R'
-        - 'github.repo[**].tag[**].R'
-      vector:
-        reversibility: reversible
-        blast: single
-        data: data
-        cost: free
-        visibility: internal
-        persistence: stateless
-
-    - id: github.read-meta
-      label: 'Lire PR, issues, releases, workflows, branch-protection'
-      reason: |
-        Métadonnées du repo. Le body des issues/PR est attacker-controlled
-        (OWASP LLM01) ; à manipuler avec prudence côté agent. Lecture des
-        rules est utile pour le diagnostic, jamais dangereuse en soi.
-      matches:
-        - 'github.repo[**].pull_request[**].R'
-        - 'github.repo[**].issue[**].R'
-        - 'github.repo[**].issue[**].comment[**].R'
-        - 'github.repo[**].release[**].R'
-        - 'github.repo[**].workflow[**].R'
-        - 'github.repo[**].workflow-run[**].R'
-        - 'github.repo[**].branch-protection[**].R'
-      vector:
-        reversibility: reversible
-        blast: single
-        data: metadata
-        cost: free
-        visibility: internal
-        persistence: stateless
-
-    - id: github.search-global
-      label: 'Search global code/issues GitHub (hors bindings)'
-      reason: |
-        Recherche traverse tout GitHub public + tous les repos auxquels
-        le token App a accès. Peut potentiellement leak des contenus
-        d'autres orgs si l'App est installée largement. Faible
-        sensibilité par défaut, mais sortable du périmètre projet.
-      matches:
-        - 'github.search.code.R'
-        - 'github.search.issues.R'
-      vector:
-        reversibility: reversible
-        blast: account
-        data: data
-        cost: free
-        visibility: internal
-        persistence: stateless
-
-    # ---------------------------------------------------------------
-    # WRITES — branches feature/* (low-risk)
-    # ---------------------------------------------------------------
-    - id: github.feature-branch-write
-      label: 'Créer/modifier des branches feature/*, fix/*, chore/*'
-      reason: |
-        Réversible (git revert ou delete de la branche). Pas de side
-        effect prod tant que pas mergé. C'est le cœur du flow du
-        coding agent.
-      matches:
-        - 'github.repo[**].branch[feature/*,fix/*,chore/*,bug/*,docs/*,refactor/*].W'
-        - 'github.repo[**].branch[feature/*,fix/*,chore/*,bug/*,docs/*,refactor/*].file[**].W'
-      vector:
-        reversibility: reversible
-        blast: single
-        data: data
-        cost: free
-        visibility: internal
-        persistence: session
-
-    # ---------------------------------------------------------------
-    # WRITES — branches non-feature, non-protected (defaut, fallback)
-    # ---------------------------------------------------------------
-    - id: github.arbitrary-branch-write
-      label: 'Créer/modifier une branche quelconque (hors feature/* et hors protected)'
-      reason: |
-        Branche custom (ex: `experiment-xyz`, `wip`, `agent-sandbox`).
-        Pas de CI prod déclenchée tant que pas mergée, mais hors du
-        pattern conventionnel — utile à observer en audit.
-      matches:
-        - 'github.repo[**].branch[*].W'
-        - 'github.repo[**].branch[*].file[**].W'
-      vector:
-        reversibility: reversible
-        blast: single
-        data: data
-        cost: free
-        visibility: internal
-        persistence: session
-
-    # ---------------------------------------------------------------
-    # WRITES — branches protégées (main, master, release-*)
-    # ---------------------------------------------------------------
-    - id: github.merge-protected
-      label: 'Écrire sur main/master/release-* (commit direct OU merge PR)'
-      reason: |
-        Branche canonique — trigge CI/CD prod en aval. Costly à reverter
-        (release notes, communications, dependencies aval). Couvre les
-        commits directs (create_or_update_file sans PR) ET les merges
-        de PR sur ces branches.
-      matches:
-        - 'github.repo[**].branch[main,master,release-*,prod,production].W'
-        - 'github.repo[**].branch[main,master,release-*,prod,production].file[**].W'
-        - 'github.repo[**].branch[main,master,release-*,prod,production].merge-into.W'
-      vector:
-        reversibility: costly
-        blast: env
-        data: data
-        cost: moderate
-        visibility: team
-        persistence: session
-
-    # ---------------------------------------------------------------
-    # WRITES — workflows YAML (via file)
-    # ---------------------------------------------------------------
-    - id: github.workflow-write-via-file
-      label: 'Modifier un workflow GitHub Actions (.github/workflows/*.yml)'
-      reason: |
-        Le YAML CI définit ce qui s'exécute avec les secrets du repo.
-        Modifier un workflow = potentiel privilege escalation
-        (steal secrets via curl vers domaine attacker-controlled).
-        Spec v4 §7.2 #1 : c'est précisément la raison pour laquelle
-        on a retiré dispatch_workflow — mais l'attaque persiste via
-        write sur le fichier.
-      matches:
-        - 'github.repo[**].branch[**].workflow-via-file.W'
-      vector:
-        reversibility: costly
-        blast: account
-        data: secret
-        cost: free
-        visibility: internal
-        persistence: posture
-      # Acceptable seulement sur feature branches non-protected, JAMAIS
-      # sur main directement (le merge passe par PR review humain).
-      acceptable_in_envs:
-        - feature
-        - fix
-        - chore
-
-    # ---------------------------------------------------------------
-    # WRITES — bulk file (push_files)
-    # ---------------------------------------------------------------
-    - id: github.bulk-file-write
-      label: 'Push bulk multi-fichiers (push_files)'
-      reason: |
-        Cardinalité `unbounded` côté file[*]. Plus difficile à reviewer
-        manuellement. Distinct du write file-by-file pour permettre au
-        manager d'opt-in/out spécifiquement.
-      matches:
-        - 'github.repo[**].branch[**].file[*].W'
-      vector:
-        reversibility: reversible
-        blast: single
-        data: data
-        cost: free
-        visibility: internal
-        persistence: session
-
-    # ---------------------------------------------------------------
-    # WRITES — PR + comments
-    # ---------------------------------------------------------------
-    - id: github.create-pr
-      label: 'Ouvrir une pull request'
-      reason: |
-        Pas de mutation prod. Notifie les reviewers (visibility=team).
-        Le titre/body peuvent être injectables côté reviewer humain.
-      matches:
-        - 'github.repo[**].pull_request[*].W'
-        - 'github.repo[**].branch[**].propose-to[**].W'
-      vector:
-        reversibility: reversible
-        blast: single
-        data: data
-        cost: free
-        visibility: team
-        persistence: session
-
-    - id: github.comment-write
-      label: 'Commenter sur une issue ou une PR'
-      reason: |
-        Comment sur une PR notifie reviewers. Comment sur une issue
-        notifie subscribers. Bas risque mais peut polluer / spam
-        si abusé.
-      matches:
-        - 'github.repo[**].issue[**].comment[**].W'
-      vector:
-        reversibility: reversible
-        blast: single
-        data: data
-        cost: free
-        visibility: team
-        persistence: session
-
-    # ---------------------------------------------------------------
-    # WRITES — releases (publication publique)
-    # ---------------------------------------------------------------
-    - id: github.create-release
-      label: 'Créer une release (potentiellement publique)'
-      reason: |
-        Si draft=false && prerelease=false → publication publique +
-        notifications watchers + trigge workflows `on: release`.
-        Difficile à "rétracter" — même si delete, des consommateurs
-        downstream ont pu déjà puller.
-      matches:
-        - 'github.repo[**].release[*].W'
-        - 'github.repo[**].tag[**].W'
-      vector:
-        reversibility: costly
-        blast: env
-        data: metadata
-        cost: free
-        visibility: public
-        persistence: session
-
-    - id: github.delete-release
-      label: 'Supprimer une release'
-      reason: |
-        Irréversible côté audit/notifications externes. Le tag persiste
-        mais la release disparaît avec son body et ses assets.
-        Consommateurs downstream peuvent voir un 404.
-      matches:
-        - 'github.repo[**].release[*].W' # delete = W sous-cas
-      vector:
-        reversibility: irreversible
-        blast: env
-        data: metadata
-        cost: free
-        visibility: public
-        persistence: session
-
-    # ---------------------------------------------------------------
-    # WRITES — branch protection (posture-shift)
-    # ---------------------------------------------------------------
-    - id: github.branch-protection-write
-      label: 'Modifier la branch protection'
-      reason: |
-        Posture-shift : ouvre la branche aux écritures hors-process
-        (ex: désactiver required reviews). Persistance après la session.
-        Même quand on DURCIT (ajoute required check), c'est une décision
-        qui survit au token — risk distinct à grant explicitement.
-      matches:
-        - 'github.repo[**].branch-protection[**].W'
-      vector:
-        reversibility: costly
-        blast: env
-        data: metadata
-        cost: free
-        visibility: team
-        persistence: posture
-
-    # ---------------------------------------------------------------
-    # WRITES — credential mint (install token)
-    # ---------------------------------------------------------------
-    - id: github.mint-install-token-clone
-      label: 'Minter un install token (purpose=clone, lecture seule)'
-      reason: |
-        Credential creation, mais portée `contents:read` uniquement.
-        Le token a sa propre durée de vie (1h) et son propre scope.
-        Risque modéré : extraction de code, pas de mutation.
-      matches:
-        - 'github.repo[**].install-token[clone].W'
-      vector:
-        reversibility: reversible
-        blast: account
-        data: secret
-        cost: free
-        visibility: internal
-        persistence: session
-
-    - id: github.mint-install-token-push
-      label: 'Minter un install token (purpose=push, écriture)'
-      reason: |
-        Credential creation avec contents:write + pull_requests:write
-        + workflows:write. Le token sort du périmètre gateway — une
-        fois minté, plus aucun gating Vaubaan ne s'applique aux usages.
-        Posture-shift de facto.
-      matches:
-        - 'github.repo[**].install-token[push].W'
-      vector:
-        reversibility: reversible
-        blast: account
-        data: secret
-        cost: free
-        visibility: internal
-        persistence: posture
-
-    # ---------------------------------------------------------------
-    # FALLBACK — catch-all (obligatoire par spec §4)
-    # ---------------------------------------------------------------
-    - id: github.uncategorized-write
-      label: 'Écriture GitHub non catégorisée (fallback)'
-      reason: |
-        Catch-all pour les writes qui n'ont pas été explicitement
-        catégorisés par les patterns ci-dessus. Si vu en prod, signale
-        qu'il manque une entrée au catalogue — à ajouter avant prochain
-        release.
-      matches:
-        - 'github.repo[**].W'
-        - 'github.**.W'
-      vector:
-        reversibility: costly
-        blast: env
-        data: data
-        cost: free
-        visibility: internal
-        persistence: session
-```
-
-### 3.1 Notes sur `acceptable_in_envs`
-
-Le champ est utilisé pour **bloquer structurellement** qu'un risk soit
-accepté sur une branche/env qui n'a pas de sens (spec v4 §4.4, Q5).
-
-Exemples appliqués :
-
-- `github.workflow-write-via-file` n'a `acceptable_in_envs: [feature, fix, chore]` :
-  on ne peut PAS accepter ce risk pour les branches main/release-\*/etc.
-  → forcer le passage par PR + review humain. Cohérent : modifier un
-  workflow directement sur main est toujours suspect.
-- Les autres risks **ne déclarent pas** `acceptable_in_envs` → utilisables
-  sur n'importe quelle env qualif.
-
-**Question ouverte (Q5)** : faut-il déclarer `acceptable_in_envs: [staging]`
-sur `github.merge-protected` quand le binding GitHub a un env declared ?
-La spec v4 §4.4 qualifie le RiskId par env de binding (`<provider>[<env>]
-.<name>`), mais GitHub n'a typiquement **pas** d'env sur le binding
-(le repo lui-même n'a pas d'env, seule la branche en a — cf. §1.3).
-→ Décision proposée : pour GitHub on **ne qualifie pas par binding-env**,
-on laisse la branche elle-même porter la sémantique env via le selector
-de slice. À valider §6 Trous.
-
----
-
-## 4. Lint coverage — matrice tool × risk
-
-> Spec v4 §13 Phase 1 : _"lint qui vérifie que chaque tool MCP est
-> couvert par au moins un risk"_.
-
-Pour chaque tool actif (Phase 6 post-retrait des workflow dispatch),
-on liste les risks qui matchent **au moins une slice émise**. Le tool
-est `OK` ssi au moins une cellule est cochée.
-
-| Tool                                 | read-code | read-meta | search-global | feature-branch | arbitrary-branch | merge-protected | workflow-via-file | bulk-file | create-pr | comment | create-release | delete-release | branch-protection | mint-clone | mint-push | uncategorized |
-| ------------------------------------ | :-------: | :-------: | :-----------: | :------------: | :--------------: | :-------------: | :---------------: | :-------: | :-------: | :-----: | :------------: | :------------: | :---------------: | :--------: | :-------: | :-----------: |
-| `list_branches`                      |     X     |           |               |                |                  |                 |                   |           |           |         |                |                |                   |            |           |               |
-| `list_commits`                       |     X     |           |               |                |                  |                 |                   |           |           |         |                |                |                   |            |           |               |
-| `list_pull_requests`                 |           |     X     |               |                |                  |                 |                   |           |           |         |                |                |                   |            |           |               |
-| `list_issues`                        |           |     X     |               |                |                  |                 |                   |           |           |         |                |                |                   |            |           |               |
-| `get_file_contents`                  |     X     |           |               |                |                  |                 |                   |           |           |         |                |                |                   |            |           |               |
-| `get_pull_request`                   |           |     X     |               |                |                  |                 |                   |           |           |         |                |                |                   |            |           |               |
-| `get_issue`                          |           |     X     |               |                |                  |                 |                   |           |           |         |                |                |                   |            |           |               |
-| `get_commit`                         |     X     |           |               |                |                  |                 |                   |           |           |         |                |                |                   |            |           |               |
-| `list_workflows`                     |           |     X     |               |                |                  |                 |                   |           |           |         |                |                |                   |            |           |               |
-| `list_workflow_runs`                 |           |     X     |               |                |                  |                 |                   |           |           |         |                |                |                   |            |           |               |
-| `get_branch_protection`              |           |     X     |               |                |                  |                 |                   |           |           |         |                |                |                   |            |           |               |
-| `list_releases`                      |           |     X     |               |                |                  |                 |                   |           |           |         |                |                |                   |            |           |               |
-| `list_tags`                          |     X     |           |               |                |                  |                 |                   |           |           |         |                |                |                   |            |           |               |
-| `search_code`                        |           |           |       X       |                |                  |                 |                   |           |           |         |                |                |                   |            |           |               |
-| `search_issues`                      |           |           |       X       |                |                  |                 |                   |           |           |         |                |                |                   |            |           |               |
-| `create_branch` (feature/\*)         |           |           |               |       X        |                  |                 |                   |           |           |         |                |                |                   |            |           |       X       |
-| `create_branch` (other non-prot.)    |           |           |               |                |        X         |                 |                   |           |           |         |                |                |                   |            |           |       X       |
-| `create_branch` (main/release-\*)    |           |           |               |                |                  |        X        |                   |           |           |         |                |                |                   |            |           |       X       |
-| `create_or_update_file` (feature/\*) |           |           |               |       X        |                  |                 |                   |           |           |         |                |                |                   |            |           |       X       |
-| `create_or_update_file` (main)       |           |           |               |                |                  |        X        |                   |           |           |         |                |                |                   |            |           |       X       |
-| `create_or_update_file` (wf yaml)    |           |           |               |       X        |                  |                 |         X         |           |           |         |                |                |                   |            |           |       X       |
-| `push_files` (feature/\*)            |           |           |               |       X        |                  |                 |                   |     X     |           |         |                |                |                   |            |           |       X       |
-| `push_files` (main)                  |           |           |               |                |                  |        X        |                   |     X     |           |         |                |                |                   |            |           |       X       |
-| `delete_file` (feature/\*)           |           |           |               |       X        |                  |                 |                   |           |           |         |                |                |                   |            |           |       X       |
-| `delete_file` (main)                 |           |           |               |                |                  |        X        |                   |           |           |         |                |                |                   |            |           |       X       |
-| `create_pull_request`                |           |           |               |                |                  |                 |                   |           |     X     |         |                |                |                   |            |           |       X       |
-| `merge_pull_request` (base=main)     |           |           |               |                |                  |        X        |                   |           |           |         |                |                |                   |            |           |       X       |
-| `merge_pull_request` (base=feature)  |           |           |               |       X        |                  |                 |                   |           |           |         |                |                |                   |            |           |       X       |
-| `add_issue_comment`                  |           |           |               |                |                  |                 |                   |           |           |    X    |                |                |                   |            |           |       X       |
-| `create_release`                     |           |           |               |                |                  |                 |                   |           |           |         |       X        |                |                   |            |           |       X       |
-| `delete_release`                     |           |           |               |                |                  |                 |                   |           |           |         |                |       X        |                   |            |           |       X       |
-| `update_branch_protection`           |           |           |               |                |                  |                 |                   |           |           |         |                |                |         X         |            |           |       X       |
-| `mint_install_token` (purpose=clone) |           |           |               |                |                  |                 |                   |           |           |         |                |                |                   |     X      |           |       X       |
-| `mint_install_token` (purpose=push)  |           |           |               |                |                  |                 |                   |           |           |         |                |                |                   |            |     X     |       X       |
-
-**Lecture** :
-
-- Chaque tool actif a **au moins** une croix → couverture intégrale prouvée.
-- Le fallback `uncategorized-write` capte par construction toute slice
-  `github.**.W` non couverte ailleurs — c'est le filet de sécurité.
-- Les tools en R-only ne tombent **pas** dans le fallback `*.W` — c'est
-  voulu, ils n'ont pas besoin de fallback (la lecture est traitée
-  séparément via `read-code` / `read-meta` / `search-global`).
-
-### 4.1 Pseudo-code du test de couverture
-
-```ts
-// packages/providers/github/tests/unit/risk-catalog.coverage.test.ts (à créer)
-import { availableTools } from '../../src/tools';
-import { classifyGithub } from '../../src/classify';
-import { catalog } from '../../src/risk-catalog'; // YAML loadé
-
-describe('GitHub risk catalog coverage', () => {
-  for (const tool of availableTools) {
-    test(`${tool.name} is covered by at least one risk`, () => {
-      // Synthesize representative args from inputSchema
-      const args = synthRepresentativeArgs(tool);
-      const result = classifyGithub(tool.name, args, [
-        /* mock binding */
-      ]);
-      if ('denied' in result) return; // structurally illegal — no coverage required
-      const slices = 'slices' in result ? result.slices : [result.capability];
-      const matched = catalog.risks.filter((r) => slices.some((s) => matchesPattern(s, r.matches)));
-      expect(matched.length).toBeGreaterThan(0); // au moins 1, idéalement ≥ 2 (fin + fallback)
-    });
-  }
-});
-```
-
----
-
-## 5. Edge cases — décisions à prendre
-
-Les questions ouvertes qui n'ont pas de réponse triviale, classées par
-priorité de décision.
-
-### 5.1 `github__create_release` — risk dédié
-
-**Faits** :
-
-- Publication publique (si non draft, non prerelease) → notifications
-  watchers.
-- Crée un tag (immutable côté GitHub, mais on peut le force-push après).
-- Trigge workflows `on: release`.
-- Costly à rollback (release notes envoyées par email aux watchers, etc.).
-
-**Vecteur** : `{ reversibility: costly, visibility: public, persistence: session }`.
-
-**Décision** : risk distinct `github.create-release`. Un manager peut
-l'accepter explicitement pour une session "release v1.2.3" sans
-intervention humaine extra.
-
-### 5.2 `github__create_or_update_file@main` sans PR : `merge-protected` ?
-
-**Faits** :
-
-- Le tool permet de committer directement sur main (Octokit
-  `createOrUpdateFileContents` avec `branch=main`).
-- Si branch protection est active avec "Require PR before merging",
-  l'API renverra 422 — mais on ne peut pas le présupposer.
-- Côté slice, le selector est `branch[main].file[path].W` — matche
-  `github.merge-protected` (qui couvre `branch[main,master,release-*].file[**].W`).
-
-**Décision** : **OUI**, le risk `github.merge-protected` couvre les
-commits directs sur main, pas seulement les merges PR. C'est le bon
-comportement (l'effet est le même : trigge CI/CD). **Capturé dans le
-catalogue §3.**
-
-Le label "merge-protected" est légèrement trompeur (couvre aussi les
-commits directs). Renommer en `github.protected-branch-write` ?
-**Suggestion : oui, plus clair**. À acter §6 Trous.
-
-### 5.3 `github__mint_install_token` : 1 ou 2 risks distincts ?
-
-**Faits** :
-
-- `purpose=clone` → token avec `contents:read` uniquement.
-- `purpose=push` → token avec `contents:write + pull_requests:write +
-workflows:write`.
-- Une fois minté, le token **sort du périmètre gateway** — aucune
-  classification ne s'applique aux calls faits avec ce token.
-
-**Proposition catalogue** : **2 risks distincts** :
-
-- `github.mint-install-token-clone` (read-only, vector léger)
-- `github.mint-install-token-push` (posture-shift, scope large, `data: secret`)
-
-**Pourquoi 2 et pas 1 ?** Un manager qui setup un CI clone-only veut
-accepter ce risk sans accepter le mint-push. Granularité utile.
-
-### 5.4 `github.workflow-write-via-file` — `acceptable_in_envs` étroit
-
-**Faits** :
-
-- Modifier un workflow YAML sur une branche `feature/X` est nécessaire
-  pour ajouter/changer un job CI. Bloquer ça structurellement casse le
-  flow développeur.
-- Mais ce workflow ne s'exécute pas avec les secrets prod tant qu'il
-  est sur une feature branch (sauf si l'attaquant met `pull_request_target`
-  qui s'exécute avec les secrets du base repo — **piège majeur**).
-
-**Décision** : `acceptable_in_envs: [feature, fix, chore]` au catalogue —
-donc le manager **peut** accepter ce risk pour une session ciblée (ajout
-d'un job CI) sur ces branches, mais structurellement il ne pourra pas
-l'accepter pour `main` / `release-*`.
-
-**Sub-edge** : faut-il détecter `pull_request_target` dans le YAML
-parsé ? Trop coûteux côté plugin (parser YAML, analyser le workflow).
-**Décision** : non, on reste au niveau path. La détection
-`pull_request_target` est un job du linter CI côté repo, pas du
-gateway. Documenter ce trade-off.
-
-### 5.5 Slice `merge-into` vs slice `file[**].W`
-
-Quand `merge_pull_request` est appelé avec `base=main` :
-
-- Option A : slice = `github.repo[X].pull_request[N].W` + `branch[main].merge-into.W`
-- Option B : slice = `github.repo[X].pull_request[N].W` + `branch[main].file[**].W`
-
-**Trade-off** :
-
-- Option A est plus sémantique (l'intention est de merger, pas d'écrire
-  des fichiers spécifiques) mais introduit un nouveau verbe `merge-into`.
-- Option B est plus uniforme (tout write sur main = `file[**].W`) mais
-  perd la distinction "merge PR" vs "commit direct".
-
-**Décision proposée : Option A.** Permet au catalogue de cibler
-finement `merge-protected` (qui couvre les deux variantes via le
-selector `branch[main,...].W` étendu à `.merge-into.W`). Cf. catalogue §3.
-
-### 5.6 Cardinalité `bulk` du `push_files`
-
-Le `push_files` émet `branch[X].file[*].W` (file[*] = wildcard) qui
-matche **aussi** `feature-branch-write` (large pattern `branch[feature/*]
-.file[**].W`). C'est OK : `push_files` sur feature branch est couvert
-par les 2 risks (`feature-branch-write` + `bulk-file-write`). Le token
-doit avoir LES DEUX accepted.
-
-**Question** : faut-il que `feature-branch-write` couvre
-**implicitement** le bulk (drop `bulk-file-write` séparé) ? **Proposition** :
-non, garder distinct. Un manager peut vouloir "OK pour push file-by-file
-sur feature, mais pas pour bulk de 50 fichiers d'un coup" (signal de
-malveillance ou de bug du modèle).
-
-### 5.7 `github__add_issue_comment` ↔ `issue` ou `pull_request` ?
-
-GitHub union l'espace des numéros entre issue et PR. L'API
-`POST /repos/{owner}/{repo}/issues/{issue_number}/comments` fonctionne
-pour les deux. Côté slice, on **ne peut pas savoir** si c'est une PR
-ou une issue sans un read préalable.
-
-**Décision** : émettre `repo[X].issue[N].comment[*].W` **uniformément**.
-Le risk `github.comment-write` matche `issue[**].comment[**].W` et c'est
-suffisant. **On perd la granularité** "comment PR vs comment issue"
-mais c'est OK : la sensibilité est identique (notification team).
-
----
-
-## 6. Trous identifiés
-
-### 6.1 Tools manquants pour des intentions métier courantes
-
-Si on regarde les intentions métier d'un coding agent typique vs le
-mapping §2, il y a des manques :
-
-| Intention métier                                 | Tool actuel ? | Proposition                                                                          |
-| ------------------------------------------------ | :-----------: | ------------------------------------------------------------------------------------ |
-| Créer une issue (file a bug)                     |      NON      | Ajouter `github__create_issue` (write `issue[*].W` — bas risque, `allow`).           |
-| Updater une issue (close, label)                 |      NON      | Ajouter `github__update_issue` (close/reopen ; risk `issue-state-write`).            |
-| Ajouter une review sur une PR                    |      NON      | Ajouter `github__create_pull_request_review` (analogue à comment).                   |
-| Demander des reviewers                           |      NON      | Ajouter `github__request_reviewers` (notif team).                                    |
-| Lister/modifier les labels                       |      NON      | Ajouter `github__list_labels`, `add_labels` (metadata légère).                       |
-| Update PR title/body                             |      NON      | Ajouter `github__update_pull_request` (utile pour l'agent qui itère).                |
-| Close PR sans merge                              |      NON      | Ajouter `github__close_pull_request` (réversible — `feature-branch-write`).          |
-| Lire un workflow run log                         |      NON      | Ajouter `github__get_workflow_run_logs` (debug CI). Risk : `read-meta`.              |
-| Get repository info (default branch, visibility) |      NON      | Ajouter `github__get_repository` (utile pour `create_branch` from default).          |
-| Delete branch (cleanup post-merge)               |      NON      | Ajouter `github__delete_branch` (réversible si feature, risk distinct si protected). |
-| Delete tag                                       |      NON      | Ajouter `github__delete_tag` (mineur, risk dédié).                                   |
-
-→ Tous ces tools rentreraient naturellement dans les risks existants
-(`read-meta`, `feature-branch-write`, `comment-write`, etc.) sans
-créer de risk supplémentaire. **Phase 2 du backlog GitHub provider**.
-
-### 6.2 Tools du code actuel à retirer (Phase 6 spec v4)
-
-Conformément à la spec v4 §7.2 #1, ces 3 tools doivent disparaître
-du `availableTools` :
-
-- `github__dispatch_workflow`
-- `github__cancel_workflow_run`
-- `github__rerun_workflow_run`
-
-Ils existent encore aujourd'hui dans
-[`tools.ts:272-308`](../../../packages/providers/github/src/tools.ts) et
-sont mappés dans
-[`risk-classifier.ts`](../../../packages/providers/github/src/risk-classifier.ts).
-Le PR de Phase 6 doit :
-
-1. Supprimer ces entrées de `availableTools`.
-2. Supprimer les `case` correspondants dans `execute.ts`.
-3. Retirer la kind `write-ci` du `TOOL_KIND` dans `classify.ts`.
-4. Mettre à jour le handbook (`docs/handbook/github-provider.md`).
-
-### 6.3 Renaming proposés
-
-| Actuel                           | Proposé                         | Raison                                                           |
-| -------------------------------- | ------------------------------- | ---------------------------------------------------------------- |
-| `github.merge-protected`         | `github.protected-branch-write` | Couvre aussi les commits directs sur main, pas que les merges.   |
-| `github.read-code`               | `github.read-source`            | "code" est ambigu vs `code` plane de v1 — découplage cosmétique. |
-| `github.workflow-write-via-file` | `github.workflow-yaml-write`    | Plus court, plus clair sur l'objet (le YAML).                    |
-
-À discuter — non bloquant.
-
-### 6.4 Slice `search.code.R` hors-périmètre bindings
-
-`github__search_code` et `github__search_issues` cherchent **dans tout
-ce que le token App voit** — pas restreint aux bindings du projet. Côté
-runtime (`classify.ts:65`), on classifie `code:read` sans binding-check.
-
-**Risque** : un agent peut faire `q: "STRIPE_SECRET_KEY org:other-org"`
-et lire les résultats. Si l'App est installée largement, fuite cross-projet.
-
-**Mitigation actuelle dans le catalogue v4** : risk `github.search-global`
-avec `vector.blast = account` pour signaler que ce n'est PAS un risk
-single-binding.
-
-**Mitigation possible Phase 2** : filtrer le `q` côté plugin pour
-forcer `repo:<bound-owner/repo>` dans la query (côté Octokit). À acter.
-
-### 6.5 Pas de binding-env qualification pour GitHub
-
-Spec v4 §4.4 dit : _"le RiskId est qualifié par env de binding (`<provider>
-[<env>].<name>`)"_. Pour Supabase/Vercel c'est naturel (un binding =
-un env). Pour GitHub, **un binding = un repo, sans env**.
-
-**Question ouverte** : devrait-on qualifier les risks GitHub par
-**l'owner** plutôt ? Ex: `github[sbw-vaubaan].merge-protected` vs
-`github[other-org].merge-protected` ? Permettrait au manager d'accepter
-sur un repo perso mais pas sur un repo client.
-
-**Suggestion** : non au MVP. On reste à `github.<risk-name>` sans
-qualification — le binding lui-même limite déjà au repo bound. Si
-plusieurs repos bound dans le même projet, ils héritent du même profil
-de risque accepté.
-
-### 6.6 Pas de plane `org`/`account`
-
-Si demain on ajoute des tools touchant `org` (`list_org_members`,
-`invite_collaborator`, etc.), il faudra un plane séparé `account` avec
-ses propres risks (`github.collaborator-write`, etc.). Le data-model
-§1 est déjà préparé (entité `collaborator` présente dans le graphe
-même si pas matchée par un tool actuel).
-
-### 6.7 Comportement actuel `classifyGithub` ↔ besoin v4
-
-Le `classify.ts` actuel renvoie `{ capability, binding }` ou
-`{ denied }`. La spec v4 §7 attend `{ slices: Slice[] }` ou
-`{ denied: string }`. **Phase 2 de la migration** (spec v4 §13).
-
-Le refacto nécessaire :
-
-1. Renommer `Capability` → `Slice` (struct interne, pas dans le wire).
-2. Convertir `{plane, level, action, env}` → string DSL
-   `github.repo[O/R].branch[X].file[Y].W`.
-3. Émettre **un set** quand pertinent (cf. §2 — `create_pull_request`
-   émet 2 slices, `merge_pull_request` aussi).
-
----
-
-## 7. Résumé exécutif
-
-- **15 entités** dans le graphe `repo` (org/repo/branch/file/commit/tag/
-  release/pull_request/comment×2/issue/workflow/workflow-run/branch-protection/
-  collaborator/secret/install-token/repo-settings).
-- **27 tools MCP actifs** dans le code aujourd'hui, **24 après Phase 6**
-  (retrait des 3 workflow-run writes).
-- **15 risks** au catalogue : 14 fins + 1 fallback `github.uncategorized-write`.
-- **Couverture lint** : 100 % des tools actifs ont au moins 1 risk
-  matchant (matrice §4).
-- **3 tools à retirer** (Phase 6 spec v4) : `dispatch_workflow`,
-  `cancel_workflow_run`, `rerun_workflow_run`.
-- **~10 tools manquants** identifiés (§6.1) — pas bloquants, à ajouter
-  en Phase 2 si besoin métier.
-
-### Questions ouvertes pour le humain
-
-1. **Q5.4** — Garder `acceptable_in_envs: [feature, fix, chore]` strict
-   sur `github.workflow-write-via-file`, ou autoriser branches
-   arbitraires ?
-2. **Q5.5** — Slice `merge-into` (Option A, suggérée) ou `file[**].W`
-   uniforme (Option B) pour `merge_pull_request` ?
-3. **Q6.3** — Renommer `merge-protected` → `protected-branch-write` ?
-4. **Q6.4** — Filtrer le `q` de `search_code`/`search_issues` pour
-   forcer `repo:<bound>` (Phase 2) ?
-5. **Q6.5** — Qualifier les risks GitHub par owner (`github[org].name`)
-   ou laisser plat (`github.name`) ?
-6. **Catalogue versioning** — quand on ajoute un risk (ex: nouveau tool
-   `create_issue`), les tokens existants tombent en denied au prochain
-   match. Confirmer ce comportement fail-closed (spec v4 §4.5) est OK
-   pour GitHub.
-
----
-
-## Annexe — pseudo-data-model TypeScript (Phase 0)
-
-À écrire dans `packages/providers/github/src/data-model.ts` lors de
-Phase 0 :
-
-```ts
-// packages/providers/github/src/data-model.ts
-import type { DataModel } from '@vaubaan/shared';
-
-export const githubDataModel: DataModel = {
-  provider: 'github',
-  planes: {
-    repo: {
-      root: { name: 'repo', cardinality: 'one', parent: null },
-      entities: [
-        { name: 'branch', parent: 'repo', cardinality: 'unbounded' },
-        { name: 'file', parent: 'branch', cardinality: 'unbounded' },
-        { name: 'commit', parent: 'branch', cardinality: 'unbounded' },
-        { name: 'tag', parent: 'repo', cardinality: 'bounded' },
-        { name: 'release', parent: 'repo', cardinality: 'bounded' },
-        { name: 'pull_request', parent: 'repo', cardinality: 'bounded' },
-        { name: 'issue', parent: 'repo', cardinality: 'bounded' },
-        { name: 'comment', parent: 'issue', cardinality: 'unbounded' },
-        { name: 'workflow', parent: 'repo', cardinality: 'bounded' },
-        { name: 'workflow-run', parent: 'workflow', cardinality: 'unbounded' },
-        { name: 'branch-protection', parent: 'repo', cardinality: 'bounded' },
-        { name: 'collaborator', parent: 'repo', cardinality: 'unbounded' },
-        { name: 'secret', parent: 'repo', cardinality: 'bounded' },
-        { name: 'install-token', parent: 'repo', cardinality: 'bounded', ephemeral: true }, // unique : sortie de credential, pas une entité persistante
-        { name: 'repo-settings', parent: 'repo', cardinality: 'one' /*singleton*/ },
-      ],
-      // Verbes dérivés (pas des entités mais des intentions slice-level) :
-      // - branch[X].merge-into        : Y mergé vers X
-      // - branch[X].propose-to[Y]     : PR ouverte de X vers Y
-      // - branch[X].workflow-via-file : modif d'un fichier sous .github/workflows
-    },
-  },
-};
-```
-
-Ce module est consommé par :
-
-1. Le runtime pour valider les slices émises (Phase 0).
-2. Le test de coverage `risk-catalog.coverage.test.ts` (Phase 1).
-3. L'auto-rendu mermaid dans le handbook (Phase 0).
-
----
-
-_Document v1 — 2026-06-15. Aligné sur spec v4 du même mois. À reviewer
-avec Renaud avant Phase 0/1 du chantier risk-model._
+The token is scoped to the repository the call names (installation-wide
+for the two search tools). `installationTokenForCall(ctx, repo)`
+(`src/token-cache.ts`) reuses it for up to 50 minutes per connection and
+repository through the host-provided `ExecuteContext.credentialCache`, so
+the diagram above is the cache-miss path; without a cache every call mints.
+`github__mint_install_token` never uses the cache: the token it hands out
+is always minted for that call. 401/403 anywhere → `UpstreamAuthError`;
+any other failed status of the token mint or of the repository listing of
+discovery → `UpstreamHttpError` carrying the status. No
+PAT path. `execute` reads the call first (`readGithubCall`, see
+"Identifiers") and declines on a refusal **before** the mint: a call without
+a well-formed repository of the mission never obtains a token, scoped or
+installation-wide. The installation id is a segment of the mint path and
+must be decimal digits (`installationIdOf` in `src/app-install.ts`, at most
+20); anything else throws `the installation id of the connection is not a
+number` and nothing is sent.
+
+### The company's App, created from the page
+
+`githubManifestRegistration` (`src/app-manifest.ts`, wired as
+`githubCredential.manifestRegistration`; ADR
+[company-app-created-from-a-manifest](../../decisions/company-app-created-from-a-manifest.md))
+posts a manifest to `https://github.com/organizations/<org>/settings/apps/new`
+or `https://github.com/settings/apps/new` (the login checked against
+`GITHUB_LOGIN_PATTERN`): `name` (34 characters at most), `url` =
+`public_url`, `redirect_url` = the instance's return route, `callback_urls` =
+[the connection callback], `request_oauth_on_install: true`, `public: false`,
+the chosen `default_permissions`; no `hook_attributes`, no `default_events`,
+no `setup_url` (the gateway takes no webhook; with OAuth on install GitHub
+sends the installing person to the callback). `POST
+/app-manifests/{code}/conversions` (the code checked against
+`[A-Za-z0-9_-]{1,128}`, no authentication) answers the App;
+`githubRegisteredApp` keeps `id` → `app_id`, `pem` → `private_key`, `slug`,
+`client_id`, `client_secret`, and drops `webhook_secret`.
+
+`GITHUB_APP_PERMISSIONS` is the one declaration of what the App may request,
+level by level, with the tools each level serves:
+
+| Permission       | Read                                                               | Write                                                                                              |
+| ---------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| `metadata`       | `list_tags` — mandatory, GitHub grants it                          | —                                                                                                  |
+| `contents`       | branches, commits, files, `search_code`, releases, the clone token | branch and file writes, `push_files`, merge, releases, the push token — **sensitive**              |
+| `pull_requests`  | list, get, merge (reads the pull request first)                    | create, merge; on a push token when held                                                           |
+| `issues`         | list, get, `search_issues`                                         | `add_issue_comment`                                                                                |
+| `actions`        | `list_workflows`, `list_workflow_runs`                             | —                                                                                                  |
+| `administration` | `get_branch_protection`                                            | `update_branch_protection` — **sensitive**                                                         |
+| `workflows`      | —                                                                  | a file write, push or delete under `.github/workflows/`; on a push token when held — **sensitive** |
+
+The permissions of the App are the hard ceiling at GitHub, which matters
+where a repository has no branch protection (private repositories on a free
+plan). `src/permission-check.ts` checks every call against what the
+installation holds — the `permissions` GitHub reports with the per-call
+installation token, kept beside it in the cache — and declines a call that
+lacks one with an `ExecutorRefusal` naming it (`github__create_branch needs
+the GitHub App permission Contents (contents: write, “Read and write”)…`),
+before anything is sent. A token whose permissions GitHub did not report
+(an entry cached by an older build) declines nothing. The push token asks
+for `contents: write` plus `pull_requests` and `workflows` (`MINT_PERMISSIONS`);
+GitHub answers 422 when the installation lacks one, and the mint is retried
+with `contents: write` and `metadata: read` only; a second 422 is declined by
+name.
+
+## Connecting with a fine-grained token
+
+Beside the App, the plugin declares a second way (`alternativeCredentials`,
+`src/token.ts`, ADR [token-connections-beside-the-integration-app](../../decisions/token-connections-beside-the-integration-app.md)): a **fine-grained personal access token** pasted
+by hand, the way offered when no GitHub App is registered. A classic token
+(`ghp_`) is refused by the field's shape (`^github_pat_…`): it reaches every
+repository and organisation of its account with coarse scopes.
+
+- **Check at paste** (`verifyGithubToken`): `GET /user` → the login, kept as
+  the account; the `github-authentication-token-expiration` header, when
+  GitHub sends it (`2026-12-31 00:00:00 UTC`), → the expiry (`expiryOf`; an
+  unreadable value is "not said"). 401 or 403 refuses the token.
+- **Resources**: `GET /user/repos` (bare list, 100 per page, 10 pages at most).
+- **Calls**: every tool sends the token as the bearer; no installation token
+  is minted, nothing is cached. A 401 expires the account (a token cannot be
+  refreshed).
+- **`github__mint_install_token`** is `unavailableTools` for this way
+  (`MINT_NEEDS_THE_APP`: "needs the GitHub App: …"): the host refuses it
+  before the budget and does not list it; `execute` declines it too.
+- **Guide**: the steps of GitHub's "Creating a fine-grained personal access
+  token", and the permissions per tool read off `GITHUB_APP_PERMISSIONS`
+  (`tokenPermissionsOf` of the SDK: a `read` level as read, any other level
+  as read and write, the mint left out) — fine-grained tokens use the App's
+  permission names, so the manifest and the guide have one source.
+  `definePlugin` checks every API tool is served.
+- **Removal**: nothing is sent to GitHub (`/credentials/revoke` is the
+  leak-report endpoint); the person deletes the token under Settings,
+  Developer settings, Personal access tokens, Fine-grained tokens.
+
+## Files
+
+| File                      | Role                                                                                                                                                                                                                                                                                                       |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/index.ts`            | `definePlugin` → `githubPlugin` v3.1.0.                                                                                                                                                                                                                                                                    |
+| `src/risk-catalog.yaml`   | 18 risks + fallback, 3 presets, `catalog_version: 6`.                                                                                                                                                                                                                                                      |
+| `src/data-model.ts`       | Plane `repo`, 17 entities (`delete` under `release` is a verb leaf); `branch` is `envScopable`.                                                                                                                                                                                                            |
+| `src/tools.ts`            | 26 tools. Retired by risk-model §7.2 #1 and not declared: `dispatch_workflow`, `cancel_workflow_run`, `rerun_workflow_run`.                                                                                                                                                                                |
+| `src/call.ts`             | The grammar of every identifier (`ownerName`, `repoName`, `repoFullName`, `repoPath`, `revision`, `branchName`, `tagName`, `pullRequestHead`, `positiveInteger`, `workflowRef`) and `readGithubCall`, the one reader `classify` and `execute` share; the refusal wording (`repositoryNotSelectedMessage`). |
+| `src/classify.ts`         | `classifyGithub(tool, args, resources)` = `readGithubCall` then `slicesOf(call)`; `isWorkflowPath`.                                                                                                                                                                                                        |
+| `src/credential.ts`       | `githubCredential` (app-install spec), `installationTokenFor(ctx, scope)`.                                                                                                                                                                                                                                 |
+| `src/app-install.ts`      | `buildAppJwt`, `mintInstallationToken`, `installationIdOf`, `GITHUB_API_BASE`, `GITHUB_API_HEADERS`.                                                                                                                                                                                                       |
+| `src/execute.ts`          | `executeGithub` (the body run under the SDK's `declining`), `discoverGithubResources`, `MINT_PERMISSIONS`, discovery paging constants (100 per page, 10 pages at most).                                                                                                                                    |
+| `src/app-manifest.ts`     | `GITHUB_APP_PERMISSIONS`, `githubManifestRegistration`, `buildGithubManifest`, `githubRegisteredApp`, `GITHUB_LOGIN_PATTERN`.                                                                                                                                                                              |
+| `src/permission-check.ts` | `needsOf(call)`, `assertAppPermissions(call, granted)`, `assertGranted`, `missingPermissionSentence`, `declineMissingPermissions`, `mintPermissions`, `MINT_NEEDS`, `gitFetchNeeds`, `gitPushNeeds`.                                                                                                       |
+| `src/credential-keys.ts`  | `GITHUB_APP_CONFIG`, `GITHUB_WEB_BASE` (shared by the credential spec and the manifest flow).                                                                                                                                                                                                              |
+| `src/token-cache.ts`      | `installationTokenForCall(ctx, repo)`: per-call token served from `ctx.credentialCache`, 50 min at most, 5 min expiry margin.                                                                                                                                                                              |
+| `src/octokit-dispatch.ts` | `dispatchGithubTool(octokit, call, args)`: checked call → Octokit call; reads the pull request before a merge and declines (`ExecutorRefusal`) a base other than the declared one.                                                                                                                         |
+| `src/git-call.ts`         | `GIT_FETCH_TOOL`, `GIT_PUSH_TOOL`, `readGitCall` (the one reader of the git tools' arguments, shared by `classify` and `execute`), `pushedRef` (branches and tags only, `refs/vaubaan/` reserved).                                                                                                         |
+| `src/git-remote.ts`       | `githubGitRemote` (the plugin's `gitRemote`): `upstream` (credential per access), `review`, `compareUrl`, `insteadOf`, `abilities`; `executeGit` (the ref moves).                                                                                                                                          |
+
+## The git remote
+
+The plugin declares the instance's git remote (`gitRemote`, SDK
+`GitRemoteCapability`; handbook [git-remote](../git-remote.md), ADR
+[gateway-as-git-remote](../../decisions/gateway-as-git-remote.md)). Two tools
+the pipeline decides and audits but that are **not MCP tools** (refused on
+`/mcp`): `github__git_fetch { repository, step }` and
+`github__git_push { repository, updates[] }`, whose arguments are the host's
+review.
+
+- **Credential** (`gitGrant`). An App connection mints a token for the one
+  repository: `contents: read` to fetch and review; to push,
+  `contents: write` + `workflows: write`, or `contents: write` alone when the
+  installation lacks `workflows` (GitHub answers 422 to the first; the mint
+  falls back, as `mint_install_token` does), and a refusal naming the
+  permission when even that is refused. Cached per repository and access in
+  `ctx.credentialCache`, with the permissions GitHub reported. A token
+  connection (`api-key`, field `token`, the fine-grained personal access
+  token) presents its token; its permissions are unknown, nothing is
+  declined on a guess. The git transport is `Basic x-access-token:<token>` to
+  `https://github.com/<owner>/<repo>.git`.
+- **Review** (`review`, `git-review.ts`). For each ref: `GET git/ref/<ref>`
+  must equal the client's `old` (else stale info — a lie about `old` would
+  keep commits out of the review); `GET compare/<base>...<head>` gives the
+  status, commit count, the commits and the net files (renames: both names);
+  a non-fast-forward is compared both ways. The base is the nearest existing
+  branch head in the pushed commit's history (`BaseFinder`: the upload-pack
+  advertisement's `refs/heads/*`, `GET commits?sha=`, up to 3 candidates, the
+  narrowest comparison): a created ref is compared with it, or with the
+  default branch when none is found; an update with `old`, or with a nearer
+  head when `old..new` brings more than one commit (ADR D4 ter). Each commit the range brings is read
+  (`GET commits/{sha}`, at most 100 per push): its paths under
+  `.github/workflows/` are workflow files of the update even when the tip
+  takes them back. Workflow files: anything under `.github/workflows/`. 300
+  files or 250 commits per comparison, a commit listing 300 files, an
+  unrelated history, an empty repository: not reviewable, refused. Then the push
+  token's permissions must cover `gitPushNeeds(updates)` (`contents: write`,
+  plus `workflows: write` when a workflow file changes), or the push is
+  refused by the permission's name.
+- **Execute** (`executeGit`, `git-moves.ts`), per ref, in order, reported
+  per ref: create `POST git/refs`; fast-forward
+  `PATCH git/refs/<ref> force:false`; force (accepted `force-push` only) and
+  delete: one receive-pack command `<old> <new|0> <ref>` with an empty pack,
+  whose `old` GitHub checks under the ref's lock (compare-and-swap). A 422 on
+  a fast-forward reads "non-fast-forward … fetch first"; a 5xx on a ref after
+  the first reports that ref and the next ones are tried; before any ref, it
+  is an upstream error.
+- **Slices** (`gitSlicesOf`, `classify.ts`): fetch `repo[R].branch.R`,
+  `repo[R].tag.R` (`read-code`); every pushed ref `<ref>.push.W`
+  (`git-push`); a branch `branch[B].W` (`feature-branch-write`,
+  `merge-protected` or the fallback); a tag `tag[T].W` (`create-release`'s
+  pattern — the deliberate overlap with `tag-write`); not a fast-forward
+  `<ref>.force.W` (`force-push`); a deletion `<ref>.delete.W`
+  (`branch-delete`, `tag-write`; a deleted branch also writes `branch[B].W`);
+  workflow files `<ref>.workflow-via-file.W` (`workflow-write-via-file`).
+- **App permissions** (`app-manifest.ts`): `github__git_fetch` under
+  `contents: read`, `github__git_push` under `contents: write`, and under
+  `workflows: write` "for a git push that changes a file under
+  .github/workflows/".
+- **Interface**: `insteadOf: https://github.com/` (the setup kit's rewrite),
+  `abilities` (what each permission means for git, for the mission page),
+  `compareUrl` (the request page's link to GitHub's comparison).
+
+## Tool → slice mapping
+
+Every repo-scoped tool resolves `owner/repo` and refuses a repository that
+is not among the mission's GitHub resources (`denied`), even though the
+host already checked `resource-not-in-mission`. A checked identifier is
+rendered to the slice ident class when it is embedded (`asIdent`: a
+character outside `[a-zA-Z0-9_./~-]` becomes `-`); this only shapes the
+slice, the request carries the identifier itself.
+
+An argument that selects a risk class is either refused unless it has the
+one spelling the classifier reasons about, or checked against GitHub:
+
+- **File paths** of `get_file_contents`, `create_or_update_file`,
+  `delete_file` and every `push_files` entry must be canonical: relative,
+  `/`-separated, with no empty, `.` or `..` segment, no backslash and no
+  control character. `/.github/workflows/ci.yml`,
+  `./.github/…` or `.github//workflows/…` are refused, not normalised, so
+  the `workflow-via-file` marker never depends on how GitHub resolves a
+  path.
+- **Branches** of `create_branch` (`branch`, `from_branch`),
+  `create_or_update_file`, `delete_file`, `push_files`,
+  `get_branch_protection`, `update_branch_protection`, `list_workflow_runs`
+  and the `base` of a pull request or a merge must be branch names: a value
+  starting with `refs/` or `heads/` is refused.
+- **`files`** of `push_files` must be a non-empty array whose every entry
+  has a string `path` and a string `content`; one malformed entry refuses
+  the call. The dispatcher pushes the entries of the call the classifier
+  read (`call.files`), so what is classified is what is pushed.
+- **`base`** of `merge_pull_request` is never sent to GitHub (the merge
+  endpoint takes none). The dispatcher first reads the pull request
+  (`GET /repos/{owner}/{repo}/pulls/{n}`) and merges only when its real
+  base equals the declared one (`main` when absent); otherwise the call
+  is declined without a merge and the answer names the real base.
+
+### Identifiers
+
+What is classified is what is sent. `readGithubCall(tool, args,
+missionRepos)` (`src/call.ts`) reads the arguments once, against the
+mission's repositories, and returns a `GithubCall` whose every identifier
+was checked by the grammar of its kind, or the refusal. `classifyGithub`
+turns that call into slices (`slicesOf`), `executeGithub` hands the same
+call to the dispatcher, which takes every identifier of its requests —
+repository, branch, path, revision, number — from the call and never from
+the raw arguments. `args` only supplies what is neither classified nor an
+identifier: contents, titles, messages, flags, page sizes, the search
+query `q`, and the blob `sha` of `create_or_update_file` / `delete_file`,
+which is forwarded as given. Each request is built field by field from
+those declared arguments: an argument no tool declares is never read, so it
+is ignored, not refused. A value outside its grammar refuses the call —
+`denied` for the classifier, an `isError` result before the token mint for
+the executor; nothing is escaped, trimmed, repaired or defaulted on one side
+only (ADR
+[`plugin-identifiers-one-grammar-for-classify-and-execute`](../../decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md)).
+
+| Argument                                                        | Grammar (`src/call.ts`)                                                                                                                                                            | Where it lands                                                                |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `owner`, `repo`                                                 | `ownerName` (`[A-Za-z0-9_-]`, ≤ 39) and `repoName` (`[A-Za-z0-9._-]`, ≤ 100, not `.` or `..`), together one of the mission's repositories                                          | URL path, token scope, slice `repo[X]`                                        |
+| `repoFullName` (`mint_install_token`), a discovered `full_name` | `repoFullName` — `owner/repo`, exactly one separator, two well-formed names                                                                                                        | token scope, resource ref, slice `repo[X]`                                    |
+| file `path`, `files[].path`                                     | `repoPath` — relative, `/`-separated, no empty, `.` or `..` segment, no backslash, no control character, ≤ 4096 characters                                                         | URL path (`/contents/{path}`) or tree body, slice `file[path]`                |
+| `branch`, `from_branch`, `base`                                 | `branchName` — a git ref name (`git check-ref-format`: no `..`, no component starting with `.` or ending in `.lock`, no blank, none of `~ ^ : ? * [ \`), ≤ 255, not a ref spelling | URL path, query or body, slice `branch[b]` / `branch-protection[b]`           |
+| `head` (`create_pull_request`)                                  | `pullRequestHead` — a `branchName`, or `owner:branch` for a fork                                                                                                                   | body, slice `branch[head]`                                                    |
+| `tag_name`                                                      | `tagName` — a git ref name, never `refs/…`                                                                                                                                         | body, slice `tag[name]`                                                       |
+| `ref`, `sha` (`list_commits`, `get_commit`), `target_commitish` | `revision` — a branch, a tag, a full ref or a SHA, optionally with `~N` / `^N`                                                                                                     | URL path (`/commits/{sha}`), query or body, slice `branch[…]` / `commit[sha]` |
+| `pull_number`, `issue_number`, `release_id`                     | `positiveInteger` — a number, a positive safe integer                                                                                                                              | URL path, slice ident                                                         |
+| `workflow_id`                                                   | `workflowRef` — a positive integer, or one file name (no `/` or `\`, not `.` or `..`, ≤ 255)                                                                                       | URL path, slice `workflow[id]`                                                |
+| the installation id of the connection                           | `installationIdOf` (`src/app-install.ts`) — decimal digits, ≤ 20                                                                                                                   | URL path of the token mint                                                    |
+
+Why a grammar per kind and not an escape: Octokit expands a path parameter
+with `encodeURIComponent`, which leaves `.` and `..` untouched, and a URL
+parser then removes those segments — `path: '..'` on `delete_file` would be
+sent as `DELETE /repos/{owner}/{repo}/`, `workflow_id: '..'` would list the
+runs of every workflow. Each grammar makes a dot-only segment impossible;
+separators and everything else are percent-encoded by Octokit. An optional
+identifier that is `undefined`, `null` or `''` is "not given"; one of the
+wrong type is refused, not treated as absent. A value GitHub answers is
+held to the same grammar before it reaches a path: the default branch read
+for a `create_branch` without `from_branch` must be a `branchName`, or
+nothing is created.
+
+| Tool                                      | Slices                                                                                               |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `list_branches`                           | `repo[X].branch.R`                                                                                   |
+| `list_commits`                            | `repo[X].commit.R`, or `repo[X].branch[sha].commit.R` when `sha` is given                            |
+| `get_file_contents`                       | `repo[X].branch[ref].file[path].R` (`branch.file[…]` without `ref`)                                  |
+| `get_commit`                              | `repo[X].commit[sha].R`                                                                              |
+| `list_tags`                               | `repo[X].tag.R`                                                                                      |
+| `list_pull_requests` / `get_pull_request` | `repo[X].pull_request.R` / `repo[X].pull_request[N].R`                                               |
+| `list_issues` / `get_issue`               | `repo[X].issue.R` / `repo[X].issue[N].R`                                                             |
+| `list_releases`                           | `repo[X].release.R`                                                                                  |
+| `list_workflows` / `list_workflow_runs`   | `repo[X].workflow.R` / `repo[X].workflow-run.R` or `repo[X].workflow[id].workflow-run.R`             |
+| `get_branch_protection`                   | `repo[X].branch-protection[branch].R`                                                                |
+| `search_code` / `search_issues`           | `github.search.code.R` / `github.search.issues.R` (no resource check)                                |
+| `create_branch`                           | `repo[X].branch[name].W`                                                                             |
+| `create_or_update_file` / `delete_file`   | `repo[X].branch[b].file[path].W` + `repo[X].branch[b].workflow-via-file.W` if path is a workflow     |
+| `push_files`                              | one `file[path].W` per file (+ workflow marker), + `repo[X].branch[b].files-bulk.W` when 2+ files    |
+| `create_pull_request`                     | `repo[X].pull_request.W` + `repo[X].branch[head].propose-to[base].W`                                 |
+| `merge_pull_request`                      | `repo[X].pull_request[N].W` + `repo[X].branch[base ?? main].merge-into.W`                            |
+| `add_issue_comment`                       | `repo[X].issue[N].comment.W` (issue/PR number space is unified)                                      |
+| `create_release`                          | `repo[X].release.W` + `repo[X].tag[name].W`                                                          |
+| `delete_release`                          | `repo[X].release[id].delete.W`                                                                       |
+| `update_branch_protection`                | `repo[X].branch-protection[branch].W`                                                                |
+| `mint_install_token`                      | `repo[X].install-token[clone\|push].W` for `repoFullName`, or one per GitHub resource of the mission |
+
+Concrete slices never carry wildcards: a "list all" read emits the entity
+name without a leaf and the catalog's terminal `[**]` absorbs it. A branch
+or a revision cannot hold a `*` (its grammar refuses it); in a file path,
+where `*` is an ordinary character, it is replaced like any character
+outside the ident class before it reaches a slice.
+
+## Catalog decisions
+
+- **Protected branches by name**, not by the owner's environment label:
+  `merge-protected` matches `main, master, prod, production, release-*`
+  for direct writes, bulk writes and merges. A GitHub resource's `env`
+  label (set by the owner on the repository) does not qualify GitHub
+  risks; no GitHub risk is env-scoped.
+- **`workflow-write-via-file` lost its v4 `acceptable_in_envs`
+  (`feature, fix, chore`)**. Those were branch pseudo-envs that the v5
+  resource-based `EnvResolver` never produces; kept, the risk would have
+  been skipped from `risks_touched` and a workflow write on a feature
+  branch would have passed on `feature-branch-write` alone. Without the
+  field the risk is always touched and must be accepted explicitly; a
+  workflow write on `main` additionally touches `merge-protected`.
+- The fallback was widened to `github.**.W` (was `github.repo[**].W`), per
+  the risk-model spec §4.3 wording. It counts only when no specific entry
+  matched the write (policy-engine rule); no preset
+  offers it, the creator adds it for unconventional branch names
+  (`risk-catalog.test.ts` pins a `wip-x` write on the fallback alone;
+  `plugin.test.ts` checks that its slice is a fallback hit and that no
+  preset lists the fallback).
+- **Publishing and deleting a release are two risks, each touched by its own
+  tool.** `create_release` emits `release.W` and `tag[name].W`, the patterns
+  of `create-release` (`repo[**].release.W`, `repo[**].tag[**].W`).
+  `delete_release` emits `release[id].delete.W`: `delete` is a verb leaf the
+  data model declares under `release`, and `delete-release` matches
+  `repo[**].release[**].delete.W`. Neither pattern matches the other tool's
+  slice, so a mission that accepts `create-release` alone cannot delete a
+  release, and the reverse; `release-manager` carries both, each under
+  `approval`.
+- Two mint risks (`clone` vs `push`): the push token leaves the gateway's
+  perimeter with write permissions, hence a separate entry. Since catalog v6
+  no preset carries either: the git remote gives git without a token leaving.
+- **Catalog v6 — git through the remote.** `git-push` (every pushed ref,
+  leaf `push`), `force-push` (leaf `force`), `branch-delete` (leaf `delete`
+  on a branch), `tag-write` (leaves `push` and `delete` on a tag). Nothing
+  renamed. A pushed tag also writes `tag[<name>]`, which `create-release`
+  matches: a release mission accepts both, deliberately.
+- `merge_pull_request` is classified on the declared `base`, `main` when
+  the argument is absent — the conservative assumption — and the declaration
+  is binding: the merge is refused when the pull request targets another
+  branch. It also touches `create-pr`, whose `pull_request[**].W` pattern
+  matches the `pull_request[N].W` slice.
+- A merge into a branch that is not protected by name (`feature/x`,
+  `develop`) has no named risk: its `merge-into` slice lands on the
+  fallback. Whether it deserves an entry is an open catalog decision.
+
+## Presets
+
+| Preset            | Risks (quota / rate per 60 s)                                                                                                                                                                                                 | Approval                                                   |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `read-only`       | read-code 5000/120, read-meta 5000/120                                                                                                                                                                                        | —                                                          |
+| `developer`       | read-code 10000/240, read-meta 10000/240, search-global 500/30, feature-branch-write 3000/60, bulk-file-write 1000/30, create-pr 200/10, comment-write 500/20, workflow-write-via-file 50/5, git-push 200/10, force-push 20/2 | workflow-write-via-file, force-push                        |
+| `release-manager` | read-code 5000/120, read-meta 5000/120, feature-branch-write 500/30, create-pr 100/10, comment-write 200/10, merge-protected 50/5, create-release 20/2, delete-release 5/1, git-push 100/10, tag-write 20/2                   | merge-protected, create-release, delete-release, tag-write |
+
+The numbers are defaults the creator adjusts at issuance; the deferred ADR
+`mission-presets-default-values` (plan §5.5) will settle them across
+plugins. `branch-protection-write`, `branch-delete` and both mint risks are in
+no preset. Missions issued from the v5 `developer` keep their mint risks: a
+policy is stored, not derived from the preset.
+
+## Tests
+
+`npx vitest run plugins/github` — 639 tests, no network:
+
+- `plugin.test.ts` (17): kit assertions, coverage with samples per tool
+  and per git tool (the 18 named risks touched, `fallbackHits` empty), the fallback catching
+  a write on an unconventional branch and a merge into a non-protected one,
+  preset invariants, credential spec, resource check.
+- `risk-catalog.test.ts` (71): the table `[tool, arguments, risks touched]`
+  evaluated through `classifyGithub` and the shipped catalog — at least one
+  row per tool, every risk of the catalog named by a row (protected and
+  feature branches, workflow files, bulk pushes, merges, both mint
+  purposes, git fetches and pushes — every ref, force, deletion, tags,
+  workflow files —, the fallback cases); the v6 presets (developer without
+  the mint risks, force-push asking first; release-manager's tags).
+- `classify.test.ts` (69): the per-tool security suite of `classifyGithub`
+  (reads, branch and file writes, pull requests, comments, releases, rules,
+  mint, retired tools, structural denials: non-canonical paths, refs given
+  as branches, malformed `files`, wildcard characters, repositories outside
+  the mission).
+- `execute.test.ts` (25): JWT claims (RS256, `iss`, 540 s), mint request
+  (Bearer JWT, scoping body, PEM un-escaping, missing key names the key,
+  kind mismatch, 401 → `UpstreamAuthError`), Octokit over `mockFetch`
+  (per-call repository scoping, installation-wide for search, JSON body,
+  403 → `UpstreamAuthError`), branch-protection and release tools, the merge
+  bound to the declared base (read then merge; a mismatch is declined with
+  no merge, an unreadable base throws), `push_files` declining malformed
+  `files`, mint tool (clone/push permission sets, fan-out over mission
+  resources, refusals before any call, as `isError` results), discovery
+  (metadata, paging to `total_count`, 401).
+- `injection.test.ts` (415): every identifier position fed `..`, `.`,
+  `a/../b`, encoded forms, an empty, an overlong and a multi-line value, to
+  `classify` and to `execute` — refused by both with nothing sent (not even
+  the token mint), or sent as the exact path that was classified; numbers;
+  the installation id of the connection and the repository names discovery
+  returns.
+- `token-cache.test.ts` (5): a mint per call without a host cache, one mint
+  per repository scope with one, no token served or stored close to its
+  expiry, lifetime bounded by what is left of the token,
+  `github__mint_install_token` never cached.
+- `data-model.test.ts` (1): data-model integrity.
+- `app-manifest.test.ts` (36): the declaration names every tool, its
+  defaults, its three sensitive permissions and the tools lost per level;
+  the manifest per permission choice; the registration URLs and the logins
+  refused; the code grammar; the conversion answer read and refused field by
+  field; a call without its permission declined by name with nothing sent
+  past the token mint (a workflow file needs Workflows, another file does
+  not); nothing declined when GitHub did not report the permissions; the push
+  token's 422 fallback and its refusal; the git remote's two tools in the
+  declaration.
+
+The git remote end to end (review, ref moves, permissions, token
+connection) is tested by the host against a git-backed stand-in of GitHub:
+`apps/gateway/tests/integration/git/` (handbook [git-remote](../git-remote.md)).
+
+## How to debug
+
+- **`Invalid risk catalog` at boot** — read every bullet of the
+  `CatalogError`; paths are exact. Presets must reference ids of this
+  catalog only.
+- **`github: app configuration key 'app_id' is missing`** — the instance
+  configuration lacks one of the app-config keys; nothing was sent to
+  GitHub.
+- **"Not connected — the provider returned no user authorization"** — the
+  App does not have "Request user authorization (OAuth) during
+  installation" enabled, so GitHub came back without `code`.
+- **"Not connected — … not among those the authorizing account can
+  reach"** — the GitHub account signed in during the installation cannot
+  reach the installation whose id came back; `GET /user/installations` with
+  that account's token does not list it.
+- **`token-exchange-failed` with `incorrect_client_credentials`** — the
+  client ID or client secret entered for the App is wrong (the client ID is
+  not the App ID).
+- **`GitHub App token mint failed (404)`** — the installation id is unknown
+  to this App (App uninstalled, or the wrong App's key); 401 means the key
+  does not match `app_id`.
+- **A call names a repository outside the mission** — the classifier
+  refuses with the sentence below. Up to five selected repositories are
+  named; above, the message ends with `N repositories are selected.` Add
+  the repository to the mission (or the connection's discovered resources
+  are stale: refresh them). `github__mint_install_token` with a foreign
+  `repoFullName` gets the same sentence.
+
+  ```text
+  github repository 'acme/lib' is not selected in this mission. Selected: acme/app.
+  ```
+
+- **The mission holds no GitHub repository** — every repo-scoped tool is
+  refused with the first line, the mint tool with the second.
+
+  ```text
+  no GitHub repository is selected in this mission.
+  github__mint_install_token: no GitHub repository is selected in this mission.
+  ```
+
+- **A client still names `dispatch_workflow`, `cancel_workflow_run` or
+  `rerun_workflow_run`** — retired tools, refused with:
+
+  ```text
+  tool retired: this gateway does not dispatch, cancel or re-run GitHub workflows — use the deployment tools of the provider that hosts the service.
+  ```
+
+- **The classifier refuses a spelling it cannot place exactly** — send the
+  canonical path, the bare branch name, well-formed `files` entries.
+
+  ```text
+  tool 'github__create_or_update_file' path '/.github/workflows/ci.yml' must be relative, with no empty, '.' or '..' segment and no backslash
+  tool 'github__create_branch' branch 'refs/heads/main' must be a branch name such as 'main', not a ref
+  tool 'github__push_files' requires 'files' to be a non-empty array of { path, content } strings
+  ```
+
+- **A merge is declined although the mission accepts it** — the call was
+  classified on the declared base and the pull request targets another
+  branch; nothing was merged, and the answer is an `isError` result, not an
+  upstream failure. Calling again with the real base classifies
+  the merge on it (`merge-protected` for a protected branch).
+
+  ```text
+  github__merge_pull_request: pull request #7 targets 'main', not the declared base 'feature/x'. Call again with base 'main'.
+  ```
+
+- **A call the mission accepts comes back `isError` with no
+  `upstream_error` in the audit** — the executor declined it
+  (`ExecutorRefusal`): the reader refused an argument, or the merge guard
+  did not hold. The text is the reason. What GitHub itself fails is thrown
+  (`UpstreamAuthError`, `UpstreamHttpError`, Octokit's own error) and
+  recorded as an upstream failure; so are the conditions the executor
+  still throws as plain errors: an installation id that is not a number, a
+  missing app-configuration key, a pull request whose base cannot be read
+  and a default branch GitHub answers that is not a branch name.
+- **`delete_release` is refused with `github.delete-release` missing on a
+  mission that holds `create-release`** — they are separate risks (catalog
+  v4); add `delete-release`.
+- **A write is refused with `github.uncategorized-write` missing** — the
+  branch matches neither the feature/\* conventions nor a protected name,
+  so only the fallback caught it. Rename the branch, or have the creator
+  add the fallback to the mission explicitly.
+- **`mockFetch: unexpected GET …`** in tests — Octokit built a URL no route
+  covers; the message names it.
+
+## Not done, on purpose
+
+- The `search_*` queries are not forced to `repo:<mission resource>`; the
+  risk `search-global` (blast `account`) is the guard.
+- The base check of `merge_pull_request` is a read followed by the merge,
+  not one atomic call: GitHub's merge endpoint has no "expected base"
+  parameter, so a pull request retargeted between the two requests is
+  merged into its new base.
+- Missing tools identified in v4 (`create_issue`, `update_issue`,
+  `create_pull_request_review`, `delete_branch`, `get_repository`…) stay
+  out; they would slot into existing risks without a new entry.

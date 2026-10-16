@@ -1,409 +1,279 @@
 ---
-title: Cloudflare DNS provider — v4 risk-based modelling + runtime
+title: Cloudflare DNS provider — modelling and runtime (v5 plugin)
 status: current
-date: 2026-06-23
-last_reviewed: 2026-07-01
+date: 2026-10-13
+last_synced: 2026-10-14
 tracks:
-  - packages/providers/cloudflare-dns/src/data-model.ts
-  - packages/providers/cloudflare-dns/src/risk-catalog.ts
-  - packages/providers/cloudflare-dns/src/risk-catalog.yaml
-  - packages/providers/cloudflare-dns/src/risk-classifier.ts
-  - packages/providers/cloudflare-dns/src/tools.ts
-  - packages/providers/cloudflare-dns/src/execute.ts
-  - packages/providers/cloudflare-dns/src/cloudflare-dns-adapter.ts
-  - packages/providers/cloudflare-dns/src/index.ts
-  - packages/web/src/lib/gateway/build.ts
+  - plugins/cloudflare-dns/src/index.ts
+  - plugins/cloudflare-dns/src/resources.ts
+  - plugins/cloudflare-dns/src/classify.ts
+  - plugins/cloudflare-dns/src/execute.ts
+  - plugins/cloudflare-dns/src/tools.ts
+  - plugins/cloudflare-dns/src/data-model.ts
+  - plugins/cloudflare-dns/src/risk-catalog.yaml
+  - plugins/cloudflare-dns/tests/unit/
+  - plugins/cloudflare-dns/README.md
 ---
 
-# Cloudflare DNS provider — v4 risk-based modelling + runtime
+# Cloudflare DNS provider — modelling and runtime
 
-Tenth Vaubaan provider. Covers DNS zone and record management for a
-single Cloudflare account. Simpler than Stripe or Gmail : 8 entities,
-no `envScopable` (DNS has no test/live mode), no synthetic overlays,
-no caps, no `infra_limits`.
+`@vaubaan/plugin-cloudflare-dns` (version 3.0.0) on the v5 Plugin SDK
+(feature P1.2g). Contract : ADR [[plugin-contract-and-credential-spec]] ;
+the closed argument surface and what the executor declines : ADR
+[`plugin-arguments-closed-surface-and-typed-refusals`](../../decisions/plugin-arguments-closed-surface-and-typed-refusals.md) ;
+spec
+[`vaubaan-gateway.md`](../../spec/vaubaan-gateway.md) §3.2, §5 and
+[`gateway-risk-model.md`](../../spec/gateway-risk-model.md) §2, §4, §7.
+Contributor-facing details (fields, tools list, preset table) :
+[`plugins/cloudflare-dns/README.md`](../../../plugins/cloudflare-dns/README.md).
 
-Spec : `docs/spec/gateway-risk-model.md`.
-Research : `.vaubaan/research/providers/cloudflare-dns.md`.
+## What changed from v4
 
----
+| v4                                                                       | v5                                                                                                      |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| One pasted secret per `provider_admins` row, API token or Global API Key | One `api-key` credential with a single `api_token` field ; the Global API Key form is refused           |
+| `ProviderBinding` with `resource_ref` = **account id**                   | One `Resource` per **zone** : `ref` = zone id, `metadata.account_id`, `metadata.zone_name`              |
+| `classifyCloudflareDnsV4(tool, args, bindings)`, `zone_id` taken as-is   | `classifyCloudflareDns(tool, args, resources)` ; `zone_id` must be a mission zone, or the single zone   |
+| `record-write` for every record change                                   | Layered : `record-write` + `critical-record-write` (apex, wildcard, MX, NS) + `record-delete`           |
+| `zone-delete` matched `zone[**].W` — every write under a zone touched it | `zone[*].W` : the zone itself only                                                                      |
+| `list_zones` filtered by the binding's account                           | `list_zones` filtered to the mission's zones ; discovery lists every zone the token reaches, no account |
+| `risk-catalog.ts` twin + sync test                                       | YAML loaded by `loadCatalogFile` at boot ; twin and sync test deleted                                   |
+| No presets                                                               | `read-only`, `dns-operator`, `zone-admin`                                                               |
 
-## Vue d'ensemble
+The v4 surface (the adapter, the binding-based classifier and the
+deprecated aliases of `index.ts`) is deleted ; the plugin exports only the
+v5 surface below. The per-tool security suite of the v4 classifier was
+ported to `classifyCloudflareDns` (`tests/unit/classify.test.ts`).
 
-The package lives in `packages/providers/cloudflare-dns/`. It contains
-the v4 risk-based modelling artifacts (data-model, risk catalog,
-classifier) and the full runtime (adapter, dispatcher, 15 MCP tools).
-
-Exports from `src/index.ts`:
-
-- `CloudflareDnsAdapter` -- paste-token adapter class.
-- `cloudflareDnsAvailableTools` -- 15 `McpToolDeclaration[]` (7 reads + 8 writes).
-- `cloudflareDnsExecuteCall` -- REST dispatcher function.
-- `cloudflareDnsDataModel` -- entity graph for the `dns` plane.
-- `cloudflareDnsRiskCatalog` -- TS mirror of `risk-catalog.yaml` (10 entries).
-- `classifyCloudflareDnsV4` -- maps `(tool, args, bindings)` to slices.
-- `CloudflareDnsClassifyV4Result` -- type alias for the classify return.
-
-Auth model : API Token (Bearer) or Global API Key (`email|key` format,
-detected by `|` separator). The operator creates a token from the
-Cloudflare dashboard and pastes it into the binding form. No OAuth.
-
----
-
-## Comment ca marche
-
-### 1. Data model (`src/data-model.ts`)
-
-Single plane `dns` with 8 entities rooted at `account` :
+## Layout
 
 ```
-account (one, root)
-  zone (bounded)
-    record (unbounded)
-    zone-settings (one)
-    dnssec (one)
-    cache (one)
-    zone-import (one, synthetic)
-    zone-export (one, synthetic)
+plugins/cloudflare-dns/src/
+  resources.ts              CLOUDFLARE_DNS_PROVIDER, PATH_IDENT, pathIdent, DNS_NAME, dnsName,
+                            RECORD_TYPE, recordType, CRITICAL_RECORD_TYPES, resolveZoneResource,
+                            accountIdOf, zoneNameOf, isCriticalRecord, recordSensitivity
+  tools.ts                  15 McpToolDeclaration (update_record requires type + name ;
+                            delete_record takes them as optional)
+  classify.ts               classifyCloudflareDns — pure, (tool, args, resources) → slices | denied ;
+                            undeclaredArgument, the argument rule `execute` shares
+  execute.ts                executeCloudflareDns, discoverCloudflareDnsResources, CLOUDFLARE_API_BASE,
+                            MAX_DISCOVERED_ZONES, API_TOKEN_FIELD
+  data-model.ts             plane `dns`, 10 entities (critical + delete overlays under record)
+  risk-catalog.yaml         11 risks + fallback, 3 presets, catalog_version 3
+  index.ts                  definePlugin(...) → cloudflareDnsPlugin (default export)
 ```
 
-No entity has `envScopable: true`. The binding's `resource_ref` is the
-Cloudflare **account_id** (one API Token may cover N zones under that
-account).
+## Resources and zone resolution
 
-`zone-import` and `zone-export` are synthetic singleton entities : they
-represent BIND zone file operations (bulk import POST, atomic export
-GET), not queryable REST resources.
-
-Validated by `tests/unit/data-model.test.ts` (referential integrity,
-single plane, no envScopable, account root, 8 entities).
-
-### 2. Risk catalog (`src/risk-catalog.yaml` + `src/risk-catalog.ts`)
-
-9 named risks + 1 fallback = 10 total.
-
-| RiskId                               | Label                                   | Reversibility    |
-| ------------------------------------ | --------------------------------------- | ---------------- |
-| `cloudflare-dns.read-zone-metadata`  | Read zone and account metadata          | reversible       |
-| `cloudflare-dns.read-records`        | Read DNS records (IPs, CNAMEs, MX, TXT) | reversible       |
-| `cloudflare-dns.export-zone-file`    | Export full zone as BIND file           | reversible       |
-| `cloudflare-dns.record-write`        | Create / update / delete a DNS record   | costly           |
-| `cloudflare-dns.import-records`      | Bulk import DNS records from BIND file  | costly           |
-| `cloudflare-dns.zone-settings-write` | Edit zone settings (SSL, TLS, cache)    | costly           |
-| `cloudflare-dns.dnssec-write`        | Enable / disable DNSSEC                 | costly           |
-| `cloudflare-dns.cache-purge`         | Purge CDN cache                         | reversible       |
-| `cloudflare-dns.zone-delete`         | Delete entire DNS zone                  | **irreversible** |
-| `cloudflare-dns.uncategorized-write` | Fallback catch-all                      | costly           |
-
-Key properties :
-
-- **No caps, no `infra_limits`** -- upstream rate-limit (1200 req/5min)
-  suffices at MVP.
-- **No `acceptable_in_envs`** -- no env scoping (DNS has no test/live).
-- **`zone-delete` is the only irreversible risk** -- domain stops
-  resolving immediately ; recreation requires zone + full record reimport.
-
-The YAML is the canonical reviewable form. The TS module
-(`risk-catalog.ts`) is a 1:1 structural mirror for runtime import
-(Vercel does not bundle YAML). Sync enforced by
-`tests/unit/risk-catalog-sync.test.ts`.
-
-### 3. Classifier (`src/risk-classifier.ts`)
-
-`classifyCloudflareDnsV4(tool, args, bindings)` maps 15 tools (7 reads
-
-- 8 writes) to slices.
-
-Binding helpers :
-
-- `pickCloudflareDnsBinding(bindings)` -- finds the binding with
-  `provider === 'cloudflare-dns'`.
-- `accountSeg(binding)` -- resolves `resource_ref` to the account ident
-  segment. Falls back to `*` when empty.
-- No mode segment (no `envScopable`).
-
-Root prefix : `[name('account'), acct]`.
-
-Tool mapping :
-
-| Tool                                 | Slice                                | Risk matched                       |
-| ------------------------------------ | ------------------------------------ | ---------------------------------- |
-| `cloudflare_dns__list_zones`         | `account[A].zone[*].R`               | read-zone-metadata                 |
-| `cloudflare_dns__get_zone`           | `account[A].zone[Z].R`               | read-zone-metadata                 |
-| `cloudflare_dns__list_records`       | `account[A].zone[Z].record[*].R`     | read-records (+read-zone-metadata) |
-| `cloudflare_dns__get_record`         | `account[A].zone[Z].record[R].R`     | read-records (+read-zone-metadata) |
-| `cloudflare_dns__export_records`     | `account[A].zone[Z].zone-export.R`   | export-zone-file                   |
-| `cloudflare_dns__get_zone_settings`  | `account[A].zone[Z].zone-settings.R` | read-zone-metadata                 |
-| `cloudflare_dns__get_dnssec`         | `account[A].zone[Z].dnssec.R`        | read-zone-metadata                 |
-| `cloudflare_dns__create_record`      | `account[A].zone[Z].record.W`        | record-write                       |
-| `cloudflare_dns__update_record`      | `account[A].zone[Z].record[R].W`     | record-write                       |
-| `cloudflare_dns__delete_record`      | `account[A].zone[Z].record[R].W`     | record-write                       |
-| `cloudflare_dns__import_records`     | `account[A].zone[Z].zone-import.W`   | import-records                     |
-| `cloudflare_dns__edit_zone_settings` | `account[A].zone[Z].zone-settings.W` | zone-settings-write                |
-| `cloudflare_dns__purge_cache`        | `account[A].zone[Z].cache.W`         | cache-purge                        |
-| `cloudflare_dns__edit_dnssec`        | `account[A].zone[Z].dnssec.W`        | dnssec-write                       |
-| `cloudflare_dns__delete_zone`        | `account[A].zone[Z].W`               | zone-delete                        |
-
-Note : record reads also match `read-zone-metadata` because the catalog
-pattern `zone[**].R` is recursive. This means reading records requires
-the operator to accept both `read-zone-metadata` and `read-records`.
-
-Unknown tools return `{ denied: 'unknown cloudflare-dns tool ...' }`.
-Missing binding returns `{ denied: 'no cloudflare-dns binding ...' }`.
-
-### 4. Tools (`src/tools.ts`)
-
-15 `McpToolDeclaration` entries (7 reads + 8 writes), prefixed
-`cloudflare_dns__`. Each tool declares its `inputSchema` with the
-required and optional parameters matching the Cloudflare REST API.
-
-Exports :
-
-- `availableTools` -- the full array of 15 tool declarations.
-- `WRITE_TOOL_NAMES` -- `Set<string>` of the 8 write tool names.
-
-Key input patterns :
-
-- Most tools require `zone_id`.
-- `get_record`, `update_record`, `delete_record` also require `record_id`.
-- `create_record` requires `type`, `name`, `content` ; optionally `ttl`,
-  `proxied`, `priority`.
-- `list_records` accepts optional filters : `type`, `name`, `content`,
-  `page`, `per_page`.
-- `edit_zone_settings` takes an `items` array of `{id, value}` pairs.
-- `purge_cache` takes optional `purge_everything`, `files`, `tags`,
-  `hosts`, `prefixes`.
-- `edit_dnssec` takes `status` (`"active"` or `"disabled"`).
-- `import_records` takes `file` (BIND zone file content as string).
-- `list_zones` takes no required args (account_id injected from binding).
-
-### 5. Execute dispatcher (`src/execute.ts`)
-
-`executeCall(fetchImpl, token, tool, args, accountId)` routes each of
-the 15 tools to its Cloudflare REST endpoint via a switch/case.
-
-Base URL : `https://api.cloudflare.com/client/v4`.
-
-Auth headers built by `buildAuthHeaders(token)` :
-
-- If `token` contains `|` : split into `email|key` and use
-  `X-Auth-Email` + `X-Auth-Key` headers (Global API Key format).
-- Otherwise : `Authorization: Bearer <token>` (API Token format).
-
-HTTP methods :
-
-- **GET** : query-string params via `toQueryString()`. No body.
-- **POST / PATCH** : `Content-Type: application/json`, JSON body.
-- **DELETE** : no body.
-- **import_records** : special case using `callCloudflareMultipart()` --
-  `multipart/form-data` with a `file` field containing the BIND content
-  as a `Blob`.
-
-`list_zones` injects `account.id=<accountId>` into the query string to
-scope results to the binding's Cloudflare account.
-
-### 6. Adapter (`src/cloudflare-dns-adapter.ts`)
-
-Class `CloudflareDnsAdapter` -- paste-token mode, same pattern as
-`ResendAdapter`.
-
-`mintUpstreamToken(admin)` : decodes `admin.access_token_encrypted` via
-`TextDecoder` and returns the raw token string with a far-future expiry
-(1 year). Cloudflare API Tokens do not expire on their own.
-
-`validateBinding(admin, resourceRef)` : calls
-`GET /zones?account.id=<resourceRef>` with the decoded token. If the
-response is OK, returns `{ ok: true, displayName }` where `displayName`
-is the first zone's name (or the `resourceRef` as fallback). Supports
-both Bearer and Global API Key auth detection.
-
-`executeCall(admin, binding, tool, args)` : decodes the token, extracts
-`accountId` from `binding.resource_ref`, and delegates to `execute.ts`.
-
-`classifyV4(tool, args, bindings)` : delegates to
-`classifyCloudflareDnsV4`.
-
-Constructor accepts an optional `CloudflareDnsAdapterConfig` with
-`fetchImpl` for test injection.
-
----
-
-## Gateway wiring
-
-### `build.ts` (l. 377-386)
-
-```typescript
-const cloudflareDnsAdapter = new CloudflareDnsAdapter();
-upstreamByProvider['cloudflare-dns'] = {
-  provider: 'cloudflare-dns',
-  availableTools: cloudflareDnsAvailableTools,
-  classifyV4: (tool, args, bindings) => cloudflareDnsAdapter.classifyV4(tool, args, bindings),
-  executeCall: (admin, binding, tool, args) =>
-    cloudflareDnsAdapter.executeCall(admin, binding, tool, args),
-  loadProviderAdmin,
-};
+```mermaid
+flowchart LR
+  cred["api-key credential<br/>api_token"] -->|"GET /zones?page=N&per_page=50"| disc["discoverResources"]
+  disc --> z1["Resource z1<br/>example.com · account acct1"]
+  disc --> z2["Resource z2<br/>example.org · account acct1"]
+  z1 & z2 --> mission["mission selects zones"]
+  mission -->|"args.zone_id ∈ refs, or the single zone"| cls["classifyCloudflareDns"]
+  cls --> slice["cloudflare-dns.account[acct1].zone[z1].record[r].W<br/>(+ .critical.W / .delete.W)"]
+  mission --> exe["executeCloudflareDns"]
+  exe -->|"zone from the resource, never the raw arg"| api["api.cloudflare.com/client/v4"]
 ```
 
-Same pattern as Resend/Upstash Redis : paste-token via
-`provider_admins`, no `selfContained` flag (unlike Stripe).
+- `resolveZoneResource` : an explicit `zone_id` must be a ref among the
+  mission's Cloudflare DNS resources ; absent, the mission's single zone ;
+  otherwise `denied` (ambiguous, none, unknown, malformed). The resolved
+  ref is always path-safe (`pathIdent`) : a zone whose ref is not is
+  `denied` too, even as the mission's single zone.
+- The account segment comes from `metadata.account_id` when it passes
+  `pathIdent` (`*` when absent or malformed) ; `list_zones` uses the
+  account shared by the mission's zones, else `account[*]`.
+- No env : DNS has no test/live mode. The owner may still label zones, but
+  no catalog risk carries `acceptable_in_envs`.
 
-### `catalog/route.ts`
+## Classifier conventions
 
-`{ slug: 'cloudflare-dns', displayName: 'Cloudflare DNS', tools: cloudflareDnsAvailableTools }`
-added to the `PROVIDERS` array exposed by `GET /api/v1/catalog`.
+| Tool                                 | Slice(s)                                                                            |
+| ------------------------------------ | ----------------------------------------------------------------------------------- |
+| `list_zones`                         | `account[A].zone[*].R` (denied when the mission has no zone)                        |
+| `get_zone`                           | `zone[Z].R`                                                                         |
+| `list_records` / `get_record`        | `zone[Z].record[*].R` / `zone[Z].record[R].R`                                       |
+| `export_records`                     | `zone[Z].zone-export.R`                                                             |
+| `get_zone_settings` / `get_dnssec`   | `zone[Z].zone-settings.R` / `zone[Z].dnssec.R`                                      |
+| `create_record`                      | `zone[Z].record.W` **and**, when critical, `zone[Z].record.critical.W`              |
+| `update_record`                      | `zone[Z].record[R].W` **and**, when critical, `zone[Z].record[R].critical.W`        |
+| `delete_record`                      | `zone[Z].record[R].delete.W` **and**, when critical, `zone[Z].record[R].critical.W` |
+| `import_records`                     | `zone[Z].zone-import.W`                                                             |
+| `edit_zone_settings` / `edit_dnssec` | `zone[Z].zone-settings.W` / `zone[Z].dnssec.W`                                      |
+| `purge_cache`                        | `zone[Z].cache.W`                                                                   |
+| `delete_zone`                        | `zone[Z].W`                                                                         |
 
-### `risk-catalog/loader.ts`
+**Critical** (`isCriticalRecord`) : type MX or NS whatever the name ; name
+equal to the zone name or `@` ; wildcard at the apex (`*.zone`, `*`) ;
+conservatively, a type that `recordType` does not read, a name or a zone
+name that `dnsName` does not read (see "Identifiers" below), an unknown
+zone name, or a write whose arguments lack `type` or `name`
+(`recordSensitivity`). A record is ordinary only when its type is a type
+name, its name and the zone name are both DNS names, and the two differ.
+Case and trailing dots are ignored (`Example.COM..` is the apex) ;
+surrounding whitespace is not trimmed, it makes the name critical.
 
-`cloudflareDnsRiskCatalog` imported from `@vaubaan/providers-cloudflare-dns`
-and registered in `PROVIDER_CATALOGS['cloudflare-dns']`.
+**Deleting a record is a record write like the others.** Removing the apex
+`A`, the `MX` set or an `NS` delegation has the effect
+`critical-record-write` describes, so `delete_record` goes through the same
+`recordSensitivity` as `update_record` :
 
-### `provider-info.ts`
+| `delete_record` arguments                                           | Slices                                       | Risks touched                                            |
+| ------------------------------------------------------------------- | -------------------------------------------- | -------------------------------------------------------- |
+| `record_id` + `type` / `name` of an ordinary record                 | `record[R].delete.W`                         | `record-write`, `record-delete`                          |
+| `record_id` + `type` / `name` of an apex, wildcard, MX or NS record | `record[R].delete.W`, `record[R].critical.W` | `record-write`, `record-delete`, `critical-record-write` |
+| `record_id` only (`type` or `name` missing)                         | `record[R].delete.W`, `record[R].critical.W` | `record-write`, `record-delete`, `critical-record-write` |
 
-Already registered with `kind: 'cloud'`, 1 plane `dns`, data model, and
-catalog path.
+`type` and `name` stay **optional** in the tool schema : a call that does
+not name the record is not refused, it is classified at the most severe
+applicable risk. This was chosen over the two alternatives because it fails
+closed with the smallest contract change — making the two arguments
+required would break every existing `delete_record` call, and classifying
+every deletion as critical would leave no way to delete an ordinary record
+without holding `critical-record-write`. A declaration is never trusted on
+its own : see the guard under "Execute".
 
-### Zod enums (preview + mint)
+## Only declared arguments
 
-`'cloudflare-dns'` already present in the `z.enum()` schemas in
-`risk-preview.ts`, `tokens/preview/route.ts`, and `tokens/mint/route.ts`.
+`execute` builds its query string and its JSON body from the arguments it
+was given, so the argument surface of a tool is closed in the classifier :
+after the zone is resolved, `undeclaredArgument(tool, args)` (over the SDK's
+`undeclaredArgumentDenial` and the tools' input schemas) denies a call
+carrying an argument the tool does not declare:
+`<name>: not an argument of '<tool>' — nothing classifies it, so it is not sent.`
+A field of Cloudflare's own API that no tool declares is therefore refused,
+not forwarded. A call wrong on both counts is told about the zone first. `execute` applies
+the same function again before it builds anything, as an `isError` refusal :
+a caller that did not go through `classify` cannot widen the call either.
 
----
+## Identifiers
 
-## Comment l'utiliser
+One grammar function per kind of identifier, all in `resources.ts`, read by
+`classify` and by `execute` alike ; a value outside its grammar is refused
+or classified at the most severe risk, never escaped (ADR
+[`plugin-identifiers-one-grammar-for-classify-and-execute`](../../decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md)).
 
-### Setup d'un binding Cloudflare DNS
+| Value                                            | Grammar                                                                                                                                                          | Where it lands                                                  | Outside the grammar                                                                               |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `zone_id` argument, zone resource ref            | `pathIdent` — `PATH_IDENT = ^[A-Za-z0-9_-]{1,64}$`                                                                                                               | URL path `/zones/<zone>`, slice `zone[Z]`                       | `denied` / refusal : `zone_id: malformed zone id`                                                 |
+| `record_id` argument                             | `pathIdent`                                                                                                                                                      | URL path `/dns_records/<record>`, slice `record[R]`             | `denied` `record_id: malformed identifier` ; refusal `record_id: missing or malformed identifier` |
+| `metadata.account_id` of a zone                  | `pathIdent` (`accountIdOf`)                                                                                                                                      | slice `account[A]` only, never a request                        | the glob `account[*]`                                                                             |
+| record `name`, zone name                         | `dnsName` — `DNS_NAME` : lower-cased, trailing dots removed, dotted labels of letters, digits, `_` and inner hyphens, an optional leading `*.`, ≤ 253 characters | JSON body ; decides the critical-record verdict                 | the write is classified critical                                                                  |
+| record `type`                                    | `recordType` — `RECORD_TYPE = ^[A-Za-z][A-Za-z0-9]{0,15}$`, upper-cased                                                                                          | JSON body ; decides the critical-record verdict                 | the write is classified critical                                                                  |
+| list filters (`name`, `type`… on `list_records`) | none — never an identifier                                                                                                                                       | query string, percent-encoded (`toQueryString`), never the path | —                                                                                                 |
 
-1. Create a Cloudflare API Token with `Zone:DNS:Edit` + `Zone:Zone:Read`
-   permissions, scoped to the target account.
-2. Add the API Token in `provider_admins` (via the UI or the API).
-3. Create a binding with `provider: 'cloudflare-dns'` and
-   `resource_ref` set to the Cloudflare **account_id**.
+`pathIdent` is called by `classify` (`recordIdent`, `resolveZoneResource`)
+and by `execute` (`recordIdArg`, `resolveZoneResource`, and once more in
+`segment` when the path is built). `record_id` is required on `get_record`,
+`update_record` and `delete_record` ; a missing one is `record_id: missing`.
+`encodeURIComponent('..')` is `..`, and every URL parser removes dot
+segments : without the grammar, `record_id: '..'` would be classified as a
+record deletion while the request that leaves is `DELETE /zones/<zone>/` —
+the zone endpoint. `dnsName` and `recordType` are the one reading of a
+record name and type, in the classifier (`recordSensitivity`) and in the
+read-back guard of `execute` : `@`, a bare `*`, an inner wildcard, an empty
+label, whitespace, a control or non-ASCII character, a separator or an
+escape is not a name, so the write needs `critical-record-write`. Service
+labels (`_dmarc`, `_sip._tcp`) and punycode (`xn--…`) are names.
 
-```json
-{
-  "provider": "cloudflare-dns",
-  "resource_ref": "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d",
-  "environment": "production"
-}
-```
+## Catalog and presets
 
-### Mint d'un token
+11 named risks + `cloudflare-dns.uncategorized-write`, none env-scoped, no
+caps. Patterns are recursive where layering is intended and exact where it
+is not :
 
-```bash
-POST /api/v1/tokens/mint
-{
-  "projectSlug": "my-project",
-  "bindings": [
-    { "provider": "cloudflare-dns", "resource_ref": "1a2b3c4d...", "env": "production" }
-  ],
-  "accepted_risks": [
-    "cloudflare-dns.read-zone-metadata",
-    "cloudflare-dns.read-records",
-    "cloudflare-dns.record-write"
-  ]
-}
-```
+- `record[**].W` (`record-write`) also matches `record[R].critical.W` and
+  `record[R].delete.W`, so every record write touches it and the sensitive
+  ones touch their own risk on top.
+- `zone[**].R` (`read-zone-metadata`) matches every read under a zone,
+  record reads included — reading records needs both read risks (v4
+  behaviour kept).
+- `zone[*].W` (`zone-delete`) matches the zone write only. The v4 pattern
+  `zone[**].W` made every record, settings or DNSSEC write touch the
+  irreversible zone-deletion risk ; fixed in catalog version 2.
 
-### Appel d'un tool
+Presets : `read-only` (metadata + records), `dns-operator` (reads,
+`record-write`, `cache-purge`, all `auto`), `zone-admin` (everything but
+`zone-delete` ; `approval` on `critical-record-write`, `record-delete`,
+`import-records`, `zone-settings-write`, `dnssec-write`). The fallback is
+in no preset : the engine counts it only when no specific risk matched.
+Values are a starting point — ADR `mission-presets-default-values` is
+deferred.
 
-```bash
-POST /api/v1/tools/call
-Authorization: Bearer vbn_live_...
-{
-  "tool": "cloudflare_dns__list_records",
-  "args": {
-    "zone_id": "abc123def456"
-  }
-}
-```
+## Execute
 
----
+`ROUTES` in `execute.ts` maps each tool to method + path + payload kind
+(query string, JSON body, multipart `file`, none). The zone in the URL is
+the resolved resource's ref ; `zone_id` and `record_id` are removed from
+the forwarded arguments. Bearer auth only. A provider failure is thrown:
+401/403 → `UpstreamAuthError`, any other failed status → `UpstreamHttpError`.
+What the executor declines itself — an unknown tool, a zone that is not
+resolved, an argument the tool does not declare, a malformed identifier,
+the record guard below — is an `isError` result (the SDK's
+`ExecutorRefusal`, thrown inside the executor and turned into the result at
+its entry point ; the unknown tool is answered directly): nothing failed at
+Cloudflare, so the audit entry carries no `upstream_error`.
 
-## Comment debug
+Three guards beyond routing :
 
-- **Symptome : "no cloudflare-dns binding is attached"** -- the token
-  does not carry a binding `provider: 'cloudflare-dns'`. Check
-  `provider_bindings` for the project and the token.
+- `list_zones` : the upstream `result` is filtered to the mission's refs.
+- `update_record` and `delete_record` declared ordinary (`type` + `name`
+  of a subdomain record) : `GET` the record first ; if it is critical
+  today, or if the answer carries no type and name to compare, refuse (an
+  `isError` result) before the `PATCH` / `DELETE`. A call classified critical (declared so, or
+  undeclared) skips the read : it already needed `critical-record-write`.
+  `type` and `name` are not forwarded on a deletion (no body).
+- Path identifiers : a `record_id` or a zone ref that fails `pathIdent`
+  is refused before any call, as an `isError` result (`record_id: missing or
+malformed identifier`, `zone_id: malformed zone id`).
 
-- **Symptome : "Cloudflare DNS ProviderAdmin has no access_token_encrypted"** --
-  the `provider_admins` row for `cloudflare-dns` has a null
-  `access_token_encrypted`. Re-paste the API Token.
+Discovery : `GET /zones` paginated, 50 per page, stops at a page shorter than 50, at
+`result_info.total_pages` (the current page when the answer carries none) or at
+`MAX_DISCOVERED_ZONES` (500). An answer whose `result` is neither a list nor absent
+fails discovery ; an absent or `null` `result` is an empty page.
 
-- **Symptome : "Cloudflare API GET /zones 403"** -- the API Token lacks
-  permissions or is revoked. Check the token in the Cloudflare dashboard.
-  If using Global API Key format (`email|key`), verify the `|` separator
-  and that both parts are correct.
+## How to debug
 
-- **Symptome : "Cloudflare validation failed (403)"** -- the
-  `validateBinding` call failed. The `resource_ref` (account_id) may not
-  match the token's account scope, or the token is invalid.
-
-- **Symptome : multipart import fails** -- the `import_records` tool
-  sends the BIND file as `multipart/form-data`. Check that the `file`
-  arg contains valid BIND zone file syntax.
-
-- **Logs de classification** -- the gateway audit trail records
-  `slices_executed` and `risks_touched` for each call. Compare with the
-  YAML patterns to understand which risk matched.
-
----
+- **`zone_id: argument missing and the mission touches 2 Cloudflare DNS zones — name one`**
+  — the agent must pass `zone_id`.
+- **`zone_id: 'z9' is not a Cloudflare DNS zone of this mission`** — the
+  zone exists upstream but was not selected for the mission ; the owner
+  adds it, or the agent targets another zone.
+- **A record update is refused with `critical-record-write` missing** —
+  the arguments lack `type` / `name`, or name the apex / an MX / an NS ;
+  the mission needs that risk (approval-gated in `zone-admin`).
+- **`the record is a critical record (A example.com) but the call declared an ordinary one`**
+  — the agent described the record as a subdomain while it is the apex ;
+  repeat the call with the record's real type and name. Raised by
+  `update_record` and `delete_record` ; an empty type and name in the
+  message mean the record could not be read back.
+- **A record deletion is refused with `critical-record-write` missing** —
+  the call carries `record_id` only, or names an apex / wildcard / MX / NS
+  record. For an ordinary record the agent adds its `type` and `name` ;
+  for a critical one the mission needs that risk.
+- **`record_id: malformed identifier`** / **`zone_id: malformed zone id`**
+  — the identifier is not a single path-safe segment (letters, digits, `_`,
+  `-`, at most 64 characters). Cloudflare ids are 32 hex characters.
+- **`<name>: not an argument of 'cloudflare_dns__…'`** — the call carries
+  an argument the tool's schema does not declare. Remove it ; to support it,
+  declare it in `tools.ts` and decide how it is classified.
+- **`list_zones` returns fewer zones than the dashboard** — expected : only
+  the mission's zones are returned.
+- **Discovery ends with `UpstreamAuthError 401`** — the token is invalid or
+  revoked ; a Global API Key cannot be pasted (pattern refuses `|`).
 
 ## Tests
 
-4 test files in `tests/unit/` :
-
-- **`data-model.test.ts`** -- referential integrity, single plane, no
-  envScopable, account root, 8 entities.
-- **`risk-catalog.test.ts`** -- YAML structural validation (10 entries),
-  RISK_ID_REGEX, unique ids, 6D vector axes, fallback exists, zone-delete
-  is the only irreversible, no caps, no infra_limits, no
-  acceptable_in_envs, coverage lint (every tool matched by at least one
-  non-fallback risk), `risksTouchedBy` sanity checks.
-- **`risk-catalog-sync.test.ts`** -- YAML-to-TS structural sync (same
-  ids, labels, reasons, matches, vectors in both files).
-- **`risk-classifier.test.ts`** -- all 15 tools with representative args,
-  account propagation from binding, no mode segment, denials (unknown
-  tool, missing binding, non-matching provider), future tools rejected.
-
----
-
-## Extension
-
-### Ajouter un tool Cloudflare DNS
-
-1. Add the `McpToolDeclaration` in `tools.ts` (section READ or WRITE).
-2. Add the `case` in the switch of `execute.ts` with the REST endpoint.
-3. Add the `case` in the switch of `risk-classifier.ts` with the slices.
-4. Verify slices are covered by an existing risk or add a new risk in
-   the YAML + TS.
-5. Add unit tests in the 4 suites (tools count, classifier, execute,
-   catalog coverage).
-
-### Global API Key support
-
-The `|` separator in the token string triggers Global API Key mode.
-Format : `user@example.com|globalapikeyhere`. The adapter and execute
-dispatcher both detect this and switch from `Authorization: Bearer` to
-`X-Auth-Email` + `X-Auth-Key` headers.
-
----
-
-## Reste a faire
-
-- **Web UI binding form** -- Cloudflare API Token input.
-- **Web UI token mint** -- risk list for Cloudflare DNS.
-- **Adapter unit tests** -- test coverage for `CloudflareDnsAdapter`
-  (mintUpstreamToken, validateBinding, executeCall delegation).
-- **Execute unit tests** -- test coverage for the 15 tool dispatchers.
-
----
-
-## References
-
-- Spec : `docs/spec/gateway-risk-model.md`
-- Research : `.vaubaan/research/providers/cloudflare-dns.md`
-- Risk catalog YAML :
-  [`packages/providers/cloudflare-dns/src/risk-catalog.yaml`](../../../packages/providers/cloudflare-dns/src/risk-catalog.yaml)
-- Risk catalog TS :
-  [`packages/providers/cloudflare-dns/src/risk-catalog.ts`](../../../packages/providers/cloudflare-dns/src/risk-catalog.ts)
-- Resend handbook (runtime pattern reference) :
-  [`./resend.md`](./resend.md)
+`npx vitest run plugins/cloudflare-dns` — 190 : `plugin.test.ts` (51 : kit,
+classifier zone resolution and record writes, the undeclared arguments
+refused by `classify` and by `execute`, execute including the
+update / delete guard and the path-unsafe identifiers, discovery,
+credential, presets), `classify.test.ts` (33 : the per-tool security suite
+of `classifyCloudflareDns`, the deletion overlay, the identifiers that
+reach the URL path), `risk-catalog.test.ts` (38 : invariants, the exact
+risks every tool touches, layering), `identifiers.test.ts` (59 : the
+grammars, then hostile `zone_id`, `record_id`, account id, record `name`
+and `type` and list filters fed to `classify` and to `execute`),
+`data-model.test.ts` (9).

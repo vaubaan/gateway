@@ -1,0 +1,52 @@
+# Secret scanning (gitleaks), run by the `secrets` workflow on every push and
+# pull request, and over the whole history every week. Gitleaks' default rules
+# apply; this file only lists what a reviewer accepted as not a secret.
+#
+# Rules for an entry (docs/workflow/coding-workflow.md, "Security checks"):
+# - a fake value in a test says so in itself: it contains `0123456789`, and
+#   needs no entry here;
+# - otherwise the entry names the exact value or the exact file, with the
+#   reason; never a whole directory, never a rule switched off;
+# - a finding in history that no longer exists in the tree goes to
+#   .gitleaksignore by fingerprint.
+# A real secret that was committed is revoked at its issuer first; the history
+# is not rewritten to hide it.
+
+title = "Vaubaan Gateway"
+
+[extend]
+useDefault = true
+
+# Throw-away RSA keys generated for the GitHub App tests: they sign the JWT
+# that a mocked GitHub verifies, and open nothing.
+[[allowlists]]
+description = "Test-only RSA key of the github plugin"
+targetRules = ["private-key"]
+paths = [
+  '''^plugins/github/tests/unit/fixtures\.ts$''',
+  '''^packages/providers/github/tests/unit/adapter\.test\.ts$''', # v4, deleted
+]
+
+# Fake values written into tests and demo data before the `0123456789`
+# convention. Each is matched exactly, so the same shape elsewhere is still
+# reported.
+[[allowlists]]
+description = "Reviewed fake values in tests, demo seed and the design specimen page"
+regexTarget = "secret"
+regexes = [
+  '''^a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d$''',                 # plugins/railway/tests/unit/token.test.ts
+  '''^01a135f1-6564-71f6-b1e2-3a4cd1988ce5$''',                 # an audit-filter id in audit/filters.test.ts
+  '''^vbn_live_XU2O5mGKq8tR3vLm9nWe2dPx7cYhBz4kA1sFj6uT$''',    # the design specimen page (app/(app)/design), not a key shape
+  '''^vbn_live_Ab12Cd34_$''',                                   # a prefix in logging.test.ts
+  '''^upstash_key_123$''',                                      # upstash-redis plugin tests
+  '''^ARGUMENT-IN-CLEAR-91c4$''',                               # a marker the approval test looks for in the audit
+  '''^encryption\.previous_keys\.1$''',                         # a configuration key path, not a value
+  '''^sk_(test|live)_demoAcmeBilling$''',                       # the demo seed (tests/demo/seed.ts)
+  '''^sk_test_(abc123def456|fakekey123)$''',                    # v4 Stripe tests, deleted
+]
+
+# The convention for new fake secrets: a value that contains this sequence is a
+# fixture by construction.
+[[allowlists]]
+description = "Fake secrets that carry the fixture marker"
+stopwords = ["0123456789"]

@@ -1,9 +1,13 @@
 ---
 title: Resend comme provider email outbound unifie (transactionnel + broadcast)
-status: accepted
+status: superseded
 date: 2026-06-23
 author: rpelissier
+superseded-by: pivot-v4-to-v5-on-prem-mission-tokens
+superseded-date: 2026-10-12
 ---
+
+> **Superseded on 2026-10-12** by [[pivot-v4-to-v5-on-prem-mission-tokens]]. Legacy v4 decision kept for history; body unchanged.
 
 # Resend comme provider email outbound unifie
 

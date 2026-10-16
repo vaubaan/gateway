@@ -1,34 +1,27 @@
 /**
- * RiskId qualification helpers (env qualifier).
+ * RiskId qualification helpers (env qualifier) and environment resolution.
  *
- * Spec : docs/spec/gateway-risk-model.md §4.4.
+ * Spec : docs/spec/gateway-risk-model.md §4.4 ; docs/spec/vaubaan-gateway.md
+ *        §0 "Resource" (environment-qualified RiskIds resolve against the
+ *        environment label of the resource a call touches).
  *
  * Convention :
- *   `<provider>[<env>].<name>`  — env-scoped (per-binding) form ;
- *   `<provider>.<name>`         — account-scope / non-env-bound form.
+ *   `<provider>[<env>].<name>`  — env-scoped (per-resource) form ;
+ *   `<provider>.<name>`         — account-scoped form.
  *
- * The catalog YAML stores the **non-qualified** id ; qualification is a
- * presentation / wire concern computed per-binding at mint time, and again
- * at the runtime when we compare `risks_touched` against `accepted_risks`
- * for env-scoped risks.
+ * The catalog YAML stores the **non-qualified** id ; qualification happens
+ * at issuance (one entry per labelled resource) and again at the runtime,
+ * when `risks_touched` is compared with the mission's accepted risks.
  *
- * These helpers are PURE — no IO, no globals — so they live in the
- * `@vaubaan/policy-engine` package and are reused by:
- *   - the web mint preview (qualify per binding when listing risks),
- *   - the mint-form client (display + wire format),
- *   - the gateway runtime (`evaluateCallForToken`), to align with the
- *     qualified ids stored on the token's `accepted_risks` snapshot.
- *
- * History : these used to be defined in
- * `packages/web/src/lib/risk-catalog/loader.ts` and re-implemented
- * client-side in `mint-form.tsx`. Centralizing here removed the
- * drift-by-copy hazard flagged in the v4 clean-code report (B3).
+ * These helpers are PURE — no IO, no globals — and are reused by the
+ * issuance UI, the issuance API and the gateway runtime, so the two sides
+ * can never drift apart.
  */
 
-import type { ProviderBinding, RiskEntry, RiskId, RiskVector, Slice } from '@vaubaan/shared';
-
-/** Regex for an env qualifier embedded in a RiskId : `[<env-slug>]`. */
-const ENV_QUALIFIER_RE = /\[[a-z][a-z0-9-]*\]/;
+import type { Resource, RiskEntry, RiskId, RiskVector, Slice } from '@vaubaan/shared';
+// Value imports come from the browser-safe subpath : the barrel pulls in
+// `api-key.ts` (argon2, node:crypto), which the issuance UI cannot bundle.
+import { formatRiskId, parseRiskId } from '@vaubaan/shared/risk-id';
 
 /** The narrow shape `qualifyRiskId` actually consumes — just the env list.
  *  Accepts `null` as well as `undefined` so UI projections (which use
@@ -39,14 +32,30 @@ export interface QualifiableRiskEntry {
 
 /**
  * Predicate : is this catalog entry env-scoped ? We use the presence of a
- * non-empty `acceptable_in_envs` as the marker. Account-scope risks
+ * non-empty `acceptable_in_envs` as the marker. Account-scoped risks
  * (e.g. `github.mint-install-token`) leave the field absent and stay
- * non-qualified across bindings.
+ * non-qualified across resources.
  */
 export function isEnvScopedEntry(entry: QualifiableRiskEntry | undefined): boolean {
   if (!entry) return false;
   if (!entry.acceptable_in_envs || entry.acceptable_in_envs.length === 0) return false;
   return true;
+}
+
+/**
+ * The one rule for "may this risk be accepted or touched in this env" : an
+ * entry that is not env-scoped (no list, or an empty one) is acceptable
+ * anywhere ; an env-scoped entry only in a listed env, so never without an
+ * env. Issuance (`checkAcceptableInEnv`), the runtime (`evaluateCall`), the
+ * plugin SDK's preset checks and the store's catalog index all call it.
+ */
+export function isAcceptableInEnv(
+  entry: QualifiableRiskEntry | undefined,
+  env: string | null | undefined,
+): boolean {
+  if (!isEnvScopedEntry(entry)) return true;
+  const envs = entry?.acceptable_in_envs ?? [];
+  return typeof env === 'string' && envs.includes(env);
 }
 
 /**
@@ -59,9 +68,8 @@ export function isEnvScopedEntry(entry: QualifiableRiskEntry | undefined): boole
  * not double-qualify, but we don't want to corrupt them either).
  *
  * Note : the entry parameter is `QualifiableRiskEntry`, NOT the full
- * `RiskEntry`. Callers in the UI carry slimmed-down catalog projections
- * (cf. `MintFormCatalogEntry`) — they can pass them in directly without
- * fabricating a fake `matches` field.
+ * `RiskEntry`. Callers in the UI carry slimmed-down catalog projections —
+ * they can pass them in directly without fabricating a `matches` field.
  */
 export function qualifyRiskId(
   baseId: RiskId,
@@ -70,71 +78,162 @@ export function qualifyRiskId(
 ): RiskId {
   if (env === null || env === undefined || env.length === 0) return baseId;
   if (!isEnvScopedEntry(entry)) return baseId;
-  if (ENV_QUALIFIER_RE.test(baseId)) return baseId;
-  const dot = baseId.indexOf('.');
-  if (dot < 0) return baseId; // shouldn't happen per RiskId regex
-  const provider = baseId.slice(0, dot);
-  const rest = baseId.slice(dot);
-  return `${provider}[${env}]${rest}`;
+  const parsed = parseRiskId(baseId);
+  if (!parsed) return baseId; // malformed ids never reach here ; stay defensive
+  if (parsed.env !== null) return baseId;
+  return formatRiskId({ provider: parsed.provider, env, name: parsed.name });
 }
 
 /**
  * Inverse of `qualifyRiskId` — strip the `[env]` qualifier to recover the
  * catalog lookup key. Returns the input unchanged when no env qualifier is
- * present.
+ * present or when the id is malformed.
  */
 export function unqualifyRiskId(qualifiedId: RiskId): RiskId {
-  return qualifiedId.replace(ENV_QUALIFIER_RE, '');
+  const parsed = parseRiskId(qualifiedId);
+  if (!parsed || parsed.env === null) return qualifiedId;
+  return formatRiskId({ provider: parsed.provider, name: parsed.name });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Environment resolution — which env label does an executed slice fall under ?
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Resolves the environment label an executed slice falls under, or `null`
+ * when it has none (account-rooted slice, unlabelled resource, ambiguity).
+ *
+ * The runtime depends on this interface, not on a resource list, so the
+ * host may resolve environments any way it likes : from the plugin's
+ * `envOf` hook composed with the mission's resources (`envResolverFor`,
+ * the default), from the resources alone (`resourceEnvResolver`), or from
+ * a fixture in tests.
+ */
+export interface EnvResolver {
+  resolveEnv(slice: Slice): string | null;
 }
 
 /**
- * Given an executed slice and the access token's bindings, resolve which
- * binding env (if any) applies to that slice. We match by `slice.provider`
- * and the slice's first `ident` segment value against `binding.resource_ref`.
- *
- * Returns `null` when no match — either the slice is account-rooted
- * (no resource_ref in the path, e.g. `vercel.account.team[…]`) or the
- * provider has no binding on this token. Both cases mean "no env to
- * qualify with".
- *
- * Design note : the resource_ref convention is :
- *  - github   `owner/repo`   appearing as `repo[owner/repo]`
- *  - vercel   `prj_xyz`      appearing as `project[prj_xyz]`
- *  - supabase `xxxxx`        appearing as `project[xxxxx]`
- *  - railway  `pid`          appearing as `project[pid]`
- *  - bash     hostname slug  appearing as `host[<slug>]` or absent
- *
- * The match is structural — first ident in the slice path that equals
- * any `binding.resource_ref` for the slice's provider wins. We don't
- * require a specific entity-name preceding the ident because the spec
- * doesn't pin one ; the providers' classifiers already encode the right
- * shape.
+ * Resolver that knows no environment : every slice resolves to `null`.
+ * It is an ordinary resolver, not a switch — `evaluateCall` given this one
+ * runs in the host mode and refuses every env-scoped risk (nothing is
+ * labelled). The mode without qualification is requested by name :
+ * `envResolver: 'unqualified'`.
  */
-export function resolveSliceBindingEnv(
+export const noEnvResolver: EnvResolver = {
+  resolveEnv: () => null,
+};
+
+/**
+ * Default resolver : match the slice against the resources the mission may
+ * touch. The slice's provider must equal `resource.provider` ; the
+ * identifiers of the slice path (`ident` segments and `list` entries) that
+ * equal a `resource.ref` name the resources the slice touches, and their
+ * environment is the answer **when they all carry the same one**.
+ *
+ * The resolver cannot know which segment of a slice is the resource : every
+ * identifier is compared. So an identifier a caller chose (a table, a key, a
+ * branch) that happens to equal the ref of another resource is counted too,
+ * and when the cited resources disagree — two labels, or a labelled and an
+ * unlabelled one — the answer is `null` : no environment, hence a refusal of
+ * every env-scoped risk the call touches. Taking the first match instead
+ * would let such an identifier lend its resource's label to the call.
+ *
+ * Returns `null` when no resource matches — either the slice is
+ * account-rooted (no ref in the path, e.g. `vercel.account.team[…]`) or the
+ * mission has no resource of that provider. Both mean "no env to qualify
+ * with". When the path carries no ref and the mission holds exactly one
+ * resource of the provider, that resource's env applies (account-rooted
+ * operations still come from a specific account). Several resources and no
+ * ref in the path is ambiguous → `null`.
+ *
+ * Ref conventions are the plugins' : `repo[owner/repo]` for GitHub,
+ * `project[prj_xyz]` for Vercel, `project[<ref>]` for Supabase and Railway,
+ * `host[<slug>]` for SSH. No entity name is required before the ident ;
+ * the classifiers already encode the right shape.
+ */
+export function resourceEnvResolver(resources: ReadonlyArray<Resource>): EnvResolver {
+  return {
+    resolveEnv(slice: Slice): string | null {
+      const matching = resources.filter((r) => r.provider === slice.provider);
+      if (matching.length === 0) return null;
+      const refToEnv = new Map<string, string | null>();
+      for (const r of matching) refToEnv.set(r.ref, r.env ?? null);
+      const cited = new Set<string | null>();
+      for (const seg of slice.path) {
+        const values = seg.kind === 'ident' ? [seg.value] : seg.kind === 'list' ? seg.values : [];
+        for (const value of values) {
+          const env = refToEnv.get(value);
+          if (env !== undefined) cited.add(env);
+        }
+      }
+      if (cited.size === 1) return [...cited][0] ?? null;
+      // Resources that disagree on the environment : none can be named.
+      if (cited.size > 1) return null;
+      if (matching.length === 1) return matching[0]!.env ?? null;
+      return null;
+    },
+  };
+}
+
+/**
+ * What an `EnvDeriver` answers for a slice that names its environment but
+ * not exactly one — `env[*]`, `env[prod,preview]`, `env[prod*]` : the slice
+ * has no single environment, and the owner's label on the resource must not
+ * stand in for it (the label says what the *resource* is, the slice says the
+ * call reaches several environments of it). The composed resolver then
+ * answers `null`, and every env-scoped risk the slice touches is refused.
+ *
+ * A value of its own rather than `null` : `null` and `undefined` both mean
+ * "this slice says nothing about its environment, use the label".
+ */
+export const NO_SINGLE_ENV: unique symbol = Symbol.for('@vaubaan/policy-engine/no-single-env');
+
+/**
+ * A plugin-side derivation of the environment of a slice : the `env[prod]`
+ * segment for Vercel, the only shipped plugin with one. Returns `undefined` (or
+ * `null`) when the slice carries no environment of its own, so the
+ * resource label applies, and `NO_SINGLE_ENV` when it names several. Mirrors
+ * `ProviderPlugin.envOf` in the SDK without importing it (the SDK depends on
+ * this package, not the reverse).
+ */
+export type EnvDeriver = (
   slice: Slice,
-  bindings: ReadonlyArray<ProviderBinding>,
-): string | null {
-  const providerBindings = bindings.filter((b) => b.provider === slice.provider);
-  if (providerBindings.length === 0) return null;
-  // Build a quick lookup ref → env from the provider's bindings.
-  const refToEnv = new Map<string, string | null>();
-  for (const b of providerBindings) {
-    refToEnv.set(b.resource_ref, b.environment ?? null);
-  }
-  // Walk the slice path, return the first matching ident.
-  for (const seg of slice.path) {
-    if (seg.kind === 'ident') {
-      const env = refToEnv.get(seg.value);
-      if (env !== undefined) return env;
-    }
-  }
-  // Slice path didn't carry a binding ref. If the provider has exactly one
-  // binding, use that one's env (account-rooted operations still come from
-  // a specific account). Multiple bindings + no ref in path = ambiguous → null.
-  if (providerBindings.length === 1) {
-    return providerBindings[0]!.environment ?? null;
-  }
-  return null;
+  resources: readonly Resource[],
+) => string | null | undefined | typeof NO_SINGLE_ENV;
+
+/**
+ * The composed default resolver (ADR fallback-risk-only-when-uncategorized,
+ * § environment resolution ; spec vaubaan-gateway §0 "Resource" : "for
+ * providers where the environment lives in the arguments, the plugin
+ * derives it") :
+ *
+ *   1. the plugin's `envOf(slice, resources)` when given and non-empty —
+ *      the environment is a slice segment or an argument (Vercel) ;
+ *      `NO_SINGLE_ENV` ends the resolution there with `null` : the slice
+ *      names several environments and no label may replace them ;
+ *   2. else the owner's label on the matching resource
+ *      (`resourceEnvResolver`) — Supabase, Railway, and Stripe whose
+ *      plugin labels one resource per mode at discovery ;
+ *   3. else `null` : the risk stays unqualified.
+ *
+ * Hosts build it once per call with the plugin's hook :
+ * `envResolverFor(missionResources, plugin.envOf?.bind(plugin))`.
+ */
+export function envResolverFor(
+  resources: ReadonlyArray<Resource>,
+  derive?: EnvDeriver,
+): EnvResolver {
+  const byLabel = resourceEnvResolver(resources);
+  if (!derive) return byLabel;
+  return {
+    resolveEnv(slice: Slice): string | null {
+      const derived = derive(slice, resources);
+      if (derived === NO_SINGLE_ENV) return null;
+      if (typeof derived === 'string' && derived.length > 0) return derived;
+      return byLabel.resolveEnv(slice);
+    },
+  };
 }
 
 /**
@@ -142,8 +241,6 @@ export function resolveSliceBindingEnv(
  * When the entry declares `vector_overrides[env]`, the overridden axes
  * replace those in the base `vector` ; absent axes inherit from the base.
  * Returns the base vector unchanged when no override applies.
- *
- * Spec : docs/spec/risk-entry-per-env-vector.md §1.
  */
 export function resolveVector(
   entry: Pick<RiskEntry, 'vector' | 'vector_overrides'>,

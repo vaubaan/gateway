@@ -1,0 +1,14 @@
+.mono {
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 0.93em;
+  overflow-wrap: break-word;
+}
+.quiet {
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+}
+.link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}

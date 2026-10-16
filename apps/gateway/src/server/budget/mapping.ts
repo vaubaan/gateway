@@ -1,0 +1,114 @@
+/**
+ * Store records ⇄ domain values, for missions and the budget.
+ *
+ * The store keeps camelCase persistence records (`MissionRecord`, its policy entries
+ * with flat `rateLimit` / `rateWindowSeconds`, `SessionCounterRecord`,
+ * `ConnectionResourceRecord`); missions, the budget and the pipeline speak
+ * `@vaubaan/shared`'s vocabulary (`MissionPolicyEntry` with `rate_limit: { max,
+ * window_seconds }`, `Period`, `SessionCounter`). This module is the only place that
+ * translates between the two, in both directions, so neither side renames anything for
+ * the other: the policy entry (`policyEntryOf` / `policyEntryRecordOf`), the period
+ * (`periodOf`, `statedPeriodOf`, `budgetPeriodOf`), the counter (`sessionCounterOf`) and
+ * the staleness of a resource (`isStale`). A connection's own shapes are translated by
+ * `connections/mapping.ts`.
+ *
+ * Naming: the store calls its camelCase policy entry `MissionPolicyEntry` and its
+ * selection `MissionConnection`, exactly like the shared and gateway-core domain types.
+ * The store's names are a contract of the store module, so they are aliased here
+ * (`…Record`) rather than renamed.
+ */
+
+import type {
+  Iso8601,
+  MissionPolicy,
+  MissionPolicyEntry,
+  MissionStatus,
+  Period,
+  SessionCounter,
+} from '@vaubaan/shared';
+import type {
+  ConnectionResourceRecord,
+  MissionPolicyEntry as MissionPolicyEntryRecord,
+  MissionRecord,
+  SessionCounterRecord,
+} from '../store/types.ts';
+import type { PeriodSpec } from './period.ts';
+
+/** What the budget needs of a mission: identity, lifecycle, period and policy. */
+export interface BudgetMission {
+  readonly id: string;
+  readonly status: MissionStatus;
+  readonly expires_at: Iso8601 | null;
+  readonly period: PeriodSpec;
+  readonly policy: MissionPolicy;
+}
+
+/** A period as a creator states it: no anchor, the store sets it at issuance. */
+export type StatedPeriod =
+  | { readonly kind: 'one-off' }
+  | { readonly kind: 'recurring'; readonly length_seconds: number };
+
+export function policyEntryOf(record: MissionPolicyEntryRecord): MissionPolicyEntry {
+  return {
+    risk_id: record.riskId,
+    quota: record.quota,
+    rate_limit: { max: record.rateLimit, window_seconds: record.rateWindowSeconds },
+    gate: record.gate,
+  };
+}
+
+/** The inverse of `policyEntryOf`: what `MissionsRepo.create` / `replacePolicy` persist. */
+export function policyEntryRecordOf(entry: MissionPolicyEntry): MissionPolicyEntryRecord {
+  return {
+    riskId: entry.risk_id,
+    quota: entry.quota,
+    rateLimit: entry.rate_limit.max,
+    rateWindowSeconds: entry.rate_limit.window_seconds,
+    gate: entry.gate,
+  };
+}
+
+/** The period as the pipeline carries it (`MissionContext.mission.period`). */
+export function periodOf(record: Pick<MissionRecord, 'periodAnchor' | 'periodSeconds'>): Period {
+  return record.periodSeconds === null
+    ? { kind: 'one-off' }
+    : { kind: 'recurring', length_seconds: record.periodSeconds, anchor_at: record.periodAnchor };
+}
+
+/** The period as a draft, a detail page, a kit or an audit payload states it. */
+export function statedPeriodOf(record: Pick<MissionRecord, 'periodSeconds'>): StatedPeriod {
+  return record.periodSeconds === null
+    ? { kind: 'one-off' }
+    : { kind: 'recurring', length_seconds: record.periodSeconds };
+}
+
+/** The period as the budget computes with it: the anchor, even for a one-off mission. */
+export function budgetPeriodOf(
+  record: Pick<MissionRecord, 'periodAnchor' | 'periodSeconds'>,
+): PeriodSpec {
+  return { anchor_at: record.periodAnchor, length_seconds: record.periodSeconds };
+}
+
+/** True once the last discovery no longer returned the resource (spec §0 "Resource"). */
+export function isStale(record: Pick<ConnectionResourceRecord, 'staleSince'>): boolean {
+  return record.staleSince !== null;
+}
+
+export function budgetMissionOf(record: MissionRecord): BudgetMission {
+  return {
+    id: record.id,
+    status: record.status,
+    expires_at: record.expiresAt,
+    period: budgetPeriodOf(record),
+    policy: record.policy.map(policyEntryOf),
+  };
+}
+
+export function sessionCounterOf(record: SessionCounterRecord): SessionCounter {
+  return {
+    session_id: record.sessionId,
+    risk_id: record.riskId,
+    period_start: record.periodStart,
+    consumed: record.consumed,
+  };
+}

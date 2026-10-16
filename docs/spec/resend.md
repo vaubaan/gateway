@@ -1,875 +1,706 @@
-# Provider spec — Resend
+---
+title: Resend provider — spec
+status: current
+date: 2026-10-13
+---
 
-> **Status** : draft (2026-06-23).
-> **Author** : rpelissier + Claude.
-> **Upstream** : `docs/spec/gateway-risk-model.md` (v4 risk-based model).
-> **Pattern** : paste-credentials (API key `re_*`), not OAuth.
-> **Provider slug** : `resend`.
+# Resend provider — spec
+
+> **Status:** current. Describes the Resend provider as the v5 plugin
+> implements it: _what_ it exposes and _why_. _How_ it is built (modules,
+> upstream endpoints, error mapping, tests) lives in the
+> [Resend provider handbook](../handbook/providers/resend.md) and in the
+> plugin's own [README](../../plugins/resend/README.md).
+>
+> **Upstream specs.** Vocabulary (connection, resource, mission, `RiskId`,
+> preset, restriction): [vaubaan-gateway](./vaubaan-gateway.md) §0. Risk
+> model (data model, slices, catalog, classification, decision):
+> [gateway-risk-model](./gateway-risk-model.md). Neither is restated here.
+>
+> **History.** The v4 spec of this provider (bindings, audiences, adapter)
+> is archived as [legacy/resend.md](./legacy/resend.md). The founding
+> decision is ADR
+> [resend-unified-email-provider](../decisions/resend-unified-email-provider.md),
+> a v4 decision kept for its rationale.
 
 ## 0. Vision
 
-**Why Resend.** Resend is the modern transactional-and-broadcast email
-API for developers. It fills a gap in the Vaubaan provider catalog :
-**outbound email as a first-class cloud surface**. Gmail covers *inbox
-reads + drafts* (inbound + compose-but-not-send) ; Resend covers
-*email delivery* (outbound). The two are complementary, not competing.
+Resend is the gateway's **outbound email** provider. One provider covers
+three uses, so that there is a single catalog and a single classifier for
+everything that leaves by email:
 
-**Use cases :**
+1. **Transactional email** — confirmation, password reset, notification.
+   An agent sends targeted one-off emails from a verified domain.
+2. **Broadcasts** — newsletters and announcements. An agent drafts a
+   campaign for a curated list of contacts and, under a distinct risk,
+   sends it.
+3. **Sending domains** — add a domain, trigger its DNS verification,
+   check its status. A provisioning agent wires up email for a project.
 
-1. **Transactional email** — confirmation, password reset, magic-link,
-   invoice, order notification. An agent running a deploy or a user
-   lifecycle script needs to send targeted one-off emails via a verified
-   domain.
-2. **Broadcast / marketing** — newsletter, product update, changelog
-   announcement. An agent managing a content pipeline can draft, schedule,
-   and send broadcast campaigns to curated audience segments.
-3. **Domain management** — add a sending domain, trigger DNS verification
-   (DKIM, SPF, DMARC), check verification status. A provisioning agent
-   that sets up a new project needs to wire up email infrastructure.
+Resend is the provider whose primary action is _sending a message to
+someone outside_. Two things therefore carry most of the risk, and the
+whole model is organised around them:
 
-**Positioning within the gateway.** Resend is the first provider whose
-primary action is *sending messages to external recipients*. This makes
-identity-zoning (who the email goes to) and blast-radius control
-(how many recipients per call) cardinal risk axes — borrowed from the
-Gmail research but adapted for outbound semantics.
+- **who the email goes to** — an agent that can write to an arbitrary
+  address can exfiltrate anything it has read, irreversibly;
+- **how many people it reaches** — a batch or a broadcast multiplies one
+  decision by tens or thousands of recipients.
+
+Who the email comes _from_ is not a risk axis of its own: Resend only
+sends from a verified domain. It is the **scope** of a mission instead.
+A mission selects the domains it may send from and the contact lists it
+may address, and a call outside that selection is refused.
 
 ## 1. Vocabulary
 
-| Resend concept       | Vaubaan data-model entity | Notes                                                                                       |
-| -------------------- | ------------------------- | ------------------------------------------------------------------------------------------- |
-| Account              | `account`                 | The Resend account backing the API key. Singleton per binding.                              |
-| API Key              | (binding credential)      | `re_*` key pasted by the operator. Stored encrypted in `provider_admins.access_token_encrypted`. Not an entity — it *is* the binding credential. |
-| Domain               | `domain`                  | A verified sending domain (e.g. `notifications.acme.com`). Carries DNS records (DKIM, SPF, DMARC). |
-| DNS record           | `dns-record`              | Synthetic child of `domain` — the individual TXT/CNAME records the operator must configure. Read-only from Resend's perspective (Resend tells you *what* to set, the human does it in their DNS). |
-| Email                | `email`                   | A single transactional email (sent or in-flight). Carries `id`, `from`, `to`, `subject`, status. |
-| Batch                | `batch`                   | A set of emails sent in a single API call (`POST /emails/batch`). Synthetic marker for blast-radius gating. |
-| Audience             | `audience`                | A named contact list (e.g. "Newsletter subscribers", "Beta users"). Container for contacts. |
-| Contact              | `contact`                 | A subscriber in an audience. Carries PII : email, first_name, last_name, custom properties.  |
-| Broadcast            | `broadcast`               | A campaign email destined to an audience/segment. Can be created, updated, scheduled, sent, deleted. |
-| Webhook (future)     | (out of scope v1)         | Resend webhook endpoints for delivery events. Deferred — see hors-scope.                    |
+Terms of the gateway (connection, resource, mission, `RiskId`, preset,
+restriction, gate, budget) are used as defined in
+[vaubaan-gateway](./vaubaan-gateway.md) §0. The terms below are specific
+to this provider.
 
-## 2. Data-model
+| Term                | Meaning                                                                                                                                                                    |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Account**         | The Resend account an API key authenticates. One connection is one account. Not an entity of the data model.                                                               |
+| **Sending domain**  | A domain registered in the account to send from (`notifications.acme.com`). A resource.                                                                                    |
+| **DNS record**      | One of the records Resend asks the domain's owner to publish (DKIM, SPF, DMARC). Published outside Resend; the only write the provider offers is the verification trigger. |
+| **Segment**         | A named list of contacts that broadcasts target. Resend's former "audience" (renamed in November 2025). A resource.                                                        |
+| **Contact**         | A subscriber of the account. Carries personal data: email address, first name, last name, custom properties. Belongs to zero or more segments.                             |
+| **Member**          | A contact _as a member of one segment_. Synthetic: it exists so that membership (who a broadcast reaches) can be named separately from the contact itself.                 |
+| **Broadcast**       | A campaign email targeting one segment. A draft until it is sent.                                                                                                          |
+| **Email**           | A transactional email already sent. Only its status and metadata are read.                                                                                                 |
+| **Batch**           | Several transactional emails sent in one call, at most 100.                                                                                                                |
+| **Recipient zone**  | The class of a recipient relative to a sending domain: `internal`, `allowlist` or `external-unbounded`. See §4.                                                            |
+| **Zone lists**      | The three lists, kept on each sending domain, that define its zones: `internal_domains`, `allowlist_domains`, `allowlist_addresses`.                                       |
+| **Envelope header** | A header that decides who receives an email or who it claims to come from (`To`, `Cc`, `Bcc`, `From`, `Sender`, `Reply-To`, `Return-Path` and their `Resent-*` forms).     |
 
-Resend exposes a single plane (`email`). There is no parallel split —
-domains, transactional emails, audiences/contacts, and broadcasts all
-live under one account namespace.
+## 2. Data model
 
-The `envScopable` axis is not on a native Resend entity (Resend has no
-test/live mode like Stripe). Instead, it is carried at the **`account`**
-level via the binding's `environment` field — an organisation may create
-separate Resend accounts (and API keys) for staging vs production, each
-with its own verified domain. This mirrors the Supabase pattern (one
-project_ref per env) rather than the Stripe pattern (one key = one mode).
-
-### 2.1 Entity graph
-
-```mermaid
-flowchart TB
-  account[account] --> domain[domain]
-  domain --> dns-record[dns-record]
-  account --> email[email]
-  account --> batch[batch]
-  account --> audience[audience]
-  audience --> contact[contact]
-  audience --> broadcast[broadcast]
-  account --> to-zone[to-zone ★]
-  account --> recipient-count[recipient-count ★]
-```
-
-> Entities marked ★ are **synthetic risk-zone markers** (not real Resend
-> resources). They are emitted by the classifier to gate recipient-zone
-> and blast-radius risks distinctly, following the Gmail identity-zoning
-> pattern.
-
-### 2.2 Entity details
-
-```ts
-// Pseudo-TypeScript — the actual DataModel declaration will live in
-// packages/providers/resend/src/data-model.ts.
-
-export const dataModel: DataModel = {
-  provider: 'resend',
-  planes: [
-    {
-      slug: 'email',
-      description:
-        'The only Resend plane Vaubaan exposes — the authenticated Resend ' +
-        'account and the transactional emails, audiences, contacts, broadcasts, ' +
-        'and domains contained within.',
-      entities: [
-        {
-          name: 'account',
-          parent: null,
-          cardinalities: ['one'],
-          envScopable: true,
-          description:
-            'The Resend account backing the API key. Singleton per binding. ' +
-            'Carries the envScopable axis — an org may have separate bindings ' +
-            'for staging (test account) vs prod (live account).',
-        },
-        // ─── Domains cluster ─────────────────────────────────────────────────
-        {
-          name: 'domain',
-          parent: 'account',
-          cardinalities: ['bounded'],
-          description:
-            'A verified sending domain. Bounded — an account typically has a ' +
-            'handful of domains (1-5). Cardinal posture-shift surface : adding ' +
-            'a domain and verifying it changes what the account can send from.',
-        },
-        {
-          name: 'dns-record',
-          parent: 'domain',
-          cardinalities: ['bounded'],
-          description:
-            'Synthetic read-only child of domain — the DKIM/SPF/DMARC DNS ' +
-            'records Resend requires the operator to set. Bounded per domain ' +
-            '(3-5 records). Read-only from Resend API — the human configures ' +
-            'them in their DNS provider.',
-        },
-        // ─── Transactional email cluster ─────────────────────────────────────
-        {
-          name: 'email',
-          parent: 'account',
-          cardinalities: ['unbounded'],
-          description:
-            'A single transactional email (confirmation, reset, notification). ' +
-            'Unbounded history — a busy SaaS can send millions over time. ' +
-            'Carries from, to, subject, html/text, status, tags.',
-        },
-        {
-          name: 'batch',
-          parent: 'account',
-          cardinalities: ['unbounded'],
-          description:
-            'Synthetic marker for a batch-send call (POST /emails/batch). ' +
-            'A batch can contain up to 100 emails. Distinct from single-email ' +
-            'to gate bulk-send risk explicitly.',
-        },
-        // ─── Audience / contact / broadcast cluster ──────────────────────────
-        {
-          name: 'audience',
-          parent: 'account',
-          cardinalities: ['bounded'],
-          description:
-            'A named contact list (newsletter subscribers, beta users, etc.). ' +
-            'Bounded — dozens at most in practice.',
-        },
-        {
-          name: 'contact',
-          parent: 'audience',
-          cardinalities: ['unbounded'],
-          description:
-            'A subscriber in an audience. Unbounded — a large newsletter can ' +
-            'have millions of contacts. Carries PII : email, first_name, ' +
-            'last_name, custom properties. RGPD-relevant.',
-        },
-        {
-          name: 'broadcast',
-          parent: 'audience',
-          cardinalities: ['unbounded'],
-          description:
-            'A campaign email created for an audience. Can be draft, scheduled, ' +
-            'or sent. Unbounded over time — an active marketing team sends ' +
-            'weekly or daily.',
-        },
-        // ─── Synthetic risk-zone markers ─────────────────────────────────────
-        {
-          name: 'to-zone',
-          parent: 'account',
-          cardinalities: ['bounded'],
-          description:
-            'Synthetic marker emitted by the classifier on send calls. The ' +
-            'bracketed identifier carries the zone name : `internal` / ' +
-            '`allowlist` / `external-unbounded`. Computed from the union of ' +
-            'to+cc+bcc recipients vs the binding metadata ' +
-            '(`internal_domains`, `allowlist_addresses`, `allowlist_domains`).',
-        },
-        {
-          name: 'recipient-count',
-          parent: 'account',
-          cardinalities: ['bounded'],
-          description:
-            'Synthetic marker emitted by the classifier to distinguish ' +
-            'single-recipient sends from multi-recipient or batch sends. ' +
-            'Brackets carry `single` / `multi` / `batch`. Gates blast-radius ' +
-            'amplification distinctly from the to-zone.',
-        },
-      ],
-    },
-  ],
-};
-```
-
-### 2.3 Cardinalities summary
-
-| Entity           | Cardinality | Rationale                                    |
-| ---------------- | ----------- | -------------------------------------------- |
-| `account`        | `one`       | Singleton per binding (one API key = one account). |
-| `domain`         | `bounded`   | A handful per account (1-5 typically).       |
-| `dns-record`     | `bounded`   | 3-5 per domain (DKIM x2 + SPF + DMARC).     |
-| `email`          | `unbounded` | Millions over a SaaS lifetime.               |
-| `batch`          | `unbounded` | One per batch-send call, accumulates.        |
-| `audience`       | `bounded`   | Dozens at most.                              |
-| `contact`        | `unbounded` | Can grow to millions (large newsletter).     |
-| `broadcast`      | `unbounded` | Accumulates over time.                       |
-| `to-zone`        | `bounded`   | 3 synthetic zone values.                     |
-| `recipient-count`| `bounded`   | 3 synthetic count values.                    |
-
-## 3. Binding model
-
-### 3.1 ProviderAdmin (paste-credentials)
-
-Resend uses the **paste-credentials** pattern (like Stripe, unlike
-GitHub/Vercel/Supabase which use OAuth).
-
-The operator pastes a Resend API key (`re_*`) into the Vaubaan UI.
-This key is stored encrypted in `provider_admins.access_token_encrypted`
-via Supabase Vault. No OAuth flow, no refresh dance, no
-`installation_id`.
+The data model follows [gateway-risk-model](./gateway-risk-model.md) §2.
+Resend has **one plane**, `email`, with nine entities. Two of them are
+roots that a mission selects as resources; two more are roots that
+belong to the account as a whole.
 
 ```
-provider_admins row:
-  provider            = 'resend'
-  status              = 'connected'
-  access_token_encrypted = vault.encrypt('re_xxxxxxxxxx...')
-  refresh_token_encrypted = NULL
-  installation_id     = NULL
-  team_id             = NULL
-  expires_at          = NULL           -- Resend API keys do not expire
+domain[<name>]            resource, environment-scopable — the sending surface
+  ├─ dns-record[*]        the records to publish for the domain
+  ├─ to-zone[Z]         ★ internal | allowlist | external-unbounded
+  └─ recipient-count[C] ★ batch — emitted by a batch send only
+segment[<id>]             resource, environment-scopable — a contact list
+  ├─ member[<contact>]  ★ a contact's membership of the segment
+  └─ broadcast[<id>]      a campaign targeting the segment
+contact[<id>]             account-level — personal data
+email[<id>]               account-level — a sent email, status only
 ```
 
-### 3.2 ProviderBinding
+★ marks a **synthetic** entity: Resend exposes no such object. It exists
+so that a risk can be named for it.
 
-```
-provider_bindings row:
-  provider      = 'resend'
-  resource_ref  = '<operator-chosen-slug>' -- e.g. 'prod-email', 'staging-notif'
-  environment   = 'prod' | 'staging' | NULL
-  display_name  = 'Acme Prod Email'
-  metadata      = {
-    "internal_domains":    ["acme.com", "acme.io"],
-    "allowlist_domains":   ["partner.com"],
-    "allowlist_addresses": ["support@vendor.com"],
-    "sending_domains":     ["notifications.acme.com"]
-  }
-```
+| Entity            | Parent    | Cardinality | Why it is modelled this way                                                                                                                |
+| ----------------- | --------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `domain`          | —         | bounded     | Every send is rooted at the domain of its `from` address, so the domain carries both the mission scope and the environment of a send.      |
+| `dns-record`      | `domain`  | bounded     | Separates "trigger a verification" from changing the domain itself.                                                                        |
+| `to-zone`         | `domain`  | bounded     | Makes the recipient zone a named part of the action, so each zone has its own risk (§4.1).                                                 |
+| `recipient-count` | `domain`  | bounded     | Makes bulk sending a consent of its own, independent of the zone. Its only value is `batch` (§4.2).                                        |
+| `segment`         | —         | bounded     | Every broadcast and every membership change names its segment, so the segment carries the mission scope of a campaign.                     |
+| `member`          | `segment` | unbounded   | Moving a contact in or out of a segment decides who a broadcast reaches; it must be distinguishable from creating or deleting the segment. |
+| `broadcast`       | `segment` | unbounded   | A campaign belongs to the segment it targets. Drafting, sending and deleting are three different actions on it (§5.4).                     |
+| `contact`         | —         | unbounded   | A contact is independent of segments in Resend's current model; it cannot be attached to one resource.                                     |
+| `email`           | —         | unbounded   | The sending domain of an already-sent email is not known when a status read is classified; it cannot be attached to one resource either.   |
 
-**`metadata` fields :**
+Consequence of the last two rows: **contacts and sent emails are not
+confined by a mission's resource selection.** A mission that accepts a
+contact risk can reach every contact of the account, whatever segments it
+selected; only membership operations are confined to the selected
+segments.
 
-| Field                  | Type       | Purpose                                                    |
-| ---------------------- | ---------- | ---------------------------------------------------------- |
-| `internal_domains`     | `string[]` | Domains considered "internal" for to-zone classification. Emails to `*@acme.com` are `internal`. |
-| `allowlist_domains`    | `string[]` | External domains pre-approved for sending. Emails to `*@partner.com` are `allowlist`. |
-| `allowlist_addresses`  | `string[]` | Individual external addresses pre-approved. `support@vendor.com` is `allowlist`. |
-| `sending_domains`      | `string[]` | Informational — the verified Resend domains this binding is expected to send from. Used for UI display and future validation. |
+## 3. Connection and resources
 
-### 3.3 Upstream token minting
+### 3.1 Credential
 
-Resend API keys do not expire. `mintUpstreamToken()` returns the raw
-stored key with a far-future expiry (same pattern as Stripe).
+A Resend connection holds **one API key**, pasted by the user who creates
+the connection. There is no authorization redirect and no application
+registered by the company with Resend: the user creates the key in the
+Resend dashboard. Like every provider credential it is stored encrypted,
+used for the duration of one upstream call, and never shown to the
+executor ([vaubaan-gateway](./vaubaan-gateway.md) §2.4).
 
-```ts
-async mintUpstreamToken(admin: ProviderAdmin): Promise<{ token: string; expiresAt: Date }> {
-  const token = decrypt(admin.access_token_encrypted);
-  return { token, expiresAt: new Date(Date.now() + 365 * 24 * 3600 * 1000) };
-}
-```
+The key must be a **full-access** key. Resend also issues keys restricted
+to sending; such a key cannot list domains or segments, so resource
+discovery fails with it and the connection has nothing a mission could
+select.
 
-### 3.4 Binding validation
+### 3.2 Resources
 
-`validateBinding` calls `GET /domains` with the API key to verify it is
-valid and has at least one domain configured. Returns the account
-display name from the first domain or the key prefix.
+A connection is one Resend account. Within it, the plugin discovers two
+kinds of resources:
 
-## 4. Identity-zoning
+| Kind               | Ref                                | What the owner sets on it                         |
+| ------------------ | ---------------------------------- | ------------------------------------------------- |
+| **Sending domain** | the domain name, lower-cased       | an environment label; the three zone lists (§4.1) |
+| **Segment**        | the segment's identifier in Resend | an environment label                              |
 
-Resend is an **outbound** email provider. The cardinal risk is *who the
-email goes to*, not who it comes from (that is fixed by the verified
-sending domain). The zoning model is therefore a simplified version of
-Gmail's, focused on **recipients** (the `to-zone` axis).
+Why these two, and not the account as a single resource (the v4 model):
+a company commonly sends from a staging domain and a production domain
+with the same account, and keeps a test list next to its customer list.
+With one resource per domain and per segment, a mission can send freely
+from the staging domain while the production domain and the customer
+list stay out of reach, or reachable only under budget and approval.
+
+Contacts and sent emails are not resources (§2). An account with no
+domain and no segment yields no resource.
+
+Discovery is bounded: a fixed maximum number of domains and of segments
+is read per connection (the value is in the handbook). Beyond it, the
+remaining items are not offered as resources.
+
+### 3.3 Mission scope
+
+A mission selects the resources it may touch
+([vaubaan-gateway](./vaubaan-gateway.md) §0, "Mission"). For Resend this
+selection is enforced on every call that names a resource:
+
+- a send, or a broadcast, whose `from` address is not on a sending
+  domain of the mission is refused. The match is exact: a subdomain of a
+  selected domain is a different domain;
+- a domain operation names its domain, and a segment, membership or
+  broadcast operation names its segment; a name outside the mission is
+  refused;
+- a broadcast is acted on only if it really targets the segment the call
+  names (§8);
+- listing domains, segments or broadcasts returns only those of the
+  mission.
+
+A refusal never widens: there is no fallback to "any domain of the
+account".
+
+### 3.4 Environment labels and zone lists
+
+Both live on the resource, and both are the owner's:
+
+- the **environment label** is free text (`prod`, `staging`, …), as for
+  every provider. Resend has no native notion of environment. §9 says
+  what the label is used for;
+- the **zone lists** are kept on each sending-domain resource, so two
+  domains of the same account can have different notions of "internal".
+  They are **empty when a domain is discovered**. An empty list matches
+  nobody, so until the owner fills them every recipient of that domain is
+  `external-unbounded`: the unconfigured state is the most restrictive
+  one.
+
+Refreshing a connection's resources must not erase what the owner set on
+them.
+
+## 4. Identity zoning
+
+Zoning answers "who does this email go to?". It applies to transactional
+sends, single and batch.
 
 ### 4.1 Recipient zones
 
-| Zone                  | Criteria                                               | Risk profile          |
-| --------------------- | ------------------------------------------------------ | --------------------- |
-| `internal`            | All recipients match `internal_domains` from metadata. | Low — internal comms. |
-| `allowlist`           | All recipients match `allowlist_domains` or `allowlist_addresses`, none is `internal`. | Medium — pre-approved external contacts. |
-| `external-unbounded`  | At least one recipient matches neither `internal_domains` nor `allowlist_*`. | High — arbitrary external recipient. Exfiltration vector. |
+Each recipient falls into exactly one zone, judged against the zone lists
+of the **sending domain** of the email:
 
-**Classification rule :** The classifier examines the union of `to` +
-`cc` + `bcc` fields. The zone is the **worst-case** (most permissive)
-across all recipients : if even one recipient is `external-unbounded`,
-the whole call is classified as `external-unbounded`.
+| Zone                 | A recipient is in it when                                                                  | What it means                                            |
+| -------------------- | ------------------------------------------------------------------------------------------ | -------------------------------------------------------- |
+| `internal`           | its domain is in `internal_domains`                                                        | The message stays inside the organisation.               |
+| `allowlist`          | otherwise, its address is in `allowlist_addresses` or its domain is in `allowlist_domains` | It leaves the organisation, to a pre-approved recipient. |
+| `external-unbounded` | otherwise                                                                                  | An arbitrary recipient: the exfiltration vector.         |
+
+Rules:
+
+- **All recipients count**: the union of `to`, `cc` and `bcc`.
+- **The worst zone wins.** A send takes the most permissive zone among
+  its recipients: one `external-unbounded` recipient among twenty
+  internal ones makes the send `external-unbounded`; internal and
+  allow-listed recipients together make it `allowlist`.
+- **Matching is exact and case-insensitive.** A listed domain does not
+  cover its subdomains.
+- **Addresses are parsed, not guessed.** A display-name form
+  (`Alice <alice@acme.com>`) is read as its address. An address that
+  cannot be parsed, or a send without any recipient, is refused rather
+  than assigned a zone.
+- **The envelope cannot be rewritten on the side.** The zone is computed
+  from `from`, `to`, `cc` and `bcc` only. A custom header that names an
+  envelope field, a malformed header name, or a header value that is not
+  a single-line string is refused: it could add a recipient or move the
+  sender behind the classification.
 
 ### 4.2 Recipient count
 
-| Count     | Criteria                                               | Risk profile          |
-| --------- | ------------------------------------------------------ | --------------------- |
-| `single`  | Exactly 1 recipient total across `to` + `cc` + `bcc`. | Baseline.             |
-| `multi`   | 2+ recipients in a single `send_email` call.           | Amplified blast.      |
-| `batch`   | Call to `POST /emails/batch` (up to 100 emails).       | Bulk amplification.   |
+The count marker has a **single value, `batch`**, emitted by a batch send
+and by nothing else. It makes bulk sending a consent of its own: a batch
+touches the risk of its zone _and_ the batch risk, and a mission needs
+both.
 
-### 4.3 Broadcast sends
+A single send emits no count marker, whether it has one recipient or
+several. Its recipients are already judged by the zone, and a marker that
+no named risk covers would make every send touch the fallback risk
+(§5.6).
 
-Broadcasts bypass individual recipient classification because they
-target an **audience** (potentially thousands of contacts). A broadcast
-send is always classified as `external-unbounded` with `batch` count,
-regardless of the audience composition. This is the conservative
-default — the blast radius of a broadcast is structurally unbounded.
+A batch is limited to 100 emails; a larger or empty batch is refused. In
+a batch, emails are grouped by sending domain, and each group is zoned on
+its own, worst recipient of the group.
 
-## 5. Risk catalog (draft)
+### 4.3 Broadcasts
 
-15 named risks + 1 fallback = 16 total.
+A broadcast is **not zoned**. Its recipients are the members of a
+segment, which are not known when the call is classified; and its blast
+radius is structurally that of the whole segment. It therefore has a risk
+of its own, `resend.broadcast-send`, which is self-contained: it does not
+additionally require a zone risk or the batch risk. What a broadcast can
+reach is controlled upstream of the send, by who may change the
+membership of the segment (`resend.contact-write`) and by which segments
+the mission selected.
 
-### 5.1 READS
+Two rules keep the send a distinct decision:
 
-```yaml
-resend:
-  risks:
-    # ─── READS ─────────────────────────────────────────────────────────────
+- a broadcast cannot be dispatched as a side effect of creating or
+  updating it: a create or update that asks to send or to schedule is
+  refused;
+- the `from` address of a broadcast must be on a sending domain of the
+  mission, like any send.
 
-    - id: resend.read-email-status
-      label: 'Read email send status and metadata'
-      reason: >-
-        Retrieve the status, subject, from/to, and tags of sent emails.
-        Metadata-level : no body content returned by GET /emails/:id
-        (Resend does not store the full HTML body post-send). Low risk.
-      matches: 'resend.account[**].email[**].R'
-      vector:
-        reversibility: reversible
-        blast: single
-        data: metadata
-        cost: free
-        visibility: internal
-        persistence: stateless
+## 5. Risk catalog
 
-    - id: resend.read-domains
-      label: 'Read domains and DNS verification status'
-      reason: >-
-        List/retrieve domains and their DNS records (DKIM, SPF, DMARC
-        status). Reveals the sending infrastructure posture. Metadata
-        only — no secrets exposed (DNS records are public by nature).
-      matches:
-        - 'resend.account[**].domain[**].R'
-        - 'resend.account[**].domain[**].dns-record[**].R'
-      vector:
-        reversibility: reversible
-        blast: single
-        data: metadata
-        cost: free
-        visibility: internal
-        persistence: stateless
+The catalog follows [gateway-risk-model](./gateway-risk-model.md) §4. It
+has **18 entries**: 15 live named risks, the fallback, and 2 deprecated
+identifiers. The catalog file shipped with the plugin is the source of
+truth for labels, reasons, patterns and the six-dimension vector of each
+entry; this section says what each entry covers and why it is separate.
 
-    - id: resend.read-audiences
-      label: 'Read audiences and contacts (PII)'
-      reason: >-
-        List/retrieve audiences and their contacts. Contacts carry PII
-        (email, first_name, last_name, custom properties). RGPD-relevant
-        — any consumption by an agent triggers minimisation obligations.
-        Distinct from read-email-status so an agent can check send status
-        without unlocking the contact database.
-      matches:
-        - 'resend.account[**].audience[**].R'
-        - 'resend.account[**].audience[**].contact[**].R'
-      vector:
-        reversibility: reversible
-        blast: account
-        data: pii
-        cost: free
-        visibility: internal
-        persistence: stateless
+Only one entry is environment-scoped,
+`resend.send-email-external-unbounded` (§9). Every other entry is
+accepted and touched under its plain identifier, whatever the label of
+the resource.
 
-    - id: resend.read-broadcasts
-      label: 'Read broadcast campaigns'
-      reason: >-
-        List/retrieve broadcast metadata (name, subject, status,
-        schedule). Does not expose contact-level PII — only aggregate
-        campaign info.
-      matches: 'resend.account[**].audience[**].broadcast[**].R'
-      vector:
-        reversibility: reversible
-        blast: single
-        data: metadata
-        cost: free
-        visibility: internal
-        persistence: stateless
-```
+### 5.1 Reads
 
-### 5.2 WRITES — Transactional email
+| RiskId                     | Covers                                                                                           | Env-scoped |
+| -------------------------- | ------------------------------------------------------------------------------------------------ | ---------- |
+| `resend.read-email-status` | The status and metadata of a sent email. No body content.                                        | no         |
+| `resend.read-domains`      | The mission's sending domains, their DNS records and verification status, and their zone lists.  | no         |
+| `resend.read-segments`     | The mission's segments, the members of a segment, and the account's contacts. **Personal data.** | no         |
+| `resend.read-broadcasts`   | Campaign metadata (name, subject, status) of the mission's segments. No contact-level data.      | no         |
 
-```yaml
-    # ─── WRITES — TRANSACTIONAL EMAIL ──────────────────────────────────────
+`read-segments` and `read-broadcasts` are separate so that the status of
+a campaign can be checked without opening the contact database.
 
-    - id: resend.send-email-internal
-      label: 'Send a transactional email to internal recipients only'
-      reason: >-
-        Single email to recipients matching internal_domains. Low
-        exfiltration risk — stays within the organisation boundary.
-        Side effect : real email delivered to a real inbox.
-      matches: 'resend.account[**].to-zone[internal].W'
-      vector:
-        reversibility: costly
-        blast: single
-        data: data
-        cost: free
-        visibility: internal
-        persistence: session
+### 5.2 Transactional sends
 
-    - id: resend.send-email-allowlist
-      label: 'Send a transactional email to pre-approved external contacts'
-      reason: >-
-        Email to recipients matching allowlist_domains or
-        allowlist_addresses. Pre-approved but external — the email
-        leaves the org boundary. Reversible only in the sense that
-        the content is already delivered (email is fire-and-forget).
-      matches: 'resend.account[**].to-zone[allowlist].W'
-      vector:
-        reversibility: costly
-        blast: single
-        data: data
-        cost: free
-        visibility: team
-        persistence: session
+| RiskId                                 | Covers                                                                                                  | Env-scoped           |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------- | -------------------- |
+| `resend.send-email-internal`           | A send whose every recipient is internal.                                                               | no                   |
+| `resend.send-email-allowlist`          | A send whose recipients are internal or allow-listed, at least one allow-listed.                        | no                   |
+| `resend.send-email-external-unbounded` | A send with at least one recipient in no zone list. Irreversible; treated as a potential secret leak.   | **`staging`, `dev`** |
+| `resend.send-batch`                    | Sending a batch (up to 100 emails in one call), whatever the zone. Touched together with the zone risk. | no                   |
 
-    - id: resend.send-email-external-unbounded
-      label: 'Send a transactional email to an arbitrary external recipient'
-      reason: >-
-        Email to an address not in internal_domains or allowlist. Cardinal
-        exfiltration vector — an agent could embed sensitive data in the
-        email body and send it to an attacker-controlled address. The
-        email is irreversibly delivered. Never acceptable on prod at MVP.
-      matches: 'resend.account[**].to-zone[external-unbounded].W'
-      vector:
-        reversibility: irreversible
-        blast: single
-        data: secret
-        cost: free
-        visibility: public
-        persistence: session
-      acceptable_in_envs: ['staging', 'dev']
+The three zone risks are exclusive for a given sending domain: a send
+touches exactly one of them. Accepting a wider zone does not imply the
+narrower ones; a mission that should send to internal and allow-listed
+recipients accepts both.
 
-    - id: resend.send-batch
-      label: 'Send a batch of transactional emails (up to 100 per call)'
-      reason: >-
-        POST /emails/batch sends up to 100 emails in one API call. Bulk
-        amplification regardless of recipient zone — the classifier
-        additionally emits the to-zone slice so both risks must be
-        accepted. Distinct marker so the operator explicitly consents to
-        bulk sending.
-      matches: 'resend.account[**].recipient-count[batch].W'
-      vector:
-        reversibility: irreversible
-        blast: bulk
-        data: data
-        cost: moderate
-        visibility: team
-        persistence: session
-      caps:
-        items_per_call_max: 100
-        calls_per_minute_max: 5
-        calls_per_session_max: 50
-      infra_limits:
-        items_per_call_max: 100
-```
+### 5.3 Segments and contacts
 
-### 5.3 WRITES — Audiences, contacts, broadcasts
+| RiskId                 | Covers                                                                                                              | Env-scoped |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `resend.segment-write` | Creating or deleting a segment. Deleting drops every membership it held; the contacts survive.                      | no         |
+| `resend.contact-write` | Creating, updating or deleting a contact, and adding a contact to or removing it from a segment. **Personal data.** | no         |
 
-```yaml
-    # ─── WRITES — AUDIENCES & CONTACTS ─────────────────────────────────────
+Membership belongs to `contact-write`, not to `segment-write`: changing
+who is in a list is a data change, repeated often; creating or deleting
+the list is a structural change, rare, and worth a different gate.
 
-    - id: resend.audience-write
-      label: 'Create or delete an audience'
-      reason: >-
-        Structural change to the contact database. Creating an audience
-        is low risk ; deleting one removes all contained contacts
-        (irreversible data loss). Conservative vector reflects the
-        worst case (delete).
-      matches: 'resend.account[**].audience[**].W'
-      vector:
-        reversibility: costly
-        blast: env
-        data: metadata
-        cost: free
-        visibility: internal
-        persistence: posture
+### 5.4 Broadcasts
 
-    - id: resend.contact-write
-      label: 'Create, update, or delete contacts in an audience'
-      reason: >-
-        Mutate the contact list — add subscribers, update PII fields,
-        remove contacts. PII-carrying operation (email, name, custom
-        properties). Reversible for creates (delete the contact) but
-        not for deletes (data loss).
-      matches: 'resend.account[**].audience[**].contact[**].W'
-      vector:
-        reversibility: costly
-        blast: env
-        data: pii
-        cost: free
-        visibility: internal
-        persistence: posture
+| RiskId                    | Covers                                                                                                                              | Env-scoped |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `resend.broadcast-draft`  | Creating or updating a broadcast that stays a draft. No effect outside the account until it is sent.                                | no         |
+| `resend.broadcast-send`   | Delivering a broadcast to its segment. Bulk, irreversible, at a cost that grows with the segment. The highest risk of the provider. | no         |
+| `resend.broadcast-delete` | Deleting a broadcast. A sent one loses its record only; delivered emails are not recalled.                                          | no         |
 
-    # ─── WRITES — BROADCASTS ───────────────────────────────────────────────
+`broadcast-send` is the one entry that declares a limit the gateway
+enforces: a ceiling on the rate limit a mission may set for it (§5.8).
 
-    - id: resend.broadcast-draft
-      label: 'Create or update a broadcast (draft, not sent)'
-      reason: >-
-        Draft a campaign email. No side effect until sent — the broadcast
-        sits in draft status. Reversible (delete the broadcast).
-      matches: 'resend.account[**].audience[**].broadcast.W'
-      vector:
-        reversibility: reversible
-        blast: single
-        data: data
-        cost: free
-        visibility: internal
-        persistence: session
+### 5.5 Domains
 
-    - id: resend.broadcast-send
-      label: 'Send a broadcast to its audience (mass email delivery)'
-      reason: >-
-        Trigger delivery of a broadcast to all contacts in the audience
-        (or a segment). Cardinal bulk action — potentially thousands of
-        real emails delivered irreversibly. Cost scales with audience
-        size (Resend pricing is per-email). The highest-risk operation
-        in this provider.
-      matches: 'resend.account[**].audience[**].broadcast[**].send.W'
-      vector:
-        reversibility: irreversible
-        blast: bulk
-        data: data
-        cost: unbounded
-        visibility: public
-        persistence: posture
-      caps:
-        calls_per_minute_max: 1
-        calls_per_session_max: 5
-      infra_limits:
-        calls_per_minute_max: 10
+| RiskId                 | Covers                                                                                                                         | Env-scoped |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------- |
+| `resend.domain-write`  | Adding, updating or removing a sending domain. A posture change: it alters what the account can send from, or breaks delivery. | no         |
+| `resend.domain-verify` | Asking Resend to re-check the DNS records of a domain. Idempotent, no effect beyond the attempt.                               | no         |
 
-    - id: resend.broadcast-delete
-      label: 'Delete a broadcast'
-      reason: >-
-        Remove a broadcast. If the broadcast was already sent, this only
-        removes the campaign record — emails already delivered are not
-        recalled. If the broadcast was scheduled, this cancels it.
-      matches: 'resend.account[**].audience[**].broadcast[**].delete.W'
-      vector:
-        reversibility: costly
-        blast: single
-        data: metadata
-        cost: free
-        visibility: internal
-        persistence: session
-```
+### 5.6 Fallback
 
-### 5.4 WRITES — Domains
+`resend.uncategorized-write` is the catch-all required by
+[gateway-risk-model](./gateway-risk-model.md) §4.3: it covers any write
+that no named entry covers. Its role is to fail loudly if a new surface
+is exposed before the catalog is updated.
 
-```yaml
-    # ─── WRITES — DOMAINS ──────────────────────────────────────────────────
+- It counts **only when no specific entry matched** the action (ADR
+  [fallback-risk-only-when-uncategorized](../decisions/fallback-risk-only-when-uncategorized.md)).
+- **No tool of this provider reaches it**: every action a tool can
+  produce is covered by exactly one named entry.
+- **No preset includes it.** Seeing it in a refusal means a catalog entry
+  is missing; accepting it by hand is never the fix.
 
-    - id: resend.domain-write
-      label: 'Add, update, or remove a sending domain'
-      reason: >-
-        Posture-shift : adding a domain changes the sending surface of
-        the account. Removing a domain breaks email delivery for all
-        messages using that sender. Requires DNS configuration outside
-        Resend (DKIM, SPF, DMARC) — the operator must complete
-        verification manually.
-      matches: 'resend.account[**].domain[**].W'
-      vector:
-        reversibility: costly
-        blast: account
-        data: metadata
-        cost: free
-        visibility: public
-        persistence: posture
+### 5.7 Deprecated identifiers
 
-    - id: resend.domain-verify
-      label: 'Trigger DNS verification of a domain'
-      reason: >-
-        Idempotent call that asks Resend to re-check the DNS records.
-        No side effect beyond the verification attempt. Low risk but
-        grouped with domain-write because it is a step in the domain
-        setup posture-shift.
-      matches: 'resend.account[**].domain[**].dns-record[**].W'
-      vector:
-        reversibility: reversible
-        blast: single
-        data: metadata
-        cost: free
-        visibility: internal
-        persistence: stateless
-```
+A catalog entry is never removed or renamed. Two entries named after
+Resend's retired "audiences" remain, marked deprecated, each pointing at
+its replacement:
 
-### 5.5 FALLBACK
+| Deprecated RiskId       | Replaced by            |
+| ----------------------- | ---------------------- |
+| `resend.read-audiences` | `resend.read-segments` |
+| `resend.audience-write` | `resend.segment-write` |
 
-```yaml
-    # ─── FALLBACK (required) ───────────────────────────────────────────────
+They are kept so that the identifiers stay resolvable. No call matches
+them any more and no preset offers them.
 
-    - id: resend.uncategorized-write
-      label: 'Uncategorized Resend write'
-      reason: >-
-        Catch-all for writes not covered by a named risk. If Resend
-        adds new API surfaces (webhooks, API key management, templates)
-        and Vaubaan wraps them before the catalog is updated, calls
-        land here — fail-loud by design.
-      matches: 'resend.[**].W'
-      vector:
-        reversibility: costly
-        blast: env
-        data: data
-        cost: moderate
-        visibility: internal
-        persistence: posture
-```
+### 5.8 Limits
 
-### 5.6 Catalog summary
+Scope caps are not enforced in v5.0 (ADR
+[scope-caps-not-enforced-in-v5-0](../decisions/scope-caps-not-enforced-in-v5-0.md)),
+and a catalog may declare only what the gateway enforces. Accordingly:
 
-| # | RiskId                              | Kind   | Cardinal axis                   |
-|---|-------------------------------------|--------|---------------------------------|
-| 1 | `resend.read-email-status`          | read   | email metadata                  |
-| 2 | `resend.read-domains`               | read   | domain + DNS status             |
-| 3 | `resend.read-audiences`             | read   | contacts PII                    |
-| 4 | `resend.read-broadcasts`            | read   | campaign metadata               |
-| 5 | `resend.send-email-internal`        | write  | to-zone internal                |
-| 6 | `resend.send-email-allowlist`       | write  | to-zone allowlist               |
-| 7 | `resend.send-email-external-unbounded` | write | to-zone external (exfil vector) |
-| 8 | `resend.send-batch`                 | write  | bulk amplification              |
-| 9 | `resend.audience-write`             | write  | audience structure              |
-|10 | `resend.contact-write`              | write  | contact PII mutation            |
-|11 | `resend.broadcast-draft`            | write  | campaign creation               |
-|12 | `resend.broadcast-send`             | write  | mass email delivery (cardinal)  |
-|13 | `resend.broadcast-delete`           | write  | campaign removal                |
-|14 | `resend.domain-write`               | write  | sending posture-shift           |
-|15 | `resend.domain-verify`              | write  | DNS verification trigger        |
-|16 | `resend.uncategorized-write`        | write  | fallback catch-all              |
+- no entry of this catalog declares a soft cap;
+- `resend.broadcast-send` declares a ceiling on calls per minute, which
+  bounds the rate limit a mission may set for that risk;
+- the 100-email limit of a batch is not a catalog cap: it is a refusal at
+  classification (§4.2).
 
-## 6. Tools list
+### 5.9 Presets
 
-25 tools total : 9 reads + 16 writes. Names prefixed `resend__` per
-Vaubaan convention.
+The catalog ships four presets. Each is a starting policy for one
+connection; the persisted mission policy is always the explicit list of
+`RiskId`s with their budgets and gates, never a reference to the preset
+and never a wildcard. The budgets and gates of each preset are defined in
+the catalog file and are not repeated here.
 
-### 6.1 Read tools
+| Preset               | Intent                                                                                                                                                                                          | Under approval                               |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `read-only`          | Email status, sending domains, campaign metadata. No personal data, no write.                                                                                                                   | —                                            |
+| `developer`          | One mission per code project: the same reads, plus transactional sends to internal and allow-listed recipients. No batch, no personal data, no domain change.                                   | —                                            |
+| `marketing-operator` | Contacts, segments and campaigns: reads including personal data, internal and allow-listed sends, batches, contact and segment writes, drafts, broadcast sends and deletions. No domain change. | batch sends, segment writes, broadcast sends |
+| `domain-admin`       | Provisioning sending domains: read and verify freely, change them under approval. No send.                                                                                                      | domain writes                                |
 
-| Tool                            | Resend API              | Risk(s) touched              |
-| ------------------------------- | ----------------------- | ---------------------------- |
-| `resend__get_email`             | `GET /emails/:id`       | `read-email-status`          |
-| `resend__list_domains`          | `GET /domains`          | `read-domains`               |
-| `resend__get_domain`            | `GET /domains/:id`      | `read-domains`               |
-| `resend__list_audiences`        | `GET /audiences`        | `read-audiences`             |
-| `resend__get_audience`          | `GET /audiences/:id`    | `read-audiences`             |
-| `resend__list_contacts`         | `GET /audiences/:id/contacts` | `read-audiences`        |
-| `resend__get_contact`           | `GET /contacts/:id`     | `read-audiences`             |
-| `resend__list_broadcasts`       | `GET /broadcasts`       | `read-broadcasts`            |
-| `resend__get_broadcast`         | `GET /broadcasts/:id`   | `read-broadcasts`            |
+No preset includes the fallback, a deprecated identifier, or
+`resend.send-email-external-unbounded`. **No preset can reach a recipient
+outside the zone lists**; the creator of a mission adds the
+environment-qualified risk by hand (§9).
 
-### 6.2 Write tools
+## 6. Tools
 
-| Tool                            | Resend API                     | Risk(s) touched                                       | Notes                              |
-| ------------------------------- | ------------------------------ | ----------------------------------------------------- | ---------------------------------- |
-| `resend__send_email`            | `POST /emails`                 | `send-email-{zone}` + `recipient-count[single\|multi]`| Zone resolved from to/cc/bcc.     |
-| `resend__send_batch_emails`     | `POST /emails/batch`           | `send-email-{zone}` + `send-batch`                    | Worst-case zone across all emails. |
-| `resend__create_domain`         | `POST /domains`                | `domain-write`                                         |                                    |
-| `resend__update_domain`         | `PATCH /domains/:id`           | `domain-write`                                         |                                    |
-| `resend__delete_domain`         | `DELETE /domains/:id`          | `domain-write`                                         |                                    |
-| `resend__verify_domain`         | `POST /domains/:id/verify`     | `domain-verify`                                        |                                    |
-| `resend__create_audience`       | `POST /audiences`              | `audience-write`                                       |                                    |
-| `resend__delete_audience`       | `DELETE /audiences/:id`        | `audience-write`                                       |                                    |
-| `resend__create_contact`        | `POST /audiences/:id/contacts` | `contact-write`                                        |                                    |
-| `resend__update_contact`        | `PATCH /contacts/:id`          | `contact-write`                                        |                                    |
-| `resend__delete_contact`        | `DELETE /contacts/:id`         | `contact-write`                                        |                                    |
-| `resend__create_broadcast`      | `POST /audiences/:id/broadcasts` | `broadcast-draft`                                    |                                    |
-| `resend__update_broadcast`      | `PUT /broadcasts/:id`          | `broadcast-draft`                                      |                                    |
-| `resend__send_broadcast`        | `POST /broadcasts/:id/send`    | `broadcast-send`                                       | Cardinal risk.                     |
-| `resend__delete_broadcast`      | `DELETE /broadcasts/:id`       | `broadcast-delete`                                     |                                    |
-| `resend__describe_zones`        | (synthetic — no upstream call)  | (no risk — read-only binding metadata) | Returns the to-zone config from binding metadata. |
+The provider exposes **27 tools**, all named `resend__<verb>_<noun>`.
+Ten read, seventeen write. Resource arguments are explicit: domain tools
+take the domain's ref, segment, membership and broadcast tools take the
+segment's ref, and sends take their domain from the `from` address.
 
-## 7. Classifier design
+`describe_zones` is one of the ten reads: it returns configuration and
+is classified as a read.
+
+### 6.1 Sent emails and transactional sends
+
+| Tool                | Does                                             | Risk touched                                    |
+| ------------------- | ------------------------------------------------ | ----------------------------------------------- |
+| `get_email`         | Reads the status and metadata of a sent email.   | `read-email-status`                             |
+| `send_email`        | Sends one transactional email.                   | the zone risk of the send                       |
+| `send_batch_emails` | Sends 1 to 100 transactional emails in one call. | per sending domain, its zone risk; `send-batch` |
+
+### 6.2 Domains
+
+| Tool             | Does                                                                                                                                       | Risk touched    |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | --------------- |
+| `list_domains`   | Lists the mission's sending domains with their verification status.                                                                        | `read-domains`  |
+| `get_domain`     | Reads one domain with its DNS records.                                                                                                     | `read-domains`  |
+| `describe_zones` | Returns the zone lists and environment label of each of the mission's domains. Synthetic: answered by the gateway, without calling Resend. | `read-domains`  |
+| `create_domain`  | Adds a sending domain to the account.                                                                                                      | `domain-write`  |
+| `update_domain`  | Changes the tracking and TLS settings of a domain.                                                                                         | `domain-write`  |
+| `delete_domain`  | Removes a sending domain.                                                                                                                  | `domain-write`  |
+| `verify_domain`  | Asks Resend to re-check the DNS records of a domain.                                                                                       | `domain-verify` |
+
+`describe_zones` lets an agent see why a send was classified the way it
+was, without being able to change it: the zone lists are edited by the
+owner of the connection, never through a tool.
+
+A domain created through `create_domain` is not part of any mission
+until the owner refreshes the connection's resources and a mission
+selects it.
+
+### 6.3 Segments
+
+| Tool             | Does                                                    | Risk touched    |
+| ---------------- | ------------------------------------------------------- | --------------- |
+| `list_segments`  | Lists the mission's segments.                           | `read-segments` |
+| `get_segment`    | Reads one segment.                                      | `read-segments` |
+| `create_segment` | Creates a segment.                                      | `segment-write` |
+| `delete_segment` | Deletes a segment; memberships are lost, contacts stay. | `segment-write` |
+
+### 6.4 Contacts and membership
+
+| Tool                          | Does                                                                        | Risk touched    |
+| ----------------------------- | --------------------------------------------------------------------------- | --------------- |
+| `list_contacts`               | Lists the account's contacts, or the members of one segment of the mission. | `read-segments` |
+| `get_contact`                 | Reads one contact, by identifier or email address.                          | `read-segments` |
+| `create_contact`              | Creates a contact, optionally as a member of a segment of the mission.      | `contact-write` |
+| `update_contact`              | Updates a contact.                                                          | `contact-write` |
+| `delete_contact`              | Deletes a contact.                                                          | `contact-write` |
+| `add_contact_to_segment`      | Adds an existing contact to a segment of the mission.                       | `contact-write` |
+| `remove_contact_from_segment` | Removes a contact from a segment of the mission.                            | `contact-write` |
+
+### 6.5 Broadcasts
+
+| Tool               | Does                                                       | Risk touched       |
+| ------------------ | ---------------------------------------------------------- | ------------------ |
+| `list_broadcasts`  | Lists the broadcasts of the mission's segments.            | `read-broadcasts`  |
+| `get_broadcast`    | Reads one broadcast of a segment of the mission.           | `read-broadcasts`  |
+| `create_broadcast` | Creates a draft for a segment of the mission. Never sends. | `broadcast-draft`  |
+| `update_broadcast` | Updates a draft.                                           | `broadcast-draft`  |
+| `send_broadcast`   | Sends a broadcast to its segment, now.                     | `broadcast-send`   |
+| `delete_broadcast` | Deletes a broadcast.                                       | `broadcast-delete` |
+
+## 7. Classification
+
+Classification follows [gateway-risk-model](./gateway-risk-model.md) §3
+(slices) and §7 (the plugin's responsibility). The classifier states what
+a call does, as slices, or refuses the call. It is a pure function of the
+tool, its arguments and the mission's resources: it reads no credential
+and calls nobody. Whether the action is acceptable is not its decision
+(§9, and [gateway-risk-model](./gateway-risk-model.md) §8).
 
 ### 7.1 Slice emission rules
 
-The classifier resolves the `account` identifier from the binding's
-`resource_ref`. The `mode`/`environment` is resolved from
-`binding.environment` (if set) and qualifies the RiskId at runtime.
+Slices are rooted at the resource the call names, so that the environment
+of the action is that of the resource.
 
-**Transactional sends** emit 2 slices :
+| Call                                           | Slice(s)                                                                              |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Single send                                    | `domain[D].to-zone[Z].W`                                                              |
+| Batch send                                     | per sending domain: `domain[D].to-zone[Z].W` and `domain[D].recipient-count[batch].W` |
+| Read a sent email                              | `email[E].R`                                                                          |
+| List domains, describe zones                   | `domain[*].R`                                                                         |
+| Read a domain                                  | `domain[D].R` and `domain[D].dns-record[*].R`                                         |
+| Create a domain                                | `domain.W`                                                                            |
+| Update or delete a domain                      | `domain[D].W`                                                                         |
+| Verify a domain                                | `domain[D].dns-record[*].W`                                                           |
+| List segments / read a segment                 | `segment[*].R` / `segment[S].R`                                                       |
+| Create a segment / delete a segment            | `segment.W` / `segment[S].W`                                                          |
+| List contacts, account-wide / of a segment     | `contact[*].R` / `segment[S].member[*].R`                                             |
+| Read, update or delete a contact               | `contact[C].R` or `contact[C].W`                                                      |
+| Create a contact                               | `contact.W`, and `segment[S].member[*].W` when a segment is named                     |
+| Add a contact to, or remove it from, a segment | `segment[S].member[C].W`                                                              |
+| List broadcasts / read a broadcast             | `segment[*].broadcast[*].R` / `segment[S].broadcast[B].R`                             |
+| Create a broadcast / update a broadcast        | `segment[S].broadcast.W` / `segment[S].broadcast[B].W`                                |
+| Send a broadcast / delete a broadcast          | `segment[S].broadcast[B].send.W` / `segment[S].broadcast[B].delete.W`                 |
 
-1. **To-zone slice** : `resend.account[A].to-zone[ZONE].W` where `ZONE`
-   is the worst-case across all `to` + `cc` + `bcc` recipients.
-2. **Recipient-count slice** : `resend.account[A].recipient-count[COUNT].W`
-   where `COUNT` = `single` (1 recipient total), `multi` (2+), or
-   `batch` (batch endpoint).
+`D` is the ref of a sending domain of the mission, `S` the ref of a
+segment of the mission, `Z` the zone (§4.1).
 
-**Batch sends** additionally emit a third slice :
-`resend.account[A].batch.W`.
+Rules behind the table:
 
-**Broadcast sends** emit :
-`resend.account[A].audience[AUD].broadcast[B].send.W`
+1. **One slice, one named risk.** Catalog patterns are written so that
+   every slice above is covered by exactly one named entry: a contact
+   write never touches `segment-write`, a broadcast send never touches
+   `broadcast-draft`, and nothing reaches the fallback.
+2. **Distinct actions on the same object have distinct slices.** Sending
+   and deleting a broadcast end in an explicit `send` or `delete` leaf;
+   without it, the slice is a draft change.
+3. **A contact selected by email address is an unknown contact.** A
+   contact may be named by its identifier or by its email address; the
+   address is not embedded in the slice, the contact is written `*`. The
+   risk touched is the same.
+4. **Identifiers are checked before they are used.** An identifier that
+   contains anything other than plain identifier characters, or that is
+   made of dots only, is refused rather than escaped.
 
-**Domain operations** emit :
-`resend.account[A].domain[D].W` (or `.dns-record[*].W` for verify).
+Refusals at classification. Each is recorded as a refused call and
+nothing is executed:
 
-**Attachment denial (v1)** : before emitting any slice, the classifier
-checks `args.attachments`. If the array is non-empty, the classifier
-short-circuits with `{ denied: 'attachments not supported in v1' }`.
-This ensures the denial is audited as a DENY in the trail (not a runtime
-error) and the agent gets an actionable message. Precedent : Gmail's
-classifier inspects recipients beyond pure slice emission.
+- a `from` address that is missing, malformed, or not on a sending
+  domain of the mission;
+- a recipient that is malformed, or no recipient at all;
+- an attachment, or a scheduled send (§10);
+- a custom header that names an envelope field, has a malformed name, or
+  has a value that is not a single-line string;
+- a batch that is empty, has more than 100 emails, or contains something
+  that is not an email;
+- a domain or a segment that is not in the mission;
+- a malformed identifier;
+- a create without what it creates (a domain or segment name, a contact
+  address, a broadcast's `from`);
+- a broadcast create or update that asks to send or to schedule, and a
+  broadcast send that asks to schedule;
+- a tool this provider does not have.
 
 ### 7.2 Multi-slice examples
 
-```
-# Single transactional email to an internal recipient
-resend__send_email { to: "alice@acme.com", ... }
-  → resend.account[acct_xxx].to-zone[internal].W
-  → resend.account[acct_xxx].recipient-count[single].W
-  risks_touched: [resend.send-email-internal]
-
-# Single email to an external recipient
-resend__send_email { to: "unknown@attacker.com", ... }
-  → resend.account[acct_xxx].to-zone[external-unbounded].W
-  → resend.account[acct_xxx].recipient-count[single].W
-  risks_touched: [resend.send-email-external-unbounded]
-
-# Batch send to mixed recipients
-resend__send_batch_emails { ... 50 emails, some external ... }
-  → resend.account[acct_xxx].to-zone[external-unbounded].W
-  → resend.account[acct_xxx].recipient-count[batch].W
-  → resend.account[acct_xxx].batch.W
-  risks_touched: [resend.send-email-external-unbounded, resend.send-batch]
-
-# Broadcast send
-resend__send_broadcast { id: "brd_xxx" }
-  → resend.account[acct_xxx].audience[aud_xxx].broadcast[brd_xxx].send.W
-  risks_touched: [resend.broadcast-send]
-
-# Add a new sending domain
-resend__create_domain { name: "mail.acme.com" }
-  → resend.account[acct_xxx].domain[*].W
-  risks_touched: [resend.domain-write]
-```
-
-## 8. Adapter design
-
-### 8.1 Pattern
-
-Same paste-token adapter as Stripe : no OAuth, no refresh, no
-`authorizationUrl()`. The adapter throws on OAuth-related methods.
-
-```ts
-export class ResendAdapter {
-  readonly provider = 'resend' as const;
-
-  authorizationUrl(): string {
-    throw new Error('ResendAdapter: use paste-token mode.');
-  }
-
-  async handleCallback(): Promise<never> {
-    throw new Error('ResendAdapter: OAuth not supported.');
-  }
-
-  async mintUpstreamToken(admin: ProviderAdmin): Promise<{ token: string; expiresAt: Date }> {
-    // Decrypt and return the stored API key.
-    // Resend keys do not expire — far-future date.
-  }
-
-  async validateBinding(admin: ProviderAdmin, resourceRef: string): Promise<ValidateResult> {
-    // GET /domains with the API key → verify key is valid.
-    // Return ok + display name from first domain or account info.
-  }
-
-  async executeCall(
-    admin: ProviderAdmin,
-    binding: ProviderBinding,
-    tool: string,
-    args: Record<string, unknown>,
-  ): Promise<unknown> {
-    // Dispatch to the Resend REST API based on tool name.
-  }
-
-  classifyV4(
-    tool: string,
-    args: Record<string, unknown>,
-    bindings: ReadonlyArray<ProviderBinding>,
-  ): ClassifyResult {
-    // Emit slice(s) per §7.1 rules.
-  }
-}
-```
-
-### 8.2 Upstream dispatch
-
-All tools are **synthesis** style (direct REST calls to
-`https://api.resend.com/...`), not rewrap. There is no official Resend
-MCP server to forward to. Auth is via `Authorization: Bearer re_*`
-header on every upstream call.
-
-## 9. Env qualification
-
-Resend has no native test/live mode. The env qualification is carried
-by the **binding's `environment` field** (same as Supabase — one
-binding per env). An org that wants staging vs prod isolation creates
-two Resend accounts with two API keys and two bindings :
+The examples assume a mission with two sending domains,
+`notifications.acme.com` (labelled `prod`) and `staging.acme.dev`
+(labelled `staging`), both with `internal_domains: [acme.com]` and
+`allowlist_domains: [partner.com]`, and one segment `seg_news`.
 
 ```
-binding A : provider=resend, resource_ref=acct_staging, environment=staging
-binding B : provider=resend, resource_ref=acct_prod,    environment=prod
+# One recipient, internal
+send_email { from: bot@notifications.acme.com, to: [alice@acme.com] }
+  → resend.domain[notifications.acme.com].to-zone[internal].W
+  touches: resend.send-email-internal
+
+# Several recipients, the worst is allow-listed — still one slice
+send_email { from: bot@notifications.acme.com,
+             to: [alice@acme.com], cc: [bob@partner.com] }
+  → resend.domain[notifications.acme.com].to-zone[allowlist].W
+  touches: resend.send-email-allowlist
+
+# One recipient in no zone list, from the staging domain
+send_email { from: bot@staging.acme.dev, to: [someone@example.org] }
+  → resend.domain[staging.acme.dev].to-zone[external-unbounded].W
+  touches: resend[staging].send-email-external-unbounded
+
+# The same from the production domain: classified the same way,
+# refused at the decision (§9)
+send_email { from: bot@notifications.acme.com, to: [someone@example.org] }
+  → resend.domain[notifications.acme.com].to-zone[external-unbounded].W
+  touches: resend[prod].send-email-external-unbounded   (never acceptable)
+
+# A batch from one domain: two slices, two risks
+send_batch_emails { emails: [
+    { from: bot@notifications.acme.com, to: [alice@acme.com] },
+    { from: bot@notifications.acme.com, to: [bob@partner.com] } ] }
+  → resend.domain[notifications.acme.com].to-zone[allowlist].W
+  → resend.domain[notifications.acme.com].recipient-count[batch].W
+  touches: resend.send-email-allowlist, resend.send-batch
+
+# A batch from two domains: one pair of slices per domain,
+# each domain zoned on its own recipients
+send_batch_emails { emails: [
+    { from: bot@notifications.acme.com, to: [alice@acme.com] },
+    { from: bot@staging.acme.dev,       to: [someone@example.org] } ] }
+  → resend.domain[notifications.acme.com].to-zone[internal].W
+  → resend.domain[notifications.acme.com].recipient-count[batch].W
+  → resend.domain[staging.acme.dev].to-zone[external-unbounded].W
+  → resend.domain[staging.acme.dev].recipient-count[batch].W
+  touches: resend.send-email-internal, resend.send-batch,
+           resend[staging].send-email-external-unbounded
+
+# Reading a domain: the domain and its DNS records
+get_domain { domain: notifications.acme.com }
+  → resend.domain[notifications.acme.com].R
+  → resend.domain[notifications.acme.com].dns-record[*].R
+  touches: resend.read-domains
+
+# Creating a contact directly into a segment: the contact and the
+# membership, one risk
+create_contact { email: new@example.com, segment_id: seg_news }
+  → resend.contact.W
+  → resend.segment[seg_news].member[*].W
+  touches: resend.contact-write
+
+# Sending a broadcast: not zoned, one risk
+send_broadcast { segment_id: seg_news, id: brd_1 }
+  → resend.segment[seg_news].broadcast[brd_1].send.W
+  touches: resend.broadcast-send
 ```
 
-At runtime, the qualified RiskId becomes
-`resend[staging].send-email-internal` vs
-`resend[prod].send-email-internal`. The operator can accept staging
-sends without accepting prod sends.
+## 8. Guarantees at execution
 
-For orgs that use a single Resend account for everything, the binding
-has `environment = NULL` and risks are unqualified
-(`resend.send-email-internal`).
+Classification says what a call _claims_ to do. Four guarantees make the
+executed call match that claim.
 
-## 10. Hors-scope (v1)
+1. **Nothing unclassified is executed.** The call is classified again
+   immediately before it is executed, and a call the classifier refuses
+   is not sent, whatever happened before.
+2. **Only declared arguments reach Resend.** A tool forwards the
+   arguments it declares and nothing else. An argument the tool does not
+   declare was not read by any classification rule, so it is dropped
+   rather than passed through unseen. Exposing a new Resend field is a
+   deliberate change: declare it, and decide how it is classified.
+3. **A broadcast is acted on only in the segment the call names.**
+   Before reading, updating, sending or deleting a broadcast, the plugin
+   reads it from Resend and refuses if it targets another segment. An
+   executor cannot reach a broadcast of an unselected segment by naming a
+   selected one.
+4. **Lists are filtered to the mission.** Listing domains, segments or
+   broadcasts returns only the mission's domains and segments and the
+   broadcasts of those segments.
 
-| Feature                          | Reason                                                         | Phase          |
-| -------------------------------- | -------------------------------------------------------------- | -------------- |
-| **Resend Webhooks**              | Webhook endpoints are an inbound configuration surface. Adds complexity (URL validation, secret rotation) without clear agent use case at MVP. | Phase 2        |
-| **API key management**           | `POST /api-keys`, `DELETE /api-keys` — creating/deleting Resend API keys from within the gateway is a credential-minting surface. Too risky for an agent ; left to human operators. | Phase 2+       |
-| **Resend Templates**             | Templates are a convenience layer (WYSIWYG editor). Agents compose HTML directly ; templates add no security surface. | Phase 2 (if demand) |
-| **Email scheduling**             | `POST /emails { scheduled_at }` — single-email scheduling. Adds a temporal dimension to blast control. Spec the cap model first. | Phase 2        |
-| **Broadcast scheduling**         | `POST /broadcasts { scheduled_at }` — broadcast scheduling. Same temporal concern. | Phase 2        |
-| **Inbound email (receiving)**    | Resend's receiving API (`/inbound`) is a separate product surface. Out of scope — Vaubaan focuses on outbound. | Not planned    |
-| **`send_email` with attachments** | Attachments add a data-exfiltration surface (binary blobs). Blocked at v1 — the classifier rejects calls with non-empty `attachments` array. | Phase 2 (with `bytes_per_call_max` cap) |
-| **Multi-recipient to-zone per-address** | At v1, zone is worst-case across all recipients. Future: emit per-recipient slices for fine-grained gating. | Phase 3        |
+The API key itself is used for the call and never returned to the
+executor ([vaubaan-gateway](./vaubaan-gateway.md) §2.4).
 
-## 11. Questions résolues
+## 9. Environment qualification
 
-**Q1 — `recipient-count` as a separate risk vs folded into to-zone ?**
-**Resolved : keep separate.** Composability wins — batch is orthogonal
-to zone. 3 zones + 1 batch = 4 entries vs 3×3 = 9 if folded.
+Environment qualification follows
+[gateway-risk-model](./gateway-risk-model.md) §4.4. Resend has no native
+environment; the environment of an action is the **label the owner put on
+the resource the action is rooted at** (§3.4): the sending domain for a
+send, the segment for a broadcast or a membership change.
 
-**Q2 — Should `broadcast-send` require `send-email-external-unbounded` too ?**
-**Resolved : no, self-contained.** The classifier cannot determine
-audience composition at classify time (sees only broadcast ID). And
-`broadcast-send` already carries the highest severity vector. Requiring
-`external-unbounded` would block legitimate internal newsletters.
+**One risk is environment-scoped**:
+`resend.send-email-external-unbounded` is acceptable only in `staging`
+and `dev`. A send, single or batch, with
+at least one recipient in no zone list is decided as follows:
 
-**Q3 — Account ID as `resource_ref` — how to discover it ?**
-**Resolved : operator-chosen slug** (e.g. `prod-email`, `staging-notif`).
-Resend has no stable `GET /account` endpoint. The slug is chosen at
-binding creation and validated by a successful `GET /domains` call.
-Stable across key rotations.
+| Label of the sending domain | Risk touched                                    | Decision                                                      |
+| --------------------------- | ----------------------------------------------- | ------------------------------------------------------------- |
+| `staging` or `dev`          | `resend[staging].…` or `resend[dev].…`          | allowed if the mission accepted that exact qualified `RiskId` |
+| any other label             | `resend[<label>].send-email-external-unbounded` | **refused**, whatever the mission accepted                    |
+| no label                    | `resend.send-email-external-unbounded`          | **refused**, whatever the mission accepted                    |
 
-**Q4 — `vector_overrides` for staging vs prod ?**
-**Resolved : `acceptable_in_envs` only for v1.** Sufficient for the
-current gating needs. `vector_overrides` deferred to v2 if demand
-emerges.
+Points that follow:
 
-**Q5 — Attachment blocking at classifier vs at adapter level ?**
-**Resolved : classifier-level denial.** Returns
-`{ denied: 'attachments not supported in v1' }` before emitting slices.
-Audited as DENY in trail, actionable message for the agent. Precedent :
-Gmail classifier inspects recipients beyond pure slice emission.
+- The qualified identifiers are distinct: accepting the `staging` one
+  does not allow a send from a `dev` domain, and the unqualified
+  identifier allows nothing.
+- An unlabelled domain is never treated as a safe default. Its owner
+  either labels it or fills its zone lists.
+- The refusal cannot be bypassed through the risks touched alongside:
+  neither `send-batch`, nor another zone risk, nor the fallback carries
+  such a send.
+- A batch is decided as a whole: one external send from a production
+  domain refuses the entire batch, including the emails from a staging
+  domain.
+- **The decision is the engine's, not the classifier's.** The classifier
+  reports an `external-unbounded` send as such on every domain. This
+  keeps the list of acceptable environments in one place, the catalog,
+  and makes the refusal a risk decision, recorded with the risk and the
+  label, rather than an opaque classification refusal.
 
----
+Every other risk is unscoped. Environment labels are free text chosen by
+each owner, so the catalog does not restrict any other risk to a closed
+list of names: an internal or allow-listed send is acceptable from any
+domain of the mission, labelled or not. Separating staging from
+production for those risks is done by **resource selection**: a mission
+that must not send from production does not select the production
+domain.
 
-_Date : 2026-06-24. Author : rpelissier + Claude. Status :
-reviewed — questions resolved, ready for implementation._
+A segment may carry a label too. No risk of the current catalog depends
+on it.
+
+## 10. Out of scope
+
+Refused when asked for (see §7.1):
+
+| Feature                  | Why                                                                                                        |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| **Attachments**          | A binary payload is an exfiltration surface that classification does not inspect.                          |
+| **Scheduled sends**      | Scheduling a transactional email adds a temporal dimension to blast control that the model does not cover. |
+| **Scheduled broadcasts** | Same reason; and scheduling at creation would dispatch a broadcast without touching `broadcast-send`.      |
+
+Not exposed at all (no tool):
+
+| Feature                     | Why                                                                                                                |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| **API key management**      | Creating or deleting Resend keys is a credential-minting surface; it stays with humans.                            |
+| **Webhooks**                | An inbound configuration surface with no agent use identified.                                                     |
+| **Templates**               | A convenience layer; agents compose the content directly.                                                          |
+| **Receiving email**         | A different product surface; this provider is outbound only.                                                       |
+| **Editing zone lists**      | They are the owner's control over classification; an executor reads them (`describe_zones`) and never writes them. |
+| **Per-recipient decisions** | A send is decided on its worst recipient as a whole; there is no partial send to the acceptable recipients only.   |
+
+If one of the unexposed surfaces is wrapped before the catalog names a
+risk for it, its writes land on the fallback (§5.6).
+
+## 11. Open points
+
+- **Preset budgets are provisional.** The quotas, rate limits and gates
+  shipped with the four presets are a starting point; the decision that
+  should fix default values across providers has not been taken. The
+  catalog records this next to the presets.

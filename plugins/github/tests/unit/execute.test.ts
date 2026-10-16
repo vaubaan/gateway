@@ -1,0 +1,508 @@
+/**
+ * Upstream calls of the github plugin against `mockFetch` : installation
+ * token minting (JWT → token), per-call scoping, Octokit dispatch with the
+ * injected fetch, `UpstreamAuthError`, the mint tool and resource discovery.
+ * No test ever reaches GitHub.
+ */
+import { describe, expect, test } from 'vitest';
+import { decodeJwt, decodeProtectedHeader } from 'jose';
+
+import { mockFetch, refusalText } from '@vaubaan/plugin-sdk/testing';
+
+import { buildAppJwt } from '../../src/app-install.ts';
+import { installationTokenFor } from '../../src/credential.ts';
+import { DISCOVERY_PAGE_SIZE, MINT_PERMISSIONS } from '../../src/execute.ts';
+import { githubPlugin } from '../../src/index.ts';
+import {
+  APP_ID,
+  MINT_URL,
+  TEST_PRIVATE_KEY_PEM,
+  appConfig,
+  appRepo,
+  connectionCtx,
+  executeCtx,
+  libRepo,
+  mintRoute,
+} from './fixtures.ts';
+
+const text = (r: { content: readonly unknown[] }) => (r.content[0] as { text: string }).text;
+
+describe('installation token — JWT → access_tokens', () => {
+  test('signs an RS256 App JWT with iss = app id and a 9-minute lifetime', async () => {
+    const now = new Date('2026-10-13T10:00:00Z');
+    const jwt = await buildAppJwt({ appId: APP_ID, privateKeyPem: TEST_PRIVATE_KEY_PEM }, now);
+    expect(decodeProtectedHeader(jwt).alg).toBe('RS256');
+    const claims = decodeJwt(jwt);
+    expect(claims.iss).toBe(APP_ID);
+    expect(claims.iat).toBe(Math.floor(now.getTime() / 1000) - 30);
+    expect(claims.exp! - claims.iat!).toBe(9 * 60);
+  });
+
+  test('POSTs the JWT as Bearer to the installation endpoint and returns the token', async () => {
+    const fetch = mockFetch([mintRoute('ghs_mint')]);
+    const minted = await installationTokenFor(connectionCtx(fetch));
+    expect(minted.token).toBe('ghs_mint');
+    expect(minted.expiresAt.toISOString()).toBe('2026-10-13T11:00:00.000Z');
+    const call = fetch.calls[0]!;
+    expect(call.method).toBe('POST');
+    expect(call.url).toBe(MINT_URL);
+    expect(call.headers.authorization).toMatch(/^Bearer /);
+    expect(decodeJwt(call.headers.authorization!.slice('Bearer '.length)).iss).toBe(APP_ID);
+    expect(call.body).toBeNull();
+  });
+
+  test('scopes the token to repositories and permissions when asked', async () => {
+    const fetch = mockFetch([mintRoute()]);
+    await installationTokenFor(connectionCtx(fetch), {
+      repositories: ['app'],
+      permissions: { contents: 'read' },
+    });
+    expect(fetch.calls[0]!.json).toEqual({
+      repositories: ['app'],
+      permissions: { contents: 'read' },
+    });
+  });
+
+  test('un-escapes a one-line PEM pasted with literal \\n', async () => {
+    const fetch = mockFetch([mintRoute()]);
+    const ctx = connectionCtx(fetch, {
+      appConfig: { ...appConfig, private_key: TEST_PRIVATE_KEY_PEM.replace(/\n/g, '\\n') },
+    });
+    await expect(installationTokenFor(ctx)).resolves.toMatchObject({ token: 'ghs_xxx' });
+  });
+
+  test('fails naming the missing app configuration key, before any call', async () => {
+    const fetch = mockFetch([]);
+    await expect(
+      installationTokenFor(connectionCtx(fetch, { appConfig: { app_slug: 'x' } })),
+    ).rejects.toThrow(/'app_id' is missing/);
+    expect(fetch.calls).toHaveLength(0);
+  });
+
+  test('refuses a credential of another kind', async () => {
+    const fetch = mockFetch([]);
+    const ctx = connectionCtx(fetch, {
+      credential: { kind: 'api-key', fields: { token: 'ghp_x' }, metadata: {} },
+    });
+    await expect(installationTokenFor(ctx)).rejects.toMatchObject({
+      name: 'CredentialKindMismatch',
+    });
+  });
+
+  test('401 on the mint becomes UpstreamAuthError ; other failures are plain errors', async () => {
+    const denied = mockFetch([
+      { method: 'POST', url: MINT_URL, status: 401, body: { message: 'Bad credentials' } },
+    ]);
+    await expect(installationTokenFor(connectionCtx(denied))).rejects.toMatchObject({
+      name: 'UpstreamAuthError',
+      upstreamStatus: 401,
+    });
+    const missing = mockFetch([{ method: 'POST', url: MINT_URL, status: 404, body: 'Not Found' }]);
+    await expect(installationTokenFor(connectionCtx(missing))).rejects.toThrow(/404/);
+  });
+});
+
+describe('execute — Octokit over the injected fetch', () => {
+  test('mints a token scoped to the named repository, then calls the REST API with it', async () => {
+    const fetch = mockFetch([
+      mintRoute('ghs_call'),
+      {
+        method: 'GET',
+        url: 'https://api.github.com/repos/acme/app/branches',
+        body: [{ name: 'main' }],
+      },
+    ]);
+    const result = await githubPlugin.execute(executeCtx(fetch), 'github__list_branches', {
+      owner: 'acme',
+      repo: 'app',
+    });
+    expect(result.isError).toBeUndefined();
+    expect(JSON.parse(text(result))).toEqual([{ name: 'main' }]);
+    expect(fetch.calls[0]!.json).toEqual({ repositories: ['app'] });
+    expect(fetch.calls[1]!.headers.authorization).toContain('ghs_call');
+  });
+
+  test('account-shaped tools (search) get an installation-wide token', async () => {
+    const fetch = mockFetch([
+      mintRoute(),
+      { method: 'GET', url: /\/search\/code\?q=foo$/, body: { total_count: 0, items: [] } },
+    ]);
+    await githubPlugin.execute(executeCtx(fetch), 'github__search_code', { q: 'foo' });
+    expect(fetch.calls[0]!.body).toBeNull();
+  });
+
+  test('a write carries the JSON body GitHub expects', async () => {
+    const fetch = mockFetch([
+      mintRoute(),
+      {
+        method: 'POST',
+        url: /\/repos\/acme\/app\/pulls$/,
+        status: 201,
+        respond: (c) => ({ number: 7, got: c.json }),
+      },
+    ]);
+    const result = await githubPlugin.execute(executeCtx(fetch), 'github__create_pull_request', {
+      owner: 'acme',
+      repo: 'app',
+      title: 'T',
+      head: 'feature/x',
+      base: 'main',
+    });
+    expect(JSON.parse(text(result))).toMatchObject({
+      number: 7,
+      got: { title: 'T', head: 'feature/x', base: 'main', draft: false },
+    });
+  });
+
+  test('401 / 403 from GitHub become UpstreamAuthError', async () => {
+    const fetch = mockFetch([
+      mintRoute(),
+      {
+        method: 'GET',
+        url: /\/branches$/,
+        status: 403,
+        body: { message: 'Resource not accessible' },
+      },
+    ]);
+    await expect(
+      githubPlugin.execute(executeCtx(fetch), 'github__list_branches', {
+        owner: 'acme',
+        repo: 'app',
+      }),
+    ).rejects.toMatchObject({ name: 'UpstreamAuthError', upstreamStatus: 403 });
+  });
+
+  test('an unknown tool fails as a plain error, before the mint', async () => {
+    const fetch = mockFetch([mintRoute()]);
+    expect(
+      await refusalText(
+        githubPlugin.execute(executeCtx(fetch), 'github__nonsense', { owner: 'acme', repo: 'app' }),
+      ),
+    ).toMatch("github__nonsense: unknown github tool 'github__nonsense'");
+    expect(fetch.calls).toHaveLength(0);
+  });
+});
+
+describe('execute — rules and release tools', () => {
+  const repo = { owner: 'acme', repo: 'app' };
+
+  test('update_branch_protection PUTs the protection settings of the branch', async () => {
+    const fetch = mockFetch([
+      mintRoute(),
+      {
+        method: 'PUT',
+        url: 'https://api.github.com/repos/acme/app/branches/main/protection',
+        body: { url: 'p' },
+      },
+    ]);
+    const result = await githubPlugin.execute(
+      executeCtx(fetch),
+      'github__update_branch_protection',
+      {
+        ...repo,
+        branch: 'main',
+        required_status_checks: { strict: true, contexts: ['ci'] },
+        enforce_admins: true,
+        required_pull_request_reviews: { required_approving_review_count: 1 },
+        restrictions: null,
+      },
+    );
+    expect(JSON.parse(text(result))).toEqual({ url: 'p' });
+    expect(fetch.calls[1]!.json).toMatchObject({
+      required_status_checks: { strict: true, contexts: ['ci'] },
+      enforce_admins: true,
+      required_pull_request_reviews: { required_approving_review_count: 1 },
+      restrictions: null,
+    });
+  });
+
+  test('list_releases / list_tags / create_release / delete_release', async () => {
+    const fetch = mockFetch([
+      mintRoute(),
+      {
+        method: 'GET',
+        url: 'https://api.github.com/repos/acme/app/releases',
+        body: [{ tag_name: 'v1' }],
+      },
+      { method: 'GET', url: 'https://api.github.com/repos/acme/app/tags', body: [{ name: 'v1' }] },
+      {
+        method: 'POST',
+        url: 'https://api.github.com/repos/acme/app/releases',
+        status: 201,
+        body: { id: 999, tag_name: 'v2' },
+      },
+      {
+        method: 'DELETE',
+        url: 'https://api.github.com/repos/acme/app/releases/999',
+        status: 204,
+      },
+    ]);
+    const ctx = executeCtx(fetch);
+    const call = async (tool: string, args: Record<string, unknown>) =>
+      JSON.parse(text(await githubPlugin.execute(ctx, tool, { ...repo, ...args }))) as unknown;
+
+    expect(await call('github__list_releases', {})).toEqual([{ tag_name: 'v1' }]);
+    expect(await call('github__list_tags', {})).toEqual([{ name: 'v1' }]);
+    expect(await call('github__create_release', { tag_name: 'v2', name: 'Two' })).toEqual({
+      id: 999,
+      tag_name: 'v2',
+    });
+    const created = fetch.calls.find((c) => c.method === 'POST' && c.url.endsWith('/releases'));
+    expect(created!.json).toMatchObject({ tag_name: 'v2', name: 'Two' });
+    expect(await call('github__delete_release', { release_id: 999 })).toEqual({
+      deleted: true,
+      release_id: 999,
+    });
+  });
+});
+
+describe('execute — merge_pull_request is bound to the declared base', () => {
+  const repo = { owner: 'acme', repo: 'app' };
+  const pullUrl = 'https://api.github.com/repos/acme/app/pulls/7';
+  const pullRoute = (baseRef: unknown) => ({
+    method: 'GET',
+    url: pullUrl,
+    body: { number: 7, base: { ref: baseRef } },
+  });
+  const mergeRoute = {
+    method: 'PUT',
+    url: `${pullUrl}/merge`,
+    body: { merged: true, sha: 'abc' },
+  };
+  const merges = (fetch: { calls: readonly { method: string; json: unknown }[] }) =>
+    fetch.calls.filter((c) => c.method === 'PUT');
+
+  test('reads the pull request, then merges when its base is the declared one', async () => {
+    const fetch = mockFetch([mintRoute(), pullRoute('feature/x'), mergeRoute]);
+    const result = await githubPlugin.execute(executeCtx(fetch), 'github__merge_pull_request', {
+      ...repo,
+      pull_number: 7,
+      base: 'feature/x',
+      merge_method: 'squash',
+    });
+    expect(JSON.parse(text(result))).toEqual({ merged: true, sha: 'abc' });
+    expect(fetch.calls.map((c) => `${c.method} ${c.url}`).slice(1)).toEqual([
+      `GET ${pullUrl}`,
+      `PUT ${pullUrl}/merge`,
+    ]);
+    expect(merges(fetch)[0]!.json).toMatchObject({ merge_method: 'squash' });
+  });
+
+  test('refuses, without merging, a pull request whose real base is not the declared one', async () => {
+    // Classified on `feature/x` (no `merge-protected`), while GitHub would merge into `main`.
+    const fetch = mockFetch([mintRoute(), pullRoute('main'), mergeRoute]);
+    expect(
+      await refusalText(
+        githubPlugin.execute(executeCtx(fetch), 'github__merge_pull_request', {
+          ...repo,
+          pull_number: 7,
+          base: 'feature/x',
+        }),
+      ),
+    ).toMatch(
+      "github__merge_pull_request: pull request #7 targets 'main', not the declared base 'feature/x'. Call again with base 'main'.",
+    );
+    expect(merges(fetch)).toEqual([]);
+  });
+
+  test('without a declared base the pull request must target main, the branch the call was classified on', async () => {
+    const refused = mockFetch([mintRoute(), pullRoute('develop'), mergeRoute]);
+    expect(
+      await refusalText(
+        githubPlugin.execute(executeCtx(refused), 'github__merge_pull_request', {
+          ...repo,
+          pull_number: 7,
+        }),
+      ),
+    ).toMatch(/targets 'develop', not the declared base 'main'/);
+    expect(merges(refused)).toEqual([]);
+
+    const merged = mockFetch([mintRoute(), pullRoute('main'), mergeRoute]);
+    await githubPlugin.execute(executeCtx(merged), 'github__merge_pull_request', {
+      ...repo,
+      pull_number: 7,
+    });
+    expect(merges(merged)).toHaveLength(1);
+  });
+
+  test('refuses when GitHub returns no base branch for the pull request', async () => {
+    const fetch = mockFetch([mintRoute(), pullRoute(undefined), mergeRoute]);
+    await expect(
+      githubPlugin.execute(executeCtx(fetch), 'github__merge_pull_request', {
+        ...repo,
+        pull_number: 7,
+        base: 'main',
+      }),
+    ).rejects.toThrow(/could not read the base branch of pull request #7/);
+    expect(merges(fetch)).toEqual([]);
+  });
+});
+
+describe('execute — push_files reads `files` like the classifier', () => {
+  test('refuses a malformed entry before any call, the token mint included', async () => {
+    const fetch = mockFetch([mintRoute()]);
+    expect(
+      await refusalText(
+        githubPlugin.execute(executeCtx(fetch), 'github__push_files', {
+          owner: 'acme',
+          repo: 'app',
+          branch: 'feature/x',
+          message: 'm',
+          files: [{ path: 'a.ts', content: '1' }, { path: 5 }],
+        }),
+      ),
+    ).toMatch(
+      "github__push_files requires 'files' to be a non-empty array of { path, content } strings",
+    );
+    expect(fetch.calls).toHaveLength(0);
+  });
+});
+
+describe('execute — github__mint_install_token', () => {
+  test('purpose=clone, no repoFullName → token over every GitHub resource of the mission, contents:read', async () => {
+    const fetch = mockFetch([
+      {
+        method: 'POST',
+        url: MINT_URL,
+        body: {
+          token: 'ghs_scoped',
+          expires_at: '2026-10-13T11:00:00Z',
+          repositories: [{ id: 1, name: 'app', full_name: 'acme/app' }],
+          permissions: { contents: 'read' },
+        },
+      },
+    ]);
+    const result = await githubPlugin.execute(
+      executeCtx(fetch, [appRepo, libRepo]),
+      'github__mint_install_token',
+      { purpose: 'clone' },
+    );
+    expect(fetch.calls[0]!.json).toEqual({
+      repositories: ['app', 'lib'],
+      permissions: MINT_PERMISSIONS.clone,
+    });
+    expect(JSON.parse(text(result))).toEqual({
+      token: 'ghs_scoped',
+      expires_at: '2026-10-13T11:00:00.000Z',
+      repositories: [{ id: 1, name: 'app', full_name: 'acme/app' }],
+      permissions: { contents: 'read' },
+    });
+  });
+
+  test('purpose=push with repoFullName → that repository only, write permission set', async () => {
+    const fetch = mockFetch([mintRoute()]);
+    await githubPlugin.execute(
+      executeCtx(fetch, [appRepo, libRepo]),
+      'github__mint_install_token',
+      {
+        purpose: 'push',
+        repoFullName: 'acme/lib',
+      },
+    );
+    expect(fetch.calls[0]!.json).toEqual({
+      repositories: ['lib'],
+      permissions: {
+        contents: 'write',
+        pull_requests: 'write',
+        metadata: 'read',
+        workflows: 'write',
+      },
+    });
+  });
+
+  test('refuses a repository outside the mission, an unknown purpose and a mission without repository — before any call', async () => {
+    const fetch = mockFetch([]);
+    const ctx = executeCtx(fetch);
+    expect(
+      await refusalText(
+        githubPlugin.execute(ctx, 'github__mint_install_token', {
+          purpose: 'clone',
+          repoFullName: 'other/repo',
+        }),
+      ),
+    ).toMatch(
+      "github__mint_install_token: github repository 'other/repo' is not selected in this mission. Selected: acme/app.",
+    );
+    expect(
+      await refusalText(
+        githubPlugin.execute(ctx, 'github__mint_install_token', { purpose: 'merge' }),
+      ),
+    ).toMatch("github__mint_install_token requires purpose 'clone' or 'push'");
+    expect(
+      await refusalText(
+        githubPlugin.execute(executeCtx(fetch, []), 'github__mint_install_token', {
+          purpose: 'clone',
+        }),
+      ),
+    ).toMatch('github__mint_install_token: no GitHub repository is selected in this mission.');
+    expect(fetch.calls).toHaveLength(0);
+  });
+});
+
+describe('discoverResources — installation repositories, paged', () => {
+  const repoDto = (i: number) => ({
+    full_name: `acme/repo-${i}`,
+    default_branch: 'main',
+    private: i % 2 === 0,
+    archived: false,
+  });
+  const pageUrl = (page: number) =>
+    `https://api.github.com/installation/repositories?per_page=${DISCOVERY_PAGE_SIZE}&page=${page}`;
+
+  test('maps repositories to resources with non-secret metadata', async () => {
+    const fetch = mockFetch([
+      mintRoute(),
+      {
+        method: 'GET',
+        url: pageUrl(1),
+        body: { total_count: 2, repositories: [repoDto(1), { full_name: 'acme/bare' }] },
+      },
+    ]);
+    const resources = await githubPlugin.discoverResources(connectionCtx(fetch));
+    expect(resources).toEqual([
+      {
+        provider: 'github',
+        ref: 'acme/repo-1',
+        displayName: 'acme/repo-1',
+        metadata: { default_branch: 'main', private: false, archived: false },
+      },
+      { provider: 'github', ref: 'acme/bare', displayName: 'acme/bare', metadata: {} },
+    ]);
+    expect(fetch.calls[1]!.headers.authorization).toBe('Bearer ghs_xxx');
+    expect(fetch.calls).toHaveLength(2);
+  });
+
+  test('follows pages until the total is reached', async () => {
+    const first = Array.from({ length: DISCOVERY_PAGE_SIZE }, (_, i) => repoDto(i));
+    const fetch = mockFetch([
+      mintRoute(),
+      {
+        method: 'GET',
+        url: pageUrl(1),
+        body: { total_count: DISCOVERY_PAGE_SIZE + 1, repositories: first },
+        times: 1,
+      },
+      {
+        method: 'GET',
+        url: pageUrl(2),
+        body: { total_count: DISCOVERY_PAGE_SIZE + 1, repositories: [repoDto(999)] },
+        times: 1,
+      },
+    ]);
+    const resources = await githubPlugin.discoverResources(connectionCtx(fetch));
+    expect(resources).toHaveLength(DISCOVERY_PAGE_SIZE + 1);
+    expect(resources.at(-1)!.ref).toBe('acme/repo-999');
+    expect(fetch.pending()).toEqual([]);
+  });
+
+  test('401 on the listing becomes UpstreamAuthError', async () => {
+    const fetch = mockFetch([
+      mintRoute(),
+      { method: 'GET', url: pageUrl(1), status: 401, body: {} },
+    ]);
+    await expect(githubPlugin.discoverResources(connectionCtx(fetch))).rejects.toMatchObject({
+      name: 'UpstreamAuthError',
+      upstreamStatus: 401,
+    });
+  });
+});

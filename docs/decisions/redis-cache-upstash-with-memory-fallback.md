@@ -1,8 +1,12 @@
 ---
 title: Cache hot-path — Upstash Redis + fallback in-memory
-status: accepted
+status: superseded
 date: 2026-05-22
+superseded-by: pivot-v4-to-v5-on-prem-mission-tokens
+superseded-date: 2026-10-12
 ---
+
+> **Superseded on 2026-10-12** by [[pivot-v4-to-v5-on-prem-mission-tokens]]. Legacy v4 decision kept for history; body unchanged.
 
 # Cache hot-path — Upstash Redis + fallback in-memory
 

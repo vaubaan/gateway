@@ -1,0 +1,42 @@
+# Reviewed exceptions of the image scan (scripts/image-scan.sh, Trivy).
+#
+# Each entry names one vulnerability in one package, says why it does not
+# apply to what the image runs, and expires at most a quarter later: on that
+# date the gate fails again until somebody looks (docs/workflow/coding-workflow.md,
+# "Security checks"). Never a whole package, never a severity.
+vulnerabilities:
+  # perl-base 5.36.0-7+deb12u3 of the pinned base image; Debian fixed all seven
+  # in deb12u4, and the node:22.23.3-bookworm-slim tag has not been rebuilt
+  # with it yet (its digest is still the pinned one, 2026-10-14). perl-base is
+  # an Essential package of Debian (dpkg depends on it) and cannot be removed;
+  # the gateway runs node only: no request, argument or file of a user reaches
+  # a perl interpreter. Short expiry on purpose: the next refresh of the base
+  # image clears them (coding-workflow, "Refreshing the base image digests").
+  - id: CVE-2026-13221
+    purls: ['pkg:deb/debian/perl-base']
+    statement: perl-base, Essential, never run by the gateway; fixed in deb12u4, awaiting the base image rebuild
+    expired_at: 2026-10-28
+  - id: CVE-2026-42496
+    purls: ['pkg:deb/debian/perl-base']
+    statement: perl-base (Archive::Tar), never run by the gateway; fixed in deb12u4, awaiting the base image rebuild
+    expired_at: 2026-10-28
+  - id: CVE-2026-8376
+    purls: ['pkg:deb/debian/perl-base']
+    statement: perl-base, 32-bit builds only, never run by the gateway; fixed in deb12u4, awaiting the base image rebuild
+    expired_at: 2026-10-28
+  - id: CVE-2026-42497
+    purls: ['pkg:deb/debian/perl-base']
+    statement: perl-base (Archive::Tar), never run by the gateway; fixed in deb12u4, awaiting the base image rebuild
+    expired_at: 2026-10-28
+  - id: CVE-2026-48962
+    purls: ['pkg:deb/debian/perl-base']
+    statement: perl-base (IO::Compress), never run by the gateway; fixed in deb12u4, awaiting the base image rebuild
+    expired_at: 2026-10-28
+  - id: CVE-2026-57432
+    purls: ['pkg:deb/debian/perl-base']
+    statement: perl-base (pack/unpack), never run by the gateway; fixed in deb12u4, awaiting the base image rebuild
+    expired_at: 2026-10-28
+  - id: CVE-2026-57433
+    purls: ['pkg:deb/debian/perl-base']
+    statement: perl-base (Storable), never run by the gateway; fixed in deb12u4, awaiting the base image rebuild
+    expired_at: 2026-10-28

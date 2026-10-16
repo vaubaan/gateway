@@ -2,7 +2,7 @@
 title: Pivot v4 → v5 — gateway on-prem, identités partagées, mission tokens à budget de risque
 status: accepted
 date: 2026-10-12
-amended: 2026-10-12
+amended: 2026-10-15
 author: Renaud Pelissier
 supersedes:
   - flat-membership-org-owner-access-token
@@ -110,6 +110,32 @@ déployable sous `apps/` ; les plugins providers dans un dossier qui dit
 leur nom ; les fichiers de déploiement (image, exemple de configuration)
 dans un dossier dédié. Le plan d'implémentation v5 fixe le layout exact
 et le documente dans le workflow de contribution.
+
+## Amendment 2026-10-15 — an importer replaces the re-creation by hand (D7)
+
+> Product owner's decision of 2026-10-15 (brief PO), written in English like
+> every document since the fourth amendment. Amends D7, step 2, and the
+> sentence "Pas de migration de données" of the Décision.
+
+The v4 SaaS holds too many connections, resources and project setups, across
+two organizations moving to their own instances, to re-create them by hand.
+Step 2 of D7 ("Recréation") becomes an **import**: a one-shot exporter reads
+one v4 organization and pipes a bundle into an importer that runs inside the
+v5 instance, under a named owner. It creates the connections whose v4 key can
+be carried as is (Cloudflare, Vercel, Stripe, SSH), carries the resources and
+their environment labels, and issues one mission per working v4 token with
+its `accepted_risks` translated one by one to the v5 catalog. GitHub,
+Railway and Supabase are still connected by hand, then a second run of the
+importer completes what waited for them. Design, limits and rejected
+alternatives: ADR
+[import-from-v4-one-shot-importer](import-from-v4-one-shot-importer.md);
+procedure: handbook [import-from-v4](../handbook/import-from-v4.md).
+
+What does not change: no long coexistence (step 1, validation, and step 3,
+extinction, stand), no migration of the v4 database's schema or history
+(audit, sessions, approvals stay in v4), and the move from "one mission per
+code project" to "one mission per goal" is still made afterwards, at the
+owner's pace.
 
 ## Contexte
 

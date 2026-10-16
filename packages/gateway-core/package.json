@@ -1,0 +1,17 @@
+{
+  "name": "@vaubaan/gateway-core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "type-check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@vaubaan/plugin-sdk": "*",
+    "@vaubaan/policy-engine": "*",
+    "@vaubaan/shared": "*"
+  }
+}

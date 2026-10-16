@@ -1,0 +1,21 @@
+{
+  "name": "@vaubaan/plugin-cloudflare-dns",
+  "version": "3.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Vaubaan Gateway provider plugin for Cloudflare DNS — zones and records, one resource per zone",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "type-check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@vaubaan/plugin-sdk": "*",
+    "@vaubaan/shared": "*"
+  },
+  "devDependencies": {
+    "@vaubaan/policy-engine": "*"
+  }
+}

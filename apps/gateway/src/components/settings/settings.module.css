@@ -1,0 +1,138 @@
+/* The pages of Settings and of the administration: what the design system
+   does not lay out itself. */
+
+.quiet {
+  color: var(--ink-3);
+}
+.sub {
+  display: block;
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+}
+.name {
+  font-weight: var(--weight-strong);
+}
+.inline {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.named {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.namedText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.reveal {
+  color: var(--accent);
+}
+.reveal:hover {
+  text-decoration: underline;
+}
+
+/* Notes about what just happened, or what needs the person, above the lists. */
+.notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+.notes p + p {
+  margin-top: var(--space-1);
+}
+.list {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-5);
+}
+
+/* A form of a few fields: one column, the measure of a form. */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 560px;
+}
+.formActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+.formHint {
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+}
+/* A form on one line: a field and its button. */
+.lineForm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-2);
+  max-width: 560px;
+}
+.lineForm > :first-child {
+  flex: 1;
+  min-width: 220px;
+}
+.claims {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.inlineForm {
+  display: inline;
+}
+.fieldset {
+  display: contents;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.prose {
+  max-width: var(--measure);
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+}
+.prose p {
+  margin: 0;
+}
+.prose p + p {
+  margin-top: var(--space-2);
+}
+.block {
+  max-width: 760px;
+}
+
+/* The detail under a row: facts, then what one can do. */
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.members {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.member {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+@media (max-width: 720px) {
+  .claims {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

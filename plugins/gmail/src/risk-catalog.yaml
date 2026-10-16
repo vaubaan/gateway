@@ -1,0 +1,393 @@
+# Gmail risk catalog — loaded by `@vaubaan/plugin-sdk` (`loadCatalogFile`) at
+# gateway boot. Experimental, classifier-only plugin : the risks below are
+# evaluated on every call, but no tool executes yet (see plugins/gmail/README.md).
+#
+# Spec     : docs/spec/gateway-risk-model.md §4 + §4bis (scope caps) ;
+#            docs/spec/vaubaan-gateway.md §3.2 (presets).
+# ADR      : docs/decisions/scope-caps-amplification-axis.md ;
+#            docs/decisions/scope-caps-not-enforced-in-v5-0.md ;
+#            docs/decisions/plugin-contract-and-credential-spec.md.
+# Handbook : docs/handbook/providers/gmail.md.
+#
+# 15 named risks + 1 fallback = 16. Ids are never renamed or deleted
+# (deprecate instead). Gmail has no native environment : the `mailbox`
+# entity is `envScopable` so an owner may still label a mailbox resource, but
+# no risk is env-scoped today.
+#
+# Three guarantees live in the classifier (`classify.ts`), not here : a draft
+# to a recipient outside the internal domains and the allowlists is refused
+# (`gmail.draft-to-zone-external-unbounded` is kept, deprecated, and can no
+# longer be touched) ; a label write naming `TRASH` or `SPAM` is refused ; a
+# recipient or an id the classifier cannot read refuses the call.
+#
+# No entry declares `caps` or `infra_limits` : the v5.0 door enforces none of
+# the stateless caps, and a catalog only states what the gateway applies
+# (ADR scope-caps-not-enforced-in-v5-0, which records the values modelled for
+# `gmail.bulk-read` and `gmail.read-from-zone-unknown`). The amplitude of a
+# mission on these two risks is bounded by its quota and rate limit.
+
+provider: gmail
+catalog_version: 4
+catalog_date: 2026-10-14
+
+risks:
+  # ─── READS ─────────────────────────────────────────────────────────────
+
+  - id: gmail.read-mailbox
+    label: 'Read mailbox structure (labels, threads, message headers)'
+    reason: >-
+      Inventory of labels, thread ids, subjects and sender names, and the
+      containment slice of a thread fetch (whose content risk is carried by
+      the from-zone marker emitted alongside). Limited attack surface, but
+      the baseline every read needs. Also covers the synthetic
+      `gmail__describe_zones` tool, which returns the zoning configuration.
+    matches:
+      - 'gmail.mailbox.label[**].R'
+      - 'gmail.mailbox.thread[**].message[**].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: metadata
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: gmail.read-from-zone-automated
+    label: 'Read messages from automated / notification senders'
+    reason: >-
+      Notifications (GitHub, Stripe, Vercel…). Little direct PII, but the
+      bodies often carry injectable URLs and markdown (OWASP LLM01). Kept
+      distinct so an "ops" agent can read alerts without unlocking personal
+      correspondence.
+    matches: 'gmail.mailbox.from-zone[automated].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: gmail.read-from-zone-internal
+    label: 'Read messages from internal-domain senders'
+    reason: >-
+      Correspondence between colleagues : may contain secrets, strategic
+      decisions and privileged context. Distinct from the automated zone by
+      least privilege.
+    matches: 'gmail.mailbox.from-zone[internal].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: gmail.read-from-zone-known-external
+    label: 'Read messages from known external contacts (allowlist)'
+    reason: >-
+      Messages from pre-approved partners and customers (allowlist). Routine
+      business traffic, comparatively low risk.
+    matches: 'gmail.mailbox.from-zone[known-external].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: gmail.read-from-zone-unknown
+    label: 'Read messages from unknown senders'
+    reason: >-
+      Messages whose sender is neither internal nor allowlisted. The cardinal
+      OWASP LLM01 vector — prompt injection through the message body. Strong
+      posture recommended, tight quota and rate limit.
+    matches: 'gmail.mailbox.from-zone[unknown].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: gmail.read-drafts
+    label: 'Read existing drafts'
+    reason: >-
+      Drafts reveal unsent intentions and earlier versions of external
+      communications.
+    matches: 'gmail.mailbox.draft[**].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: gmail.read-sensitive-label
+    label: 'Read messages tagged with a sensitive label (financial, legal, HR, …)'
+    reason: >-
+      Zone override : whoever the sender is, a thread carrying a label the
+      owner declared sensitive is escalated. Guard rail for structurally
+      private correspondence (payroll, legal, HR, invoices). The labels of a
+      thread are unknown before the fetch, so on a mailbox that declares
+      sensitive labels every thread fetch needs this permission, and so does
+      every search that does not exclude each of them with `-label:<name>`.
+    matches: 'gmail.mailbox.sensitive-label[**].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: pii
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: gmail.bulk-read
+    label: 'Bulk read across the mailbox (non-discriminating query)'
+    reason: >-
+      `search_threads(q="is:unread")`, or any query that is not a plain
+      conjunction bounded by a `from:<address>` clause (a union, a grouping,
+      a negated or missing sender), may return hundreds of threads at once
+      and bypass per-message zoning. A distinct marker forces an explicit
+      acceptance.
+    matches: 'gmail.mailbox.bulk-marker.R'
+    vector:
+      reversibility: reversible
+      blast: bulk
+      data: data
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  # ─── WRITES — DRAFTS ───────────────────────────────────────────────────
+  # Every draft write emits two slices : the containment slice `draft.W`
+  # (matched by `draft-write`) and the recipient-zone marker (matched by one
+  # `draft-to-zone-*` risk). Both must be accepted ; without `draft-write`
+  # the containment slice would fall to the fallback, which no preset offers.
+
+  - id: gmail.draft-write
+    label: 'Create / modify a draft (any recipient)'
+    reason: >-
+      Baseline write of a draft, whatever its recipients ; the exfiltration
+      axis is carried by the `draft-to-zone-*` permission needed alongside. Drafts
+      are reversible (delete) and never sent by this plugin.
+    matches:
+      - 'gmail.mailbox.draft.W'
+      - 'gmail.mailbox.draft[**].W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: session
+
+  - id: gmail.draft-to-zone-self
+    label: 'Create / modify a draft addressed to self only'
+    reason: >-
+      A memo to oneself. No external leak as long as the draft is not sent ;
+      the official Google MCP server cannot send, so a draft is a terminal
+      action here.
+    matches: 'gmail.mailbox.to-zone[self].W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: session
+
+  - id: gmail.draft-to-zone-internal
+    label: 'Create / modify a draft addressed to internal recipients only'
+    reason: >-
+      A draft for colleagues. Stays internal while unsent ; no external
+      exfiltration path.
+    matches: 'gmail.mailbox.to-zone[internal].W'
+    vector:
+      reversibility: reversible
+      blast: env
+      data: data
+      cost: free
+      visibility: team
+      persistence: session
+
+  - id: gmail.draft-to-zone-allowlist
+    label: 'Create / modify a draft to pre-approved external contacts (allowlist)'
+    reason: >-
+      A draft to pre-approved external contacts (CRM-like). Limited risk while
+      unsent ; if a `send_draft` tool is ever wrapped, this permission covers it
+      naturally.
+    matches: 'gmail.mailbox.to-zone[allowlist].W'
+    vector:
+      reversibility: reversible
+      blast: env
+      data: data
+      cost: free
+      visibility: team
+      persistence: session
+
+  - id: gmail.draft-to-zone-external-unbounded
+    label: 'Create / modify a draft to an external recipient not in the allowlist'
+    reason: >-
+      A draft to an arbitrary external address : the cardinal exfiltration
+      vector once sent, and even unsent its existence can leak intentions.
+      Never acceptable : the classifier refuses such a draft before any permission
+      is evaluated, so holding this one grants nothing. The id is kept
+      (ids are never deleted) and marked deprecated so no new mission is
+      offered it.
+    matches: 'gmail.mailbox.to-zone[external-unbounded].W'
+    deprecated: true
+    vector:
+      reversibility: reversible
+      blast: account
+      data: secret
+      cost: free
+      visibility: public
+      persistence: session
+
+  # ─── WRITES — LABELS ───────────────────────────────────────────────────
+
+  - id: gmail.label-write
+    label: 'Apply / remove labels on a thread or message (single)'
+    reason: >-
+      Mailbox organisation on one identified thread or message. UI-level and
+      reversible (re-label). `TRASH` and `SPAM` are refused by the classifier
+      (a deletion is not a label write) ; a label that is, or may be, one the
+      owner declared sensitive also needs the fallback write permission.
+    matches: 'gmail.mailbox.thread[**].label.W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: metadata
+      cost: free
+      visibility: internal
+      persistence: session
+
+  - id: gmail.bulk-label-write
+    label: 'Bulk apply / remove labels across many threads'
+    reason: >-
+      One call labelling many threads at once. Distinct from the single
+      label write. No modelled tool can touch it today : `label_thread` takes
+      exactly one thread id and a call without one is refused. Kept for a
+      future batch tool ; in no preset until then.
+    matches: 'gmail.mailbox.bulk-marker.W'
+    vector:
+      reversibility: reversible
+      blast: bulk
+      data: metadata
+      cost: free
+      visibility: internal
+      persistence: session
+
+  # ─── FALLBACK (required) ───────────────────────────────────────────────
+
+  - id: gmail.uncategorized-write
+    label: 'Uncategorized Gmail write'
+    reason: >-
+      Catch-all for writes no entry above covers. Today : applying or
+      removing a label the owner declared sensitive, or a user label the
+      classifier cannot tell apart from one (`sensitive-label[..].W`). If the
+      plugin ever surfaces `send_message`, `delete_message` or
+      `create_filter`, they land here until a dedicated permission is added —
+      fail-loud by design. Never offered in a preset.
+    matches: 'gmail.[**].W'
+    fallback: true
+    vector:
+      reversibility: costly
+      blast: env
+      data: data
+      cost: free
+      visibility: internal
+      persistence: posture
+
+# Presets are default suggestions copied into a mission policy at issuance
+# (spec §3.2). Gmail has no environment, so no entry is env-qualified.
+# Values are provisional until ADR `mission-presets-default-values`.
+# Deliberately in no preset : `gmail.read-sensitive-label` (PII, explicit
+# acceptance), `gmail.draft-to-zone-external-unbounded` (deprecated : the
+# classifier refuses the draft), `gmail.bulk-label-write` (no tool can touch
+# it) and the fallback.
+presets:
+  - id: read-only
+    label: Read-only triage
+    description: List labels and drafts, search and read threads from automated, internal, allowlisted and unknown senders; no write, no bulk read, no sensitive label.
+    entries:
+      - risk_id: gmail.read-mailbox
+        quota: 2000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: gmail.read-from-zone-automated
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: gmail.read-from-zone-internal
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: gmail.read-from-zone-known-external
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: gmail.read-from-zone-unknown
+        quota: 200
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: gmail.read-drafts
+        quota: 200
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+
+  - id: developer
+    label: Developer
+    description: Experimental — read-only triage plus drafts to self, colleagues and allowlisted contacts and single-thread labelling; bulk reads ask first.
+    entries:
+      - risk_id: gmail.read-mailbox
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: gmail.read-from-zone-automated
+        quota: 2000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: gmail.read-from-zone-internal
+        quota: 1000
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: gmail.read-from-zone-known-external
+        quota: 1000
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: gmail.read-from-zone-unknown
+        quota: 300
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: gmail.read-drafts
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: gmail.draft-write
+        quota: 300
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: gmail.draft-to-zone-self
+        quota: 200
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: gmail.draft-to-zone-internal
+        quota: 200
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: gmail.draft-to-zone-allowlist
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: gmail.label-write
+        quota: 500
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: gmail.bulk-read
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval

@@ -1,0 +1,428 @@
+/**
+ * The temporary refs of a push (spec §4.1 ter; ADR gateway-as-git-remote D4,
+ * D5): the pack stored at the provider under `refs/vaubaan/<random>` so that
+ * the provider can say what it brings, then deleted — on every path.
+ *
+ *   names     random, carrying no mission id: every reader of the repository
+ *             can list them while they exist (the fetch listings of the door
+ *             hide them, the provider's own interface does not);
+ *   rows      one per ref (`git_pending_refs`), written before a byte leaves,
+ *             with the request's deadline; dropped once the provider confirmed
+ *             the ref gone, kept for the sweeper otherwise;
+ *   ceiling   a mission holds at most `MAX_TEMPORARY_REFS_PER_MISSION` refs at
+ *             once, in flight or waiting for an approval;
+ *   approval  a push waiting for one keeps its refs until the request expires;
+ *             a later push of the same mission to the same ref supersedes them.
+ */
+import { randomBytes } from 'node:crypto';
+
+import type { MissionContext } from '@vaubaan/gateway-core';
+import {
+  advertisementType,
+  concatBytes,
+  encodeCommandList,
+  ExecutorRefusal,
+  GIT_TEMPORARY_REF_PREFIX,
+  parseAdvertisement,
+  parseReceivePackResult,
+  pktLine,
+  prependChunk,
+  RECEIVE_PACK_REQUEST_TYPE,
+  RECEIVE_PACK_RESULT_TYPE,
+  RECEIVE_PACK_SERVICE,
+  sendRefUpdates,
+  type CommandList,
+  type ExecuteContext,
+  type GitReviewedUpdate,
+  type GitUpstream,
+  type PktLineReader,
+  type RefCommand,
+} from '@vaubaan/plugin-sdk';
+
+import type { InstanceConfig } from '../config';
+import type { Logger } from '../logging';
+import type { PendingRefsRepo } from '../store';
+import {
+  BYTES_PER_MEGABYTE,
+  CLEANUP_TIMEOUT_MS,
+  GIT_AGENT,
+  HTTP_UNAUTHORIZED,
+  IN_FLIGHT_MARGIN_MS,
+  MAX_TEMPORARY_REFS_PER_MISSION,
+  MS_PER_SECOND,
+} from './constants';
+import { callUpstream, executeContextFor, type GitTarget, type UpstreamDeps } from './upstream';
+
+/** Random bytes of a temporary ref's name. */
+const TEMPORARY_REF_BYTES = 16;
+
+/** `refs/vaubaan/<32 hex>`: unique, and telling nothing of the mission. */
+export function temporaryRefName(): string {
+  return `${GIT_TEMPORARY_REF_PREFIX}${randomBytes(TEMPORARY_REF_BYTES).toString('hex')}`;
+}
+
+export function isTemporaryRef(name: string): boolean {
+  return name.startsWith(GIT_TEMPORARY_REF_PREFIX);
+}
+
+/** The push could not go on: what git is told, what the audit keeps. */
+export class PushStop extends Error {
+  constructor(
+    readonly reason: string,
+    readonly audited: string,
+  ) {
+    super(reason);
+    this.name = 'PushStop';
+  }
+}
+
+class PackTooLarge extends Error {
+  constructor() {
+    super('pack too large');
+    this.name = 'PackTooLarge';
+  }
+}
+
+/** A command whose pack was stored under a temporary ref. */
+export interface StoredRef {
+  /** The branch or tag the push asked for. */
+  readonly ref: string;
+  readonly temporary: string;
+  readonly objectId: string;
+}
+
+/**
+ * Delete temporary refs at the provider, a compare-and-swap on what each
+ * points at. Returns the refs that are gone: those the provider reported
+ * `ok`, and those it refused that it no longer lists (already gone). A ref it
+ * refused and still lists stays: its row is kept for the sweeper.
+ */
+export async function deleteTemporaryRefs(
+  ctx: ExecuteContext,
+  upstream: GitUpstream,
+  refs: readonly { readonly temporary: string; readonly objectId: string }[],
+  signal?: AbortSignal,
+): Promise<Set<string>> {
+  const sent = await sendRefUpdates({
+    fetch: ctx.fetch,
+    upstream,
+    commands: refs.map((r) => ({ old: r.objectId, new: null, ref: r.temporary })),
+    agent: GIT_AGENT,
+    ...(signal ? { signal } : {}),
+  });
+  if (!sent.report) throw new Error(`HTTP ${sent.status}`);
+  const gone = new Set<string>();
+  const refused: string[] = [];
+  for (const r of refs) {
+    if (sent.report.refs.get(r.temporary)?.ok === true) gone.add(r.temporary);
+    else refused.push(r.temporary);
+  }
+  if (refused.length === 0) return gone;
+  const listed = await listedRefs(ctx, upstream, signal);
+  for (const ref of refused) if (!listed.has(ref)) gone.add(ref);
+  return gone;
+}
+
+/** The refs the provider's receive-pack advertises now. */
+async function listedRefs(
+  ctx: ExecuteContext,
+  upstream: GitUpstream,
+  signal?: AbortSignal,
+): Promise<Set<string>> {
+  const answer = await callUpstream(ctx, upstream, {
+    method: 'GET',
+    suffix: `/info/refs?service=${RECEIVE_PACK_SERVICE}`,
+    headers: new Headers({ accept: advertisementType(RECEIVE_PACK_SERVICE) }),
+    body: null,
+    ...(signal ? { signal } : {}),
+  });
+  if (!answer.ok) {
+    await answer.body?.cancel();
+    throw new Error(`HTTP ${answer.status}`);
+  }
+  const ad = parseAdvertisement(new Uint8Array(await answer.arrayBuffer()));
+  return new Set(ad.refs.map((r) => r.name));
+}
+
+export interface TemporaryRefsDeps extends UpstreamDeps {
+  readonly config: Pick<InstanceConfig, 'git'>;
+  readonly pendingRefs: PendingRefsRepo;
+  readonly logger: Logger;
+}
+
+export interface TemporaryRefsScope {
+  readonly ctx: MissionContext;
+  readonly target: GitTarget;
+  /** The request's signal: aborted at `git.request_timeout` or when git hangs up. */
+  readonly signal: AbortSignal;
+}
+
+/** The temporary refs of one push, and the write access to the provider they need. */
+export class TemporaryRefs {
+  private storedRefs: readonly StoredRef[] = [];
+  private connection: { execCtx: ExecuteContext; upstream: GitUpstream } | null = null;
+
+  constructor(
+    private readonly deps: TemporaryRefsDeps,
+    private readonly scope: TemporaryRefsScope,
+  ) {}
+
+  get stored(): readonly StoredRef[] {
+    return this.storedRefs;
+  }
+
+  /** The plugin's context and the write endpoint, minted once per push. */
+  async upstream(): Promise<{ execCtx: ExecuteContext; upstream: GitUpstream }> {
+    if (this.connection) return this.connection;
+    const { ctx, target, signal } = this.scope;
+    try {
+      const execCtx = await executeContextFor(this.deps, ctx, target, signal);
+      const upstream = await target.remote.upstream(execCtx, target.repository, 'write');
+      this.connection = { execCtx, upstream };
+      return this.connection;
+    } catch (err) {
+      // The plugin declined (a permission the account lacks): its sentence, as it is.
+      if (err instanceof ExecutorRefusal) throw new PushStop(err.message, err.message);
+      throw new PushStop(
+        `the ${target.plugin.displayName} account of this mission could not be used (${errorName(err)}); tell the human`,
+        `the provider account could not be used (${errorName(err)})`,
+      );
+    }
+  }
+
+  /** Stream the pack to the provider under one temporary ref per created or moved ref. */
+  async store(reader: PktLineReader, list: CommandList): Promise<void> {
+    const { ctx, target, signal } = this.scope;
+    const toStore = list.commands.filter((c): c is RefCommand & { new: string } => c.new !== null);
+    if (toStore.length === 0) return;
+    await this.checkCeiling(toStore.length);
+    const stored = toStore.map((c) => ({
+      ref: c.ref,
+      temporary: temporaryRefName(),
+      objectId: c.new,
+    }));
+    const { execCtx, upstream } = await this.upstream();
+    const capabilities = [
+      'report-status',
+      'side-band-64k',
+      'quiet',
+      ...list.capabilities.filter((c) => c === 'ofs-delta' || c === 'object-format=sha1'),
+      `agent=${GIT_AGENT}`,
+    ];
+    const head = concatBytes([
+      ...list.shallow.map((oid) => pktLine(`shallow ${oid}`)),
+      encodeCommandList(
+        stored.map((s) => ({ old: null, new: s.objectId, ref: s.temporary })),
+        capabilities,
+      ),
+    ]);
+    // Recorded before a byte leaves: if this process dies or the client goes
+    // away mid-push, the sweeper finds them once the deadline has passed.
+    const deadline = new Date(
+      Date.now() + this.deps.config.git.requestTimeoutSeconds * MS_PER_SECOND + IN_FLIGHT_MARGIN_MS,
+    ).toISOString();
+    await this.deps.pendingRefs.add(
+      stored.map((r) => ({
+        ref: r.temporary,
+        targetRef: r.ref,
+        connectionId: target.connection.id,
+        repository: target.repository,
+        missionId: ctx.mission.id,
+        objectId: r.objectId,
+        expiresAt: deadline,
+      })),
+    );
+    const limit = this.deps.config.git.maxPackBytes;
+    const pack = capped(reader.rest(), limit);
+    // From here the provider may hold the refs: they are cleaned up whatever follows.
+    this.storedRefs = stored;
+    let answer: Response;
+    try {
+      answer = await callUpstream(execCtx, upstream, {
+        method: 'POST',
+        suffix: `/${RECEIVE_PACK_SERVICE}`,
+        headers: new Headers({
+          'content-type': RECEIVE_PACK_REQUEST_TYPE,
+          accept: RECEIVE_PACK_RESULT_TYPE,
+        }),
+        body: prependChunk(head, pack.stream),
+        signal,
+      });
+    } catch (err) {
+      throw this.uploadFailure(err, pack.exceeded(), limit);
+    }
+    if (pack.exceeded()) {
+      await answer.body?.cancel();
+      throw this.uploadFailure(new PackTooLarge(), true, limit);
+    }
+    if (!answer.ok) {
+      await answer.body?.cancel();
+      if (answer.status === HTTP_UNAUTHORIZED) {
+        await this.deps.credentialCache.drop(target.connection.id);
+      }
+      throw new PushStop(
+        `${target.plugin.displayName} refused to store the pack (HTTP ${answer.status}); push again, and tell the human if it persists`,
+        `the provider refused to store the pack (HTTP ${answer.status})`,
+      );
+    }
+    let report;
+    try {
+      report = parseReceivePackResult(new Uint8Array(await answer.arrayBuffer()), true);
+    } catch (err) {
+      throw this.uploadFailure(err, pack.exceeded(), limit);
+    }
+    const failed = stored.map((s) => report.refs.get(s.temporary)).find((r) => !r || !r.ok);
+    if (report.unpack !== 'ok' || failed !== undefined) {
+      const detail =
+        report.unpack !== 'ok'
+          ? report.unpack
+          : failed && !failed.ok
+            ? failed.error
+            : 'no status reported';
+      throw new PushStop(
+        `${target.plugin.displayName} could not store the pack: ${firstLine(detail || report.errors)}`,
+        'the provider could not store the pack',
+      );
+    }
+  }
+
+  /** A mission holds a bounded number of temporary refs at the provider. */
+  private async checkCeiling(adding: number): Promise<void> {
+    const held = await this.deps.pendingRefs.countFor(this.scope.ctx.mission.id);
+    if (held + adding <= MAX_TEMPORARY_REFS_PER_MISSION) return;
+    const reason = `this mission already holds ${held} temporary refs at ${this.scope.target.plugin.displayName} for pushes waiting for an answer (at most ${MAX_TEMPORARY_REFS_PER_MISSION}); have the waiting requests answered, or let them expire, then push again`;
+    throw new PushStop(
+      reason,
+      `the mission holds ${held} temporary refs (limit ${MAX_TEMPORARY_REFS_PER_MISSION})`,
+    );
+  }
+
+  private uploadFailure(err: unknown, exceeded: boolean, limit: number): PushStop {
+    if (exceeded) {
+      const mb = Math.floor(limit / BYTES_PER_MEGABYTE);
+      return new PushStop(
+        `this push is larger than the ${mb} MB this gateway accepts; push fewer commits at a time`,
+        `the push is larger than the ${mb} MB limit`,
+      );
+    }
+    const { signal } = this.scope;
+    if (signal.aborted) {
+      const timedOut = (signal.reason as { name?: unknown } | undefined)?.name === 'TimeoutError';
+      return timedOut
+        ? new PushStop(
+            'this push took longer than this gateway allows; push fewer commits at a time',
+            'the push exceeded the request timeout',
+          )
+        : new PushStop('the push was interrupted: the client went away', 'the client went away');
+    }
+    return new PushStop(
+      `the pack could not be sent to ${this.scope.target.plugin.displayName} (${errorName(err)}); push again`,
+      `the pack could not be sent to the provider (${errorName(err)})`,
+    );
+  }
+
+  /**
+   * The push waits for an approval: its refs stay until the request expires,
+   * so the person who answers reads the change at the provider. What an
+   * earlier push of the same mission left waiting for the same refs is
+   * superseded and deleted.
+   */
+  async keepForApproval(expiresAt: string): Promise<void> {
+    const { ctx, target } = this.scope;
+    const mine = new Set(this.storedRefs.map((s) => s.temporary));
+    const targets = new Set(this.storedRefs.map((s) => s.ref));
+    const superseded = (
+      await this.deps.pendingRefs.listFor(ctx.mission.id, target.repository)
+    ).filter((row) => !mine.has(row.ref) && targets.has(row.targetRef));
+    await this.deps.pendingRefs.extend([...mine], expiresAt);
+    await this.cleanUp(
+      superseded.map((r) => ({ ref: r.targetRef, temporary: r.ref, objectId: r.objectId })),
+    );
+  }
+
+  /** An allowed replay: what earlier pushes of the same commits left for their requests. */
+  async cleanUpEarlier(review: readonly GitReviewedUpdate[]): Promise<void> {
+    const { ctx, target } = this.scope;
+    const pushed = new Set(review.map((u) => u.new).filter((oid) => oid !== null));
+    const earlier = (await this.deps.pendingRefs.listFor(ctx.mission.id, target.repository)).filter(
+      (r) => pushed.has(r.objectId),
+    );
+    await this.cleanUp(
+      earlier.map((r) => ({ ref: r.targetRef, temporary: r.ref, objectId: r.objectId })),
+    );
+  }
+
+  /**
+   * Delete temporary refs at the provider, then the rows of those confirmed
+   * gone. Runs on every path with a deadline of its own, never the request's
+   * signal. A ref the provider kept keeps its row, for the sweeper.
+   */
+  async cleanUp(stored: readonly StoredRef[] = this.storedRefs): Promise<void> {
+    if (stored.length === 0) return;
+    try {
+      const { execCtx, upstream } = await this.upstream();
+      const deadline = AbortSignal.timeout(CLEANUP_TIMEOUT_MS);
+      const gone = await deleteTemporaryRefs(
+        { ...execCtx, signal: deadline },
+        upstream,
+        stored,
+        deadline,
+      );
+      await this.deps.pendingRefs.remove([...gone]);
+      if (gone.size < stored.length) {
+        this.deps.logger.warn('temporary refs kept by the provider; left to the sweeper', {
+          mission_id: this.scope.ctx.mission.id,
+          refs: stored.length - gone.size,
+        });
+      }
+    } catch (err) {
+      this.deps.logger.warn('temporary refs of a push not deleted', {
+        mission_id: this.scope.ctx.mission.id,
+        refs: stored.length,
+        error: errorName(err),
+      });
+    }
+  }
+}
+
+/** `stream`, cut with an error once more than `limit` bytes went through. */
+function capped(
+  stream: ReadableStream<Uint8Array>,
+  limit: number,
+): { readonly stream: ReadableStream<Uint8Array>; readonly exceeded: () => boolean } {
+  let seen = 0;
+  let over = false;
+  const reader = stream.getReader();
+  return {
+    exceeded: () => over,
+    stream: new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        const { done, value } = await reader.read();
+        if (done) {
+          controller.close();
+          return;
+        }
+        seen += value.length;
+        if (seen > limit) {
+          // The rest of the body is left unread: the server discards it once the
+          // answer is sent, so git reads the refusal instead of a broken pipe.
+          over = true;
+          controller.error(new PackTooLarge());
+          return;
+        }
+        controller.enqueue(value);
+      },
+      cancel(reason) {
+        return reader.cancel(reason);
+      },
+    }),
+  };
+}
+
+export function errorName(err: unknown): string {
+  return err instanceof Error ? err.name : 'Error';
+}
+
+export function firstLine(text: string): string {
+  return (text.split(/\r?\n/).find((l) => l.trim().length > 0) ?? '').trim().slice(0, 300);
+}

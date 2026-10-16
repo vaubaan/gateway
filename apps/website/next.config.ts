@@ -1,0 +1,36 @@
+import type { NextConfig } from 'next';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+/**
+ * The `@vaubaan/*` workspaces this app imports as TypeScript source, read
+ * from its own package.json so the list is written once.
+ */
+function workspaceDependencies(): string[] {
+  const parsed: unknown = JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf8'));
+  const deps =
+    typeof parsed === 'object' && parsed !== null
+      ? (parsed as { dependencies?: Record<string, string> }).dependencies
+      : undefined;
+  return Object.keys(deps ?? {}).filter((name) => name.startsWith('@vaubaan/'));
+}
+
+const nextConfig: NextConfig = {
+  transpilePackages: workspaceDependencies(),
+  poweredByHeader: false,
+  // The site sets no cookie and loads nothing from a third party (website spec §1.1).
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'Referrer-Policy', value: 'no-referrer' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' },
+        ],
+      },
+    ];
+  },
+};
+
+export default nextConfig;

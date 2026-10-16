@@ -1,346 +1,450 @@
 ---
 title: Policy engine
 status: current
-date: 2026-06-15
+date: 2026-10-13
+last_synced: 2026-10-13
 tracks:
+  - packages/policy-engine/src/index.ts
   - packages/policy-engine/src/slice-dsl.ts
   - packages/policy-engine/src/slice-matcher.ts
   - packages/policy-engine/src/risk-evaluator.ts
   - packages/policy-engine/src/risk-policy.ts
+  - packages/policy-engine/src/budget.ts
   - packages/policy-engine/src/risk-runtime.ts
   - packages/policy-engine/src/qualify.ts
-  - packages/policy-engine/src/scope-injection.ts
+  - packages/shared/src/wildcard.ts
   - packages/policy-engine/tests/unit/
-  - packages/web/src/lib/risk-catalog/
+  - packages/policy-engine/package.json
 ---
 
 # Policy engine — `@vaubaan/policy-engine`
 
-Modules purs autour des **slices** et des **risk catalogs** Vaubaan
-(cf. spec [`gateway-risk-model.md`](../spec/gateway-risk-model.md) §3,
-§4, §6, §8). Le paquet a été entièrement réécrit lors du pivot v4
-(`chore(v1-drop)`, 2026-06-15) : les modules v1 capability-based
-(`policy.ts`, `evaluate.ts`, `tools-filter.ts`) ont été supprimés. Ce
-qui survit : la totalité du runtime risk-based + le module
-`scope-injection.ts` (inchangé, indépendant du modèle d'autorisation).
+Pure modules around **slices** and **risk catalogs** (spec
+[`gateway-risk-model.md`](../spec/gateway-risk-model.md) §3, §4, §8;
+[`vaubaan-gateway.md`](../spec/vaubaan-gateway.md) §4.1). No IO, no state:
+the gateway feeds it parsed objects (`IndexedRiskCatalog`, `Slice[]`,
+`Resource[]`) and gets a decision back. The only dependency is
+`@vaubaan/shared` — types from the barrel, values (`parseRiskId`,
+`formatRiskId`, `isRiskId`) from the browser-safe subpath
+`@vaubaan/shared/risk-id`, because the issuance UI bundles this package and
+the barrel drags in `node:crypto` and argon2 through `api-key.ts`.
 
-## Vue d'ensemble
+Rewritten in English for v5 (ADR
+[plugin-contract-and-credential-spec](../decisions/plugin-contract-and-credential-spec.md)
+D3, D8): the engine resolves environments through an `EnvResolver` over v5
+`Resource`s instead of v4 bindings; the two v4 modules
+(`legacy-bindings.ts`, `scope-injection.ts`) were deleted with the v4
+application.
 
-Sept modules purs, étanches, sans état ni IO :
+## Modules
 
-| Module               | Responsabilité                                                                                                                 | Appelé depuis                                   |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------- |
-| `slice-dsl.ts`       | Parser / sérialiser la grammaire des slices (chemin sur le data-model + action `R`/`W`).                                       | catalog YAML loader, audit log, tests           |
-| `slice-matcher.ts`   | Prédicats `matches` / `covers` / `intersects` entre patterns de slices.                                                        | `risk-evaluator`, lints                         |
-| `risk-evaluator.ts`  | Indexer un catalogue (parse les `matches`, vérifie l'unicité des ids) + calculer `risks_touched` pour une slice exécutée.      | `risk-runtime`, `mcp-gateway` (au boot)         |
-| `risk-policy.ts`     | Helper mint-time `checkAcceptableInEnv` (structural restriction du catalog) + `prepareCatalog` (boot lint).                    | routes mint (`POST /tokens/preview`, `/tokens`) |
-| `qualify.ts`         | Env-qualifier un `RiskId` (`base.name` → `provider[env].name`) et son inverse. Helper de cohérence mint ↔ runtime (spec §4.4). | `risk-runtime`, mint preview, UI mint-form      |
-| `risk-runtime.ts`    | Décision pure `evaluateCall` au hot-path `/mcp` : strict-fail si `risks_touched ⊄ accepted`.                                   | `mcp-gateway` (`callTool`)                      |
-| `scope-injection.ts` | Hide / auto-fill des arguments déterminés par les `provider_bindings` du projet (owner/repo, projectId, project_ref, teamId).  | `mcp-gateway` (`tools/list` + `tools/call`)     |
+| Module              | Responsibility                                                                                                                                                                              | Called from                                                              |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `slice-dsl.ts`      | Parse / serialize the slice grammar (path on the data model + action `R`/`W`).                                                                                                              | catalog loader (SDK), classifiers, audit, tests                          |
+| `slice-matcher.ts`  | Predicates `matches` / `covers` / `intersects` between slice patterns.                                                                                                                      | `risk-evaluator`, lints                                                  |
+| `risk-evaluator.ts` | `indexCatalog` (parse every `matches` once, unique ids) + `risksTouchedBy[All]` for executed slices + fallback detection (`isFallbackEntry`, `fallbackEntriesOf`, `hasFallbackRisk`).       | `risk-runtime`, `risk-policy`, SDK catalog loader, registry and test kit |
+| `risk-policy.ts`    | `checkAcceptableInEnv` (issuance-time structural restriction) + `prepareCatalog` (boot checks, injectable `warn`).                                                                          | SDK catalog loader and registry, issuance                                |
+| `budget.ts`         | `budgetIssues` — the one rule for a quota, a rate limit and a gate (spec §3.2), with `isValidBudget`, `ratePerMinute`, `exceedsRateCeiling`.                                                | SDK catalog loader and `presetIssues`; the issuance preview              |
+| `qualify.ts`        | Env-qualify a `RiskId` (`provider.name` → `provider[env].name`) and back; `EnvResolver` + `resourceEnvResolver` + `envResolverFor` (plugin `envOf` first, then the label); `resolveVector`. | `risk-runtime`, issuance UI, SDK                                         |
+| `risk-runtime.ts`   | `evaluateCall` — the pure risk step of the call decision: strict-fail if `risks_touched ⊄ accepted`; `carriesGlobIdentifier`, the test for a `*` inside an executed identifier.             | gateway-core `risk-gateway.ts` (with `envResolver`); the SDK test kit    |
 
-Le barrel `src/index.ts` re-exporte les 7 modules. Aucun module ne touche
-au DB — la couche route ou le gateway les nourrit avec des objets
-parsés (`RiskCatalog`, `ProviderBinding[]`).
-
-## Layout
+The barrel `src/index.ts` re-exports all seven. The listing below names
+functions; the exported types travel with them (`SliceSegment` lives in
+`@vaubaan/shared`, plus `IndexedRiskCatalog`, `QualifiableRiskEntry`,
+`PrepareCatalogOptions`, `EvaluateCallInput`, `EnvResolver`, `EnvDeriver`,
+`BudgetInput`, `ValidBudget`, `BudgetField`, `BudgetIssue` and the
+`BRACKET_IDENT_CHAR_CLASS`, `UNQUALIFIED`, `NO_SINGLE_ENV` and
+`SECONDS_PER_MINUTE` constants).
 
 ```
 packages/policy-engine/
   src/
-    slice-dsl.ts          # parseSlice / serializeSlice — DSL §3 spec
-    slice-matcher.ts      # matches / covers / intersects (path-segment)
-    risk-evaluator.ts     # indexCatalog / risksTouchedBy(All) / findRiskEntry
-    risk-policy.ts        # checkAcceptableInEnv / prepareCatalog
-    risk-runtime.ts       # evaluateCall — pure decision function
-    scope-injection.ts    # injectionPlanFor / stripInjectedArgs / mergeInjectedArgs
-    index.ts              # barrel
+    slice-dsl.ts          parseSlice / serializeSlice / SliceParseError / BRACKET_IDENT_CHAR_CLASS
+    slice-matcher.ts      matches / covers / intersects
+    risk-evaluator.ts     indexCatalog / risksTouchedBy / risksTouchedByAll / findRiskEntry /
+                          isFallbackEntry / fallbackEntriesOf / hasFallbackRisk /
+                          fallbackRiskPrefix / isCatchAllWritePattern / hasCatchAllWritePattern
+    risk-policy.ts        checkAcceptableInEnv / prepareCatalog
+    budget.ts             budgetIssues / isValidBudget / isPositiveInteger / ratePerMinute /
+                          exceedsRateCeiling
+    qualify.ts            isEnvScopedEntry / isAcceptableInEnv / qualifyRiskId / unqualifyRiskId /
+                          EnvResolver / noEnvResolver / resourceEnvResolver / envResolverFor /
+                          EnvDeriver / NO_SINGLE_ENV / resolveVector
+    risk-runtime.ts       evaluateCall / evaluateCallSimple / carriesGlobIdentifier / UNQUALIFIED
   tests/unit/
-    slice-dsl.test.ts        (23 tests)
-    slice-matcher.test.ts    (26 tests)
-    risk-evaluator.test.ts   (10 tests)
-    risk-policy.test.ts      (25 tests)
-    risk-runtime.test.ts     (9  tests)
-    scope-injection.test.ts  (12 tests)
+    slice-dsl (23)  slice-matcher (29)  risk-evaluator (20)  risk-policy (9)
+    qualify (33)    risk-runtime (33)   budget (25)
 ```
 
-## Décision flow
-
-Le hot-path `/mcp` consume `risk-runtime` ; les routes mint consument
-`risk-policy`. Schéma simplifié :
+## Decision flow
 
 ```mermaid
 flowchart TD
-  call["call (tool, args)"] --> classify["plugin.classifyV4(tool, args, bindings)"]
+  call["tools/call (tool, args)"] --> classify["plugin.classify(tool, args, resources)"]
   classify --> slices["slices: Slice[]"]
-  slices --> risks_touched["risksTouchedByAll(slices, catalog)"]
-  risks_touched --> check{"risks_touched ⊆ token.accepted_risks ?"}
-  check -->|"oui"| allow["ALLOW → executeCall + audit"]
-  check -->|"non"| deny["DENY 403 (missing_risks + executed_slices + hint)"]
+  slices --> touched["for each slice: risksTouchedBy(slice, catalog)<br/>env = envResolver.resolveEnv(slice)<br/>qualifyRiskId(id, env, entry)<br/>refuse if acceptable_in_envs excludes env"]
+  touched --> check{"risks_touched ⊆ accepted_risks ?"}
+  check -->|"yes"| allow["allowed → budget, gate, execute, audit (gateway-core)"]
+  check -->|"no"| deny["denied → risk-not-accepted (missing_risks, executed_slices, hint)"]
 ```
 
-Le runtime est **stateless** : aucune résolution mint-time n'a lieu
-hors du mint endpoint. Au call, on intersect slices ↔ catalogue, on
-check appartenance, c'est tout.
+The runtime is **stateless**. Budget, rate limit and gate are evaluated by
+the gateway after an `allowed` outcome, with session counters as input;
+they never run on a denied call.
 
-## Modules
+## Modules in detail
 
-### `slice-dsl.ts` — parser/serializer
+### `slice-dsl.ts`
 
-`parseSlice(input) → Slice` parse la grammaire spec §3 :
+`parseSlice(input) → Slice` implements spec §3:
 
 ```
 slice    ::= provider '.' segment ('.' segment)* '.' action
 segment  ::= ident | '[' inner ']' | '*' | '**'
 inner    ::= ident | ident (',' ident)* | '*' | '**'
-ident    ::= [a-zA-Z0-9_/-]+  (avec `*` glob autorisé en bracket)
+ident    ::= [a-zA-Z0-9_/-]+   (inside brackets: [a-zA-Z0-9_./~-]+, glob `*` allowed)
 action   ::= 'R' | 'W'
 ```
 
-Exemples acceptés :
+Accepted: `github.repo[sbw-vaubaan/gateway].branch[main].W`,
+`supabase.project[**].schema[public].table[users].row[*].R`,
+`github.repo[**].branch[feature/*,fix/*].file[**].W`, `github.**.W`.
+`serializeSlice` produces the canonical form (no dot between a name and its
+bracket, bare `*`/`**` normalized to `[*]`/`[**]`). `SliceParseError`
+carries `input`, `position` and a short message. The parser reads one
+segment at a time through `readBracketSegment` / `readBareToken` (which
+also recognises the terminal action) and `skipSeparator`.
 
-- `github.repo[sbw-vaubaan/gateway].branch[main].W`
-- `supabase.project[**].schema[public].table[users].row[*].R`
-- `github.repo[**].branch[feature/*,fix/*].file[**].W`
-- `github.**.W` (fallback catalog pattern)
+### `slice-matcher.ts`
 
-`serializeSlice(slice) → string` produit la forme canonique : un
-`name` segment suivi d'un bracket segment n'a **pas** de `.` entre les
-deux (`repo[main]` pas `repo.[main]`). Bare `**`/`*` sont normalisés en
-`[**]`/`[*]` à la sortie.
+- `matches(pattern, concrete)` — the pattern may hold wildcards, the
+  concrete slice may not.
+- `covers(a, b)` — partial order on patterns: every concrete matched by `b`
+  is matched by `a`.
+- `intersects(a, b)` — symmetric; true iff some concrete slice matches
+  both. Used by `risksTouchedBy` because a classifier may itself emit a
+  wildcard: Railway's replace-all writes `service-var[*].W`. That wildcard
+  touches `railway.upsert-variable` only; the destructive
+  `railway.bulk-variables-replace` is carried by the marker slice the
+  classifier emits next to it, `service-var-replace.W`.
 
-`SliceParseError` porte `input`, `position`, et un message court — les
-catalogues YAML sont validés au boot et l'erreur remonte vers l'opérateur.
+Segment-by-segment matching; `[**]` consumes zero or more segments with
+backtracking; the in-bracket glob `*` expands over `BRACKET_IDENT_CHAR_CLASS`
+(exported by `slice-dsl.ts`, `[a-zA-Z0-9_./~-]`), the same class the parser
+accepts, so `branch[release-*]` matches `release-1.2` and `file[*]` matches
+`a.ts`: a pattern never accepts less than an identifier may contain. The glob
+is never turned into a regular expression: a value with a character outside
+the class is refused, then `matchWildcard` (`@vaubaan/shared/wildcard`, a
+two-pointer matcher, linear in practice) reads `*` as one character followed
+by any number. A regex read `a*a*a*…` with exponential backtracking, and a
+policy can arrive through the management door (found by Semgrep, 2026-10-14).
+Glob × glob `intersects` is exact for globs with one `*` each (literal
+prefixes and suffixes must extend one another) and fails closed (`true`)
+when both sides carry several `*`; `covers` uses the same split (a glob
+covers itself and any glob whose literals extend its own).
 
-Tests : `slice-dsl.test.ts` (23) — happy path, errors (missing action,
-unterminated bracket, empty bracket, invalid ident chars, double dot,
-wrong provider chars), round-trip serialize.
+### `risk-evaluator.ts`
 
-### `slice-matcher.ts` — predicates
+`indexCatalog(catalog) → IndexedRiskCatalog` parses every `matches` once
+(string or list, OR semantics), enforces id uniqueness and provider
+consistency of patterns, and marks the catalog's fallback entry
+(`fallback: boolean` per indexed entry). `risksTouchedBy(slice, indexed) →
+RiskId[]` returns, in catalog order, every non-fallback entry one of whose
+patterns intersects the slice; **the fallback is included only when no
+other entry matched** (ADR
+[fallback-risk-only-when-uncategorized](../decisions/fallback-risk-only-when-uncategorized.md));
+empty means nothing covers the slice, not even the fallback.
+`risksTouchedByAll(slices, indexed)` unions and deduplicates, applying the
+fallback rule per slice. `findRiskEntry(indexed, id)` is an O(N) lookup,
+N small.
 
-Trois prédicats, sémantiques distinctes :
+Fallback detection: `isFallbackEntry(entry, provider, patterns?)` — the
+explicit `fallback` flag when present; otherwise a catch-all write pattern
+(`<provider>.**.W`, `isCatchAllWritePattern`) or the id prefix
+`fallbackRiskPrefix(provider)` = `<provider>.uncategorized-` — dash
+included, so `github.uncategorizedfoo` is an ordinary risk.
+`fallbackEntriesOf(catalog)` and `hasFallbackRisk(catalog)` derive from it
+(moved here from `risk-policy.ts`, same barrel exports).
+`hasCatchAllWritePattern(entry)` tells whether one of an entry's patterns
+is the catch-all write; the SDK loader requires it of the fallback entry,
+because the fallback is the one entry left out of the touched risks when
+another entry matches.
 
-- **`matches(pattern, concrete)`** — `pattern` peut contenir wildcards,
-  `concrete` n'en contient pas. Vrai ssi le pattern accepte la slice.
-  Utilisé au runtime quand le plugin émet une slice concrète.
-- **`covers(a, b)`** — `a.covers(b)` ssi tout `concrete` matché par
-  `b` est aussi matché par `a`. Partial order sur les patterns ;
-  utilisé pour les lints (catalog vs catalog).
-- **`intersects(a, b)`** — symétrique, vrai ssi `∃ concrete` matché par
-  les deux. Utilisé par `risksTouchedBy` : le plugin peut émettre une
-  slice avec wildcards (`service-var[*].W`) et on veut savoir si elle
-  recoupe une entrée catalogue (qui contient aussi des wildcards).
+### `risk-policy.ts`
 
-Algorithme : matching path-segment par path-segment, avec
-`wild-rec` (`[**]`) qui consomme 0+ segments via backtracking. Glob
-inside-bracket : `*` matche `[a-zA-Z0-9_/-]+` (pas de regex utilisateur).
+- `checkAcceptableInEnv(entry, env)` — refuses at issuance when the entry
+  is env-scoped and the resource's environment label is absent or not in
+  the list. Returns a message or `null`. Built on `isAcceptableInEnv`.
+- `prepareCatalog(catalog, { warn? })` — `indexCatalog` (patterns parsed,
+  ids unique) + RiskId grammar (`isRiskId` from `@vaubaan/shared`); a
+  missing fallback (`hasFallbackRisk`) calls `warn` (default
+  `console.warn`). The SDK loader silences `warn` and re-checks the fallback
+  itself (`fallbackIssues`, a hard error requiring exactly one); the SDK
+  registry silences it too; here it stays a warning so partial catalogs
+  can be indexed in tests and tooling.
 
-Tests : `slice-matcher.test.ts` (26) — matches simple/wild/list/glob,
-covers `**` vs `*`, intersects glob×glob, intersects asymétriques.
+### `budget.ts`
 
-### `risk-evaluator.ts` — touch detection
+The budget rule of spec §3.2 ("always numbers, never unbounded"), in one
+pure function shared by every place a budget is judged:
 
-`indexCatalog(catalog: RiskCatalog) → IndexedRiskCatalog` parse chaque
-`matches` du YAML une seule fois (gain hot-path). Une entrée peut
-déclarer un pattern unique OU un tableau (OR-semantics — la slice
-touche le risk si ≥1 pattern intersecte).
+- `budgetIssues({ quota, rate_limit, gate }) → BudgetIssue[]` — the inputs
+  are `unknown` (YAML, a TypeScript literal, a form). `quota`,
+  `rate_limit.max` and `rate_limit.window_seconds` must be positive
+  integers (`isPositiveInteger`: no `Infinity`, `NaN`, fraction, zero or
+  negative), `rate_limit` a mapping, `gate` one of `GATES`. Each issue is
+  `{ field, message }` with `field` one of `quota`, `rate_limit`,
+  `rate_limit.max`, `rate_limit.window_seconds`, `gate`; the caller adds
+  its own path prefix. An absent `gate` is an issue: the YAML loader
+  defaults it to `auto` before calling.
+- `isValidBudget(entry)` — type guard over the same rule
+  (`entry is ValidBudget`).
+- `ratePerMinute(rate)` and `exceedsRateCeiling(rate, ceilingPerMinute)` —
+  the comparison of a rate limit with a catalog's per-minute ceiling
+  (`null` / `undefined` ceiling: never exceeded).
 
-`risksTouchedBy(slice, catalog) → RiskId[]` retourne en ordre catalogue
-toutes les entrées qui intersectent la slice. Vide ⇒ catalogue
-incomplet (pas de fallback) → le runtime traite en `deny` (no silent
-passthrough).
+Callers: the SDK's YAML loader (`presetEntryFrom`) and `presetIssues`, which
+`definePlugin`, the registry and the test kit run on every catalog,
+including one written in TypeScript; and the issuance preview of the
+application (`apps/gateway/src/server/missions/preview.ts`, `budgetProblem`),
+which words the first `budgetIssues` field for the creator and adds the
+catalog's ceiling through `exceedsRateCeiling`. The module is browser-safe: the
+gate set comes from the subpath `@vaubaan/shared/domain`.
 
-`risksTouchedByAll(slices[], catalog)` même chose pour un call
-multi-slice (ex : `supabase__apply_migration` qui touche DDL+DML).
-Dédupliqué, ordre stable.
+### `qualify.ts`
 
-`findRiskEntry(catalog, riskId)` lookup O(N), N petit (~10-20).
+`isAcceptableInEnv(entry, env)` is the one rule for `acceptable_in_envs`:
+an entry that is not env-scoped (no list, or an empty one) is acceptable
+anywhere; an env-scoped entry only in a listed env, never without an env.
+Issuance (`checkAcceptableInEnv`), the runtime (`evaluateCall`), the plugin
+SDK's preset checks and the composition root's `RegistryCatalogIndex` (the
+store's `CatalogIndex`, `apps/gateway/src/server/compose/registry.ts`) all
+call it, so the four places cannot disagree (an empty list used to be refused by one of
+them).
 
-Tests : `risk-evaluator.test.ts` (10) — index une catalog YAML, touched
-single/multi, fallback unique, deprecated entries préservés, multi-pattern
-OR-semantics, empty catalog.
+- `isEnvScopedEntry(entry)` — true iff `acceptable_in_envs` is non-empty;
+  that is the marker of an env-scoped risk.
+- `qualifyRiskId(baseId, env, entry)` — `supabase.bulk-row-write` →
+  `supabase[staging].bulk-row-write` when the entry is env-scoped and `env`
+  non-empty; already-qualified ids and account-scoped entries are returned
+  unchanged. `unqualifyRiskId` is the inverse. Both are built on
+  `parseRiskId` / `formatRiskId` from `@vaubaan/shared` — no string
+  surgery here.
+- `EnvResolver { resolveEnv(slice): string | null }` — the runtime's only
+  notion of "which environment does this slice fall under".
+  `noEnvResolver` resolves every slice to `null`; it is an ordinary
+  resolver, not a mode switch (see `evaluateCall`).
+- `resourceEnvResolver(resources)` reads the environment from the owner's
+  labels. It keeps the resources of the slice's provider and compares
+  **every** identifier of the slice path — each `ident` segment and each
+  value of a `list` segment — with their `ref`s; it cannot know which
+  segment is the resource, so an identifier the caller chose (a table, a
+  key, a branch) that equals the ref of another resource counts too. The
+  environments of the resources so named are collected (an unlabelled
+  resource counts as `null`):
+  - they all agree → that environment (or `null` when the one resource
+    named is unlabelled);
+  - they disagree — two labels, or a labelled and an unlabelled resource →
+    `null`: no environment, so every env-scoped risk the slice touches is
+    refused. The first match never wins;
+  - no ref in the path and exactly one resource of the provider → that
+    resource's env; no ref and several resources → `null` (ambiguous); no
+    resource of the provider → `null`.
+- `EnvDeriver` is the shape of the SDK's `ProviderPlugin.envOf`, declared
+  here so this package does not import the SDK:
+  `(slice, resources) → env | null | undefined | NO_SINGLE_ENV`. `NO_SINGLE_ENV` is a
+  symbol (`Symbol.for('@vaubaan/policy-engine/no-single-env')`, re-exported
+  by the SDK): the answer of a deriver for a slice that names its
+  environment but not exactly one (`env[*]`, `env[prod,preview]`,
+  `env[prod*]`). It has a value of its own because `null` and `undefined`
+  both mean "this slice says nothing about its environment, use the label".
+- `envResolverFor(resources, derive?)` is the composed default resolver
+  (ADR
+  [fallback-risk-only-when-uncategorized](../decisions/fallback-risk-only-when-uncategorized.md)
+  D4; spec vaubaan-gateway §0 "Resource"), in this order: `NO_SINGLE_ENV`
+  from the deriver → `null`, and the resource label is **not** consulted;
+  a non-empty string from the deriver → that environment (Vercel's
+  `env[prod]` segment — the only shipped plugin with one); anything else →
+  the resource label (`resourceEnvResolver`), else `null`. Without a
+  deriver it is exactly `resourceEnvResolver(resources)`.
+- `resolveVector(entry, env)` — base vector with `vector_overrides[env]`
+  applied.
 
-### `risk-policy.ts` — mint-time helpers
-
-Post drop-confirm (ADR [[unified-gates-drop-confirm]]), ce module se
-réduit à deux helpers utilisés au mint :
-
-`checkAcceptableInEnv(entry, env)` — refuse au mint si le catalogue
-déclare `acceptable_in_envs: ['preview', 'staging']` et que l'env
-binding n'y figure pas. Renvoie un message ou `null`.
-
-`prepareCatalog(catalog)` — wrapper `indexCatalog` + sanity checks
-(ids uniques, regex `<provider>[<env>].<name>` ou `<provider>.<name>`,
-fallback `<provider>.uncategorized-*` présent). Throw si IDs en doublon ;
-warn si fallback absent.
-
-Tests : `risk-policy.test.ts` — `checkAcceptableInEnv` (no-env,
-env-not-in-list, ok), `prepareCatalog` (dup, regex fail).
-
-### `risk-runtime.ts` — call-time decision
-
-`evaluateCall({ executed_slices, token_accepted_risks, token_denied_risks,
-catalog }) → RiskDecision` est la fonction de décision pure du runtime.
-Strict-fail au MVP (spec §8) :
-
-```
-if executed_slices empty                        → DENY (classifier gap)
-risks_touched = risksTouchedByAll(slices, catalog)
-if risks_touched empty                          → DENY (catalog gap)
-if any risk ∈ token_denied_risks                → DENY (explicit deny)
-if risks_touched ⊄ token_accepted_risks         → DENY (missing_risks)
-sinon                                            → ALLOW (risks_touched)
-```
-
-Pas de step-up runtime au MVP — le client doit re-minter avec les
-`risks_touched` manquants accepted. Reporté en Phase 2 (cf. spec §8).
-
-`evaluateCallSimple(catalog, slices, acceptedRisks)` est un convenience
-pour les tests (pas pour le hot-path — pré-indexer au boot).
-
-Tests : `risk-runtime.test.ts` (9) — allow happy, deny missing, deny
-empty-slices, deny no-catalog-match, denied_risks override, multi-slice
-union, hint message shape.
-
-### `scope-injection.ts` — args hide & fill
-
-Inchangé depuis v1 — indépendant du modèle d'autorisation. 3 fonctions :
-
-- `injectionPlanFor(provider, scope) → InjectionPlan | null` — null si 0
-  ou 2+ bindings (l'agent doit fournir). Sinon construit le plan : `owner`
-  - `repo` (parse `resource_ref` `^[^/]+/[^/]+$` pour GitHub), `projectId`
-    (Vercel/Railway), `project_ref` (Supabase), `teamId` (Vercel via
-    `provider_admins.team_id`).
-- `stripInjectedArgs(tool, plan) → McpToolDeclaration` — retire les keys
-  injectées de `inputSchema.properties` ET de `required[]`. Pure, no-mutate.
-- `mergeInjectedArgs(args, plan) → Record<string, unknown>` — auto-fill
-  côté serveur avant dispatch. **Caller-provided wins** (un admin peut
-  override en MCP Inspector ; l'auto-fill ne s'applique que sur
-  undefined/null/'').
-
-Mapping `provider → arg-name` centralisé ici — single source of truth.
-
-Tests : `scope-injection.test.ts` (12) — chaque provider, null si 0/2+
-bindings, null si malformed resource_ref, strip retire properties+required,
-merge fill missing, caller-override wins, empty string treated as missing.
-
-## Wiring côté gateway
-
-Le gateway charge les catalogues au boot via
-`packages/web/src/lib/risk-catalog/loader.ts` :
+### `risk-runtime.ts`
 
 ```ts
-import { indexCatalog } from '@vaubaan/policy-engine';
-import { githubRiskCatalog, vercelRiskCatalog, ... } from '@vaubaan/providers-*';
-
-// Une fois par runtime — TS imports, pas de YAML au runtime.
-const catalogs: Record<Provider, IndexedRiskCatalog> = {
-  github: indexCatalog(githubRiskCatalog),
-  vercel: indexCatalog(vercelRiskCatalog),
-  supabase: indexCatalog(supabaseRiskCatalog),
-  railway: indexCatalog(railwayRiskCatalog),
-  bash: indexCatalog(sshRiskCatalog),  // historic naming, bash = ssh package
-};
+evaluateCall({
+  executed_slices,            // Slice[] from the plugin
+  token_accepted_risks,       // ReadonlySet<RiskId> — the keys of the mission policy
+  token_denied_risks?,        // legacy explicit opt-outs — trump acceptance; v5 passes none
+  catalog,                    // IndexedRiskCatalog of the provider
+  envResolver?,               // an EnvResolver (host) | 'unqualified' (tooling, tests); omitted = 'unqualified'
+}) → RiskDecision
 ```
 
-Le YAML sibling (`packages/providers/<vendor>/src/risk-catalog.yaml`)
-reste la forme canonique reviewable ; un test
-`risk-catalog-sync.test.ts` lints que les deux restent en sync.
+```
+executed_slices empty                                → denied (classification gap)
+a slice carries `*` inside an identifier             → denied (a value read as a pattern)
+one slice matches no catalog entry                   → denied (catalog gap — add a fallback)
+an env-scoped risk touched outside its envs          → denied (not acceptable here)
+any touched risk ∈ token_denied_risks                → denied (explicit deny, legacy input)
+risks_touched ⊄ token_accepted_risks                 → denied (missing_risks)
+otherwise                                            → allowed (risks_touched)
+```
 
-Au hot-path :
+**An executed slice names what the call touches.** `carriesGlobIdentifier(slice)`
+is true when an `ident` segment holds a `*` without being exactly `*`, or
+when a value of a `list` segment holds one. Such a `*` can only be a
+caller's value that a classifier passed through, and the matcher would read
+it as a glob, pricing the call on whatever it happens to match.
+`evaluateCall` denies the call before any catalog lookup — `risks_touched`
+and `missing_risks` empty, the hint quoting the slices. The whole-segment
+wildcards (`[*]`, `[**]`) and the identifier `*` remain: they are how a
+classifier says "every instance" (the SDK's `ANY_IDENT`,
+[plugin-sdk](./plugin-sdk.md)). The SDK test kit runs the same function on
+every sample slice (ADR
+[decision-stages-fail-closed-and-audited](../decisions/decision-stages-fail-closed-and-audited.md)
+D2–D4, which also covers the two environment rules above).
+
+**Every slice must be covered, not the union.** Each slice is something the
+call does. A slice that no entry of the catalog matches — or a slice of
+another provider — denies the call (`uncovered` in `collectQualifiedRisks`),
+whatever the other slices touch: an effect nobody priced must not ride on the
+risks of the slices next to it. The denial lists the uncovered slices in its
+hint, `missing_risks` empty and the accepted risks of the other slices in
+`covered_risks` (ADR
+[execution-door-json-faithful-arguments-and-shared-throttle](../decisions/execution-door-json-faithful-arguments-and-shared-throttle.md)).
+
+The mode is decided by the `envResolver` input alone, never by which
+object is passed:
+
+- an `EnvResolver` — the host mode. `collectQualifiedRisks` resolves each
+  slice's environment, qualifies the touched risks and records every
+  env-scoped risk whose `acceptable_in_envs` excludes that environment (or
+  whose resource carries no label). Such a risk is **never dropped**: the
+  call is refused, the risk listed in `missing_risks` under the id it
+  would have there, and the hint names the environments it is acceptable
+  in. Any resolver selects this mode, including `noEnvResolver` or a
+  wrapper around it — those say "nothing is labelled" and therefore refuse
+  every env-scoped risk;
+- `'unqualified'` (the exported constant `UNQUALIFIED`) — catalog tooling
+  and tests: no qualification, `acceptable_in_envs` not applied;
+- omitted — the same as `'unqualified'`, kept so existing callers keep
+  working. New code names the mode.
+
+`token_denied_risks` is the v4 explicit-deny input. Spec §4.1 has no
+explicit deny and a v5 mission carries none: the application's risk stage
+leaves `denied_risks` out, and gateway-core's `evaluateCallForToken` hands
+the engine an empty set. The branch stays while a caller still passes the
+field (one plugin test does, with `[]`:
+`plugins/railway/tests/unit/policy.test.ts`). Removing it means dropping the
+field from that caller and from `evaluateCallForToken` first.
+
+Every denial is built by one `denied(...)` helper and carries
+`code: 'risk-not-accepted'` (the only code this step emits) and a `hint`
+saying what to do (ask the mission creator to re-issue, or restrict the
+operation); the structured refusal body is gateway-core's job.
+`evaluateCallSimple(catalog, slices, accepted)` is for tests and
+integration code and runs in the unqualified mode; never on the hot path
+(pre-index at boot).
+
+### What was removed with the v4 application
+
+`legacy-bindings.ts` (the `ProviderBinding` → `Resource` bridge and the
+`bindings` input of `evaluateCall`) and `scope-injection.ts` (v4's auto-fill
+of `owner`/`repo`, `projectId`, `project_ref`, `teamId` from project
+bindings, which had been quarantined behind a flag that defaulted to off).
+If plan §8-Q4 is answered "yes", the v5 form is the plugin hook
+`normalizeArgs` behind the SDK's `argNormalization` flag
+([plugin-sdk](./plugin-sdk.md)).
+
+## Wiring
+
+At boot the plugin SDK loads each YAML catalog and the registry calls
+`prepareCatalog`; the execution door then evaluates:
 
 ```ts
-import { evaluateCall } from '@vaubaan/policy-engine';
+import { envResolverFor, evaluateCall } from '@vaubaan/policy-engine';
+
+const outcome = plugin.classify(tool, args, missionResources);
+if ('denied' in outcome) return refuse(outcome.denied);
 const decision = evaluateCall({
-  executed_slices: adapter.classifyV4(tool, args, bindings).slices,
-  token_accepted_risks: new Set(token.accepted_risks),
-  token_denied_risks: new Set(token.denied_risks),
-  catalog: catalogs[provider],
+  executed_slices: outcome.slices,
+  token_accepted_risks: new Set(acceptedRisksOf(mission)),
+  catalog: registry.catalogOf(providerId),
+  envResolver: envResolverFor(missionResources, plugin.envOf?.bind(plugin)),
 });
-if (decision.outcome === 'allowed') executeCall(...);
-else return rpcDeny(decision);
+if (decision.outcome === 'allowed') {
+  /* budget, gate, execute, audit */
+} else {
+  /* risk-not-accepted */
+}
 ```
 
-Cf. [`mcp-gateway.md`](./mcp-gateway.md) §Decision flow pour le hot-path
-intégral et [`gateway-risk-model.md`](../spec/gateway-risk-model.md) §8.
+`gateway-core`'s `evaluateCallForToken` does exactly this, with
+`envResolverFor(resources, adapter.envOf?.bind(adapter))` as the default
+resolver; the execution door reaches it through its risk stage
+(`apps/gateway/src/server/execution/risk-stage.ts`). The v4 `bindings`
+input and its bridge (`legacy-bindings.ts`) were deleted with the v4
+application.
 
-## Comment debug
+## How to debug
 
-- **Mint `400` `risks_touched empty`** → le catalogue du provider n'a
-  pas de fallback ou la slice émise est hors-périmètre. Inspecter
-  `packages/providers/<vendor>/src/risk-catalog.yaml` — il faut un
-  `<provider>.uncategorized-*` qui matche `**.W` ou `**.R`.
-- **`/mcp` renvoie 403 `risk-not-accepted` alors qu'on a le grant** →
-  vérifier que le `RiskId` est qualifié de la même façon des deux côtés.
-  Le token stocke `supabase[staging].bulk-row-write` ; le runtime
-  qualifie via `qualifyRiskId(baseId, binding.environment, entry)`. Si
-  l'entry n'a pas `acceptable_in_envs` non-vide, la qualification est
-  no-op et le grant doit être non-qualifié.
-- **`indexCatalog` throw au boot** → un pattern `matches` du YAML est
-  malformé. Le message inclut le `risk.id` + position. Pas de hot-fix,
-  ça remonte au commit qui a introduit le YAML.
-- **`tools/call` denied `classify-denied`** → c'est le plugin (provider
-  adapter) qui a refusé avant même d'arriver à la policy. Souvent un
-  `projectId` non bindé ou un tool inconnu. Inspecter le message.
-- **Empty `risks_touched` mais slice claire** → la pattern catalogue
-  n'inclut pas la slice. Soit ajouter une entrée fine, soit étendre le
-  fallback `**.W`. Lint au CI : `risk-catalog-sync.test.ts` vérifie que
-  chaque tool MCP émet une slice qui matche ≥1 entrée.
-- **`scope-injection` ne fill pas `owner`** → le binding GitHub a un
-  `resource_ref` qui ne matche pas `^[^/]+/[^/]+$`. Re-créer le binding
-  proprement.
+- **`risks_touched` empty, slice looks right** — no catalog pattern
+  intersects it, not even the fallback. Check the slice against the
+  plugin's `dataModel`; the fallback `<provider>.**.W` catches writes only,
+  reads need their own entry.
+- **The fallback is accepted but the call is denied** — the fallback no
+  longer co-fires with a dedicated entry; `missing_risks` names the entry
+  to accept. Conversely, the fallback appearing in `risks_touched` means no
+  dedicated entry covers that write: add one to the catalog.
+- **Denied although the risk is accepted** — qualification mismatch. The
+  mission stores `supabase[staging].bulk-row-write`; the runtime qualifies
+  with the env the resolver returns. Is the resource labelled? Does the
+  slice path carry the resource `ref`? Is the entry env-scoped
+  (non-empty `acceptable_in_envs`)? An account-scoped entry is never
+  qualified and must be accepted unqualified.
+- **Denied with "is touched on a resource … but is acceptable only in
+  […]"** — the call touches an env-scoped risk in an environment its
+  catalog entry excludes, or on an unlabelled resource. No mission can
+  hold that risk there; label the resource if the label is what is
+  missing, otherwise the operation is structurally refused.
+- **Denied with "an executed slice may not carry '\*' inside an
+  identifier"** — a classifier put a caller's value holding `*` into an
+  identifier or a list. The plugin must refuse the value in its grammar, or
+  emit the whole-segment placeholder (`identSegment` / `ANY_IDENT` of the
+  SDK).
+- **An env-scoped risk refused on a labelled resource** — the slice names
+  several resources of the mission whose labels differ (or one of them is
+  unlabelled), or the plugin's `envOf` answered `NO_SINGLE_ENV` (a wildcard,
+  a list or a glob where one environment is expected). Both resolve to no
+  environment; the label is not used as a substitute.
+- **`indexCatalog` / `prepareCatalog` throws at boot** — a `matches` pattern
+  is malformed or names another provider; the message includes the risk id.
+  With the SDK loader every issue is listed at once.
 
 ## Extension
 
-### Ajouter un risque au catalogue d'un provider
+- **New matching operator** — extend `slice-dsl.ts` (lexer + parser),
+  `SliceSegment` in `@vaubaan/shared` `risk.ts`, every `*Segments` /
+  `*One` helper of `slice-matcher.ts`, and the matcher tests.
+- **Another environment source** — implement `EnvResolver`; do not touch
+  `risk-runtime.ts`.
+- **A new structural guardrail at issuance** — a sibling of
+  `checkAcceptableInEnv` in `risk-policy.ts`, consumed by the issuance
+  path, never by the runtime.
+- **A new budget dimension** — add it to `Budget` (`@vaubaan/shared`), to
+  `BudgetInput` / `BudgetField` and to `budgetIssues`; the loader, the
+  preset checks and the test kit follow without a change.
 
-Toucher `packages/providers/<vendor>/src/risk-catalog.{yaml,ts}` :
+## References
 
-```yaml
-- id: <provider>.<name> # OU <provider>[<env>].<name> si env-scoped
-  label: 'Libellé court (UI)'
-  reason: "Pourquoi c'est un risque (≤ 2 phrases)"
-  matches: '<slice-pattern>' # ou liste de patterns
-  vector:
-    reversibility: reversible|costly|irreversible
-    blast: single|env|account|bulk
-    data: metadata|data|secret|pii
-    cost: free|moderate|unbounded
-    visibility: internal|team|public
-    persistence: stateless|session|posture
-  acceptable_in_envs: [preview, staging] # optionnel — structural restriction
-```
-
-Le test `risk-catalog-sync.test.ts` du provider check :
-
-- YAML ↔ TS export sync.
-- Chaque tool MCP du provider émet au moins une slice qui intersect ≥1 entry.
-- IDs uniques + matchent `RISK_ID_REGEX`.
-- Fallback `<provider>.uncategorized-*` présent.
-
-### Ajouter un nouvel opérateur de matching
-
-Le matcher actuel supporte `name`, `ident exact`, `ident glob` (avec
-`*`), `list`, `wild-one` (`*`), `wild-rec` (`**`). Pour ajouter un
-opérateur (ex : negation, range), étendre :
-
-- `slice-dsl.ts` (lexer + parser).
-- `SliceSegment` dans `@vaubaan/shared/src/types.ts` (nouveau `kind`).
-- Toutes les `*Segments` / `*One` de `slice-matcher.ts`.
-- Couvrir par tests dans `slice-matcher.test.ts`.
-
-### Ajouter un provider au plan d'injection
-
-Étendre `scope-injection.ts:injectionPlanFor` avec une branche
-`if (provider === '<new>')`. Définir quelles propriétés de
-`InjectionPlan` (étendre l'interface si nécessaire) sont déterminées
-par la binding ; mapper depuis `resource_ref` (ou via `ScopeContext`).
-
-## Références
-
-- Spec : [`docs/spec/gateway-risk-model.md`](../spec/gateway-risk-model.md)
-  §3 (DSL), §4 (catalog), §6 (project policy), §8 (runtime).
-- Handbooks voisins : [[mcp-gateway]] (hot-path orchestration),
-  [[escalation]] (runtime escalation_channel out-of-gateway),
-  [`providers/README.md`](./providers/README.md) (5 risk catalogs par
-  provider).
-- Tests : `npx vitest run packages/policy-engine` — 105 tests, ~50ms.
+- Spec: [`gateway-risk-model.md`](../spec/gateway-risk-model.md) §3, §4,
+  §8; [`vaubaan-gateway.md`](../spec/vaubaan-gateway.md) §3.1, §4.1.
+- ADRs:
+  [plugin-contract-and-credential-spec](../decisions/plugin-contract-and-credential-spec.md),
+  [unified-gates-drop-confirm](../decisions/unified-gates-drop-confirm.md),
+  [decision-stages-fail-closed-and-audited](../decisions/decision-stages-fail-closed-and-audited.md),
+  [scope-caps-amplification-axis](../decisions/scope-caps-amplification-axis.md).
+- Neighbours: [plugin-sdk](./plugin-sdk.md), [`providers/README.md`](./providers/README.md).
+- Tests: `npx vitest run packages/policy-engine` — 172 tests.

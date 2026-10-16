@@ -1,0 +1,55 @@
+# What `railway up` must never upload to Railway's builder (gitignore syntax).
+# The image's own exclusions are in .dockerignore; this file keeps the *upload*
+# clean when someone runs `railway up` from a working tree instead of the clean
+# `git archive` of deploy/railway.md §5. Kept in step with .dockerignore by
+# apps/gateway/tests/unit/structural/upload-ignore-files.test.ts.
+
+# Secrets and keys: never leave the machine.
+.env
+.env.*
+**/.env
+**/.env.*
+!**/.env.example
+*.pem
+**/*.pem
+*.key
+**/*.key
+**/id_rsa*
+**/id_ed25519*
+**/id_ecdsa*
+deploy/config/gateway.yaml
+.mcp.json
+
+# Operator and agent tooling: reports, transcripts, harness state.
+.vaubaan/
+.claude/
+.codex/
+.opencode/
+.agents/
+.build/
+.harness/
+.harness-overrides/
+.harness-manifest.json
+AGENTS.md
+CLAUDE.md
+.railway/
+
+# Repository metadata and local state.
+.git/
+.github/
+.husky/
+.vscode/
+
+# Dependencies and build output: Railway installs and builds from the lockfile.
+node_modules/
+**/node_modules/
+**/.next/
+**/out/
+**/dist/
+**/coverage/
+**/playwright-report/
+**/test-results/
+**/.turbo/
+**/.cache/
+*.log
+*.tsbuildinfo

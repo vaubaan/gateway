@@ -1,0 +1,50 @@
+/* The label column grows with its longest label: a label never runs under its value. */
+.allow {
+  display: grid;
+  grid-template-columns: minmax(110px, max-content) minmax(0, 1fr);
+  gap: 6px var(--space-4);
+  max-width: var(--measure);
+  margin: 0;
+  font-size: var(--text-sm);
+}
+.line {
+  display: contents;
+}
+.allow dt {
+  white-space: nowrap;
+}
+.allow dd {
+  margin: 0;
+  color: var(--ink-2);
+}
+.allow dd b,
+.allow dd strong {
+  color: var(--ink);
+  font-weight: var(--weight-regular);
+}
+.allow dd a {
+  color: var(--accent);
+}
+/* The one coloured line: something here needs a person. */
+.asks dt {
+  color: var(--warn);
+}
+.quiet dt {
+  color: var(--ink-3);
+}
+
+.compact {
+  grid-template-columns: 62px minmax(0, 1fr);
+  gap: var(--space-1) var(--space-2);
+  font-size: var(--text-sm);
+}
+
+@media (max-width: 720px) {
+  .allow {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+  .allow dd {
+    margin-bottom: var(--space-2);
+  }
+}

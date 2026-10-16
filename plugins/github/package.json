@@ -1,0 +1,22 @@
+{
+  "name": "@vaubaan/plugin-github",
+  "version": "3.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Vaubaan Gateway provider plugin for GitHub — repositories of a GitHub App installation, risk catalog and presets",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "type-check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@octokit/rest": "^21.0.2",
+    "@vaubaan/plugin-sdk": "*",
+    "jose": "^5.9.6"
+  },
+  "devDependencies": {
+    "@vaubaan/policy-engine": "*"
+  }
+}

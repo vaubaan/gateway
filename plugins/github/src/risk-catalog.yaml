@@ -1,0 +1,525 @@
+# Risk catalog of the `github` provider.
+#
+# Spec : docs/spec/gateway-risk-model.md §4 (schema), docs/spec/vaubaan-gateway.md §3.2 (presets).
+# Handbook : docs/handbook/providers/github.md.
+#
+# 18 fine-grained risks + 1 fallback (`github.uncategorized-write`). Each
+# `matches` is one slice pattern or a list ; the risk is touched when at
+# least one pattern intersects the concrete slice the classifier emitted.
+# Bracket lists mix exact names and globs (`[main,master,release-*]`).
+#
+# Loaded by `@vaubaan/plugin-sdk` at boot ; the loader refuses unknown keys,
+# malformed ids, patterns of another provider, a missing fallback, zero
+# presets, a preset entry that is not an explicit risk of this catalog.
+#
+# Adding a risk : append an entry, bump `catalog_version`, update `catalog_date`.
+# Renaming or removing a risk : forbidden — `deprecated: true` + `replaced_by`.
+#
+# Fallback note : `github.uncategorized-write` counts only when no specific
+# entry matched the write (a branch outside the feature/* and protected
+# conventions, a future tool without an entry). No preset offers it ; the
+# creator adds it explicitly when a mission needs unconventional branches.
+
+provider: github
+catalog_version: 6
+catalog_date: 2026-10-14
+
+risks:
+  # ---------------------------------------------------------------
+  # READS
+  # ---------------------------------------------------------------
+  - id: github.read-code
+    label: 'Read code, branches, commits, files'
+    reason: >-
+      Reads may leak secrets through `.env`-style commits (rare but
+      non-zero). The contents of fetched files are attacker-injectable
+      into the agent's context (OWASP LLM01) — a malicious README can
+      steer a downstream prompt.
+    matches:
+      - 'github.repo[**].branch[**].R'
+      - 'github.repo[**].branch[**].file[**].R'
+      - 'github.repo[**].commit[**].R'
+      - 'github.repo[**].branch[**].commit[**].R'
+      - 'github.repo[**].tag[**].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: github.read-meta
+    label: 'Read PRs, issues, releases, workflows, branch-protection'
+    reason: >-
+      Repository metadata. Issue/PR bodies are attacker-controlled (OWASP
+      LLM01) — handle with care on the agent side. Reading branch
+      protection rules is diagnostic only, never dangerous in itself.
+    matches:
+      - 'github.repo[**].pull_request[**].R'
+      - 'github.repo[**].issue[**].R'
+      - 'github.repo[**].issue[**].comment[**].R'
+      - 'github.repo[**].release[**].R'
+      - 'github.repo[**].workflow[**].R'
+      - 'github.repo[**].workflow-run[**].R'
+      - 'github.repo[**].workflow[**].workflow-run[**].R'
+      - 'github.repo[**].branch-protection[**].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: metadata
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: github.search-global
+    label: 'Global GitHub search (code / issues, beyond the mission resources)'
+    reason: >-
+      Search traverses every public GitHub repo plus every repo the App
+      installation has access to. Cross-org leakage is possible if the
+      App is installed widely. Sensitivity is low by default but the
+      surface is account-shaped, not resource-shaped.
+    matches:
+      - 'github.search.code.R'
+      - 'github.search.issues.R'
+    vector:
+      reversibility: reversible
+      blast: account
+      data: data
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  # ---------------------------------------------------------------
+  # WRITES — branches feature/* (low-risk, the coding-agent hot loop)
+  # ---------------------------------------------------------------
+  - id: github.feature-branch-write
+    label: 'Create/modify branches under feature/*, fix/*, chore/*, …'
+    reason: >-
+      Reversible (`git revert` or branch delete). No production side
+      effect until merged. This is the heart of the coding-agent flow.
+    matches:
+      - 'github.repo[**].branch[feature/*,fix/*,chore/*,bug/*,docs/*,refactor/*].W'
+      - 'github.repo[**].branch[feature/*,fix/*,chore/*,bug/*,docs/*,refactor/*].file[**].W'
+      - 'github.repo[**].branch[feature/*,fix/*,chore/*,bug/*,docs/*,refactor/*].files-bulk.W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: session
+
+  # ---------------------------------------------------------------
+  # WRITES — protected branches (main / master / release-* / prod)
+  # ---------------------------------------------------------------
+  - id: github.merge-protected
+    label: 'Write on main / master / release-* (direct commit OR PR merge)'
+    reason: >-
+      The canonical branch — triggers downstream CI/CD on prod. Costly to
+      revert (release notes, communications, downstream dependencies).
+      Covers direct commits (create_or_update_file without a PR) AND
+      merges of PRs whose base is one of these branches.
+    matches:
+      - 'github.repo[**].branch[main,master,prod,production,release-*].W'
+      - 'github.repo[**].branch[main,master,prod,production,release-*].file[**].W'
+      - 'github.repo[**].branch[main,master,prod,production,release-*].files-bulk.W'
+      - 'github.repo[**].branch[main,master,prod,production,release-*].merge-into.W'
+    vector:
+      reversibility: costly
+      blast: env
+      data: data
+      cost: moderate
+      visibility: team
+      persistence: session
+
+  # ---------------------------------------------------------------
+  # WRITES — workflow YAML files (privilege escalation vector)
+  # ---------------------------------------------------------------
+  # Not env-scoped : GitHub resources are repositories and the owner's env
+  # label (prod, staging) says nothing about the branch, so the risk is
+  # touched on every branch. Writing a workflow on a protected branch
+  # additionally touches `github.merge-protected`.
+  - id: github.workflow-write-via-file
+    label: 'Modify a GitHub Actions workflow (.github/workflows/*.yml)'
+    reason: >-
+      The CI YAML defines what runs with the repo's secrets. Modifying a
+      workflow is a potential privilege-escalation vector (steal secrets
+      via curl to attacker-controlled domain, `pull_request_target`).
+      `dispatch_workflow` was retired for this reason — but the attack
+      persists through file writes on the YAML itself.
+    matches:
+      - 'github.repo[**].branch[**].workflow-via-file.W'
+      # A tag pushed through the git remote whose commits change a workflow :
+      # `on: push: tags` runs that workflow with the repository's secrets.
+      - 'github.repo[**].tag[**].workflow-via-file.W'
+    vector:
+      reversibility: costly
+      blast: account
+      data: secret
+      cost: free
+      visibility: internal
+      persistence: posture
+
+  # ---------------------------------------------------------------
+  # WRITES — bulk multi-file push (push_files)
+  # ---------------------------------------------------------------
+  - id: github.bulk-file-write
+    label: 'Bulk multi-file push (push_files)'
+    reason: >-
+      A single commit touching many files. Harder to review manually
+      than a single-file write. Kept distinct from file-by-file so the
+      creator can opt-in/out specifically — useful signal for spotting
+      malicious or buggy agents. Emitted as a `files-bulk` virtual leaf
+      alongside the per-file `file[<path>].W` slices.
+    matches:
+      - 'github.repo[**].branch[**].files-bulk.W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: session
+
+  # ---------------------------------------------------------------
+  # WRITES — pull requests & comments
+  # ---------------------------------------------------------------
+  - id: github.create-pr
+    label: 'Open a pull request'
+    reason: >-
+      No prod mutation. Notifies reviewers (visibility=team). PR title and
+      body are reviewer-injectable.
+    matches:
+      - 'github.repo[**].pull_request[**].W'
+      - 'github.repo[**].branch[**].propose-to[**].W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+      persistence: session
+
+  - id: github.comment-write
+    label: 'Comment on an issue or PR'
+    reason: >-
+      A comment on a PR notifies reviewers ; on an issue, subscribers.
+      Low risk but pollution / spam potential if abused.
+    matches:
+      - 'github.repo[**].issue[**].comment[**].W'
+      - 'github.repo[**].pull_request[**].comment[**].W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+      persistence: session
+
+  # ---------------------------------------------------------------
+  # WRITES — releases (potentially public publication)
+  # ---------------------------------------------------------------
+  - id: github.create-release
+    label: 'Create a release (potentially public publication)'
+    reason: >-
+      With `draft=false && prerelease=false`, the release is publicly
+      visible, notifies watchers, and triggers `on: release` workflows.
+      Hard to "retract" — downstream consumers may already have pulled
+      tarballs / asset URLs by the time you delete.
+    matches:
+      - 'github.repo[**].release.W'
+      - 'github.repo[**].tag[**].W'
+    vector:
+      reversibility: costly
+      blast: env
+      data: metadata
+      cost: free
+      visibility: public
+      persistence: session
+
+  - id: github.delete-release
+    label: 'Delete a release'
+    reason: >-
+      Irreversible w.r.t. audit / external notifications. The tag itself
+      persists, but the release body and assets vanish — downstream
+      consumers may see 404s.
+    matches:
+      - 'github.repo[**].release[**].delete.W'
+    vector:
+      reversibility: irreversible
+      blast: env
+      data: metadata
+      cost: free
+      visibility: public
+      persistence: session
+
+  # ---------------------------------------------------------------
+  # WRITES — branch protection (posture-shift)
+  # ---------------------------------------------------------------
+  - id: github.branch-protection-write
+    label: 'Modify branch protection'
+    reason: >-
+      Posture-shift : opens the branch to out-of-process writes (e.g.
+      disabling required reviews). Persists after the token's lifetime.
+      Even when *tightening* (adding a required check), the change
+      outlives the session.
+    matches:
+      - 'github.repo[**].branch-protection[**].W'
+    vector:
+      reversibility: costly
+      blast: env
+      data: metadata
+      cost: free
+      visibility: team
+      persistence: posture
+
+  # ---------------------------------------------------------------
+  # GIT REMOTE — pushes through https://<instance>/git/<owner>/<repo>.git
+  # ---------------------------------------------------------------
+  # Every push touches `git-push` (one virtual `push` leaf per ref), together
+  # with the risk of the branch it lands on (`feature-branch-write`,
+  # `merge-protected`, or the fallback for an unconventional name) or the tag
+  # risks. A clone or a fetch touches `read-code`. Overlaps are deliberate :
+  # a tag pushed by git touches `git-push`, `tag-write` AND `create-release`
+  # (all three publish a tag), a force-push on `main` touches `force-push`
+  # AND `merge-protected`.
+  - id: github.git-push
+    label: 'Push with git through the gateway'
+    reason: >-
+      The git remote of the gateway relays the pack and moves the ref only
+      after the decision. Touched by every pushed ref, next to the risk of
+      the branch or tag it lands on ; it is what a creator limits to bound
+      how often an agent pushes. The pack itself is not read : the decision
+      is on refs and changed paths, never on content.
+    matches:
+      - 'github.repo[**].branch[**].push.W'
+      - 'github.repo[**].tag[**].push.W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: session
+
+  - id: github.force-push
+    label: 'Force-push (rewrite the history of a branch or move a tag)'
+    reason: >-
+      A push that is not a fast-forward replaces commits others may have
+      built on ; once replaced, they may survive only in someone's clone.
+      Agents rebase often, which is precisely where a mistake destroys
+      work.
+    matches:
+      - 'github.repo[**].branch[**].force.W'
+      - 'github.repo[**].tag[**].force.W'
+    vector:
+      reversibility: costly
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: session
+
+  - id: github.branch-delete
+    label: 'Delete a branch with git'
+    reason: >-
+      The branch disappears for everyone ; its commits remain reachable only
+      from other refs and clones. A deleted protected branch also touches
+      `merge-protected`.
+    matches:
+      - 'github.repo[**].branch[**].delete.W'
+    vector:
+      reversibility: costly
+      blast: single
+      data: metadata
+      cost: free
+      visibility: internal
+      persistence: session
+
+  - id: github.tag-write
+    label: 'Push or delete a tag with git'
+    reason: >-
+      A tag names a release point : pushing one can trigger `on: push: tags`
+      workflows (publication, deployment) and downstream consumers pin
+      tags. Overlaps `create-release` on purpose : a tag pushed by git
+      also writes `tag[<name>]`, which `create-release` covers, so a
+      mission that may push tags says so twice. Matched on the git leaves
+      only : `create_release` keeps touching `create-release` alone.
+    matches:
+      - 'github.repo[**].tag[**].push.W'
+      - 'github.repo[**].tag[**].delete.W'
+    vector:
+      reversibility: costly
+      blast: single
+      data: metadata
+      cost: free
+      visibility: team
+      persistence: posture
+
+  # ---------------------------------------------------------------
+  # WRITES — credential mint (install token, two purposes)
+  # ---------------------------------------------------------------
+  - id: github.mint-install-token-clone
+    label: 'Mint an install token (purpose=clone, read-only)'
+    reason: >-
+      Credential creation, but scoped to `contents:read` only. The token
+      has its own TTL (1h) and its own scope. Moderate risk : code
+      extraction is possible, no mutation.
+    matches:
+      - 'github.repo[**].install-token[clone].W'
+    vector:
+      reversibility: reversible
+      blast: account
+      data: secret
+      cost: free
+      visibility: internal
+      persistence: session
+
+  - id: github.mint-install-token-push
+    label: 'Mint an install token (purpose=push, write)'
+    reason: >-
+      Credential creation with `contents:write + pull_requests:write +
+      workflows:write`. The token leaves the gateway's gating perimeter ;
+      no Vaubaan policy applies to usages of this credential. De-facto
+      posture-shift.
+    matches:
+      - 'github.repo[**].install-token[push].W'
+    vector:
+      reversibility: reversible
+      blast: account
+      data: secret
+      cost: free
+      visibility: internal
+      persistence: posture
+
+  # ---------------------------------------------------------------
+  # FALLBACK — catch-all (mandatory, risk-model spec §4.3)
+  # ---------------------------------------------------------------
+  - id: github.uncategorized-write
+    label: 'Uncategorized GitHub write (fallback)'
+    reason: >-
+      Catch-all for writes no fine-grained entry categorises — a branch
+      outside the feature/* and protected conventions, or a future tool
+      added without a catalog entry. Never offered by a preset ; the
+      creator opts in explicitly (no implicit accept).
+    matches:
+      - 'github.**.W'
+    fallback: true
+    vector:
+      reversibility: costly
+      blast: env
+      data: data
+      cost: free
+      visibility: internal
+      persistence: session
+
+# ---------------------------------------------------------------
+# PRESETS — UI sugar ; the persisted policy is always the explicit list.
+# Quotas are actions per period ; rate limits are per sliding window.
+# ---------------------------------------------------------------
+presets:
+  - id: read-only
+    label: Read-only
+    description: Read code and metadata of the selected repositories; no write, no global search.
+    entries:
+      - risk_id: github.read-code
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: github.read-meta
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+
+  - id: developer
+    label: Developer
+    description: One mission per code repository — clone and push with git on feature branches (a force-push asks first), read everything, open PRs and comment; no merge on protected branches, no branch-protection changes.
+    entries:
+      - risk_id: github.read-code
+        quota: 10000
+        rate_limit: { max: 240, window_seconds: 60 }
+        gate: auto
+      - risk_id: github.read-meta
+        quota: 10000
+        rate_limit: { max: 240, window_seconds: 60 }
+        gate: auto
+      - risk_id: github.search-global
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: github.feature-branch-write
+        quota: 3000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: github.bulk-file-write
+        quota: 1000
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: github.create-pr
+        quota: 200
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: github.comment-write
+        quota: 500
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: github.workflow-write-via-file
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+      # git through the gateway's remote replaces the minted tokens of catalog v5 :
+      # the two mint risks stay in the catalog, a creator adds them by hand.
+      - risk_id: github.git-push
+        quota: 200
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: github.force-push
+        quota: 20
+        rate_limit: { max: 2, window_seconds: 60 }
+        gate: approval
+
+  - id: release-manager
+    label: Release manager
+    description: Ship a release — merge into protected branches, create and delete releases, push tags with git, each asking the creator first; read everything.
+    entries:
+      - risk_id: github.read-code
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: github.read-meta
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: github.feature-branch-write
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: github.create-pr
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: github.comment-write
+        quota: 200
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: github.merge-protected
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+      - risk_id: github.create-release
+        quota: 20
+        rate_limit: { max: 2, window_seconds: 60 }
+        gate: approval
+      - risk_id: github.delete-release
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+        gate: approval
+      - risk_id: github.git-push
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: github.tag-write
+        quota: 20
+        rate_limit: { max: 2, window_seconds: 60 }
+        gate: approval

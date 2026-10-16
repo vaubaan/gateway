@@ -1,0 +1,169 @@
+.wrap {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: var(--space-12) var(--space-6) var(--space-12);
+}
+
+.wide {
+  max-width: 760px;
+}
+
+.title {
+  font-size: var(--text-title);
+  letter-spacing: -0.02em;
+  margin: 0 0 var(--space-1);
+}
+
+.lead {
+  color: var(--ink-3);
+  margin: 0 0 var(--space-6);
+}
+
+.identity {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.email {
+  font-weight: var(--weight-regular);
+}
+
+.muted {
+  color: var(--ink-3);
+  font-size: var(--text-sm);
+}
+
+.inlineForm {
+  display: inline;
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.groupList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+}
+.dl dt {
+  color: var(--ink-3);
+}
+.dl dd {
+  margin: 0;
+}
+
+/* ── A page outside the shell: the sign-in, "not found", an error ─────────── */
+.page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--paper);
+}
+.column {
+  flex: 1;
+  width: 100%;
+  max-width: 440px;
+  margin: 0 auto;
+  padding: 18vh var(--space-6) var(--space-12);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: var(--space-8);
+}
+.brandMark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-md);
+  background: var(--ink);
+  color: var(--paper);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+  line-height: 1;
+}
+.brandText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.2;
+}
+.brandName {
+  font-size: var(--text-base);
+  font-weight: var(--weight-strong);
+}
+.brandInstance {
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+.heading {
+  margin: 0;
+  font-size: var(--text-title);
+  font-weight: var(--weight-strong);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-title);
+}
+.sentence {
+  margin: var(--space-1) 0 0;
+  color: var(--ink-3);
+  font-size: var(--text-sm);
+}
+.block {
+  margin-top: var(--space-6);
+}
+.act {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin-top: var(--space-6);
+}
+.act a:not([class]) {
+  color: var(--accent);
+  font-size: var(--text-sm);
+}
+.who {
+  margin-top: var(--space-6);
+  padding: var(--space-4) 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.whoName {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: var(--weight-strong);
+  overflow-wrap: anywhere;
+}
+.whoFacts {
+  margin-top: var(--space-half);
+  color: var(--ink-3);
+  font-size: var(--text-sm);
+}
+.field {
+  margin-top: var(--space-6);
+}
+.reference {
+  margin-top: var(--space-4);
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+}

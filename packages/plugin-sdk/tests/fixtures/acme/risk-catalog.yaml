@@ -1,0 +1,90 @@
+# Fixture catalog for the SDK's own tests. Not a real provider.
+provider: acme
+catalog_version: 3
+catalog_date: 2026-10-13
+
+risks:
+  - id: acme.read-things
+    label: 'Read things'
+    reason: 'Reads leak nothing but the thing itself.'
+    matches:
+      - 'acme.space[**].thing[**].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: acme.thing-write
+    label: 'Write a thing'
+    reason: 'Reversible edit of one thing. Costly on prod because customers see it.'
+    matches: 'acme.space[**].thing[**].W'
+    acceptable_in_envs: [staging, prod]
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+      persistence: session
+    vector_overrides:
+      prod:
+        reversibility: costly
+        visibility: public
+    caps:
+      items_per_call_max: 50
+
+  - id: acme.legacy-export
+    label: 'Legacy export'
+    reason: 'Kept for missions issued before v3.'
+    matches: 'acme.space[**].export.R'
+    deprecated: true
+    replaced_by: acme.read-things
+    vector:
+      reversibility: reversible
+      blast: account
+      data: data
+      cost: moderate
+      visibility: internal
+      persistence: stateless
+
+  - id: acme.uncategorized-write
+    label: 'Uncategorized write'
+    reason: 'Catch-all. Seen in production, it means the catalog misses an entry.'
+    matches: 'acme.**.W'
+    fallback: true
+    vector:
+      reversibility: costly
+      blast: env
+      data: data
+      cost: free
+      visibility: internal
+      persistence: session
+
+presets:
+  - id: reader
+    label: Reader
+    description: Read-only access to every space of the connection.
+    entries:
+      - risk_id: acme.read-things
+        quota: 500
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+
+  - id: developer
+    label: Developer
+    description: Read everywhere, write on staging, approval on prod writes.
+    entries:
+      - risk_id: acme.read-things
+        quota: 2000
+        rate_limit: { max: 120, window_seconds: 60 }
+      - risk_id: acme[staging].thing-write
+        quota: 200
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: acme[prod].thing-write
+        quota: 10
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval

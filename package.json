@@ -2,40 +2,46 @@
   "name": "@vaubaan/gateway",
   "private": true,
   "type": "module",
-  "version": "0.0.0",
-  "description": "Policy-enforcing MCP gateway for coding agents — Vaubaan v4",
-  "license": "UNLICENSED",
+  "version": "2.0.0-alpha.0",
+  "description": "Vaubaan Gateway v5 — open source, on-prem MCP gateway that gives coding agents risk-budgeted missions instead of cloud credentials",
+  "license": "Apache-2.0",
   "engines": {
     "node": ">=20",
     "npm": ">=10"
   },
   "workspaces": [
+    "apps/*",
     "packages/*",
-    "packages/providers/*"
+    "plugins/*"
   ],
   "scripts": {
     "type-check": "npm run --workspaces --if-present type-check",
-    "lint": "eslint . --max-warnings=0",
-    "lint:fix": "eslint . --fix",
+    "lint": "node --max-old-space-size=6144 node_modules/eslint/bin/eslint.js . --max-warnings=0",
+    "lint:fix": "node --max-old-space-size=6144 node_modules/eslint/bin/eslint.js . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "build": "npm run --workspaces --if-present build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test",
-    "test:e2e:real-clouds": "playwright test --project=e2e-real-clouds",
-    "sweeper": "tsx scripts/e2e-sweeper.ts",
-    "dev": "npm run --workspace @vaubaan/web dev",
+    "test:e2e": "npm run test:e2e:v5",
+    "test:e2e:v5": "npm run build --workspace @vaubaan/gateway-app && playwright test -c apps/gateway/tests/e2e/v5/playwright.config.ts",
+    "dev": "npm run --workspace @vaubaan/gateway-app dev",
+    "demo": "tsx apps/gateway/tests/demo/main.ts",
     "prepare": "husky || true",
-    "ci": "npm run type-check && npm run lint && npm run format:check && npm run test && npm run build"
+    "gen-master-key": "node scripts/gen-master-key.mjs",
+    "release:prepare": "node scripts/release-prepare.mjs",
+    "docker:build": "docker build -f deploy/docker/Dockerfile -t vaubaan-gateway:local .",
+    "docker:smoke": "deploy/docker/smoke.sh vaubaan-gateway:local",
+    "ci": "npm run type-check && npm run lint && npm run format:check && npm run build && npm run test"
   },
   "devDependencies": {
     "@eslint/js": "9.39.4",
     "@playwright/test": "1.60.0",
-    "@sbw-vaubaan/harness": "1.1.1",
     "@types/node": "20.19.41",
+    "@vaubaan/harness": "^1.4.0",
     "eslint": "9.39.4",
     "eslint-config-prettier": "10.1.8",
+    "fast-check": "4.10.2",
     "globals": "17.6.0",
     "husky": "^9.1.7",
     "lint-staged": "17.6.0",
@@ -45,16 +51,9 @@
     "typescript-eslint": "8.59.4",
     "vitest": "3.2.4"
   },
-  "dependencies": {
-    "@types/pg": "^8.20.0",
-    "pg": "^8.21.0"
-  },
-  "optionalDependencies": {
-    "@sbw-vaubaan/harness": "1.1.1"
-  },
   "lint-staged": {
     "*.{ts,tsx,js,mjs,cjs}": [
-      "eslint --max-warnings=0",
+      "eslint --max-warnings=0 --no-warn-ignored",
       "prettier --check"
     ],
     "*.{md,json,yaml,yml,css,html}": [

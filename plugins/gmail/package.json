@@ -1,0 +1,20 @@
+{
+  "name": "@vaubaan/plugin-gmail",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "Vaubaan Gateway provider plugin for Gmail — experimental, classifier-only : identity-zoned risks for reading, drafting and labelling",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "type-check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@vaubaan/plugin-sdk": "*"
+  },
+  "devDependencies": {
+    "@vaubaan/policy-engine": "*"
+  }
+}

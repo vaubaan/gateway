@@ -1,0 +1,311 @@
+# Vaubaan Gateway — instance configuration (spec §4.3).
+#
+# Mount this file and point VAUBAAN_CONFIG_FILE at it, or set the VAUBAAN_*
+# environment variables listed next to each key (.env.example), or mix both:
+# the file wins over the environment, key by key.
+#
+# EVERY KEY BELOW IS COMMENTED OUT, on purpose: a key written here silently
+# overrides its environment variable, so a copy of this file changes nothing
+# until you uncomment a key. Uncomment only the keys you want this file to
+# own (with their parent line, e.g. `admin:` for `admin.group`), replace the
+# example value, and remove the twin variable from .env to keep one source.
+#
+# Secrets: write `${NAME}` to read the environment variable NAME, or
+# `${file:/run/secrets/name}` to read a file (Docker / Kubernetes secret).
+# Never commit a filled-in copy of this file.
+#
+# Every key is either required (marked; from this file or from its
+# environment variable) or shown with its default. Values under example.com
+# and `gateway-admins` are examples, not defaults.
+#
+# Booleans are written true / false and integers unquoted (the yes / on / 1
+# spellings are accepted in environment variables only).
+
+# REQUIRED. Public origin of the instance: provider callbacks, request URLs
+# and the bootstrap kit are built from it. Must be https (TLS is terminated
+# by your reverse proxy, see deploy/caddy/Caddyfile). A sub-path is allowed.
+# env: VAUBAAN_PUBLIC_URL
+# public_url: https://gateway.example.com
+
+# Optional. The name the interface shows at the top of the navigation and in
+# the browser tab, to tell this instance from your others (1 to 64
+# characters, no control characters). Set here, it is read-only on the
+# Administration page; not set, an administrator may name the instance there,
+# and without a name the host of public_url is shown.
+# env: VAUBAAN_INSTANCE_NAME
+# instance_name: Acme production
+
+# Reverse proxies whose X-Forwarded-For header is trusted for client IPs
+# (surface rate limits, audit). IP addresses or CIDR blocks. Default: none.
+# 172.16.0.0/12 is Docker's default address pool (the Caddy container of
+# compose.yaml); narrow it to your proxy's address when you can.
+# env: VAUBAAN_TRUSTED_PROXIES (comma-separated)
+# trusted_proxies:
+#   - 172.16.0.0/12
+
+# Provider resources that host or run this instance: never reachable by a
+# mission (not offered at issuance, refused at execution). Each entry is
+# <provider>:<ref>, the ref as the connection's discovery stores it. On
+# Railway the instance's own project (RAILWAY_PROJECT_ID) is always counted.
+# env: VAUBAAN_SELF_RESOURCES (comma-separated)
+# self_resources:
+#   - vercel:prj_xxx
+
+# Trusted-edge mode, instead of trusted_proxies: the one header the edge in
+# front of the instance OVERWRITES with the client address on every request
+# (Railway: x-real-ip). One of x-real-ip, cf-connecting-ip, true-client-ip,
+# fly-client-ip. Never set it behind an edge that passes a client value through.
+# env: VAUBAAN_CLIENT_IP_HEADER
+# client_ip_header: x-real-ip
+
+# store:
+#   # REQUIRED. SQLite database file; its directory must be writable and
+#   # persistent (the /data volume in the image).
+#   # env: VAUBAAN_STORE_PATH
+#   path: /data/gateway.db
+
+# encryption:
+#   # REQUIRED. 32 random bytes, base64 (`npm run gen-master-key`). Every
+#   # connection credential is encrypted with a key derived from it.
+#   # env: VAUBAAN_MASTER_KEY or VAUBAAN_MASTER_KEY_FILE
+#   # With compose.yaml the value comes from deploy/config/.env; with Docker or
+#   # Kubernetes secrets write `${file:/run/secrets/vaubaan_master_key}` instead.
+#   master_key: ${VAUBAAN_MASTER_KEY}
+#   # Version stamped on new blobs (integer >= 1). Increase it when you rotate the key.
+#   # env: VAUBAAN_MASTER_KEY_VERSION
+#   key_version: 1
+#   # Older keys still needed to open blobs written before a rotation.
+#   # Example only: there is no default; uncomment after a rotation. A version
+#   # listed here is an integer >= 1 and must differ from key_version.
+#   # env: VAUBAAN_MASTER_KEY_PREVIOUS ("1=<base64>,2=<base64>") or _FILE
+#   previous_keys:
+#     1: ${file:/run/secrets/vaubaan_master_key_v1}
+
+# OpenID Connect provider (spec D2). Optional at first boot: until it is set,
+# the operator signs in with bootstrap_token. Once present, issuer (https),
+# client_id and client_secret are required and bootstrap_token becomes
+# optional; claims and allowed_email_domains keep their defaults.
+# idp:
+#   # env: VAUBAAN_IDP_ISSUER
+#   issuer: https://login.example.com/realms/acme
+#   # env: VAUBAAN_IDP_CLIENT_ID
+#   client_id: vaubaan-gateway
+#   # env: VAUBAAN_IDP_CLIENT_SECRET or VAUBAAN_IDP_CLIENT_SECRET_FILE
+#   client_secret: ${VAUBAAN_IDP_CLIENT_SECRET}
+#   # Claim names in the ID token / userinfo. Defaults shown.
+#   # env: VAUBAAN_IDP_CLAIM_SUB, VAUBAAN_IDP_CLAIM_EMAIL, VAUBAAN_IDP_CLAIM_GROUPS
+#   claims:
+#     sub: sub
+#     email: email
+#     groups: groups
+#   # Only users whose email domain is listed (or who are invited) may sign
+#   # in. Default: everyone the directory signs in — refused for an issuer
+#   # where anyone can open an account (personal Google or Microsoft).
+#   # env: VAUBAAN_IDP_ALLOWED_EMAIL_DOMAINS (comma-separated)
+#   allowed_email_domains:
+#     - example.com
+#   # Admit invited addresses (Settings → People) and the admin emails only,
+#   # instead of domains. Default false.
+#   # env: VAUBAAN_IDP_INVITATION_ONLY
+#   invitation_only: false
+
+# More sign-in providers, keyed by an id of your choice (lower-case letters,
+# digits, hyphens). Each is a button on the sign-in page; its callback is
+# <public_url>/auth/callback/<id>. A person signing in through two providers is
+# two users: accounts are never joined by email. Providers can also be added in
+# Settings → Sign-in.
+# env: VAUBAAN_SIGN_IN_<ID>_<FIELD>, e.g. VAUBAAN_SIGN_IN_GITHUB_CLIENT_ID
+# sign_in:
+#   github:
+#     # oidc or github.
+#     kind: github
+#     # What the button says. Default: GitHub, or the issuer's host.
+#     name: GitHub
+#     # GitHub: only for a GitHub Enterprise Server (default github.com).
+#     # issuer: https://github.example.com
+#     # Of the OAuth App registered at GitHub with the callback above.
+#     client_id: Ov23liExample
+#     client_secret: ${file:/run/secrets/github_sign_in_secret}
+#     # Anyone can hold a GitHub account: allowed domains or invitation only.
+#     invitation_only: true
+#   partners:
+#     kind: oidc
+#     name: Partner Entra ID
+#     issuer: https://login.example.com/tenant/v2.0
+#     client_id: vaubaan-gateway
+#     client_secret: ${PARTNER_IDP_CLIENT_SECRET}
+#     claims:
+#       sub: sub
+#       email: email
+#       groups: groups
+#       # The claim that says the email is verified. Entra ID sends no
+#       # email_verified: request the optional claim xms_edov and name it here.
+#       email_verified: xms_edov
+#     # Admit a verified email only, as on an open provider. Set it when the
+#     # admin rule uses emails on Entra ID (better: an admin group by object id).
+#     require_verified_email: true
+#     allowed_email_domains:
+#       - partner.example.com
+
+# REQUIRED (one of the two). Who is operator once bootstrap_token is revoked:
+# members of a group of a named sign-in provider (<provider-id>:<group>; a
+# GitHub group is a team, org/team; a bare name is accepted while one provider is
+# configured), and/or an explicit list of emails (matched on the verified
+# address of a user of any provider, and always admitted to sign in).
+# Example values: anyone your IdP places in the group named here is an
+# operator, so uncomment `group` only with the name of a group you control.
+# admin:
+#   # env: VAUBAAN_ADMIN_GROUP
+#   group: idp:gateway-admins
+#   # env: VAUBAAN_ADMIN_EMAILS (comma-separated)
+#   emails:
+#     - ops@example.com
+
+# Apps your company registered at each provider, keyed by plugin id. Only
+# providers connected through an app need one (an App installation or an
+# OAuth client); providers connected with an API key or an SSH key have no
+# block here. Which fields a provider needs is
+# declared by its plugin (plugins/<id>/README.md); allowed fields: client_id,
+# client_secret, app_id, app_slug, private_key.
+# env: VAUBAAN_PROVIDER_<ID>_<FIELD>, e.g. VAUBAAN_PROVIDER_GITHUB_APP_ID,
+#      VAUBAAN_PROVIDER_GITHUB_PRIVATE_KEY_FILE (a hyphen in the plugin id
+#      becomes an underscore)
+# providers:
+#   github:
+#     app_id: '12345'
+#     app_slug: acme-gateway
+#     private_key: ${file:/run/secrets/github_app_key.pem}
+#     # OAuth client of the same GitHub App (not the App ID). Required: the
+#     # App must have "Request user authorization (OAuth) during installation"
+#     # enabled, and the gateway checks that whoever installs it can reach the
+#     # installation before connecting it.
+#     # env: VAUBAAN_PROVIDER_GITHUB_CLIENT_ID,
+#     #      VAUBAAN_PROVIDER_GITHUB_CLIENT_SECRET[_FILE]
+#     client_id: Iv1.0123456789abcdef
+#     client_secret: ${file:/run/secrets/github_app_client_secret}
+#   # OAuth providers take the client id and secret of your OAuth app.
+#   supabase:
+#     client_id: ${SUPABASE_CLIENT_ID}
+#     client_secret: ${SUPABASE_CLIENT_SECRET}
+#   railway:
+#     client_id: ${RAILWAY_CLIENT_ID}
+#     client_secret: ${RAILWAY_CLIENT_SECRET}
+
+# REQUIRED while no sign-in provider is configured. At least 32 characters; lets the
+# operator sign in at /admin/bootstrap and configure the IdP from the Admin
+# page. Revoked automatically (flag in the database) after the first operator
+# signs in through the IdP; harmless to leave set afterwards.
+# env: VAUBAAN_BOOTSTRAP_TOKEN or VAUBAAN_BOOTSTRAP_TOKEN_FILE
+# (or `${file:/run/secrets/vaubaan_bootstrap_token}` with a secrets mount)
+# bootstrap_token: ${VAUBAAN_BOOTSTRAP_TOKEN}
+
+# Community telemetry (spec §9): anonymous plugin success/failure counts,
+# six fields per report (shown on Administration → Telemetry). Off by default.
+# telemetry:
+#   # env: VAUBAAN_TELEMETRY_ENABLED
+#   # Leave this key out to let an operator decide on Administration →
+#   # Telemetry. Setting it, to true or to false, decides here and makes that
+#   # page read-only; `false` guarantees nothing is ever sent.
+#   enabled: false
+#   # env: VAUBAAN_TELEMETRY_COLLECTOR_URL (example value; must be https)
+#   # The built-in default is a placeholder: no collector is published yet,
+#   # and the gateway sends nothing while the URL is that default, even when
+#   # telemetry is enabled. A real collector URL is the endpoint that receives
+#   # reports, with the collector's public key as `apikey` when it needs one
+#   # (deploy/collector/README.md).
+#   collector_url: https://collector.example.net/rest/v1/plugin_reports?apikey=<public key>
+
+# Retention in days (integer >= 1): the sweeper deletes what is older than this (at boot,
+# then hourly) — audit entries, the events of the session timelines, and the counters of
+# periods that ended longer ago. The counters of a current period, the gates opened in it
+# and the credits granted in it are kept whatever their age. Decided requests and
+# approvals are not purged.
+# env: VAUBAAN_RETENTION_DAYS
+# retention_days: 90
+
+# How long a request to the creator stays answerable, a claim (spec §3.4) and
+# an approval request (spec §3.5) alike. A duration is a whole number > 0 and
+# one unit: 30s, 10m, 24h, 7d.
+# env: VAUBAAN_REQUEST_EXPIRY
+# requests:
+#   expiry: 24h
+
+# How long a granted approval stays usable (spec §3.5): the executor has this
+# long to repeat the approved call, once. A duration, as above.
+# env: VAUBAAN_APPROVAL_EXPIRY
+# approvals:
+#   expiry: 10m
+
+# Surface rate limit of the execution surface — the MCP door and the git remote
+# together: requests per minute (integer >= 1), per mission, all agents of the
+# mission together (spec §6). Separate from the per-risk rate limits of a
+# mission's budget.
+# env: VAUBAAN_MCP_RATE_LIMIT_PER_MINUTE
+# mcp:
+#   rate_limit_per_minute: 600
+
+# The git remote (https://<public_url>/git/<owner>/<repo>.git, spec §4.1 ter).
+# max_pack_mb: the largest push accepted, in MiB (1 to 4096); a larger push is
+#   refused, and git prints why.
+# request_timeout: how long one git request may last (at most 1h). Behind
+#   Railway keep it under 15 minutes, and know that Railway wants a request
+#   body uploaded within 5 minutes.
+# env: VAUBAAN_GIT_MAX_PACK_MB, VAUBAAN_GIT_REQUEST_TIMEOUT
+# git:
+#   max_pack_mb: 200
+#   request_timeout: 10m
+
+# Authorization server of the management MCP door (/mcp/manage, spec §4.1 bis):
+# an MCP client such as Claude Code obtains a delegated token for a user
+# through the standard OAuth flow (discovery, registration, consent).
+# oauth:
+#   # Lifetime of a delegated access token. Short on purpose, at most 1h; the
+#   # client renews it with its refresh token.
+#   # env: VAUBAAN_OAUTH_ACCESS_TOKEN_TTL
+#   access_token_ttl: 15m
+#   # Lifetime of a refresh token; every renewal starts it again. A delegation
+#   # left unused for this long ends by itself. Must be longer than access_token_ttl.
+#   # env: VAUBAAN_OAUTH_REFRESH_TOKEN_TTL
+#   refresh_token_ttl: 30d
+#   # Absolute lifetime of a delegation, counted from the day the user gave
+#   # their consent. Past it the client must ask for the consent again,
+#   # however recently it renewed its token: no agent keeps a standing
+#   # authorization forever. Must be longer than access_token_ttl.
+#   # env: VAUBAAN_OAUTH_DELEGATION_MAX_LIFETIME
+#   delegation_max_lifetime: 90d
+#   # For how many seconds the refresh token that was just rotated may be
+#   # presented once more without ending the delegation: two sessions of one
+#   # agent sharing a stored token and renewing at the same moment. Any other
+#   # replay still revokes the delegation. 0 disables the window; at most 60.
+#   # env: VAUBAAN_OAUTH_REFRESH_REUSE_WINDOW_SECONDS
+#   refresh_reuse_window_seconds: 30
+#   client_registration:
+#     # Who may become a client:
+#     #   open               any client that registers is usable at once
+#     #   operator-approved  a client waits for an operator (Administration →
+#     #                      OAuth clients), with the exception below
+#     #   closed             nothing registers; only clients already approved
+#     #                      by an operator are usable
+#     # Whatever the policy, a user still signs in and consents on a screen
+#     # naming the client before anything is granted.
+#     # env: VAUBAAN_OAUTH_CLIENT_REGISTRATION_POLICY
+#     policy: operator-approved
+#     # Under operator-approved: a client that can only redirect to the
+#     # loopback interface of the user's own machine (a CLI or desktop agent,
+#     # e.g. Claude Code) needs no approval. Set to false to approve every
+#     # client by hand.
+#     # env: VAUBAAN_OAUTH_CLIENT_REGISTRATION_AUTO_APPROVE_LOOPBACK
+#     auto_approve_loopback: true
+#     # Accept client ids that are https URLs of Client ID Metadata Documents
+#     # (the successor of dynamic registration). When true, the instance
+#     # fetches such a document from the internet when a signed-in user starts
+#     # an authorization: it needs outbound https, and never follows a
+#     # redirect nor reaches a private address.
+#     # env: VAUBAAN_OAUTH_CLIENT_REGISTRATION_METADATA_DOCUMENTS
+#     metadata_documents: false
+
+# Log verbosity: debug, info, warn, error. Logs are JSON lines; secrets and
+# mission token secrets are redacted.
+# env: VAUBAAN_LOG_LEVEL
+# log:
+#   level: info

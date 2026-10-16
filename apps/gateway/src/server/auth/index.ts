@@ -1,0 +1,239 @@
+/**
+ * Human authentication (spec §6 "human authentication", §4.2 Administration,
+ * §7.1): OIDC relying party, web sessions, bootstrap token, groups from
+ * claims, admin rule. Built once by the composition root as `root.auth`.
+ * Handbook: docs/handbook/authentication.md. ADR: oidc-relying-party-and-web-session.
+ */
+import type { RateLimiter, SessionStore } from '../compose/ports';
+import { clientIpResolver } from '../http/client-ip';
+import type { InstanceConfig } from '../config/types';
+import type { Logger } from '../logging';
+import type { Store } from '../store';
+import { systemClock, type Clock } from '../store/clock';
+import { Authenticator } from './authenticator';
+import { BootstrapService } from './bootstrap';
+import { createAuthHandlers, type AuthHandlers } from './handlers';
+import { IdpSettingsService } from './idp-settings';
+import { createSignInFlows, type SignInFlows } from './sign-in-flows';
+import { SignInProvidersService } from './sign-in-providers';
+import type { LoginDeps } from './login';
+import {
+  createRelyingPartyFactory,
+  type CustomFetch,
+  type RelyingPartyFactory,
+} from './relying-party';
+import { SessionService } from './session-service';
+
+export interface OidcOptions {
+  /**
+   * Routes the outbound HTTP of every sign-in — OpenID Connect discovery, tokens and
+   * userinfo, GitHub's token endpoint and API (corporate proxy; in-process providers
+   * in tests).
+   */
+  readonly fetch?: CustomFetch;
+  /** Tests only: accept an `http://` issuer. */
+  readonly allowInsecureIssuer?: boolean;
+}
+
+export interface AuthModuleDeps {
+  readonly config: InstanceConfig;
+  readonly store: Store;
+  readonly sessions: SessionStore;
+  readonly logger: Logger;
+  readonly clock?: Clock;
+  readonly oidc?: OidcOptions;
+  /** Watches the user's memberships across a sign-in (`MembershipSettler`, handbook authority). */
+  readonly membershipsChanging?: LoginDeps['membershipsChanging'];
+  /** The limits of the sign-in start, the callbacks and the bootstrap endpoint. */
+  readonly rateLimiter: RateLimiter;
+}
+
+export interface AuthModule {
+  readonly sessions: SessionService;
+  /** The single-provider settings saved from the interface (the provider `idp`). */
+  readonly idp: IdpSettingsService;
+  /** Every sign-in provider: the configuration's and the ones saved in Settings → Sign-in. */
+  readonly providers: SignInProvidersService;
+  readonly flows: SignInFlows;
+  readonly bootstrap: BootstrapService;
+  readonly relyingParties: RelyingPartyFactory;
+  readonly authenticator: Authenticator;
+  readonly handlers: AuthHandlers;
+}
+
+export function createAuthModule(deps: AuthModuleDeps): AuthModule {
+  const clock = deps.clock ?? systemClock;
+  const logger = deps.logger.child({ component: 'auth' });
+  const sessions = new SessionService(deps.sessions, clock);
+  const idp = new IdpSettingsService(deps.config.idp, deps.store.config, {
+    allowInsecureIssuer: deps.oidc?.allowInsecureIssuer,
+  });
+  const bootstrap = new BootstrapService(deps.config.bootstrapToken, deps.store.config, clock);
+  const relyingParties = createRelyingPartyFactory({
+    publicUrl: deps.config.publicUrl,
+    fetch: deps.oidc?.fetch,
+    allowInsecureRequests: deps.oidc?.allowInsecureIssuer,
+  });
+  const providers = new SignInProvidersService(
+    deps.config,
+    deps.config.admin,
+    idp,
+    deps.store.config,
+    clock,
+    { allowInsecureIssuer: deps.oidc?.allowInsecureIssuer },
+  );
+  const flows = createSignInFlows({
+    publicUrl: deps.config.publicUrl,
+    relyingParties,
+    fetch: deps.oidc?.fetch,
+  });
+  const authenticator = new Authenticator(
+    sessions,
+    deps.store,
+    deps.config.admin,
+    bootstrap,
+    providers,
+  );
+  const handlers = createAuthHandlers({
+    publicUrl: deps.config.publicUrl,
+    sessions,
+    providers,
+    flows,
+    bootstrap,
+    authenticator,
+    store: deps.store,
+    adminEmails: deps.config.admin.emails,
+    login: {
+      store: deps.store,
+      bootstrap,
+      logger,
+      clock,
+      membershipsChanging: deps.membershipsChanging,
+    },
+    audit: deps.store.auditWriter,
+    logger,
+    clock,
+    rateLimiter: deps.rateLimiter,
+    clientIp: clientIpResolver(deps.config.trustedProxies, deps.config.clientIpHeader),
+  });
+  return { sessions, idp, providers, flows, bootstrap, relyingParties, authenticator, handlers };
+}
+
+export {
+  describeAdminRule,
+  isOperator,
+  resolveAdminRule,
+  type AdminRuleSubject,
+  type ResolvedAdminRule,
+} from './admin-rule';
+export { admit, type AdmissionContext, type AdmissionReason } from './admission';
+export { GithubSignIn, readableTeams } from './github';
+export {
+  createSignInFlows,
+  type FinishedSignIn,
+  type SignInFlow,
+  type SignInFlows,
+} from './sign-in-flows';
+export {
+  signInAuditObjectId,
+  signInProviderAuditView,
+  SignInProvidersService,
+  type EffectiveSignInProvider,
+  type SaveMode,
+  type SignInProviderInput,
+  type SignInProviderView,
+} from './sign-in-providers';
+export {
+  auditActorId,
+  Authenticator,
+  type AdminDecision,
+  type BootstrapPrincipal,
+  type Principal,
+  type UserPrincipal,
+} from './authenticator';
+export {
+  BOOTSTRAP_MAX_MISSES,
+  BOOTSTRAP_MISSES_KEY,
+  BOOTSTRAP_REVOKED_KEY,
+  BootstrapService,
+  type BootstrapState,
+} from './bootstrap';
+export {
+  assertEmailDomainAllowed,
+  mapClaims,
+  parseGroupsClaim,
+  type IdentityClaims,
+  type RawClaims,
+} from './claims';
+export { clearCookie, LOGIN_COOKIE, readCookie, serializeCookie, SESSION_COOKIE } from './cookies';
+export {
+  IdpSettingsError,
+  isLoginErrorCode,
+  LOGIN_ERROR_CODES,
+  LOGIN_ERROR_MESSAGES,
+  LoginError,
+  type LoginErrorCode,
+} from './errors';
+export {
+  guardMutation,
+  guardSession,
+  OPERATOR_REFUSALS,
+  refusalResponse,
+  type GuardDeps,
+  type GuardRefusal,
+  type GuardRefusalReason,
+  type GuardResult,
+  type GuardRole,
+  type RefusalWording,
+  type SessionGuardDeps,
+} from './guard';
+export {
+  ADMIN_PAGE,
+  AUTH_LIMITS,
+  adminSignInPage,
+  BOOTSTRAP_PAGE,
+  IDP_PAGE,
+  LOGIN_PAGE,
+  NEW_SIGN_IN_PROVIDER_PAGE,
+  safeReturnTo,
+  signInProviderPage,
+  signInStartPath,
+  statusResponse,
+  type AuthHandlers,
+} from './handlers';
+export {
+  DEFAULT_CLAIM_MAPPING,
+  IDP_CONFIG_KEYS,
+  IdpSettingsService,
+  splitList,
+  type EffectiveIdp,
+  type IdpSettingsInput,
+  type IdpSource,
+} from './idp-settings';
+export {
+  completeLogin,
+  currentAuthority,
+  syncIdpGroups,
+  type Authority,
+  type LoginContext,
+  type LoginOutcome,
+} from './login';
+export { forbiddenOriginResponse, isSameOrigin, requestOrigin } from './origin';
+export {
+  CALLBACK_PATH,
+  callbackUrl,
+  type RelyingPartySettings,
+  createRelyingPartyFactory,
+  type CustomFetch,
+  type OidcRelyingParty,
+  type RelyingPartyFactory,
+} from './relying-party';
+export {
+  isPendingLogin,
+  isWebSessionRecord,
+  LOGIN_TTL_MS,
+  SESSION_TTL_MS,
+  SessionService,
+  type PendingLogin,
+  type WebSessionRecord,
+} from './session-service';

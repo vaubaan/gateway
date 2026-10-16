@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'vitest';
-import type { ProviderBinding, RiskCatalog } from '@vaubaan/shared';
+import type { Resource, RiskCatalog } from '@vaubaan/shared';
 
 import { indexCatalog } from '../../src/risk-evaluator.ts';
-import { evaluateCall, evaluateCallSimple } from '../../src/risk-runtime.ts';
+import { UNQUALIFIED, evaluateCall, evaluateCallSimple } from '../../src/risk-runtime.ts';
+import { noEnvResolver, resourceEnvResolver, type EnvResolver } from '../../src/qualify.ts';
 import { parseSlice } from '../../src/slice-dsl.ts';
 
 const catalog: RiskCatalog = {
@@ -70,17 +71,36 @@ const catalog: RiskCatalog = {
 const idx = indexCatalog(catalog);
 
 describe('evaluateCall — allow path', () => {
-  test('feature branch write with feature-branch-write + fallback accepted', () => {
+  test('feature branch write allowed with feature-branch-write alone (fallback not co-touched)', () => {
+    // Inverted on purpose (ADR fallback-risk-only-when-uncategorized) : a mission built from a
+    // preset without the fallback can still write on feature branches.
     const d = evaluateCall({
       executed_slices: [parseSlice('github.repo[foo].branch[feature/x].file[a.ts].W')],
-      token_accepted_risks: new Set(['github.feature-branch-write', 'github.uncategorized-write']),
+      token_accepted_risks: new Set(['github.feature-branch-write']),
       catalog: idx,
     });
     expect(d.outcome).toBe('allowed');
     if (d.outcome === 'allowed') {
-      expect(d.risks_touched).toContain('github.feature-branch-write');
-      expect(d.risks_touched).toContain('github.uncategorized-write');
+      expect(d.risks_touched).toEqual(['github.feature-branch-write']);
     }
+  });
+
+  test('an uncategorized write needs the fallback, and only the fallback', () => {
+    const slice = parseSlice('github.repo[foo].webhook[h1].W');
+    const refused = evaluateCall({
+      executed_slices: [slice],
+      token_accepted_risks: new Set(['github.feature-branch-write', 'github.merge-protected']),
+      catalog: idx,
+    });
+    expect(refused.outcome).toBe('denied');
+    if (refused.outcome === 'denied')
+      expect(refused.missing_risks).toEqual(['github.uncategorized-write']);
+    const allowed = evaluateCall({
+      executed_slices: [slice],
+      token_accepted_risks: new Set(['github.uncategorized-write']),
+      catalog: idx,
+    });
+    expect(allowed.outcome).toBe('allowed');
   });
 
   test('read code accepted', () => {
@@ -102,9 +122,37 @@ describe('evaluateCall — denied paths', () => {
     });
     expect(d.outcome).toBe('denied');
     if (d.outcome === 'denied') {
-      expect(d.missing_risks).toContain('github.merge-protected');
-      expect(d.missing_risks).toContain('github.uncategorized-write');
-      expect(d.hint).toContain('not granted');
+      expect(d.code).toBe('risk-not-accepted');
+      expect(d.missing_risks).toEqual(['github.merge-protected']);
+      // The fallback is not co-touched by a categorized write (ADR fallback-risk-only-when-uncategorized).
+      expect(d.missing_risks).not.toContain('github.uncategorized-write');
+      expect(d.hint).toContain('does not accept');
+    }
+  });
+
+  test('every denial carries the structured code `risk-not-accepted`', () => {
+    const denials = [
+      evaluateCall({ executed_slices: [], token_accepted_risks: new Set(), catalog: idx }),
+      evaluateCall({
+        executed_slices: [parseSlice('github.repo[foo].W')],
+        token_accepted_risks: new Set(),
+        catalog: indexCatalog({ provider: 'github', risks: [] }),
+      }),
+      evaluateCall({
+        executed_slices: [parseSlice('github.repo[foo].file[a.ts].R')],
+        token_accepted_risks: new Set(['github.read-code']),
+        token_denied_risks: new Set(['github.read-code']),
+        catalog: idx,
+      }),
+      evaluateCall({
+        executed_slices: [parseSlice('github.repo[foo].branch[main].W')],
+        token_accepted_risks: new Set(),
+        catalog: idx,
+      }),
+    ];
+    for (const d of denials) {
+      expect(d.outcome).toBe('denied');
+      if (d.outcome === 'denied') expect(d.code).toBe('risk-not-accepted');
     }
   });
 
@@ -134,6 +182,60 @@ describe('evaluateCall — denied paths', () => {
     }
   });
 
+  test.each([
+    ['a glob in an identifier', 'github.repo[foo].branch[feature/*].file[a.ts].W'],
+    ['a glob in the middle of an identifier', 'github.repo[foo].branch[ma*n].W'],
+    ['a glob in a list entry', 'github.repo[foo].branch[fix/x,feature/*].file[a.ts].W'],
+    ['a star as a list entry', 'github.repo[foo].branch[main,*].W'],
+  ])('an executed slice with %s is refused, whatever the mission accepts', (_what, raw) => {
+    // What a call does is concrete. A classifier that means "any identifier" emits `[*]`
+    // or `[**]` whole; a `*` inside an identifier can only be a caller's value passed
+    // through, and reading it as a glob would price the call on what it happens to match.
+    const d = evaluateCall({
+      executed_slices: [parseSlice(raw)],
+      token_accepted_risks: new Set(catalog.risks.map((r) => r.id)),
+      catalog: idx,
+    });
+    expect(d.outcome).toBe('denied');
+    if (d.outcome !== 'denied') return;
+    expect(d.code).toBe('risk-not-accepted');
+    expect(d.missing_risks).toEqual([]);
+    expect(d.hint).toContain("'*' inside an identifier");
+  });
+
+  test('the whole-segment wildcards a classifier emits for "any" still pass', () => {
+    for (const raw of [
+      'github.repo[foo].file[*].R',
+      'github.repo[foo].file[**].R',
+      'github.repo[*].file[a.ts].R',
+    ]) {
+      const d = evaluateCall({
+        executed_slices: [parseSlice(raw)],
+        token_accepted_risks: new Set(['github.read-code']),
+        catalog: idx,
+      });
+      expect(d.outcome, raw).toBe('allowed');
+    }
+    // `{ kind: 'ident', value: '*' }`, the "any identifier" placeholder of the shipped classifiers.
+    const d = evaluateCall({
+      executed_slices: [
+        {
+          provider: 'github',
+          action: 'R',
+          path: [
+            { kind: 'name', value: 'repo' },
+            { kind: 'ident', value: 'foo' },
+            { kind: 'name', value: 'file' },
+            { kind: 'ident', value: '*' },
+          ],
+        },
+      ],
+      token_accepted_risks: new Set(['github.read-code']),
+      catalog: idx,
+    });
+    expect(d.outcome).toBe('allowed');
+  });
+
   test('no risk in catalog matches the slice → deny', () => {
     const otherCatalog: RiskCatalog = { provider: 'github', risks: [] };
     const d = evaluateCall({
@@ -156,11 +258,7 @@ describe('evaluateCall — multi-slice scenarios', () => {
         parseSlice('github.repo[foo].file[a.ts].R'),
         parseSlice('github.repo[foo].branch[main].W'),
       ],
-      token_accepted_risks: new Set([
-        'github.read-code',
-        'github.merge-protected',
-        'github.uncategorized-write',
-      ]),
+      token_accepted_risks: new Set(['github.read-code', 'github.merge-protected']),
       catalog: idx,
     });
     expect(d.outcome).toBe('allowed');
@@ -172,10 +270,56 @@ describe('evaluateCall — multi-slice scenarios', () => {
         parseSlice('github.repo[foo].file[a.ts].R'),
         parseSlice('github.repo[foo].branch[main].W'),
       ],
-      token_accepted_risks: new Set(['github.read-code']), // missing merge-protected + fallback
+      token_accepted_risks: new Set(['github.read-code']), // missing merge-protected
       catalog: idx,
     });
     expect(d.outcome).toBe('denied');
+  });
+});
+
+describe('evaluateCall — every slice must be covered, not the union', () => {
+  test('a slice no catalog entry matches denies the call, although another slice is covered and accepted', () => {
+    // `issue[…].R` matches nothing (the fallback is write-only): carried by the read
+    // of a file next to it, the call used to be allowed on `read-code` alone.
+    const d = evaluateCall({
+      executed_slices: [
+        parseSlice('github.repo[foo].file[a.ts].R'),
+        parseSlice('github.repo[foo].issue[7].R'),
+      ],
+      token_accepted_risks: new Set(['github.read-code']),
+      catalog: idx,
+    });
+    expect(d.outcome).toBe('denied');
+    if (d.outcome !== 'denied') return;
+    expect(d.hint).toContain('github.repo[foo].issue[7].R');
+    expect(d.hint).toContain('catalog matches');
+    expect(d.missing_risks).toEqual([]);
+    // What the other slice touches is still reported.
+    expect(d.covered_risks).toEqual(['github.read-code']);
+  });
+
+  test('a slice of another provider is not dropped: it denies', () => {
+    const d = evaluateCall({
+      executed_slices: [
+        parseSlice('github.repo[foo].file[a.ts].R'),
+        parseSlice('stripe.account[acct].customer[*].R'),
+      ],
+      token_accepted_risks: new Set(['github.read-code']),
+      catalog: idx,
+    });
+    expect(d.outcome).toBe('denied');
+  });
+
+  test('with every slice covered the call is decided as before', () => {
+    const d = evaluateCall({
+      executed_slices: [
+        parseSlice('github.repo[foo].file[a.ts].R'),
+        parseSlice('github.repo[foo].file[b.ts].R'),
+      ],
+      token_accepted_risks: new Set(['github.read-code']),
+      catalog: idx,
+    });
+    expect(d).toEqual({ outcome: 'allowed', risks_touched: ['github.read-code'] });
   });
 });
 
@@ -215,23 +359,17 @@ describe('evaluateCall — env-qualified subset check', () => {
   };
   const supabaseIdx = indexCatalog(supabaseCatalog);
 
-  const stagingBinding: ProviderBinding = {
-    id: 'b1',
-    project_id: 'p1',
+  const stagingResource: Resource = {
     provider: 'supabase',
-    resource_ref: 'staging-ref',
-    display_name: null,
-    environment: 'staging',
-    created_at: '2026-01-01',
+    ref: 'staging-ref',
+    env: 'staging',
+    displayName: 'staging-ref',
   };
-  const prodBinding: ProviderBinding = {
-    id: 'b2',
-    project_id: 'p1',
+  const prodResource: Resource = {
     provider: 'supabase',
-    resource_ref: 'prod-ref',
-    display_name: null,
-    environment: 'prod',
-    created_at: '2026-01-01',
+    ref: 'prod-ref',
+    env: 'prod',
+    displayName: 'prod-ref',
   };
 
   const stagingBulkSlice = parseSlice(
@@ -239,12 +377,12 @@ describe('evaluateCall — env-qualified subset check', () => {
   );
   const prodBulkSlice = parseSlice('supabase.project[prod-ref].schema[any].table[any].row[bulk].W');
 
-  test('token accepted `supabase[staging].bulk-row-write` allows staging binding call', () => {
+  test('token accepted `supabase[staging].bulk-row-write` allows a call on the staging resource', () => {
     const d = evaluateCall({
       executed_slices: [stagingBulkSlice],
       token_accepted_risks: new Set(['supabase[staging].bulk-row-write']),
       catalog: supabaseIdx,
-      bindings: [stagingBinding, prodBinding],
+      envResolver: resourceEnvResolver([stagingResource, prodResource]),
     });
     expect(d.outcome).toBe('allowed');
     if (d.outcome === 'allowed') {
@@ -252,12 +390,12 @@ describe('evaluateCall — env-qualified subset check', () => {
     }
   });
 
-  test('token accepted `supabase[staging].bulk-row-write` denies prod binding call', () => {
+  test('token accepted `supabase[staging].bulk-row-write` denies a call on the prod resource', () => {
     const d = evaluateCall({
       executed_slices: [prodBulkSlice],
       token_accepted_risks: new Set(['supabase[staging].bulk-row-write']),
       catalog: supabaseIdx,
-      bindings: [stagingBinding, prodBinding],
+      envResolver: resourceEnvResolver([stagingResource, prodResource]),
     });
     expect(d.outcome).toBe('denied');
     if (d.outcome === 'denied') {
@@ -266,15 +404,51 @@ describe('evaluateCall — env-qualified subset check', () => {
     }
   });
 
-  test('no bindings provided → risks_touched returned non-qualified (legacy/test mode)', () => {
+  test('no resolver provided → risks_touched returned non-qualified (test mode)', () => {
     const d = evaluateCall({
       executed_slices: [stagingBulkSlice],
-      // The token would have to use the non-qualified id when bindings are
-      // absent (this is the legacy/test entrypoint).
+      // The mission would have to use the non-qualified id when no resolver
+      // is given (this is the test entrypoint).
       token_accepted_risks: new Set(['supabase.bulk-row-write']),
       catalog: supabaseIdx,
     });
     expect(d.outcome).toBe('allowed');
+  });
+
+  test("the unqualified mode is named : `envResolver: 'unqualified'` is the omitted field, said aloud", () => {
+    const d = evaluateCall({
+      executed_slices: [stagingBulkSlice],
+      token_accepted_risks: new Set(['supabase.bulk-row-write']),
+      catalog: supabaseIdx,
+      envResolver: UNQUALIFIED,
+    });
+    expect(d).toEqual({ outcome: 'allowed', risks_touched: ['supabase.bulk-row-write'] });
+  });
+
+  test('the mode never depends on which resolver object is passed', () => {
+    // A resolver that answers `null` for every slice says "no resource has
+    // an environment" : the env-scoped risk is touched where it is not
+    // acceptable, and the call is refused. That holds for the exported
+    // `noEnvResolver`, for a wrapper around it and for a home-made one —
+    // none of them switches the runtime to the unqualified mode.
+    const resolvers: EnvResolver[] = [
+      noEnvResolver,
+      { resolveEnv: (slice) => noEnvResolver.resolveEnv(slice) },
+      { resolveEnv: () => null },
+    ];
+    for (const envResolver of resolvers) {
+      const d = evaluateCall({
+        executed_slices: [stagingBulkSlice],
+        token_accepted_risks: new Set(['supabase.bulk-row-write']),
+        catalog: supabaseIdx,
+        envResolver,
+      });
+      expect(d.outcome).toBe('denied');
+      if (d.outcome === 'denied') {
+        expect(d.missing_risks).toEqual(['supabase.bulk-row-write']);
+        expect(d.hint).toContain('a resource with no environment label');
+      }
+    }
   });
 });
 
@@ -287,7 +461,7 @@ describe('evaluateCall — acceptable_in_envs runtime filter', () => {
     risks: [
       {
         id: 'railway.upsert-variable',
-        label: 'Modifier une env var',
+        label: 'Modify an env var',
         reason: 'r',
         matches: 'railway.project[**].environment[**].service-var[**].W',
         acceptable_in_envs: ['staging', 'preview', 'dev', 'prod'],
@@ -321,24 +495,18 @@ describe('evaluateCall — acceptable_in_envs runtime filter', () => {
   };
   const railwayIdx = indexCatalog(railwayCatalog);
 
-  const prodBinding: ProviderBinding = {
-    id: 'b1',
-    project_id: 'p1',
+  const prodResource: Resource = {
     provider: 'railway',
-    resource_ref: 'pid-123',
-    display_name: null,
-    environment: 'prod',
-    created_at: '2026-01-01',
+    ref: 'pid-123',
+    env: 'prod',
+    displayName: 'pid-123',
   };
 
-  const stagingBinding: ProviderBinding = {
-    id: 'b2',
-    project_id: 'p1',
+  const stagingResource: Resource = {
     provider: 'railway',
-    resource_ref: 'pid-456',
-    display_name: null,
-    environment: 'staging',
-    created_at: '2026-01-01',
+    ref: 'pid-456',
+    env: 'staging',
+    displayName: 'pid-456',
   };
 
   const prodSlice = parseSlice('railway.project[pid-123].environment[prod].service-var[MY_VAR].W');
@@ -346,50 +514,173 @@ describe('evaluateCall — acceptable_in_envs runtime filter', () => {
     'railway.project[pid-456].environment[staging].service-var[MY_VAR].W',
   );
 
-  test('prod binding: upsert-variable fires with env-qualified id', () => {
+  // The fallback no longer co-fires with `upsert-variable` (ADR fallback-risk-only-when-uncategorized) :
+  // the env-qualified entry alone is touched and accepted.
+  test('prod resource: upsert-variable fires with env-qualified id', () => {
     const d = evaluateCall({
       executed_slices: [prodSlice],
-      token_accepted_risks: new Set([
-        'railway[prod].upsert-variable',
-        'railway.uncategorized-write',
-      ]),
+      token_accepted_risks: new Set(['railway[prod].upsert-variable']),
       catalog: railwayIdx,
-      bindings: [prodBinding],
+      envResolver: resourceEnvResolver([prodResource]),
     });
     expect(d.outcome).toBe('allowed');
     if (d.outcome === 'allowed') {
-      expect(d.risks_touched).toContain('railway[prod].upsert-variable');
-      expect(d.risks_touched).toContain('railway.uncategorized-write');
+      expect(d.risks_touched).toEqual(['railway[prod].upsert-variable']);
     }
   });
 
-  test('staging binding: upsert-variable fires with staging-qualified id', () => {
+  test('staging resource: upsert-variable fires with staging-qualified id', () => {
     const d = evaluateCall({
       executed_slices: [stagingSlice],
-      token_accepted_risks: new Set([
-        'railway[staging].upsert-variable',
-        'railway.uncategorized-write',
-      ]),
+      token_accepted_risks: new Set(['railway[staging].upsert-variable']),
       catalog: railwayIdx,
-      bindings: [stagingBinding],
+      envResolver: resourceEnvResolver([stagingResource]),
     });
     expect(d.outcome).toBe('allowed');
     if (d.outcome === 'allowed') {
-      expect(d.risks_touched).toContain('railway[staging].upsert-variable');
-      expect(d.risks_touched).toContain('railway.uncategorized-write');
+      expect(d.risks_touched).toEqual(['railway[staging].upsert-variable']);
     }
   });
 
-  test('prod binding without upsert-variable accepted → deny', () => {
+  test('prod resource without upsert-variable accepted → deny', () => {
     const d = evaluateCall({
       executed_slices: [prodSlice],
       token_accepted_risks: new Set(['railway.uncategorized-write']),
       catalog: railwayIdx,
-      bindings: [prodBinding],
+      envResolver: resourceEnvResolver([prodResource]),
     });
     expect(d.outcome).toBe('denied');
     if (d.outcome === 'denied') {
       expect(d.missing_risks).toContain('railway[prod].upsert-variable');
     }
+  });
+});
+
+// ─── An env-scoped risk touched outside its envs refuses, never vanishes ────
+
+describe('evaluateCall — env-scoped risk outside its acceptable envs', () => {
+  const vector = {
+    reversibility: 'reversible',
+    blast: 'single',
+    data: 'data',
+    cost: 'free',
+    visibility: 'internal',
+    persistence: 'stateless',
+  } as const;
+  const acme: RiskCatalog = {
+    provider: 'acme',
+    risks: [
+      // Broad, account-scoped read that co-fires with the specific one below.
+      {
+        id: 'acme.read-runtime',
+        label: 'read runtime',
+        reason: 'r',
+        matches: 'acme.project[**].**.R',
+        vector,
+      },
+      {
+        id: 'acme.read-variables',
+        label: 'read variable values',
+        reason: 'r',
+        matches: 'acme.project[**].variable[**].R',
+        vector,
+        acceptable_in_envs: ['staging', 'prod'],
+      },
+      {
+        id: 'acme.schema-write',
+        label: 'schema write',
+        reason: 'r',
+        matches: 'acme.project[**].table[*].W',
+        vector,
+        acceptable_in_envs: ['staging', 'prod'],
+      },
+      {
+        id: 'acme.bulk-row-write',
+        label: 'bulk row write',
+        reason: 'r',
+        matches: 'acme.project[**].table[**].row[bulk].W',
+        vector,
+        acceptable_in_envs: ['staging'],
+      },
+    ],
+  };
+  const acmeIdx = indexCatalog(acme);
+  const resource = (ref: string, env: string | null): Resource => ({
+    provider: 'acme',
+    ref,
+    env,
+    displayName: ref,
+  });
+  const readVariables = (ref: string) => parseSlice(`acme.project[${ref}].variable[DB_URL].R`);
+
+  test('labelled resource: the specific risk is required on top of the broad one', () => {
+    const d = evaluateCall({
+      executed_slices: [readVariables('p1')],
+      token_accepted_risks: new Set(['acme.read-runtime']),
+      catalog: acmeIdx,
+      envResolver: resourceEnvResolver([resource('p1', 'prod')]),
+    });
+    expect(d).toMatchObject({ outcome: 'denied', missing_risks: ['acme[prod].read-variables'] });
+  });
+
+  test.each([
+    ['no environment label', null, 'acme.read-variables'],
+    ['a label outside the list', 'production', 'acme[production].read-variables'],
+  ])(
+    'resource with %s: the broad co-touched risk does not carry the call alone',
+    (_title, env, missing) => {
+      const d = evaluateCall({
+        executed_slices: [readVariables('p1')],
+        token_accepted_risks: new Set(['acme.read-runtime']),
+        catalog: acmeIdx,
+        envResolver: resourceEnvResolver([resource('p1', env)]),
+      });
+      expect(d.outcome).toBe('denied');
+      if (d.outcome !== 'denied') return;
+      expect(d.code).toBe('risk-not-accepted');
+      expect(d.missing_risks).toEqual([missing]);
+      expect(d.covered_risks).toEqual(['acme.read-runtime']);
+      expect(d.hint).toContain('acceptable only in [staging, prod]');
+    },
+  );
+
+  test('multi-slice call: a risk not acceptable in this env refuses the whole call', () => {
+    const d = evaluateCall({
+      executed_slices: [
+        parseSlice('acme.project[p1].table[users].W'),
+        parseSlice('acme.project[p1].table[users].row[bulk].W'),
+      ],
+      token_accepted_risks: new Set(['acme[prod].schema-write']),
+      catalog: acmeIdx,
+      envResolver: resourceEnvResolver([resource('p1', 'prod')]),
+    });
+    expect(d).toMatchObject({
+      outcome: 'denied',
+      missing_risks: ['acme[prod].bulk-row-write'],
+      covered_risks: ['acme[prod].schema-write'],
+    });
+  });
+
+  test('holding the unqualified id does not open an unlabelled resource', () => {
+    const d = evaluateCall({
+      executed_slices: [readVariables('p1')],
+      token_accepted_risks: new Set(['acme.read-runtime', 'acme.read-variables']),
+      catalog: acmeIdx,
+      envResolver: resourceEnvResolver([resource('p1', null)]),
+    });
+    expect(d).toMatchObject({ outcome: 'denied', missing_risks: ['acme.read-variables'] });
+  });
+
+  test('the same slices are allowed where every touched risk is acceptable and accepted', () => {
+    const d = evaluateCall({
+      executed_slices: [
+        parseSlice('acme.project[p1].table[users].W'),
+        parseSlice('acme.project[p1].table[users].row[bulk].W'),
+      ],
+      token_accepted_risks: new Set(['acme[staging].schema-write', 'acme[staging].bulk-row-write']),
+      catalog: acmeIdx,
+      envResolver: resourceEnvResolver([resource('p1', 'staging')]),
+    });
+    expect(d.outcome).toBe('allowed');
   });
 });

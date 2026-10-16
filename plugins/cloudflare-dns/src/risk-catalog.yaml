@@ -1,0 +1,316 @@
+# Risk catalog of the `cloudflare-dns` provider.
+#
+# Spec : docs/spec/gateway-risk-model.md §4, docs/spec/vaubaan-gateway.md §3.2 (presets).
+# ADR  : docs/decisions/plugin-contract-and-credential-spec.md (presets, loader),
+#        docs/decisions/unified-gates-drop-confirm.md (no default_gate).
+#
+# 11 named risks + 1 fallback. Every slice lives under `account[**].zone[**]`
+# where the zone is a mission resource (one resource per zone). No risk is
+# env-scoped : DNS has no test/live mode. No caps, no infra_limits : the
+# upstream rate limit (1200 req / 5 min per token) suffices.
+#
+# Record writes are layered. `record-write` matches every record write
+# (`record[**].W` is recursive) ; a write (deletion included) on an apex, wildcard, MX or NS
+# record also touches `critical-record-write` ; a deletion also touches
+# `record-delete`. A mission needs `record-write` for any record change and
+# the specific risk on top for the sensitive ones.
+#
+# Presets never list the fallback : the engine counts it only when no
+# specific risk matched a write.
+#
+# Adding a risk : append an entry, bump `catalog_version`, update `catalog_date`.
+# Removing or renaming a risk : forbidden — mark it `deprecated: true` and
+# point `replaced_by` at its successor.
+
+provider: cloudflare-dns
+catalog_version: 3
+catalog_date: 2026-10-14
+
+risks:
+  # ─── Reads ───────────────────────────────────────────────────────────────
+
+  - id: cloudflare-dns.read-zone-metadata
+    label: 'Read zone and account metadata'
+    reason: >-
+      Inventory of zones, status, nameservers, plan, zone settings and
+      DNSSEC posture. Metadata only, no secrets, no record values. Note
+      that `zone[**].R` is recursive : reading records needs this permission
+      too, so a mission that reads records holds both.
+    matches:
+      - 'cloudflare-dns.account[**].zone[**].R'
+      - 'cloudflare-dns.account[**].zone[**].zone-settings.R'
+      - 'cloudflare-dns.account[**].zone[**].dnssec.R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: metadata
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: cloudflare-dns.read-records
+    label: 'Read DNS records (IPs, CNAMEs, MX, TXT values)'
+    reason: >-
+      Exposes the network topology (server IPs, MX relays, SPF/DKIM/DMARC
+      configuration, ACME challenges). Reconnaissance surface for an
+      attacker.
+    matches: 'cloudflare-dns.account[**].zone[**].record[**].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: cloudflare-dns.export-zone-file
+    label: 'Export the whole zone as a BIND file (all records in one dump)'
+    reason: >-
+      Atomic export of every record in BIND format — the complete DNS
+      topology in a single request. Distinct from read-records (paginated)
+      because the export is a one-call bulk exfiltration vector.
+    matches: 'cloudflare-dns.account[**].zone[**].zone-export.R'
+    vector:
+      reversibility: reversible
+      blast: account
+      data: data
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  # ─── Writes — DNS records ────────────────────────────────────────────────
+
+  - id: cloudflare-dns.record-write
+    label: 'Create / update a DNS record'
+    reason: >-
+      Posture shift on a DNS record. A changed A/CNAME redirects traffic ;
+      a changed TXT invalidates SPF/DKIM (mail) or ACME (TLS). Costly to
+      revert because the previous value must be known (no DNS versioning).
+      Public by nature. Touched by every record write, including the
+      critical ones and the deletions, which also need their own permission.
+    matches: 'cloudflare-dns.account[**].zone[**].record[**].W'
+    vector:
+      reversibility: costly
+      blast: env
+      data: metadata
+      cost: free
+      visibility: public
+      persistence: posture
+
+  - id: cloudflare-dns.critical-record-write
+    label: 'Change an apex, wildcard, MX or NS record'
+    reason: >-
+      The record governs the whole domain rather than one host : the apex
+      (`example.com`, `@`) or the wildcard at the apex redirects the main
+      site and every undefined subdomain ; MX reroutes all incoming mail ;
+      NS delegates a subtree to another nameserver. Emitted next to the
+      ordinary record write, so a mission holds it distinctly. When the
+      arguments do not name the record's type and name, the write counts
+      as critical.
+    matches: 'cloudflare-dns.account[**].zone[**].record[**].critical.W'
+    vector:
+      reversibility: costly
+      blast: account
+      data: metadata
+      cost: free
+      visibility: public
+      persistence: posture
+
+  - id: cloudflare-dns.record-delete
+    label: 'Delete a DNS record'
+    reason: >-
+      Removes a record ; the host, mail route or validation token it served
+      stops resolving immediately. Costly to revert : the previous value is
+      gone and must be recovered from elsewhere. Emitted as a verb leaf so a
+      mission can allow edits without allowing deletions.
+    matches: 'cloudflare-dns.account[**].zone[**].record[**].delete.W'
+    vector:
+      reversibility: costly
+      blast: single
+      data: metadata
+      cost: free
+      visibility: public
+      persistence: posture
+
+  - id: cloudflare-dns.import-records
+    label: 'Bulk import DNS records from a BIND zone file'
+    reason: >-
+      A BIND import creates or overwrites potentially hundreds of records
+      in one call, apex and MX included. Higher blast than a single record
+      write ; non-atomic (partial import on error). Rate-limited upstream.
+    matches: 'cloudflare-dns.account[**].zone[**].zone-import.W'
+    vector:
+      reversibility: costly
+      blast: bulk
+      data: metadata
+      cost: free
+      visibility: public
+      persistence: posture
+
+  # ─── Writes — zone-level ─────────────────────────────────────────────────
+
+  - id: cloudflare-dns.zone-settings-write
+    label: 'Edit zone settings (SSL mode, minimum TLS, cache level…)'
+    reason: >-
+      Modifies the security posture of the zone. Lowering the minimum TLS
+      version re-enables known weaknesses ; switching SSL from Full (strict)
+      to Flexible opens the origin leg to interception.
+    matches: 'cloudflare-dns.account[**].zone[**].zone-settings.W'
+    vector:
+      reversibility: costly
+      blast: account
+      data: metadata
+      cost: free
+      visibility: public
+      persistence: posture
+
+  - id: cloudflare-dns.dnssec-write
+    label: 'Enable / disable DNSSEC on a zone'
+    reason: >-
+      Toggling DNSSEC without the matching DS record at the registrar breaks
+      resolution (SERVFAIL on validating resolvers). Zone-wide security
+      posture shift.
+    matches: 'cloudflare-dns.account[**].zone[**].dnssec.W'
+    vector:
+      reversibility: costly
+      blast: account
+      data: metadata
+      cost: free
+      visibility: public
+      persistence: posture
+
+  - id: cloudflare-dns.cache-purge
+    label: 'Purge the CDN cache (everything, by URL, tag, host or prefix)'
+    reason: >-
+      A purge-everything sends every request to the origin — a self-inflicted
+      load spike on a busy site. Reversible (the cache rebuilds) but with an
+      immediate performance cost.
+    matches: 'cloudflare-dns.account[**].zone[**].cache.W'
+    vector:
+      reversibility: reversible
+      blast: account
+      data: metadata
+      cost: moderate
+      visibility: public
+      persistence: session
+
+  - id: cloudflare-dns.zone-delete
+    label: 'Delete a whole DNS zone (the domain stops resolving)'
+    reason: >-
+      Deletes the zone. The domain stops resolving at once ; every record,
+      setting and the DNSSEC configuration are lost. Irreversible in
+      practice — the zone must be recreated and every record reimported.
+      Listed in no preset : a mission that needs it enumerates it explicitly.
+      The pattern ends on the zone ident (`zone[*]`, not `zone[**]`) : a
+      recursive wildcard would make every record or settings write need
+      this irreversible permission.
+    matches: 'cloudflare-dns.account[**].zone[*].W'
+    vector:
+      reversibility: irreversible
+      blast: account
+      data: data
+      cost: moderate
+      visibility: public
+      persistence: posture
+
+  # ─── Fallback (required) ─────────────────────────────────────────────────
+
+  - id: cloudflare-dns.uncategorized-write
+    label: 'Uncategorized Cloudflare DNS write'
+    reason: >-
+      Catch-all for writes without a dedicated entry. Seen in production, it
+      means a tool classifies to a slice no entry covers : add the entry.
+    matches: 'cloudflare-dns.[**].W'
+    fallback: true
+    vector:
+      reversibility: costly
+      blast: account
+      data: data
+      cost: moderate
+      visibility: public
+      persistence: posture
+
+# Presets are UI sugar : the persisted policy is always the explicit
+# enumeration. Quotas are actions per mission period ; rate limits are
+# actions per sliding window ; `approval` gates suggest a human in the loop
+# on the entries that take a domain down or are hard to undo. Values are a
+# starting point (ADR `mission-presets-default-values`, deferred).
+presets:
+  - id: read-only
+    label: Read-only
+    description: Zone metadata, settings, DNSSEC posture and record values of the selected zones. No export, no write.
+    entries:
+      - risk_id: cloudflare-dns.read-zone-metadata
+        quota: 2000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: cloudflare-dns.read-records
+        quota: 2000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+
+  - id: dns-operator
+    label: DNS operator
+    description: Read, then create and update ordinary subdomain records and purge the cache. No apex / MX / NS change, no deletion, no import, no zone settings.
+    entries:
+      - risk_id: cloudflare-dns.read-zone-metadata
+        quota: 2000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: cloudflare-dns.read-records
+        quota: 2000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: cloudflare-dns.record-write
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: cloudflare-dns.cache-purge
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+
+  - id: zone-admin
+    label: Zone admin
+    description: Everything on the selected zones except deleting them; record deletion, apex / MX / NS changes, imports, zone settings and DNSSEC ask first.
+    entries:
+      - risk_id: cloudflare-dns.read-zone-metadata
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: cloudflare-dns.read-records
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: cloudflare-dns.export-zone-file
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: cloudflare-dns.record-write
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: cloudflare-dns.critical-record-write
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: approval
+      - risk_id: cloudflare-dns.record-delete
+        quota: 200
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: approval
+      - risk_id: cloudflare-dns.import-records
+        quota: 10
+        rate_limit: { max: 3, window_seconds: 60 }
+        gate: approval
+      - risk_id: cloudflare-dns.zone-settings-write
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: approval
+      - risk_id: cloudflare-dns.dnssec-write
+        quota: 10
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+      - risk_id: cloudflare-dns.cache-purge
+        quota: 100
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto

@@ -1,0 +1,179 @@
+# `@vaubaan/plugin-railway`
+
+Vaubaan Gateway provider plugin for [Railway](https://railway.com). It
+rewraps the official Railway MCP server (`https://mcp.railway.com/`, 10
+tools) and adds four GraphQL-backed environment-variable tools, under the
+`railway__` prefix. Written against `@vaubaan/plugin-sdk` only. Maintainer
+handbook: [`docs/handbook/providers/railway.md`](../../docs/handbook/providers/railway.md);
+decisions: [`railway-rewrap-remote-mcp`](../../docs/decisions/railway-rewrap-remote-mcp.md),
+[`plugin-arguments-closed-surface-and-typed-refusals`](../../docs/decisions/plugin-arguments-closed-surface-and-typed-refusals.md).
+Plugin version 4.2.0, catalog version 3.
+
+## Data model
+
+One plane, `runtime`:
+
+```
+account → project → environment → service → deployment → {logs, status}
+                                           └→ service-var   (service-scoped or project-shared)
+                                           └→ service-var-replace (marker: "replace every variable")
+account → agent-session                                     (the railway-agent meta-tool)
+```
+
+The **resource** a connection exposes is the Railway **project** (UUID).
+`discoverResources` lists the projects the connected workspace member can
+see, with their environments in `metadata.environments` and their services
+in `metadata.services` (`[{ id, name }]` each, empty lists included).
+The owner labels each project with an environment (`prod`, `staging`,
+`preview`, `dev`); that label is what env-qualified risks resolve against.
+
+**A project must be labelled to run env-scoped operations.** On a project
+with no label, or a label outside those four, every call touching
+`read-variables`, `deploy` or `upsert-variable` is refused whatever the
+mission accepts: `list-variables`, `redeploy`, `accept-deploy`, the
+variable writes and `railway-agent`. Account, runtime and log reads still
+work. The owner fixes it by labelling the project.
+
+## Tools
+
+| Tool                                                                                | Backend | Risk(s)                                               |
+| ----------------------------------------------------------------------------------- | ------- | ----------------------------------------------------- |
+| `railway__whoami`, `railway__list-projects`                                         | MCP     | `railway.read-account`                                |
+| `railway__create-project`                                                           | MCP     | `railway.create-project`                              |
+| `railway__list-services`, `railway__list-deployments`, `railway__get-status`        | MCP     | `railway.read-runtime`                                |
+| `railway__get-logs`                                                                 | MCP     | `railway.read-runtime`, `railway.read-logs`           |
+| `railway__redeploy`, `railway__accept-deploy`                                       | MCP     | `railway[env].deploy`                                 |
+| `railway__railway-agent`                                                            | MCP     | `railway.agent-action` + deploy and variable risks    |
+| `railway__list-variables`                                                           | GraphQL | `railway.read-runtime`, `railway[env].read-variables` |
+| `railway__upsert-variable`, `railway__delete-variable`, `railway__upsert-variables` | GraphQL | `railway[env].upsert-variable`                        |
+| `railway__upsert-variables` with `replace: true`                                    | GraphQL | `…upsert-variable` + `railway.bulk-variables-replace` |
+
+A write of named variables touches `upsert-variable` alone.
+`bulk-variables-replace` is touched only when the call replaces every
+variable: `upsert-variables` with `replace` set (or an empty or malformed
+`variables`), and every `railway-agent` call.
+
+Project-scoped tools take `projectId` (one of the mission's resources).
+When omitted, the mission's single Railway project is used; `accept-deploy`
+carries only `environmentId`, which the classifier maps back to the project
+whose discovered environments contain it. In every case an `environmentId`
+argument must be one of the discovered environments of the resolved
+project, and a `serviceId` argument one of its discovered services, or the
+call is refused — refresh the connection's resources after creating an
+environment or a service. A project discovered before services were
+recorded carries no service list and refuses every `serviceId` until its
+resources are refreshed once.
+
+A tool takes the arguments its schema declares and nothing else: the
+rewrapped tools forward their arguments whole, so an undeclared argument is
+denied by `classify` and refused by `execute` (`undeclaredArgument`).
+`projectId` is the one exception — it is read for every project-scoped tool,
+then written where the tool takes one and dropped where it does not.
+
+`execute` resolves the call with the classifier's own `resolveTarget` and
+`readVariableWrite` and writes `projectId`, `environmentId` and `serviceId`
+from their answer : a Railway id is `[A-Za-z0-9_-]{1,64}`, anything else is
+denied and refused before any request. No id reaches a URL (JSON-RPC
+arguments, GraphQL variables of a constant document). Every id that is
+forwarded is bound to the mission's project. Two arguments of the upstream
+tools cannot be — `deploymentId` of `get-logs` and `threadId` of
+`railway-agent` — and are refused, never forwarded (`UNBOUND_ARGUMENTS` in
+`src/tools.ts` ; handbook, "Identifiers") : the declared schemas do not offer
+them.
+
+What `execute` declines — an unknown tool, an undeclared argument, a target
+the mission cannot resolve, a malformed id or variable name — is an
+`isError` result returned before any request. What Railway fails is thrown:
+`UpstreamAuthError` on 401/403, `UpstreamHttpError` on another failed
+status, an `Error` for a JSON-RPC error frame or GraphQL `errors`.
+
+## Catalog and presets
+
+`src/risk-catalog.yaml` — nine risks plus the mandatory
+`railway.uncategorized-write` fallback, `catalog_version: 3`. Env-scoped
+risks (`deploy`, `upsert-variable`, `read-variables`) accept `staging`,
+`preview`, `dev`, `prod` and carry a stricter `prod` vector.
+
+| Preset      | Grants                                                                                                                                |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `read-only` | Account, runtime and logs reads. No variable values, no write.                                                                        |
+| `developer` | Reads + variables, deploys and variable writes on `dev` / `preview` / `staging` (`auto`); `prod` deploys and writes under `approval`. |
+| `operator`  | Developer + `prod` variable reads; `bulk-variables-replace` and `create-project` under `approval`.                                    |
+
+Presets are default suggestions copied into a mission policy at issuance;
+`railway.agent-action` is in none of them and must be accepted explicitly.
+
+## Credential — how the company registers its app
+
+1. Railway → Workspace → **Developer → Auth apps → New app**
+   (`https://railway.com/workspace/developer/apps/new`). Name it after your
+   gateway instance. Leave **Device Flow off**.
+2. Redirect URI: the instance callback the gateway shows in
+   Settings → Administration → Company apps (Railway requires `https://`; for loopback use `https://127.0.0.1`,
+   never `localhost`).
+3. Copy `client_id` and `client_secret` into the instance configuration
+   under the Railway provider app (Settings → Administration → Company apps, or the
+   mounted config file). The host uses them for the authorization-code flow and
+   for refresh; the plugin reads neither.
+
+The gateway then runs the authorization-code flow declared by
+`railwayCredentialSpec`: scopes `openid offline_access workspace:member`,
+PKCE S256, `prompt=consent` (needed for a refresh token) and the RFC 8707
+resource indicator `https://mcp.railway.com` on both the authorization and
+token requests — the MCP server refuses tokens minted without it. Access
+tokens last one hour; the host refreshes them with the standard
+`refresh_token` grant declared by the spec (`refreshable: true`), including
+after an `UpstreamAuthError`.
+
+## Credential, the other way: a workspace token
+
+Without a company OAuth app — or beside it — an account is connected with a
+Railway token pasted by hand (`railwayTokenCredential`, `src/token.ts`),
+created under railway.com/account/tokens. Every tool runs with it: discovery
+and the four variable tools on the GraphQL API, the ten tools of Railway's MCP
+server with the token sent as `Authorization: Bearer` to
+`https://mcp.railway.com/`.
+
+| Token                                  | Reach                          | Offered                     | MCP server                                                |
+| -------------------------------------- | ------------------------------ | --------------------------- | --------------------------------------------------------- |
+| **workspace token** (workspace chosen) | that workspace only            | yes, recommended            | accepted — checked against the real service on 2026-10-14 |
+| account token ("No workspace")         | every workspace of the account | yes, second choice          | not checked; Railway documents the server for OAuth only  |
+| project token                          | one environment of one project | no: a resource is a project | —                                                         |
+
+A shared service account that is a member of the workspace is fine: Vaubaan
+decides who may do what.
+
+**Check at paste** (`probeRailwayToken`): `query { me { name email } }`
+answers for an account token only (named by its email). Otherwise the
+projects the token reaches answer for a workspace token, named by its
+workspace (`the vaubaan workspace`) or, when the workspace name is not
+exposed, by its projects. Neither answers → the token is refused.
+
+**Discovery**: the projects the token reaches, then — account token only —
+each workspace of `me.workspaces`. A workspace token has no `me`; its refusal
+ends the list.
+
+**When the MCP server refuses a pasted token** (401 or 403), the plugin asks
+the API about the same token (`explainMcpRefusal`): refused there too → a
+rejected credential (401, the account "Needs reconnecting"); still accepted →
+the MCP server does not take this kind of token: a 403 naming it ("refused
+this account token … reconnect with a workspace token"), and the connection
+stays usable for the variable tools. `railway__whoami` may say little with a
+workspace token, which has no user behind it.
+
+Removing the account tells the person to delete the token under Account
+settings → Tokens. ADR
+[`token-connections-beside-the-integration-app`](../../docs/decisions/token-connections-beside-the-integration-app.md)
+(amendment of 2026-10-14).
+
+## Development
+
+```
+npx vitest run plugins/railway     # 421 tests, no network
+npx tsc -p plugins/railway/tsconfig.json --noEmit
+```
+
+Refreshing the upstream tool list: `POST tools/list` to
+`https://mcp.railway.com/` with a Bearer scoped to the MCP resource, prefix
+every name with `railway__`, commit `src/upstream-tools.json`, bump
+`version` in `src/index.ts`.

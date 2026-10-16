@@ -8,6 +8,8 @@ extends:
   - pivot-to-risk-based-model
 ---
 
+> **Pre-v5 document (French).** Not translated; read with the mapping in [[legacy-status-of-v4-adrs-and-handbooks]].
+
 # Scope caps — axe d'amplification orthogonal aux risks
 
 > Identifie une famille de garde-fous (temporal window, volume per

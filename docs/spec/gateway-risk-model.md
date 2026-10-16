@@ -1,1083 +1,768 @@
-# Gateway — modèle de risque (CURRENT, supersède gateway-capability-model.md)
+---
+title: Gateway risk model — plugins, slices, catalogs, the decision
+status: current
+date: 2026-10-13
+---
 
-> Modèle actuel implémenté dans le code (depuis 2026-06-15, commit
-> `chore(v1-drop)`). Remplace en bloc
-> [`gateway-capability-model.md`](./gateway-capability-model.md) (v1, "rings
-> concentriques") et trois itérations intermédiaires (v2 macros, v3 slices
-> capability-based) qui n'ont jamais été actées. Le modèle ci-dessous est
-> **risk-based**, pas capability-based : le token ne porte pas une liste
-> d'autorisations, il porte une liste de **risques acceptés**.
+# Gateway — risk model
+
+> **Status:** current. This document describes the risk model as v5
+> implements it. It answers one question: _which risks does a call touch,
+> and does the mission accept them?_ Who may accept a risk, how many
+> times, how fast and under whose eyes is the subject of
+> [vaubaan-gateway](./vaubaan-gateway.md), which builds on this document.
 >
-> **Évolutions actées en aval** (à intégrer ici à la prochaine passe) :
-> - [ADR unified-tokens-delegation-chain-and-escalation-channel](../decisions/unified-tokens-delegation-chain-and-escalation-channel.md)
->   — table `tokens` unifiée + `delegation_chain` + `escalation_channel`.
-> - [ADR unified-gates-drop-confirm](../decisions/unified-gates-drop-confirm.md)
->   — drop des 3 gates `allow/confirm/deny`, des `project_risk_policies`,
->   du flow approval mint-time (Telegram/Email). Le binaire est
->   `risk ∈ accepted_risks` (allow) sinon deny ; l'élévation passe par
->   l'`escalation_channel` runtime.
+> It replaces the French text of June 2026, kept unchanged as
+> [legacy/gateway-risk-model.md](./legacy/gateway-risk-model.md). Founding
+> decision: ADR
+> [pivot-to-risk-based-model](../decisions/pivot-to-risk-based-model.md).
+> Later decisions folded in here:
+> [unified-gates-drop-confirm](../decisions/unified-gates-drop-confirm.md),
+> [plugin-contract-and-credential-spec](../decisions/plugin-contract-and-credential-spec.md),
+> [fallback-risk-only-when-uncategorized](../decisions/fallback-risk-only-when-uncategorized.md),
+> [scope-caps-amplification-axis](../decisions/scope-caps-amplification-axis.md)
+> and
+> [scope-caps-not-enforced-in-v5-0](../decisions/scope-caps-not-enforced-in-v5-0.md).
 >
-> Recherche source : [`/.vaubaan/research/permission-threat-model-state-of-the-art.md`](../../.vaubaan/research/permission-threat-model-state-of-the-art.md).
+> **Section numbers.** §1 to §4bis, §7, §8, §12 and §14 keep the numbers
+> and subjects of the earlier text at the top level, because code,
+> catalogs and other documents cite them; so do §3.1, §3.3, §4.3 (the
+> mandatory fallback), §4.4 and §7.2. §5, §6, §9, §10, §11, §13, §15 and §16 carry new
+> content: what stood there described mechanisms v5 does not have (§13).
 
-## 0. Le shift conceptuel — "risque acceptable" plutôt que "droits demandés"
+## 0. The idea — accepted risks, not granted capabilities
 
-| Avant (v1 rings, v2 macros, v3 slices)         | Après (v4 risk-based)                                             |
-| ---------------------------------------------- | ----------------------------------------------------------------- |
-| Le manager **énumère ce que l'agent peut faire** (slices/caps explicites). | Le manager **énumère les risques qu'il accepte de prendre** sur cette session. |
-| Sous-grant → l'agent se bloque mid-session, friction. Sur-grant → on perd le least-privilege. | Le profil de risque est **stable inter-sessions**, scannable en 30s, ne demande pas d'anticiper la trajectoire de l'agent. |
-| Le langage du grant suit la surface d'API du provider. | Le langage du grant suit l'**intention métier** ("écrire en bulk", "modifier RLS", "deploy prod"). |
-| Audit = "qu'est-ce qui a été grant". | Audit = "quelles slices ont été touchées + quels risques catégorisés". |
+A capability model asks the person who delegates to enumerate what the
+agent may do: which endpoints, which objects, which verbs. For an
+autonomous coding agent that list cannot be written in advance. Grant
+too little and the agent stops mid-task; grant too much and least
+privilege is gone.
 
-C'est l'inversion **capability-based → risk-based** que font Google Adaptive
-Auth, Microsoft Conditional Access, OAuth Step-Up (RFC 9470) et Claude Code
-Auto Mode. Le manager raisonne comme avec un humain à qui il délègue :
-*"OK pour tout sauf : tu touches pas la prod, tu modifies pas DNS, tu crées
-pas de comptes."*
+The risk model turns the question around. The person who delegates
+states **which consequences they accept**: "it may write on feature
+branches", "it may apply a migration on staging", "it may not change
+row-level security". The vocabulary is a short list of named risks per
+provider, written once by the plugin author and reviewed like code.
 
-### Ce qui survit des itérations précédentes
+|                       | Capability-based                    | Risk-based (this model)                                   |
+| --------------------- | ----------------------------------- | --------------------------------------------------------- |
+| What is enumerated    | What the agent may do               | What the delegating human accepts as a consequence        |
+| Language of the grant | The provider's API surface          | Business intent, one sentence per risk                    |
+| Stability             | Rewritten for every task            | The same profile serves every task of the same kind       |
+| Audit                 | "What was granted"                  | Which slices were executed, which risks they touched      |
+| Unknown operation     | Depends on how the grant is written | Refused, or caught by the catalog's fallback entry (§4.3) |
 
-- **Plugin / policy étanches** (v1 §6 reste vrai).
-- **Default-deny** + anti-patterns SQL (v1 §5.1).
-- **Single-use tokens + TTL court** (v1 §8).
-- **Env comme calque par-data** (v1 §4), désormais **un segment du data-model**.
-- **Vecteur de risque 6D** (v2 §1), **attaché aux entrées du catalogue de
-  risques**, pas au token. Drive l'ordre d'affichage UI (severity-sorted)
-  et l'explicabilité audit — pas de gate dérivé.
+Three properties hold throughout:
 
-Supprimé par l'ADR unified-gates-drop-confirm (à reprendre dans une
-passe spec ultérieure) : les 3 gates `allow | confirm | deny`, les
-channels Telegram/Email/Manual, le long-poll 25s.
+- **Default deny.** A call is allowed only if every risk it touches is
+  accepted. A call that touches nothing the catalog knows is refused.
+- **Plugins classify, the gateway decides.** A plugin knows its provider
+  and nothing about missions, accepted risks or budgets.
+- **Always an enumeration.** Accepted risks are a list of explicit
+  identifiers. No wildcard, no "everything" sentinel, at any level.
 
-### Ce qui change
-
-- Plus de `(plane, level, action, env)` dans le wire.
-- Plus de macro-permission (`inspect/read/mutate/destroy/govern`).
-- Plus de slice dans le grant.
-- Le token porte : `bindings[] + accepted_risks[] + denied_risks[]`.
-
-## 1. Trois piliers — `Plugin`, `Catalog`, `Policy`
+## 1. Three pillars and one decision
 
 ```
-┌─ PLUGIN (par-provider, code) ─────────────────────────────────────────────┐
-│  data-model    : entités du plane + cardinalités déclarées               │
-│  classify(t,a) : (tool, args) → slice touchée (au call)                  │
-└──────────────────────────────────────────────────────────────────────────┘
+PLUGIN (per provider, code)
+  data model     the entities of each plane, their containment
+  classify       (tool, arguments, resources) → the slices the call touches
 
-┌─ CATALOG (par-provider, statique, versionné dans le repo) ───────────────┐
-│  risks: [                                                                │
-│    { id, label, reason, matches (slice pattern),                         │
-│      vector (6D), acceptable_in_envs?: string[] }                        │
-│  ]                                                                       │
-│  + un risque fallback générique par provider qui catch tout le reste.    │
-└──────────────────────────────────────────────────────────────────────────┘
+CATALOG (per provider, static, versioned in the repository)
+  risks          { id, label, reason, matches, vector, acceptable_in_envs?, … }
+  one fallback   catches the writes no other entry names
+  presets        named policy fragments offered at issuance
 
-┌─ PROJECT POLICY ─ DROPPÉ (ADR unified-gates-drop-confirm) ───────────────┐
-│  Le seul garde-fou structurel est `acceptable_in_envs` au catalog level. │
-└──────────────────────────────────────────────────────────────────────────┘
+MISSION POLICY (per mission, written by its creator)
+  RiskId → (budget, gate)     the keys are the accepted risks
 
-┌─ TOKEN MINT (par-session) ───────────────────────────────────────────────┐
-│  bindings        : [{ provider, resource_ref, env? }, ...]               │
-│  accepted_risks  : [ risk_id, ... ]                                      │
-│  denied_risks    : [ risk_id, ... ]   (opt-out explicite)                │
-│  context         : { task, agent_id, requester_user_id }                 │
-│  ttl, singleUse                                                          │
-│  ── PAS de slices, pas de plane/level, pas de macro.                     │
-└──────────────────────────────────────────────────────────────────────────┘
-
-┌─ RUNTIME (au call) ──────────────────────────────────────────────────────┐
-│  1. plugin.classify(tool, args) → slice                                  │
-│  2. risks_touched = intersect(slice, catalog.risks)                       │
-│  3. if risks_touched ⊆ token.accepted_risks → ALLOW                      │
-│     else                                       → DENY (strict)           │
-│  4. audit_log.insert(slice, risks_touched, decision)                     │
-└──────────────────────────────────────────────────────────────────────────┘
+DECISION (per call)
+  1. slices        = plugin.classify(tool, arguments, resources)
+  2. risks_touched = the catalog entries those slices match,
+                     each qualified by the environment of its slice
+  3. risks_touched ⊆ accepted risks ?   no  → refused, risk-not-accepted
+                                        yes → budget, gate, execution
+  4. one audit entry, allowed or refused
 ```
 
-Le runtime reste **stateless** : la décision est `intersect(slice,
-risks) ⊆ token.accepted_risks`. Aucun appel DB hot-path autre que la
-résolution du token (cachée, comme aujourd'hui).
+Steps 1 to 3 are **stateless**: they read the call, the catalog and the
+mission, and nothing else. Budget, rate limit and gate come after an
+allowed outcome and are described in
+[vaubaan-gateway](./vaubaan-gateway.md) §3.
 
-## 2. Le data-model par plane
+## 2. The data model, per plane
 
-> *Premier énoncé de chaque doc de provider* :
-> **"Un provider est une BDD mutable de `(entité_1, entité_2, …)` avec
-> des side effects observables via `read` sur certaines entités."**
+A provider is described as a mutable store of entities. Each **plane** of
+a provider (a repository, a database, a runtime, a mailbox) declares the
+entities it contains and how they nest. The data model is the vocabulary
+of slices: a slice path names entities of the data model, and a catalog
+pattern matches paths over them.
 
-Chaque plane d'un provider déclare un **graphe d'entités** avec leur
-**cardinalité possible** et leur **containment**. Auto-générable en
-mermaid pour les revues de design.
+### 2.1 Entities, containment, cardinality
 
-### 2.1 Cardinalités
+Each entity declares:
 
-3 niveaux universels :
+- a **name**, as it appears in slices (`branch`, `env-var`, `row`);
+- its **parent** in the plane, or none at the root. Every parent must be
+  an entity of the same plane; a plugin with a dangling parent does not
+  load;
+- the **cardinalities** that make sense for it, as documentation for the
+  reader of the model:
 
-| Cardinalité | Sémantique                            | Inférence depuis le selecteur            |
-| ----------- | ------------------------------------- | ---------------------------------------- |
-| `one`       | exactement 1 instance ciblée nommément| identifiant exact (`branch[main]`)       |
-| `bounded`   | ≤ N, count borné                      | liste finie ou glob borné par namespace  |
-| `unbounded` | nombre inconnu, peut tout toucher     | wildcard `*` ou `**`                     |
+  | Cardinality | Meaning                         |
+  | ----------- | ------------------------------- |
+  | `one`       | exactly one instance, named     |
+  | `bounded`   | a finite, known set             |
+  | `unbounded` | an unknown number, possibly all |
 
-La cardinalité **n'est pas dans le wire** — elle émerge du selecteur et
-sert au catalogue de risques pour distinguer `row.W[one]` de `row.W[*]`.
+- optionally, that it **carries the environment** of the provider (§2.3).
 
-### 2.2 Exemple GitHub — plane `repo`
+Cardinality is not a field of a slice. When the difference between "one"
+and "many" changes the risk, the plugin makes it visible in the slice
+itself, with a literal marker the catalog can match exactly: Supabase
+emits `object[one]` for a write on one stored object and `object[bulk]`
+for a write on a whole bucket, and a different catalog entry matches
+each.
+
+A plugin may also emit **virtual leaves**: path segments that are not
+entities but name an act the catalog must tell apart. GitHub emits
+`branch[main].merge-into` for a merge and `branch[x].workflow-via-file`
+when a file write targets a workflow definition.
+
+### 2.2 Example — GitHub, plane `repo`
 
 ```mermaid
 flowchart TB
-  org[org/account] --> repo[repo]
-  repo --> branch[branch]
-  branch --> file[file]
-  branch --> commit[commit]
-  repo --> branch-protection[branch-protection]
-  repo --> workflow[workflow]
-  workflow --> workflow-run[workflow-run]
-  repo --> release[release]
-  repo --> collaborator[collaborator]
-  repo --> secret[secret]
-  repo --> install-token[install-token]
-  repo --> repo-settings[repo-settings]
+  repo --> branch
+  branch --> file
+  branch --> commit
+  repo --> tag
+  repo --> release
+  repo --> pull_request
+  repo --> issue
+  issue --> comment
+  repo --> workflow
+  workflow --> workflow-run
+  repo --> branch-protection
+  repo --> collaborator
+  repo --> secret
+  repo --> install-token
+  repo --> repo-settings
 ```
 
-### 2.3 Exemple Supabase — planes `db`, `storage`, `auth`, `functions`
+The data model of each provider lives with its plugin and is described in
+the provider's handbook
+([providers](../handbook/providers/README.md)).
 
-```mermaid
-flowchart TB
-  project[project] --> schema[schema]
-  schema --> table[table]
-  table --> row[row]
-  table --> index[index]
-  schema --> function[db-function]
-  project --> policy[policy/RLS]
-  project --> project-settings[project-settings]
+### 2.3 The environment carrier
 
-  project --> bucket[bucket]
-  bucket --> object[object]
-  project --> storage-config[storage-config]
+Environment is not an axis beside the data model; it is carried by one of
+its entities, and which one depends on the provider:
 
-  project --> user[user]
-  project --> sso-provider[sso-provider]
-  project --> auth-config[auth-config]
+| Provider       | Carrier of the environment                                       |
+| -------------- | ---------------------------------------------------------------- |
+| Supabase       | the project (one project per environment)                        |
+| Vercel         | the `env` entity under a project (`prod`, `preview`, …)          |
+| Railway        | the `environment` entity, identified by the label of the project |
+| Stripe         | the mode of the account (`test`, `live`)                         |
+| Upstash Redis  | the database                                                     |
+| Resend         | the sending domain, and the segment                              |
+| SSH            | the host                                                         |
+| Gmail          | the mailbox                                                      |
+| GitHub         | the branch, in the data model only (see §6)                      |
+| Cloudflare DNS | none: no entity carries an environment                           |
 
-  project --> edge-function[edge-function]
-  edge-function --> function-secret[function-secret]
-```
+How a slice gets its environment at call time is §6.
 
-### 2.4 Exemple Vercel — plane `runtime`
+## 3. Slices
 
-```mermaid
-flowchart TB
-  team[team] --> project[project]
-  project --> env[env: prod/preview/dev]
-  env --> deployment[deployment]
-  env --> env-var[env-var]
-  project --> domain[domain]
-  project --> deployment-protection[deployment-protection]
-  project --> project-settings[project-settings]
-```
+**A slice is a path over the data model plus an action, read or write.**
+Slices are internal plumbing: the plugin emits them, the catalog matches
+them, the audit records them. A human who creates a mission never writes
+one.
 
-> Les data-models par-provider vivent dans `packages/providers/<vendor>/
-> src/data-model.ts` et se rendent automatiquement en mermaid dans le
-> handbook du provider.
-
-## 3. Le DSL des slices (interne)
-
-**Une slice = un chemin sur le data-model + une action `R | W`.** Les
-slices ne sont **jamais** dans le wire utilisateur ; elles servent
-uniquement au plugin (`classify` au call) et au catalogue (`matches`
-pattern).
-
-### 3.1 Grammaire
+### 3.1 Grammar
 
 ```
-slice      ::= provider '.' segment ('.' segment)* '.' action
-segment    ::= ident | list | wildcard
-ident      ::= [a-zA-Z0-9_/-]+
-list       ::= '[' ident (',' ident)* ']'
-wildcard   ::= '[*]' | '[**]'         # * = un segment, ** = récursif
-action     ::= 'R' | 'W'
+slice    ::= provider '.' segment ('.' segment)* '.' action
+segment  ::= name | '[' inner ']' | '*' | '**'
+inner    ::= '*' | '**' | item (',' item)*
+name     ::= [a-zA-Z0-9_/-]+              an entity or a virtual leaf
+item     ::= [a-zA-Z0-9_./~*-]+           an identifier; '*' inside it is a glob
+action   ::= 'R' | 'W'
 ```
 
-**Pas de regex.** Globs seulement (`*`, `**`). Listes
-explicites (`[main, develop]`). Le `*` accepte `[a-zA-Z0-9_/-]+`
-(donc `NEXT_PUBLIC_*` est valide ; `NEXT_PUBLIC_[A-Z]+` ne l'est pas).
+- A **name** is written bare; an **identifier** is written in brackets,
+  directly after the name it qualifies, with no dot between them:
+  `branch[main]`.
+- `[*]` stands for exactly one identifier. `[**]`, or a bare `**`, stands
+  for any number of segments, including none.
+- Inside brackets, `*` within an identifier is a glob over one or more
+  identifier characters: `[feature/*]`, `[NEXT_PUBLIC_*]`,
+  `[release-*]`. A list may mix exact identifiers and globs:
+  `[main,master,release-*]`.
+- There are no regular expressions, no predicates and no operators.
+- The provider and the action are never wildcards: another provider or
+  another action is never the same risk.
 
-### 3.2 Exemples
+### 3.2 Examples
 
 ```
-# slices émises par le plugin au call
-github.repo[sbw-vaubaan/gateway].branch[main].W
-github.repo[sbw-vaubaan/gateway].branch[feature/auth-bug].file[src/auth.ts].W
-supabase.project[tlqgxnezmthbpzhdwxgi].schema[public].table[users].row[*].R
-vercel.project[gateway].env[prod].deployment[*].W
+# emitted by a plugin for one call
+github.repo[acme/api].branch[main].merge-into.W
+github.repo[acme/api].branch[feature/login].file[src/auth.ts].W
+supabase.project[abcd1234].schema[any].table[any].row[bulk].W
+vercel.project[prj_1].env[prod].env-var[API_KEY].W
 
-# patterns dans le catalogue
+# patterns of a catalog
+github.repo[**].branch[main,master,prod,production,release-*].W
 github.repo[**].branch-protection[**].W
-github.repo[**].install-token[**].*
 supabase.project[**].policy[**].W
-vercel.project[**].env[prod].env-var[**].W
+github.**.W
 ```
 
-### 3.3 Containment et matching
+### 3.3 Matching
 
-`intersect(grantPattern, executedSlice)` = matching path-segment par
-path-segment, avec `*` matche un segment, `**` matche zéro-ou-plus
-segments, et `[a,b,c]` matche `a` OR `b` OR `c`. Algorithme similaire
-à `minimatch` mais sur des paths à segments structurés.
+Matching compares two slices segment by segment:
 
-`covers(a, b)` : `a` couvre `b` ssi tout slice matché par `b` est aussi
-matché par `a`. Standard inclusion logic (well-defined sur les globs).
+- a name matches the same name only;
+- `[*]` matches one identifier, never a name;
+- `[**]` matches zero or more segments;
+- an identifier with a glob matches the identifiers the glob accepts; a
+  list matches when one of its items does.
 
-## 4. Le catalogue de risques par provider
+Three relations are defined on slices:
 
-C'est le **dictionnaire** que le manager peut accepter. Versionné dans
-le repo. Une entrée = une intention métier exprimable en une phrase.
+- **matches** — a pattern accepts a concrete slice;
+- **covers** — every slice one pattern accepts, the other accepts too;
+- **intersects** — at least one slice is accepted by both.
 
-### 4.1 Schéma
+The decision uses _intersects_, because a plugin may itself emit a slice
+with a wildcard when a call touches a set it cannot enumerate ("every
+variable of this service"). Such a slice touches every entry that could
+be concerned. When two globs cannot be compared exactly, they are held to
+intersect: the model errs towards requiring one risk too many, never one
+too few.
 
-```ts
-type RiskId = string;   // ex: "supabase.staging.bulk-row-write"
+## 4. The risk catalog
 
-type RiskEntry = {
-  id: RiskId;                         // stable, versionné, qualifié par provider+env
-  label: string;                      // libellé court (UI)
-  reason: string;                     // pourquoi c'est un risque (≤ 2 phrases)
-  matches: SlicePattern;              // pattern catalogue (peut être large : ex: '**.policy[**].W')
-  vector: RiskVector6D;               // pour expliquer + ordonner la UI par sévérité
-  acceptable_in_envs?: string[];      // ex: ['preview', 'staging'] — empêche d'accepter sur prod
-};
-```
+The catalog is the dictionary of what a human may accept for one
+provider. One entry is one business intent that fits in a sentence.
 
-### 4.2 Vecteur 6D (rappel v2)
+### 4.1 An entry
 
-Sert à **expliquer** dans la UI / l'audit, à **ordonner les entrées
-par sévérité décroissante** dans le picker mint, et à éclairer la
-décision humaine de cocher (ou pas) un risk. Aucun gate dérivé du
-vecteur (ADR unified-gates-drop-confirm §A1).
+| Field                  | Meaning                                                                                                         |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `id`                   | The `RiskId`: `<provider>.<name>`. Stable; never renamed, never removed (§4.5).                                 |
+| `label`                | Short text shown to the human.                                                                                  |
+| `reason`               | Why this is a risk, in a sentence or two.                                                                       |
+| `matches`              | One slice pattern, or a list of patterns. The entry is touched when any of them intersects a slice.             |
+| `vector`               | The six-axis profile of the risk (§4.2).                                                                        |
+| `vector_overrides`     | Per environment, the axes that differ from `vector` ([per-env vector](./risk-entry-per-env-vector.md)).         |
+| `acceptable_in_envs`   | The environments in which the risk may be accepted and touched. Its presence makes the entry env-scoped (§4.4). |
+| `fallback`             | Marks the one catch-all entry of the catalog (§4.3).                                                            |
+| `deprecated`           | The entry is kept for existing missions and no longer offered (§4.5).                                           |
+| `replaced_by`          | For a deprecated entry, the `RiskId` that replaces it. Informational.                                           |
+| `caps`, `infra_limits` | Scope caps (§4bis).                                                                                             |
 
-```ts
-type RiskVector6D = {
-  reversibility: 'reversible' | 'costly' | 'irreversible';
-  blast:         'single' | 'env' | 'account' | 'bulk';
-  data:          'metadata' | 'data' | 'secret' | 'pii';
-  cost:          'free' | 'moderate' | 'unbounded';
-  visibility:    'internal' | 'team' | 'public';
-  persistence:   'stateless' | 'session' | 'posture';
-};
-```
+Entries may overlap, and that is deliberate. One slice may touch several
+entries (a broad read risk and a narrower one for sensitive files), and
+all of them must be accepted. Only the fallback behaves differently.
 
-### 4.3 Exemple — extrait du catalogue GitHub
+An abridged extract of the GitHub catalog:
 
 ```yaml
-github:
-  risks:
-    - id: github.read-code
-      label: "Lire le code et les PR"
-      reason: "Lectures peuvent leak des secrets via .env commit (rare). Body
-               des issues/PR est injectable (OWASP LLM01)."
-      matches: "github.repo[**].file[**].R"
-      vector: { reversibility: reversible, blast: single, data: data,
-                cost: free, visibility: internal, persistence: stateless }
-    - id: github.feature-branch-write
-      label: "Créer / modifier des branches feature/*"
-      reason: "Réversible (git revert). Pas de side effect prod tant que
-               pas mergé."
-      matches: "github.repo[**].branch[feature/*,fix/*].file[**].W"
-      vector: { reversibility: reversible, blast: single, data: data,
-                cost: free, visibility: internal, persistence: session }
-    - id: github.create-pr
-      label: "Ouvrir une pull request"
-      reason: "Pas de mutation prod. Notifie les reviewers."
-      matches: "github.repo[**].pr[**].W"
-      vector: { reversibility: reversible, blast: single, data: data,
-                cost: free, visibility: team, persistence: session }
-    - id: github.merge-protected
-      label: "Merger vers une branche protégée (main/master/prod)"
-      reason: "Trigger CI/CD prod en aval. Costly à reverter (release notes,
-               communications, dependencies aval)."
-      matches: "github.repo[**].branch[main,master,prod*].W"
-      vector: { reversibility: costly, blast: env, data: data,
-                cost: moderate, visibility: team, persistence: session }
-    - id: github.branch-protection-write
-      label: "Modifier la branch protection"
-      reason: "Posture-shift : ouvre la branche aux écritures hors-process.
-               Persistance après la session."
-      matches: "github.repo[**].branch-protection[**].W"
-      vector: { reversibility: costly, blast: env, data: metadata,
-                cost: free, visibility: team, persistence: posture }
-    - id: github.mint-install-token
-      label: "Minter un install token GitHub App"
-      reason: "Credential creation. Le token a sa propre durée de vie et
-               son propre scope, indépendamment du token Vaubaan."
-      matches: "github.repo[**].install-token[**].*"
-      vector: { reversibility: reversible, blast: account, data: secret,
-                cost: free, visibility: internal, persistence: posture }
-    - id: github.collaborator-write
-      label: "Modifier la liste des collaborateurs"
-      reason: "Posture-shift : donne durablement accès au repo."
-      matches: "github.repo[**].collaborator[**].W"
-      vector: { reversibility: reversible, blast: account, data: metadata,
-                cost: free, visibility: team, persistence: posture }
-    # … etc
+- id: github.feature-branch-write
+  label: 'Create/modify branches under feature/*, fix/*, chore/*, …'
+  reason: Reversible. No production side effect until merged.
+  matches:
+    - 'github.repo[**].branch[feature/*,fix/*,chore/*,bug/*,docs/*,refactor/*].W'
+    - 'github.repo[**].branch[feature/*,fix/*,chore/*,bug/*,docs/*,refactor/*].file[**].W'
+  vector:
+    reversibility: reversible
+    blast: single
+    data: data
+    cost: free
+    visibility: internal
+    persistence: session
 
-    # Fallback générique — DOIT être présent par provider
-    - id: github.uncategorized-write
-      label: "Écriture GitHub non catégorisée"
-      reason: "Catch-all pour les writes qui n'ont pas été explicitement
-               catégorisés. Si vu en prod, signale qu'il manque une
-               entrée au catalogue."
-      matches: "github.**.W"
-      vector: { reversibility: costly, blast: env, data: data,
-                cost: free, visibility: internal, persistence: session }
+- id: github.branch-protection-write
+  label: 'Modify branch protection'
+  reason: Opens the branch to out-of-process writes. Outlives the session.
+  matches:
+    - 'github.repo[**].branch-protection[**].W'
+  vector:
+    reversibility: costly
+    blast: env
+    data: metadata
+    cost: free
+    visibility: team
+    persistence: posture
 ```
 
-### 4.4 Qualification par binding (env / resource)
-
-Un même risque peut avoir une sensibilité différente sur staging vs prod.
-Le `RiskId` est donc qualifié au moment du mint en injectant `env` ou
-`resource_ref` quand pertinent :
-
-```
-# catalogue déclare :
-supabase.bulk-row-write    matches: supabase.project[**].schema[**].table[**].row[*].W
-
-# au mint, le moteur expose au manager UNE entrée par binding :
-supabase[staging].bulk-row-write
-supabase[prod].bulk-row-write
-```
-
-Le manager peut alors accepter `supabase[staging].bulk-row-write` sans
-accepter `supabase[prod].bulk-row-write`. Le runtime, au call, qualifie
-de même la slice exécutée (l'env est résolu par le binding) et compare.
-
-### 4.5 Versioning du catalogue
-
-- Le catalogue est un fichier YAML/TS dans le repo, versionné, reviewé en PR.
-- Ajouter un `RiskId` : les tokens existants n'auront pas ce risk → tomberont
-  en `deny` au prochain call qui matche. **C'est le bon comportement** (fail-closed)
-  mais à signaler côté UI ("vous avez 3 tokens actifs qui ne couvrent pas le
-  nouveau risque `xyz` — re-mintez si nécessaire").
-- Supprimer / renommer un `RiskId` : interdit. On déprécie (`deprecated: true`)
-  et on garde l'entrée pour ne pas casser les tokens existants.
-
-## 4bis. Scope caps — axe d'amplitude orthogonal
-
-Les `accepted_risks` capturent le *kind* d'action (lire un mail,
-écrire un env var) mais **pas son amplitude** (combien d'items, sur
-quelle fenêtre temporelle, à quel rythme). Cette dimension est portée
-par les **scope caps**, primitive orthogonale aux risks. Détails dans
-[[scope-caps-amplification-axis]] ; la spec en présente l'interface
-load-bearing.
-
-### 4bis.1 Deux types parallèles
-
-```ts
-export interface ScopeCaps {
-  readonly temporal_window_days?: number;
-  readonly items_per_call_max?: number;
-  readonly bytes_per_call_max?: number;
-  readonly calls_per_minute_max?: number;
-  readonly calls_per_session_max?: number;
-}
-
-export interface InfraLimits {
-  // Mêmes champs, sémantique hard-ceiling non-overrideable.
-  readonly temporal_window_days?: number;
-  readonly items_per_call_max?: number;
-  readonly bytes_per_call_max?: number;
-  readonly calls_per_minute_max?: number;
-  readonly calls_per_session_max?: number;
-}
-```
-
-`ScopeCaps` = soft defaults loosenable au niveau org puis tighten-only
-en aval. `InfraLimits` = hard ceiling imposé par le mainteneur provider
-plugin pour des raisons techniques/opérationnelles (budget mémoire
-gateway, quotas cache partagés cross-org, plafonds upstream durs).
-
-### 4bis.2 Quatre niveaux asymétriques + wrap infra
-
-| Niveau | Champ | Direction permise |
-|---|---|---|
-| catalog (suggestion) | `RiskEntry.caps?` | point de départ |
-| org (contractuel) | `organizations.caps_defaults` | loose OU tighten vs catalog |
-| binding (opérationnel) | `provider_bindings.caps` | tighten only vs org |
-| token (per-mint) | `tokens.caps_override` | tighten only vs binding |
-| infra (wrap final) | `RiskEntry.infra_limits?` | jamais overrideable |
-
-Résolution : dernière-valeur-définie sur la chaîne (token > binding >
-org > catalog) puis clamp silencieux sur `infra_limits`. Validations
-au write (binding ≤ org, token ≤ binding) avec 403
-`binding-caps-loosens-org` / `token-caps-loosens-binding`.
-
-### 4bis.3 Le catalog YAML gagne deux champs
-
-```yaml
-- id: gmail.bulk-read
-  label: 'Lecture bulk via filtre `q`'
-  matches: 'gmail.mailbox.bulk-marker.R'
-  vector: { … }
-  caps:                     # soft default, loosenable au niveau org
-    items_per_call_max: 200
-    calls_per_minute_max: 5
-  infra_limits:             # hard ceiling, jamais overrideable
-    bytes_per_call_max: 10485760    # 10 MB, budget parsing gateway
-    items_per_call_max: 500         # Gmail API plafonne à 500 max
-```
-
-Les deux champs sont optionnels. Absence = pas de cap soft / pas de
-ceiling hard.
-
-### 4bis.4 Enforcement runtime
-
-Deux familles distinctes :
-
-- **Caps stateless** (`temporal_window_days`, `items_per_call_max`,
-  `bytes_per_call_max`) : injection upstream via
-  `plugin.normalizeForCaps(args, caps)` quand possible, sinon check
-  post-hoc (read-only) ou refus pre-execute (mutating, cf.
-  `cap-not-enforceable`).
-- **Caps stateful** (`calls_per_minute_max`, `calls_per_session_max`) :
-  compteur sur l'infra cache existante du gateway (mémoire locale par
-  défaut, cache distribué optionnel — ADR cache hot-path référencée
-  par [[scope-caps-amplification-axis]] D5), toujours à priori,
-  429 `cap-exceeded` si dépassement.
-
-## 5. Le wire format
-
-```ts
-type TokenMintRequest = {
-  projectSlug: string;
-  bindings: ProjectBinding[];          // déjà existant
-  accepted_risks: RiskId[];            // sous-ensemble du catalogue, filtré par policy
-  denied_risks?: RiskId[];             // opt-out explicite (utile si on dérive accepted_risks
-                                       //   d'un preset et qu'on veut retirer une entrée)
-  context?: {
-    task?: string;
-    agent_id?: string;
-    requester_user_id?: string;
-  };
-  ttlSeconds?: number;       // capé à 3600 si singleUse=true
-  singleUse?: boolean;
-};
-
-// Post drop-confirm : pas de status 'pending'. Soit le mint passe
-// (sous-ensemble strict de l'autorité parent + acceptable_in_envs OK),
-// soit il échoue avec 403 + liste explicite des risks bloquants.
-type TokenMintResponse =
-  | { status: 'minted', api_key: string, expires_at: string }
-  | { status: 'rejected', not_acceptable: RiskId[], not_inherited: RiskId[] };
-
-// Au runtime, le token résolu en cache contient :
-type ResolvedToken = {
-  id: string;
-  org_id: string;
-  project_id: string;
-  bindings: ProjectBinding[];
-  accepted_risks: RiskId[];
-  denied_risks: RiskId[];
-  context: TokenContext;
-  expires_at: Date;
-  single_use: boolean;
-  consumed_at: Date | null;
-};
-```
-
-**Notation courte (UI/wire)** : on garde les `RiskId` tels quels —
-qualifiés (`supabase[staging].bulk-row-write`), lisibles, stables.
-
-## 6. Project policy — DROPPÉ
-
-ADR [unified-gates-drop-confirm](../decisions/unified-gates-drop-confirm.md) §D3.
-
-La table `project_risk_policies` est supprimée (migration 0036). Aucun
-équivalent. La sévérité d'un risk est intrinsèquement provider-level
-(vit dans le catalog YAML), pas project-level. Si un projet veut serrer
-son scope, l'opérateur **ne coche tout simplement pas** les risks
-concernés au mint.
-
-Le seul garde-fou structurel restant est `acceptable_in_envs` (au
-catalog) — il bloque les acceptations impossibles-par-design (un risk
-`bulk-row-write` interdit en prod ne peut PAS être coché pour un
-binding `env=prod`, même par un opérateur qui le voudrait).
-
-## 7. Le plugin — 2 responsabilités
-
-```ts
-interface ProviderPlugin {
-  readonly provider: string;
-
-  // (1) Le data-model statique du provider.
-  readonly dataModel: DataModel;     // entités + containment + cardinalités
-
-  // (2) Classification d'un call concret → slice touchée.
-  classify(
-    tool: string,
-    args: Record<string, unknown>,
-    bindings: ReadonlyArray<ProjectBinding>,
-  ): { slices: Slice[] } | { denied: string };
-
-  // (3) Optionnel — auto-trigger lors du discovery du catalogue.
-  //     Le plugin DÉCLARE ses risks dans un YAML; cette fonction sert
-  //     uniquement aux tests/lints pour vérifier que chaque tool MCP
-  //     est couvert par AU MOINS un risk du catalogue.
-  toolCoverage?(tool: string): RiskId[];
-}
-```
-
-**Le plugin ne connaît ni gates, ni accepted_risks.** Il classifie. Le
-moteur intersect avec le catalogue, applique la policy, décide. Étanchéité
-préservée (v1 §6).
-
-### 7.1 Multi-slice par tool
-
-Un tool peut toucher **plusieurs entités**. Ex : `github__dispatch_workflow`
-touche `workflow-run.W` ET (côté side-effect non-observable) potentiellement
-`deployment.W` côté Vercel. Le plugin renvoie un **set** de slices, et le
-moteur intersect chacune avec le catalogue. Le token doit couvrir TOUS les
-`risks_touched`.
-
-### 7.2 Tools réduits — décisions prises lors du brainstorm v4
-
-Deux simplifications actées :
-
-1. **`github__dispatch_workflow` et compagnie sont retirés du périmètre W.**
-   On ne garde que `workflow.R` et `workflow-run.R`. Justification : un agent
-   qui a `vercel.deployment.W` ou `supabase.migration.W` n'a pas besoin de
-   hook GitHub pour déclencher des déploiements. Les workflows GitHub
-   restent une **convention humaine** (CI sur PR), pas un canal de privilege
-   escalation pour l'agent. Bénéfice : on retire la classe de pièges
-   "workflow secret peut leaker vers un dest contrôlable" (recherche §pièges
-   #11).
-
-2. **`supabase__execute_sql` devient strictement read-only**, géré par
-   Postgres lui-même (`SET TRANSACTION READ ONLY` en wrapper, OU connect en
-   `pg_read_all_data` role). Toute mutation passe par les **tools API
-   granulaires** déjà shipped (13 tools data-plane). Bénéfice : on supprime
-   `classifySql` parsing entièrement — la sécurité du read-only est portée
-   par Postgres, pas par notre parser. `execute_sql` peut désormais être
-   exposé sans peur même aux tokens à risque-minimal.
-
-## 8. Runtime — strict-fail au MVP
-
-```mermaid
-flowchart TD
-  call["call (tool, args)"] --> cl["plugin.classify(t,a) → slices[]"]
-  cl --> int["intersect(slices, catalog.risks) → risks_touched[]"]
-  int --> acc{"risks_touched ⊆ token.accepted_risks ?"}
-  acc -->|"non"| denyR["403 risk-not-accepted"]
-  acc -->|"oui"| caps{"within(effective_caps) ?<br/>(stateful rate, stateless normalize)"}
-  caps -->|"rate dépassé"| denyRate["429 cap-exceeded"]
-  caps -->|"mutating + cap non-injectable"| denyM["403 cap-not-enforceable"]
-  caps -->|"OK"| allow["ALLOW + executeCall + audit"]
-```
-
-Trois codes de refus distincts, sémantiques explicites :
-
-```
-403 risk-not-accepted
-{
-  "missing_risks": ["supabase[prod].bulk-row-write"],
-  "executed_slice": "supabase.project[prj_xyz].schema[public].table[users].row[*].W",
-  "hint": "Re-mint a token with this risk accepted, or restrict the operation."
-}
-```
-
-```
-429 cap-exceeded
-{
-  "risk_id": "gmail.bulk-read",
-  "field": "calls_per_minute_max",
-  "limit": 5,
-  "retry_after_ms": 12000,
-  "hint": "Slow down or restrict scope."
-}
-```
-
-```
-403 cap-not-enforceable
-{
-  "tool": "supabase__execute_sql",
-  "mutating_slices": ["supabase[prod].db.rows.W"],
-  "unenforceable_caps": ["items_per_call_max"],
-  "hint": "Mutating tool requires plugin.normalizeForCaps to enforce caps before the side effect."
-}
-```
-
-**Pas de step-up runtime au MVP.** Si l'agent dépasse le profil de
-risque accepté, le call est rejeté avec un message explicite. L'agent
-(ou son orchestrateur) demande au manager de re-minter pour
-`risk-not-accepted`, ralentit / restreint pour `cap-exceeded`, ou
-escalade vers ops pour `cap-not-enforceable`. Coût : un round-trip.
-Bénéfice : **token immuable, runtime sans race condition, pas
-d'effet bord d'approbation mid-flow**.
-
-Détails du modèle caps + des sémantiques d'enforcement (stateless
-normalize via `plugin.normalizeForCaps`, mutating à priori
-obligatoire, stateful rate via cache) : §4bis et
-[[scope-caps-amplification-axis]].
-
-Step-up runtime (option B, ajout d'un risk acceptépendant la session)
-est reporté en Phase 2 et nécessite un design dédié (token mutable
-atomic, idempotence du re-call, race conditions).
-
-## 9. Le mint flow (post drop-confirm)
-
-```
-POST /api/v1/tokens/preview { bindings, accepted_risks }
-  │
-  ├─ pour chaque (accepted_risk × matching binding) :
-  │    acceptable  = catalog.acceptable_in_envs absent OU binding.env ∈ liste
-  │    inherited   = risk_id ∈ parent_token.accepted_risks
-  └─→ 200 {
-        risks: [
-          { id, base_id, provider, env, label, reason, vector,
-            acceptable: bool, inherited: bool,
-            blocked_reason?: string }
-        ],
-        not_acceptable: RiskId[],   // acceptable=false
-        not_inherited:  RiskId[],   // acceptable=true && inherited=false
-        ok: not_acceptable.length === 0 && not_inherited.length === 0
-      }
-
-POST /api/v1/tokens/mint { bindings, accepted_risks, denied_risks?,
-                           context, ttl, singleUse }
-  │
-  ├─ recompute le preview côté serveur (sécurité)
-  ├─ si !preview.ok → 403 { error, not_acceptable, not_inherited, risks }
-  └─ sinon          → mint direct (201 + api_key)
-```
-
-Plus de réponse 202 / approval-pending. Si l'opérateur veut un risk
-que son token parent n'a pas, il escalade lui-même via
-`context.escalation_channel` (ADR unified-tokens §D4).
-
-## 10. Human-in-the-loop — DROPPÉ
-
-ADR [unified-gates-drop-confirm](../decisions/unified-gates-drop-confirm.md) §D4.
-
-Les channels Telegram / Email / Manual ont été supprimés (migration
-0036 drop des tables `project_approval_channels` et `approval_requests`)
-ainsi que les routes d'approval associées. Détail des endpoints
-retirés : ADR [unified-gates-drop-confirm](../decisions/unified-gates-drop-confirm.md) §D4.
-
-L'élévation runtime se fait via `context.escalation_channel` du token
-(cf. §11) — c'est un endpoint HTTP libre que le parent qui mint
-configure, hors du gateway.
-
-## 11. Escalation
-
-Voir ADR [unified-tokens-delegation-chain-and-escalation-channel](../decisions/unified-tokens-delegation-chain-and-escalation-channel.md)
-§D4.
-
-Quand un child token rencontre un 403 `risk-not-accepted` au runtime,
-il peut POSTer à son `context.escalation_channel.endpoint_url` avec
-`{ child_token_id, risks_needed, justification, executed_slice }` et
-`Authorization: Bearer ${escalation_channel.auth_token}`. Le parent
-décide ; sur cede, il re-minte le child avec un nouveau token au scope
-élargi (via une side-channel hors-gateway). Le child retry l'appel
-avec le nouveau Bearer.
-
-Les roots (sans parent) n'ont pas d'escalation possible — l'erreur
-remonte à l'opérateur humain.
-
-## 12. Audit log
-
-```jsonc
-{
-  "token_id": "tok_…",
-  "tool": "supabase__execute_sql",
-  "args_hash": "sha256:…",                    // jamais les valeurs en clair
-  "slices_executed": [
-    "supabase.project[tlqgxnezmthbpzhdwxgi].schema[public].table[users].row[*].R"
-  ],
-  "risks_touched": ["supabase[staging].read-rows"],
-  "token_accepted_risks": [...],              // snapshot pour reproductibilité
-  "decision": "allow",
-  "decided_at": "2026-…",
-  "binding_used": { provider: "supabase", resource_ref: "tlqgxnezmthbpzhdwxgi", env: "staging" },
-  // Caps (cf. §4bis et [[scope-caps-amplification-axis]] D7)
-  "effective_caps": { "items_per_call_max": 50 },
-  "cap_source":     { "items_per_call_max": "binding" },
-  "caps_action":    "normalized",             // "normalized" | "enforced-as-is" | "denied-pre-execute" | "exceeded-post-execute" | "infra-clamped" | null
-  "caps_normalization": { "args_diff": { "LIMIT": [100, 50] } }
-}
-```
-
-Five Eyes (2026-05) + NIST AI RMF Agentic Profile exigent traçabilité
-100 % par action. `slices_executed` capture le détail technique ;
-`risks_touched` capture l'intention métier ; `effective_caps` +
-`cap_source` capturent l'amplitude effective et sa provenance (catalog
-default vs informed loosening org vs tighten binding/token vs clamp
-infra). Les quatre sont indispensables pour la reproductibilité
-forensique.
-
-## 13. Migration de l'existant — 8 phases
-
-1. **Phase 0 — Data-model par provider.**
-   Écrire `packages/providers/<vendor>/src/data-model.ts` pour chaque
-   provider existant (5). Auto-rendu mermaid dans le handbook.
-
-2. **Phase 1 — Catalogue de risks par provider.**
-   `packages/providers/<vendor>/src/risk-catalog.yaml`. Cible ~10-15 risks
-   par provider, +1 fallback générique. Lint qui vérifie que chaque tool
-   MCP est couvert par au moins un risk.
-
-3. **Phase 1bis — Caps optionnels sur les catalogs existants.**
-   Champs `caps?` (soft, ScopeCaps) et `infra_limits?` (hard,
-   InfraLimits) au niveau `RiskEntry`. Adoption opportuniste — les
-   providers existants restent fonctionnels sans caps. Les premiers
-   à en bénéficier seront ceux dont la normalisation upstream est
-   triviale (un `q: newer_than:Nd` ou un `LIMIT N` injectable). Cf.
-   [[scope-caps-amplification-axis]] Plan d'implémentation pour la
-   séquence ops complète.
-
-4. **Phase 2 — Plugin `classify` returns `Slice[]`.**
-   Refacto des classifieurs existants. Drop `(plane, level, action)`,
-   garde la logique "binding lookup" inchangée.
-
-5. **Phase 3 — Moteur runtime risk-based.**
-   `evaluateCall(token, slices) → allow|deny` + audit enrichi. Phase
-   2-3 peuvent rouler en dual mode le temps de migrer les tokens
-   existants (legacy capabilities → fallback risks).
-
-6. **Phase 4 — Nouveau wire de mint.**
-   `POST /api/v1/tokens/mint` accepte `accepted_risks[]`. Migration
-   greenfield : pas de back-compat sur l'ancien wire (on est encore en
-   pre-1.0).
-
-7. **Phase 5 — UI risk-checklist par projet.**
-   Page operator "Token mint" : checklist des risks du catalogue × bindings,
-   greyed-out pour ceux que `acceptable_in_envs` exclut, tooltip avec
-   `reason` + `vector`. Affiche aussi les caps effectifs + leur source
-   (cf. §4bis et [[scope-caps-amplification-axis]] D8).
-
-8. **Phase 6 — Tools réduits.**
-   Retirer `github__dispatch_workflow` & co (§7.2 #1).
-   Migrer `supabase__execute_sql` vers read-only Postgres (§7.2 #2).
-   Drop `classifySql` parsing.
-
-Estimation : Phases 0-4 ~ 2 semaines focus full-time. Phases 5-6 ~
-1 semaine chacune. Phase 1bis incrémentale, sans bloquer les autres.
-
-## 14. Anti-patterns à éviter (mis à jour pour risk-based)
-
-| Piège                                                | Garde-fou v4                                                                       |
-| ---------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Catalogue avec trous (slice sans risk)               | Fallback générique par provider + lint au CI qui vérifie couverture des tools.     |
-| Risk trop large ("write-anything") accepté par UX rapide | Catalogue cible 10-15 risks fins. UI groupe par bucket de sévérité, pas un single "tout".|
-| Manager autorise tous les risks par défaut          | Pas de bouton "Accept All". Manager doit cocher chaque risk à risque non-trivial.  |
-| Slice attacker-controlled (branche `feature/exfil`)  | Les risks `feature/*` sont grantable mais bornés à `file.W` (pas `branch-protection`, pas `secret`). |
-| Bulk silencieux                                      | Cardinalité émergente : `row[*].W` matche le risk `bulk-row-write` distinct de `row[id=…].W`. |
-| Token sur-vit à un changement de catalogue           | Ajout d'un risk = fail-closed sur tokens existants. UI signale "X tokens à re-mint".|
-| State in-memory                                      | DB-only (déjà v1).                                                                  |
-| Logging insuffisant                                  | `slices_executed` + `risks_touched` + `token_accepted_risks` (snapshot).            |
-| `dispatch_workflow` comme bypass                     | Retiré du périmètre (§7.2 #1).                                                      |
-| Mauvaise classification SQL                          | Read-only Postgres-enforced (§7.2 #2). Pas de parser, pas de bug.                  |
-
-## 15. Comparaison v1 / v4 — checklist de bascule
-
-| Aspect                          | v1                                                       | **v4**                                                       | Cassé ? |
-| ------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------ | ------- |
-| Unit de grant                   | `{provider, plane, level, action, env?}`                 | **`accepted_risks: RiskId[]` + bindings**                    | OUI     |
-| Plane / level                   | top-level concept                                        | **disparu du wire**, plomberie interne au plugin             | OUI     |
-| Action                          | `read | write`                                           | **disparue du wire**, R/W reste au runtime sur slice         | OUI     |
-| Env                             | calque axe à part                                        | **segment du data-model** + qualif du RiskId par binding     | OUI     |
-| Macro-permission                | n/a (v2 only)                                            | abandonnée — manager raisonne en risk-id catalogue           | n/a     |
-| Slice (DSL)                     | n/a                                                      | introduit, **plomberie interne** seulement                   | OUI (new) |
-| Catalogue de risks par provider | n/a                                                      | **NEW** — versionné YAML dans le repo provider               | OUI (new) |
-| Project policy                  | matrice (plane,level,action,env,gate)                    | **DROPPÉ** (ADR unified-gates-drop-confirm) — `acceptable_in_envs` au catalog seul garde-fou | OUI |
-| Plugin contract                 | `classify(t,a) → CapabilityV1`                            | `classify(t,a) → Slice[]` + `dataModel`                       | OUI     |
-| Gates                           | `allow / confirm / deny`                                  | **DROPPÉ** — décision binaire `risk ∈ accepted_risks`         | OUI     |
-| Default-deny                    | oui                                                       | identique (catalogue-driven + fallback risk)                  | non     |
-| Approval channels               | Telegram + Manual                                         | **DROPPÉ** — `escalation_channel` runtime hors gateway        | OUI     |
-| Polling                         | 202 + GET court                                           | **DROPPÉ** (avec le mint-time approval)                       | OUI     |
-| Single-use token                | oui                                                       | identique                                                     | non     |
-| Audit log                       | `capability_matched`                                      | `slices_executed` + `risks_touched` + snapshot                | étendu  |
-| Tools `dispatch_workflow.W`     | exposés                                                   | **retirés**                                                   | OUI     |
-| Tools `execute_sql` write       | classifié via parser SQL                                  | **Postgres read-only forced** ; writes via API tools          | OUI     |
-
-## 16. Décisions résiduelles à acter
-
-**Q2 — Préfixe RiskId : `<provider>[<binding>].<name>` ou autre forme ?**
-Proposition : `<provider>[<env>].<name>` pour les risks env-scoped,
-`<provider>.<name>` pour les non-env-scoped (compte-level, ex.
-`github.mint-install-token`). Tu valides ?
-
-**Q3 — Step-up runtime (Phase 2 ?) ou strictement re-mint au MVP ?**
-Phase 1 (=MVP) = strict re-mint. Phase 2 (optionnelle) = step-up runtime
-sur risk manquant, avec token mutable atomique. Tu acquiesces ce séquençage ?
-
-**Q4 — Profils réutilisables (Phase 2) ?**
-Un manager peut sauver un set d'`accepted_risks` comme preset
-("MyCodingAgent-Standard"). À mintage suivant, sélection en un clic.
-Très utile à l'usage. Tu valides Phase 2 ?
-
-**Q5 — Catalogue de risks `acceptable_in_envs` strict ?**
-Proposition : `acceptable_in_envs: ['preview','staging']` sur un risk
-empêche le manager d'accepter ce risk pour un binding `env: prod`.
-Garde-fou "ce risk n'a structurellement pas de sens sur prod". Tu valides ?
-
-**Q6 — UI : afficher les risks non-grantables greyed-out ou les cacher ?**
-Proposition : greyed-out + tooltip "non-grantable on this env via
-`acceptable_in_envs`" (ou "not inherited from parent token").
-Meilleure découvrabilité pour l'opérateur. Tu valides ?
+### 4.2 The vector
+
+Six independent axes, each a closed scale ordered from mildest to most
+severe:
+
+| Axis            | Values                                   | Question it answers                  |
+| --------------- | ---------------------------------------- | ------------------------------------ |
+| `reversibility` | `reversible` · `costly` · `irreversible` | Can it be undone, and at what price? |
+| `blast`         | `single` · `env` · `account` · `bulk`    | How much does one action reach?      |
+| `data`          | `metadata` · `data` · `secret` · `pii`   | What kind of data is exposed?        |
+| `cost`          | `free` · `moderate` · `unbounded`        | Can it spend money?                  |
+| `visibility`    | `internal` · `team` · `public`           | Who sees the effect?                 |
+| `persistence`   | `stateless` · `session` · `posture`      | Does the effect outlive the mission? |
+
+The vector **explains** a risk and **orders** risks by severity where
+they are listed. No decision is derived from it: a risk is accepted or it
+is not, whatever its vector.
+
+### 4.3 The fallback entry
+
+Every catalog declares **exactly one** fallback entry:
+
+- named `<provider>.uncategorized-…` (in every shipped catalog,
+  `<provider>.uncategorized-write`), so that audit entries read alike
+  across providers;
+- matching the catch-all write `<provider>.**.W`;
+- flagged `fallback: true`. A catalog that omits the flag is still
+  recognised by the name or the pattern, with a warning; the catalogs
+  shipped with the gateway must carry the flag.
+
+A catalog with no fallback, or with two, does not load.
+
+**The fallback counts only when nothing else matched.** For each slice:
+
+1. if one or more ordinary entries match, those are the risks touched,
+   and the fallback is not;
+2. otherwise, if the fallback matches (the slice is a write), the
+   fallback is the risk touched;
+3. otherwise nothing is touched, and the call is refused as a gap in the
+   catalog.
+
+The rule applies slice by slice: a call with one categorized write and
+one uncategorized write touches the named entry and the fallback.
+
+Two consequences:
+
+- Accepting the fallback means accepting _writes the catalog has not
+  reviewed_, not "any write". Its appearance in the audit means an entry
+  is missing from the catalog.
+- **A preset never includes the fallback**; a catalog whose preset does is
+  refused. A mission creator may still accept it by hand.
+
+The fallback catches writes only. A read that no entry names touches
+nothing and is refused.
+
+### 4.4 Qualification by environment
+
+The same act can be acceptable on staging and not on production. An
+entry that declares `acceptable_in_envs` is **env-scoped**; an entry that
+does not is **account-scoped**.
+
+- The catalog stores the unqualified id: `supabase.bulk-row-write`.
+- An env-scoped entry is offered, accepted and compared in its qualified
+  form, one id per environment it lists:
+  `supabase[staging].bulk-row-write`,
+  `supabase[preview].bulk-row-write`. A mission may accept one and not
+  the other.
+- An account-scoped entry is never qualified: `github.merge-protected`.
+- An environment label is a lowercase slug (`prod`, `staging`,
+  `preview-eu`).
+
+`acceptable_in_envs` is the one structural guard of the catalog: it holds
+whatever a human would like to accept. An entry listing
+`[preview, staging]` has no `…[prod]…` form at all: it cannot be put in a
+share or a mission for production, and a call that touches it on a
+production resource is refused (§8).
+
+### 4.5 Versioning and deprecation
+
+- The catalog is a file in the plugin, changed by pull request. It
+  carries a `catalog_version`, an integer raised on every reviewed
+  change, and the date of that change.
+- **Adding** an entry narrows nothing by itself, but slices the new entry
+  matches now touch a risk existing missions and shares do not hold.
+  Those calls are refused until the creator accepts the new risk. This is
+  the intended behaviour: a new risk is never accepted by default.
+- **Renaming or removing** an entry is forbidden: existing missions and
+  shares reference it. An entry that must go is marked `deprecated`,
+  with `replaced_by` when there is a successor. A deprecated entry still
+  matches at call time, so missions that hold it keep working; it is no
+  longer proposed by "select all", and a catalog whose preset references
+  it is refused.
+
+### 4.6 Presets
+
+A catalog ships **at least one preset**: a named list of `RiskId`s of
+that catalog, each with a default quota, rate limit and gate, plus a
+label and a one-line description. A preset may name an env-scoped risk
+without an environment; the entry then stands for that risk in each
+environment the mission can reach. A preset pre-fills the policy of a
+mission for one connection; what is stored is always the resulting
+explicit list ([vaubaan-gateway](./vaubaan-gateway.md) §3.2).
+
+A catalog is refused when a preset:
+
+- references a risk of another provider, or one the catalog does not
+  declare;
+- contains anything but explicit ids (a pattern, a sentinel);
+- qualifies an environment the entry does not list, or qualifies an
+  account-scoped entry;
+- references the fallback or a deprecated entry;
+- repeats a risk, is empty, or shares its identifier with another preset;
+- carries a budget that is not a positive whole quota, a positive whole
+  rate over a positive whole window, and a gate of the closed set.
+
+## 4bis. Scope caps — designed, not enforced in v5.0
+
+Accepted risks say _what kind_ of action is acceptable. They do not say
+_how much_ one call may reach, nor how fast calls may follow one another.
+Scope caps were designed as that second axis, with two families:
+
+- **stateless** caps, enforced on one call by narrowing its arguments: a
+  time window, a number of items per call, a number of bytes per call;
+- **stateful** caps, counted by the gateway: calls per minute, calls per
+  session.
+
+A catalog entry may carry them in two blocks: `caps`, a default that
+could only be tightened further down, and `infra_limits`, a ceiling
+nobody may raise.
+
+**What v5.0 enforces:**
+
+- **Speed and volume are bounded by the mission**, per accepted risk: a
+  quota per period and a rate limit per sliding window
+  ([vaubaan-gateway](./vaubaan-gateway.md) §3.2). The rate limit is the
+  one speed mechanism of the risk model. The gateway also limits the
+  number of requests a mission may send to its endpoint, whatever they
+  touch; that protects the instance and is not part of this model
+  ([vaubaan-gateway](./vaubaan-gateway.md) §6).
+- **One catalog limit is applied:** the per-minute ceiling of
+  `infra_limits`. A mission cannot be issued with a rate limit above the
+  ceiling of the risk it applies to.
+- **Nothing else.** No stage narrows the arguments of a call, so the
+  stateless caps are applied nowhere, and neither are the `caps` block or
+  the other keys of `infra_limits`.
+
+Because a declared limit that is not applied would be believed, the
+catalogs shipped with the gateway may declare only the limit that is
+enforced; a structural check fails otherwise. The catalog format still
+accepts the other keys, so that enforcing them later does not change the
+format. What enforcing them requires is listed in ADR
+[scope-caps-not-enforced-in-v5-0](../decisions/scope-caps-not-enforced-in-v5-0.md).
+
+## 5. What a mission carries
+
+For the risk decision, a mission is three things:
+
+- its **connections**, one provider each;
+- per connection, the **resources** it may touch: a subset of the
+  resources of the connection, each with a ref and an optional
+  environment label;
+- its **policy**: one entry per accepted risk, `RiskId → (budget, gate)`.
+  The accepted risks are the keys of the policy. Each id is explicit and
+  appears once; env-scoped risks appear qualified.
+
+A mission carries no slice, no pattern, no plane, no level, no explicit
+deny, and no reference to a preset. What it accepts is bounded by the
+authority of its creator on each connection: the full catalog for an
+owner, the restriction of the shares received otherwise
+([vaubaan-gateway](./vaubaan-gateway.md) §3.1).
+
+## 6. Environment resolution
+
+At call time, each slice is given at most one environment, in this
+order:
+
+1. **Derived by the plugin**, when the environment is part of the call
+   itself. Vercel is the provider that does so today: the environment is
+   a segment of the slice (`env[prod]`), whatever label the project
+   carries. A slice that spans several environments at once derives none.
+2. **Otherwise, the label of the resource the slice names.** The first
+   identifier of the slice that equals the ref of one of the mission's
+   resources for that provider designates the resource; its label, set by
+   the owner of the connection, is the environment. When the slice names
+   no resource and the mission holds exactly one resource of that
+   provider, that resource's label applies. With several resources and
+   none named, there is no environment.
+3. **Otherwise, none.**
+
+The environment found is used twice: to qualify the env-scoped risks the
+slice touches (§4.4), and to check them against `acceptable_in_envs`.
+
+**An unlabelled resource is never a safe default.** A call that touches
+an env-scoped risk on a resource with no label, or with a label the
+entry does not list, is refused. On a database project its owner has not
+labelled, every env-scoped risk is out of reach; only account-scoped
+risks pass.
+
+GitHub: the data model marks the branch as the carrier of the
+environment, but the GitHub catalog has no env-scoped entry. Protected
+and working branches are told apart by the patterns of two different
+risks, not by qualification.
+
+## 7. The plugin — classification
+
+A plugin has two responsibilities towards this model:
+
+1. declare its **data model** (§2);
+2. **classify** a concrete call: from the tool name, the arguments and
+   the mission's resources on the connection, return either the slices
+   the call touches, or a refusal of its own.
+
+Classification is pure: no network, no credential, no state. The plugin
+refuses by itself a tool it does not know, a tool that was retired, and
+arguments from which no slice can be built. It never sees the accepted
+risks and never decides.
+
+**A classification error is a security hole.** A write classified as a
+read passes under a read risk. Classifiers are unit-tested tool by tool,
+and when a classifier cannot read what a call will do, it must fail
+closed: emit every slice the call could touch. The Supabase plugin does
+this for a migration it cannot fully read, which then requires all the
+write risks a migration may carry.
+
+### 7.1 Several slices per call
+
+One call may touch several entities. Opening a pull request touches the
+pull request and the pair of branches; a multi-file push touches each
+file and the "bulk" leaf. The plugin returns every slice, the risks
+touched are the union over the slices, and the mission must accept all
+of them.
+
+### 7.2 Tools deliberately left out
+
+Two families of operation are kept out of the tool surface because no
+catalog entry could bound them:
+
+1. **Dispatching, cancelling or re-running a CI workflow on GitHub.** A
+   workflow runs with the repository's secrets and can deploy anywhere;
+   triggering one would be a path around every other risk. The tools are
+   not exposed, and the classifier refuses them by name. Reading
+   workflows and their runs remains. The same escalation through a
+   _file write_ on a workflow definition is a named risk of its own.
+2. **Arbitrary SQL that writes, on Supabase.** The free-form SQL tool is
+   read-only, and the guarantee comes from the provider: the query runs
+   on an endpoint where the database itself refuses mutations. The
+   classifier does not try to prove a query harmless. Writes go through
+   dedicated tools; migrations are read statement by statement against a
+   list of known shapes and fail closed as described above.
+
+   Read-only is not "harmless to read". A database also holds what the
+   provider keeps for itself: the users and sessions of its
+   authentication service, its secret vault, the internals of its
+   storage. **Reading those is a risk of its own**, distinct from reading
+   application data and absent from every read preset. The classifier
+   decides by what the SQL **names**, never by what the database role
+   may read: a query that names a provider-managed schema touches that
+   risk. A query the classifier cannot read with confidence (a
+   statement that is not a plain query, a function outside the list it
+   knows to be inert, text it cannot tokenise) touches it too. The list
+   of managed schemas belongs to the plugin's data model.
+
+## 8. The decision
+
+For one call, after the plugin returned its slices:
+
+| Situation                                                                            | Outcome                                                 |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------- |
+| The plugin refused the call                                                          | Refused, with the plugin's reason                       |
+| The plugin returned no slice                                                         | Refused: classification gap                             |
+| An env-scoped risk is touched outside its environments, or on an unlabelled resource | Refused: no mission can hold that risk there            |
+| The slices touch no entry at all                                                     | Refused: catalog gap                                    |
+| A touched risk is not accepted by the mission                                        | Refused: `risk-not-accepted`, listing the missing risks |
+| Every touched risk is accepted                                                       | Allowed; budget, rate limit and gate follow             |
+
+Rules:
+
+- **All or nothing.** The call needs every risk it touches. There is no
+  partial execution.
+- **A risk is never dropped to make a call pass.** In particular, an
+  env-scoped risk touched where it is not acceptable is not removed from
+  the set: if it were, a broader risk touched by the same slice would
+  carry the call alone, exactly where the catalog says it must not go.
+- **No step-up.** The decision does not wait, ask or widen. The mission
+  is not modified by a call.
+- **One code.** Every refusal of this step carries the code
+  `risk-not-accepted`, including the two gaps and the environment case;
+  the list of missing risks is empty for a gap. Only the plugin's own
+  refusal carries no code.
+
+The refusal `risk-not-accepted` carries the missing risks, the slices
+executed, and a hint for the agent: ask the mission creator to issue the
+mission again with those risks, or restrict the operation. When the
+cause is an environment, the hint names the environments the risk is
+acceptable in.
+
+This step happens after the gateway has checked that the mission is
+active, that the resources named by the call belong to the mission, and
+that the connection is usable; those checks and their refusals are
+defined in [vaubaan-gateway](./vaubaan-gateway.md) §4.1.
+
+## 9. Checking a policy before issuance
+
+A policy is checked when a mission is drafted, and again when it is
+issued; the result of the first is never trusted for the second. For
+each connection of the draft, each requested risk is sorted:
+
+| Finding           | Meaning                                                                                           |
+| ----------------- | ------------------------------------------------------------------------------------------------- |
+| unknown           | not an explicit id of the provider's catalog                                                      |
+| duplicate         | requested twice                                                                                   |
+| exceeds authority | not held by the creator on that connection                                                        |
+| unresolvable      | qualified for an environment no selected resource carries, for a provider that does not derive it |
+| budget missing    | no quota or rate limit, neither given nor supplied by the chosen preset                           |
+| budget invalid    | not positive whole numbers, gate outside the closed set, or rate limit above the catalog ceiling  |
+
+Any finding blocks issuance and is reported with the risks concerned.
+There is no pending state and nobody to ask: the creator corrects the
+draft, or obtains more authority from the owner of the connection.
+
+One case is not a finding. When a connection's policy is taken from a
+preset as is, the preset's entries that exceed the creator's authority or
+cannot resolve are left out and reported as such; the rest of the preset
+passes. A preset is a suggestion, intersected with what the creator
+holds.
+
+The same enumeration of explicit ids serves a share: the restriction of
+a share is a list of ids of the connection's catalog, each one valid by
+the rules of §4.4.
+
+## 10. After the risk decision — budget and gate
+
+This model stops at "allowed". What v5 adds on top, per accepted risk:
+
+- a **quota** per period and a **rate limit** per sliding window. An
+  allowed call that touches N risks counts against N budgets; a refused
+  call counts against none;
+- a **gate**, `auto` or `approval`. Under `approval`, each call must be
+  approved by the mission creator before it runs, for these exact
+  arguments, unless the creator opened the gate for the rest of the
+  period.
+
+These are defined in [vaubaan-gateway](./vaubaan-gateway.md) §3.2 to
+§3.5. They never change which risks a call touches.
+
+## 11. Refusals go up to a human
+
+The agent that executes a mission cannot widen it, and no machine can
+widen it on its behalf:
+
+- `risk-not-accepted`: the creator issues the mission again with the
+  missing risks, within their authority;
+- an exhausted budget, or an action to approve: the creator answers a
+  request from their inbox ([vaubaan-gateway](./vaubaan-gateway.md) §3.4,
+  §3.5).
+
+There is no escalation channel between tokens and no parent token to
+turn to.
+
+## 12. Audit
+
+Every call produces one entry, allowed or refused. The fields this model
+defines:
+
+| Field                    | Content                                                                                      |
+| ------------------------ | -------------------------------------------------------------------------------------------- |
+| tool                     | The tool called.                                                                             |
+| arguments hash           | A fingerprint of the arguments. Never the arguments.                                         |
+| slices executed          | The slices the plugin returned; empty when the call was refused before classification.       |
+| risks touched            | The risks those slices matched, qualified.                                                   |
+| accepted risks, snapshot | The mission's accepted risks at the time of the call, so the decision can be replayed later. |
+| decision, refusal        | Allowed or refused; the refusal code and its hint, or the reason when there is no code.      |
+
+Slices executed record the technical fact, risks touched the business
+intent, the snapshot what the mission allowed at that moment. The three
+together make a decision reproducible. The other fields of an entry
+(mission, connection, resource, remaining budget, approval, agent label,
+upstream outcome) are defined in
+[vaubaan-gateway](./vaubaan-gateway.md) §8.
+
+The audit carries no field for scope caps: none is applied (§4bis).
+
+## 13. Reading older documents
+
+Decisions and documents written before v5 use the vocabulary of the
+hosted, multi-tenant version. They read with this mapping:
+
+| Earlier term                                  | In v5                                                                   |
+| --------------------------------------------- | ----------------------------------------------------------------------- |
+| binding (of a project to a provider resource) | a **resource** of a connection, selected by the mission                 |
+| project policy                                | the **restriction** of a share                                          |
+| root token, project-scoped token              | a **mission**                                                           |
+| child token, delegation chain                 | none: one token per mission, shared by its agents                       |
+| mint, re-mint                                 | issue a mission, issue it again                                         |
+| denied risks (explicit opt-out)               | none: a risk that is not accepted is not in the policy                  |
+| escalation channel                            | none: a refusal goes to the mission creator (§11)                       |
+| gates `allow` / `confirm` / `deny`            | accepted or not; then the gate `auto` / `approval` of the mission (§10) |
+
+The sections of the earlier text on the project policy, mint-time
+approval channels, the escalation channel and the migration plan have no
+counterpart here: those mechanisms do not exist in v5.
+
+## 14. Pitfalls and guards
+
+| Pitfall                                                     | Guard                                                                                                                                                                      |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A write no entry names                                      | The mandatory fallback, touched only then (§4.3). A read no entry names is refused.                                                                                        |
+| A tool that classifies to nothing, or to an unmatched slice | Checked per plugin: every tool has sample calls, every sample yields slices a catalog entry matches (§15).                                                                 |
+| The fallback turning into "allow any write"                 | It never co-fires with a named entry; no preset includes it.                                                                                                               |
+| One broad risk that covers everything                       | Catalogs are written as fine-grained intents; risks are listed by severity, and "select all" records the explicit list and leaves out the fallback and deprecated entries. |
+| A branch or path name chosen by the agent                   | A pattern on a naming convention bounds the entity, not the act: writing a file under `feature/*` never touches branch protection or secrets.                              |
+| A silent bulk operation                                     | The plugin marks bulk in the slice, and a separate entry matches it (§2.1).                                                                                                |
+| A mission outliving a catalog change                        | A new risk is not held by existing missions; ids are never renamed or removed (§4.5).                                                                                      |
+| An environment assumed from a missing label                 | No label, no env-scoped risk (§6).                                                                                                                                         |
+| A trigger used as a bypass                                  | Workflow dispatch is not exposed (§7.2).                                                                                                                                   |
+| SQL misread as harmless                                     | The read-only guarantee comes from the provider; unread migrations and unread queries fail closed, and provider-managed schemas are a read risk of their own (§7.2).       |
+| A limit declared and not applied                            | Shipped catalogs declare only the enforced limit (§4bis).                                                                                                                  |
+
+## 15. What is checked mechanically
+
+**When a catalog is loaded**, at startup. Any finding stops the gateway,
+and the problems found are reported with their location:
+
+- unknown fields; a missing or malformed field;
+- an id that is not `<provider>.<name>` of this provider, a duplicate id,
+  an id that contains a wildcard;
+- a pattern that does not parse, or names another provider;
+- a vector with a missing axis or a value outside its scale;
+- an invalid environment label;
+- zero or several fallback entries, a fallback not named or not matching
+  as §4.3 requires;
+- no preset, or a preset breaking a rule of §4.6.
+
+**In each plugin's tests**: the plugin is well formed and its fallback
+is flagged; no wildcard anywhere; presets are valid; every declared tool
+has at least one sample call, and every sample yields slices matched by
+the plugin's own catalog. The samples that land on the fallback are
+reported, as the sign of a missing entry.
+
+**Across the shipped plugins**: no catalog declares a limit the gateway
+does not enforce (§4bis).
+
+## 16. Open points
+
+- **Stateless scope caps.** Enforcing them needs decisions this document
+  does not make: whether the narrowed or the original arguments are
+  fingerprinted for audit and approvals, and how a capped risk is refused
+  when its plugin cannot narrow the call.
+- **A finer `tools/list`.** A plugin does not declare which risks a tool
+  may touch, since that depends on the arguments. Discovery therefore
+  cannot be filtered tool by tool from the accepted risks alone.
+- **Environment from the branch, for GitHub.** The data model allows it;
+  no catalog entry uses it. Introducing env-scoped GitHub risks would
+  need the plugin to derive the environment from the branch.
+- **Explicit deny.** Not part of v5. The decision still accepts an
+  explicit list of denied risks as an input, always empty.
+- **Identifier characters.** The grammar of §3.1 is that of the written
+  form. A plugin builds its slices directly and may put in an identifier
+  a character the written form does not accept (an email address); such a
+  slice matches and is audited, but its written form cannot be read back.
+  The two should be one set.
 
 ---
 
-## Annexe A — Cheat sheet manager (UX cible)
-
-```
-─── Token mint — checklist des risques acceptés ──────────────────────────
-
-Bindings : ☑ github(sbw-vaubaan/gateway)  ☑ supabase(staging)
-           ☑ vercel(gateway)
-
-Coder :
-  ☑ github.read-code                      lire le code et les PR
-  ☑ github.feature-branch-write           créer/modifier branches feature/*
-  ☑ github.create-pr                      ouvrir une PR
-  ☐ github.merge-protected                merge vers main
-  ☐ github.delete-release                 supprimer une release
-  ☐ github.branch-protection.W            branch protection (posture-shift)
-  ☐ github.mint-install-token             mint install token (credential)
-
-Supabase (staging) :
-  ☑ supabase.read-rows                    lire schema & data
-  ☑ supabase[staging].row-write-one       écrire row par row
-  ☐ supabase[staging].bulk-row-write      écrire en bulk (pas de rollback auto)
-  ☐ supabase[staging].migration.W         DDL schéma (apply_migration)
-  ☐ supabase[staging].policy.W            modif RLS (posture-shift)
-
-Vercel :
-  ☑ vercel.deploy-preview                  deploy preview
-  ☐ vercel.deploy-prod                     deploy prod (public, costly rollback)
-  ☐ vercel[prod].env-var-write             env var prod (secret + posture)
-  ☐ vercel.domain.W                        modif domaine (DNS posture-shift)
-
-[ Preview risks ]   [ Mint token ]
-```
-
-> Post drop-confirm la décision est binaire : ☑ (risk accepté) ou ☐
-> (non accepté). Les risks bloqués par `acceptable_in_envs` ne sont
-> simplement pas exposés pour le binding incompatible.
-
-## Annexe B — Scenarios incarnés
-
-### Pré-requis : la chaîne d'autorité
-
-```
-Renaud (humain ultime)
-  │
-  │ délègue (par management key, profil de risque managérial)
-  ▼
-Story Dev (agent IA orchestrateur, "manager" d'une session)
-  │
-  │ mint un access_token (sous-ensemble strict de sa propre autorité)
-  ▼
-Coding Agent (agent IA exécutant, fait le travail concret)
-```
-
-- **Renaud** a une UI qui lui permet d'éditer la `project policy` et de
-  recevoir les escalades par Telegram/email/manual.
-- **Story Dev** détient un `vbn_live_*` parent (root project-scoped, minté
-  via UI Project page) lui-même limité à un sous-ensemble de risks
-  acceptés ("Story Dev peut mint des children avec tout sauf
-  `*.branch-protection.W`, `*.policy.W`, `*.mint-install-token.*` — pour
-  ça il doit escalader via son propre `escalation_channel`").
-- **Coding Agent** porte un `access_token` minté par le Story Dev pour
-  une tâche précise.
-
-L'escalade va du bas vers le haut **uniquement** si l'échelon courant
-ne peut pas décider seul.
-
-### Scenario 1 — Le happy path (mint serein)
-
-**Contexte** : Story Dev démarre la session "implémente le channel Email
-pour les approvals" sur `vaubaan-gateway`.
-
-**Story Dev (raisonnement)** : *« Cette tâche touche du code backend
-(Next.js route + EmailChannel impl), une migration Supabase staging
-(nouvelle colonne `email_address`), un deploy preview Vercel pour valider.
-Pas de prod, pas de secret prod, pas de governance. »*
-
-Il ouvre l'UI mint, coche :
-
-```
-☑ github.read-code
-☑ github.feature-branch-write          (branches feature/*)
-☑ github.create-pr
-☑ supabase[staging].migration.W        (apply_migration pour la colonne)
-☑ supabase[staging].row-write-one      (probable seed de test rows)
-☑ vercel.deploy-preview
-```
-
-Tous ces risks sont `allow` par catalogue + project policy. Mint direct
-en 201, `api_key` retourné, valide 1h, single-use désactivé (le Coding
-Agent va faire plusieurs calls).
-
-**Coding Agent** reçoit le token, exécute :
-- `github__create_branch feature/email-channel` → OK (catégorisé `github.feature-branch-write`)
-- `github__create_or_update_file …/EmailChannel.ts` → OK (idem)
-- `supabase__apply_migration "alter table … add column email_address text"` → OK (catégorisé `supabase[staging].migration.W`)
-- `vercel__deploy_to_vercel target=preview` → OK (catégorisé `vercel.deploy-preview`)
-- `github__create_pull_request` → OK (catégorisé `github.create-pr`)
-
-Termine la tâche, le token expire après 1h. Audit log capture les 5 calls
-avec leurs slices + risks_touched.
-
-**Ce que le scenario montre** : le profil de risque accepté à l'avance
-est **suffisamment générique** pour couvrir toute la session sans
-re-mint. Le Coding Agent n'est jamais bloqué.
-
-### Scenario 2 — Le blocage propre (call trop puissant)
-
-**Contexte** : même session que scenario 1. À mi-parcours, le Coding
-Agent réalise qu'il veut **ajouter une required check** sur les nouveaux
-PR Email-related, donc modifier la branch protection de `main`.
-
-**Coding Agent** appelle `github__update_branch_protection`.
-
-```
-POST /api/v1/mcp/tools/call
-  { tool: "github__update_branch_protection",
-    args: { owner: "sbw-vaubaan", repo: "gateway", branch: "main",
-            required_status_checks: [..., "email-channel-tests"] } }
-
-→ 403
-  {
-    "error": "risk-not-accepted",
-    "missing_risks": ["github.branch-protection-write"],
-    "executed_slice": "github.repo[sbw-vaubaan/gateway].branch-protection[main].W",
-    "hint": "This risk is DENY by default per catalog. Re-mint a token
-             with it accepted, or restrict the operation."
-  }
-```
-
-Le Coding Agent ne re-tente pas, ne contourne pas, **n'invente pas un
-workaround**. Il renvoie le message au Story Dev en synchronous :
-
-> Coding Agent : *« Blocked on `github__update_branch_protection`. Risk
-> `github.branch-protection-write` not accepted. Context: je voulais
-> ajouter `email-channel-tests` aux required checks de `main` pour que
-> les futurs PR sur le module Email soient automatiquement testés. »*
-
-**Ce que le scenario montre** : strict-fail = comportement déterministe,
-message actionnable, pas d'effet de bord runtime. Le Coding Agent rend
-la main proprement.
-
-### Scenario 3 — Story Dev décide tout seul (in-budget)
-
-**Suite du scenario 2.** Le Story Dev raisonne :
-
-> Story Dev : *« `branch-protection.W` est DENY par catalogue parce que
-> c'est un posture shift. Mais ici c'est juste ajouter une required check
-> — c'est durcir la protection, pas la relâcher. Et c'est cohérent avec
-> le but de la feature. Le humain serait d'accord. Est-ce que MA
-> propre management key autorise ce risk à grant ? »*
-
-Hypothèse : le token parent du Story Dev a `accepted_risks` qui **inclut**
-`github.branch-protection-write` (parce que c'est un orchestrateur de
-confiance pour ce projet). Donc il peut mint un child avec ce risk en
-restant subset du parent.
-
-```
-POST /api/v1/tokens/mint
-  { bindings: [...], accepted_risks: [
-      ... (les 6 du scenario 1),
-      "github.branch-protection-write"           // ← ajouté
-    ],
-    parent_token_id: "tok_session_xyz",          // contexte de continuation
-    ttl: 600, singleUse: true }                  // étroit pour cette action précise
-→ 201 { api_key: "vbn_…" }
-```
-
-Le Story Dev passe ce nouveau token au Coding Agent, qui retente le call
-avec le nouveau Bearer. 200 OK. La session continue.
-
-**Audit log** capture :
-- Mint #1 par Story Dev avec 6 risks (Scenario 1).
-- Bloquage du call (Scenario 2) avec slice + missing risk.
-- Mint #2 par Story Dev avec 7 risks, marqué `escalation_decided_locally: true`
-  + champ `parent_token_id`.
-- Call retenté avec succès.
-
-**Ce que le scenario montre** : la délégation peut être **élargie en
-cours de session** sans déranger le humain, tant que le Story Dev a
-l'autorité pour le faire. Strict-fail force la transparence (chaque
-élargissement est un mint distinct, donc une ligne d'audit).
-
-### Scenario 5 — Le pire-cas : agent qui essaie de contourner
-
-**Contexte** : session avec profil "Coder feature/*". Le Coding Agent
-veut deploy prod (pas dans le profil).
-
-**Tentative 1** :
-```
-vercel__deploy_to_vercel target=prod
-→ 403 risk-not-accepted: vercel.deploy-prod
-```
-
-**Tentative 2 (contournement essayé)** : le Coding Agent pense
-*« si je trigger un workflow GitHub qui contient un step `vercel deploy
---prod`, le workflow utilise le secret du repo, je n'ai pas besoin du
-droit Vercel »*. Il appelle :
-
-```
-github__dispatch_workflow workflow_id=deploy-prod.yml
-→ 404 unknown github tool 'github__dispatch_workflow'
-```
-
-Le tool a été retiré du périmètre (§7.2 #1). Pas de bypass possible
-via cette voie.
-
-**Tentative 3 (autre contournement)** : créer un commit sur `main` qui
-trigge le CI Vercel. Mais le Coding Agent n'a que `feature-branch-write`,
-pas `merge-protected`. Donc :
-
-```
-github__create_or_update_file branch=main ...
-→ 403 risk-not-accepted: github.merge-protected
-```
-
-Pas de bypass. L'agent doit **demander** au Story Dev d'élargir le profil
-ou d'escalader. Strict-fail rend les bypass structurellement impossibles
-tant que le catalogue couvre bien les surfaces.
-
-**Ce que le scenario montre** :
-1. Retirer les surfaces critique (`dispatch_workflow.W`) ferme des classes
-   entières d'attaques par confused deputy.
-2. Le catalogue exhaustif + fallback générique garantit qu'aucune action
-   ne passe sans être catégorisée.
-3. Un agent malicieux ou compromis ne peut pas escalader ses droits
-   sans passer par le Story Dev (et donc être audité).
-
-### Patterns récurrents observés dans ces scenarios
-
-| Pattern                       | Quand il se déclenche                                  | Mécanisme                                                                       |
-| ----------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| **Mint serein**               | Tâche bien cadrée, profil pré-établi suffit            | UI checklist + mint direct                                                      |
-| **Blocage propre**            | Agent dépasse le profil                                | 403 avec `missing_risks` + slice exécutée                                       |
-| **Élargissement local**       | Story Dev a l'autorité pour ajouter le risk            | Re-mint avec `parent_token_id`, marqué `decided_locally`                        |
-| **Escalation runtime**        | Story Dev n'a pas l'autorité, demande à son parent     | POST `escalation_channel.endpoint_url` → parent re-mint side-channel (cf. §11)  |
-| **Contournement impossible**  | Agent essaie via workflow ou backdoor                  | Tools critiques retirés + catalogue exhaustif + fallback                        |
-
-## Annexe C — Pourquoi ne pas garder le modèle capability-based ?
-
-Les 3 itérations précédentes (rings v1, macros v2, slices v3) partageaient
-toutes la même hypothèse : **le manager sait à l'avance ce que l'agent va
-faire**. Hypothèse fausse en pratique pour un coding agent autonome :
-- Si on sous-grant → blocage mid-session, re-prompts, friction.
-- Si on sur-grant → on perd le bénéfice du least-privilege.
-
-Le risk-based résout en **inversant l'orientation** : le manager déclare
-ce qu'il accepte comme conséquences, l'agent agit dans cet espace.
-Le profil est **stable inter-sessions** (un profil "CodingAgent-Standard"
-sert pour toutes les tâches similaires), **scannable** par l'humain
-(10-15 cases à cocher en langage métier), et **finit le débat** sur
-"quelle granularité de cap" — il n'y a plus de cap utilisateur, il y a
-des intentions catégorisées par le provider.
-
-L'invariant fondateur des rings ("`niv k+1` gouverne `niv k`") reste
-**vrai dans la structure du data-model** (containment des entités) mais
-ne sert plus à ordonner le least-privilege — c'est désormais le catalogue
-de risks qui rend le raisonnement explicite, intention par intention.
+_Date: 2026-10-13. English rewrite of the June 2026 text, checked against
+the implementation._

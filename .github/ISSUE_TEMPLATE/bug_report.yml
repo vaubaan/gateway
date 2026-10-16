@@ -1,0 +1,90 @@
+name: Bug report
+description: Something does not behave as the specification or a handbook says.
+title: '[bug] '
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report.
+
+        - **A security problem is not reported here.** If the bug lets an agent or a user do more than they were allowed, or exposes a credential, follow `SECURITY.md` (private vulnerability reporting).
+        - A risk that is wrong or missing in a plugin's catalog has its own form: "Catalog correction".
+        - Remove tokens, keys and credentials from everything you paste. A token prefix is enough.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: The image tag, or the output of `git rev-parse --short HEAD`.
+      placeholder: 2.0.0-alpha.0 / abc1234
+    validations:
+      required: true
+  - type: dropdown
+    id: run
+    attributes:
+      label: How do you run it
+      options:
+        - Docker image (Compose or other)
+        - From source (`npm run build` / `npm run dev`)
+        - The demo (`npm run demo`)
+        - Tests only (`npm run ci`, `npm run test:e2e:v5`)
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options:
+        - Sign-in, sessions, administration
+        - Connections, resources, shares, groups
+        - Missions, budgets, presets
+        - Execution door (`/mcp`), refusals
+        - Requests, claims, approvals
+        - Management door (`/mcp/manage`), OAuth delegation
+        - Audit
+        - A provider plugin (name it below)
+        - Plugin SDK
+        - Telemetry
+        - Deployment (image, Compose, configuration)
+        - Documentation
+        - Build, tests, tooling
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: The smallest sequence that shows the problem. For a tool call, give the tool name and the arguments with secrets removed.
+      placeholder: |
+        1. Issue a mission with the preset … on the connection …
+        2. Call the tool … with the arguments …
+        3. …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: If you can, point to the section of `docs/spec/` or the handbook that says so.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead
+      description: The message shown, the refusal returned to the agent (its `code` and `hint`), or the page you landed on.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or audit entries
+      description: Paste with secrets removed. Token prefixes are fine; full tokens, keys and call arguments that contain secrets are not.
+      render: text
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system, Node.js version when running from source, browser for an interface problem, MCP client for an agent problem.
+      placeholder: Ubuntu 24.04, Node 22, Firefox, Claude Code

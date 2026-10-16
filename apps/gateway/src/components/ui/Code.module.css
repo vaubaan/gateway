@@ -1,0 +1,65 @@
+.code {
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: var(--fill);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.93em;
+}
+
+.block {
+  position: relative;
+}
+.pre {
+  margin: 0;
+  padding: var(--space-3) 76px var(--space-3) 14px;
+  overflow: auto;
+  border-radius: var(--radius-lg);
+  background: var(--code-bg);
+  color: var(--code-ink);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+  white-space: pre;
+}
+.pre code {
+  font-size: inherit;
+}
+.pre:focus-visible {
+  border-radius: var(--radius-lg);
+}
+.wrap {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.copy {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+}
+/* A phone: the button sits above the block instead of over its first line,
+   and the line scrolls under nothing. */
+@media (max-width: 640px) {
+  .block {
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: flex-end;
+    gap: var(--space-1);
+  }
+  .pre {
+    align-self: stretch;
+    padding-right: 14px;
+  }
+  .copy {
+    position: static;
+  }
+}
+.tone_key {
+  color: var(--code-key);
+}
+.tone_string {
+  color: var(--code-string);
+}
+.tone_comment {
+  color: var(--code-dim);
+}

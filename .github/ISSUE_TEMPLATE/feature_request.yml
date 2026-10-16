@@ -1,0 +1,52 @@
+name: Feature request
+description: Propose a change to what the gateway does.
+title: '[feature] '
+labels: ['enhancement']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Features are specified before they are coded: the specification (`docs/spec/vaubaan-gateway.md`) says what the product does and why. A good request explains the problem; the design comes after, in the discussion.
+
+        A new provider is a "Plugin request"; a wrong or missing risk is a "Catalog correction".
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What can you not do today, or what is harder or riskier than it should be? Describe the situation, not the solution.
+    validations:
+      required: true
+  - type: dropdown
+    id: who
+    attributes:
+      label: Who is affected
+      multiple: true
+      options:
+        - The operator who installs and runs the instance
+        - A user who connects providers and shares connections
+        - A user who issues missions and answers requests
+        - A coding agent working under a mission
+        - An agent that prepares missions for a user (management door)
+        - A plugin author
+        - A contributor to the gateway itself
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: How you would like it to work. Name the section of the specification it would change, if you know it.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Including what you do today to work around it.
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      options:
+        - label: I read the specification's section 1.1 ("Explicitly out of scope") and section 11 (settled decisions and open questions); this is not already specified or ruled out.
+          required: true
+        - label: I searched the open issues and the decisions under `docs/decisions/` for a prior answer.
+          required: true
