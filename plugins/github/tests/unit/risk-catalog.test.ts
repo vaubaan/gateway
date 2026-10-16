@@ -14,7 +14,7 @@ import { prepareCatalog, risksTouchedByAll } from '@vaubaan/policy-engine';
 import type { Resource } from '@vaubaan/plugin-sdk';
 
 import { classifyGithub } from '../../src/classify.ts';
-import { githubCatalog, githubPlugin } from '../../src/index.ts';
+import { githubCatalog, githubPlugin, workingBranchesOf } from '../../src/index.ts';
 import { appRepo, libRepo } from './fixtures.ts';
 
 const repo = { owner: 'acme', repo: 'app' };
@@ -67,10 +67,13 @@ const READS: readonly Row[] = [
 const BRANCH_AND_FILE_WRITES: readonly Row[] = [
   ['create_branch', 'feature/*', { ...repo, branch: 'feature/x' }, ['feature-branch-write']],
   ['create_branch', 'fix/*', { ...repo, branch: 'fix/x' }, ['feature-branch-write']],
+  // `feat/<id>-<slug>` : Conventional Commits, this repository's own convention.
+  ['create_branch', 'feat/*', { ...repo, branch: 'feat/x' }, ['feature-branch-write']],
   ['create_branch', 'release-*', { ...repo, branch: 'release-2026' }, ['merge-protected']],
   ['create_branch', 'unconventional name', { ...repo, branch: 'wip-x' }, [FALLBACK]],
 
   ['create_or_update_file', 'feature/*', file('feature/x'), ['feature-branch-write']],
+  ['create_or_update_file', 'feat/*', file('feat/x'), ['feature-branch-write']],
   ['create_or_update_file', 'main', file('main'), ['merge-protected']],
   ['create_or_update_file', 'master', file('master'), ['merge-protected']],
   ['create_or_update_file', 'production', file('production'), ['merge-protected']],
@@ -110,6 +113,12 @@ const BRANCH_AND_FILE_WRITES: readonly Row[] = [
   ],
 
   ['push_files', 'one file on feature/*', push('feature/x', 'a.ts'), ['feature-branch-write']],
+  [
+    'push_files',
+    'two files on feat/*',
+    push('feat/x', 'a.ts', 'b.ts'),
+    ['feature-branch-write', 'bulk-file-write'],
+  ],
   [
     'push_files',
     'two files on feature/*',
@@ -225,6 +234,12 @@ const GIT: readonly Row[] = [
   ],
   [
     'git_push',
+    'new feat/* branch (refused on the fallback before catalog v7)',
+    gitPush(gitUpdate('refs/heads/feat/v5-plugin-context7', 'create')),
+    ['git-push', 'feature-branch-write'],
+  ],
+  [
+    'git_push',
     'force on a feature branch',
     gitPush(gitUpdate('refs/heads/feature/x', 'force')),
     ['git-push', 'feature-branch-write', 'force-push'],
@@ -334,5 +349,31 @@ describe('github — the risks each tool touches', () => {
       expect(risksOf(tool, args).filter((id) => !readRisks.has(id))).toEqual([]);
     }
     for (const [tool, , args] of ROWS) expect(risksOf(tool, args)).not.toEqual([]);
+  });
+});
+
+describe('github — the working branches, one list', () => {
+  const WORKING = `${ID_PREFIX}feature-branch-write`;
+
+  test('the three patterns of feature-branch-write name the same branches, feat/* among them', () => {
+    const entry = githubCatalog.catalog.risks.find((r) => r.id === WORKING);
+    const lists = [entry!.matches].flat().map((p) => /\.branch\[([^\]]+)\]/.exec(p)?.[1]);
+    expect(new Set(lists).size).toBe(1);
+    expect(workingBranchesOf(githubCatalog.catalog)).toEqual(lists[0]!.split(','));
+    expect(workingBranchesOf(githubCatalog.catalog)).toContain('feat/*');
+  });
+
+  test("the git remote's words list the catalog's branches, not a copy", () => {
+    const ability = githubPlugin.gitRemote.abilities!.find((a) => a.risk_id === WORKING);
+    expect(ability!.words).toBe(
+      `push to working branches (${workingBranchesOf(githubCatalog.catalog).join(', ')})`,
+    );
+    expect(ability!.words).toContain('feat/*');
+  });
+
+  test('a catalog without the branch-write pattern fails at boot', () => {
+    expect(() => workingBranchesOf({ provider: 'github', risks: [] })).toThrow(
+      /feature-branch-write/,
+    );
   });
 });

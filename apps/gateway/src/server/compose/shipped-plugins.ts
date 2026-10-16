@@ -13,9 +13,11 @@
  * broken plugin fails the boot instead of the first call.
  */
 import cloudflareDnsPlugin from '@vaubaan/plugin-cloudflare-dns';
+import context7Plugin from '@vaubaan/plugin-context7';
 import flyPlugin from '@vaubaan/plugin-fly';
 import githubPlugin from '@vaubaan/plugin-github';
 import gmailPlugin from '@vaubaan/plugin-gmail';
+import miroPlugin from '@vaubaan/plugin-miro';
 import notionPlugin from '@vaubaan/plugin-notion';
 import railwayPlugin from '@vaubaan/plugin-railway';
 import resendPlugin from '@vaubaan/plugin-resend';
@@ -38,6 +40,8 @@ export const SHIPPED_PLUGINS: readonly ProviderPlugin[] = [
   sshPlugin,
   gmailPlugin,
   flyPlugin,
+  context7Plugin,
+  miroPlugin,
   notionPlugin,
 ];
 

@@ -6,6 +6,21 @@ date: 2026-05-31
 
 > **Pre-v5 document (French).** Not translated; read with the mapping in [[legacy-status-of-v4-adrs-and-handbooks]].
 
+> **Amendment 2026-10-16 — Context7 is reached through the gateway.** The rule
+> stands (Context7 is the canonical source of provider documentation); the
+> mechanics below change. Context7 is now a provider plugin of the gateway
+> (`@vaubaan/plugin-context7`, handbook
+> [`providers/context7`](../handbook/providers/context7.md)): its API key is a
+> gateway connection only, never an environment variable, a personal
+> `claude mcp add` or an entry of `.mcp.json`. Once the dogfood instance has the
+> Context7 connection in the mission behind the `vaubaan` server, the tools are
+> `mcp__vaubaan__context7__resolve-library-id` and
+> `mcp__vaubaan__context7__query-docs`, in place of the direct
+> `resolve-library-id` and `query-docs` of the personal setup described below.
+> The process (resolve, query, cite what Context7 returned, record the
+> fallback) is unchanged. Product owner's decision of 2026-10-16: "everything
+> through our gateway, zero env".
+
 # Context7 MCP comme source canonique de doc des providers tiers
 
 ## Contexte
