@@ -16,6 +16,20 @@ extends:
 > [vercel](../handbook/providers/vercel.md). Dated with the v5 decisions it
 > belongs to; written on 2026-10-15.
 
+> **Amendment of 2026-10-16 — an instance on Fly counts its own app
+> (product owner, Fly research Q7).** Fly sets `FLY_APP_NAME` in every
+> machine (Fly docs, "Runtime environment"). With the `fly` plugin, whose
+> resources are apps by name, the host now adds `fly:$FLY_APP_NAME` to the
+> self resources exactly as it adds `railway:$RAILWAY_PROJECT_ID` (source
+> `fly`; the configuration cannot remove it). The managed offer also keeps
+> its control plane in a **Fly organization separate from the tenants'**,
+> never connected to the gateway it hosts: resource binding does not cover
+> organization-level calls (creating an app names no resource), the same
+> reason the deploy guide gives a separate Railway workspace. Any other
+> Vaubaan app in the tenant organization is listed in `self_resources` as
+> `fly:<app name>`. Handbooks: [configuration](../handbook/configuration.md),
+> [fly](../handbook/providers/fly.md) §5.10.
+
 ## Context
 
 Two findings of the review share one cause: what an accepted risk is worth

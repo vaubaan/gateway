@@ -1,0 +1,20 @@
+{
+  "name": "@vaubaan/plugin-fly",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Fly.io provider plugin for Vaubaan Gateway — apps, machines, volumes, secrets, addresses and certificates through the Machines API",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "type-check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@vaubaan/plugin-sdk": "*"
+  },
+  "devDependencies": {
+    "@vaubaan/policy-engine": "*"
+  }
+}

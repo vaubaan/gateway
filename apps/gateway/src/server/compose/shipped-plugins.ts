@@ -13,6 +13,7 @@
  * broken plugin fails the boot instead of the first call.
  */
 import cloudflareDnsPlugin from '@vaubaan/plugin-cloudflare-dns';
+import flyPlugin from '@vaubaan/plugin-fly';
 import githubPlugin from '@vaubaan/plugin-github';
 import gmailPlugin from '@vaubaan/plugin-gmail';
 import railwayPlugin from '@vaubaan/plugin-railway';
@@ -35,6 +36,7 @@ export const SHIPPED_PLUGINS: readonly ProviderPlugin[] = [
   upstashRedisPlugin,
   sshPlugin,
   gmailPlugin,
+  flyPlugin,
 ];
 
 export async function buildShippedRegistry(): Promise<PluginRegistry> {

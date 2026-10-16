@@ -207,6 +207,20 @@ names, and the notes about them do too.
 
 ### Added
 
+- **Fly.io plugin** (`@vaubaan/plugin-fly` 0.1.0, catalog 1): the apps of one Fly
+  organization — machines, images, volumes and snapshots, secrets, IP addresses,
+  certificates and logs — through the Machines API, with an organization token checked
+  against the organization it names. Presets `read-only`, `operator`, `fleet-upgrade`,
+  `provisioner`. Machines only run images pinned by digest under the account's allowed
+  prefixes (default `ghcr.io/vaubaan/gateway`); an image change needs a snapshot of
+  every mounted volume taken in the last hour; secret values are never read back;
+  destroying an app or a volume, writing secrets and running a command inside a machine
+  ask first in every preset. Handbook `providers/fly`.
+- **Secret values are masked on an approval page.** A plugin names the arguments that
+  carry secrets (`secretArguments`); the page shows each value as a short fingerprint
+  and keeps the names. ADR `secret-arguments-masked-in-the-approval-view`.
+- **An instance on Fly protects its own app**: `fly:$FLY_APP_NAME` is one of its self
+  resources, as `railway:$RAILWAY_PROJECT_ID` on Railway, never reachable by a mission.
 - **Import from the hosted product (v4), once per organization.**
   `scripts/export-v4.mjs --org <slug>` reads one organization of the v4 database
   (read-only, through `psql`) and writes a bundle to stdout only; piped into

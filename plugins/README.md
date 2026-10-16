@@ -18,7 +18,7 @@ end with a command that checks your work; between steps 4 and 8 the copied
 tests are broken on purpose, and `npx tsc -p plugins/<id> --noEmit` is the
 check to run after each file.
 
-- Shipped plugins: `cloudflare-dns`, `github`, `gmail` (experimental),
+- Shipped plugins: `cloudflare-dns`, `fly`, `github`, `gmail` (experimental),
   `railway`, `resend`, `ssh`, `stripe`, `supabase`, `upstash-redis`, `vercel`.
   Their modelling notes are indexed in
   [`docs/handbook/providers/README.md`](../docs/handbook/providers/README.md).

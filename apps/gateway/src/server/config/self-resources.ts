@@ -8,8 +8,10 @@
  * Two sources, merged:
  *
  * - the platform: Railway injects `RAILWAY_PROJECT_ID` into every container
- *   it runs, so an instance on Railway always counts its own project. The
- *   configuration cannot take it out;
+ *   it runs, so an instance on Railway always counts its own project; Fly
+ *   sets `FLY_APP_NAME` in every machine, so an instance on Fly always counts
+ *   its own app (`fly:<app name>`, the ref the Fly plugin discovers). The
+ *   configuration cannot take either out;
  * - the `self_resources` key (`VAUBAAN_SELF_RESOURCES`), a list of
  *   `<provider>:<ref>` entries, for any other host (a Vercel project, a
  *   Supabase project holding a backup, the SSH host the gateway runs on).
@@ -24,6 +26,12 @@ export const RAILWAY_PROJECT_ENV = 'RAILWAY_PROJECT_ID';
 
 /** The Railway plugin id: the provider of the resource the platform names. */
 const RAILWAY_PROVIDER = 'railway';
+
+/** The variable Fly sets in every machine: the name of its app. */
+export const FLY_APP_ENV = 'FLY_APP_NAME';
+
+/** The Fly plugin id: its resources are apps, by name. */
+const FLY_PROVIDER = 'fly';
 
 /** `<provider>:<ref>` — a plugin id, then the ref as discovery stores it (no whitespace). */
 const ENTRY = /^([a-z][a-z0-9_-]*):(\S+)$/;
@@ -44,6 +52,8 @@ export function readSelfResources(
   };
   const railwayProject = env[RAILWAY_PROJECT_ENV]?.trim();
   if (railwayProject) add({ provider: RAILWAY_PROVIDER, ref: railwayProject, source: 'railway' });
+  const flyApp = env[FLY_APP_ENV]?.trim();
+  if (flyApp) add({ provider: FLY_PROVIDER, ref: flyApp, source: 'fly' });
   for (const entry of entries) {
     const match = ENTRY.exec(entry);
     if (!match) {

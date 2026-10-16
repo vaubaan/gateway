@@ -62,6 +62,26 @@ describe('definePlugin', () => {
     ]);
   });
 
+  test('secretArguments is optional; it names declared arguments of declared tools', () => {
+    const tool = 'acme__update_thing';
+    expect(pluginIssues({ ...acmePlugin, secretArguments: { [tool]: ['name'] } })).toEqual([]);
+    expect(
+      pluginIssues({
+        ...acmePlugin,
+        secretArguments: [] as unknown as Record<string, readonly string[]>,
+      }),
+    ).toEqual(['secretArguments: expected an object keyed by tool name when present']);
+    expect(pluginIssues({ ...acmePlugin, secretArguments: { acme__nope: ['name'] } })).toEqual([
+      "secretArguments['acme__nope'] is not a tool of this plugin",
+    ]);
+    expect(pluginIssues({ ...acmePlugin, secretArguments: { [tool]: [] } })).toEqual([
+      `secretArguments['${tool}']: expected a non-empty list of argument names`,
+    ]);
+    expect(pluginIssues({ ...acmePlugin, secretArguments: { [tool]: ['password'] } })).toEqual([
+      `secretArguments['${tool}']: 'password' is not an argument of the tool`,
+    ]);
+  });
+
   test('toolTitles is optional; a title names a declared tool and reads as a headline', () => {
     const [tool] = acmePlugin.tools;
     const name = tool!.name;

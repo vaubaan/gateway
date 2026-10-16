@@ -706,6 +706,14 @@ past its expiry even when the sweeper has not erased the blob yet. The
 arguments are in no summary, no event, no audit entry, no log line and no
 `decision_json`; the tool and the fingerprint are.
 
+**Secret arguments are masked on the page.** `approvalView()` passes the
+opened arguments through `maskSecretArguments` (`requests/masked-arguments.ts`):
+the arguments a plugin declares in `secretArguments` (`fly__set_secrets` →
+`values`) show every string they hold as `[secret · sha256:<12 hex>]`, keys
+kept, so the approver sees which secrets change and never their values. The
+sealed arguments, the approval's fingerprint and the replay are unchanged
+(ADR [secret-arguments-masked-in-the-approval-view](../decisions/secret-arguments-masked-in-the-approval-view.md)).
+
 ### The three resolutions (`approval.ts`)
 
 `ApprovalDecision` is `{ resolution: 'grant' | 'open-gate' | 'refuse' }` and

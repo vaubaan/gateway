@@ -163,7 +163,7 @@ export interface OAuthConfig {
 }
 
 /** Where a self resource comes from: the `self_resources` key, or the platform the instance runs on. */
-export type SelfResourceSource = 'config' | 'railway';
+export type SelfResourceSource = 'config' | 'railway' | 'fly';
 
 /**
  * A provider resource that hosts or runs this instance (SEC 2026-10-15 H1):
@@ -172,9 +172,9 @@ export type SelfResourceSource = 'config' | 'railway';
  * no plugin can add or remove one.
  */
 export interface SelfResource {
-  /** A plugin id (`railway`). */
+  /** A plugin id (`railway`, `fly`). */
   readonly provider: string;
-  /** The resource ref as discovery stores it (a Railway project id). */
+  /** The resource ref as discovery stores it (a Railway project id, a Fly app name). */
   readonly ref: string;
   readonly source: SelfResourceSource;
 }
