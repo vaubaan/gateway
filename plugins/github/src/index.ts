@@ -17,7 +17,7 @@ import { githubCredential } from './credential.ts';
 import { githubDataModel } from './data-model.ts';
 import { discoverGithubResources, executeGithub } from './execute.ts';
 import { githubTokenCredential } from './token.ts';
-import { githubGitRemote } from './git-remote.ts';
+import { githubGitRemoteOf } from './git-remote.ts';
 import { githubToolTitles } from './tool-titles.ts';
 import { githubTools } from './tools.ts';
 
@@ -27,10 +27,13 @@ export const GITHUB_CATALOG_PATH = catalogPathNextTo(import.meta.url);
 
 export const githubCatalog = loadCatalogFile(GITHUB_CATALOG_PATH);
 
+/** The git remote ; its working-branch words are read from the catalog, the one list. */
+export const githubGitRemote = githubGitRemoteOf(githubCatalog.catalog);
+
 export const githubPlugin = definePlugin({
   id: 'github',
   displayName: 'GitHub',
-  version: '3.1.0',
+  version: '3.2.0',
   description:
     'Repositories, branches, files, pull requests, issues, releases and workflows of the GitHub App installation.',
   summary:
@@ -84,5 +87,5 @@ export {
   COMPARE_MAX_COMMITS,
   COMPARE_MAX_FILES,
   GIT_TOKEN_PERMISSIONS,
-  githubGitRemote,
+  workingBranchesOf,
 } from './git-remote.ts';

@@ -16,7 +16,7 @@
  *
  * `github__git_fetch` is never executed here : the host relays the bytes.
  */
-import type { GitRemoteCapability } from '@vaubaan/plugin-sdk';
+import type { GitRemoteCapability, RiskCatalog } from '@vaubaan/plugin-sdk';
 
 import { GITHUB_WEB_BASE } from './credential.ts';
 import { GIT_FETCH_TOOL, GIT_PUSH_TOOL } from './git-call.ts';
@@ -28,7 +28,29 @@ export { COMPARE_MAX_COMMITS, COMPARE_MAX_FILES } from './git-rest.ts';
 export { COMMITS_REVIEWED_MAX } from './git-review.ts';
 export { executeGit } from './git-moves.ts';
 
-export const githubGitRemote: GitRemoteCapability = {
+/** The risk a push to a working branch touches ; its catalog patterns name the branches. */
+const WORKING_BRANCH_RISK = 'github.feature-branch-write';
+
+/** The branch write of a pattern (`….branch[feature/*,fix/*].W`), capturing its bracket list. */
+const BRANCH_WRITE = /\.branch\[([^\]]+)\]\.W$/;
+
+/**
+ * The working-branch globs, read from the catalog's `feature-branch-write`
+ * pattern : the YAML holds the one list, the git remote's words never restate
+ * it. Throws at boot when the entry or its branch-write pattern is missing.
+ */
+export function workingBranchesOf(catalog: RiskCatalog): readonly string[] {
+  const entry = catalog.risks.find((risk) => risk.id === WORKING_BRANCH_RISK);
+  const patterns: readonly string[] = entry === undefined ? [] : [entry.matches].flat();
+  for (const pattern of patterns) {
+    const list = BRANCH_WRITE.exec(pattern)?.[1];
+    if (list !== undefined) return list.split(',');
+  }
+  throw new Error(`${WORKING_BRANCH_RISK}: no 'branch[…].W' pattern in the github catalog`);
+}
+
+/** The plugin's git remote, its words built from `catalog`. */
+export const githubGitRemoteOf = (catalog: RiskCatalog): GitRemoteCapability => ({
   fetchTool: GIT_FETCH_TOOL,
   pushTool: GIT_PUSH_TOOL,
   pushRisk: 'github.git-push',
@@ -41,8 +63,8 @@ export const githubGitRemote: GitRemoteCapability = {
     { risk_id: 'github.read-code', words: 'clone and fetch' },
     { risk_id: 'github.git-push', words: 'push' },
     {
-      risk_id: 'github.feature-branch-write',
-      words: 'push to working branches (feature/*, fix/*, chore/*, bug/*, docs/*, refactor/*)',
+      risk_id: WORKING_BRANCH_RISK,
+      words: `push to working branches (${workingBranchesOf(catalog).join(', ')})`,
     },
     {
       risk_id: 'github.merge-protected',
@@ -56,4 +78,4 @@ export const githubGitRemote: GitRemoteCapability = {
       words: 'change CI workflows (.github/workflows/)',
     },
   ],
-};
+});

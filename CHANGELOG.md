@@ -689,6 +689,11 @@ write …)`), instead of GitHub's bare 403. The push token of
 
 ### Changed
 
+- **GitHub plugin** (`@vaubaan/plugin-github` 3.2.0, catalog v7): `github.feature-branch-write`
+  also covers `feat/*` branches (the Conventional Commits prefix), for branch, file and
+  bulk writes and for `git push`; such a write fell to `github.uncategorized-write` and
+  was refused on a mission without the fallback. The git remote's description of the
+  permission now reads its branch list from the catalog.
 - **The Docker build no longer takes a `NODE_IMAGE` argument**: the base image is
   written, version and digest, on the first `FROM` line, so that Dependabot can propose
   its refresh. To build on another base, edit that line.
