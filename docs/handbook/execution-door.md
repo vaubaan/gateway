@@ -534,8 +534,8 @@ network failure as it comes. A result with `isError: true` is the executor
 declining the call itself (an unknown tool, an argument it cannot read or
 that the tool does not declare, a target outside the mission) — the SDK's
 `ExecutorRefusal`, turned into that result by `declining()`: it is an
-`allowed` outcome with no `upstream_error`, handed to the agent untouched. All eleven shipped plugins
-follow the rule (since the second review cycle: `vercel` and `upstash-redis`
+`allowed` outcome with no `upstream_error`, handed to the agent untouched. Every shipped plugin
+follows the rule (since the second review cycle: `vercel` and `upstash-redis`
 used to return provider failures as results; `cloudflare-dns` used to throw
 its own refusals).
 

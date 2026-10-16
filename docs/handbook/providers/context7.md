@@ -197,7 +197,7 @@ library's documentation".
 
 ### 3.1 Risks
 
-**One named risk and the fallback.**
+**One named risk and the fallback**, as `src/risk-catalog.yaml` holds them:
 
 ```yaml
 provider: context7
@@ -208,8 +208,8 @@ risks:
   - id: context7.query-docs
     label: 'Ask Context7 about library documentation'
     reason: >-
-      The question the agent writes — which may carry code or internal
-      context — is sent to Context7, a third party that stores queries; the
+      The question the agent writes, which may carry code or internal
+      context, is sent to Context7, a third party that stores queries; the
       documentation that comes back is third-party text. Each call also
       spends the key's monthly Context7 quota.
     matches: 'context7.index[**].library[**].R'
@@ -217,7 +217,7 @@ risks:
       reversibility: irreversible # what was sent cannot be recalled
       blast: single
       data: data #                  free text written by the agent
-      cost: moderate #              plan quota; billed overage on Pro
+      cost: moderate #              plan quota ; billed overage on paid plans
       visibility: public #          leaves the company
       persistence: stateless
 
@@ -476,7 +476,8 @@ resource:
 ```
 
 `plan` is checked against the four documented values by a type guard; an
-unknown value or payload fails the discovery. No `env`. The ref is a
+unknown value or payload fails the discovery. **(live)** A valid Pro key was
+answered HTTP 200 with the documented shape (§6.3), a bad key HTTP 401. No `env`. The ref is a
 constant because nothing in Context7's answers identifies the teamspace;
 two connections with two keys each have their own `docs` resource.
 
@@ -500,19 +501,38 @@ text/event-stream`, `MCP-Protocol-Version` as Railway sends it, a
 
 Failures:
 
-| What happens                                                | The plugin                                                                                                                                                                                                                                                                                                                                                                                  |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| HTTP 401 / 403 from the MCP server (JSON-RPC `-32001`)      | `UpstreamAuthError` with the status                                                                                                                                                                                                                                                                                                                                                         |
-| another failed HTTP status                                  | `UpstreamHttpError` with the status                                                                                                                                                                                                                                                                                                                                                         |
-| a JSON-RPC error frame, or a result that is not text blocks | a plain `Error`                                                                                                                                                                                                                                                                                                                                                                             |
-| a tool result with `isError: true` (Context7's REST failed) | probe `GET /api/v2/usage`: 401 or 403 → `UpstreamAuthError` with that status (the key is refused: the host marks the connection expired on a 401); 429 → `UpstreamHttpError(429)`; 200 or any other status → a plain `Error` carrying Context7's text (quota spent, library not found, 402, 5xx) — the agent reads it, the audit keeps the class; probe unreachable → the plain `Error` too |
+| What happens                                                | The plugin                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| HTTP 401 / 403 from the MCP server (JSON-RPC `-32001`)      | `UpstreamAuthError` with the status                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| another failed HTTP status                                  | `UpstreamHttpError` with the status                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| a JSON-RPC error frame, or a result that is not text blocks | a plain `Error`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| a tool result with `isError: true` (Context7's REST failed) | probe `GET /api/v2/usage`: 401 or 403 → `UpstreamAuthError` with that status (the key is refused; only a 401 makes the host mark the connection expired); 429 → `UpstreamHttpError(429)`; 200 with a quota provably spent (below) → `UpstreamHttpError(429)`; 200 otherwise, or any other status → a plain `Error` carrying Context7's text (library not found, a paid plan in overage, 5xx) — the agent reads it, the audit keeps the class; probe unreachable → the plain `Error` too; an aborted call → the abort, rethrown |
+
+**When the quota is provably spent** (`isQuotaSpent`, `src/usage.ts`): the
+usage answer of a 200 says the key cannot make another request this month
+when `plan` is `free` and `member.requests >= member.includedInPlan` (the
+Free plan is blocked with a 429), or when `teamspace.spendingLimitUsd` is a
+number and `teamspace.extraCostUsd >= teamspace.spendingLimitUsd` (402
+`spending_limit_exceeded`, any plan). A paid plan past `includedInPlan` is
+billed overage, "not blocked": not spent. Every field is type-guarded (an
+integer count, a finite non-negative amount); an absent or odd field proves
+nothing and gives the plain `Error`. **(live)** The answer for a valid Pro
+key on 2026-10-16 was HTTP 200 with `{ plan: 'pro', usageResetsAt,
+member: { requests: 25, includedInPlan: 2000 }, teamspace: { extraRequests:
+0, extraCostUsd: 0, spendingLimitUsd: null, daily: [{ date, requests,
+searchRequests, docsRequests, extraCostUsd }, …] } }`: the documented shape,
+with `spendingLimitUsd` `null` when no limit is set.
 
 The upstream text is not parsed to decide anything; at most 300 characters
 of it are quoted in the error. A probe after an upstream error costs nothing
 on Context7's quota. A result with `isError: false` (or none) is passed
 through as its `content`, "No documentation found" included.
 
-No streaming (`emitPart` unused), no `credentialCache`, no `refresh`.
+No streaming (`emitPart` unused), no `credentialCache`, no `refresh`. Every
+refusal is decided at the entry point and returned with `refusalResult`, so
+`execute` throws no `ExecutorRefusal` and does not need `declining`. The
+JSON-RPC parser accepts a frame with a `null` id for an error only, never
+for a result. `ctx.signal` is passed to both requests.
 
 ### 6.4 Code map
 
@@ -531,7 +551,7 @@ No streaming (`emitPart` unused), no `credentialCache`, no `refresh`.
 
 ### 6.5 Tests
 
-`npx vitest run plugins/context7` — 46 tests, no network
+`npx vitest run plugins/context7` — 54 tests, no network
 (`tests/unit/support.ts` holds the shared context and the upstream answers
 as the live calls showed them):
 
@@ -549,13 +569,19 @@ as the live calls showed them):
   that is not the index or several, every alias and an invented argument
   denied, 25 malformed library ids, the free-text bounds (500 accepted, 501
   refused);
-- `execute.test.ts` (17): the JSON-RPC body (prefix stripped, arguments as
+- `execute.test.ts` (25): the JSON-RPC body (prefix stripped, arguments as
   classified, nothing else) and the headers (Bearer, no other key header),
   SSE and bare JSON answers, refusals with `fetch.calls` empty, the hostile
-  library ids fed to `classify` and `execute`, an accepted id sent
-  unchanged, a credential without its key, HTTP 401 / 403 / 503, a JSON-RPC
-  error frame, a result that is not text, the probe's answers (401, 429,
-  200, 500, unreachable), "No documentation found" passed through;
+  library ids (empty and overlong included) fed to `classify` and
+  `execute`, an accepted id sent unchanged, a credential without its key,
+  HTTP 401 / 403 / 503, a JSON-RPC error frame, a `null` id accepted for an
+  error frame only, a result that is not text, an `isError` result with no
+  text; the probe's answers: 401, 403, 429, 500, unreachable, and on a 200
+  the quota rule (a Free plan at or past its included requests, one request
+  left, a paid plan in billed overage on each paid plan, a spending limit
+  reached or not, no limit set, ten answers whose fields are absent or odd);
+  the abort signal reaching both requests and an aborted probe rethrown;
+  "No documentation found" passed through;
   `discoverResources` and `verify` on 200 (each plan), 401, 503 and four
   answers that are not the documented one;
 - `risk-catalog.test.ts` (5): the entries at catalog version 1, the decided
@@ -586,6 +612,15 @@ once the dogfood instance has the connection. The direct server's MCP
 `instructions` ("Use this server to fetch current documentation whenever…")
 do not travel through the gateway, which has its own; the tool descriptions
 keep Context7's usage rules.
+
+**Known limitation, follow-up proposed.** The JSON-RPC client over Streamable
+HTTP (`callTool`, `firstJsonRpcFrame` in `src/execute.ts`) duplicates
+Railway's (`callUpstream`, `parseFirstJsonRpcFrame`), because a plugin
+imports the SDK and nothing else. Proposed: extract one
+`callRemoteMcpTool` into `@vaubaan/plugin-sdk`, starting from this plugin's
+stricter version (a type guard on the tool result, a `null` id accepted for
+an error frame only, the abort signal passed), and move both plugins onto it.
+Kept as is for 0.1.0 (coordinator's arbitration, 2026-10-16).
 
 ## Decisions of the product owner (2026-10-16)
 
@@ -618,7 +653,11 @@ irreversible`).
   required; `language` optional); `Authorization: Bearer <key>` works; a bad
   key answers HTTP 200 with an `isError` result "Invalid API key. …" in an
   SSE `event: message` frame; `GET /api/v2/usage` with a bad Bearer key
-  answers HTTP 401.
+  answers HTTP 401; `GET /api/v2/usage` with a valid Pro key answers HTTP 200
+  with the documented shape, `spendingLimitUsd` `null` when no limit is set.
+- **Out of quota (coordinator's arbitration, option B).** After an `isError`
+  result, a 200 from the usage endpoint becomes `UpstreamHttpError(429)` only
+  when the quota is provably spent (§6.3); otherwise the plain `Error`.
 - **Goal: everything through the gateway, zero env.** The key exists only
   as a gateway connection. `.mcp.json` is not edited by the plugin's change
   (§7); the provider-modeler skill and the ADR

@@ -70,6 +70,31 @@ export const INVALID_KEY_RESULT = {
   isError: true,
 };
 
+/**
+ * The answer of `GET /v2/usage` for a valid Pro key, as the live call of
+ * 2026-10-16 returned it ; `member` and `teamspace` fields overridable.
+ */
+export function usageBody(
+  plan: string,
+  member: Record<string, unknown> = {},
+  teamspace: Record<string, unknown> = {},
+): unknown {
+  return {
+    plan,
+    usageResetsAt: '2026-11-01T00:00:00.000Z',
+    member: { requests: 25, includedInPlan: 2000, ...member },
+    teamspace: {
+      extraRequests: 0,
+      extraCostUsd: 0,
+      spendingLimitUsd: null,
+      daily: [
+        { date: '2026-10-16', requests: 0, searchRequests: 0, docsRequests: 0, extraCostUsd: 0 },
+      ],
+      ...teamspace,
+    },
+  };
+}
+
 /** `GET /v2/usage` answering with a status, and a documented body on 200. */
 export function usageAnswers(status: number, body: unknown = { plan: 'free' }): MockRoute {
   return { method: 'GET', url: CONTEXT7_USAGE_URL, status, body };

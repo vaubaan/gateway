@@ -10,9 +10,12 @@
  * "Calls to this endpoint do not count as requests", so none of them spends
  * the key's quota. It takes no argument of the agent.
  *
- * Checked by a live call on 2026-10-16 : a bad Bearer key is answered
+ * Checked by live calls on 2026-10-16 : a bad Bearer key is answered
  * HTTP 401 here, while the MCP server answers it with an `isError` result on
- * an HTTP 200.
+ * an HTTP 200 ; a valid Pro key is answered HTTP 200 with
+ * `{ plan, usageResetsAt, member: { requests, includedInPlan },
+ * teamspace: { extraRequests, extraCostUsd, spendingLimitUsd, daily } }`,
+ * `spendingLimitUsd` being `null` when no limit is set.
  */
 
 import {
@@ -86,8 +89,45 @@ export async function readPlan(ctx: ConnectionContext): Promise<Context7Plan> {
   return body.plan;
 }
 
+/**
+ * True when a usage answer proves the key cannot make another request this
+ * month : a Free plan whose member reached the requests the plan includes
+ * (Context7 then answers 429), or a teamspace whose extra cost reached its
+ * spending limit (402). A paid plan past `includedInPlan` is billed overage,
+ * not blocked : not spent. Every field is type-guarded ; an absent or odd
+ * field proves nothing.
+ */
+export function isQuotaSpent(answer: unknown): boolean {
+  if (!isRecord(answer)) return false;
+  const { plan, member, teamspace } = answer;
+  const freeSpent =
+    plan === 'free' &&
+    isRecord(member) &&
+    isCount(member.requests) &&
+    isCount(member.includedInPlan) &&
+    member.requests >= member.includedInPlan;
+  const limitReached =
+    isRecord(teamspace) &&
+    isAmount(teamspace.spendingLimitUsd) &&
+    isAmount(teamspace.extraCostUsd) &&
+    teamspace.extraCostUsd >= teamspace.spendingLimitUsd;
+  return freeSpent || limitReached;
+}
+
+function isRecord(x: unknown): x is Readonly<Record<string, unknown>> {
+  return typeof x === 'object' && x !== null && !Array.isArray(x);
+}
+
+function isCount(x: unknown): x is number {
+  return typeof x === 'number' && Number.isInteger(x) && x >= 0;
+}
+
+function isAmount(x: unknown): x is number {
+  return typeof x === 'number' && Number.isFinite(x) && x >= 0;
+}
+
 /** The body as JSON, or `undefined` when it is not JSON (refused by the type guard). */
-function parsedJson(text: string): unknown {
+export function parsedJson(text: string): unknown {
   try {
     return JSON.parse(text);
   } catch {

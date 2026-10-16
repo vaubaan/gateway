@@ -24,18 +24,24 @@
  * 2026-10-16). Such a result is not passed through — the audit would say
  * the call went through — and its text is not parsed to decide anything :
  * the executor asks the usage endpoint about the key (free) and throws
- *   - `UpstreamAuthError` (401 / 403) when the key is refused there : the
- *     host marks the connection expired ;
- *   - `UpstreamHttpError(429)` when the key is rate limited or out of quota ;
+ *   - `UpstreamAuthError` with the status when the key is refused there
+ *     (401 or 403) ; on a 401 only, the host marks the connection expired ;
+ *   - `UpstreamHttpError(429)` when the usage endpoint answers 429, or
+ *     answers 200 with a quota provably spent (`isQuotaSpent` : a Free plan
+ *     past its included requests, or a spending limit reached) ;
  *   - a plain `Error` carrying Context7's text otherwise (an unknown
- *     library, a spending limit, a server failure), or when the probe itself
- *     fails. The agent reads the text ; the audit keeps the class.
+ *     library, a paid plan in billed overage, a server failure), or when
+ *     the probe itself fails. The agent reads the text ; the audit keeps the
+ *     class. An aborted call is rethrown as the abort.
+ *
+ * The JSON-RPC client is a copy of Railway's, stricter (a type guard on the
+ * result, a null id accepted for an error frame only) ; extracting one
+ * `callRemoteMcpTool` into the SDK is a follow-up (handbook §7).
  */
 
 import {
   UpstreamAuthError,
   UpstreamHttpError,
-  declining,
   refusalResult,
   type ConnectionContext,
   type ExecuteContext,
@@ -50,6 +56,8 @@ import {
   CONTEXT7_USER_AGENT,
   context7KeyOf,
   isKeyRefusal,
+  isQuotaSpent,
+  parsedJson,
   readPlan,
   requestUsage,
 } from './usage.ts';
@@ -70,18 +78,18 @@ export async function executeContext7(
   tool: string,
   args: Readonly<Record<string, unknown>>,
 ): Promise<McpToolResult> {
-  return declining(async () => {
-    // Declined here, before any request : a result the agent reads, not an upstream failure.
-    const call = readCall(tool, args);
-    if ('denied' in call) return refusalResult(call.denied);
-    const index = resolveIndex(ctx.resources);
-    if ('denied' in index) return refusalResult(index.denied);
+  // Declined here, before any request : a result the agent reads, not an
+  // upstream failure. Every refusal is decided at this entry point, so no
+  // `ExecutorRefusal` is thrown and `declining` is not needed.
+  const call = readCall(tool, args);
+  if ('denied' in call) return refusalResult(call.denied);
+  const index = resolveIndex(ctx.resources);
+  if ('denied' in index) return refusalResult(index.denied);
 
-    const key = context7KeyOf(ctx.credential);
-    const result = await callTool(ctx, key, call);
-    if (result.isError === true) throw await explainToolError(ctx, key, result);
-    return { content: result.content };
-  });
+  const key = context7KeyOf(ctx.credential);
+  const result = await callTool(ctx, key, call);
+  if (result.isError === true) throw await explainToolError(ctx, key, result);
+  return { content: result.content };
 }
 
 /**
@@ -176,8 +184,13 @@ function asFrame(payload: string, id: number): JsonRpcFrame | null {
   }
   if (typeof parsed !== 'object' || parsed === null) return null;
   const frame = parsed as Record<string, unknown>;
-  if (frame.jsonrpc !== '2.0' || (frame.id !== id && frame.id !== null)) return null;
+  if (frame.jsonrpc !== '2.0') return null;
   const error = frame.error as Record<string, unknown> | null | undefined;
+  // A null id is what a server answers when it could not read the request's
+  // id : acceptable for an error frame, never for a result.
+  if (frame.id !== id && !(frame.id === null && typeof error === 'object' && error !== null)) {
+    return null;
+  }
   if (typeof error === 'object' && error !== null) {
     return {
       error: {
@@ -210,22 +223,27 @@ function isToolResult(x: unknown): x is UpstreamToolResult {
 // A tool error, explained by the usage endpoint
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** What to throw for an upstream `isError` result, decided by the status of `GET /v2/usage`. */
+/** What to throw for an upstream `isError` result, decided by what `GET /v2/usage` says of the key. */
 async function explainToolError(
   ctx: ExecuteContext,
   key: string,
   result: UpstreamToolResult,
 ): Promise<Error> {
   const said = `Context7: ${toolText(result)}`;
-  let status: number;
+  let res: Response;
+  let body: unknown;
   try {
-    status = (await requestUsage(ctx, key)).status;
-  } catch {
+    res = await requestUsage(ctx, key);
+    body = res.ok ? parsedJson(await res.text()) : undefined;
+  } catch (err) {
+    // An aborted call is the caller's, not a fact about the key.
+    if (ctx.signal?.aborted) throw err;
     // The probe failed : nothing is known of the key, the tool's text is what there is.
     return new Error(said);
   }
-  if (isKeyRefusal(status)) return new UpstreamAuthError(said, status);
-  if (status === HTTP_TOO_MANY_REQUESTS) return new UpstreamHttpError(said, status);
+  if (isKeyRefusal(res.status)) return new UpstreamAuthError(said, res.status);
+  if (res.status === HTTP_TOO_MANY_REQUESTS) return new UpstreamHttpError(said, res.status);
+  if (res.ok && isQuotaSpent(body)) return new UpstreamHttpError(said, HTTP_TOO_MANY_REQUESTS);
   return new Error(said);
 }
 

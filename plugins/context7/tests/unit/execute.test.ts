@@ -5,7 +5,7 @@
 import { describe, expect, test } from 'vitest';
 
 import { UpstreamAuthError, UpstreamHttpError, type ConnectionContext } from '@vaubaan/plugin-sdk';
-import { mockFetch, refusalText } from '@vaubaan/plugin-sdk/testing';
+import { mockFetch, refusalText, type MockRoute } from '@vaubaan/plugin-sdk/testing';
 
 import {
   CONTEXT7_MCP_URL,
@@ -30,6 +30,7 @@ import {
   mcpAnswers,
   sse,
   usageAnswers,
+  usageBody,
 } from './support.ts';
 
 const QUERY = 'middleware matcher';
@@ -141,6 +142,8 @@ describe('executeContext7 — what it declines, before any request', () => {
       '/a/*',
       '/a\nb',
       '/a?x=1#y',
+      '',
+      `/${'x'.repeat(500)}`,
     ];
     for (const value of hostile) {
       const args = { libraryId: value, query: QUERY };
@@ -253,20 +256,132 @@ describe('executeContext7 — provider failures are thrown', () => {
     expect(fetch.calls[1]!.body).toBeNull();
   });
 
+  const QUOTA_TEXT =
+    'Rate limited or quota exceeded. Upgrade your plan at https://context7.com/plans for higher limits.';
+  const quota = { content: [{ type: 'text', text: QUOTA_TEXT }], isError: true };
+
+  async function thrownAfterProbe(probe: MockRoute): Promise<unknown> {
+    const fetch = mockFetch([mcpAnswers(quota), probe]);
+    return executeContext7(ctx(fetch), TOOL.resolveLibraryId, {
+      libraryName: 'x',
+      query: QUERY,
+    }).catch((e: unknown) => e);
+  }
+
+  function expectPlainError(err: unknown): void {
+    expect(err).toBeInstanceOf(Error);
+    expect(err).not.toBeInstanceOf(UpstreamAuthError);
+    expect(err).not.toBeInstanceOf(UpstreamHttpError);
+    expect((err as Error).message).toBe(`Context7: ${QUOTA_TEXT}`);
+  }
+
   test('an isError result while the usage endpoint answers 429 → UpstreamHttpError(429)', async () => {
-    const quota = {
-      content: [
-        {
-          type: 'text',
-          text: 'Rate limited or quota exceeded. Upgrade your plan at https://context7.com/plans for higher limits.',
-        },
-      ],
-      isError: true,
-    };
-    const fetch = mockFetch([mcpAnswers(quota), usageAnswers(429, { error: 'rate_limited' })]);
+    expect(await thrownAfterProbe(usageAnswers(429, { error: 'rate_limited' }))).toMatchObject({
+      name: 'UpstreamHttpError',
+      status: 429,
+    });
+  });
+
+  test('a Free plan past its included requests is spent → UpstreamHttpError(429)', async () => {
+    for (const requests of [1000, 1020]) {
+      const body = usageBody('free', { requests, includedInPlan: 1000 });
+      expect(await thrownAfterProbe(usageAnswers(200, body)), String(requests)).toMatchObject({
+        name: 'UpstreamHttpError',
+        status: 429,
+      });
+    }
+    // One request left : not spent.
+    expectPlainError(
+      await thrownAfterProbe(
+        usageAnswers(200, usageBody('free', { requests: 999, includedInPlan: 1000 })),
+      ),
+    );
+  });
+
+  test('a paid plan past its included requests is billed overage, not blocked → a plain Error', async () => {
+    for (const plan of ['pro', 'enterprise', 'payg']) {
+      const body = usageBody(
+        plan,
+        { requests: 2340, includedInPlan: 2000 },
+        { extraRequests: 340, extraCostUsd: 1.7 },
+      );
+      expectPlainError(await thrownAfterProbe(usageAnswers(200, body)));
+    }
+  });
+
+  test('a spending limit reached is spent, on any plan → UpstreamHttpError(429)', async () => {
+    for (const extraCostUsd of [50, 50.5]) {
+      const body = usageBody('pro', { requests: 12000 }, { extraCostUsd, spendingLimitUsd: 50 });
+      expect(await thrownAfterProbe(usageAnswers(200, body))).toMatchObject({
+        name: 'UpstreamHttpError',
+        status: 429,
+      });
+    }
+    expectPlainError(
+      await thrownAfterProbe(
+        usageAnswers(200, usageBody('pro', {}, { extraCostUsd: 49.9, spendingLimitUsd: 50 })),
+      ),
+    );
+    // No limit set (`null`, as the live answer) : never spent by the limit.
+    expectPlainError(
+      await thrownAfterProbe(usageAnswers(200, usageBody('pro', {}, { extraCostUsd: 999 }))),
+    );
+  });
+
+  test('a usage answer whose fields are absent or odd proves nothing → a plain Error', async () => {
+    for (const body of [
+      { plan: 'free' },
+      usageBody('free', { requests: '1000', includedInPlan: 1000 }),
+      usageBody('free', { requests: 1000, includedInPlan: null }),
+      usageBody('free', { requests: -1, includedInPlan: -1 }),
+      usageBody('free', { requests: 1000.5, includedInPlan: 1000 }),
+      usageBody('pro', {}, { extraCostUsd: '60', spendingLimitUsd: 50 }),
+      usageBody('pro', {}, { extraCostUsd: 60, spendingLimitUsd: 'none' }),
+      {
+        ...(usageBody('free', { requests: 1000, includedInPlan: 1000 }) as object),
+        member: [1000],
+      },
+      [],
+      'not json',
+    ]) {
+      expectPlainError(await thrownAfterProbe(usageAnswers(200, body)));
+    }
+  });
+
+  test('a probe answering 403 → UpstreamAuthError(403)', async () => {
+    expect(await thrownAfterProbe(usageAnswers(403, { error: 'forbidden' }))).toMatchObject({
+      name: 'UpstreamAuthError',
+      upstreamStatus: 403,
+    });
+  });
+
+  test('an isError result with no text says so', async () => {
+    const fetch = mockFetch([mcpAnswers({ content: [], isError: true }), usageAnswers(200)]);
     await expect(
       executeContext7(ctx(fetch), TOOL.resolveLibraryId, { libraryName: 'x', query: QUERY }),
-    ).rejects.toMatchObject({ name: 'UpstreamHttpError', status: 429 });
+    ).rejects.toThrow('Context7: the tool failed without a message');
+  });
+
+  test('the abort signal reaches both requests, and an aborted probe is rethrown as the abort', async () => {
+    const controller = new AbortController();
+    const seen: Array<AbortSignal | undefined> = [];
+    const aborting: typeof fetch = async (input, init) => {
+      seen.push(init?.signal ?? undefined);
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url === CONTEXT7_MCP_URL) {
+        const id = (JSON.parse(String(init?.body)) as { id: number }).id;
+        return Promise.resolve(new Response(sse({ jsonrpc: '2.0', id, result: quota })));
+      }
+      controller.abort();
+      return Promise.reject(new DOMException('aborted', 'AbortError'));
+    };
+    const err = await executeContext7(
+      { ...ctx(mockFetch([])), fetch: aborting, signal: controller.signal },
+      TOOL.resolveLibraryId,
+      { libraryName: 'x', query: QUERY },
+    ).catch((e: unknown) => e);
+    expect(seen).toEqual([controller.signal, controller.signal]);
+    expect(err).toMatchObject({ name: 'AbortError' });
   });
 
   test('an isError result with a healthy key, or a probe that fails → a plain Error carrying the text', async () => {
@@ -314,6 +429,19 @@ describe('firstJsonRpcFrame', () => {
     const body = `event: message\ndata: not json\n\ndata: ${JSON.stringify({ jsonrpc: '2.0', id: 9, result: 1 })}\n\ndata: ${JSON.stringify({ jsonrpc: '2.0', id: 7, result: 2 })}\n`;
     expect(firstJsonRpcFrame(body, 7)).toEqual({ result: 2 });
     expect(() => firstJsonRpcFrame(body, 8)).toThrow(/no JSON-RPC frame answered id 8/);
+  });
+
+  test('a null id is accepted for an error frame only', () => {
+    const error = JSON.stringify({
+      jsonrpc: '2.0',
+      id: null,
+      error: { code: -32700, message: 'parse error' },
+    });
+    expect(firstJsonRpcFrame(`data: ${error}\n`, 7)).toEqual({
+      error: { code: -32700, message: 'parse error' },
+    });
+    const result = JSON.stringify({ jsonrpc: '2.0', id: null, result: { content: [] } });
+    expect(() => firstJsonRpcFrame(`data: ${result}\n`, 7)).toThrow(/no JSON-RPC frame/);
   });
 });
 

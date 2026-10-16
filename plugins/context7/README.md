@@ -105,21 +105,29 @@ saved holds the explicit list of risks.
 
 The MCP server answers a failed Context7 request with a tool result
 `isError: true` on an HTTP 200 (a bad key included). The plugin does not
-pass it through and does not read its text to decide: it asks `GET
-/v2/usage` (free) and throws `UpstreamAuthError` when the key is refused
-there (401 or 403: the connection is marked expired), `UpstreamHttpError`
-429 when the key is rate limited, and otherwise an `Error` carrying
-Context7's text, which the agent reads. A failed HTTP status of the MCP
-server is thrown with its status.
+pass it through and does not read its text to decide: it asks
+`GET /v2/usage` (free) about the key and throws
+
+- `UpstreamAuthError` when the key is refused there (401 or 403; only a 401
+  makes the gateway mark the account as needing reconnection);
+- `UpstreamHttpError` 429 when the usage endpoint answers 429, or answers 200
+  with a quota provably spent: a Free plan whose member reached the requests
+  the plan includes, or a spending limit reached. A paid plan past its
+  included requests is billed overage, not blocked, so it is not a 429;
+- otherwise an `Error` carrying Context7's text, which the agent reads.
+
+A failed HTTP status of the MCP server is thrown with its status. An aborted
+call is rethrown as the abort.
 
 ## Tests
 
-`npx vitest run plugins/context7` — 46 tests: the SDK kit
+`npx vitest run plugins/context7` — 54 tests: the SDK kit
 (`assertPluginWellFormed`, `assertPresetsValid`, `assertNoWildcard`,
 `assertCatalogCoverage`, `assertIdentifiersRefused` with no identifier in a
 URL), the frozen upstream surface, the classifier branch by branch (every
 alias refused, malformed library ids, free-text bounds, the resource),
 `execute`, `discoverResources` and `verify` against `mockFetch` (the
-JSON-RPC body, the headers, each failure and the probe's answers). No test
+JSON-RPC body, the headers, each failure, the probe's answers and the quota
+rule, the abort signal). No test
 calls Context7. `risk-catalog.test.ts` and `data-model.test.ts` lint the YAML
 (slice → risk resolution included) and the model.
