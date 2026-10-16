@@ -13,6 +13,7 @@
     "@modelcontextprotocol/server": "2.3.1",
     "@vaubaan/gateway-core": "*",
     "@vaubaan/plugin-cloudflare-dns": "*",
+    "@vaubaan/plugin-fly": "*",
     "@vaubaan/plugin-github": "*",
     "@vaubaan/plugin-gmail": "*",
     "@vaubaan/plugin-railway": "*",

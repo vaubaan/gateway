@@ -128,7 +128,7 @@ The table relies on the plugin contract ([plugin-sdk](plugin-sdk.md),
 "Errors of `execute`"): a provider failure is **thrown** (`UpstreamAuthError`
 on 401/403, `UpstreamHttpError` on another failed status, a network error as
 it comes), and `isError: true` is returned only for what the executor
-declines itself. The ten shipped plugins follow it, so a provider 5xx is
+declines itself. The eleven shipped plugins follow it, so a provider 5xx is
 `upstream-error` / `http_5xx`, never `classification-error`. Still coarse: a
 provider failure that carries no status (a JSON-RPC error frame of a
 rewrapped MCP server, an unusable answer) is `unspecified`, and a rewrapped

@@ -1,0 +1,853 @@
+# Risk catalog of the `fly` provider (Fly.io Machines API).
+#
+# Handbook : docs/handbook/providers/fly.md §3. Spec : docs/spec/gateway-risk-model.md §4.
+#
+# Write patterns are exact : each write slice touches the risk named for it.
+# A call that does several things (create a machine, replace a config,
+# restore a volume) gets several slices from the classifier, one per risk.
+# Writes on an existing app's state are env-scoped ; reads, app creation,
+# empty volume creation and snapshots are not.
+
+provider: fly
+catalog_version: 1
+catalog_date: 2026-10-16
+
+risks:
+  # ─── Reads ───────────────────────────────────────────────────────────────────
+
+  - id: fly.read-org
+    label: 'List the apps and regions of the organization'
+    reason: >-
+      App names, ids and networks, and the platform regions. In an
+      organization that hosts one app per customer, the list of apps is the
+      list of customers; the answer is filtered to the apps of the mission.
+    matches:
+      - 'fly.org[*].region[*].R'
+      - 'fly.org[*].app[*].R'
+    infra_limits: { calls_per_minute_max: 60 }
+    vector:
+      {
+        reversibility: reversible,
+        blast: account,
+        data: metadata,
+        cost: free,
+        visibility: internal,
+        persistence: stateless,
+      }
+
+  - id: fly.read-runtime
+    label: 'Read machines, volumes, snapshots, IP addresses and certificates'
+    reason: >-
+      Machine configurations (image, region, size, services, plain
+      environment variables), events, processes, volumes and their
+      snapshots, the app's addresses and certificates. People sometimes put
+      secrets in plain environment variables.
+    matches:
+      - 'fly.org[*].app[*].machine[**].R'
+      - 'fly.org[*].app[*].volume[**].R'
+      - 'fly.org[*].app[*].ip[*].R'
+      - 'fly.org[*].app[*].certificate[*].R'
+    infra_limits: { calls_per_minute_max: 120 }
+    vector:
+      {
+        reversibility: reversible,
+        blast: single,
+        data: data,
+        cost: free,
+        visibility: internal,
+        persistence: stateless,
+      }
+
+  - id: fly.read-secret-names
+    label: 'List the names of the app secrets'
+    reason: >-
+      Names, digests and dates of the secrets set on an app, never their
+      values: any value in Fly's answer is replaced before the agent sees it.
+    matches: 'fly.org[*].app[*].secret[*].R'
+    infra_limits: { calls_per_minute_max: 30 }
+    vector:
+      {
+        reversibility: reversible,
+        blast: single,
+        data: metadata,
+        cost: free,
+        visibility: internal,
+        persistence: stateless,
+      }
+
+  - id: fly.read-logs
+    label: 'Read the app logs'
+    reason: >-
+      What the app printed recently. Logs can carry customer data, and
+      secrets when an app prints them.
+    matches: 'fly.org[*].app[*].logs.R'
+    infra_limits: { calls_per_minute_max: 30 }
+    vector:
+      {
+        reversibility: reversible,
+        blast: single,
+        data: pii,
+        cost: free,
+        visibility: internal,
+        persistence: stateless,
+      }
+
+  # ─── Apps ────────────────────────────────────────────────────────────────────
+
+  - id: fly.app-create
+    label: 'Create an app in the organization'
+    reason: >-
+      A new app on a private network of its own. Costs nothing until it runs
+      machines. It is not part of the mission until its owner labels it and
+      adds it.
+    matches: 'fly.org[*].app.W'
+    infra_limits: { calls_per_minute_max: 5 }
+    vector:
+      {
+        reversibility: reversible,
+        blast: account,
+        data: metadata,
+        cost: moderate,
+        visibility: internal,
+        persistence: posture,
+      }
+
+  - id: fly.app-destroy
+    label: 'Destroy an app'
+    reason: >-
+      Removes the app with its machines, addresses, certificates, volumes and
+      their snapshots. For a customer instance, its data is gone for good.
+    matches: 'fly.org[*].app[*].app-destroy.W'
+    acceptable_in_envs: [staging, prod]
+    infra_limits: { calls_per_minute_max: 2 }
+    vector:
+      {
+        reversibility: irreversible,
+        blast: env,
+        data: pii,
+        cost: free,
+        visibility: public,
+        persistence: posture,
+      }
+
+  # ─── Machines ────────────────────────────────────────────────────────────────
+
+  - id: fly.machine-create
+    label: 'Create a machine'
+    reason: >-
+      A new VM in the app, billed while it runs. A creation sets a whole
+      configuration and an image: a mission needs those two permissions too.
+    matches: 'fly.org[*].app[*].machine.W'
+    acceptable_in_envs: [staging, prod]
+    infra_limits: { calls_per_minute_max: 10 }
+    vector:
+      {
+        reversibility: reversible,
+        blast: single,
+        data: metadata,
+        cost: moderate,
+        visibility: internal,
+        persistence: session,
+      }
+
+  - id: fly.machine-config-write
+    label: 'Set a machine configuration'
+    reason: >-
+      Environment variables, start command, files written at boot, mounted
+      volumes, autostop and the services the machine exposes. A
+      configuration can start any command with the app's secrets in its
+      environment.
+    matches:
+      - 'fly.org[*].app[*].machine.config.W'
+      - 'fly.org[*].app[*].machine[*].config.W'
+    acceptable_in_envs: [staging, prod]
+    infra_limits: { calls_per_minute_max: 20 }
+    vector:
+      {
+        reversibility: costly,
+        blast: single,
+        data: secret,
+        cost: moderate,
+        visibility: public,
+        persistence: posture,
+      }
+    vector_overrides:
+      staging: { visibility: internal }
+
+  - id: fly.deploy
+    label: 'Change the image a machine runs'
+    reason: >-
+      The machine restarts on the new image, which runs with the app's
+      secrets and volume. Only images pinned by digest under the
+      connection's allowed prefixes are accepted, and a mounted volume needs
+      a fresh snapshot first.
+    matches:
+      - 'fly.org[*].app[*].machine.image.W'
+      - 'fly.org[*].app[*].machine[*].image.W'
+    acceptable_in_envs: [staging, prod]
+    infra_limits: { calls_per_minute_max: 20 }
+    vector:
+      {
+        reversibility: reversible,
+        blast: single,
+        data: secret,
+        cost: free,
+        visibility: public,
+        persistence: session,
+      }
+    vector_overrides:
+      staging: { visibility: internal }
+
+  - id: fly.scale
+    label: 'Resize a machine'
+    reason: 'CPU and memory of a machine, billed while it runs. The machine restarts.'
+    matches: 'fly.org[*].app[*].machine[*].guest.W'
+    acceptable_in_envs: [staging, prod]
+    infra_limits: { calls_per_minute_max: 10 }
+    vector:
+      {
+        reversibility: reversible,
+        blast: single,
+        data: metadata,
+        cost: unbounded,
+        visibility: internal,
+        persistence: session,
+      }
+
+  - id: fly.machine-power
+    label: 'Start, stop, restart, suspend or cordon a machine'
+    reason: >-
+      A stopped or cordoned machine serves no traffic until it starts again
+      or a request wakes it. Changes no data.
+    matches: 'fly.org[*].app[*].machine[*].power.W'
+    acceptable_in_envs: [staging, prod]
+    infra_limits: { calls_per_minute_max: 30 }
+    vector:
+      {
+        reversibility: reversible,
+        blast: single,
+        data: metadata,
+        cost: free,
+        visibility: public,
+        persistence: session,
+      }
+
+  - id: fly.machine-destroy
+    label: 'Destroy a machine'
+    reason: >-
+      The machine and its root filesystem are gone; a volume it mounted
+      stays. A stopped machine only: a running one must be stopped first.
+    matches: 'fly.org[*].app[*].machine[*].machine-destroy.W'
+    acceptable_in_envs: [staging, prod]
+    infra_limits: { calls_per_minute_max: 10 }
+    vector:
+      {
+        reversibility: costly,
+        blast: single,
+        data: metadata,
+        cost: free,
+        visibility: public,
+        persistence: session,
+      }
+
+  - id: fly.machine-exec
+    label: 'Run a command inside a machine'
+    reason: >-
+      Any command, with the app's secrets in its environment and its volume
+      mounted; the output comes back to the agent. On a Vaubaan instance
+      this reaches the master key and every account it seals.
+    matches: 'fly.org[*].app[*].machine[*].exec.W'
+    acceptable_in_envs: [staging, prod]
+    infra_limits: { calls_per_minute_max: 10 }
+    vector:
+      {
+        reversibility: irreversible,
+        blast: env,
+        data: secret,
+        cost: free,
+        visibility: internal,
+        persistence: posture,
+      }
+
+  # ─── Volumes ─────────────────────────────────────────────────────────────────
+
+  - id: fly.volume-create
+    label: 'Create an empty volume'
+    reason: 'Persistent storage billed by size, in one region. Holds no data yet.'
+    matches: 'fly.org[*].app[*].volume.W'
+    infra_limits: { calls_per_minute_max: 10 }
+    vector:
+      {
+        reversibility: reversible,
+        blast: single,
+        data: metadata,
+        cost: moderate,
+        visibility: internal,
+        persistence: session,
+      }
+
+  - id: fly.volume-restore
+    label: 'Create a volume from a snapshot or another volume'
+    reason: >-
+      Copies data into a new volume. A machine that mounts it serves that
+      data, which may be older than the live one. The source must belong to
+      the same app.
+    matches: 'fly.org[*].app[*].volume.restore.W'
+    acceptable_in_envs: [staging, prod]
+    infra_limits: { calls_per_minute_max: 5 }
+    vector:
+      {
+        reversibility: costly,
+        blast: single,
+        data: pii,
+        cost: moderate,
+        visibility: internal,
+        persistence: session,
+      }
+
+  - id: fly.volume-extend
+    label: 'Extend a volume'
+    reason: 'A volume grows and never shrinks: the extra size is billed for as long as it exists.'
+    matches: 'fly.org[*].app[*].volume[*].extend.W'
+    acceptable_in_envs: [staging, prod]
+    infra_limits: { calls_per_minute_max: 5 }
+    vector:
+      {
+        reversibility: irreversible,
+        blast: single,
+        data: metadata,
+        cost: moderate,
+        visibility: internal,
+        persistence: posture,
+      }
+
+  - id: fly.volume-backup-settings
+    label: 'Change automatic snapshots of a volume'
+    reason: >-
+      Turns daily snapshots on or off and sets how many days they are kept.
+      Off, or a shorter retention, leaves less to restore from.
+    matches:
+      - 'fly.org[*].app[*].volume.backup-settings.W'
+      - 'fly.org[*].app[*].volume[*].backup-settings.W'
+    acceptable_in_envs: [staging, prod]
+    infra_limits: { calls_per_minute_max: 5 }
+    vector:
+      {
+        reversibility: reversible,
+        blast: single,
+        data: data,
+        cost: moderate,
+        visibility: internal,
+        persistence: posture,
+      }
+
+  - id: fly.volume-snapshot
+    label: 'Take a volume snapshot'
+    reason: 'A point-in-time copy, kept for the volume retention period. Changes nothing that runs.'
+    matches: 'fly.org[*].app[*].volume[*].snapshot.W'
+    infra_limits: { calls_per_minute_max: 10 }
+    vector:
+      {
+        reversibility: reversible,
+        blast: single,
+        data: metadata,
+        cost: moderate,
+        visibility: internal,
+        persistence: stateless,
+      }
+
+  - id: fly.volume-destroy
+    label: 'Destroy a volume'
+    reason: >-
+      Cannot be undone. The data survives only in snapshots still within
+      their retention period.
+    matches: 'fly.org[*].app[*].volume[*].volume-destroy.W'
+    acceptable_in_envs: [staging, prod]
+    infra_limits: { calls_per_minute_max: 5 }
+    vector:
+      {
+        reversibility: irreversible,
+        blast: single,
+        data: pii,
+        cost: free,
+        visibility: internal,
+        persistence: posture,
+      }
+
+  # ─── Secrets, addresses, certificates ────────────────────────────────────────
+
+  - id: fly.secret-write
+    label: 'Set or remove app secrets'
+    reason: >-
+      Machines pick up new values when they are next updated. A wrong or
+      missing value, such as a master key or a sign-in setting, can lock
+      everyone out of an instance or make its sealed data unreadable.
+    matches: 'fly.org[*].app[*].secret[*].W'
+    acceptable_in_envs: [staging, prod]
+    infra_limits: { calls_per_minute_max: 10 }
+    vector:
+      {
+        reversibility: costly,
+        blast: env,
+        data: secret,
+        cost: free,
+        visibility: internal,
+        persistence: posture,
+      }
+
+  - id: fly.ip-write
+    label: 'Allocate an IP address'
+    reason: >-
+      A public address makes the app reachable from the internet; a
+      dedicated IPv4 address is billed monthly.
+    matches: 'fly.org[*].app[*].ip.W'
+    acceptable_in_envs: [staging, prod]
+    infra_limits: { calls_per_minute_max: 5 }
+    vector:
+      {
+        reversibility: reversible,
+        blast: single,
+        data: metadata,
+        cost: moderate,
+        visibility: public,
+        persistence: posture,
+      }
+
+  - id: fly.ip-release
+    label: 'Release an IP address'
+    reason: >-
+      The app stops answering on that address and DNS pointing at it breaks.
+      A released dedicated address is not given back.
+    matches: 'fly.org[*].app[*].ip[*].ip-release.W'
+    acceptable_in_envs: [staging, prod]
+    infra_limits: { calls_per_minute_max: 5 }
+    vector:
+      {
+        reversibility: irreversible,
+        blast: single,
+        data: metadata,
+        cost: free,
+        visibility: public,
+        persistence: posture,
+      }
+
+  - id: fly.certificate-write
+    label: 'Request or re-check a certificate'
+    reason: >-
+      Asks Fly to issue a certificate for a hostname, or to validate it
+      again. Issuance succeeds only when the hostname's DNS points at the app.
+    matches: 'fly.org[*].app[*].certificate[*].W'
+    acceptable_in_envs: [staging, prod]
+    infra_limits: { calls_per_minute_max: 10 }
+    vector:
+      {
+        reversibility: reversible,
+        blast: single,
+        data: metadata,
+        cost: free,
+        visibility: public,
+        persistence: posture,
+      }
+
+  - id: fly.certificate-remove
+    label: 'Remove a certificate'
+    reason: 'HTTPS on that hostname fails until a certificate is issued again.'
+    matches: 'fly.org[*].app[*].certificate[*].certificate-remove.W'
+    acceptable_in_envs: [staging, prod]
+    infra_limits: { calls_per_minute_max: 5 }
+    vector:
+      {
+        reversibility: costly,
+        blast: single,
+        data: metadata,
+        cost: free,
+        visibility: public,
+        persistence: posture,
+      }
+
+  # ─── Fallback ────────────────────────────────────────────────────────────────
+
+  - id: fly.uncategorized-write
+    label: 'Uncategorized write'
+    reason: 'Catch-all for a write no other entry covers. Seeing it in the activity means the catalog misses an entry.'
+    matches: 'fly.**.W'
+    fallback: true
+    vector:
+      {
+        reversibility: costly,
+        blast: env,
+        data: data,
+        cost: moderate,
+        visibility: internal,
+        persistence: session,
+      }
+
+# Gates: destroying an app or a volume, writing secrets and running a command
+# inside a machine always ask first. `fleet-upgrade` lets production image
+# changes run freely : the image guard (pinned digest, allowed prefix) and the
+# fresh-snapshot guard of the executor hold for every image change.
+
+presets:
+  - id: read-only
+    label: Read-only
+    description: 'Look at apps, machines, volumes, secret names and logs. Changes nothing.'
+    entries:
+      - risk_id: fly.read-org
+        quota: 2000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly.read-runtime
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly.read-secret-names
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly.read-logs
+        quota: 1000
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+
+  - id: operator
+    label: Operator
+    description: 'Day-to-day care of existing instances: staging runs freely; production configuration, upgrades, resizes, secrets, commands inside a machine and anything destructive ask first.'
+    entries:
+      - risk_id: fly.read-org
+        quota: 2000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly.read-runtime
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly.read-secret-names
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly.read-logs
+        quota: 1000
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[staging].machine-config-write
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[prod].machine-config-write
+        quota: 10
+        rate_limit: { max: 2, window_seconds: 60 }
+        gate: approval
+      - risk_id: fly[staging].deploy
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[prod].deploy
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+      - risk_id: fly[staging].scale
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[prod].scale
+        quota: 10
+        rate_limit: { max: 2, window_seconds: 60 }
+        gate: approval
+      - risk_id: fly[staging].machine-power
+        quota: 200
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[prod].machine-power
+        quota: 200
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[staging].machine-destroy
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[prod].machine-destroy
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+        gate: approval
+      - risk_id: fly[staging].machine-exec
+        quota: 10
+        rate_limit: { max: 2, window_seconds: 60 }
+        gate: approval
+      - risk_id: fly[prod].machine-exec
+        quota: 10
+        rate_limit: { max: 2, window_seconds: 60 }
+        gate: approval
+      - risk_id: fly.volume-create
+        quota: 10
+        rate_limit: { max: 2, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[staging].volume-restore
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+        gate: approval
+      - risk_id: fly[prod].volume-restore
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+        gate: approval
+      - risk_id: fly[staging].volume-extend
+        quota: 10
+        rate_limit: { max: 2, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[prod].volume-extend
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+        gate: approval
+      - risk_id: fly[staging].volume-backup-settings
+        quota: 10
+        rate_limit: { max: 2, window_seconds: 60 }
+        gate: approval
+      - risk_id: fly[prod].volume-backup-settings
+        quota: 10
+        rate_limit: { max: 2, window_seconds: 60 }
+        gate: approval
+      - risk_id: fly.volume-snapshot
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[staging].volume-destroy
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+        gate: approval
+      - risk_id: fly[staging].secret-write
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+      - risk_id: fly[prod].secret-write
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+      - risk_id: fly[staging].ip-write
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+        gate: approval
+      - risk_id: fly[prod].ip-write
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+        gate: approval
+      - risk_id: fly[staging].ip-release
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+        gate: approval
+      - risk_id: fly[prod].ip-release
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+        gate: approval
+      - risk_id: fly[staging].certificate-write
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[prod].certificate-write
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[staging].certificate-remove
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+        gate: approval
+      - risk_id: fly[prod].certificate-remove
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+        gate: approval
+
+  - id: fleet-upgrade
+    label: Fleet upgrade
+    description: 'Roll a new image across many instances: snapshot each volume, then change the image and restart, without asking each time. Only pinned images under the allowed prefixes, after a fresh snapshot. Nothing else.'
+    entries:
+      - risk_id: fly.read-org
+        quota: 2000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly.read-runtime
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly.read-logs
+        quota: 1000
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly.volume-snapshot
+        quota: 500
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[staging].deploy
+        quota: 200
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[prod].deploy
+        quota: 500
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[staging].machine-power
+        quota: 500
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[prod].machine-power
+        quota: 500
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+
+  - id: provisioner
+    label: Provisioner
+    description: 'Create and configure customer instances: apps, machines, volumes, addresses, certificates. Secrets, restores and destruction ask first; commands inside a machine are not included.'
+    entries:
+      - risk_id: fly.read-org
+        quota: 2000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly.read-runtime
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly.read-secret-names
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly.read-logs
+        quota: 1000
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly.app-create
+        quota: 10
+        rate_limit: { max: 2, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[staging].app-destroy
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+        gate: approval
+      - risk_id: fly[prod].app-destroy
+        quota: 2
+        rate_limit: { max: 1, window_seconds: 60 }
+        gate: approval
+      - risk_id: fly[staging].machine-create
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[prod].machine-create
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[staging].machine-config-write
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[prod].machine-config-write
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[staging].deploy
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[prod].deploy
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[staging].scale
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[prod].scale
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[staging].machine-power
+        quota: 100
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[prod].machine-power
+        quota: 100
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[staging].machine-destroy
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[prod].machine-destroy
+        quota: 10
+        rate_limit: { max: 2, window_seconds: 60 }
+        gate: approval
+      - risk_id: fly.volume-create
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[staging].volume-restore
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+        gate: approval
+      - risk_id: fly[prod].volume-restore
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+        gate: approval
+      - risk_id: fly[staging].volume-extend
+        quota: 10
+        rate_limit: { max: 2, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[prod].volume-extend
+        quota: 10
+        rate_limit: { max: 2, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[staging].volume-backup-settings
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[prod].volume-backup-settings
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly.volume-snapshot
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[staging].volume-destroy
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+        gate: approval
+      - risk_id: fly[prod].volume-destroy
+        quota: 2
+        rate_limit: { max: 1, window_seconds: 60 }
+        gate: approval
+      - risk_id: fly[staging].secret-write
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: approval
+      - risk_id: fly[prod].secret-write
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: approval
+      - risk_id: fly[staging].ip-write
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[prod].ip-write
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[staging].ip-release
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+        gate: approval
+      - risk_id: fly[prod].ip-release
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+        gate: approval
+      - risk_id: fly[staging].certificate-write
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[prod].certificate-write
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: auto
+      - risk_id: fly[staging].certificate-remove
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+        gate: approval
+      - risk_id: fly[prod].certificate-remove
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+        gate: approval
