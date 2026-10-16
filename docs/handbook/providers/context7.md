@@ -1,6 +1,6 @@
 ---
 title: Context7 provider plugin
-status: draft
+status: current
 date: 2026-10-16
 last_synced: 2026-10-16
 tracks:
@@ -10,10 +10,11 @@ tracks:
 
 # Context7 provider plugin
 
-> **Draft, phase 1 of [`provider-modeler`](../../skills/provider-modeler.md):
-> nothing under `plugins/context7/` exists yet.** This page proposes the
-> model for a human review before any code. The questions left to the
-> product owner are in "Open questions" at the end.
+> **Current.** The model was drafted in phase 1 of
+> [`provider-modeler`](../../skills/provider-modeler.md), reviewed by the
+> product owner on 2026-10-16 ("Decisions of the product owner", at the
+> end), and is what `plugins/context7/` implements. This page describes the
+> code as written.
 
 > **Sources: an authorised exception to the Context7-first rule.** The rule
 > ([`use-context7-for-provider-docs`](../../decisions/use-context7-for-provider-docs.md))
@@ -24,10 +25,12 @@ tracks:
 > Every page read is listed in "Sources"; the facts taken from the
 > repository's source code describe the open-source server, which is
 > assumed to be the one hosted at `mcp.context7.com` (marked ⚠ where a rule
-> depends on it). One fact comes from a live call made by the coordinator
-> the same day (marked **(live)**).
+> depends on it). The facts marked **(live)** come from live calls made the
+> same day: by the coordinator and the product owner with a key, and an
+> anonymous `tools/list` (no key needed, no quota spent) from which
+> `upstream-tools.json` was captured.
 
-`@vaubaan/plugin-context7` 0.1.0 (proposed), tool prefix `context7__`.
+`@vaubaan/plugin-context7` 0.1.0, catalog version 1, tool prefix `context7__`.
 
 **Why.** "Everything goes through our gateway, zero env" (PO). Today Claude
 Code in this repository reaches Context7 directly and anonymously (the
@@ -51,7 +54,7 @@ layer over the same two REST endpoints (`searchLibraries` →
 `/v2/libs/search`, `fetchLibraryContext` → `/v2/context`, in
 `packages/mcp/src/lib/api.ts`).
 
-**Recommendation: rewrap the MCP server for the two tools, and use the REST
+**Decision: rewrap the MCP server for the two tools, and use the REST
 API for what the gateway does around them** (checking a pasted key,
 discovery, diagnosing a refused call). This is the Railway shape — MCP
 tools forwarded, a side API for the rest
@@ -72,21 +75,25 @@ For the rewrap:
   instance per request, no Mcp-Session-Id, no session store" (source
   comment) — so, as for Railway, `tools/call` needs no `initialize` and no
   session. The key travels as a header on each request. **(live)** A
-  `tools/call` of `resolve-library-id` with `{ libraryName, query }` and the
-  key in a header answered an SSE `event: message` whose text starts with
-  "Available Libraries: …": the Railway parser (`parseFirstJsonRpcFrame`)
-  applies.
-- **The surface is frozen.** The two declarations are captured verbatim from
-  `tools/list` into `upstream-tools.json`, as for Railway and Vercel. A tool
-  Context7 adds later is unknown to the classifier and refused until it is
-  modelled.
+  `tools/call` of `resolve-library-id` with `{ libraryName, query }` and
+  `Authorization: Bearer <key>` answered an SSE `event: message` whose text
+  starts with "Available Libraries: …": a parser of the first JSON-RPC frame,
+  as Railway's, applies.
+- **The surface is frozen.** **(live)** `tools/list` returns exactly two
+  tools, `resolve-library-id` and `query-docs`; their declarations are
+  captured verbatim into `upstream-tools.json`, as for Railway and Vercel. A
+  tool Context7 adds later is unknown to the classifier and refused until it
+  is modelled.
 
 Against the rewrap, and how the design answers it:
 
 - **Failures arrive as tool results, not statuses.** The MCP server turns a
   failed REST call into a tool result with `isError: true` on an HTTP 200
   (`outcome === "error"`; "No documentation found" is a valid answer, not an
-  error). Its texts are fixed strings of `parseErrorResponse`: on 401
+  error). **(live)** A bad key answers HTTP 200 with the JSON-RPC result
+  `{ content: [{ type: 'text', text: 'Invalid API key. …' }], isError: true }`
+  in an SSE `event: message` frame, while `GET /api/v2/usage` with the same
+  bad Bearer key answers HTTP 401. Its texts are fixed strings of `parseErrorResponse`: on 401
   "Invalid API key. Please check your API key. API keys should start with
   'ctx7sk' prefix.", on 429 with a key "Rate limited or quota exceeded.
   Upgrade your plan at https://context7.com/plans for higher limits.", on
@@ -141,13 +148,13 @@ with a constant `ref`.
 it keeps the library id in the slice (the audit then says which
 documentation was read), and it leaves room for a narrower risk later — a
 risk on the private sources, or a restriction to named libraries — without
-a new slice shape (Open question Q3).
+a new slice shape (D3: not in v0.1).
 
 **No environment.** Context7 has no notion of environment; no entity is
 `envScopable`, no `envOf`, no risk is env-scoped. The owner may still put a
 label on the resource; it changes nothing.
 
-`summary` (proposed, for Reference): "One account is a Context7 API key of a
+`summary` (shown in Reference): "One account is a Context7 API key of a
 teamspace. It has one resource, the library index the key can query: the
 public libraries its teamspace policies allow and its private sources. The
 documentation questions an agent asks are sent to Context7. There is no
@@ -158,16 +165,18 @@ environment."
 Two rewrapped tools. Names keep the upstream spelling after the prefix, as
 Railway does (`railway__get-logs`).
 
-| Tool                           | Upstream input schema (from the source ⚠, to be frozen from `tools/list`)                 | Slice                                   | Risk                  |
+| Tool                           | Upstream input schema (**(live)** `tools/list`)                                           | Slice                                   | Risk                  |
 | ------------------------------ | ----------------------------------------------------------------------------------------- | --------------------------------------- | --------------------- |
 | `context7__resolve-library-id` | `query: string` (required), `libraryName: string` (required)                              | `context7.index[<ref>].library[*].R`    | `context7.query-docs` |
 | `context7__query-docs`         | `libraryId: string` (required), `query: string` (required), `language: string` (optional) | `context7.index[<ref>].library[<id>].R` | `context7.query-docs` |
 
 Upstream annotations of both: `readOnlyHint: true`, `destructiveHint:
 false`, `openWorldHint: true`, `idempotentHint: true`. Upstream titles:
-"Resolve Context7 Library ID", "Query Documentation". Proposed
-`toolTitles`: "Find a library in Context7", "Read a library's
-documentation".
+"Resolve Context7 Library ID", "Query Documentation". Both stay in
+`upstream-tools.json`; the gateway's declaration carries the name (prefixed),
+the description and the schema's `properties` and `required`, unchanged
+(`src/tools.ts`). `toolTitles`: "Find a library in Context7", "Read a
+library's documentation".
 
 - `<ref>` is the connection's single resource (§6.2). The tools take no
   resource argument: the upstream schemas have none, and a mission holds
@@ -237,7 +246,7 @@ plan's quota (Context7 counts "search and docs requests" together against
 `includedInPlan`). A mission that could search libraries but not read their
 documentation, or the reverse, does nothing useful: an agent resolves an id
 and then queries it, or queries an id it already knows. Two risks would
-only double the budget lines of every mission. (Alternative in Q2.)
+only double the budget lines of every mission (D2).
 
 **The vector is about disclosure, not about the read.** Reading public
 documentation is harmless; what deserves a decision is that the gateway
@@ -253,7 +262,7 @@ lets an agent's free text leave for a third party.
 - `visibility: public` — the closest value of the scale for "seen outside
   the company". Context7 stores the queries ("anonymously stored and used to
   benchmark retrieval accuracy and improve the documentation matching
-  pipeline"; API logs retained 30 days). Whether `team` reads better is Q4.
+  pipeline"; API logs retained 30 days). Kept over `team` (D4).
 - `reversibility: irreversible` — a query sent cannot be withdrawn.
 - `cost: moderate` — Free: 1,000 calls a month, then blocked (20 bonus calls
   a day). Pro: 2,000 calls per seat a month, then $5 per 1,000 calls, "not
@@ -290,7 +299,7 @@ presets:
   risk, which is a read, the two are the same list: a second preset would
   differ by its numbers only, and the creator adjusts numbers in New
   mission anyway. `read-only` **is** the daily-work preset; the handbook and
-  the README say so (Q1).
+  the README say so (D1).
 - `gate: auto` — a documentation lookup asking first would make the tool
   unusable; what the gate would protect (the text of the query) cannot be
   judged from an approval card any better than from the mission.
@@ -319,12 +328,12 @@ Context7 resource.
 
 ### 5.1 Identifiers
 
-| Value                                | Grammar                                                                                                                                                                                                                            | Bound to the mission                | Where it lands                                                                  | Outside the grammar                                                   |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| the resource ref                     | the constant `docs` (`pathIdent` shape); discovery writes it, the classifier compares with it                                                                                                                                      | yes — the mission's single resource | slice `index[docs]` only, never sent                                            | `context7: the resource of this mission is not a Context7 index.`     |
-| `libraryId` (`query-docs`)           | `libraryId` — a leading `/`, then 1 to 4 segments of `[A-Za-z0-9_.~@+-]`, no empty, `.` or `..` segment, at most 500 characters (Context7's own limit on `/v2/context`), no whitespace, control character, `*`, `?`, `#`, `%`, `\` | no — libraries are global (§5.3)    | JSON-RPC argument of `tools/call`; slice `library[<id>]` through `identSegment` | `libraryId: malformed Context7 library id.`                           |
-| `libraryName` (`resolve-library-id`) | none — a product name, free text; a string of 1 to 500 characters                                                                                                                                                                  | —                                   | JSON-RPC argument only                                                          | `libraryName: expected a non-empty string of at most 500 characters.` |
-| `query`, `language`                  | none — free text; `query` a string of 1 to 500 characters (Context7's limit on the REST side), `language` a string                                                                                                                 | —                                   | JSON-RPC argument only                                                          | `query: …` as above                                                   |
+| Value                                | Grammar                                                                                                                                                                                                                             | Bound to the mission                | Where it lands                                                                  | Outside the grammar                                                   |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| the resource ref                     | the constant `docs` (`pathIdent` shape); discovery writes it, the classifier compares with it                                                                                                                                       | yes — the mission's single resource | slice `index[docs]` only, never sent                                            | `context7: the resource of this mission is not a Context7 index.`     |
+| `libraryId` (`query-docs`)           | `libraryId()` — a leading `/`, then 1 to 4 segments of `[A-Za-z0-9_.~@+-]`, no empty or dot-only segment, at most 500 characters (Context7's own limit on `/v2/context`), no whitespace, control character, `*`, `?`, `#`, `%`, `\` | no — libraries are global (§5.3)    | JSON-RPC argument of `tools/call`; slice `library[<id>]` through `identSegment` | `libraryId: malformed Context7 library id.`                           |
+| `libraryName` (`resolve-library-id`) | `freeText()` — a product name; a string of 1 to 500 characters                                                                                                                                                                      | —                                   | JSON-RPC argument only                                                          | `libraryName: expected a non-empty string of at most 500 characters.` |
+| `query`, `language`                  | `freeText()` — a string of 1 to 500 characters (Context7's limit on the REST side); `language` is optional, and when given follows the same rule                                                                                    | —                                   | JSON-RPC argument only                                                          | `query: …`, `language: …` as above                                    |
 
 **No identifier reaches a URL.** The MCP request is one `POST` to the
 constant `https://mcp.context7.com/mcp`; `libraryId`, `libraryName`,
@@ -366,7 +375,7 @@ decide what the key reaches, and a refused or unknown library comes back as
 Context7's own answer (404 `library_not_found`, 403 `access_denied`). The
 mission's resource is the whole index; the slice names the library for the
 audit only. Restricting a mission to named libraries is not offered in
-v0.1 (Q3).
+v0.1 (D3).
 
 ### 5.4 What leaves for Context7
 
@@ -376,8 +385,9 @@ does not inspect it. Three things bound it:
 - the mission holds `context7.query-docs` only if its creator accepted that
   the agent's questions go to Context7 — the reason says so in those words;
 - the length: `query` is refused above 500 characters, Context7's own
-  limit on the REST side (the MCP schema states none ⚠), which also bounds
-  how much context one call can carry;
+  limit on the REST side (the MCP schema states none: **(live)** `tools/list`
+  declares no `maxLength`), which also bounds how much context one call can
+  carry;
 - Context7's tool description asks the agent not to include secrets.
 
 The gateway itself sends nothing else of the caller: no prompt, no mission,
@@ -387,7 +397,7 @@ and version" — the gateway's, not the agent's.
 
 Refusing queries that look like secrets (a `vbn_live_` or `ctx7sk-` prefix,
 a PEM header) is possible in the classifier but would be a promise the
-gateway cannot keep in general. Not proposed (Q5).
+gateway cannot keep in general. Not done (D5).
 
 ### 5.5 Results can carry prompt injection
 
@@ -424,16 +434,16 @@ their own risks, and nobody has asked for them.
 
 Kind `api-key`, one secret field.
 
-| Member                        | Value                                                                                                                                                                                                                                                                 |
-| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `label`                       | "API key"                                                                                                                                                                                                                                                             |
-| `createUrl`                   | `https://context7.com/dashboard` (the API Keys card, "Create API Key")                                                                                                                                                                                                |
-| field `api_key`               | `secret: true`, `required: true`, `pattern: '^ctx7sk-[A-Za-z0-9_-]{16,128}$'` ⚠ — the documented format is `ctx7sk-**********************`; **(live)** a real key is 43 characters; the character set after the prefix is not documented (Q6)                         |
-| `help`                        | "Create a key in the Context7 dashboard, API Keys. A key reaches what its teamspace's policies allow; the key itself has no permission choice. The questions agents ask are counted on the plan of the person who created it."                                        |
-| `guide.permissions`           | `[]` — a Context7 key carries no permission choice (none is documented)                                                                                                                                                                                               |
-| `guide.recommendedExpiryDays` | `null` — no expiry is documented; "Keys can be rotated at any time from your dashboard"                                                                                                                                                                               |
-| `verify`                      | `GET https://context7.com/api/v2/usage` with `Authorization: Bearer <key>`. 200 → `{ account: 'Context7 <plan> plan', expiresAt: null }` (`plan` is `free`, `pro`, `enterprise` or `payg`). 401 → `UpstreamAuthError`, nothing stored. Free: the call is not counted. |
-| `manualRevocation`            | "Revoke the key in the Context7 dashboard, API Keys. Revocation is immediate and permanent."                                                                                                                                                                          |
+| Member                        | Value                                                                                                                                                                                                                                                                        |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `label`                       | "API key"                                                                                                                                                                                                                                                                    |
+| `createUrl`                   | `https://context7.com/dashboard` (the API Keys card, "Create API Key")                                                                                                                                                                                                       |
+| field `api_key`               | `secret: true`, `required: true`, `pattern: '^ctx7sk-[A-Za-z0-9_-]{16,128}$'` ⚠ — the documented format is `ctx7sk-**********************`; **(live)** a real key is 43 characters; the character set after the prefix is not documented (D6)                                |
+| `help`                        | "Create a key in the Context7 dashboard, API Keys. A key reaches what its teamspace's policies allow; the key itself has no permission choice. The questions agents ask are counted on the plan of the person who created it."                                               |
+| `guide.permissions`           | `[]` — a Context7 key carries no permission choice (none is documented)                                                                                                                                                                                                      |
+| `guide.recommendedExpiryDays` | `null` — no expiry is documented; "Keys can be rotated at any time from your dashboard"                                                                                                                                                                                      |
+| `verify`                      | `GET https://context7.com/api/v2/usage` with `Authorization: Bearer <key>`. 200 → `{ account: 'Context7 <plan> plan', expiresAt: null }` (`plan` is `free`, `pro`, `enterprise` or `payg`). 401 or 403 → `UpstreamAuthError`, nothing stored. Free: the call is not counted. |
+| `manualRevocation`            | "Revoke the key in the Context7 dashboard, API Keys. Revocation is immediate and permanent."                                                                                                                                                                                 |
 
 Facts behind it: keys are shown once at creation; "Revoking a key is
 permanent and cannot be undone. The key deactivates immediately"; keys are
@@ -446,15 +456,15 @@ No `oauth2` way in v0.1, although the server offers one (`/mcp/oauth`, "the
 MCP OAuth specification"; the Claude Code plugin signs in by device flow):
 it is an MCP-client OAuth with dynamic registration, the Supabase shape the
 gateway does not forward server-side, and a key is what "zero env" needs
-(Q7).
+(D7).
 
 **Header.** The documented way is `Authorization: Bearer <key>` (README,
-"Manage API Keys", "All MCP clients" — Cursor, VS Code, Codex, Gemini CLI…).
-The server also reads `x-context7-api-key`, `context7-api-key`,
-`x-api-key`, `context7_api_key` and `x_api_key` (source ⚠); **(live)** a
-`CONTEXT7_API_KEY` header was accepted (header names are case-insensitive,
-so it is `context7_api_key`). The plugin sends `Authorization: Bearer`, the
-documented form, to the MCP server and to the REST API alike (Q8).
+"Manage API Keys", "All MCP clients" — Cursor, VS Code, Codex, Gemini CLI…),
+and **(live)** it works on `https://mcp.context7.com/mcp`. The server also
+reads `x-context7-api-key`, `context7-api-key`, `x-api-key`,
+`context7_api_key` and `x_api_key` (source ⚠); a `CONTEXT7_API_KEY` header
+was accepted too. The plugin sends `Authorization: Bearer` only, to the MCP
+server and to the REST API alike (decided, D8).
 
 ### 6.2 Discovery
 
@@ -474,9 +484,10 @@ two connections with two keys each have their own `docs` resource.
 
 `executeContext7(ctx, tool, args)`, under `declining`:
 
-1. an unknown tool → `refusalResult`; an undeclared argument → the
-   classifier's own sentence; a `libraryId`, `libraryName` or `query`
-   outside its grammar → `ExecutorRefusal`. Nothing is sent;
+1. the call is read by the classifier's `readCall`: an unknown tool, an
+   undeclared argument, or a `libraryId`, `libraryName`, `query` or
+   `language` outside its grammar → `refusalResult` with the classifier's
+   own sentence. Nothing is sent;
 2. the single resource is resolved by the classifier's function (a mission
    without one is declined);
 3. JSON-RPC `tools/call` to `https://mcp.context7.com/mcp` (a constant),
@@ -489,40 +500,74 @@ text/event-stream`, `MCP-Protocol-Version` as Railway sends it, a
 
 Failures:
 
-| What happens                                                | The plugin                                                                                                                                                                                                                                                                                                                                  |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| HTTP 401 / 403 from the MCP server (JSON-RPC `-32001`)      | `UpstreamAuthError` with the status                                                                                                                                                                                                                                                                                                         |
-| another failed HTTP status                                  | `UpstreamHttpError` with the status                                                                                                                                                                                                                                                                                                         |
-| a JSON-RPC error frame                                      | a plain `Error`                                                                                                                                                                                                                                                                                                                             |
-| a tool result with `isError: true` (Context7's REST failed) | probe `GET /api/v2/usage`: 401 → `UpstreamAuthError(401)` (the key is revoked: the host marks the connection expired); 429 → `UpstreamHttpError(429)`; 200 → a plain `Error` carrying Context7's text (quota spent, library not found, 402, 5xx) — the agent reads it, the audit keeps the class; probe unreachable → the plain `Error` too |
+| What happens                                                | The plugin                                                                                                                                                                                                                                                                                                                                                                                  |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HTTP 401 / 403 from the MCP server (JSON-RPC `-32001`)      | `UpstreamAuthError` with the status                                                                                                                                                                                                                                                                                                                                                         |
+| another failed HTTP status                                  | `UpstreamHttpError` with the status                                                                                                                                                                                                                                                                                                                                                         |
+| a JSON-RPC error frame, or a result that is not text blocks | a plain `Error`                                                                                                                                                                                                                                                                                                                                                                             |
+| a tool result with `isError: true` (Context7's REST failed) | probe `GET /api/v2/usage`: 401 or 403 → `UpstreamAuthError` with that status (the key is refused: the host marks the connection expired on a 401); 429 → `UpstreamHttpError(429)`; 200 or any other status → a plain `Error` carrying Context7's text (quota spent, library not found, 402, 5xx) — the agent reads it, the audit keeps the class; probe unreachable → the plain `Error` too |
 
-The upstream text is not parsed to decide anything. A probe after an
-upstream error costs nothing on Context7's quota.
+The upstream text is not parsed to decide anything; at most 300 characters
+of it are quoted in the error. A probe after an upstream error costs nothing
+on Context7's quota. A result with `isError: false` (or none) is passed
+through as its `content`, "No documentation found" included.
 
 No streaming (`emitPart` unused), no `credentialCache`, no `refresh`.
 
-### 6.4 Tests (phase 2)
+### 6.4 Code map
 
-- the kit: `assertPluginWellFormed`, `assertPresetsValid`,
-  `assertNoWildcard`, `assertCatalogCoverage` with the samples of §4
-  (`fallbackHits` and `risksUntouched` empty), `assertIdentifiersRefused`
-  with `pathIdentifiers: { none: … }`;
-- classifier: each tool, the `@` version form on `[*]`, every alias and an
-  invented argument denied, malformed `libraryId` (`..`, `/a/../b`,
-  `%2e%2e`, `/a/*`, empty, 501 characters, a line break, no leading `/`),
-  `query` empty or over 500 characters, no resource;
-- `execute` against `mockFetch`: the JSON-RPC body (prefix stripped,
-  arguments as classified, nothing else), the headers (Bearer, no
-  `CONTEXT7_API_KEY`), the SSE parse, each failure row above including the
-  probe's three answers, refusals with `fetch.calls` empty;
-- `verify` and `discoverResources`: 200, 401, an unknown `plan`, a payload
-  that is not an object;
-- `upstream-tools.json` equal to the two declarations, with a structural
-  check that no declared property is an alias.
+| File                      | What it holds                                                                                                    |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `src/identity.ts`         | `PROVIDER_ID`, `TOOL`, `UPSTREAM_TOOL`, `INDEX_REF`, `API_KEY_FIELD`: the one place ids are written.             |
+| `src/upstream-tools.json` | The `tools` array of `tools/list`, verbatim (2026-10-16).                                                        |
+| `src/tools.ts`            | The declarations derived from it (prefixed names, a modelled-tools check at load) and `toolTitles`.              |
+| `src/data-model.ts`       | The `docs` plane (§1).                                                                                           |
+| `src/risk-catalog.yaml`   | §3.                                                                                                              |
+| `src/classify.ts`         | `readCall` (the one reader, shared with `execute`), `libraryId`, `freeText`, `resolveIndex`, `classifyContext7`. |
+| `src/usage.ts`            | `GET /v2/usage`: the key of a connection, `readPlan` (verify, discovery), the probe's request.                   |
+| `src/credential.ts`       | The `api-key` spec, its guide and `verifyContext7Key`.                                                           |
+| `src/execute.ts`          | `executeContext7` (JSON-RPC over Streamable HTTP, the probe on a tool error), `discoverContext7Resources`.       |
+| `src/index.ts`            | `definePlugin`, the default export.                                                                              |
+
+### 6.5 Tests
+
+`npx vitest run plugins/context7` — 46 tests, no network
+(`tests/unit/support.ts` holds the shared context and the upstream answers
+as the live calls showed them):
+
+- `plugin.test.ts` (12): the kit — `assertPluginWellFormed`,
+  `assertPresetsValid`, `assertNoWildcard`, `assertCatalogCoverage` with the
+  samples of §4 (`fallbackHits` and `risksUntouched` empty),
+  `assertIdentifiersRefused` with `pathIdentifiers: { none: … }`; the
+  catalog path, the default export and the version; the credential spec and
+  its pattern; the preset's exact budget; no environment anywhere; the
+  frozen surface (exactly the two tools of `tools/list`, descriptions and
+  schemas unchanged, the schemas checked live, no alias declared, a title
+  per tool);
+- `classify.test.ts` (10): each tool, the `@` and `+` forms on `[*]`, the
+  only risk touched, an unknown tool, no or a foreign resource, a resource
+  that is not the index or several, every alias and an invented argument
+  denied, 25 malformed library ids, the free-text bounds (500 accepted, 501
+  refused);
+- `execute.test.ts` (17): the JSON-RPC body (prefix stripped, arguments as
+  classified, nothing else) and the headers (Bearer, no other key header),
+  SSE and bare JSON answers, refusals with `fetch.calls` empty, the hostile
+  library ids fed to `classify` and `execute`, an accepted id sent
+  unchanged, a credential without its key, HTTP 401 / 403 / 503, a JSON-RPC
+  error frame, a result that is not text, the probe's answers (401, 429,
+  200, 500, unreachable), "No documentation found" passed through;
+  `discoverResources` and `verify` on 200 (each plan), 401, 503 and four
+  answers that are not the documented one;
+- `risk-catalog.test.ts` (5): the entries at catalog version 1, the decided
+  vector, every pattern parsing, a read of the index (a search or one
+  library) touching `context7.query-docs` alone, a write no tool emits
+  landing on the fallback alone;
+- `data-model.test.ts` (2): referential integrity, the one plane with
+  nothing environment-scoped.
 
 ## 7. This repository afterwards (`.mcp.json`)
 
-Not edited by this draft. Once the plugin is registered and a Context7
+`.mcp.json` is not edited by the plugin's change. Once a Context7
 connection exists on the dogfood instance:
 
 1. the `context7` entry is removed from `.mcp.json` — no direct server, no
@@ -534,49 +579,51 @@ connection exists on the dogfood instance:
    `mcp__vaubaan__context7__resolve-library-id` and
    `mcp__vaubaan__context7__query-docs` in Claude Code.
 
-Follow-ups in the docs, at registration: the provider-modeler skill and the
-ADR `use-context7-for-provider-docs` name `mcp__context7__…` tools and a
-personal `claude mcp add` setup; both would point at the gateway tools. The
-direct server's MCP `instructions` ("Use this server to fetch current
-documentation whenever…") do not travel through the gateway, which has its
-own; the tool descriptions keep Context7's usage rules.
+The docs were updated with the registration: the provider-modeler skill and
+the ADR `use-context7-for-provider-docs` (an amendment of 2026-10-16) say that
+Context7 is reached through the gateway, as `mcp__vaubaan__context7__…`,
+once the dogfood instance has the connection. The direct server's MCP
+`instructions` ("Use this server to fetch current documentation whenever…")
+do not travel through the gateway, which has its own; the tool descriptions
+keep Context7's usage rules.
 
-## Open questions for Renaud
+## Decisions of the product owner (2026-10-16)
 
-1. **Q1 — One preset.** `read-only` is also the daily-work preset (one risk,
-   a read). Accept one preset, or ship a second one (`research`, same risk,
-   a larger quota) to follow the kit's letter?
-2. **Q2 — One risk or two.** One risk for both tools (proposed), or
-   `context7.resolve-library` and `context7.query-docs` with separate
-   budgets?
-3. **Q3 — Private sources.** A teamspace's private sources are company
-   documentation. Should reading them be a risk of its own, or a mission
-   restricted to named libraries? Neither is possible without a way to
-   tell a private library id from a public one before the call; the docs
-   read do not give one (the "Add Private Sources" page does not state the
-   id format). Out of v0.1 unless you need it.
-4. **Q4 — Vector of the disclosure.** `visibility: public` (proposed, "leaves
-   the company") or `team`? `reversibility: irreversible` or `reversible`?
-   The vector decides nothing; it orders risks in lists.
-5. **Q5 — Secret-looking queries.** Leave the query text uninspected
-   (proposed), or refuse a few unmistakable credential shapes in the
-   classifier?
-6. **Q6 — Key pattern.** The character set after `ctx7sk-` is undocumented.
-   Can you read one key's shape (not its value) from the dashboard, or
-   accept the loose pattern `^ctx7sk-[A-Za-z0-9_-]{16,128}$`?
-7. **Q7 — OAuth later?** Context7 offers MCP OAuth (`/mcp/oauth`). Keep
-   API key only, as proposed?
-8. **Q8 — Header.** `Authorization: Bearer` (documented) rather than the
-   `CONTEXT7_API_KEY` header the live check used — agreed?
-9. **Q9 — Which plan for the dogfood key.** Free (1,000 calls a month, then
-   blocked) or Pro ($10 a seat, 2,000 calls, billed overage)? On Pro,
-   set a spending limit in the teamspace: the gateway's quota bounds a
-   mission, not the key.
-10. **Q10 — Facts to confirm before code**, by `tools/list` with the key
-    once phase 2 starts: the exact frozen schemas (descriptions,
-    `required`, `additionalProperties`), whether a rejected key answers
-    HTTP 401 or an `isError` result, and the length limits of the MCP
-    side.
+The model above was reviewed by Renaud on 2026-10-16. What he decided, by
+the number of the question the draft asked; every other proposal of the
+draft stands as written.
+
+- **Shape (§0).** Rewrap `https://mcp.context7.com/mcp`, the Railway shape;
+  the REST API (`GET https://context7.com/api/v2/usage`) only for checking a
+  pasted key, discovery and diagnosing an upstream error.
+- **No environment anywhere** (§1): no `envScopable` entity, no `envOf`, no
+  env-scoped risk.
+- **D1 — one preset**, `read-only` (quota 300, 20 calls per 60 s, `auto`),
+  which is also the daily-work preset.
+- **D2 — one risk**, `context7.query-docs`, for both tools, plus the
+  fallback.
+- **D3 — private sources**: out of v0.1.
+- **D4 — vector**: as drafted (`visibility: public`, `reversibility:
+irreversible`).
+- **D5 — query text**: not inspected.
+- **D6 — key pattern**: the loose `^ctx7sk-[A-Za-z0-9_-]{16,128}$`.
+- **D7 — OAuth**: none; an API key only.
+- **D8 — header**: `Authorization: Bearer`.
+- **Q9 — plan of the dogfood key**: not decided here; it changes no code.
+  On a paid plan, set a spending limit in the teamspace: the gateway's quota
+  bounds a mission, not the key.
+- **Q10 — facts checked by live calls on 2026-10-16** (marked **(live)**
+  above): `tools/list` returns exactly `resolve-library-id` (`query`,
+  `libraryName`, both required) and `query-docs` (`libraryId`, `query`
+  required; `language` optional); `Authorization: Bearer <key>` works; a bad
+  key answers HTTP 200 with an `isError` result "Invalid API key. …" in an
+  SSE `event: message` frame; `GET /api/v2/usage` with a bad Bearer key
+  answers HTTP 401.
+- **Goal: everything through the gateway, zero env.** The key exists only
+  as a gateway connection. `.mcp.json` is not edited by the plugin's change
+  (§7); the provider-modeler skill and the ADR
+  `use-context7-for-provider-docs` (by an amendment) name the gateway tools
+  `mcp__vaubaan__context7__…` once the dogfood instance has the connection.
 
 ## Sources
 

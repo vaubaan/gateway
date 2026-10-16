@@ -138,7 +138,7 @@ and add your sign-in provider.
 │  data model · classifier · catalog of       accounts, credentials        │
 │  permissions with presets · executor        encrypted under your master  │
 │  github, vercel, supabase, railway,         key, accesses, missions,     │
-│  stripe, resend, cloudflare-dns,            keys (as digests), counters, │
+│  stripe, resend, cloudflare-dns, context7,  keys (as digests), counters, │
 │  upstash-redis, ssh, gmail (experimental)   requests, activity           │
 └──────────────────────────────────────────────────────────────────────────┘
        │ ephemeral or decrypted credential, used for the call

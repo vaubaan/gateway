@@ -20,6 +20,7 @@ tracks:
   - plugins/resend/tests/
   - plugins/upstash-redis/tests/
   - plugins/cloudflare-dns/tests/
+  - plugins/context7/tests/
   - plugins/gmail/tests/
   - plugins/stripe/tests/
   - packages/gateway-core/tests/
@@ -348,6 +349,11 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/cloudflare-dns/tests/unit/identifiers.test.ts`                                                    |        59 |
 | `plugins/cloudflare-dns/tests/unit/plugin.test.ts`                                                         |        51 |
 | `plugins/cloudflare-dns/tests/unit/risk-catalog.test.ts`                                                   |        38 |
+| `plugins/context7/tests/unit/classify.test.ts`                                                             |        10 |
+| `plugins/context7/tests/unit/data-model.test.ts`                                                           |         2 |
+| `plugins/context7/tests/unit/execute.test.ts`                                                              |        17 |
+| `plugins/context7/tests/unit/plugin.test.ts`                                                               |        12 |
+| `plugins/context7/tests/unit/risk-catalog.test.ts`                                                         |         5 |
 | `plugins/github/tests/unit/app-manifest.test.ts`                                                           |        36 |
 | `plugins/github/tests/unit/classify.test.ts`                                                               |        69 |
 | `plugins/github/tests/unit/data-model.test.ts`                                                             |         1 |
@@ -681,7 +687,7 @@ npx vitest run packages/policy-engine     # one package
 
 ## Scenarios — Provider plugins
 
-> Covers: the ten handbooks under
+> Covers: the handbooks under
 > [`docs/handbook/providers/`](../handbook/providers/README.md) and
 > [[plugin-sdk]]. Spec: `vaubaan-gateway.md` §5 (plugins), §3.2 (presets),
 > §10 (structural tests); `gateway-risk-model.md` §7. ADRs
@@ -1024,6 +1030,23 @@ itself). `identifiers.test.ts` (59): the grammars, `zone_id` and
 a slice identifier and never a request, a record `name` and `type` in the
 critical-record verdict, list filters in the query string. `classify`
 (33), `data-model` (9).
+
+**Context7** (46) — `plugin.test.ts` (12): kit (both tools on the one
+named risk, no fallback hit; the identifier proof with no identifier in a
+URL), the credential spec and its key pattern, the `read-only` preset's
+exact budget, no environment anywhere, and **the frozen upstream surface**:
+exactly the two tools of `tools/list`, descriptions and schemas unchanged,
+no upstream alias declared. `classify` (10): each tool, a library id the
+slice cannot carry on `[*]`, the resource (none, foreign, not the index,
+several), **every upstream alias refused as undeclared** (`libraryName` on
+`query-docs` would otherwise name the library past the classifier), 25
+malformed library ids, the free-text bounds. `execute.test.ts` (17): the
+JSON-RPC body is rebuilt from what was classified, the key travels as a
+Bearer only, refusals send nothing, the hostile library ids on both sides;
+**an `isError` result is never passed through**: the usage probe turns it
+into `UpstreamAuthError` (key refused), `UpstreamHttpError(429)` or an
+`Error` carrying Context7's text; discovery and `verify` on
+`GET /v2/usage`. `risk-catalog` (5), `data-model` (2).
 
 **Gmail** (407, experimental) — `plugin.test.ts` (27): kit, the experimental
 shape (`experimental: true`, version below 1.0, no tool exposed), coverage

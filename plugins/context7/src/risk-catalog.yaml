@@ -1,0 +1,67 @@
+# Risk catalog of the `context7` provider.
+#
+# Spec     : docs/spec/gateway-risk-model.md §4 (schema), docs/spec/vaubaan-gateway.md §3.2 (presets).
+# Handbook : docs/handbook/providers/context7.md §3.
+#
+# Rules the loader enforces at boot :
+#   - `provider` is the plugin id ; every risk id starts with it ;
+#   - every `matches` pattern parses as a slice of this provider ;
+#   - exactly one `<provider>.uncategorized-*` fallback exists, flagged `fallback: true` ;
+#   - at least one preset ; every preset entry names a risk of THIS catalog,
+#     with an explicit quota, rate limit and gate — never a wildcard.
+#
+# Adding a risk : append an entry, bump `catalog_version`, update `catalog_date`.
+# Removing or renaming a risk : forbidden — mark it `deprecated: true` and
+# point `replaced_by` at its successor, so existing missions keep working.
+#
+# 1 risk + 1 fallback. Both tools are the same act : send the agent's
+# question to Context7 and read documentation back. The vector describes the
+# disclosure of that question, not the read. No environment : Context7 has
+# none, no risk is env-scoped. No `infra_limits` : Context7 publishes no rate
+# figure, and a 429 is a provider failure.
+
+provider: context7
+catalog_version: 1
+catalog_date: 2026-10-16
+
+risks:
+  - id: context7.query-docs
+    label: 'Ask Context7 about library documentation'
+    reason: >-
+      The question the agent writes, which may carry code or internal
+      context, is sent to Context7, a third party that stores queries; the
+      documentation that comes back is third-party text. Each call also
+      spends the key's monthly Context7 quota.
+    matches: 'context7.index[**].library[**].R'
+    vector:
+      reversibility: irreversible # what was sent cannot be recalled
+      blast: single
+      data: data #                  free text written by the agent
+      cost: moderate #              plan quota ; billed overage on paid plans
+      visibility: public #          leaves the company
+      persistence: stateless
+
+  - id: context7.uncategorized-write
+    label: 'Uncategorized write'
+    reason: 'Catch-all for writes without a dedicated entry. No Context7 tool of this plugin writes.'
+    matches: 'context7.**.W'
+    fallback: true
+    vector:
+      {
+        reversibility: costly,
+        blast: account,
+        data: data,
+        cost: moderate,
+        visibility: team,
+        persistence: posture,
+      }
+
+presets:
+  - id: read-only
+    label: Read-only
+    description: Ask Context7 about library documentation. The questions the agent writes are sent to Context7.
+    entries:
+      - risk_id: context7.query-docs
+        quota: 300
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
