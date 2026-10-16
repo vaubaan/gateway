@@ -27,7 +27,7 @@
     "@vaubaan/shared": "*",
     "@vaubaan/telemetry": "*",
     "better-sqlite3": "12.11.1",
-    "geist": "^1.7.1",
+    "geist": "^1.7.2",
     "libsodium-wrappers": "^0.8.4",
     "next": "16.4.1",
     "openid-client": "^6.8.8",
