@@ -56,6 +56,7 @@ export function pluginIssues(plugin: ProviderPlugin): string[] {
     ...identityIssues(plugin),
     ...toolIssues(plugin),
     ...toolTitleIssues(plugin),
+    ...secretArgumentIssues(plugin),
     ...dataModelIssues(plugin),
     ...catalogIssues(plugin),
     ...credentialSpecIssues(plugin),
@@ -286,6 +287,37 @@ function toolIssues(plugin: ProviderPlugin): string[] {
     if (!isRecord(tool.inputSchema) || tool.inputSchema.type !== 'object')
       issues.push(`tools[${i}].inputSchema.type must be 'object'`);
   });
+  return issues;
+}
+
+/**
+ * `secretArguments` names declared tools and, for each, arguments its input
+ * schema declares : a masked name that is not an argument would mask nothing.
+ */
+function secretArgumentIssues(plugin: ProviderPlugin): string[] {
+  const masks: unknown = plugin.secretArguments;
+  if (masks === undefined) return [];
+  if (!isRecord(masks))
+    return ['secretArguments: expected an object keyed by tool name when present'];
+  const issues: string[] = [];
+  const tools = isList(plugin.tools) ? plugin.tools : [];
+  for (const [tool, names] of Object.entries(masks)) {
+    const declared = tools.find((t) => t?.name === tool);
+    if (!declared) {
+      issues.push(`secretArguments['${tool}'] is not a tool of this plugin`);
+      continue;
+    }
+    if (!Array.isArray(names) || names.length === 0) {
+      issues.push(`secretArguments['${tool}']: expected a non-empty list of argument names`);
+      continue;
+    }
+    const properties = declared.inputSchema.properties ?? {};
+    for (const name of names) {
+      if (typeof name !== 'string' || !Object.hasOwn(properties, name)) {
+        issues.push(`secretArguments['${tool}']: '${String(name)}' is not an argument of the tool`);
+      }
+    }
+  }
   return issues;
 }
 

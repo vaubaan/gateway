@@ -19,6 +19,7 @@
  * One decide entry point per request kind: `decideClaim` and
  * `decideApproval`; `decide()` dispatches on the kind of the request.
  */
+import { maskSecretArguments } from './masked-arguments';
 import { providerPagesOf, type ProviderPage } from './provider-pages';
 import type { AdminAct } from '@vaubaan/gateway-core';
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
@@ -770,7 +771,8 @@ export class RequestService {
       call: {
         tool,
         fingerprint,
-        arguments: openArguments,
+        // Secret arguments (a secret's value) are shown as a fingerprint, never in clear.
+        arguments: maskSecretArguments(this.deps.registry, tool, openArguments),
         arguments_erased: !open,
         slices: audited ? audited.slices_executed.map(serializeSlice) : null,
         risks,

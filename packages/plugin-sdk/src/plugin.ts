@@ -153,6 +153,16 @@ export interface ProviderPlugin {
    * (structural test).
    */
   readonly toolTitles?: Readonly<Record<string, string>>;
+  /**
+   * Arguments whose values are secrets, by tool : the names of top-level
+   * arguments of that tool (`fly__set_secrets` → `['values']`). The host never
+   * shows such a value to a person : the approval view replaces each string it
+   * holds — the argument itself, every value of an object, every item of a
+   * list — with a short fingerprint, and keeps the keys (the secret names).
+   * The call itself is unchanged. Each name must be a declared argument of
+   * the tool (`definePlugin`). Absent : every argument is shown as it is.
+   */
+  readonly secretArguments?: Readonly<Record<string, readonly string[]>>;
   /** URL of the plugin's modelling handbook, when published. */
   readonly docsUrl?: string;
   /**

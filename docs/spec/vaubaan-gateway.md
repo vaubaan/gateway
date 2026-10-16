@@ -626,9 +626,11 @@ the risk's gate to `approval` at issuance, or later.
   `approval-required` and the URL of an approval request. The gateway
   executes nothing and holds nothing.
 - The request shows the creator the tool, the **arguments in clear**, the
-  slices touched, the remaining budget. The arguments are kept encrypted
-  for the lifetime of the request, then erased; only their fingerprint
-  remains in the audit.
+  slices touched, the remaining budget. One exception: an argument the
+  plugin declares secret (a secret's value) is shown as a short
+  fingerprint, never in clear; its key (the secret's name) stays. The
+  arguments are kept encrypted for the lifetime of the request, then
+  erased; only their fingerprint remains in the audit.
 - The creator grants or refuses. A grant produces an **approval** bound
   to `(mission, tool, argument fingerprint)`, covering the gated risks the
   request lists, single-use, valid for a short time configured by the
@@ -877,7 +879,8 @@ interpreted as markup.
   creator, the oldest open beside the list; one sentence when nothing waits.
   Each request also has its own page, at the URL the executor hands over,
   read in this order: who asks and on which mission, the call — the tool and,
-  for an approval, **the arguments in clear** —, the permission and its
+  for an approval, **the arguments in clear**, secret values as a
+  fingerprint —, the permission and its
   severity, the room left, what each answer does, then the answers. **A yes
   is given on this page only**, where the exact call is shown. To an approval
   request: approve this call, let the permission run freely until the limits
