@@ -768,6 +768,28 @@ write …)`), instead of GitHub's bare 403. The push token of
 
 ### Security
 
+- **A git push that changes CI workflows is decided before anything reaches GitHub.**
+  Found on the dogfood instance on 2026-10-16: a mission holding `github.git-push` and
+  `github.feature-branch-write` but not `github.workflow-write-via-file` pushed changes to
+  `.github/workflows/` through the git remote; the gateway stored the pack at GitHub
+  before its review saw the workflow files, and only GitHub's own `workflows` permission
+  check refused it. The gateway now reads the pack first, hashes its objects, and compares
+  the `.github/workflows` entries of each pushed tip with the ref's current tip (for a new
+  branch or tag: the default branch, or a current branch head the push builds on): any
+  change — added, modified, deleted, renamed, mode changed, reverted to an older tree —
+  needs `github.workflow-write-via-file`, and a mission without it is refused by the
+  permission's name with nothing sent. What cannot be read (a garbled or thin pack, an
+  object GitHub does not hold, GitHub's API failing, a limit) counts as a change. The
+  door now asks git for self-contained packs (`no-thin`), and a push is read into memory
+  up to `git.max_pack_mb` before it is sent. ADR `git-push-inspected-before-it-leaves`.
+- **A branch built on a large merge already at GitHub is no longer refused by the git
+  remote.** Found on the dogfood on 2026-10-16: a branch cut from `main` after `v5` was
+  merged into it was refused with "commit 681415ed changes 300 or more files and cannot be
+  reviewed" — the review compared it with old work branches rather than with `main`. The
+  default branch is now always a candidate base, and a commit GitHub lists 300 files of
+  (a large merge, also when merging a moved branch into a work branch) is read by its trees:
+  it needs no permission for CI when its workflows equal one of its parents'. ADR
+  `gateway-as-git-remote`, amendment of D4 ter.
 - **A backup command ships in the image**: `node apps/gateway/backup.mjs` makes a
   consistent, integrity-checked copy of the store on the data volume, read-only, and
   names the master-key versions the copy needs. Take one before a key rotation.

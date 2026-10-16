@@ -1,14 +1,18 @@
 /**
  * GitHub's REST API as the git remote uses it (ADR gateway-as-git-remote
- * D4): the value of a ref, the default branch, a comparison and the paths of
- * one commit — reads, with the read grant — and the ref writes of a create
- * and a fast-forward, with the write grant.
+ * D4): the value of a ref, the default branch, a comparison, the paths of
+ * one commit and, for the inspection before a push leaves the gateway (ADR
+ * git-push-inspected-before-it-leaves), one commit, tag or tree of the git
+ * database — reads, with the read grant — and the ref writes of a create and
+ * a fast-forward, with the write grant.
  */
 import {
+  normalizeMode,
   UpstreamAuthError,
   UpstreamHttpError,
   type ExecuteContext,
   type GitAccess,
+  type GitTreeEntry,
 } from '@vaubaan/plugin-sdk';
 
 import { GITHUB_API_BASE, GITHUB_API_HEADERS } from './app-install.ts';
@@ -58,6 +62,20 @@ export type Comparison =
       /** How many commits `head` brings, when GitHub said. */
       readonly commits?: number;
     };
+
+/** An object read through GitHub's git database API. */
+export type GitObjectRead =
+  | {
+      readonly kind: 'commit';
+      readonly tree: string;
+      readonly parents: readonly string[];
+    }
+  | { readonly kind: 'tag'; readonly object: string; readonly type: string };
+
+/** GitHub's answers for an object it does not hold (404) or an id it rejects (422). */
+function isAbsent(status: number): boolean {
+  return status === HTTP_NOT_FOUND || status === HTTP_UNPROCESSABLE;
+}
 
 /** Commits of one page of `GET commits?sha=` (GitHub's maximum). */
 export const ANCESTORS_PAGE_SIZE = 100;
@@ -213,6 +231,78 @@ export class GithubRest {
       const sha = typeof c === 'object' && c !== null ? (c as { sha?: unknown }).sha : undefined;
       return typeof sha === 'string' ? [sha] : [];
     });
+  }
+
+  /**
+   * A commit's tree and parents, or an annotated tag's target, as GitHub
+   * holds the object (`GET git/commits/{sha}`, then `GET git/tags/{sha}`);
+   * `null` when GitHub holds neither under this id.
+   */
+  async gitObject(sha: string): Promise<GitObjectRead | null> {
+    const commit = await this.request('read', 'GET', `/git/commits/${encodeURIComponent(sha)}`);
+    if (commit.ok) {
+      const body = (await commit.json()) as {
+        sha?: unknown;
+        tree?: { sha?: unknown };
+        parents?: readonly { sha?: unknown }[];
+      };
+      if (body.sha !== sha || typeof body.tree?.sha !== 'string') return null;
+      const parents = (body.parents ?? []).flatMap((p) =>
+        typeof p.sha === 'string' ? [p.sha] : [],
+      );
+      return { kind: 'commit', tree: body.tree.sha, parents };
+    }
+    await commit.body?.cancel();
+    if (!isAbsent(commit.status)) {
+      throw new UpstreamHttpError(
+        `github GET git/commits failed with HTTP ${commit.status}`,
+        commit.status,
+      );
+    }
+    const tag = await this.request('read', 'GET', `/git/tags/${encodeURIComponent(sha)}`);
+    if (!tag.ok) {
+      await tag.body?.cancel();
+      if (isAbsent(tag.status)) return null;
+      throw new UpstreamHttpError(`github GET git/tags failed with HTTP ${tag.status}`, tag.status);
+    }
+    const body = (await tag.json()) as {
+      sha?: unknown;
+      object?: { sha?: unknown; type?: unknown };
+    };
+    if (body.sha !== sha || typeof body.object?.sha !== 'string') return null;
+    return {
+      kind: 'tag',
+      object: body.object.sha,
+      type: typeof body.object.type === 'string' ? body.object.type : 'unknown',
+    };
+  }
+
+  /**
+   * The entries of one tree (`GET git/trees/{sha}`, not recursive), modes as
+   * git writes them in a tree object; `null` when GitHub holds no such tree
+   * or truncated its listing.
+   */
+  async gitTree(sha: string): Promise<readonly GitTreeEntry[] | null> {
+    const res = await this.request('read', 'GET', `/git/trees/${encodeURIComponent(sha)}`);
+    if (!res.ok) {
+      await res.body?.cancel();
+      if (isAbsent(res.status)) return null;
+      throw new UpstreamHttpError(
+        `github GET git/trees failed with HTTP ${res.status}`,
+        res.status,
+      );
+    }
+    const body = (await res.json()) as { sha?: unknown; truncated?: unknown; tree?: unknown };
+    if (body.sha !== sha || body.truncated === true || !Array.isArray(body.tree)) return null;
+    const listed = body.tree as readonly { path?: unknown; mode?: unknown; sha?: unknown }[];
+    const entries: GitTreeEntry[] = [];
+    for (const e of listed) {
+      if (typeof e.path !== 'string' || typeof e.mode !== 'string' || typeof e.sha !== 'string') {
+        return null;
+      }
+      entries.push({ name: e.path, mode: normalizeMode(e.mode), oid: e.sha });
+    }
+    return entries;
   }
 
   /** The paths one commit changes against its first parent; `null` when GitHub truncated the list. */

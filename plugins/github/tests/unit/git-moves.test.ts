@@ -150,6 +150,8 @@ describe('review', () => {
       url: `${API}/commits?sha=${NEW}&per_page=100&page=1`,
       body: [{ sha: NEW }, { sha: MID }, { sha: OLD }],
     },
+    // The default branch is a candidate base too: none reported here.
+    { method: 'GET', url: API, body: {} },
   ];
   const refRoute = (sha: string): MockRoute => ({
     method: 'GET',
@@ -200,12 +202,23 @@ describe('review', () => {
     });
   });
 
-  test('a commit GitHub lists 300 files of cannot be reviewed', async () => {
+  /**
+   * A commit GitHub lists 300 files of (a large merge): read by its trees.
+   * `MID`'s root holds `.github` = `github`; `OLD`'s holds `G_OLD`.
+   */
+  function largeCommit(github: string): MockRoute[] {
     const many = Array.from({ length: 300 }, (_, i) => ({ filename: `f${i}` }));
-    const fetch = mockFetch([
-      mintRoute(),
-      refRoute(OLD),
-      ...noOtherBranch,
+    const T_MID = '1'.repeat(40);
+    const T_OLD = '2'.repeat(40);
+    const G_OLD = '3'.repeat(40);
+    const W_OLD = '4'.repeat(40);
+    const W_MID = '5'.repeat(40);
+    const tree = (sha: string, entries: { path: string; mode: string; sha: string }[]) => ({
+      method: 'GET',
+      url: `${API}/git/trees/${sha}`,
+      body: { sha, truncated: false, tree: entries.map((e) => ({ ...e, type: 'tree' })) },
+    });
+    return [
       {
         method: 'GET',
         url: `${API}/compare/${OLD}...${NEW}`,
@@ -219,11 +232,51 @@ describe('review', () => {
       },
       { method: 'GET', url: `${API}/commits/${MID}`, body: { files: many } },
       { method: 'GET', url: `${API}/commits/${NEW}`, body: { files: [] } },
+      {
+        method: 'GET',
+        url: `${API}/git/commits/${MID}`,
+        body: { sha: MID, tree: { sha: T_MID }, parents: [{ sha: OLD }] },
+      },
+      {
+        method: 'GET',
+        url: `${API}/git/commits/${OLD}`,
+        body: { sha: OLD, tree: { sha: T_OLD }, parents: [] },
+      },
+      tree(T_MID, [{ path: '.github', mode: '040000', sha: github }]),
+      tree(T_OLD, [{ path: '.github', mode: '040000', sha: G_OLD }]),
+      tree(G_OLD, [{ path: 'workflows', mode: '040000', sha: W_OLD }]),
+      tree(github, [{ path: 'workflows', mode: '040000', sha: W_MID }]),
+      tree(W_OLD, [{ path: 'ci.yml', mode: '100644', sha: '6'.repeat(40) }]),
+      tree(W_MID, [{ path: 'ci.yml', mode: '100644', sha: '7'.repeat(40) }]),
+    ];
+  }
+
+  test('a commit GitHub lists 300 files of is read by its trees: same workflows as its parent, none', async () => {
+    const fetch = mockFetch([
+      mintRoute(),
+      refRoute(OLD),
+      ...noOtherBranch,
+      ...largeCommit('3'.repeat(40)),
     ]);
     const reviewed = await review(executeCtx(fetch), 'acme/app', [
       { ref: 'refs/heads/feature/x', old: OLD, new: NEW },
     ]);
-    expect(reviewed.ok).toBe(false);
-    if (!reviewed.ok) expect(reviewed.reason).toContain('cannot be reviewed');
+    expect(reviewed).toMatchObject({ ok: true, updates: [{ workflow_files: [] }] });
+  });
+
+  test('a commit GitHub lists 300 files of, whose workflows differ from its parent’s, is a workflow change', async () => {
+    const fetch = mockFetch([
+      mintRoute(),
+      refRoute(OLD),
+      ...noOtherBranch,
+      ...largeCommit('8'.repeat(40)),
+    ]);
+    const reviewed = await review(executeCtx(fetch), 'acme/app', [
+      { ref: 'refs/heads/feature/x', old: OLD, new: NEW },
+    ]);
+    expect(reviewed).toMatchObject({
+      ok: true,
+      updates: [{ workflow_files: ['.github/workflows/ci.yml'] }],
+    });
   });
 });

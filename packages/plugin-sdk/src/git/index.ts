@@ -8,3 +8,4 @@ export * from './advertisement.ts';
 export * from './remote.ts';
 export * from './streams.ts';
 export * from './upload-pack.ts';
+export * from './pack.ts';

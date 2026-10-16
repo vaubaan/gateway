@@ -17,6 +17,9 @@
  *     decrypted in memory from the connection (`upstream`) — the key of the
  *     agent never reaches the provider, the provider's credential never
  *     reaches the agent ;
+ *   - the inspection of a push's own objects before anything is sent
+ *     (`inspectPack`) : whether each update's tip changes the CI workflow
+ *     definitions, from objects the host hashed itself ;
  *   - the review of a push before the decision (`review`) : for each ref,
  *     fast-forward or not, how many commits, which files, which of them are
  *     CI workflow files — read from the provider, never from the pack ;
@@ -32,6 +35,7 @@
  */
 
 import type { ExecuteContext } from '../plugin.ts';
+import type { GitPackObjects } from './pack.ts';
 import type { GitUpstream } from './receive-pack.ts';
 
 /** What the upstream credential is for : reading refs and packs, or writing refs. */
@@ -60,6 +64,17 @@ export interface GitReviewedUpdate extends GitRefUpdate {
   /** Paths the update changes, sorted ; renames list both names. */
   readonly files: readonly string[];
   /** The subset of `files` that are CI workflow definitions. */
+  readonly workflow_files: readonly string[];
+}
+
+/**
+ * What a push's own objects change in the paths the provider guards (CI
+ * workflow definitions), per ref update, read before the pack leaves the
+ * gateway (ADR git-push-inspected-before-it-leaves). `workflow_files` is
+ * empty when the tip of the update provably leaves them as they are.
+ */
+export interface GitInspectedUpdate {
+  readonly ref: string;
   readonly workflow_files: readonly string[];
 }
 
@@ -131,6 +146,21 @@ export interface GitRemoteCapability {
     repository: string,
     updates: readonly GitRefUpdate[],
   ): Promise<GitReview>;
+  /**
+   * What the updates of a push change in the CI workflow definitions, decided
+   * from the push's own objects (`objects`, hashed by the host) and the
+   * provider's existing ones — BEFORE the pack is stored at the provider, so
+   * that a mission that may not change CI is refused with nothing sent.
+   * Fail closed: whatever cannot be determined (an object neither in the pack
+   * nor at the provider, a provider error, a limit) counts as changed. A
+   * throw refuses the push. Reads only. Absent: the plugin guards no path.
+   */
+  inspectPack?(
+    ctx: ExecuteContext,
+    repository: string,
+    updates: readonly GitRefUpdate[],
+    objects: GitPackObjects,
+  ): Promise<readonly GitInspectedUpdate[]>;
   /**
    * The prefix of the provider's own git URLs (`https://github.com/`). The
    * setup kit rewrites it to the instance (`url.<instance>/git/.insteadOf`),
