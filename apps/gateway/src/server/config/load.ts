@@ -24,6 +24,7 @@ import {
 } from './sign-in';
 import { ConfigError, IssueList } from './errors';
 import { type EnvSource, type FileReader, defaultFileReader } from './secret-refs';
+import { parseRestoreSource, parseSha256 } from './restore-source';
 import { readSelfResources } from './self-resources';
 import {
   type RawTree,
@@ -40,6 +41,7 @@ import {
 } from './sources';
 import {
   type AdminRule,
+  type RestoreConfig,
   CLIENT_REGISTRATION_POLICIES,
   type ClientRegistrationPolicy,
   type EncryptionConfig,
@@ -268,6 +270,7 @@ function validate(raw: RawTree, issues: IssueList, env: EnvSource): InstanceConf
   );
   const clientIpHeader = readClientIpHeader(r, trustedProxies);
   const storePath = r.string('store.path', { required: isKeyRequired(keySpec('store.path')) });
+  const restore = readRestore(r);
   const encryption = readEncryption(r);
   const idp = readIdp(r);
   const signIn = readSignIn(r);
@@ -304,6 +307,7 @@ function validate(raw: RawTree, issues: IssueList, env: EnvSource): InstanceConf
     selfResources,
     clientIpHeader,
     store: { path: storePath },
+    restore,
     encryption,
     idp,
     signIn,
@@ -398,6 +402,48 @@ function readClientIpHeader(r: Reader, trustedProxies: readonly string[]): Clien
     return null;
   }
   return header;
+}
+
+/**
+ * `restore.*` (ADR restore-verifies-before-it-replaces-and-runs-at-first-boot): the
+ * source is a secret — a problem with it is named, the value never echoed — and the
+ * expected SHA-256 is required with it.
+ */
+function readRestore(r: Reader): RestoreConfig {
+  const maxSpec = keySpec('restore.max_mb');
+  let maxMb = r.int(maxSpec);
+  if (maxMb > maxSpec.max) {
+    r.issues.add(maxSpec.path, `expected an integer from ${maxSpec.min} to ${maxSpec.max}`, [
+      ...envNamesFor(maxSpec.path),
+    ]);
+    maxMb = maxSpec.default;
+  }
+  const maxBytes = maxMb * BYTES_PER_MEGABYTE;
+
+  const rawFrom = r.string('restore.from');
+  let from: RestoreConfig['from'] = null;
+  if (rawFrom !== undefined) {
+    const parsed = parseRestoreSource(rawFrom);
+    if (parsed.ok) from = parsed.source;
+    else r.issues.add('restore.from', parsed.problem, envNamesFor('restore.from'));
+  }
+  const rawSha = r.string('restore.sha256');
+  let sha256: string | null = null;
+  if (rawSha !== undefined) {
+    sha256 = parseSha256(rawSha);
+    if (sha256 === null) {
+      r.issues.add('restore.sha256', 'expected 64 hexadecimal characters (a SHA-256)', [
+        ...envNamesFor('restore.sha256'),
+      ]);
+    }
+  } else if (rawFrom !== undefined) {
+    r.issues.add(
+      'restore.sha256',
+      'required with restore.from: the SHA-256 of the store copy to restore',
+      envNamesFor('restore.sha256'),
+    );
+  }
+  return { from, sha256, maxBytes };
 }
 
 /** Required while the configuration sets no sign-in provider; long enough to resist guessing. */

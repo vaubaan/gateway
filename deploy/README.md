@@ -245,6 +245,17 @@ environment.
   it up with a volume snapshot or SQLite's `VACUUM INTO` (`store.backupTo()`
   in the [store handbook](../docs/handbook/store.md#backup); inside the
   container, `node apps/gateway/backup.mjs` makes that copy on the volume).
+- **Restore, moving hosts**: `node apps/gateway/restore.mjs <file or https URL>
+--sha256 <hex>` inside the container puts a copy back after checking its hash,
+  its integrity, its schema and that this instance's keys open its secrets
+  (`--dry-run` checks only; a store that exists is replaced only with
+  `--force`, gateway stopped, and kept aside). A new instance can also start
+  from a copy: set `VAUBAAN_RESTORE_FROM` and `VAUBAAN_RESTORE_SHA256` and its
+  first boot restores it before opening the store (handbook
+  [store](../docs/handbook/store.md#restore); the whole move:
+  [railway.md](railway.md#9-moving-an-instance)). With Compose, stop the
+  gateway and run the command with `docker compose run --rm gateway node
+apps/gateway/restore.mjs …`.
 - **Key rotation**: generate a new key, set `encryption.key_version` to
   `n+1`, move the old key under `encryption.previous_keys.<n>`, restart;
   back up first (`node apps/gateway/backup.mjs` inside the container, handbook

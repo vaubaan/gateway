@@ -4530,6 +4530,45 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
   Upstash tests (L-2) — a self resource of an unknown provider stops the boot;
   `get_database` sends `credentials=hide` and nested credentials are dropped.
 
+## Scenarios — Restore and moving an instance
+
+> Covers: ADR [[restore-verifies-before-it-replaces-and-runs-at-first-boot]];
+> handbook [[store]] ("Restore"), [[configuration]] (`restore.*` keys, boot
+> sequence); `deploy/railway.md` §9. Real SQLite files in a temporary directory;
+> the copy is made as `backup.mjs` makes it (`VACUUM INTO` of a store holding a
+> sealed secret); an https source is served by a fake `fetch` (no network).
+
+- **`integration/restore/restore.test.ts`** (22) — a good copy from a file is
+  verified and renamed into place (mode `0600`, its secret opens); a dry run
+  writes nothing; a wrong SHA-256 is refused before anything else is read and
+  leaves no file; a tampered copy is refused by its hash, and by SQLite when the
+  hash is the tampered file's; a file that is not SQLite and a database without
+  `schema_migrations` are refused; a copy recording a migration this image does not
+  ship is refused naming it, an older one passes; a key version with no key and a
+  wrong key under the right version are refused with the per-version report, the
+  old key as previous passes; an existing store is never overwritten without
+  `force`, and with it is moved aside as `.replaced-<timestamp>`; an empty file is
+  no store; `force` is refused (in use) while another connection holds the store;
+  the size cap on a local file, on `Content-Length` and while streaming; an https
+  download through an https redirect; the hash required for a URL; a redirect to
+  http refused without naming the URL; a network failure named by its code only;
+  configuration: an http source refused naming `restore.from` without echoing the
+  value, the hash required with the source and well-formed, the source a secret
+  (scrubbed from the environment, fed to the redactor); first boot: the copy
+  restored before the store opens, migrated, the URL in no log line, the next boot
+  skips with exactly one warning and no download; a refused restore stops the boot
+  and leaves no store; a local-file source.
+- **`src/server/restore/cli.test.ts`** (7) — argument parsing never echoes a value;
+  exit codes 0 (restored, dry run), 73 (store exists), 65 (wrong hash), 66 (no
+  file), 64 (http, URL without hash, no source), 77 (root), 78 (not configured);
+  the configured source used when none is given, the URL never printed; no key
+  printed.
+- **`config/keys-doc.test.ts`, `config/load.test.ts`** — the three `restore.*`
+  keys are rows of the handbook table and appear in both example files.
+- The container smoke (`deploy/docker/smoke.sh` step 13,
+  [e2e-tests](./e2e-tests.md)) runs the command and the first-boot restore in the
+  image.
+
 ## Out of scope for these tests
 
 - **E2E** (Playwright, container smoke) → [`e2e-tests.md`](./e2e-tests.md).

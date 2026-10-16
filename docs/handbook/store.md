@@ -2,7 +2,7 @@
 title: Store — embedded SQLite, schema and migrations, repositories
 status: current
 date: 2026-10-13
-last_synced: 2026-10-14
+last_synced: 2026-10-16
 tracks:
   - apps/gateway/migrations/
   - apps/gateway/src/server/store/
@@ -15,6 +15,8 @@ tracks:
   - apps/gateway/src/server/compose/ports.ts
   - apps/gateway/tests/integration/compose/boot.test.ts
   - apps/gateway/src/server/store/repositories/pending-refs.ts
+  - apps/gateway/src/server/restore/
+  - apps/gateway/tests/integration/restore/
 ---
 
 # Store — embedded SQLite, schema and migrations, repositories
@@ -760,8 +762,98 @@ opens only with the keys of those versions, as they are when it is made.** The
 Docker smoke test runs it (step 12). Getting the file off a Railway volume:
 `deploy/railway.md` §6.
 
+## Restore
+
+The inverse of the backup (ADR
+[restore-verifies-before-it-replaces-and-runs-at-first-boot](../decisions/restore-verifies-before-it-replaces-and-runs-at-first-boot.md)).
+One implementation, `restoreStore` (`server/restore/restore.ts`), serves the
+operator's command and the first boot.
+
+```bash
+vaubaan-entrypoint node /app/apps/gateway/restore.mjs [<source>] [--sha256 <hex>] [--dry-run] [--force] [--max-mb <n>]
+```
+
+**Source.** An absolute file path or an `https://` URL (a presigned URL, typically).
+`http` is refused, a URL carrying a user name or password too; redirects are followed
+by hand, at most `MAX_REDIRECTS` (5), each to `https`. A URL needs `--sha256`. Without
+a source the command uses `restore.from` / `restore.sha256` of the configuration
+(`VAUBAAN_RESTORE_FROM`, `VAUBAAN_RESTORE_SHA256`), which keeps the URL out of the
+shell history. The source is never printed or logged: the report says "an https URL
+(not shown)"; a malformed value is refused without being echoed
+(`config/restore-source.ts`), a network failure is named by its code (`ENOTFOUND`),
+never by its message.
+
+**Acquire.** The copy is streamed into `.<store file>.restore-<random>.tmp` in the
+store's directory (mode `0600`, created exclusively), hashed on the way and cut at
+`restore.max_mb` (1024 MiB by default; a `Content-Length` above it is refused before
+the body is read). The download has `DOWNLOAD_TIMEOUT_MS` (30 min). The temporary file
+and any `-wal`/`-shm` SQLite left beside it are removed whatever happens.
+
+**Verify, in order, on the temporary copy:**
+
+1. the SHA-256, when expected — nothing else is read from a file that is not the one
+   meant;
+2. it opens as SQLite, read-only (`openReadonlyDb`), and `PRAGMA integrity_check` is `ok`;
+3. `compareWithShipped` (`migrate.ts`): a `schema_migrations` table exists, and every
+   recorded migration is one this image ships, with the same checksum. An **older**
+   store passes (the boot migrates it), a **newer** one is refused naming the
+   migrations this image lacks;
+4. `openEverySealedBlobOf` (`sealed-blobs.ts`) opens every blob of the three sealed
+   columns with the instance's encryptor (current key and `VAUBAAN_MASTER_KEY_PREVIOUS`)
+   and drops each plaintext. The report gives, per key version, the blob count,
+   whether a key is configured for it, and how many opened; one blob that does not
+   open refuses the restore.
+
+`--dry-run` stops here.
+
+**Install.** A store file that exists and is not empty is replaced only with `--force`;
+an empty file counts as no store. `--force` refuses a store in use
+(`heldByAnotherConnection`, `db.ts`: open, `wal_checkpoint(TRUNCATE)`, close; a `-wal`
+that survives the close means another connection, the gateway, holds it — exit 75).
+The check runs before the download and again before the rename. What is in the way —
+the store and its `-wal`/`-shm`, or a stale `-wal`/`-shm` beside an absent store,
+which SQLite would replay into the copy — is renamed `<name>.replaced-<UTC timestamp>`,
+never deleted; then the copy (already `fsync`ed) is renamed onto `store.path` and the
+directory is synced.
+
+**Exit codes**: 0 done or the dry run passed, 1 unexpected failure (one fixed line),
+64 usage (an http URL, a URL without hash, no source), 65 a check failed, 66 the
+source cannot be read (or is above the cap), 69 the download failed, 73 a store exists
+(no `--force`), 75 the store is in use, 77 root, 78 not configured.
+
+**At first boot.** With `restore.from` set (and so `restore.sha256`, required with
+it), `openEmbeddedStore` calls `restoreAtFirstBoot` before `openStore()`: when the store
+file does not exist or is empty, the copy is restored as above, then the store opens
+and migrates as usual. A refusal stops the boot with a message naming the failure kind
+and the check (never the source), and leaves no store: the next start tries again.
+When the store exists, one `warn` line and nothing else, at each boot until the
+variables are removed. The restore never re-seals: moving the copy to the new
+instance's key is the reseal's job (`deploy/railway.md`, "Moving an instance").
+The Docker smoke test runs the command and the first-boot restore in the image
+(step 13).
+
 ## Tests
 
+- `src/server/restore/cli.test.ts` (7) — arguments parsed without echoing a value;
+  a file restored with its report (integrity, per-version key line, no key printed);
+  a dry run writes nothing; 73 without `--force`, the old file kept aside with it;
+  wrong hash 65, missing file 66, http 64 without echoing the URL, a URL without hash
+  64, root 77, no source 64; the configured source used when none is given, the URL
+  never printed; an unconfigured instance 78.
+- `tests/integration/restore/restore.test.ts` (22) — a good copy restored from a file
+  (mode `0600`, its secret opens); dry run; wrong SHA-256 refused before anything else
+  is read; a tampered copy refused by its hash, and by SQLite when the hash is the
+  tampered file's; a non-database and a database without `schema_migrations` refused;
+  a newer schema refused naming the migration, an older one accepted; a key version
+  without key, a wrong key, and the old key as previous (accepted); an existing store
+  not overwritten without `--force`, moved aside with it; an empty file is no store;
+  `--force` refused while another connection holds the store; the size cap on a file,
+  on `Content-Length` and while streaming; an https download through a redirect; the
+  hash required for a URL; a redirect to http refused; a network failure named by its
+  code; the configuration (http refused without echo, hash required and well-formed,
+  the source a secret: redacted and scrubbed); at first boot: restored before the
+  store opens and migrated, then one warning and no download at the next boot, the URL
+  in no log line; a refused restore stops the boot and leaves no store; a local file.
 - `tests/unit/server/store/ids.test.ts` — UUIDv7 shape, embedded timestamp, ordering,
   uniqueness.
 - `tests/unit/server/store/migrate.test.ts` — file naming, ordering, duplicate

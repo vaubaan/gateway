@@ -163,3 +163,56 @@ function assertNoUnknownMigration(
       'start an image at least as new as the one that wrote the database',
   );
 }
+
+/** How a database's recorded migrations compare with the ones this image ships. */
+export interface ShippedComparison {
+  /** Whether the database has a `schema_migrations` table at all. */
+  readonly hasMigrationsTable: boolean;
+  /** Highest recorded version, 0 when none. */
+  readonly version: number;
+  /** Highest version this image ships. */
+  readonly shippedVersion: number;
+  /** Recorded migrations this image does not ship (`NNNN_name`): a newer image wrote them. */
+  readonly unknown: readonly string[];
+  /** Recorded migrations whose content differs from the file this image ships. */
+  readonly changed: readonly string[];
+}
+
+/**
+ * Compares a database with the shipped migrations without writing anything (the
+ * `restore` command reads its candidate read-only): the checks `runMigrations`
+ * would make at boot, answered ahead of time.
+ */
+export function compareWithShipped(
+  db: StoreDb,
+  migrations: readonly Migration[],
+): ShippedComparison {
+  const shippedVersion = migrations.reduce((max, m) => Math.max(max, m.version), 0);
+  const table = db
+    .prepare<
+      [],
+      { n: number }
+    >("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'")
+    .get();
+  if ((table?.n ?? 0) === 0) {
+    return { hasMigrationsTable: false, version: 0, shippedVersion, unknown: [], changed: [] };
+  }
+  const recorded = db
+    .prepare<
+      [],
+      { version: number; name: string; checksum: string }
+    >('SELECT version, name, checksum FROM schema_migrations ORDER BY version')
+    .all();
+  const shipped = new Map(migrations.map((m) => [m.version, m]));
+  const label = (m: { version: number; name: string }) =>
+    `${String(m.version).padStart(4, '0')}_${m.name}`;
+  const unknown: string[] = [];
+  const changed: string[] = [];
+  for (const row of recorded) {
+    const file = shipped.get(row.version);
+    if (!file) unknown.push(label(row));
+    else if (file.checksum !== row.checksum) changed.push(label(row));
+  }
+  const version = recorded.reduce((max, m) => Math.max(max, m.version), 0);
+  return { hasMigrationsTable: true, version, shippedVersion, unknown, changed };
+}
