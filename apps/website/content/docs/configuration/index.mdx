@@ -1,0 +1,48 @@
+---
+title: Configuration
+description: How an instance reads its configuration — environment variables and a YAML file — and how to set sign-in providers, the admin rule and company apps.
+---
+
+An instance is configured by environment variables, by a YAML file, or both; the configuration is read once at start, and anything required and missing stops the instance with a message naming every key. Every key, with its variable, type, default and accepted values: [configuration keys](/docs/configuration/keys).
+
+## Two sources
+
+- **Environment variables**, `VAUBAAN_*`. A secret may come from a file instead, through the twin variable ending in `_FILE` (`VAUBAAN_MASTER_KEY_FILE`).
+- **A YAML file**, named by `VAUBAAN_CONFIG_FILE`. Secrets in it are written as references, `${NAME}` (an environment variable) or `${file:/path}` (a mounted file).
+
+When both set a key, **the file wins, silently**. That is why `deploy/config/gateway.example.yaml` ships with every key commented out: copying it changes nothing until you uncomment a key. Use either source alone, or give each key one owner.
+
+A missing or invalid key stops the instance at start with exit code 78:
+
+```
+Invalid instance configuration (1 problem):
+  - encryption.master_key: missing required key (env: VAUBAAN_MASTER_KEY or VAUBAAN_MASTER_KEY_FILE)
+```
+
+## Sign-in providers
+
+People sign in through one or more providers, offered side by side on the sign-in page:
+
+- **OpenID Connect**, your company's directory. One provider under `idp.*` (callback `https://your-domain/auth/callback`), or any number under `sign_in.<id>.*` with `kind: oidc` (callback `https://your-domain/auth/callback/<id>`).
+- **GitHub**, through a GitHub OAuth App, under `sign_in.<id>.*` with `kind: github` (callback `https://your-domain/auth/callback/<id>`).
+
+Providers can also be added from the interface, Settings → Administration → Sign-in, by an administrator; a provider set in the configuration is read-only there. Until a provider exists, the bootstrap token (`bootstrap_token`) lets the first administrator in; the first sign-in of a person matching the admin rule revokes it.
+
+A provider where anyone can open an account (GitHub, personal Google or Microsoft accounts) is refused without allowed email domains (`allowed_email_domains`) or "invitation only" (`invitation_only`); invitations are made on Settings → People. A person is a pair (issuer, subject): the same person at two providers is two accounts, never merged by email.
+
+## The admin rule
+
+Administrators are named by the configuration only: `admin.group` (a group of the identity provider, written `<provider>:<group>` once there are several providers) or `admin.emails` (verified addresses), or both. An administrator configures the instance, approves connected apps, keeps local teams and deactivates people; they do not answer another person's requests nor create missions on accounts they do not hold.
+
+## Company apps
+
+A service that works through an app — the GitHub App, a Supabase OAuth app, a Railway OAuth app — needs **your company's own app**, registered once per instance: this gateway never uses an app shared with another one.
+
+- **From the interface**: Settings → Administration → Company apps. For GitHub, "Create the GitHub App" creates it at GitHub from the page and stores its id, key and secrets encrypted: nothing to copy. For the others, register the app at the service with the callback the page shows, then enter its client id and secret there.
+- **From the configuration**: `providers.<id>.<field>` (`VAUBAAN_PROVIDER_<ID>_<FIELD>`), with the fields `client_id`, `client_secret`, `app_id`, `app_slug`, `private_key`. The app is then read-only in the interface.
+
+Each service's steps: [connect a provider](/docs/providers).
+
+## Things that are not configurable
+
+Several lifetimes, rate-limit windows and timeouts look like settings but are constants of the code, and changing one is a release; the list is in the [configuration handbook](https://github.com/vaubaan/gateway/blob/main/docs/handbook/configuration.md#fixed-in-code-not-configurable).

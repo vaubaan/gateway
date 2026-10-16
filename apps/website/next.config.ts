@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import { createMDX } from 'fumadocs-mdx/next';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -29,8 +30,21 @@ const nextConfig: NextConfig = {
           { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' },
         ],
       },
+      {
+        // The Markdown twins of the pages (website spec §2.6), generated into public/.
+        source: '/:path(.+\\.md)',
+        headers: [{ key: 'Content-Type', value: 'text/markdown; charset=utf-8' }],
+      },
+      {
+        // The same address answers HTML or Markdown depending on Accept (src/proxy.ts).
+        source: '/:section(docs|plugins|trust)/:rest*',
+        headers: [{ key: 'Vary', value: 'Accept' }],
+      },
     ];
   },
 };
 
-export default nextConfig;
+// Compiles content/docs (source.config.ts) into .source/ (ADR website-nextjs-on-vercel D2).
+const withMDX = createMDX();
+
+export default withMDX(nextConfig);

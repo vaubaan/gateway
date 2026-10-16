@@ -306,6 +306,10 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/structural/version-single-source.test.ts`                                         |         4 |
 | `apps/website/tests/unit/collector/reports.test.ts`                                                        |         6 |
 | `apps/website/tests/unit/collector/stats-and-config.test.ts`                                               |        12 |
+| `apps/website/tests/unit/site/plugins.test.ts`                                                             |         4 |
+| `apps/website/tests/unit/site/site.test.ts`                                                                |        10 |
+| `apps/website/tests/unit/site/sources-agree.test.ts`                                                       |         6 |
+| `apps/website/tests/unit/site/units.test.ts`                                                               |        15 |
 | `packages/gateway-core/tests/unit/audit.test.ts`                                                           |         2 |
 | `packages/gateway-core/tests/unit/authenticate.test.ts`                                                    |        11 |
 | `packages/gateway-core/tests/unit/cache.test.ts`                                                           |         7 |
@@ -4548,6 +4552,50 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
 - **`compose/self-resources-check.test.ts`** (2, re-check L-1) and the
   Upstash tests (L-2) — a self resource of an unknown provider stops the boot;
   `get_database` sends `credentials=hide` and nested credentials are dropped.
+
+## Scenarios — The public site
+
+> Covers: spec [`website.md`](../spec/website.md) §1.1 (no second source of
+> truth), §2.3, §2.4 (thresholds, "not enough reports yet"), §2.5, §2.6
+> (Markdown twins, llms.txt, robots.txt, sitemap). Handbook [[website]]. ADRs
+> [[website-nextjs-on-vercel]], [[website-generated-from-the-repository]].
+> `apps/website/tests/unit/site/`. No test reaches the collector: `buildSite()`
+> is given an offline snapshot and `fetchHealth()` an injected `fetch`. The
+> rendered HTML is checked by `npm run build --workspace @vaubaan/website`,
+> not by these tests.
+
+- **`plugins.test.ts`** (4) — **one source for the plugin list**: every
+  folder of `plugins/` with a `package.json` is listed, `_template` is not
+  (the expected list is computed independently of `discoverPluginDirs`);
+  each plugin is imported through its entry, with a semver version, risks,
+  presets whose entries name risks of the same catalog, and credentials; the
+  experimental flag comes from the declaration (`gmail`).
+- **`site.test.ts`** (10) — **the site as data**, built offline: every
+  hand-written docs page, every generated one and every plugin page is in
+  the page list, once; **every page has its `.md` twin** with the page's
+  Markdown, starting with its title, and `markdownTwinOf()` routes
+  `Accept: text/markdown` to it; every page opens with a defining sentence;
+  **`llms.txt` lists every docs, plugin and trust page** with its `.md` URL
+  and description, and **`llms-full.txt` carries each of them whole**;
+  `robots.txt` allows `GPTBot`, `ClaudeBot`, `PerplexityBot`,
+  `Google-Extended`, `CCBot` and `*` and disallows nothing; the sitemap
+  lists every page; `plugins.json` carries every plugin and never a rate
+  offline; every GitHub link names a file of the repository and every site
+  link a page or a file of the site.
+- **`sources-agree.test.ts`** (6) — what the site copies is the gateway's:
+  **the configuration keys page has one row per entry of `KEYS`** (plus the
+  two families) with the variable the loader reads; **the thresholds are 200
+  reports, 90 %, 90 days**, read from `schema.sql` and equal to the collector
+  README's; the severity word equals the gateway's over all 1 296 vectors.
+- **`units.test.ts`** (15) — `escapeMdx` (outside code only),
+  `rewriteRelativeLinks`, `sectionsOf` (fence-aware), `text`,
+  `splitFrontmatter`; health: no rate below the minimum or without the
+  collector, the rate and status from it on, `fetchHealth` never throws
+  (network error, non-list, 503, malformed rows dropped); the proxy's host
+  gate (only `/v1/*` and a disallowing robots.txt on `COLLECTOR_HOST`,
+  nothing without it), `wantsMarkdown`, `markdownTwinOf`; hand-written docs
+  are plain Markdown; the trust center reads every accepted risk and the
+  out-of-scope items of the threat model.
 
 ## Out of scope for these tests
 

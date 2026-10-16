@@ -1,0 +1,60 @@
+---
+title: Missions and agents
+description: Create a mission, give its key to an agent with the kit the instance prints, and what the agent reads when a call is refused.
+---
+
+A mission is created by a person, in the interface or through a connected app, and handed to an agent as a key plus a kit: the MCP client configuration, the instructions for the agent and a command to check it.
+
+## Create a mission
+
+In the interface: Missions → New mission, on one screen.
+
+1. **Name it** after the task ("Ship the billing page").
+2. **Include accounts** and select the resources the task needs, not all of them. You can include an account you own or one you were given access to; one account per service.
+3. **Pick a preset** per account ("Read-only", "Developer", "Release manager"…): it says what it yields here. "Edit the permissions one by one" opens every permission with its limit per period, its rate per minute, and "runs freely" or "ask me first".
+4. **Choose the period and the expiry**: once, or limits reloaded every day; an end date, or none (a forgotten mission without an end keeps its keys valid).
+5. **Create mission**: the form lists every permission with its limit before anything exists.
+
+A mission can only hold what you may allow yourself: the permissions of the accounts you own, or what an access you were given allows.
+
+## Give the key to the agent
+
+The key is shown once, followed by the kit:
+
+- **The environment variable**, `export VAUBAAN_MISSION_TOKEN='...'`, to set where the agent runs.
+- **The MCP client configuration**, which reads the key from that variable, never the secret itself:
+
+```json
+{
+  "mcpServers": {
+    "vaubaan": {
+      "type": "http",
+      "url": "https://your-domain/mcp",
+      "headers": { "Authorization": "Bearer ${VAUBAAN_MISSION_TOKEN}" }
+    }
+  }
+}
+```
+
+- **Instructions for the agent**, in Markdown: whose key it is, the accounts and resources it may touch, each permission with its limits, what each refusal means and what to do, the management door's address.
+- **The git configuration**, when the mission holds repositories: see [git remote](/docs/missions/git-remote).
+- **A check**, a `curl` that lists the tools the key opens.
+
+Configuring the main clients: [MCP clients](/docs/missions/mcp-clients).
+
+## Teammates and keys
+
+The creator can add teammates; each generates their own key, shown to them alone, and every call is recorded under the holder of the key that made it. The limits are one for the whole mission, never multiplied by its keys. A machine key (for a CI runner) is a key with a name instead of a person. Removing a teammate refuses their key at once; the others keep working.
+
+## When a call is refused
+
+The gateway answers with a code and what to do; it never holds a call waiting.
+
+| Code                      | Meaning                                                                 | What happens next                                                                                        |
+| ------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `risk-not-accepted`       | the call needs a permission the mission does not hold (`missing_risks`) | the creator may change the mission; the agent does not work around it                                    |
+| `budget-exhausted`        | a limit is reached for this period                                      | the answer carries a `claim_url`; the creator gives more or resets it under "Waiting for you"            |
+| `approval-required`       | the permission asks first                                               | the answer carries an `approval_url`; once the creator approves, the agent replays exactly the same call |
+| `resource-not-in-mission` | the resource is not selected in the mission                             | the creator may add it                                                                                   |
+
+The kit's instructions list every code the instance can return. Stopping a mission or removing an access stops every call at once.

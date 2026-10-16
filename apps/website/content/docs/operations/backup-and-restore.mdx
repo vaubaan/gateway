@@ -1,0 +1,46 @@
+---
+title: Backup and restore
+description: Make a consistent copy of the database while the instance runs, keep the master key apart, and what restoring a copy involves.
+---
+
+A backup of an instance is two things kept apart: a consistent copy of its SQLite database, and the master key versions that copy is sealed under; the copy alone opens no credential, and the key alone is nothing.
+
+## Make a copy
+
+The image ships a command that copies the database with SQLite's `VACUUM INTO`, online, next to the original:
+
+```bash
+# Docker Compose (the service is named gateway in deploy/compose.yaml)
+docker compose --env-file deploy/config/.env -f deploy/compose.yaml exec gateway node apps/gateway/backup.mjs
+
+# Railway
+railway ssh
+vaubaan-entrypoint node /app/apps/gateway/backup.mjs
+```
+
+It prints what it made:
+
+```
+backup: /data/backup-2026-10-16T08-00-00-000Z.sqlite
+backup: 1234567 bytes, schema version 15, integrity_check: ok
+backup: its secrets are sealed under master key version(s) 1: …
+```
+
+It never overwrites a file, refuses to run as root (`vaubaan-entrypoint` drops to the image's user) and checks the copy. Copy the file off the volume, then delete it there. On Railway, for instance from your machine:
+
+```bash
+railway ssh -- base64 /data/<file> > backup.b64 && base64 -d backup.b64 > backup.sqlite
+railway ssh -- rm /data/<file>
+```
+
+Check once on your setup that the copy opens with `sqlite3` and passes `PRAGMA integrity_check`. A volume snapshot that captures the database and its `-wal` file together is also a valid backup; a plain copy of the database file without its `-wal` file is not.
+
+## Keep the key apart
+
+Keep the master key outside the host and outside the backups. **A copy opens only with the keys of the versions it names** (the third line above), as they were when it was made: after a [rotation](/docs/operations/master-key-rotation), the copies taken before need the old key. Losing the key loses every stored credential.
+
+## Restore
+
+**The repository documents no restore command yet, and no restore has been rehearsed by the project.** A copy is a complete SQLite database at a schema version, so restoring it means, in principle: stop the instance; put the copy in place of the file named by `store.path`, with no `-wal` or `-shm` file of the old database left beside it; make sure the configuration holds every master key version the copy names; start an image at least as recent as the one that made the copy — an older image refuses a newer database, and migrations run forward at start. Try it on a scratch instance before you need it.
+
+More: the [store handbook, Backup](https://github.com/vaubaan/gateway/blob/main/docs/handbook/store.md#backup).

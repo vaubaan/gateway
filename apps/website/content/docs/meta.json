@@ -1,0 +1,16 @@
+{
+  "title": "Docs",
+  "pages": [
+    "index",
+    "concepts",
+    "quick-look",
+    "install",
+    "install-with-your-coding-agent",
+    "configuration",
+    "providers",
+    "missions",
+    "operations",
+    "known-limitations",
+    "compare"
+  ]
+}
