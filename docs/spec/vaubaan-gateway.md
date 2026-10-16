@@ -1026,7 +1026,8 @@ a mounted file, never committing anything:
   claims: a group of provider A never satisfies a rule written for
   provider B. A group without a provider is accepted while one provider
   is configured, and refused once there are several;
-- the **telemetry opt-in** and the collector URL (default supplied,
+- the **telemetry level** (off, plugin-health, plugin-health +
+  usage-stats; §9) and the collector URL (default supplied,
   overridable, disableable).
 
 Optional keys have defaults; among them the **absolute lifetime of a
@@ -1360,23 +1361,57 @@ for as long as the mission does.
 Plugins cannot be tested against real providers in the project's
 automated suite. Trust comes from usage.
 
+> Amended on 2026-10-16 (ADR
+> [telemetry-two-levels-behind-a-vercel-collector](../decisions/telemetry-two-levels-behind-a-vercel-collector.md)):
+> the report is widened to everything that carries no secret, no identifier
+> and no payload, in two levels. The receiving side is specified in
+> [website](./website.md) §3.
+
 - **Opt-in per instance**, disabled at installation, enabled by the
-  operator, visible in the interface.
-- **Content of a report**: plugin identifier, plugin version, gateway
-  version, tool name, outcome (`success`, `upstream-error`,
-  `classification-error`, `execution-error`), normalized error class.
-  Nothing else.
-- **Never**: arguments, argument hashes, resource refs, mission
-  identifiers, user identifiers, stable instance identifier, network
-  address. A structural test checks the report's shape (§10).
-- **Public aggregation**: success rate per `(plugin, version, tool)`,
-  number of reporting instances. A plugin is **deemed validated** above a
-  success threshold and a minimum number of reports, both published. The
-  instance's interface shows this status in the details of each account and
-  in the reference of its service.
-- The collector is hosted by the open source project, insert-only and
-  anonymous; its shape is an infrastructure decision, not part of this
-  spec.
+  operator, visible in the interface. Three settings: **off**,
+  **plugin-health**, **plugin-health + usage-stats**. The first version may
+  offer only off and the last one; the wire keeps the two levels apart from
+  the start so that the choice can be offered without a new format.
+- **Level `plugin-health`** — one report per call a plugin executed: plugin
+  identifier, plugin version, gateway version, tool name, outcome
+  (`success`, `upstream-error`, `classification-error`, `execution-error`),
+  normalized error class, duration bucket (`<100ms`, `<1s`, `<10s`,
+  `>=10s`).
+- **Level `usage-stats`** — in addition:
+  - one **decision report** per call the gateway decided, executed or
+    refused: plugin identifier, tool name (only if the plugin declares it),
+    gateway version, decision (`allowed` or the refusal code of §4.1), the
+    `RiskId`s the call touched **without their environment qualifier**
+    (environment labels are chosen by the company), and whether a gate
+    applied (`approval`, none);
+  - one **instance profile** per UTC day: gateway version, deployment kind
+    (`docker`, `railway`, `other`), runtime version and architecture, the
+    plugins enabled with their versions, the kinds of sign-in providers
+    configured (`oidc`, `github`), and bucketed counts (users, accounts per
+    plugin, active missions, calls of the day). It carries a **day
+    identifier**: random, drawn again each UTC day, held in memory only,
+    sent with the profile and with nothing else. It counts the reporting
+    instances of a day; it cannot follow an instance from one day to the
+    next or join a profile to a call.
+- **No report carries a time.** The collector stamps the arrival, truncated
+  to the UTC hour.
+- **Never**, at any level: arguments, argument hashes, payloads, provider
+  responses, error text, resource refs, environment labels, mission
+  identifiers, user identifiers, emails, account names, host names, URLs,
+  a stable instance identifier, a network address. Every field is a value of
+  a closed vocabulary, a shape bounded by the plugin's own declaration, or a
+  bucket. A structural test checks every report shape (§10).
+- **Public aggregation**: success rate per `(plugin, version, tool)` and the
+  number of reporting instances per day. A plugin is **deemed validated**
+  above a success threshold and a minimum number of reports, both
+  published. The instance's interface shows this status in the details of
+  each account and in the reference of its service. Usage statistics are
+  readable by the project's maintainers; publishing their aggregates is an
+  open question of [website](./website.md) §5.
+- The collector is hosted by the open source project, never stores a
+  network address, and stores no field a report does not define
+  ([website](./website.md) §3). The content of each level is published on
+  the project's trust center, word for word.
 
 ## 10. Tests
 
@@ -1416,7 +1451,8 @@ automated suite. Trust comes from usage.
   Described in [e2e-tests](../tests/e2e-tests.md). Run by hand, outside
   the automated suite.
 - **Structural**:
-  - a telemetry report contains none of the forbidden fields (§9);
+  - no telemetry report, of either level, contains a forbidden field
+    (§9), and the day identifier travels with the instance profile only;
   - session counters agree with the audit;
   - no configuration value is hard-coded;
   - every persisted restriction and `accepted_risks` is an enumerated
