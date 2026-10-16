@@ -136,7 +136,7 @@ deploy/config/                  gateway.example.yaml, .env.example (every key do
    - `createEncryptor(config.encryption)` (awaits libsodium);
    - the plugin registry (`@vaubaan/plugin-sdk`'s `PluginRegistry`) from
      `RootDeps.buildRegistry`, by default `buildShippedRegistry`: the
-     eleven plugins imported by `compose/shipped-plugins.ts`. A
+     plugins imported by `compose/shipped-plugins.ts`. A
      plugin that fails `definePlugin` or a duplicate id fails the boot;
    - `checkProviderApps`: every `providers.<id>` must name a registered
      plugin, otherwise a `ConfigError` naming `providers.<id>` and

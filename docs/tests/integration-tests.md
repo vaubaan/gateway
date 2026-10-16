@@ -366,6 +366,7 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/gmail/tests/unit/q-parser.test.ts`                                                                |        32 |
 | `plugins/gmail/tests/unit/risk-catalog.test.ts`                                                            |        45 |
 | `plugins/notion/tests/unit/ancestry.test.ts`                                                               |        20 |
+| `plugins/notion/tests/unit/boundaries.test.ts`                                                             |        16 |
 | `plugins/notion/tests/unit/classify.test.ts`                                                               |        21 |
 | `plugins/notion/tests/unit/data-model.test.ts`                                                             |         3 |
 | `plugins/notion/tests/unit/discovery.test.ts`                                                              |         9 |

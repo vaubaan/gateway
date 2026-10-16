@@ -520,7 +520,7 @@ fallback; a slice covered by nothing — reads are not caught by
 `<provider>.**.W` — yields an empty set, which the runtime refuses. So a
 preset must not include the fallback (loader error), and its appearance in
 an audit log means "a catalog entry is missing". The YAML marks it
-`fallback: true` (all eleven plugins do); the detection by pattern or id is the
+`fallback: true` (every shipped plugin does); the detection by pattern or id is the
 compatibility path for third-party catalogs written before the flag, and
 warns.
 
