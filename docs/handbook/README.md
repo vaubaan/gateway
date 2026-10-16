@@ -79,6 +79,7 @@ One handbook per provider plugin (`plugins/<id>`):
 | [providers/upstash-redis](providers/upstash-redis.md)   | `@vaubaan/plugin-upstash-redis`: plugin and risk model.                                                                                 |
 | [providers/ssh](providers/ssh.md)                       | `@vaubaan/plugin-ssh`: bash over SSH.                                                                                                   |
 | [providers/gmail](providers/gmail.md)                   | `@vaubaan/plugin-gmail`, experimental and classifier-only: it classifies the modelled tools and discovers the mailbox, exposes no tool. |
+| [providers/notion](providers/notion.md)                 | `@vaubaan/plugin-notion`: pages, content, databases and comments under shared roots, proven by an ancestry walk.                        |
 
 ## Legacy
 

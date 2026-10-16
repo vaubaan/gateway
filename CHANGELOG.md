@@ -221,6 +221,11 @@ names, and the notes about them do too.
   and keeps the names. ADR `secret-arguments-masked-in-the-approval-view`.
 - **An instance on Fly protects its own app**: `fly:$FLY_APP_NAME` is one of its self
   resources, as `railway:$RAILWAY_PROJECT_ID` on Railway, never reachable by a mission.
+- **Notion plugin** (`@vaubaan/plugin-notion` 0.1.0): pages, page content, databases and
+  comments of the top-level pages and databases shared with an internal connection token
+  (`api-key`; personal access tokens refused), every id proven under its root before a
+  call reads or writes, writes sent silently; presets `read-only`, `reviewer` and
+  `editor` (moving a page to the trash and deleting a block ask first).
 - **Import from the hosted product (v4), once per organization.**
   `scripts/export-v4.mjs --org <slug>` reads one organization of the v4 database
   (read-only, through `psql`) and writes a bundle to stdout only; piped into

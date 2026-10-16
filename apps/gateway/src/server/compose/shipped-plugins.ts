@@ -16,6 +16,7 @@ import cloudflareDnsPlugin from '@vaubaan/plugin-cloudflare-dns';
 import flyPlugin from '@vaubaan/plugin-fly';
 import githubPlugin from '@vaubaan/plugin-github';
 import gmailPlugin from '@vaubaan/plugin-gmail';
+import notionPlugin from '@vaubaan/plugin-notion';
 import railwayPlugin from '@vaubaan/plugin-railway';
 import resendPlugin from '@vaubaan/plugin-resend';
 import { createRegistry, type PluginRegistry, type ProviderPlugin } from '@vaubaan/plugin-sdk';
@@ -37,6 +38,7 @@ export const SHIPPED_PLUGINS: readonly ProviderPlugin[] = [
   sshPlugin,
   gmailPlugin,
   flyPlugin,
+  notionPlugin,
 ];
 
 export async function buildShippedRegistry(): Promise<PluginRegistry> {

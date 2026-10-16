@@ -22,6 +22,7 @@ tracks:
   - plugins/cloudflare-dns/tests/
   - plugins/gmail/tests/
   - plugins/stripe/tests/
+  - plugins/notion/tests/
   - packages/gateway-core/tests/
   - apps/gateway/tests/
   - apps/gateway/src/server/
@@ -364,6 +365,14 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/gmail/tests/unit/plugin.test.ts`                                                                  |        27 |
 | `plugins/gmail/tests/unit/q-parser.test.ts`                                                                |        32 |
 | `plugins/gmail/tests/unit/risk-catalog.test.ts`                                                            |        45 |
+| `plugins/notion/tests/unit/ancestry.test.ts`                                                               |        20 |
+| `plugins/notion/tests/unit/classify.test.ts`                                                               |        21 |
+| `plugins/notion/tests/unit/data-model.test.ts`                                                             |         3 |
+| `plugins/notion/tests/unit/discovery.test.ts`                                                              |         9 |
+| `plugins/notion/tests/unit/execute.test.ts`                                                                |        18 |
+| `plugins/notion/tests/unit/identifiers.test.ts`                                                            |        26 |
+| `plugins/notion/tests/unit/plugin.test.ts`                                                                 |         8 |
+| `plugins/notion/tests/unit/risk-catalog.test.ts`                                                           |         5 |
 | `plugins/railway/tests/unit/classify.test.ts`                                                              |        22 |
 | `plugins/railway/tests/unit/data-model.test.ts`                                                            |         1 |
 | `plugins/railway/tests/unit/identifier-injection.test.ts`                                                  |       294 |

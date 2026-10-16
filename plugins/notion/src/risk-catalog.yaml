@@ -1,0 +1,372 @@
+# Risk catalog of the `notion` provider.
+#
+# Handbook : docs/handbook/providers/notion.md §3.
+#
+# No risk is env-scoped (product owner, 2026-10-16) : the destructive
+# operations ask first in the presets instead. Write patterns do not
+# overlap : each write slice touches exactly one named risk, except the
+# trash of the root page itself, which emits two slices (`page-trash` and
+# `root-trash`).
+
+provider: notion
+catalog_version: 1
+catalog_date: 2026-10-16
+
+risks:
+  # ─── Reads ─────────────────────────────────────────────────────────────────
+
+  - id: notion.read-content
+    label: 'Read pages, their content and database descriptions'
+    reason: >-
+      Page titles, properties and block content of the selected pages and
+      databases, search results within them, and the description of their
+      databases. Content written by people, which can carry instructions
+      aimed at the agent.
+    matches:
+      - 'notion.root[*].R'
+      - 'notion.root[**].page[**].R'
+      - 'notion.root[**].block[*].R'
+      - 'notion.root[**].database[*].R'
+      - 'notion.root[**].data-source[*].R'
+    infra_limits: { calls_per_minute_max: 60 }
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: notion.query-databases
+    label: 'Query database entries in bulk'
+    reason: >-
+      One query returns up to a hundred entries with all their properties —
+      a CRM, a hiring pipeline or a task list in a few calls. Kept apart from
+      reading one page so a mission can read documents without exporting
+      tables.
+    matches: 'notion.root[**].data-source[*].entry[*].R'
+    infra_limits: { calls_per_minute_max: 30 }
+    vector:
+      reversibility: reversible
+      blast: bulk
+      data: pii
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: notion.read-comments
+    label: 'Read comments and discussions'
+    reason: >-
+      Open discussions on pages and blocks, with the names of who wrote
+      them. Often more candid than the page itself.
+    matches: 'notion.root[**].block[*].comment[*].R'
+    infra_limits: { calls_per_minute_max: 30 }
+    vector:
+      reversibility: reversible
+      blast: single
+      data: pii
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  # ─── Writes — pages and their content ──────────────────────────────────────
+
+  - id: notion.page-create
+    label: 'Create a page under a page'
+    reason: >-
+      Adds a page, with its first content, under an existing page of the
+      selected roots. Additive and visible to everyone who can see the
+      parent page; removed by moving it to the trash.
+    matches: 'notion.root[**].page[*].subpage.W'
+    infra_limits: { calls_per_minute_max: 30 }
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+      persistence: posture
+
+  - id: notion.page-update
+    label: "Change a page's title, icon or cover"
+    reason: >-
+      Overwrites what a page is called and how it looks. The previous value
+      is kept only in Notion's page history, whose length depends on the
+      workspace's plan.
+    matches: 'notion.root[**].page[*].properties.W'
+    infra_limits: { calls_per_minute_max: 30 }
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+      persistence: posture
+
+  - id: notion.content-append
+    label: 'Add content to a page'
+    reason: >-
+      Adds blocks (text, lists, to-dos, code, links) at the start or the end
+      of a page or a block, or after a given block. Nothing existing is
+      changed.
+    matches: 'notion.root[**].block[*].children.W'
+    infra_limits: { calls_per_minute_max: 30 }
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+      persistence: posture
+
+  - id: notion.block-update
+    label: 'Rewrite a block of a page'
+    reason: >-
+      Replaces the content of one existing block — a paragraph, a heading, a
+      to-do, a line of a table — with new text. What people wrote there is
+      kept only in Notion's page history, and a mention in the new text can
+      notify the person it names.
+    matches: 'notion.root[**].block[*].W'
+    infra_limits: { calls_per_minute_max: 30 }
+    vector:
+      reversibility: costly
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+      persistence: posture
+
+  - id: notion.block-delete
+    label: 'Delete a block of a page'
+    reason: >-
+      Moves one block of a page, and the blocks nested in it, to Notion's
+      trash: it disappears for everyone. It can be restored in Notion, not by
+      the agent. Never a page: moving a page to the trash is its own
+      permission.
+    matches: 'notion.root[**].block[*].delete.W'
+    infra_limits: { calls_per_minute_max: 10 }
+    vector:
+      reversibility: costly
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+      persistence: posture
+
+  - id: notion.page-trash
+    label: 'Move a page to the trash'
+    reason: >-
+      The page and everything under it — sub-pages, inline databases —
+      disappear for everyone. It can be restored from Notion's trash; the
+      API cannot delete it for good. Database entries are pages too.
+    matches: 'notion.root[**].page[*].trash.W'
+    infra_limits: { calls_per_minute_max: 10 }
+    vector:
+      reversibility: costly
+      blast: bulk
+      data: data
+      cost: free
+      visibility: team
+      persistence: posture
+
+  - id: notion.page-restore
+    label: 'Bring a page back from the trash'
+    reason: >-
+      A page someone moved to the trash — out of date, wrong or confidential
+      — reappears with everything under it for everyone who can see where it
+      was. It can be moved to the trash again, but whoever saw it in between
+      has seen it.
+    matches: 'notion.root[**].page[*].restore.W'
+    infra_limits: { calls_per_minute_max: 10 }
+    vector:
+      reversibility: reversible
+      blast: bulk
+      data: data
+      cost: free
+      visibility: team
+      persistence: posture
+
+  - id: notion.root-trash
+    label: 'Move a whole shared root page to the trash'
+    reason: >-
+      Trashing the page that was shared with the connection takes the whole
+      resource away: every page under it, for every person and every
+      mission. Listed in no preset; a mission that needs it holds it
+      explicitly, beside the permission to trash a page.
+    matches: 'notion.root[*].root-trash.W'
+    infra_limits: { calls_per_minute_max: 2 }
+    vector:
+      reversibility: costly
+      blast: env
+      data: data
+      cost: free
+      visibility: public
+      persistence: posture
+
+  # ─── Writes — database entries ─────────────────────────────────────────────
+
+  - id: notion.entry-create
+    label: 'Add an entry to a database'
+    reason: >-
+      Creates a row in a database: a task, a contact, a ticket. Can start the
+      database's automations, which run whatever the notifications.
+    matches: 'notion.root[**].data-source[*].entry.W'
+    infra_limits: { calls_per_minute_max: 30 }
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+      persistence: posture
+
+  - id: notion.entry-update
+    label: "Change a database entry's properties"
+    reason: >-
+      Overwrites the values of an entry — a status, an owner, a date, a
+      relation; a list value replaces the whole list. Views, automations and
+      relations elsewhere follow the change; the previous value is only in
+      the page history.
+    matches: 'notion.root[**].data-source[*].entry[*].W'
+    infra_limits: { calls_per_minute_max: 30 }
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+      persistence: posture
+
+  # ─── Writes — comments ─────────────────────────────────────────────────────
+
+  - id: notion.comment-create
+    label: 'Add a comment'
+    reason: >-
+      Opens a discussion on a page or a block, or replies to an open one,
+      signed by the connection. Notifies the people it mentions: Notion offers
+      no silent comment.
+    matches: 'notion.root[**].block[*].comment[**].W'
+    infra_limits: { calls_per_minute_max: 20 }
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+      persistence: session
+
+  # ─── Fallback (required) ───────────────────────────────────────────────────
+
+  - id: notion.uncategorized-write
+    label: 'Uncategorized Notion write'
+    reason: >-
+      Catch-all for writes without a dedicated entry. Seen in an audit, it
+      means a tool classifies to a slice no entry covers: add the entry.
+    matches: 'notion.**.W'
+    fallback: true
+    vector:
+      reversibility: costly
+      blast: env
+      data: data
+      cost: free
+      visibility: team
+      persistence: posture
+
+presets:
+  - id: read-only
+    label: Read-only
+    description: Read the pages, databases and comments of the selected roots. No write, no comment.
+    entries:
+      - risk_id: notion.read-content
+        quota: 3000
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: notion.query-databases
+        quota: 500
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: notion.read-comments
+        quota: 500
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+
+  - id: reviewer
+    label: Reviewer
+    description: Read everything in the selected roots and leave comments. No change to pages or databases.
+    entries:
+      - risk_id: notion.read-content
+        quota: 3000
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: notion.query-databases
+        quota: 500
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: notion.read-comments
+        quota: 500
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: notion.comment-create
+        quota: 100
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: auto
+
+  - id: editor
+    label: Editor
+    description: >-
+      Daily work: read, comment, create and edit pages, their content and
+      database entries freely; moving a page to the trash and deleting a block
+      ask first. Never trashes a whole root.
+    entries:
+      - risk_id: notion.read-content
+        quota: 5000
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: notion.query-databases
+        quota: 1000
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: notion.read-comments
+        quota: 1000
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: notion.comment-create
+        quota: 200
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: auto
+      - risk_id: notion.page-create
+        quota: 200
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: notion.page-update
+        quota: 300
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: notion.content-append
+        quota: 500
+        rate_limit: { max: 15, window_seconds: 60 }
+        gate: auto
+      - risk_id: notion.block-update
+        quota: 300
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: notion.entry-create
+        quota: 300
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: notion.entry-update
+        quota: 500
+        rate_limit: { max: 15, window_seconds: 60 }
+        gate: auto
+      - risk_id: notion.page-restore
+        quota: 20
+        rate_limit: { max: 2, window_seconds: 60 }
+        gate: auto
+      - risk_id: notion.page-trash
+        quota: 20
+        rate_limit: { max: 2, window_seconds: 60 }
+        gate: approval
+      - risk_id: notion.block-delete
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
