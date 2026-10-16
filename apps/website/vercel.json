@@ -1,0 +1,5 @@
+{
+  "framework": "nextjs",
+  "installCommand": "cd ../.. && npm ci --include=dev --ignore-scripts --no-audit --no-fund",
+  "ignoreCommand": "case \"$VERCEL_GIT_COMMIT_REF\" in main|v5|feat/v5-website) git diff --quiet HEAD^ HEAD -- . ../../packages/telemetry ../../packages/shared ../../plugins ../../package-lock.json ;; *) exit 0 ;; esac"
+}
