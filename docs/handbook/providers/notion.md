@@ -10,11 +10,12 @@ tracks:
 
 # Notion provider plugin
 
-> **Draft, phase 1 of [`provider-modeler`](../../skills/provider-modeler.md):
-> nothing under `plugins/notion/` exists yet.** This page proposes the model
-> for a human review before any code. Decisions already taken by the
-> product owner are marked **(PO)**; the questions left to him are in
-> "Open questions" at the end.
+> **Phase 1 of [`provider-modeler`](../../skills/provider-modeler.md),
+> reviewed.** The product owner's decisions of 2026-10-16 are in
+> "Decisions" at the end; they remove the environment, add a restore tool,
+> block update and deletion, and silent notifications. Where a section below
+> still says otherwise, "Decisions" wins until the page is aligned with the
+> code.
 
 > **Sources.** Provider facts were checked on 2026-10-16 against the
 > official developer documentation at `developers.notion.com`, read with
@@ -1142,63 +1143,44 @@ and append block children; the parameters quoted here come from the parts
 read. The upgrade guide for `2025-09-03` names the query as `PATCH`; the
 endpoint reference says `POST`, which this page follows.
 
-## Open questions
+## Decisions
 
-1. **Environment labels.** Writes are env-scoped on `[staging, prod]`, so
-   an unlabelled root is read-only and a root labelled anything else
-   (`sandbox`, `internal`) cannot be written. Is `staging` / `prod` the
-   right pair for Notion workspaces, or should writes be account-scoped
-   and only the trash env-scoped?
-2. **Search across roots.** One root per search (consistent, cheap to
-   filter), or allow a search without `root` over every root of the
-   mission (one slice per root, results filtered to all of them)? The
-   documentation confirms search has no ancestor filter, so either way the
-   plugin filters.
-3. **Ancestry cache.** No cache between calls (correct when pages move,
-   ~1 extra second per call at depth 3 on a 3-requests-a-second plan). Is
-   the latency acceptable for the Fiabilis / dogfood use, or should the SDK
-   get a short-lived (e.g. 60 s) per-connection cache for proven ancestry —
-   a host change, therefore a spec gap to open?
-4. **Relations across roots.** v0.1 refuses a relation value pointing
-   outside the call's root. Many workspaces relate a "Projects" database to
-   a "People" or "Clients" database shared separately. Allow relation
-   targets under any root of the mission (each emitting a read slice on its
-   root), or keep it refused?
-5. **Rollups.** Notion computes them only over pages shared with the
-   connection, so nothing unshared leaks; but a rollup over a database of
-   another root carries that root's data into this mission. Return rollup
-   (and formula) values as Notion computes them, or strip them from query
-   and page results?
-6. **Comments env-scoped?** `comment-create` is account-scoped (no content
-   changes). Should a comment on a production root ask first?
-7. **429 handling.** Throw at once with `Retry-After` in the message (the
-   proposal, and safe for writes, since Notion's `503` may follow a write
-   that was saved), or retry reads only, once, when `Retry-After` ≤ 2 s?
-8. **Restore from trash.** The documentation confirms `in_trash: false`
-   restores a page. Add `notion__restore_page` in v0.1? It would make
-   `page-trash` cheaper to accept.
-9. **Public connection (OAuth) later?** It would let each person pick the
-   pages at consent. Out of v0.1 by the token-first decision — confirm it
-   stays out.
-10. **`editor` on production.** Page and entry writes run freely on
-    production in `editor`; only the trash asks first (your rule:
-    "approval on prod destructive ops"). Should `page-update` and
-    `entry-update` on `prod` — which overwrite values — ask first too?
-11. **The page body.** The plugin cannot replace or delete existing blocks
-    (no block update or deletion in scope; `erase_content` is refused). Is
-    "append only" enough for the daily-work preset, or are
-    `notion__update_block` / `notion__delete_block` wanted (each a risk of
-    its own, the deletion a verb leaf)?
-12. **Silent writes.** Notion accepts `notifications: { mode: "silent" }`
-    on page and block writes, suppressing update, @mention and person
-    notifications. Declare it (agents' writes would not ping people), or
-    leave Notion's default notifications on, as the reasons say today?
-13. **Personal access tokens.** Notion now offers them; one acts as its
-    creator, with everything that person can open and nothing shared
-    explicitly, for up to a year. `verify` refuses them, since the resource
-    model is "what was shared with the connection". Keep refusing them, or
-    accept them later with the resource model of the person's whole
-    workspace?
+Taken by the product owner on 2026-10-16 (marked **(PO)**), or the proposed
+default of the draft kept as written (marked _default_). Each closes the open
+question of the same number in the reviewed draft.
+
+1. **No environment (PO).** No entity is `envScopable`, no risk has
+   `acceptable_in_envs`, no preset entry is env-qualified. A root is written
+   whatever its owner's label. The presets put `gate: approval` on the
+   destructive operations instead: moving a page to the trash, deleting a
+   block; trashing a whole root stays in no preset.
+2. **One root per search** (_default_). The plugin filters results to the
+   call's root (§5.2).
+3. **No ancestry cache between calls** (_default_). A memo within one call
+   only; a cache across calls would need state the SDK does not offer — a
+   known limitation, not an SDK change (§5.1).
+4. **Relations across roots refused** (_default_): every relation target is
+   walked to the call's root.
+5. **Rollups and formulas returned as Notion computes them** (_default_),
+   recorded as an aggregated leak across roots (§5.4).
+6. **Comments**: the question disappears with the environment; adding a
+   comment runs freely in `reviewer` and `editor` (_default_).
+7. **No retry** (_default_): a `429` / `529` is thrown with `Retry-After` in
+   the message.
+8. **`notion__restore_page` added (PO)**, with its own risk
+   `notion.page-restore` (§5.5).
+9. **No public connection (OAuth)** (_default_): token first.
+10. **`editor` writes run freely** (_default_); only the destructive
+    operations ask first (decision 1).
+11. **`notion__update_block` and `notion__delete_block` added (PO)**, each
+    with its own risk (`notion.block-update`, `notion.block-delete` through a
+    verb leaf), the same ancestry check as every write and the same refused
+    block types and limits.
+12. **Notifications silent (PO).** Every write whose endpoint accepts it sends
+    `notifications: { mode: "silent" }`; the agent cannot change it (an
+    undeclared argument). Where it applies is in §6.3.
+13. **Personal access tokens refused at `verify` (PO)**; credential `api-key`
+    on an internal connection.
 
 ## Sources
 
