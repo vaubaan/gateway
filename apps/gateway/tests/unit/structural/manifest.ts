@@ -69,9 +69,10 @@ export const INVARIANTS: readonly Invariant[] = [
   {
     id: 'telemetry-shape',
     statement:
-      'A telemetry report carries the six frozen fields and nothing else: no argument, no resource ref, no token, no token holder (member id, member email, token name), no label, no instance identifier — whatever a plugin returns or throws.',
-    source: 'spec §9, §10; ADR telemetry-collector-shape',
-    specBullet: 'a telemetry report contains none of the forbidden fields',
+      'A telemetry report carries the fields of its kind and nothing else: no argument, no resource ref, no token, no token holder (member id, member email, token name), no label, no stable instance identifier — whatever a plugin returns or throws.',
+    source:
+      'spec §9, §10; ADRs telemetry-collector-shape, telemetry-two-levels-behind-a-vercel-collector',
+    specBullet: 'no telemetry report, of either level, contains a forbidden field',
     proofs: [
       {
         file: `${STRUCTURAL}/telemetry-report-shape.test.ts`,
@@ -80,8 +81,8 @@ export const INVARIANTS: readonly Invariant[] = [
       {
         file: `${STRUCTURAL}/telemetry-collector-schema.test.ts`,
         tests: [
-          'stores the six report columns, an identity and a day — nothing else',
-          'lets anon insert the six columns and nothing else',
+          'never reads a request header, never stores an address',
+          'publishes aggregates only: anon reads the views, which run with their owner rights',
         ],
       },
     ],

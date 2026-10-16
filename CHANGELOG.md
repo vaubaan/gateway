@@ -586,11 +586,18 @@ write …)`), instead of GitHub's bare 403. The push token of
 - **Community telemetry (opt-in).** Off at installation. An administrator enables it
   under Settings → Telemetry, which shows the exact payload first: plugin, plugin
   version, gateway version, tool, outcome (`success`, `upstream-error`,
-  `classification-error`, `execution-error`) and a fixed-vocabulary error class — never
-  arguments or their hash, resource refs, mission or user identifiers, an instance
-  identifier, an address or a provider's message. The built-in collector URL is a
-  placeholder: nothing is sent until `telemetry.collector_url` names a real collector.
-  `deploy/collector/` ships the collector's SQL; no collector is deployed.
+  `classification-error`, `execution-error`), a fixed-vocabulary error class and the
+  call's duration as one of four buckets — never arguments or their hash, resource
+  refs, mission or user identifiers, an instance identifier, an address or a
+  provider's message. The built-in collector URL (`https://telemetry.vaubaan.com/v1/reports`)
+  is still gated as a placeholder: nothing is sent until a release publishes it or
+  `telemetry.collector_url` names another collector. The project's collector is
+  `deploy/collector/schema.sql` (the store) behind the site's endpoint
+  (`apps/website`); it also accepts the reports of the coming `usage-stats` level
+  (decisions with their refusal code and risks, a daily instance profile with a
+  day identifier drawn again every day), which the gateway does not send yet.
+  A collector of your own now receives `{"plugin_health": [...]}` instead of a JSON
+  array.
 - **Embedded store and encryption at rest.** SQLite (`better-sqlite3`, `STRICT` tables,
   WAL) with forward-only migrations applied at start (schema version 11) and an
   append-only audit enforced by triggers. The gateway refuses a database newer than the

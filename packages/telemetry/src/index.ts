@@ -1,20 +1,25 @@
 /**
  * `@vaubaan/telemetry` — community telemetry of the gateway (spec §9): the
- * frozen report, the batching queue and the client. Disabled unless the host
+ * frozen reports of both levels, the wire format shared by the instance and
+ * the collector, the batching queue and the client. Disabled unless the host
  * says otherwise. Handbook: docs/handbook/telemetry.md.
  */
 export {
   createPluginReport,
+  DURATION_BUCKETS,
+  durationBucket,
   ERROR_CLASSES_BY_OUTCOME,
   httpErrorClass,
+  isDurationBucket,
   isErrorClassOf,
+  isGatewayVersion,
   isPluginReport,
   isReportOutcome,
   PLUGIN_REPORT_KEYS,
   REPORT_FIELD_PATTERNS,
   REPORT_OUTCOMES,
-  serializeReports,
   UNSTAMPED_GATEWAY_VERSION,
+  type DurationBucket,
   type ErrorClass,
   type HttpErrorClass,
   type NamedErrorClass,
@@ -23,6 +28,47 @@ export {
   type PluginReportKey,
   type ReportOutcome,
 } from './report.ts';
+export {
+  ARCHES,
+  COUNT_BUCKETS,
+  countBucket,
+  createDecisionReport,
+  createInstanceProfile,
+  DAY_ID_PATTERN,
+  DECISION_GATES,
+  DECISION_OUTCOMES,
+  DECISION_REPORT_KEYS,
+  DEPLOYMENT_KINDS,
+  INSTANCE_PROFILE_KEYS,
+  isReportableRiskId,
+  MAX_PROFILE_PLUGINS,
+  MAX_RISKS_PER_DECISION,
+  PROFILE_PLUGIN_KEYS,
+  RUNTIME_PATTERN,
+  SIGN_IN_KINDS,
+  type Arch,
+  type CountBucket,
+  type DecisionGate,
+  type DecisionOutcome,
+  type DecisionReport,
+  type DecisionReportInput,
+  type DeploymentKind,
+  type InstanceProfile,
+  type InstanceProfileInput,
+  type ProfilePlugin,
+  type SignInKind,
+} from './usage.ts';
+export {
+  BATCH_KEYS,
+  batchSize,
+  MAX_PROFILES_PER_BATCH,
+  MAX_REPORTS_PER_BATCH,
+  parseBatch,
+  serializeBatch,
+  type ReportBatch,
+  type TelemetryReport,
+  type TelemetryReportKind,
+} from './wire.ts';
 export {
   backoffDelayMs,
   QUEUE_DEFAULTS,

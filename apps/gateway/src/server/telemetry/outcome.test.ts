@@ -141,9 +141,12 @@ describe('reportOf', () => {
     ],
   };
 
-  it('builds the six-key report from the plugin declaration and the outcome class', () => {
+  it('builds the seven-key report from the plugin declaration and the outcome class', () => {
     expect(
-      reportOf({ plugin, tool: 'depot__purge', outcome: thrown(new RangeError('x')) }, '2.1.0'),
+      reportOf(
+        { plugin, tool: 'depot__purge', outcome: thrown(new RangeError('x')), durationMs: 42 },
+        '2.1.0',
+      ),
     ).toEqual({
       plugin: 'depot',
       plugin_version: '1.4.0',
@@ -151,15 +154,19 @@ describe('reportOf', () => {
       tool: 'depot__purge',
       outcome: 'execution-error',
       error_class: 'range_error',
+      duration_bucket: 'lt_100ms',
     });
   });
 
   it('reports nothing for a tool the plugin does not declare', () => {
     expect(
-      reportOf({ plugin, tool: `depot__${SECRET}`, outcome: returned({}) }, '2.1.0'),
+      reportOf(
+        { plugin, tool: `depot__${SECRET}`, outcome: returned({}), durationMs: 42 },
+        '2.1.0',
+      ),
     ).toBeNull();
     expect(
-      reportOf({ plugin, tool: 'depot__write_item', outcome: returned({}) }, 'dev'),
+      reportOf({ plugin, tool: 'depot__write_item', outcome: returned({}), durationMs: 42 }, 'dev'),
     ).toBeNull();
   });
 
@@ -170,12 +177,16 @@ describe('reportOf', () => {
           plugin: { ...plugin, version: 'nightly build' },
           tool: 'depot__purge',
           outcome: returned({}),
+          durationMs: 42,
         },
         'dev',
       ),
     ).toBeNull();
     expect(
-      reportOf({ plugin, tool: 'depot__purge', outcome: returned({}) }, 'gateway on host-7'),
+      reportOf(
+        { plugin, tool: 'depot__purge', outcome: returned({}), durationMs: 42 },
+        'gateway on host-7',
+      ),
     ).toBeNull();
   });
 });

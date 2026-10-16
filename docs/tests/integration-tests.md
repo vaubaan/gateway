@@ -29,6 +29,7 @@ tracks:
   - apps/gateway/migrations/
   - packages/telemetry/src/
   - deploy/collector/
+  - apps/website/tests/
   - packages/shared/src/
 ---
 
@@ -293,9 +294,11 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/structural/persisted-enumerations.test.ts`                                        |        10 |
 | `apps/gateway/tests/unit/structural/plugin-identifier-tests.test.ts`                                       |        25 |
 | `apps/gateway/tests/unit/structural/shipped-presets.test.ts`                                               |        41 |
-| `apps/gateway/tests/unit/structural/telemetry-collector-schema.test.ts`                                    |         7 |
+| `apps/gateway/tests/unit/structural/telemetry-collector-schema.test.ts`                                    |        15 |
 | `apps/gateway/tests/unit/structural/telemetry-report-shape.test.ts`                                        |         3 |
 | `apps/gateway/tests/unit/structural/version-single-source.test.ts`                                         |         4 |
+| `apps/website/tests/unit/collector/reports.test.ts`                                                        |         6 |
+| `apps/website/tests/unit/collector/stats-and-config.test.ts`                                               |        12 |
 | `packages/gateway-core/tests/unit/audit.test.ts`                                                           |         2 |
 | `packages/gateway-core/tests/unit/authenticate.test.ts`                                                    |        11 |
 | `packages/gateway-core/tests/unit/cache.test.ts`                                                           |         7 |
@@ -333,7 +336,9 @@ this table says where each requirement lives, and what is not written yet.
 | `packages/shared/src/wildcard.test.ts`                                                                     |        18 |
 | `packages/telemetry/src/client.test.ts`                                                                    |        24 |
 | `packages/telemetry/src/queue.test.ts`                                                                     |        12 |
-| `packages/telemetry/src/report.test.ts`                                                                    |        24 |
+| `packages/telemetry/src/report.test.ts`                                                                    |        26 |
+| `packages/telemetry/src/usage.test.ts`                                                                     |        24 |
+| `packages/telemetry/src/wire.test.ts`                                                                      |         9 |
 | `plugins/_template/tests/unit/plugin.test.ts`                                                              |        26 |
 | `plugins/cloudflare-dns/tests/unit/classify.test.ts`                                                       |        33 |
 | `plugins/cloudflare-dns/tests/unit/data-model.test.ts`                                                     |         9 |
@@ -3462,17 +3467,30 @@ itself are asserted in "Scenarios — Execution door".
 > change). Handbook [[telemetry]]. ADR [[telemetry-collector-shape]]. No test
 > reaches a collector: the outbound `fetch` is injected everywhere.
 
-Unit, beside the code (`packages/telemetry/src/`, 60):
+Unit, beside the code (`packages/telemetry/src/`, 95):
 
-- **`report.test.ts`** (24) — **the frozen shape**: the six keys and the four
-  outcomes; `createPluginReport` returns a frozen six-key object whatever the
+- **`report.test.ts`** (26) — **the frozen shape**: the seven keys and the four
+  outcomes; `createPluginReport` returns a frozen seven-key object whatever the
   input smuggles in (`arguments`, `arguments_hash`, `mission_id`,
-  `instance_id`); refuses a plugin, version or tool that is not of its shape
+  `instance_id`, `duration_ms`); refuses a plugin, version or tool that is not of its shape
   (spaces, a query string, free text), an unknown outcome, an error class on
   a success, none on a failure, free text, a class of another outcome, an
-  HTTP class out of range; each named class belongs to one outcome;
-  `isPluginReport` by exact keys; `serializeReports` drops what is not a
-  vetted report.
+  HTTP class out of range, a duration instead of its bucket; each named class
+  belongs to one outcome; `isPluginReport` by exact keys; the four duration
+  buckets and their bounds.
+- **`usage.test.ts`** (24) — the `usage-stats` reports: a decision report is
+  frozen, its risks sorted and unique, every refusal code but the wrong-door
+  one; refused: a risk with its environment label, of another provider, a
+  pattern, free text, an unknown decision or gate, too many risks; an instance
+  profile drops what a plugin entry smuggles in and refuses a day id that is
+  not 128 bits of hex, an exact count, an unknown deployment, architecture or
+  sign-in kind, a minor runtime version, a plugin listed twice; counts become
+  buckets.
+- **`wire.test.ts`** (9) — `serializeBatch` groups by kind and rebuilds every
+  report; `parseBatch` (the collector side) round-trips it and refuses the
+  whole batch for one extra key, one refused value, an unknown batch key, the
+  old JSON-array body, a smuggled key in a profile's plugin, an empty or
+  oversized batch, a value that is not a plain object.
 - **`queue.test.ts`** (12) — **batching**: one timer for several pushes, the
   flush interval, an immediate flush when a batch is full, at most
   `batchSize` per request, order kept, one request in flight, oldest dropped
@@ -3539,14 +3557,17 @@ Structural (`apps/gateway/tests/unit/structural/`, 10):
   addresses, user agents, the instance's host, provider messages; one report
   per call that reached the plugin, in order, with the expected class; every
   outcome class drawn.
-- **`telemetry-collector-schema.test.ts`** (7) — `deploy/collector/schema.sql`
-  read as text: the table's columns are an identity, a day and the six report
-  keys; `anon` holds `INSERT` on those six columns and one `for insert`
-  policy, nothing else; the view runs with its owner's rights and is the only
-  thing `anon` reads; the `CHECK` constraints carry the outcomes, error
-  classes and shapes exported by `@vaubaan/telemetry`; the per-request limit
-  admits a full client batch; the thresholds published in the README are the
-  ones of the SQL function; the README documents every field and class.
+- **`telemetry-collector-schema.test.ts`** (15) — `deploy/collector/schema.sql`
+  read as text, for each of the four tables (plugin health, decisions,
+  instance profiles and their plugins): the columns are an identity, a
+  truncated arrival hour and the report keys; `anon` holds `INSERT` on those
+  columns and one `for insert` policy, nothing else, and every table has the
+  ingestion trigger; nothing reads a request header or stores an address;
+  the two public views run with their owner's rights and are the only things
+  `anon` reads; the `CHECK` constraints carry the vocabularies, buckets and
+  shapes exported by `@vaubaan/telemetry`; the per-request limit admits a
+  full client batch; the thresholds published in the README are the ones of
+  the SQL function; the README documents every field and closed value.
 
 Integration (`apps/gateway/tests/integration/telemetry/telemetry.test.ts`, 18):
 
@@ -3584,6 +3605,24 @@ Elsewhere: `admin-mutations.test.ts` classifies
 `telemetry.handlers.setEnabled` through every refusal of the guard;
 `admin-guard.test.ts` covers the page `/admin/telemetry`; `load.test.ts`
 tells an explicit `telemetry.enabled` from an unset one.
+
+The collector's endpoint (`apps/website/tests/unit/collector/`, 18), with the
+store stubbed:
+
+- **`reports.test.ts`** (6) — a batch of the three kinds lands in its four
+  tables (a profile's plugins in their own, joined by the day id) with 202
+  and no body; headers of the request (an address, a user agent) appear in no
+  stored row; one report with an extra key refuses the whole batch and
+  stores nothing; not JSON → 400, wrong type → 415, over 64 KiB → 413; the
+  store's limit → 429, down or refusing → 503; the log line is a count and a
+  result.
+- **`stats-and-config.test.ts`** (12) — a missing variable is named; a
+  secret key and a plain-http store are refused; the routes answer on the
+  collector's host only (not a suffix of it); the stats query of the gateway
+  client is passed on, any other parameter, column, filter or plugin id is a
+  400; an hour of edge cache, 503 when the store does not answer; the store
+  client sends the publishable key and nothing of the instance, and maps the
+  store's statuses.
 
 ## Scenarios — Authorization server of the management door
 

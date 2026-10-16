@@ -7,9 +7,10 @@ import {
   type ScheduledTask,
   type SendResult,
 } from './queue.ts';
-import { createPluginReport, type PluginReport } from './report.ts';
+import { createPluginReport } from './report.ts';
+import type { TelemetryReport } from './wire.ts';
 
-function report(n: number): PluginReport {
+function report(n: number): TelemetryReport {
   const built = createPluginReport({
     plugin: 'depot',
     plugin_version: '1.0.0',
@@ -17,9 +18,10 @@ function report(n: number): PluginReport {
     tool: `depot__tool_${n}`,
     outcome: 'success',
     error_class: null,
+    duration_bucket: 'lt_100ms',
   });
   if (!built) throw new Error('fixture report refused');
-  return built;
+  return { kind: 'plugin-health', report: built };
 }
 
 /** A scheduler the test fires by hand, recording every delay asked for. */
@@ -51,10 +53,10 @@ function manualScheduler() {
 }
 
 function rig(
-  results: SendResult[] | ((batch: readonly PluginReport[]) => Promise<SendResult>),
+  results: SendResult[] | ((batch: readonly TelemetryReport[]) => Promise<SendResult>),
   options: { batchSize?: number; maxQueued?: number } = {},
 ) {
-  const batches: PluginReport[][] = [];
+  const batches: TelemetryReport[][] = [];
   const scheduler = manualScheduler();
   const queue = new ReportQueue({
     send: async (batch) => {

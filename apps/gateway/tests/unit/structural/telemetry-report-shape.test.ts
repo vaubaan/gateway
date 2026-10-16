@@ -12,7 +12,8 @@
  * What must hold for everything that reached the collector (URL, headers and
  * body of every request):
  *
- *   1. every report has exactly the six allowed keys;
+ *   1. every report has exactly the seven allowed keys, and the batch
+ *      holds plugin-health reports only (the usage level is not wired yet);
  *   2. every value belongs to a universe fixed before the first call: the
  *      plugin's declaration, the build stamp and the closed vocabularies —
  *      so no value can be derived from a call;
@@ -31,6 +32,7 @@
 import { fingerprintArguments } from '@vaubaan/gateway-core';
 import { UpstreamAuthError } from '@vaubaan/shared';
 import {
+  DURATION_BUCKETS,
   ERROR_CLASSES_BY_OUTCOME,
   isPluginReport,
   PLUGIN_REPORT_KEYS,
@@ -302,6 +304,8 @@ describe('structural: a telemetry report contains none of the forbidden fields (
           return typeof value === 'string' && declaredTools.includes(value);
         case 'outcome':
           return (REPORT_OUTCOMES as readonly unknown[]).includes(value);
+        case 'duration_bucket':
+          return (DURATION_BUCKETS as readonly unknown[]).includes(value);
         case 'error_class':
           return (
             value === null ||
@@ -403,7 +407,11 @@ describe('structural: a telemetry report contains none of the forbidden fields (
     }
     expect(overview.queue).toMatchObject({ queued: 0, dropped: 0, delivered: expected.length });
 
-    const reports = wire.flatMap((request) => JSON.parse(request.body) as unknown[]);
+    const reports = wire.flatMap((request) => {
+      const body = JSON.parse(request.body) as Record<string, unknown[]>;
+      expect(Object.keys(body)).toEqual(['plugin_health']);
+      return body.plugin_health ?? [];
+    });
 
     // Every holder made calls, and the instance itself did record who: the property
     // below is about what leaves it, not about attribution being absent.
@@ -429,7 +437,7 @@ describe('structural: a telemetry report contains none of the forbidden fields (
     expect(new Set(expected.map((e) => e.outcome))).toEqual(new Set(REPORT_OUTCOMES));
 
     for (const report of reports) {
-      // 1. Exactly the six keys.
+      // 1. Exactly the seven keys.
       expect(Object.keys(report as object).sort()).toEqual([...PLUGIN_REPORT_KEYS].sort());
       expect(isPluginReport(report)).toBe(true);
       // 2. Every value from the universe fixed before the first call.

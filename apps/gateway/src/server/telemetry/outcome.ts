@@ -44,6 +44,7 @@ import { UpstreamRefusalError } from '@vaubaan/gateway-core';
 import { UpstreamAuthError } from '@vaubaan/shared';
 import {
   createPluginReport,
+  durationBucket,
   httpErrorClass,
   type ErrorClass,
   type PluginReport,
@@ -170,5 +171,6 @@ export function reportOf(execution: PluginExecution, gatewayVersion: string): Pl
     gateway_version: gatewayVersion,
     tool,
     ...classifyOutcome(execution.outcome),
+    duration_bucket: durationBucket(execution.durationMs),
   });
 }

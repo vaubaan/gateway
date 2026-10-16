@@ -24,13 +24,13 @@
  * // instance identity, so nothing needs to be shared); a deployment that
  * // wants durable delivery replaces this class behind `ReportBuffer`.
  */
-import type { PluginReport } from './report.ts';
+import type { TelemetryReport } from './wire.ts';
 
 export type SendResult = 'delivered' | 'retry' | 'rejected';
 
 /** What the client needs from a buffer; `ReportQueue` is the in-memory one. */
 export interface ReportBuffer {
-  push(report: PluginReport): void;
+  push(report: TelemetryReport): void;
   clear(): void;
   stop(): void;
 }
@@ -52,7 +52,7 @@ export interface ScheduledTask {
 }
 
 export interface ReportQueueOptions {
-  readonly send: (batch: readonly PluginReport[]) => Promise<SendResult>;
+  readonly send: (batch: readonly TelemetryReport[]) => Promise<SendResult>;
   readonly batchSize?: number;
   readonly flushIntervalMs?: number;
   readonly maxQueued?: number;
@@ -95,7 +95,7 @@ export function backoffDelayMs(failures: number, backoff: BackoffOptions, random
 }
 
 export class ReportQueue implements ReportBuffer {
-  private readonly pending: PluginReport[] = [];
+  private readonly pending: TelemetryReport[] = [];
   private readonly send: ReportQueueOptions['send'];
   private readonly batchSize: number;
   private readonly flushIntervalMs: number;
@@ -134,7 +134,7 @@ export class ReportQueue implements ReportBuffer {
     };
   }
 
-  push(report: PluginReport): void {
+  push(report: TelemetryReport): void {
     if (this.stopped) return;
     this.pending.push(report);
     while (this.pending.length > this.maxQueued) {
@@ -178,7 +178,7 @@ export class ReportQueue implements ReportBuffer {
     this.disarm();
   }
 
-  private async attempt(batch: readonly PluginReport[]): Promise<void> {
+  private async attempt(batch: readonly TelemetryReport[]): Promise<void> {
     let result: SendResult;
     try {
       result = await this.send(batch);

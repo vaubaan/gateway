@@ -496,7 +496,10 @@ describe('streaming and community telemetry (spec §9)', () => {
       await instance.root.telemetry.flush();
       if ((await instance.root.telemetry.overview()).queue.queued === 0) break;
     }
-    return batches.flatMap((body) => JSON.parse(body) as Record<string, unknown>[]);
+    return batches.flatMap(
+      (body) =>
+        (JSON.parse(body) as { plugin_health?: Record<string, unknown>[] }).plugin_health ?? [],
+    );
   };
   const auditEntry = async () => {
     for (let i = 0; i < 100; i++) {

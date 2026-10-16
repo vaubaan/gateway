@@ -10,7 +10,7 @@
  * configuration decides); what a report is emitted for; the validation badge.
  */
 import { UpstreamAuthError, UpstreamHttpError } from '@vaubaan/shared';
-import { PLUGIN_REPORT_KEYS } from '@vaubaan/telemetry';
+import { isDurationBucket, PLUGIN_REPORT_KEYS } from '@vaubaan/telemetry';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { SESSION_COOKIE } from '../../../src/server/auth';
@@ -77,12 +77,19 @@ describe('community telemetry', () => {
       instance,
       collector,
       logs,
+      // The plugin-health reports sent, without their duration bucket (checked, then
+      // dropped: a duration is not something a test can pin).
       reports: () =>
-        collector.mock.calls.flatMap(([url, init]) =>
-          new URL(String(url)).pathname.endsWith('/plugin_reports')
-            ? (JSON.parse(String((init as RequestInit).body)) as Record<string, unknown>[])
-            : [],
-        ),
+        collector.mock.calls.flatMap(([url, init]) => {
+          if (!new URL(String(url)).pathname.endsWith('/plugin_reports')) return [];
+          const body = JSON.parse(String((init as RequestInit).body)) as {
+            plugin_health?: Record<string, unknown>[];
+          };
+          return (body.plugin_health ?? []).map(({ duration_bucket, ...rest }) => {
+            expect(isDurationBucket(duration_bucket)).toBe(true);
+            return rest;
+          });
+        }),
       mission: () => instance.issue({ policy: [line(READ, 1_000)] }),
       async toggle(enabled, options = {}) {
         const as = options.as ?? 'operator';
@@ -386,7 +393,9 @@ describe('community telemetry', () => {
         ['execution-error', 'type_error'],
       ]);
       for (const report of r.reports()) {
-        expect(Object.keys(report)).toEqual([...PLUGIN_REPORT_KEYS]);
+        expect(Object.keys(report)).toEqual(
+          PLUGIN_REPORT_KEYS.filter((k) => k !== 'duration_bucket'),
+        );
       }
     });
 
@@ -477,10 +486,11 @@ describe('community telemetry', () => {
       });
     });
 
-    it('shows the sample payload with the six keys and the collector URL without its key', async () => {
+    it('shows the sample payload with the seven keys and the collector URL without its key', async () => {
       const { r } = await enabled();
       const overview = await r.instance.root.telemetry.overview();
-      const sample = JSON.parse(overview.samplePayload) as Record<string, unknown>[];
+      const sample = (JSON.parse(overview.samplePayload) as { plugin_health: object[] })
+        .plugin_health;
       expect(sample).toHaveLength(1);
       expect(Object.keys(sample[0] ?? {})).toEqual([...PLUGIN_REPORT_KEYS]);
       expect(sample[0]).toMatchObject({ plugin: 'depot', outcome: 'success', error_class: null });

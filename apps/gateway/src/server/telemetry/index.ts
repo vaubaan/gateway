@@ -15,7 +15,7 @@ import {
   collectorEndpoint,
   createPluginReport,
   isPlaceholderCollector,
-  serializeReports,
+  serializeBatch,
   TelemetryClient,
   type PluginReport,
   type QueueStats,
@@ -97,6 +97,7 @@ function sampleReport(registry: PluginRegistry, gatewayVersion: string): PluginR
       tool: tool.name,
       outcome: 'success',
       error_class: null,
+      duration_bucket: 'lt_1s',
     });
     if (report) return report;
   }
@@ -105,7 +106,8 @@ function sampleReport(registry: PluginRegistry, gatewayVersion: string): PluginR
 
 /** The body of a one-report batch, indented for display; the same serializer as the client. */
 function displayPayload(report: PluginReport | null): string {
-  return JSON.stringify(JSON.parse(serializeReports(report ? [report] : [])), null, 2);
+  const queued = report ? [{ kind: 'plugin-health' as const, report }] : [];
+  return JSON.stringify(JSON.parse(serializeBatch(queued)), null, 2);
 }
 
 export async function createTelemetryModule(deps: TelemetryModuleDeps): Promise<TelemetryModule> {
@@ -151,7 +153,7 @@ export async function createTelemetryModule(deps: TelemetryModuleDeps): Promise<
         // Cheapest gate first: a disabled instance does not even classify.
         if (client.state === 'disabled') return;
         const report = reportOf(execution, deps.build.version);
-        if (report) client.record(report);
+        if (report) client.record({ kind: 'plugin-health', report });
       } catch {
         // Telemetry never fails a call, and an error here may carry provider text: not logged.
       }

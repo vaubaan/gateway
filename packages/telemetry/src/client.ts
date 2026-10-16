@@ -12,8 +12,8 @@
  * Switching telemetry off empties the queue: a report recorded while it was
  * on never leaves after the operator turned it off.
  *
- * The request: `POST <collector URL>` with a JSON array of reports
- * (`serializeReports`), `Prefer: return=minimal` (the collector is insert-only
+ * The request: `POST <collector URL>` with the batch of `wire.ts`
+ * (`serializeBatch`), `Prefer: return=minimal` (the collector is insert-only
  * and grants no read-back). When the configured URL carries an `apikey` query
  * parameter — the collector's public, anonymous key — the client moves it to
  * the `apikey` and `Authorization` headers and removes it from the URL, so the
@@ -25,7 +25,7 @@
  * version header (the versions are in the reports).
  */
 import { ReportQueue, type QueueStats, type ReportQueueOptions, type SendResult } from './queue.ts';
-import { serializeReports, type PluginReport } from './report.ts';
+import { serializeBatch, type TelemetryReport } from './wire.ts';
 
 /** The query parameter carrying the collector's public key in the configured URL. */
 export const COLLECTOR_KEY_PARAM = 'apikey';
@@ -124,7 +124,7 @@ export class TelemetryClient {
   }
 
   /** Queues a report when telemetry is on and a real collector is configured. Never throws. */
-  record(report: PluginReport): void {
+  record(report: TelemetryReport): void {
     if (!this.gateOpen()) return;
     this.queue.push(report);
   }
@@ -158,7 +158,7 @@ export class TelemetryClient {
     return false;
   }
 
-  private async send(batch: readonly PluginReport[]): Promise<SendResult> {
+  private async send(batch: readonly TelemetryReport[]): Promise<SendResult> {
     // Telemetry may have been switched off since the batch was queued.
     if (!this.gateOpen()) return 'rejected';
     let response: Response;
@@ -170,7 +170,7 @@ export class TelemetryClient {
           'content-type': 'application/json',
           prefer: 'return=minimal',
         },
-        body: serializeReports(batch),
+        body: serializeBatch(batch),
         redirect: 'error',
         credentials: 'omit',
         referrerPolicy: 'no-referrer',

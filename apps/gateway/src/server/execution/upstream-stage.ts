@@ -195,15 +195,19 @@ function asUpstreamFailure(err: unknown, provider: string, parts: number): Upstr
 
 export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
   const telemetry = deps.telemetry ?? NOOP_TELEMETRY_SINK;
-  /** The plugin each call reached, if any: what `report` reads once the call has ended. */
-  const reached = new WeakMap<CallRequest, ResolvedCredential['plugin']>();
+  /** The plugin each call reached, if any, and when: what `report` reads once the call has ended. */
+  const reached = new WeakMap<
+    CallRequest,
+    { readonly plugin: ResolvedCredential['plugin']; readonly startedAt: number }
+  >();
 
   /** The one telemetry hook. A sink never fails a call. */
   function report(call: CallRequest, outcome: PluginOutcome): void {
-    const plugin = reached.get(call);
-    if (!plugin) return;
+    const entry = reached.get(call);
+    if (!entry) return;
     try {
-      telemetry.pluginExecuted({ plugin, tool: call.tool, outcome });
+      const durationMs = performance.now() - entry.startedAt;
+      telemetry.pluginExecuted({ plugin: entry.plugin, tool: call.tool, outcome, durationMs });
     } catch (err) {
       deps.logger.warn('telemetry sink failed', { error: upstreamErrorClassName(err) });
     }
@@ -216,7 +220,9 @@ export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
     target: CallTarget,
     relay: PartRelay,
   ) {
-    reached.set(call, resolved.plugin);
+    // The first attempt starts the clock; a retry keeps it.
+    const startedAt = reached.get(call)?.startedAt ?? performance.now();
+    reached.set(call, { plugin: resolved.plugin, startedAt });
     return resolved.plugin.execute(
       {
         ...deps.credentials.contextOf(resolved),

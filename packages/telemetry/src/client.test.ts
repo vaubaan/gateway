@@ -6,12 +6,13 @@ import {
   TELEMETRY_USER_AGENT,
   TelemetryClient,
 } from './client.ts';
-import { createPluginReport, PLUGIN_REPORT_KEYS, type PluginReport } from './report.ts';
+import { createPluginReport, PLUGIN_REPORT_KEYS } from './report.ts';
+import type { TelemetryReport } from './wire.ts';
 
 const PLACEHOLDER = new URL('https://placeholder.example.com/v1/reports');
 const COLLECTOR = new URL('https://collector.example.net/rest/v1/plugin_reports?apikey=pk_public');
 
-function report(tool = 'depot__read_item'): PluginReport {
+function report(tool = 'depot__read_item'): TelemetryReport {
   const built = createPluginReport({
     plugin: 'depot',
     plugin_version: '1.0.0',
@@ -19,9 +20,10 @@ function report(tool = 'depot__read_item'): PluginReport {
     tool,
     outcome: 'upstream-error',
     error_class: 'http_503',
+    duration_bucket: 'lt_1s',
   });
   if (!built) throw new Error('fixture report refused');
-  return built;
+  return { kind: 'plugin-health', report: built };
 }
 
 interface Sent {
@@ -144,7 +146,7 @@ describe('TelemetryClient: the gates before the network', () => {
 });
 
 describe('TelemetryClient: the request', () => {
-  it('posts the batch as a JSON array of six-key objects and nothing else', async () => {
+  it('posts the batch grouped by kind, each report with its own keys and nothing else', async () => {
     const { client, sent } = rig({});
     client.record(report('depot__read_item'));
     client.record(report('depot__write_item'));
@@ -153,9 +155,15 @@ describe('TelemetryClient: the request', () => {
     expect(sent).toHaveLength(1);
     const [request] = sent;
     expect(request?.init.method).toBe('POST');
-    const body = JSON.parse(String(request?.init.body)) as Record<string, unknown>[];
-    expect(body).toHaveLength(2);
-    for (const item of body) expect(Object.keys(item)).toEqual([...PLUGIN_REPORT_KEYS]);
+    const body = JSON.parse(String(request?.init.body)) as Record<
+      string,
+      Record<string, unknown>[]
+    >;
+    expect(Object.keys(body)).toEqual(['plugin_health']);
+    expect(body.plugin_health).toHaveLength(2);
+    for (const item of body.plugin_health ?? []) {
+      expect(Object.keys(item)).toEqual([...PLUGIN_REPORT_KEYS]);
+    }
     expect(client.stats.delivered).toBe(2);
   });
 

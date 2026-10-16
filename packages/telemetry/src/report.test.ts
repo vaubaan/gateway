@@ -7,9 +7,8 @@ import {
   isErrorClassOf,
   isPluginReport,
   PLUGIN_REPORT_KEYS,
+  durationBucket,
   REPORT_OUTCOMES,
-  serializeReports,
-  type PluginReport,
   type PluginReportInput,
 } from './report.ts';
 
@@ -20,10 +19,11 @@ const VALID: PluginReportInput = {
   tool: 'github__get_file_contents',
   outcome: 'success',
   error_class: null,
+  duration_bucket: 'lt_1s',
 };
 
 describe('PluginReport: the frozen shape', () => {
-  it('has exactly the six keys of spec §9, in a fixed order', () => {
+  it('has exactly the seven keys of spec §9, in a fixed order', () => {
     expect(PLUGIN_REPORT_KEYS).toEqual([
       'plugin',
       'plugin_version',
@@ -31,6 +31,7 @@ describe('PluginReport: the frozen shape', () => {
       'tool',
       'outcome',
       'error_class',
+      'duration_bucket',
     ]);
     expect(REPORT_OUTCOMES).toEqual([
       'success',
@@ -40,13 +41,14 @@ describe('PluginReport: the frozen shape', () => {
     ]);
   });
 
-  it('builds a frozen object with the six keys and nothing the input smuggled in', () => {
+  it('builds a frozen object with the seven keys and nothing the input smuggled in', () => {
     const smuggled = {
       ...VALID,
       arguments: { query: 'select 1' },
       arguments_hash: 'a'.repeat(64),
       mission_id: 'mis_1',
       instance_id: 'i-1',
+      duration_ms: 812,
     };
     const report = createPluginReport(smuggled);
     expect(report).toEqual(VALID);
@@ -78,6 +80,8 @@ describe('PluginReport: the frozen shape', () => {
     ['error class of another outcome', { outcome: 'execution-error', error_class: 'http_500' }],
     ['HTTP class out of range', { outcome: 'upstream-error', error_class: 'http_999' }],
     ['HTTP class with a suffix', { outcome: 'upstream-error', error_class: 'http_404_users' }],
+    ['duration in milliseconds', { duration_bucket: '812' }],
+    ['unknown duration bucket', { duration_bucket: 'lt_1min' }],
   ])('refuses a %s', (_name, override) => {
     expect(createPluginReport({ ...VALID, ...override } as PluginReportInput)).toBeNull();
   });
@@ -119,11 +123,15 @@ describe('PluginReport: the frozen shape', () => {
     expect(isPluginReport(null)).toBe(false);
   });
 
-  it('serializes a batch as a JSON array, dropping whatever is not a vetted report', () => {
-    const cast = { ...VALID, arguments_hash: 'f'.repeat(64) } as unknown as PluginReport;
-    const invalid = { ...VALID, tool: 'DROP TABLE' } as unknown as PluginReport;
-    const body = JSON.parse(serializeReports([cast, invalid])) as unknown[];
-    expect(body).toEqual([VALID]);
-    expect(Object.keys(body[0] as object)).toEqual([...PLUGIN_REPORT_KEYS]);
+  it('puts a duration in one of four buckets and never travels the duration itself', () => {
+    expect(durationBucket(0)).toBe('lt_100ms');
+    expect(durationBucket(99.9)).toBe('lt_100ms');
+    expect(durationBucket(100)).toBe('lt_1s');
+    expect(durationBucket(999)).toBe('lt_1s');
+    expect(durationBucket(1_000)).toBe('lt_10s');
+    expect(durationBucket(10_000)).toBe('gte_10s');
+    for (const odd of [-5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(['lt_100ms', 'gte_10s']).toContain(durationBucket(odd));
+    }
   });
 });

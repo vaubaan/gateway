@@ -2,7 +2,7 @@
 title: Community telemetry — the report, the queue, the toggle, the validation badge
 status: current
 date: 2026-10-13
-last_synced: 2026-10-14
+last_synced: 2026-10-16
 tracks:
   - packages/telemetry/src/
   - apps/gateway/src/server/telemetry/
@@ -16,6 +16,7 @@ tracks:
   - apps/gateway/tests/unit/structural/telemetry-report-shape.test.ts
   - apps/gateway/tests/unit/structural/telemetry-collector-schema.test.ts
   - deploy/collector/
+  - apps/website/src/collector/
 ---
 
 # Community telemetry — the report, the queue, the toggle, the validation badge
@@ -36,9 +37,13 @@ still the placeholder.
 ## Layout
 
 ```
-packages/telemetry/src/            @vaubaan/telemetry — no dependency, no I/O but the injected fetch
-  report.ts                        PluginReport (frozen, six keys), vocabularies, createPluginReport,
-                                   isPluginReport, serializeReports
+packages/telemetry/src/            @vaubaan/telemetry — no I/O but the injected fetch; imports only
+                                   the refusal codes and the RiskId grammar of @vaubaan/shared
+  report.ts                        PluginReport (frozen, seven keys), vocabularies, createPluginReport,
+                                   isPluginReport, durationBucket
+  usage.ts                         level usage-stats: DecisionReport, InstanceProfile, their
+                                   constructors, countBucket (not emitted by the gateway yet)
+  wire.ts                          the request body: serializeBatch (instance), parseBatch (collector)
   queue.ts                         ReportQueue: bounded, batched, backoff; ReportBuffer port
   client.ts                        TelemetryClient: the three gates, the POST, the collector headers
 apps/gateway/src/server/
@@ -56,7 +61,8 @@ apps/gateway/src/app/
   admin/(guarded)/telemetry/page.tsx   Settings → Telemetry (/admin/telemetry)
   api/admin/telemetry/route.ts         one-line adapter over the handler
 apps/gateway/src/components/telemetry/ValidationBadge.tsx
-deploy/collector/                  schema.sql + README.md (no cloud resource is created by the repo)
+deploy/collector/                  schema.sql + README.md: the store
+apps/website/src/collector/        the endpoint at telemetry.vaubaan.com (see deploy/collector/README.md)
 ```
 
 ## The report
@@ -72,12 +78,21 @@ deploy/collector/                  schema.sql + README.md (no cloud resource is 
 | `tool`            | the call's tool, **only if the plugin declares it** | `^[a-z][a-z0-9_]{0,95}$`                           |
 | `outcome`         | `classifyOutcome`                                   | one of `REPORT_OUTCOMES`                           |
 | `error_class`     | `classifyOutcome`                                   | `null` on success, else a class its outcome allows |
+| `duration_bucket` | `durationBucket(execution.durationMs)`              | `lt_100ms`, `lt_1s`, `lt_10s` or `gte_10s`         |
 
 `createPluginReport(input)` is the only constructor: a fresh frozen object
-with the six keys, or `null` when a value does not fit. `serializeReports`
-rebuilds every report through it before `JSON.stringify`, so the request body
-cannot carry a seventh key or an unvetted value. No timestamp, no instance
+with the seven keys, or `null` when a value does not fit. The client queues
+`{ kind: 'plugin-health', report }`; `serializeBatch` (`wire.ts`) rebuilds
+every report through its constructor and groups them by kind
+(`{"plugin_health": [...]}`), so the request body cannot carry an eighth key
+or an unvetted value. The collector parses the same body with `parseBatch`,
+which also refuses a report with an extra key. No timestamp, no instance
 identifier, no host name is ever part of a report or of the request.
+
+The reports of the `usage-stats` level (`usage.ts`: one decision report per
+decided call, one instance profile per UTC day) are defined, tested and
+accepted by the collector; the gateway does not emit them yet (ADR
+telemetry-two-levels-behind-a-vercel-collector, D7).
 
 The same vocabularies and shapes are `CHECK` constraints of the collector's
 table; `telemetry-collector-schema.test.ts` compares the SQL text with the
@@ -130,6 +145,7 @@ interface TelemetrySink {
     plugin: Pick<ProviderPlugin, 'id' | 'version' | 'tools'>;
     tool: string;
     outcome: { ok: true; result: unknown } | { ok: false; error: unknown };
+    durationMs: number; // first execute → final outcome, retries included
   }): void;
 }
 ```
@@ -194,12 +210,13 @@ The timer is `unref`'d and stopped by `root.close()`. Nothing is persisted.
 The queue is `// single-process only`: each replica of a hosted deployment
 would keep its own, which is harmless since reports carry no identity.
 
-The request: `POST` to the configured URL **without** its `apikey` query
-parameter; the key, when present, goes to the `apikey` and `Authorization:
-Bearer` headers (`collectorEndpoint`, `collectorHeaders`); `Content-Type:
-application/json`, `Prefer: return=minimal`, `User-Agent:
+The request: `POST` to the configured URL, body `serializeBatch(batch)`;
+`Content-Type: application/json`, `Prefer: return=minimal`, `User-Agent:
 vaubaan-gateway-telemetry`; `redirect: 'error'`, no credentials, no referrer.
-The response body is never read.
+The response body is never read. The project's collector needs no key; a
+configured URL that still carries an `apikey` query parameter (a collector of
+your own behind PostgREST) has it moved to the `apikey` and `Authorization:
+Bearer` headers (`collectorEndpoint`, `collectorHeaders`).
 
 ## Who decides: configuration, then the operator
 
@@ -236,7 +253,8 @@ collector / yes), the counters since start, the button that turns it on or
 off (replaced by "set in the mounted configuration" when locked), and **the
 exact request body of one report** in a code block
 (`data-testid="telemetry-sample"`) — `serializeReports` applied to a report
-built from the first tool of the first registered plugin, so what the
+built from the first tool of the first registered plugin, through
+`serializeBatch`, so what the
 administrator reads is produced by the code that sends. A note explains the
 "on, but the collector is the placeholder" case. The setup checklist
 (`/admin`) carries a line for it, "Review" while it is off.
@@ -267,14 +285,16 @@ collector (`plugin_validation_thresholds()`).
 ```yaml
 telemetry:
   enabled: true # optional: leave unset to decide from Settings → Telemetry
-  collector_url: https://collector.example.net/rest/v1/plugin_reports?apikey=<publishable key>
+  collector_url: https://collector.example.net/v1/reports
 ```
 
 or `VAUBAAN_TELEMETRY_COLLECTOR_URL` / `VAUBAAN_TELEMETRY_ENABLED`. The URL
 must be https. The last path segment is the reports resource; `plugin_stats`
-is read beside it. To run your own collector, apply
-`deploy/collector/schema.sql` to a Postgres exposed by PostgREST (a Supabase
-project) — see its README. To never send anything whatever
+is read beside it. The project's collector is `https://telemetry.vaubaan.com/v1/reports`,
+which is also the default URL — still gated as the placeholder until a
+release publishes it. To run your own, deploy `apps/website` with its three
+`COLLECTOR_*` variables in front of a Postgres where `deploy/collector/schema.sql`
+is applied — see its README. To never send anything whatever
 Settings → Telemetry says, set `telemetry.enabled: false`.
 
 ## How to debug
@@ -302,8 +322,9 @@ statistics unavailable` names a failure.
 
 ## Tests
 
-- `packages/telemetry/src/report.test.ts`, `queue.test.ts`, `client.test.ts`
-  — shape and vocabularies; batching, overflow, backoff, single flight;
+- `packages/telemetry/src/report.test.ts`, `usage.test.ts`, `wire.test.ts`,
+  `queue.test.ts`, `client.test.ts` — shapes and vocabularies of the three
+  report kinds, buckets, the body both ends share; batching, overflow, backoff, single flight;
   disabled → zero calls; placeholder → zero calls and one warning, also with
   a key, another query, trailing slashes or a fragment appended (another
   path, host, port or scheme is not the placeholder); headers.
@@ -311,11 +332,14 @@ statistics unavailable` names a failure.
   `stats.test.ts` — the classification table, precedence, the reader.
 - `apps/gateway/tests/unit/structural/telemetry-report-shape.test.ts` — spec
   §10: property-based over the real pipeline (three seeds × 400 calls);
-  exactly six keys, every value from a universe fixed before the first call,
+  exactly seven keys, plugin-health only on the wire, every value from a universe fixed before the first call,
   nothing planted in arguments, errors, headers or identifiers found on the
   wire.
 - `apps/gateway/tests/unit/structural/telemetry-collector-schema.test.ts` —
-  SQL, README and report type agree.
+  SQL, README and report types agree, table by table.
+- `apps/website/tests/unit/collector/` — the endpoint: storage per table,
+  nothing of the request added, whole-batch refusal, statuses, the stats
+  query it passes on, host gate, configuration.
 - `apps/gateway/tests/integration/telemetry/telemetry.test.ts` — default and
   placeholder silence on a real root (the default URL with a key or a
   trailing slash included), the toggle and its audit entry, what is reported
@@ -330,7 +354,9 @@ statistics unavailable` names a failure.
 ## References
 
 - Spec [`vaubaan-gateway.md`](../spec/vaubaan-gateway.md) §9, §10, §4.3.
-- ADR [telemetry-collector-shape](../decisions/telemetry-collector-shape.md).
+- ADRs [telemetry-collector-shape](../decisions/telemetry-collector-shape.md),
+  [telemetry-two-levels-behind-a-vercel-collector](../decisions/telemetry-two-levels-behind-a-vercel-collector.md).
+- Spec [`website.md`](../spec/website.md) §3 (the receiving side).
 - Handbooks: [execution-door](execution-door.md) (upstream stage),
   [configuration](configuration.md) (keys, composition root),
   [connections](connections.md) (pages carrying the badge),

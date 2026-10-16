@@ -32,6 +32,8 @@ export interface PluginExecution {
   readonly plugin: Pick<ProviderPlugin, 'id' | 'version' | 'tools'>;
   readonly tool: string;
   readonly outcome: PluginOutcome;
+  /** From the first `execute` to the final outcome, retries included. Bucketed before it leaves. */
+  readonly durationMs: number;
 }
 
 export interface TelemetrySink {
