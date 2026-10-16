@@ -30,6 +30,7 @@ follow can be detected as drift.
 | [demo-mode](demo-mode.md)                 | `npm run demo`: the real application in a browser with a simulated identity provider, simulated services and seeded data.                                                  |
 | [threat-model](threat-model.md)           | What the gateway defends, against whom, with which control, and which test proves the control is still there: the security reading of the spec and of the other handbooks. |
 | [known-limitations](known-limitations.md) | What a reader should know before relying on this version: what has not been done, and what is not there.                                                                   |
+| [website](website.md)                     | The public site vaubaan.com (`apps/website`), generated from the repository at build time: user docs, plugin pages and health, trust center, Markdown twins, llms.txt.     |
 
 Packaging and deployment (image, compose file, reverse proxy) are in
 [`deploy/README.md`](../../deploy/README.md).

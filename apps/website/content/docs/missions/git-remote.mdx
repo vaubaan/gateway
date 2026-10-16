@@ -1,0 +1,28 @@
+---
+title: Git remote
+description: Agents clone and push through the instance with the mission key as the password; every pushed ref is decided like a tool call.
+---
+
+The instance is the agents' git remote for GitHub: `git clone` and `git push` go to `https://your-domain/git/<owner>/<repo>.git` with the mission key as the password, and the instance speaks to GitHub with a credential the agent never sees.
+
+## Configure git
+
+The kit of a mission that holds repositories carries the commands for your instance:
+
+- a credential helper for the instance's origin that prints the key from `VAUBAAN_MISSION_TOKEN` — never git's `store` or `cache` helpers, never the key in a URL;
+- the recommended `url.<instance>/git/.insteadOf` rule, so that GitHub URLs go through the instance;
+- one `git clone` per repository of the mission.
+
+## What is decided
+
+- Every ref of a push is read and classified; one refused ref refuses the push. A refusal comes back on `remote: Vaubaan:` lines, and once the creator approved, the same push with the same commits goes through.
+- Fetches and pushes count against the mission's limits and appear in its activity like tool calls.
+- `git push --atomic`, push options, signed pushes and Git LFS are not served; signed commits are.
+
+## Limits to know
+
+- A push larger than GitHub's compare API lists (300 files, 250 commits per ref), or bringing more than 100 commits, is refused, to be split.
+- `git.max_pack_mb` (200 MiB by default) caps a push and `git.request_timeout` (10 minutes) caps one git request. The reverse proxy must not cap or buffer request bodies under `/git/`.
+- The git remote has never pushed to github.com itself: its tests run the real `git` client against a stand-in for GitHub ([known limitations](/docs/known-limitations)).
+
+More: the [git remote handbook](https://github.com/vaubaan/gateway/blob/main/docs/handbook/git-remote.md).

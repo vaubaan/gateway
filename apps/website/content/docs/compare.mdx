@@ -1,0 +1,41 @@
+---
+title: How Vaubaan compares
+description: How Vaubaan Gateway differs from handing an agent a token, from a secrets manager and from other MCP gateways, and what it is not.
+---
+
+Vaubaan Gateway differs from the usual ways of giving an agent access in one respect: the agent never holds the credential, and every call it makes is decided against a mission a person wrote, permission by permission, with limits and approvals, then recorded.
+
+## Handing the agent a token
+
+The common way: create a token at the service and paste it into the agent's configuration.
+
+|                      | A token in the agent's configuration                                     | A mission of Vaubaan Gateway                                                                  |
+| -------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| What the agent holds | the credential itself, which it can print, copy or leak                  | a mission key, which opens this mission and nothing else                                      |
+| What it may do       | everything the token's scopes allow, on every resource the token reaches | the permissions and resources of the mission, named one by one                                |
+| How much             | unlimited until the token expires                                        | a limit per period and a rate for each permission                                             |
+| Dangerous actions    | nothing asks you                                                         | "ask me first" makes each use wait for the mission's creator                                  |
+| Afterwards           | the service's own logs, if any                                           | every call recorded, allowed or refused, with the permissions it needed and whose key made it |
+| Revoking             | rotate the token at the service, everywhere it is used                   | stop the mission or replace its key; the account stays connected                              |
+
+What it costs: an instance to run, a mission to write, and only the service tools a plugin covers — see [plugins](/plugins).
+
+## A secrets manager
+
+A secrets manager stores credentials and hands them to the programs allowed to read them: whoever reads the secret can then do anything it allows. Vaubaan Gateway never hands the stored secret over: it uses it for one call it has decided, and returns the result. The two fit together — the gateway's own master key can live in your secrets manager — but the gateway is not one: it stores only the credentials of the accounts connected to it, and only to use them itself.
+
+## Other MCP gateways
+
+Many MCP gateways and proxies put several MCP servers behind one endpoint and add sign-in, logging and lists of allowed tools. What Vaubaan Gateway adds, and what it gives up:
+
+- **Decisions below the tool name.** A plugin classifies each call, with its arguments, into named permissions of a reviewed catalog (`github.merge-protected` is not `github.git-push`); a call that touches a permission the mission does not hold is refused, and an unknown tool or an unclassified call is refused too.
+- **Limits and approvals per permission**, counted per mission, answered by a person in the interface; an agent can neither widen its own mission nor approve its own action.
+- **Your infrastructure only.** One instance per company, behind your identity provider, with your company's own app at each service; no hosted tenant.
+- **Fewer services.** Only the services a plugin covers, and only their tools the plugin declares; it does not relay arbitrary MCP servers.
+
+## What it is not
+
+- Not a secrets manager (above).
+- Not a proxy for command-line tools or SDKs: only MCP calls and git over HTTPS go through it. A credential an agent finds elsewhere on its machine is outside its reach.
+- Not highly available: one process, one embedded database.
+- Not finished: pre-release, never run in production, no third-party audit ([known limitations](/docs/known-limitations), [trust center](/trust)).

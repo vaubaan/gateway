@@ -53,3 +53,12 @@ clean-code-report.md
 
 # Semgrep community rules checked out by the CI job `sast` (scripts/sast.sh)
 .semgrep-rules/
+
+# The site's generated files (apps/website/scripts/generate.ts, fumadocs-mdx)
+apps/website/.generated/
+apps/website/.source/
+apps/website/public/
+apps/website/content/docs/configuration/keys.mdx
+apps/website/content/docs/known-limitations.mdx
+apps/website/content/docs/providers/*.mdx
+!apps/website/content/docs/providers/index.mdx

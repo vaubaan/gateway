@@ -1,0 +1,30 @@
+---
+title: Telemetry
+description: Community telemetry is off by default and sends nothing today; the two levels, who decides, and what leaves the instance when it is on.
+---
+
+Community telemetry is an opt-in report an instance can send to a collector so that the project learns which plugins work; it is off on a new instance, and today nothing is sent even when it is turned on, because the project's collector is not published yet.
+
+## Who decides
+
+- **From the interface**: leave `telemetry.enabled` unset; an administrator turns it on or off on Settings → Administration → Telemetry. The change is recorded in the activity. The page shows the exact body of one report before anything is enabled.
+- **From the configuration**: set `telemetry.enabled` to `true` or `false` (`VAUBAAN_TELEMETRY_ENABLED`); the page becomes read-only. `false` guarantees nothing is sent.
+
+## The two levels
+
+`telemetry.level` (`VAUBAAN_TELEMETRY_LEVEL`) says what an enabled instance sends; the default is `usage-stats`.
+
+- `plugin-health`: one report per call a plugin executed — plugin, plugin version, gateway version, tool, outcome, error class, duration bucket.
+- `usage-stats`: the same, plus one decision per call the gateway decided (allowed or the refusal code, the permissions touched without your environment labels) and one instance profile per UTC day (counts as buckets only, a day identifier drawn again every day).
+
+Never sent: arguments or their hash, payloads, provider answers or error text, resource references, environment labels, mission, user or connection identifiers, emails, account names, host names, URLs, a stable identifier of the instance, an address. Every field: [trust center, What leaves an instance](/trust#what-leaves-an-instance).
+
+## The collector address
+
+`telemetry.collector_url` (`VAUBAAN_TELEMETRY_COLLECTOR_URL`) defaults to `https://telemetry.vaubaan.com/v1/reports`, which the gateway still treats as a placeholder: it sends nothing to it, whatever the toggle says, until a release publishes it. To contribute to a collector that exists — one you run yourself from `deploy/collector/` — set the URL to its reports endpoint, https.
+
+## Outbound traffic
+
+Only when telemetry is on and the collector is not the placeholder: `POST` batches to the collector, at most every 60 seconds, and one `GET` of the public plugin statistics every six hours, which feeds the "validated by the community" tag on the accounts and in Reference. A firewall that blocks them costs nothing but the reports and the tag.
+
+More: [telemetry handbook](https://github.com/vaubaan/gateway/blob/main/docs/handbook/telemetry.md), [collector README](https://github.com/vaubaan/gateway/blob/main/deploy/collector/README.md), [plugin health](/plugins/health).

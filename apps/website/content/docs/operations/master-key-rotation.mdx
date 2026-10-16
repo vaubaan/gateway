@@ -1,0 +1,40 @@
+---
+title: Master key rotation
+description: Rotate the master key and reseal every stored secret under the new one, with a backup first, a dry run, and the removal of the old key at the end.
+---
+
+Rotating the master key means starting the instance with a new key version, then resealing every stored secret under it; a rotation without the reseal leaves every credential stored before still openable by the old key.
+
+Rotate after any suspicion that the key was seen: a transcript, a screen share, a person with access to the host who left.
+
+## Steps
+
+**0. Back up first**, while the current key is the only one ([backup](/docs/operations/backup-and-restore)). Keep the copy with the current key: it opens with that key only.
+
+**1. Generate a key** on a trusted machine, `npm run gen-master-key`, and change three variables together:
+
+| Variable                      | New value                                           |
+| ----------------------------- | --------------------------------------------------- |
+| `VAUBAAN_MASTER_KEY`          | the new key                                         |
+| `VAUBAAN_MASTER_KEY_VERSION`  | the current version plus one (it is `1` when unset) |
+| `VAUBAAN_MASTER_KEY_PREVIOUS` | `<old version>=<old key>`                           |
+
+**2. Restart once**, with the three changes applied together — a start with the new key and the old version opens nothing. Check `/healthz` and the start log: a line "stored secrets do not open with the configured master keys" means a variable is wrong; fix it and restart before anything else.
+
+**3. Dry run, apply, confirm**, inside the container, as the image's user:
+
+```bash
+node apps/gateway/reseal.mjs           # dry run: opens every blob, writes nothing
+node apps/gateway/reseal.mjs --apply   # seals the stale blobs again
+node apps/gateway/reseal.mjs           # "nothing to reseal: every blob is sealed under version N"
+```
+
+With Docker Compose: `docker compose exec gateway node apps/gateway/reseal.mjs`. On Railway, in `railway ssh`, prefix each command with `vaubaan-entrypoint` and use `/app/apps/gateway/reseal.mjs` (the session is root; the command refuses root).
+
+A non-zero `current unreadable` column in the dry run means `VAUBAAN_MASTER_KEY` is not the key that sealed the current blobs: stop, do not pass `--apply`. Exit 1 with a non-zero `changed` column is normal on a busy instance: run `--apply` again.
+
+**4. Remove the old key.** When the confirming run says "nothing to reseal: every blob is sealed under version N … VAUBAAN_MASTER_KEY_PREVIOUS can now be removed", delete `VAUBAAN_MASTER_KEY_PREVIOUS` and restart.
+
+**5. Replace your offline copy of the key** with the key as the host holds it, and keep the old key with the backups taken before step 3, or destroy those backups.
+
+More: [configuration handbook, Rotating the master key](https://github.com/vaubaan/gateway/blob/main/docs/handbook/configuration.md#rotating-the-master-key), [Railway guide §8](https://github.com/vaubaan/gateway/blob/main/deploy/railway.md#8-rotating-the-master-key), ADR [master-key-rotation-reseals-every-blob](https://github.com/vaubaan/gateway/blob/main/docs/decisions/master-key-rotation-reseals-every-blob.md).

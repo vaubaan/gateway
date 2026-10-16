@@ -58,7 +58,7 @@ your machine: the identity provider and the cloud services are simulated.
 
 ```bash
 git clone https://github.com/vaubaan/gateway.git
-cd vaubaan-gateway
+cd gateway
 npm ci
 npm run demo
 ```
@@ -199,18 +199,19 @@ domain — keeps the names it had. The same things, under both:
 
 ## Documentation
 
-| If you want to…                                    | Read                                                                                                                                           |
-| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| understand what the product does and why           | [`docs/spec/vaubaan-gateway.md`](docs/spec/vaubaan-gateway.md)                                                                                 |
-| understand how a call becomes a set of permissions | [`docs/spec/gateway-risk-model.md`](docs/spec/gateway-risk-model.md)                                                                           |
-| run an instance                                    | [`deploy/README.md`](deploy/README.md), [configuration](docs/handbook/configuration.md)                                                        |
-| know how a part of the code works today            | [`docs/handbook/`](docs/handbook/README.md), one handbook per subsystem and per service                                                        |
-| know why something was decided                     | [`docs/decisions/`](docs/decisions/), starting with [the pivot to an on-prem gateway](docs/decisions/pivot-v4-to-v5-on-prem-mission-tokens.md) |
-| see what is tested                                 | [`docs/tests/`](docs/tests/)                                                                                                                   |
-| contribute, or write a plugin for another service  | [`CONTRIBUTING.md`](CONTRIBUTING.md), [`plugins/README.md`](plugins/README.md), [workflow](docs/workflow/coding-workflow.md)                   |
-| work on the repository with a coding agent         | [`docs/AGENTS-guide.md`](docs/AGENTS-guide.md)                                                                                                 |
-| report a vulnerability                             | [`SECURITY.md`](SECURITY.md)                                                                                                                   |
-| see what changed                                   | [`CHANGELOG.md`](CHANGELOG.md)                                                                                                                 |
+| If you want to…                                    | Read                                                                                                                                                                                                                                                                                 |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| understand what the product does and why           | [`docs/spec/vaubaan-gateway.md`](docs/spec/vaubaan-gateway.md)                                                                                                                                                                                                                       |
+| understand how a call becomes a set of permissions | [`docs/spec/gateway-risk-model.md`](docs/spec/gateway-risk-model.md)                                                                                                                                                                                                                 |
+| run an instance                                    | [`deploy/README.md`](deploy/README.md), [configuration](docs/handbook/configuration.md)                                                                                                                                                                                              |
+| read the user docs, or install with a coding agent | the site's docs, [vaubaan.com/docs](https://vaubaan.com/docs), public with the first release; until then their sources: [`apps/website/content/docs`](apps/website/content/docs), and [install with your coding agent](apps/website/content/docs/install-with-your-coding-agent.mdx) |
+| know how a part of the code works today            | [`docs/handbook/`](docs/handbook/README.md), one handbook per subsystem and per service                                                                                                                                                                                              |
+| know why something was decided                     | [`docs/decisions/`](docs/decisions/), starting with [the pivot to an on-prem gateway](docs/decisions/pivot-v4-to-v5-on-prem-mission-tokens.md)                                                                                                                                       |
+| see what is tested                                 | [`docs/tests/`](docs/tests/)                                                                                                                                                                                                                                                         |
+| contribute, or write a plugin for another service  | [`CONTRIBUTING.md`](CONTRIBUTING.md), [`plugins/README.md`](plugins/README.md), [workflow](docs/workflow/coding-workflow.md)                                                                                                                                                         |
+| work on the repository with a coding agent         | [`docs/AGENTS-guide.md`](docs/AGENTS-guide.md)                                                                                                                                                                                                                                       |
+| report a vulnerability                             | [`SECURITY.md`](SECURITY.md)                                                                                                                                                                                                                                                         |
+| see what changed                                   | [`CHANGELOG.md`](CHANGELOG.md)                                                                                                                                                                                                                                                       |
 
 Documents written before the on-prem version are kept under `legacy/`
 folders, or carry a banner saying so; several are in French and none is
@@ -220,6 +221,7 @@ maintained.
 
 ```
 apps/gateway/            the deployable: both doors, the web interface, the store
+apps/website/            vaubaan.com: user docs, plugin pages, trust center, the telemetry collector
 packages/shared/         domain and risk types
 packages/policy-engine/  slices, matching, the risk decision, the validity rule of a budget (protocol names)
 packages/gateway-core/   the call pipeline, refusals, the audit entry

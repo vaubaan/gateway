@@ -1,0 +1,75 @@
+---
+title: Install with your coding agent
+description: One block to paste into a coding agent so it installs a Vaubaan Gateway instance with Docker Compose, asks you what only you know, and checks the result.
+---
+
+This page gives one block of instructions to paste into a coding agent (Claude Code, Cursor, any agent with a shell) so that it installs a Vaubaan Gateway instance with Docker Compose on a host it can reach, asks you for what only you know, and verifies the result. The first sign-in and the approval of a mission stay with you, in a browser.
+
+Run the agent on the host that will serve the instance, or on a machine with shell access to it.
+
+## The block
+
+```text
+Install Vaubaan Gateway, an open source MCP gateway, on this host with Docker Compose.
+Docs: https://vaubaan.com/docs/install/docker-compose (Markdown: append .md to any docs URL).
+It is pre-release: no image is published, you build it from the repository.
+
+Before you start, ask me and wait for the answers:
+1. The DNS name of the instance (for example gateway.example.com). It must already point at this host,
+   and ports 80 and 443 must be reachable from the internet (the bundled Caddy proxy obtains the certificate).
+2. The email address(es) of the administrators.
+3. How people will sign in: my company's OpenID Connect provider, or GitHub. I will add it in the
+   interface after the first sign-in unless I give you its client id and secret now.
+
+Check that Docker with Compose v2, git, openssl and Node.js 20 or later are installed. Do not install
+anything else without asking me.
+
+Then run, from a directory of my choice:
+
+  git clone https://github.com/vaubaan/gateway.git
+  cd gateway
+  cp deploy/config/.env.example deploy/config/.env
+  cp deploy/config/gateway.example.yaml deploy/config/gateway.yaml
+  npm run gen-master-key
+  openssl rand -hex 24
+
+Edit deploy/config/.env only (leave gateway.yaml as copied, every key commented out):
+- GATEWAY_DOMAIN = the DNS name
+- VAUBAAN_PUBLIC_URL = https:// followed by the DNS name
+- VAUBAAN_ADMIN_EMAILS = the administrators' addresses, comma-separated
+- VAUBAAN_MASTER_KEY = the output of npm run gen-master-key
+- VAUBAAN_BOOTSTRAP_TOKEN = the output of openssl rand -hex 24
+
+Never print the master key or the bootstrap token in your answers or logs, never commit
+deploy/config/.env, and tell me to keep a copy of the master key outside this host: losing it
+loses every stored credential.
+
+Start it:
+
+  docker compose --env-file deploy/config/.env -f deploy/compose.yaml up -d --build
+
+Verify:
+- curl -s https://<the DNS name>/healthz answers {"status":"ok", ...} with a version and a commit.
+- If the container exits with code 78, read its log: it names every missing or invalid key; fix .env
+  and start again.
+
+Finish by telling me:
+- to open https://<the DNS name>/login, follow the bootstrap link and paste the bootstrap token
+  (give me the command that prints it from .env, not the value);
+- to add the sign-in provider on Settings → Administration → Sign-in, then sign in through it;
+- where the docs for connecting accounts and creating missions are: https://vaubaan.com/docs/providers
+  and https://vaubaan.com/docs/missions.
+```
+
+## Afterwards: a mission for the agent
+
+Once you have signed in and connected an account, an agent can prepare its own mission through the [management door](/docs/missions/management-door), in your name and within what you may allow: you authorize it once in the browser, it previews a policy and issues the mission, and the answer carries the mission key and the configuration for the agent that will do the work. Requests the mission raises later — more of a limit, an approval — are answered by you alone, in the interface.
+
+With Claude Code:
+
+```bash
+claude mcp add --transport http vaubaan-manage https://your-domain/mcp/manage
+# then, inside Claude Code: /mcp → vaubaan-manage → Authenticate
+```
+
+Or create the mission yourself in the interface (Missions → New mission) and give the agent its kit: see [missions and agents](/docs/missions).

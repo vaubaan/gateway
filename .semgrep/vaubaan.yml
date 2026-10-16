@@ -52,6 +52,8 @@ rules:
       exclude:
         - /apps/gateway/next.config.ts
         - /scripts/
+        # The site's build-time generator: `git log` for the sitemap's dates.
+        - /apps/website/scripts/
         - /apps/*/tests/
         - /packages/*/tests/
         - /plugins/*/tests/
