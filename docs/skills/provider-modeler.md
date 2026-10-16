@@ -63,9 +63,14 @@ back. Where the two disagree, the kit wins; report the disagreement.
   classified from their text), `railway` (rewrapped remote MCP server,
   `oauth2` with refresh).
 
-Provider documentation comes from Context7
-(`mcp__context7__resolve-library-id`, then `mcp__context7__query-docs`), not
-from memory and not from ad-hoc web fetches. Record which pages the
+Provider documentation comes from Context7, not from memory and not from
+ad-hoc web fetches. Context7 is reached through the gateway, like any other
+provider: once the dogfood instance has a Context7 connection in the
+mission behind the `vaubaan` server, the tools are
+`mcp__vaubaan__context7__resolve-library-id`, then
+`mcp__vaubaan__context7__query-docs` (plugin `context7`, handbook
+[`providers/context7`](../handbook/providers/context7.md)). The key is that
+connection only: never in an environment variable or in `.mcp.json`. Record which pages the
 classifier was written from: the pull request states them.
 
 ## Phases

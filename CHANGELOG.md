@@ -681,6 +681,13 @@ write …)`), instead of GitHub's bare 403. The push token of
     rooted at the `from` domain and classified by recipient zone. Presets `read-only`,
     `developer`, `marketing-operator`, `domain-admin`.
   - **Gmail** `0.3.0`, experimental — classifier only: no tool is exposed.
+- **Context7 plugin** (`@vaubaan/plugin-context7` 0.1.0): agents look up library
+  documentation through the gateway. The official Context7 MCP server is rewrapped
+  (`resolve-library-id`, `query-docs`, frozen from its `tools/list`); a Context7 API
+  key is the account, checked at Context7 before it is stored, and one resource, the
+  library index it can query. One permission, `context7.query-docs` (the agent's
+  question is sent to Context7), preset `read-only`. No environment. Arguments the
+  tools do not declare are refused, the upstream server's aliases included.
 - **Project files.** `LICENSE`, `CONTRIBUTING.md` (from a fresh clone to a pull
   request), `CODE_OF_CONDUCT.md`, `SECURITY.md` (private reporting, scope, trust model),
   four issue forms and a pull request template; `docs/handbook/threat-model.md` lists

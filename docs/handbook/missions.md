@@ -376,6 +376,7 @@ own. The values in force are therefore the catalogs' — at this commit:
 | upstash-redis  | `read-only`, `developer`, `operator`                              |
 | resend         | `read-only`, `developer`, `marketing-operator`, `domain-admin`    |
 | gmail          | `read-only`, `developer` (plugin `experimental`)                  |
+| context7       | `read-only`                                                       |
 
 They are provisional until the `mission-presets-default-values` ADR (plan §5.5).
 The picker labels each preset with its width on this connection
