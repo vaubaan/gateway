@@ -362,8 +362,12 @@ capability, no new privilege). The smoke test runs both.
 Native addons (`argon2`, `better-sqlite3`) are prebuilt for glibc, which is
 why the base is Debian slim rather than Alpine; `next.config.ts` traces
 their binaries and runtime files explicitly (`outputFileTracingIncludes`)
-and the smoke test loads both inside the image. Build-time argument:
-`GIT_COMMIT_SHA` (shown by `/healthz`). The base image is not an argument:
+and the smoke test loads both inside the image. The image takes **no
+build argument**: the commit shown by `/healthz` is read from
+`apps/gateway/build-commit.txt`, which `git archive` stamps
+(`export-subst`; the CI runs `scripts/stamp-commit.sh` on its checkout);
+a context that is not stamped builds `unknown` (ADR
+[deployed-commit-stamped-by-git-archive](../docs/decisions/deployed-commit-stamped-by-git-archive.md)). The base image is not an argument:
 it is written, with its digest, on the first `FROM` line. Nothing else than
 `node` runs in the container: the package managers of the base image (npm,
 npx, corepack, yarn) are removed from it, and the smoke test checks it.

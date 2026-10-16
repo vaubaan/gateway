@@ -17,6 +17,8 @@ import {
 } from '@vaubaan/gateway-core';
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
+import { classifyConnectionOf } from './resource-stage';
+
 export function createRiskStage(deps: { readonly registry: PluginRegistry }): RiskStage {
   return {
     async evaluate(ctx, call, target): Promise<CallVerdict> {
@@ -26,6 +28,7 @@ export function createRiskStage(deps: { readonly registry: PluginRegistry }): Ri
         tool: call.tool,
         args: call.args,
         resources: ctx.resources.filter((r) => r.connection_id === target.connection.id),
+        connection: classifyConnectionOf(target.connection),
         // v5 missions carry no explicit denies: the policy is the enumeration.
         token: { id: ctx.token.id, accepted_risks: acceptedRisksOf(ctx) },
         adapter: registered.plugin,

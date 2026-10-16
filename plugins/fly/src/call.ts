@@ -6,7 +6,12 @@
  * sides"). Pure.
  */
 
-import { declaredArgumentsOf, undeclaredArgumentDenial, type Resource } from '@vaubaan/plugin-sdk';
+import {
+  declaredArgumentsOf,
+  undeclaredArgumentDenial,
+  type ClassifyConnection,
+  type Resource,
+} from '@vaubaan/plugin-sdk';
 
 import {
   appName,
@@ -22,7 +27,7 @@ import {
   slug,
   volumeName,
 } from './identifiers.ts';
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { ORG_SLUG_FIELD, PROVIDER_ID, TOOL } from './identity.ts';
 import { flyTools } from './tools.ts';
 
 export interface Denial {
@@ -40,7 +45,11 @@ export const META = {
 /** What a call names, every value checked. */
 export interface FlyCall {
   readonly tool: string;
-  /** The org slug of the mission's apps, or `null` when unknown (the slice says `org[*]`). */
+  /**
+   * The org slug the call is cited under : the connection's (its form field),
+   * else the one the mission's apps share ; `null` when neither says it (the
+   * slice then says `org[*]`).
+   */
   readonly org: string | null;
   /** The resolved app : a resource of the mission. Absent for org-level tools. */
   readonly app?: Resource;
@@ -153,6 +162,11 @@ export function orgOf(resources: readonly Resource[]): string | null {
   return only ?? null;
 }
 
+/** The org slug the connection was made for (a public form field), or `null`. */
+export function orgOfConnection(connection: ClassifyConnection | undefined): string | null {
+  return slug(connection?.fields[ORG_SLUG_FIELD]);
+}
+
 /** The allowed image prefixes discovery stored on an app, or the refusal. */
 export function prefixesOfApp(app: Resource): readonly string[] | Denial {
   const raw = app.metadata?.[META.imagePrefixes];
@@ -205,9 +219,11 @@ export function readFlyCall(
   tool: string,
   args: Readonly<Record<string, unknown>>,
   resources: readonly Resource[],
+  connection?: ClassifyConnection,
 ): FlyCall | Denial {
   if (!TOOLS.has(tool)) return deny(`unknown tool '${tool}'`);
-  const org = orgOf(resources);
+  const connectionOrg = orgOfConnection(connection);
+  const org = connectionOrg ?? orgOf(resources);
   const values: Values = {};
 
   if (ORG_TOOLS.has(tool)) {
@@ -232,7 +248,8 @@ export function readFlyCall(
   if (isDenial(app)) return app;
   const undeclared = undeclaredArgumentDenial(DECLARED, tool, args);
   if (undeclared) return deny(undeclared);
-  const appOrg = slug(app.metadata?.[META.orgSlug]) ?? org;
+  // The connection's org is the one `execute` sends and checks the app against.
+  const appOrg = connectionOrg ?? slug(app.metadata?.[META.orgSlug]) ?? org;
   const base = { tool, org: appOrg, app };
 
   let machineId: string | undefined;

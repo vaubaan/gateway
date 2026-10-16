@@ -144,7 +144,9 @@ in the blob. `scripts/gen-master-key.mjs` prints a key.
   below). Build tools exist only in the `deps` stage as a fallback.
 - Four stages: `manifests` (package manifests only, for a cached dependency
   layer), `deps` (`npm ci`), `build` (`next build`, `GIT_COMMIT_SHA` build
-  arg), `runner` (standalone output + `.next/static` + `public`).
+  arg — removed on 2026-10-16: the commit is stamped by `git archive`, ADR
+  [deployed-commit-stamped-by-git-archive](deployed-commit-stamped-by-git-archive.md)),
+  `runner` (standalone output + `.next/static` + `public`).
 - Non-root user `vaubaan` (uid 10001), `/data` owned by it (no `VOLUME`
   instruction since 2026-10-14: some platforms refuse it; the deployment
   mounts `/data`), `EXPOSE 3000`,

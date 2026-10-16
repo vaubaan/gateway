@@ -98,6 +98,18 @@ fly.org[O]                                  O = org slug of the connection
     .logs                                   read
 ```
 
+**How `O` is known.** The classifier receives the connection's public form
+fields (`ClassifyConnection`, ADR
+[classify-sees-the-connection-public-fields](../../decisions/classify-sees-the-connection-public-fields.md))
+and cites their `org_slug` — the organization `execute` sends to Fly and
+checks every app against. When the field is absent or malformed (a host that
+passes none, catalog tooling), it falls back to the organization the
+mission's apps share (their discovered `org_slug`), then to `org[*]`. Every
+catalog pattern matches `org[*]`, so the name changes what a refusal or an
+audit entry says (`fly.org[vaubaan].app.W` for a `create_app` in a mission
+with no app, where it used to say `fly.org[*].app.W`), never which risk is
+touched. The organization is never read from the arguments (§5.1).
+
 Every leaf name is unique in the plane (`app-destroy`, `machine-destroy`,
 `volume-destroy`, `ip-release`, `certificate-remove`), so a pattern says what
 it acts on without its path.

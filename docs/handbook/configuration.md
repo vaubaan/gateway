@@ -22,6 +22,8 @@ tracks:
   - deploy/docker/entrypoint.sh
   - apps/gateway/src/app/healthz/route.ts
   - apps/gateway/next.config.ts
+  - apps/gateway/build-commit.txt
+  - apps/gateway/tests/unit/structural/deployed-commit.test.ts
   - apps/gateway/tsconfig.json
   - apps/gateway/package.json
   - apps/gateway/tests/integration/standalone-native-addons.test.ts
@@ -255,7 +257,17 @@ deploy/config/                  gateway.example.yaml, .env.example (every key do
 root cannot be built. `version` and `commit` are frozen into the bundle by `next.config.ts`
 (`NEXT_PUBLIC_GATEWAY_VERSION`, `NEXT_PUBLIC_COMMIT_SHA`; `dev` outside a
 build) and read by `config/build-info.ts` (`buildInfoFromEnv()`), like every
-other read of the process environment. The version is the `version` of the
+other read of the process environment. The commit is `resolveCommitSha`
+(`next.config.ts`): the stamp `git archive` writes into
+`apps/gateway/build-commit.txt` (`.gitattributes`: `export-subst`; a
+checkout holds the placeholder `$Format:%H$`, which `commitFromStamp`
+rejects), else the checkout's own HEAD (7 characters, `-dirty` when tracked
+files differ), else `unknown`. No environment variable and no build
+argument feed it: a hand-set `GIT_COMMIT_SHA` once kept an old commit on a
+Railway instance (ADR
+[deployed-commit-stamped-by-git-archive](../decisions/deployed-commit-stamped-by-git-archive.md);
+`tests/unit/structural/deployed-commit.test.ts` archives a commit and reads
+it back). The version is the `version` of the
 root `package.json` and has no other source; the footer of the interface and
 the telemetry field `gateway_version` show the same stamp
 ([coding workflow, "One version"](../workflow/coding-workflow.md#one-version)). The handler does not take the root:

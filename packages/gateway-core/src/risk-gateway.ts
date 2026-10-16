@@ -23,7 +23,7 @@
  */
 
 import type { RefusalCode, Resource, RiskDecision, RiskId, Slice } from '@vaubaan/shared';
-import type { ClassifyOutcome, ProviderPlugin } from '@vaubaan/plugin-sdk';
+import type { ClassifyConnection, ClassifyOutcome, ProviderPlugin } from '@vaubaan/plugin-sdk';
 
 import {
   envResolverFor,
@@ -85,6 +85,9 @@ export function evaluateCallForToken(input: {
    *  the classifier and, unless `envResolver` is given, composed with the
    *  adapter's `envOf` to qualify the touched risks by environment. */
   resources: readonly Resource[];
+  /** The public form fields of that connection, handed to the classifier
+   *  (`ClassifyConnection`); absent outside a host. */
+  connection?: ClassifyConnection;
   token: AcceptedRisksSnapshot;
   adapter: Classifier;
   catalog: IndexedRiskCatalog | undefined;
@@ -99,7 +102,7 @@ export function evaluateCallForToken(input: {
     return { kind: 'no-catalog', provider: 'unknown' };
   }
 
-  const classified: ClassifyOutcome = adapter.classify(tool, args, resources);
+  const classified: ClassifyOutcome = adapter.classify(tool, args, resources, input.connection);
   if ('denied' in classified) {
     return { kind: 'classify-denied', reason: classified.denied };
   }

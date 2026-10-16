@@ -74,6 +74,64 @@ describe('organization tools', () => {
   });
 });
 
+describe("the connection's organization", () => {
+  const connection = { fields: { org_slug: 'vaubaan', image_prefixes: 'ghcr.io/vaubaan/' } };
+  const cite = (
+    tool: string,
+    args: Record<string, unknown>,
+    resources: readonly Resource[],
+    conn?: { fields: Record<string, string> },
+  ) => {
+    const out = classifyFly(tool, args, resources, conn);
+    if ('denied' in out) throw new Error(out.denied);
+    return out.slices.map(serializeSlice);
+  };
+
+  test('a creation in a mission with no app names the organization of the connection', () => {
+    // The dogfood refusal of 2026-10-16 cited `fly.org[*].app.W`.
+    expect(cite(TOOL.createApp, { name: 'beta-gw', network: 'beta-net' }, [], connection)).toEqual([
+      'fly.org[vaubaan].app.W',
+    ]);
+    expect(cite(TOOL.listRegions, {}, [], connection)).toEqual(['fly.org[vaubaan].region[*].R']);
+  });
+
+  test('the risk touched is the same whatever the organization is called', () => {
+    const named = classifyFly(TOOL.createApp, { name: 'b', network: 'n' }, [], connection);
+    const any = classifyFly(TOOL.createApp, { name: 'b', network: 'n' }, []);
+    if ('denied' in named || 'denied' in any) throw new Error('refused');
+    expect([...risksTouchedByAll(named.slices, flyCatalog.indexed)]).toEqual([
+      ...risksTouchedByAll(any.slices, flyCatalog.indexed),
+    ]);
+  });
+
+  test("the connection's organization is the one an app call cites", () => {
+    expect(cite(TOOL.getApp, {}, [acme], { fields: { org_slug: 'vaubaan' } })).toEqual([
+      'fly.org[vaubaan].app[acme-gw].R',
+    ]);
+  });
+
+  test('a missing or malformed field leaves the organization to the resources, else any', () => {
+    const malformed: Record<string, string>[] = [
+      {},
+      { org_slug: '' },
+      { org_slug: 'Not A Slug' },
+      { org_slug: '*' },
+    ];
+    for (const fields of malformed) {
+      expect(cite(TOOL.createApp, { name: 'b', network: 'n' }, [], { fields })).toEqual([
+        'fly.org[*].app.W',
+      ]);
+      expect(cite(TOOL.listApps, {}, [acme], { fields })).toEqual(['fly.org[vaubaan].app[*].R']);
+    }
+  });
+
+  test('the organization never comes from the arguments', () => {
+    expect(denial(TOOL.createApp, { name: 'b', network: 'n', org_slug: 'vaubaan' }, [])).toMatch(
+      /^org_slug: not an argument/,
+    );
+  });
+});
+
 describe('app resolution', () => {
   test('the named app must be one of the mission; absent, the single app', () => {
     expect(slices(TOOL.getApp, { app: 'canary-gw' }, [acme, canary])).toEqual([

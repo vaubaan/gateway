@@ -137,6 +137,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/connections/shipped-providers.test.ts`                                            |         9 |
 | `apps/gateway/src/server/connections/token-connections.test.ts`                                            |         8 |
 | `apps/gateway/src/server/crypto/aead.test.ts`                                                              |        12 |
+| `apps/gateway/src/server/execution/classify-connection.test.ts`                                            |         4 |
 | `apps/gateway/src/server/execution/execution.test.ts`                                                      |        23 |
 | `apps/gateway/src/server/groups/service.test.ts`                                                           |        15 |
 | `apps/gateway/src/server/http/client-ip.test.ts`                                                           |        11 |
@@ -294,6 +295,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/structural/authority-not-snapshotted.test.ts`                                     |        27 |
 | `apps/gateway/tests/unit/structural/base-images-pinned.test.ts`                                            |         5 |
 | `apps/gateway/tests/unit/structural/catalog-caps-enforced.test.ts`                                         |        12 |
+| `apps/gateway/tests/unit/structural/deployed-commit.test.ts`                                               |        15 |
 | `apps/gateway/tests/unit/structural/example-config-providers.test.ts`                                      |        10 |
 | `apps/gateway/tests/unit/structural/index.test.ts`                                                         |       102 |
 | `apps/gateway/tests/unit/structural/no-arguments-in-logs.test.ts`                                          |         3 |
@@ -4358,6 +4360,16 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
   is the `version` of the root `package.json`; that version fits the
   telemetry pattern of `gateway_version` and the release scripts' spelling;
   the lockfile carries the same value.
+- **`apps/gateway/tests/unit/structural/deployed-commit.test.ts`** (15) —
+  **the commit `/healthz` reports is one the build saw** (ADR
+  [[deployed-commit-stamped-by-git-archive]]): `commitFromStamp` reads a
+  40-hex stamp and rejects the checkout's placeholder `$Format:%H$`, an empty
+  or missing file, a short id, upper case; `resolveCommitSha` prefers the
+  stamp to the checkout and answers `unknown` with neither; the checked-in
+  file is the placeholder, `.gitattributes` marks it `export-subst`; the
+  Dockerfile, the CI and release workflows and `next.config.ts` name no
+  commit variable; neither `.dockerignore` nor `.railwayignore` drops the
+  file; and a `git archive` of a fresh commit carries that commit's id.
 - **`apps/gateway/tests/unit/app/build-footer.test.tsx`** (3) — the footer
   renders the version and commit it is given, the stamps of the build by
   default (the ones `/healthz` answers), and `dev` for an unstamped build.
@@ -4587,6 +4599,17 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
   (re-check M-1) — Railway's agent is refused on an account that reaches the
   hosting project, every other tool and every other account unaffected; the
   mission context marks such a connection; the SDK validates the declaration.
+- **`execution/classify-connection.test.ts`** (4) and the Fly
+  `classify.test.ts` ("the connection's organization", 5) — the classifier
+  is shown the connection's public form fields (ADR
+  [[classify-sees-the-connection-public-fields]]): a refused
+  `fly__create_app` in a mission with no Fly app goes through the resource
+  and risk stages and is audited as `fly.org[vaubaan].app.W`, and as
+  `fly.org[*].app.W` without the fields; the view holds the string fields of
+  `metadata.fields` only; in the plugin, the connection's `org_slug` is
+  cited for organization and app tools, a missing or malformed one falls back
+  to the apps' organization then `org[*]`, the risks touched are the same
+  whatever the organization is called, and `org_slug` is never an argument.
 - **`compose/self-resources-check.test.ts`** (2, re-check L-1) and the
   Upstash tests (L-2) — a self resource of an unknown provider stops the boot;
   `get_database` sends `credentials=hide` and nested credentials are dropped.

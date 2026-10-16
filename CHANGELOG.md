@@ -726,6 +726,15 @@ write …)`), instead of GitHub's bare 403. The push token of
   bulk writes and for `git push`; such a write fell to `github.uncategorized-write` and
   was refused on a mission without the fallback. The git remote's description of the
   permission now reads its branch list from the catalog.
+- **`/healthz` reports the commit that was built, or `unknown`.** The Docker build no
+  longer takes a `GIT_COMMIT_SHA` argument: `git archive` writes the commit it archives
+  into `apps/gateway/build-commit.txt`, and the build reads it from there (a checkout:
+  its own HEAD). A `GIT_COMMIT_SHA` variable on a Railway service is now ignored —
+  delete it. ADR `deployed-commit-stamped-by-git-archive`.
+- **Fly refusals and Activity name the account's organization**
+  (`fly.org[vaubaan].app.W`, was `fly.org[*]` in a mission with no app). A plugin's
+  classifier now receives the non-secret fields of the account's form; the permissions
+  a call touches do not change. ADR `classify-sees-the-connection-public-fields`.
 - **The Docker build no longer takes a `NODE_IMAGE` argument**: the base image is
   written, version and digest, on the first `FROM` line, so that Dependabot can propose
   its refresh. To build on another base, edit that line.
