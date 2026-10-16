@@ -121,7 +121,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/compose/compose.test.ts`                                                          |        17 |
 | `apps/gateway/src/server/config/duration.test.ts`                                                          |         2 |
 | `apps/gateway/src/server/config/instance-name.test.ts`                                                     |        11 |
-| `apps/gateway/src/server/config/keys-doc.test.ts`                                                          |        42 |
+| `apps/gateway/src/server/config/keys-doc.test.ts`                                                          |        43 |
 | `apps/gateway/src/server/config/load.property.test.ts`                                                     |         6 |
 | `apps/gateway/src/server/config/load.test.ts`                                                              |        62 |
 | `apps/gateway/src/server/config/sign-in.test.ts`                                                           |        15 |
@@ -189,6 +189,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/telemetry/outcome.test.ts`                                                        |        30 |
 | `apps/gateway/src/server/telemetry/settings.test.ts`                                                       |         7 |
 | `apps/gateway/src/server/telemetry/stats.test.ts`                                                          |        11 |
+| `apps/gateway/src/server/telemetry/usage.test.ts`                                                          |         6 |
 | `apps/gateway/tests/integration/audit/admin-mutations.test.ts`                                             |        65 |
 | `apps/gateway/tests/integration/audit/audit-query.test.ts`                                                 |        35 |
 | `apps/gateway/tests/integration/audit/events-agent-label.test.ts`                                          |         3 |
@@ -268,7 +269,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/store/token-holders.test.ts`                                               |         4 |
 | `apps/gateway/tests/integration/store/users-issuer.test.ts`                                                |        14 |
 | `apps/gateway/tests/integration/store/web-sessions.test.ts`                                                |         8 |
-| `apps/gateway/tests/integration/telemetry/telemetry.test.ts`                                               |        18 |
+| `apps/gateway/tests/integration/telemetry/telemetry.test.ts`                                               |        22 |
 | `apps/gateway/tests/unit/app/admin-guard.test.ts`                                                          |        86 |
 | `apps/gateway/tests/unit/app/app-guard.test.ts`                                                            |       131 |
 | `apps/gateway/tests/unit/app/build-footer.test.tsx`                                                        |         3 |
@@ -305,6 +306,10 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/structural/version-single-source.test.ts`                                         |         4 |
 | `apps/website/tests/unit/collector/reports.test.ts`                                                        |         6 |
 | `apps/website/tests/unit/collector/stats-and-config.test.ts`                                               |        12 |
+| `apps/website/tests/unit/site/plugins.test.ts`                                                             |         4 |
+| `apps/website/tests/unit/site/site.test.ts`                                                                |        10 |
+| `apps/website/tests/unit/site/sources-agree.test.ts`                                                       |         6 |
+| `apps/website/tests/unit/site/units.test.ts`                                                               |        15 |
 | `packages/gateway-core/tests/unit/audit.test.ts`                                                           |         2 |
 | `packages/gateway-core/tests/unit/authenticate.test.ts`                                                    |        11 |
 | `packages/gateway-core/tests/unit/cache.test.ts`                                                           |         7 |
@@ -1282,7 +1287,7 @@ enforced limits is pinned to what the code enforces today.
   (403), no session (401) and a foreign origin (403) change nothing;
   `VAUBAAN_INSTANCE_NAME` wins over a stored name and the POST answers
   `locked`.
-- **`config/keys-doc.test.ts`** (42) — **structural: the key table of the
+- **`config/keys-doc.test.ts`** (43) — **structural: the key table of the
   configuration handbook is the loader's.** The table of
   `docs/handbook/configuration.md` has the six columns the test reads and
   lists each key once; it has a row for every key of `KEYS` and no other
@@ -3651,7 +3656,7 @@ Unit, beside the code (`packages/telemetry/src/`, 95):
   credentials, no referrer); 408 / 429 / 5xx and an unreachable collector
   keep the batch; 400 / 401 / 403 / 404 drop it with one warning.
 
-Unit, beside the code (`apps/gateway/src/server/telemetry/`, 48):
+Unit, beside the code (`apps/gateway/src/server/telemetry/`, 54):
 
 - **`outcome.test.ts`** (30) — **outcome classes**: a result is a `success`;
   `isError: true` is `classification-error / executor_refused`; a status
@@ -3675,6 +3680,13 @@ Unit, beside the code (`apps/gateway/src/server/telemetry/`, 48):
   that is not a list and an unreachable collector show nothing and are not
   retried for 10 min; **no request at all while telemetry is not sending**;
   concurrent refreshes share one request; malformed rows skipped.
+- **`usage.test.ts`** (6) — `decisionReportOf`: a declared tool with its
+  risks stripped of their environment and `gate: approval`; a tool of the
+  plugin's prefix it does not declare travels as `null`; nothing for a
+  refusal without a code, the wrong door or a tool of no plugin;
+  `deploymentKindOf` tells Railway, Fly, Docker and the rest apart; the day
+  identifier stays within a UTC day and changes the next; every count is
+  bucketed and the call counter restarts after a profile.
 
 Structural (`apps/gateway/tests/unit/structural/`, 10):
 
@@ -3686,9 +3698,11 @@ Structural (`apps/gateway/tests/unit/structural/`, 10):
   an error result, thrown errors carrying the arguments, the provider token
   and a unique message in their message, `name`, `code`, `status`,
   `statusText` and `cause`, thrown strings, objects, `null`, symbols — and
-  one call in ten is refused before the plugin. Asserted on everything that
-  reached the collector (URL, headers, body): exactly the six keys per
-  report; every value from a universe fixed before the first call (the
+  one call in ten is refused before the plugin; the level is `usage-stats`
+  and a profile is queued. Asserted on everything that reached the collector
+  (URL, headers, body): exactly the seven keys per plugin-health report, the
+  six keys of a decision report (one per audited call with a decision word,
+  risks of the plugin without environment), a profile its constructor accepts; every value from a universe fixed before the first call (the
   plugin's declaration, the build stamp, the closed vocabularies); none of
   the planted values anywhere — argument values, `fingerprintArguments(args)`
   of every call, resource refs and ids, mission, session, user and connection
@@ -3708,7 +3722,8 @@ Structural (`apps/gateway/tests/unit/structural/`, 10):
   full client batch; the thresholds published in the README are the ones of
   the SQL function; the README documents every field and closed value.
 
-Integration (`apps/gateway/tests/integration/telemetry/telemetry.test.ts`, 18):
+Integration (`apps/gateway/tests/integration/telemetry/telemetry.test.ts`, 22;
+the rig runs at `plugin-health` unless a scenario asks for `usage-stats`):
 
 - **Disabled by default** — 61 calls, a failing one included, a flush and a
   statistics refresh: the injected collector `fetch` is never called;
@@ -3733,8 +3748,16 @@ type_error` in order; a provider failure a plugin throws with its status
   a 401 followed by a successful refresh is one
   `success`; a credential refused for good is `credential_rejected` and the
   now-expired connection reports nothing more; a collector that is down
-  does not fail a call; the Admin overview's sample payload has the six keys
+  does not fail a call; the Admin overview's sample payload has the seven keys
   and the collector URL is shown without its key.
+- **The usage-stats level** — one decision per audited call with a decision
+  word (`allowed`, `risk-not-accepted`), none for a refusal without a code,
+  risks of the plugin only; nothing but `plugin_health` at the plugin-health
+  level, even after `profileNow()`; one profile a day whatever the number of
+  checks, with a 128-bit day id, bucketed counts (`calls: 2-5`), the plugin's
+  accounts, and neither the host, an email, a user id nor the mission id
+  anywhere on the wire, the day id on the profile only; the Admin sample shows
+  `plugin_health` and `decisions`.
 - **Validation status** — one `plugin_stats` read, cached, the row of the
   running version; a collector without the endpoint shows nothing.
 
@@ -4606,6 +4629,50 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
 - The container smoke (`deploy/docker/smoke.sh` step 13,
   [e2e-tests](./e2e-tests.md)) runs the command and the first-boot restore in the
   image.
+
+## Scenarios — The public site
+
+> Covers: spec [`website.md`](../spec/website.md) §1.1 (no second source of
+> truth), §2.3, §2.4 (thresholds, "not enough reports yet"), §2.5, §2.6
+> (Markdown twins, llms.txt, robots.txt, sitemap). Handbook [[website]]. ADRs
+> [[website-nextjs-on-vercel]], [[website-generated-from-the-repository]].
+> `apps/website/tests/unit/site/`. No test reaches the collector: `buildSite()`
+> is given an offline snapshot and `fetchHealth()` an injected `fetch`. The
+> rendered HTML is checked by `npm run build --workspace @vaubaan/website`,
+> not by these tests.
+
+- **`plugins.test.ts`** (4) — **one source for the plugin list**: every
+  folder of `plugins/` with a `package.json` is listed, `_template` is not
+  (the expected list is computed independently of `discoverPluginDirs`);
+  each plugin is imported through its entry, with a semver version, risks,
+  presets whose entries name risks of the same catalog, and credentials; the
+  experimental flag comes from the declaration (`gmail`).
+- **`site.test.ts`** (10) — **the site as data**, built offline: every
+  hand-written docs page, every generated one and every plugin page is in
+  the page list, once; **every page has its `.md` twin** with the page's
+  Markdown, starting with its title, and `markdownTwinOf()` routes
+  `Accept: text/markdown` to it; every page opens with a defining sentence;
+  **`llms.txt` lists every docs, plugin and trust page** with its `.md` URL
+  and description, and **`llms-full.txt` carries each of them whole**;
+  `robots.txt` allows `GPTBot`, `ClaudeBot`, `PerplexityBot`,
+  `Google-Extended`, `CCBot` and `*` and disallows nothing; the sitemap
+  lists every page; `plugins.json` carries every plugin and never a rate
+  offline; every GitHub link names a file of the repository and every site
+  link a page or a file of the site.
+- **`sources-agree.test.ts`** (6) — what the site copies is the gateway's:
+  **the configuration keys page has one row per entry of `KEYS`** (plus the
+  two families) with the variable the loader reads; **the thresholds are 200
+  reports, 90 %, 90 days**, read from `schema.sql` and equal to the collector
+  README's; the severity word equals the gateway's over all 1 296 vectors.
+- **`units.test.ts`** (15) — `escapeMdx` (outside code only),
+  `rewriteRelativeLinks`, `sectionsOf` (fence-aware), `text`,
+  `splitFrontmatter`; health: no rate below the minimum or without the
+  collector, the rate and status from it on, `fetchHealth` never throws
+  (network error, non-list, 503, malformed rows dropped); the proxy's host
+  gate (only `/v1/*` and a disallowing robots.txt on `COLLECTOR_HOST`,
+  nothing without it), `wantsMarkdown`, `markdownTwinOf`; hand-written docs
+  are plain Markdown; the trust center reads every accepted risk and the
+  out-of-scope items of the threat model.
 
 ## Out of scope for these tests
 

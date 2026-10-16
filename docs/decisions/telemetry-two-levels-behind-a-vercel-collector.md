@@ -42,13 +42,15 @@ This cannot be switched off.
 
 ## Decision
 
-### D1 — Two levels, three settings
+### D1 — Two levels, chosen by configuration; the operator's toggle stays on/off
 
-`telemetry.level`: `off` (default), `plugin-health`, `usage-stats` (which
-includes plugin health). The legacy `telemetry.enabled: true` means
-`usage-stats` in the short term, as decided; `false` means `off`. The first
-interface may show only off / on; the levels exist on the wire from the
-start (D3).
+`telemetry.enabled` (and the Admin toggle beside it) keeps deciding **whether**
+anything is sent. `telemetry.level` (`VAUBAAN_TELEMETRY_LEVEL`) decides
+**what** an enabled instance sends: `plugin-health`, or `usage-stats`, which
+includes plugin health and is the default, as decided for the short term.
+Spec §9's three settings are the pairs (off), (on, plugin-health),
+(on, usage-stats). Choosing the level on the Admin page, rather than in the
+configuration, is the later step the product owner described.
 
 ### D2 — What each level adds, and the rule every field obeys
 
@@ -141,10 +143,23 @@ trigger counts rows across the four tables.
 ### D7 — Implemented in two steps
 
 The collector (endpoint, store, shared constructors and wire) and the
-`plugin-health` level with its duration bucket ship first. The instance's
-`usage-stats` emitters (decision reports, the daily profile) and the
-three-way setting of D1 follow in a second change; until then an enabled
-instance sends `plugin_health` only.
+`plugin-health` level with its duration bucket shipped first (2026-10-16). The
+`usage-stats` emitters followed the same day:
+
+- **decisions** — the stages' audit writer is wrapped
+  (`withDecisionTelemetry`): once a call entry is written, the sink receives
+  the tool, the decision word, the risks touched and whether a gate applied,
+  and nothing else of the entry. The execution door and the git remote share
+  the stages, so both report. A refusal without a code (unknown tool, a
+  plugin's denial, a stage that threw) is not a decision report: it has no
+  word in the vocabulary;
+- **the profile** — checked every hour, queued once per UTC day while the
+  client is sending. Users counted are the active ones, accounts are the
+  connections not revoked, missions are those stored `active` and not
+  expired, calls are the decisions counted since the previous profile (lost
+  on a restart). `deployment` is `railway` or `fly` when the platform's
+  variable is set (`RAILWAY_PROJECT_ID`, `FLY_APP_NAME`), else `docker` when
+  `/.dockerenv` exists, else `other`.
 
 ## Consequences
 

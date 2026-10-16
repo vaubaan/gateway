@@ -1,0 +1,30 @@
+---
+title: Vaubaan Gateway docs
+description: How to try, install, configure and run a Vaubaan Gateway instance, and how to give agents missions.
+---
+
+Vaubaan Gateway is a server you install on your own network so that coding agents can use your cloud services through MCP without being handed your credentials; these pages are for the people who install it, run it and use it.
+
+**Pre-release.** No version is tagged and no image is published yet: you build the image from the sources, and every command on these pages is one that works on the repository today. What was never tried or is not built is listed under [known limitations](/docs/known-limitations).
+
+## Start here
+
+- [Concepts](/docs/concepts): instance, account, resource, mission, key, permission, preset, limit, "ask me first", activity.
+- [Quick look](/docs/quick-look): the whole interface on a laptop in a few minutes, nothing to register.
+- [Install](/docs/install): Docker Compose with the bundled proxy, or Railway.
+- [Install with your coding agent](/docs/install-with-your-coding-agent): one block to paste into an agent.
+
+## Run an instance
+
+- [Configuration](/docs/configuration) and [every configuration key](/docs/configuration/keys).
+- [Connect a provider](/docs/providers): one page per service.
+- [Missions and agents](/docs/missions): create a mission, configure the agent's MCP client, the management door, the git remote.
+- [Operations](/docs/operations): backup and restore, master key rotation, upgrade, telemetry.
+
+## Decide
+
+- [How Vaubaan compares](/docs/compare) with handing an agent a token, with a secrets manager and with other MCP gateways.
+- [Trust center](/trust): what protects the credentials an instance holds, and what does not.
+- [Plugins](/plugins): every service, its permissions and presets.
+
+These docs describe how to use the gateway. How its code works is in the repository's [handbooks](https://github.com/vaubaan/gateway/tree/main/docs/handbook), written for contributors; the docs link to them rather than copy them.

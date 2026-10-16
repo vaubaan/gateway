@@ -29,7 +29,7 @@ import { ConnectionCredentialCache } from './credential-cache';
 import type { DelegatedTokenResolver } from './admission';
 import { ExecutionDoor } from './door';
 import { createResourceStage } from './resource-stage';
-import type { TelemetrySink } from './telemetry-sink';
+import { withDecisionTelemetry, type TelemetrySink } from './telemetry-sink';
 import { createRiskStage } from './risk-stage';
 import { TokenVerifier } from './token-verifier';
 import { createUpstreamStage } from './upstream-stage';
@@ -97,7 +97,11 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
       logger,
       telemetry: deps.telemetry,
     }),
-    audit: deps.store.auditWriter,
+    audit: deps.telemetry
+      ? withDecisionTelemetry(deps.store.auditWriter, deps.telemetry, (error) =>
+          logger.warn('telemetry sink failed', { error: upstreamErrorClassName(error) }),
+        )
+      : deps.store.auditWriter,
     now: () => clock.now(),
     // A decision stage threw: the pipeline refuses and audits the call; this is the
     // operator's trace. The error's message is left out on purpose — a classifier's

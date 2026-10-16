@@ -1,0 +1,67 @@
+---
+title: Install on Railway
+description: One Railway service built from the repository's Dockerfile, one volume at /data, the configuration in Railway variables, sign-in through GitHub.
+---
+
+On Railway, an instance is one service built from the repository's Dockerfile, with one volume mounted at `/data`, its configuration in Railway variables and sign-in through a GitHub OAuth App.
+
+## 1. The service
+
+1. Create a project and an empty service. Do not connect a repository, or connect it and disable automatic deployments: you deploy a verified build (step 5).
+2. Add one volume to the service, mounted at `/data`.
+3. Generate a domain or attach your own. Its `https://` origin is your public URL.
+
+## 2. Variables
+
+| Variable                                 | Value                                                                   |
+| ---------------------------------------- | ----------------------------------------------------------------------- |
+| `RAILWAY_DOCKERFILE_PATH`                | `deploy/docker/Dockerfile`                                              |
+| `RAILWAY_RUN_UID`                        | `0` — the entrypoint gives `/data` to the gateway's user and drops root |
+| `VAUBAAN_PUBLIC_URL`                     | `https://your-domain`                                                   |
+| `VAUBAAN_STORE_PATH`                     | `/data/gateway.db`                                                      |
+| `VAUBAAN_MASTER_KEY`                     | the output of `npm run gen-master-key`; keep a copy outside Railway     |
+| `VAUBAAN_ADMIN_EMAILS`                   | your address, as GitHub has it as your primary verified email           |
+| `VAUBAAN_SIGN_IN_GITHUB_KIND`            | `github`                                                                |
+| `VAUBAAN_SIGN_IN_GITHUB_CLIENT_ID`       | from step 3                                                             |
+| `VAUBAAN_SIGN_IN_GITHUB_CLIENT_SECRET`   | from step 3                                                             |
+| `VAUBAAN_SIGN_IN_GITHUB_INVITATION_ONLY` | `true` (or `VAUBAAN_SIGN_IN_GITHUB_ALLOWED_EMAIL_DOMAINS`)              |
+
+Railway sets `PORT`; do not set it. With a sign-in provider in the configuration no bootstrap token is needed.
+
+- **Leave `VAUBAAN_TRUSTED_PROXIES` unset.** Railway publishes no address range for its edge, so there is nothing safe to declare; the per-address limits are then one shared window and the activity records no address (accepted risk A2 of the threat model). Never set `0.0.0.0/0`.
+- **`VAUBAAN_CLIENT_IP_HEADER=x-real-ip` only after you verified it** on your instance: the procedure is in the [Railway guide](https://github.com/vaubaan/gateway/blob/main/deploy/railway.md#2-variables).
+- **The instance's own project is never a mission resource.** The gateway reads `RAILWAY_PROJECT_ID` and refuses that project to every mission; on an account that can see it, Railway's agent tool is unavailable. Still prefer a separate Railway workspace for the gateway, and never connect that workspace's token to the gateway itself.
+
+## 3. The GitHub OAuth App
+
+At GitHub, in the settings of your organisation or account: Developer settings → OAuth Apps → New OAuth App.
+
+- Homepage URL: your public URL.
+- Authorization callback URL: `https://your-domain/auth/callback/github`.
+- Leave device flow off. Generate a client secret; copy the client id and the secret into the variables of step 2.
+
+This app only signs people in. The GitHub App through which missions reach your repositories is created later from the interface: Settings → Administration → Company apps → GitHub ([Connect GitHub](/docs/providers/github)).
+
+## 4. Who may sign in
+
+GitHub is open to anyone: the gateway refuses to start with a GitHub provider that has neither allowed domains nor invitation only. With invitation only, the addresses of `VAUBAAN_ADMIN_EMAILS` are admitted and are administrators; everybody else needs an invitation (Settings → People → Invite). A person is admitted on the primary, verified address of their GitHub account only.
+
+## 5. Deploy a verified build
+
+Deploy the commit that passed the checks, from a clean archive of it — never `railway up` from your working copy, which uploads the directory you are in:
+
+```bash
+git checkout <the verified commit>
+npm ci && npm run ci && npm run test:e2e
+npm run docker:build && npm run docker:smoke
+git archive --format=tar HEAD | (rm -rf /tmp/vaubaan-release && mkdir /tmp/vaubaan-release && tar -x -C /tmp/vaubaan-release)
+cd /tmp/vaubaan-release && railway link && railway up --ci
+```
+
+Then open `https://your-domain/healthz` (it answers the version and the commit) and sign in.
+
+## 6. Backups
+
+Use Railway's volume backups, or make a consistent copy while the gateway runs ([backup and restore](/docs/operations/backup-and-restore)). Keep the master key separately, outside Railway: a copy of the volume opens no credential without it.
+
+The whole guide, with the git remote's limits behind Railway's edge and the master key rotation on Railway: [deploy/railway.md](https://github.com/vaubaan/gateway/blob/main/deploy/railway.md).

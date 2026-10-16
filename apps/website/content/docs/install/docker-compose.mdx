@@ -1,0 +1,38 @@
+---
+title: Install with Docker Compose
+description: Build the image from the repository and run it with the bundled Caddy proxy, which obtains the TLS certificate for your domain.
+---
+
+The reference Compose file runs the gateway, its data volume and a Caddy proxy that terminates TLS for your domain; it builds the gateway's image from the repository.
+
+## Steps
+
+Needs Docker with Compose v2, a DNS name pointing at the host, ports 80 and 443 reachable, and Node.js for the key script.
+
+```bash
+git clone https://github.com/vaubaan/gateway.git
+cd gateway
+cp deploy/config/.env.example deploy/config/.env
+cp deploy/config/gateway.example.yaml deploy/config/gateway.yaml
+npm run gen-master-key     # prints the value for VAUBAAN_MASTER_KEY
+openssl rand -hex 24       # prints a value for VAUBAAN_BOOTSTRAP_TOKEN
+```
+
+Edit `deploy/config/.env`: `GATEWAY_DOMAIN`, `VAUBAAN_PUBLIC_URL` (https, same host), `VAUBAAN_ADMIN_EMAILS`, and the two secrets above. Then:
+
+```bash
+docker compose --env-file deploy/config/.env -f deploy/compose.yaml up -d --build
+curl -s https://your-domain/healthz
+```
+
+Then the [first sign-in](/docs/install#first-sign-in).
+
+## What to know
+
+- **Pass `--env-file deploy/config/.env` on every Compose command** (`up`, `down`, `logs`, `config`): Compose reads `GATEWAY_DOMAIN` from it and hands that one variable to the proxy. The proxy receives nothing else; the master key, the bootstrap token and the identity provider's secret go to the gateway container only. `GATEWAY_DOMAIN` must be the host of `VAUBAAN_PUBLIC_URL`; nothing checks it for you.
+- **The YAML file wins over the environment, key by key, silently.** `gateway.example.yaml` ships with every key commented out, so the copy changes nothing until you uncomment a key; uncomment only what you want the file to own and remove the twin variable from `.env`. Both files are gitignored.
+- **Secrets** go in through `${NAME}` or `${file:/path}` references in the YAML, or `*_FILE` variables.
+- **Declare your proxy.** `deploy/config/.env.example` sets `VAUBAAN_TRUSTED_PROXIES` to Docker's address pool, where the Caddy container lives; narrow it to your proxy. Without a trusted proxy the instance believes no client address: the per-address limits become one window shared by all callers and the activity records no address (it says so in one warning at start).
+- **The gateway sets its own security headers**; the proxy must not add or override them. The proxy must not buffer responses (the MCP door streams) nor cap request bodies under `/git/` (a push streams through).
+
+Everything about the image, running it without Compose, and the operations: [deploy README](https://github.com/vaubaan/gateway/blob/main/deploy/README.md).

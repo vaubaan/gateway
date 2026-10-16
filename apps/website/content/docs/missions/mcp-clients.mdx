@@ -1,0 +1,68 @@
+---
+title: MCP clients
+description: Point Claude Code, Cursor or another MCP client at the execution door with a mission key, and name each agent with a label.
+---
+
+An agent reaches its mission through the instance's execution door, `https://your-domain/mcp`, over MCP's HTTP transport, with the mission key as a bearer token; any MCP client that can send an `Authorization` header works the same way.
+
+**Never run with Claude Code as the agent yet.** The project's suites drive both doors with the official MCP client; no person has yet pointed Claude Code at a running instance ([known limitations](/docs/known-limitations)). The configurations below follow each client's documentation.
+
+Keep the key in an environment variable, `VAUBAAN_MISSION_TOKEN`, set where the client runs; the configuration only refers to it.
+
+## Claude Code
+
+Put the kit's entry in the project's `.mcp.json`; Claude Code expands `${VAUBAAN_MISSION_TOKEN}` from the environment:
+
+```json
+{
+  "mcpServers": {
+    "vaubaan": {
+      "type": "http",
+      "url": "https://your-domain/mcp",
+      "headers": { "Authorization": "Bearer ${VAUBAAN_MISSION_TOKEN}" }
+    }
+  }
+}
+```
+
+Do not commit a `.mcp.json` that holds the secret itself.
+
+## Cursor
+
+Cursor reads `.cursor/mcp.json` in the project; it writes an environment variable as `${env:NAME}`:
+
+```json
+{
+  "mcpServers": {
+    "vaubaan": {
+      "url": "https://your-domain/mcp",
+      "headers": { "Authorization": "Bearer ${env:VAUBAAN_MISSION_TOKEN}" }
+    }
+  }
+}
+```
+
+## Any other client
+
+- Endpoint: `https://your-domain/mcp`, MCP over HTTP (POST).
+- Header: `Authorization: Bearer` followed by the mission key.
+- `tools/list` returns the tools of the mission's services; `GET https://your-domain/mcp/catalog` with the same header says whose key it is, the mission's resources and permissions.
+
+Check a key from a shell:
+
+```bash
+curl -sS https://your-domain/mcp \
+  -H "Authorization: Bearer $VAUBAAN_MISSION_TOKEN" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+The kit printed with the key carries this command for your instance.
+
+## Several agents on one key
+
+An orchestrator hands its sub-agents the same configuration, same endpoint and same key — never a key per agent. Each agent names itself with the header `X-Vaubaan-Agent: <label>` in its copy of the configuration, or with `_meta.agent` on each `tools/call` when one process sends the calls of several agents. The label appears in the activity; it is attribution only, never an identity, and no decision reads it.
+
+## Which tools are listed
+
+Every tool of a service for which the mission holds an account and at least one permission is listed; a listed tool whose own permission the mission does not hold is refused with `risk-not-accepted` when called. Tools of an experimental plugin are never listed.

@@ -1288,6 +1288,13 @@ const RULES: Readonly<Record<string, Rule>> = {
   'PluginStatsReader.refresh': exempt(
     'refreshes the cached copy of the public plugin statistics read from the collector: nothing of the instance is created, changed or revoked',
   ),
+  'InstanceProfiler.countCall': exempt(
+    'counts, in memory, the calls decided since the last telemetry profile: nothing of the instance is stored, changed or revoked',
+  ),
+  'InstanceProfiler.dayIdFor': exempt(
+    'draws, in memory, the telemetry day identifier of a UTC day: never stored, nothing of the instance changes',
+  ),
+  'InstanceProfiler.profile': READ,
   // ── authorization server of the management door ───────────────────────────
   'ClientRegistry.statusOf': READ,
   'ClientRegistry.view': READ,

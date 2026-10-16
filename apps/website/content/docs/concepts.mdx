@@ -1,0 +1,73 @@
+---
+title: Concepts
+description: The words of Vaubaan Gateway — instance, account, resource, mission, key, permission, preset, limit, ask me first, activity — and the names the protocol keeps for them.
+---
+
+A mission is what a person allows an agent to do through Vaubaan Gateway: which accounts and resources it may touch, which permissions it holds, the limits of each, and which actions ask first. The other words of the interface follow from it.
+
+## Instance
+
+One running Vaubaan Gateway: one process, one embedded database, on your network, for one company. It signs people in through your identity provider (OpenID Connect) or GitHub, and holds the credentials of the accounts connected to it, encrypted under a master key you keep. There is no hosted service and no tenant.
+
+## Account
+
+A connection to one service — a GitHub organisation through your company's GitHub App, a Supabase organisation, a Stripe account, an SSH host. A person connects it once; its credential stays on the instance. The person who connected it owns it and can give access to a teammate or a team, possibly restricted to some permissions.
+
+## Resource
+
+What a mission selects inside an account: a repository, a project, a database, a DNS zone, a host. An owner can label a resource with an environment such as `staging` or `prod`; some permissions exist only for one environment (`supabase[staging].migration-write`).
+
+## Mission
+
+The unit of delegation. A mission names the accounts and resources the agent may touch, its permissions, the limits of each, and the actions that ask its creator first. It can run once or reload its limits every period, expire, be stopped, and be worked on by teammates, each with their own key.
+
+## Key
+
+The secret an agent presents to the gateway, one per mission and per holder. It opens the execution door of that mission and nothing else: not the interface, not the management door. It is shown once; the gateway keeps a digest. Replace it or stop the mission at any time.
+
+## Permission
+
+A named risk from a service's catalog, such as `github.merge-protected` or `supabase[prod].row-write`, with the reason it exists and one severity word (low, medium, high, critical) computed from six axes: undo, blast radius, data, cost, visible to, lasts. A mission stores an explicit list of permissions; nothing is ever "all". Every service's permissions are on its [plugin page](/plugins).
+
+## Preset
+
+A named set of permissions with limits that pre-fills a mission for one account — "Read-only", "Developer", "Release manager". The person creating the mission adjusts it; the mission stores the explicit list, never the preset.
+
+## Limit
+
+How many times a permission may be used per period and how fast (per minute). A limit that is reached refuses the call with `budget-exhausted` and a link where the mission's creator can give more.
+
+## Ask me first
+
+A permission marked "ask me first" makes each use wait for the mission's creator, who answers under "Waiting for you" in the interface. The gateway never holds a call: it refuses it with `approval-required` and the link of the request; the agent replays the same call once approved. The other permissions "run freely", within their limits.
+
+## Activity
+
+The record of every call, allowed or refused, with the permissions it needed, whose key made it and the decision taken, and of every change a person made. A call's arguments are kept as a fingerprint only.
+
+## The other words
+
+- **Teammate**: a person added to a mission, with their own key and the mission's shared limits.
+- **Connected app**: an agent a person authorized through OAuth on the [management door](/docs/missions/management-door), which may prepare missions in that person's name.
+- **Company app**: your company's own app at a service (a GitHub App, a Supabase OAuth app), registered by an administrator once per instance.
+- **Administrator**: a person matching the instance's admin rule; configures the instance, never answers another person's requests.
+
+## The same things, in the protocol
+
+The interface speaks to people; tool names, refusal codes, ids, the API and the configuration keep the protocol's names.
+
+| In the interface             | In the protocol, the code and the spec                |
+| ---------------------------- | ----------------------------------------------------- |
+| account                      | connection                                            |
+| access (Give access)         | share                                                 |
+| permission                   | risk, by its `RiskId`                                 |
+| limits (per day, per minute) | budget: quota and rate limit                          |
+| runs freely / ask me first   | gate: `auto` / `approval`                             |
+| key, machine key             | mission token: member token, named token              |
+| Replace key                  | rotate                                                |
+| Waiting for you              | request: a claim (limit reached), an approval request |
+| connected app                | delegation, OAuth client                              |
+| Activity                     | audit, session                                        |
+| teammate, team               | mission member, group                                 |
+| administrator                | operator                                              |
+| service, company app         | provider, provider app                                |

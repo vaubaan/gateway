@@ -476,7 +476,13 @@ describe('streaming and community telemetry (spec §9)', () => {
   beforeEach(async () => {
     batches = [];
     instance = await executionInstance({
-      env: { VAUBAAN_TELEMETRY_ENABLED: 'true', VAUBAAN_TELEMETRY_COLLECTOR_URL: COLLECTOR_URL },
+      // plugin-health: what these scenarios are about (a decision report is written
+      // for the abandoned call too: the gateway did decide it).
+      env: {
+        VAUBAAN_TELEMETRY_ENABLED: 'true',
+        VAUBAAN_TELEMETRY_COLLECTOR_URL: COLLECTOR_URL,
+        VAUBAAN_TELEMETRY_LEVEL: 'plugin-health',
+      },
       deps: {
         telemetryFetch: async (_input: string | URL | Request, init?: RequestInit) => {
           if (typeof init?.body === 'string') batches.push(init.body);

@@ -1,0 +1,33 @@
+---
+title: Operations
+description: Running an instance day to day — health, logs, audit retention, the reverse proxy — and the procedures for backup, key rotation, upgrade and telemetry.
+---
+
+Operating an instance means keeping one process, one SQLite file and one master key healthy: checking its health, reading its logs, backing up the file and the key apart, rotating the key, upgrading the image.
+
+- [Backup and restore](/docs/operations/backup-and-restore)
+- [Master key rotation](/docs/operations/master-key-rotation)
+- [Upgrade](/docs/operations/upgrade)
+- [Telemetry](/docs/operations/telemetry)
+
+## Health
+
+`GET /healthz` answers 200 `{"status":"ok",...}` with the version and the commit; 503 `degraded` when the store does not answer, 503 `unavailable` when the process could not start. The image's health check and the Compose file use it.
+
+## Logs
+
+JSON lines on stdout and stderr. Mission keys appear by prefix only and configured secrets are redacted. `VAUBAAN_LOG_LEVEL=debug` for more.
+
+## Audit retention
+
+`retention_days` (90 by default) purges the activity entries and the session history older than that, at start and then every hour. What the current period of a limit is computed from is kept; decided requests and approvals are not purged.
+
+## The reverse proxy
+
+Declare it in `trusted_proxies` so the client address it appends to `X-Forwarded-For` is believed: without it, the per-address limits are one window shared by all callers and the activity records no address. The proxy must terminate TLS for the host of `public_url`, must not buffer responses (the MCP door streams), must not cap request bodies under `/git/`, and must not add or override the security headers the gateway sets itself.
+
+## One process
+
+The instance is one process: rate-limit windows, caches and timers live in its memory, and a second process would neither share nor replace them. A restart or the loss of the host is an outage; durability is what your backups give.
+
+More: [deploy README, Operations](https://github.com/vaubaan/gateway/blob/main/deploy/README.md#operations).

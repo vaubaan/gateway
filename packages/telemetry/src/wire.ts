@@ -33,6 +33,17 @@ import {
   type InstanceProfileInput,
 } from './usage.ts';
 
+/**
+ * What an enabled instance sends (spec §9): `plugin-health` alone, or with
+ * `usage-stats`. Off is not a level: it is telemetry disabled.
+ */
+export const TELEMETRY_LEVELS = ['plugin-health', 'usage-stats'] as const;
+export type TelemetryLevel = (typeof TELEMETRY_LEVELS)[number];
+
+export function isTelemetryLevel(value: unknown): value is TelemetryLevel {
+  return typeof value === 'string' && (TELEMETRY_LEVELS as readonly string[]).includes(value);
+}
+
 export const MAX_REPORTS_PER_BATCH = 50;
 /**
  * An instance sends one profile a day: more than two in a batch is not an

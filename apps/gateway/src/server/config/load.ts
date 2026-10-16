@@ -5,6 +5,8 @@
  * over environment variables, key by key. Validation collects every problem
  * and throws one `ConfigError` naming each YAML path and its variable(s).
  */
+import { isTelemetryLevel, TELEMETRY_LEVELS, type TelemetryLevel } from '@vaubaan/telemetry';
+
 import { KEY_BYTES } from '../crypto/aead';
 import { isClientIpHeader, isTrustedProxyEntry, type ClientIpHeader } from '../http/client-ip';
 import { parseDuration } from './duration';
@@ -282,6 +284,7 @@ function validate(raw: RawTree, issues: IssueList, env: EnvSource): InstanceConf
   const telemetryEnabled = r.bool(keySpec('telemetry.enabled'));
   // A null or mistyped value is not a decision: only a boolean pins the toggle.
   const telemetrySetByConfig = typeof getPath(raw, 'telemetry.enabled') === 'boolean';
+  const telemetryLevel = readTelemetryLevel(r);
   const collector = keySpec('telemetry.collector_url');
   const collectorUrl = r.url(collector.path, {
     fallback: collector.default,
@@ -317,6 +320,7 @@ function validate(raw: RawTree, issues: IssueList, env: EnvSource): InstanceConf
     telemetry: {
       enabled: telemetryEnabled,
       enabledSetByConfig: telemetrySetByConfig,
+      level: telemetryLevel,
       collectorUrl,
     },
     retentionDays,
@@ -532,6 +536,18 @@ function readClientRegistrationPolicy(r: Reader): ClientRegistrationPolicy {
     path,
     `expected one of ${CLIENT_REGISTRATION_POLICIES.join(', ')}, got "${policy}"`,
     envNamesFor(path),
+  );
+  return fallback;
+}
+
+function readTelemetryLevel(r: Reader): TelemetryLevel {
+  const fallback: TelemetryLevel = 'usage-stats';
+  const level = r.string('telemetry.level', { fallback }) ?? fallback;
+  if (isTelemetryLevel(level)) return level;
+  r.issues.add(
+    'telemetry.level',
+    `expected one of ${TELEMETRY_LEVELS.join(', ')}, got "${level}"`,
+    [...envNamesFor('telemetry.level')],
   );
   return fallback;
 }

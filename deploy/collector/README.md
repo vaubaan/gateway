@@ -101,7 +101,8 @@ success and otherwise a fixed keyword (`network`, `timeout`,
   is `approval` or `none`; `tool` is null when the agent named a tool the
   plugin does not declare.
 - `instance_profiles`: one per instance and UTC day. Counts are buckets (`0`,
-  `1`, `2-5`, `6-20`, `21-100`, `101-1000`, `>1000`), never exact. `day_id` is
+  `1`, `2-5`, `6-20`, `21-100`, `101-1000`, `>1000`), never exact;
+  `deployment` is `docker`, `railway`, `fly` or `other`. `day_id` is
   128 random bits the instance draws again every UTC day and keeps in memory
   only: it counts the instances of a day, it cannot follow one from a day to
   the next, and it is never attached to a plugin-health or decision report.

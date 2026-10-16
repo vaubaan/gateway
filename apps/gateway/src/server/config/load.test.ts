@@ -40,6 +40,7 @@ describe('loadInstanceConfig — required keys', () => {
     expect(config.telemetry).toEqual({
       enabled: false,
       enabledSetByConfig: false,
+      level: 'usage-stats',
       collectorUrl: new URL(DEFAULT_TELEMETRY_COLLECTOR_URL),
     });
     expect(config.retentionDays).toBe(90);

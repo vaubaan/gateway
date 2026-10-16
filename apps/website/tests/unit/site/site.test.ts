@@ -1,0 +1,159 @@
+/**
+ * The site as data (`buildSite`): every page has its Markdown twin, llms.txt
+ * and llms-full.txt carry every docs page, the sitemap every page, robots.txt
+ * welcomes every crawler, and every link into the repository names a file
+ * that exists. Built offline, without writing anything.
+ */
+import { existsSync, readdirSync, statSync } from 'node:fs';
+import { join, relative, sep } from 'node:path';
+
+import { beforeAll, describe, expect, it } from 'vitest';
+
+import { buildSite, DOCS_DIR_FROM_REPO, type BuiltSite } from '../../../src/content/build-site';
+import { docPathOf } from '../../../src/content/docs';
+import { absolute, NAMED_CRAWLERS, robotsTxt, twinPathOf } from '../../../src/content/outputs';
+import { loadPlugins } from '../../../src/content/plugins';
+import { readRepoFile, REPO_ROOT } from '../../../src/content/repo';
+import { parseThresholds, THRESHOLDS_SOURCE } from '../../../src/content/thresholds';
+import { markdownTwinOf } from '../../../src/site/routing';
+
+let site: BuiltSite;
+
+beforeAll(async () => {
+  site = buildSite({
+    repoRoot: REPO_ROOT,
+    plugins: await loadPlugins(REPO_ROOT),
+    thresholds: parseThresholds(readRepoFile(THRESHOLDS_SOURCE)),
+    snapshot: { fetchedAt: null, rows: [], problem: 'offline' },
+    lastModified: () => null,
+  });
+}, 60_000);
+
+function handwrittenDocPaths(): string[] {
+  const dir = join(REPO_ROOT, DOCS_DIR_FROM_REPO);
+  const walk = (d: string): string[] =>
+    readdirSync(d).flatMap((name) => {
+      const path = join(d, name);
+      if (statSync(path).isDirectory()) return walk(path);
+      return name.endsWith('.mdx') ? [path] : [];
+    });
+  return walk(dir)
+    .filter((file) => !readRepoFile(relative(REPO_ROOT, file)).includes('\ngenerated: true\n'))
+    .map((file) => docPathOf(relative(dir, file).split('/').join(sep)));
+}
+
+describe('the pages of the site', () => {
+  it('include every hand-written docs page, every generated one and every plugin', () => {
+    const paths = site.pages.map((p) => p.path);
+    for (const path of handwrittenDocPaths()) expect(paths).toContain(path);
+    for (const doc of site.generatedDocs) expect(paths).toContain(doc.page.path);
+    for (const plugin of site.plugins) {
+      expect(paths).toContain(`/plugins/${plugin.id}`);
+      expect(paths).toContain(`/docs/providers/${plugin.id}`);
+    }
+    for (const path of ['/', '/docs', '/plugins', '/plugins/health', '/trust']) {
+      expect(paths).toContain(path);
+    }
+    expect(new Set(paths).size).toBe(paths.length);
+  });
+
+  it('each have a Markdown twin, served at the same path plus .md and when asked for Markdown', () => {
+    for (const page of site.pages) {
+      const twin = twinPathOf(page.path);
+      expect(site.files.get(twin.slice(1)), twin).toBe(page.markdown);
+      expect(page.markdown.startsWith(`# ${page.title}\n`), page.path).toBe(true);
+      if (page.group !== 'home') expect(markdownTwinOf(page.path), page.path).toBe(twin);
+    }
+  });
+
+  it('open with a sentence that defines their subject, after the title', () => {
+    for (const page of site.pages) {
+      const first = page.markdown.split('\n\n')[1] ?? '';
+      expect(first.length, page.path).toBeGreaterThan(40);
+      expect(first.startsWith('#'), page.path).toBe(false);
+    }
+  });
+});
+
+describe('llms.txt and llms-full.txt', () => {
+  it('llms.txt lists every page but the home page, with its .md address', () => {
+    const llms = site.files.get('llms.txt') ?? '';
+    expect(llms.startsWith('# Vaubaan Gateway\n\n> ')).toBe(true);
+    for (const page of site.pages.filter((p) => p.group !== 'home')) {
+      expect(llms, page.path).toContain(
+        `(${absolute(twinPathOf(page.path))}): ${page.description}`,
+      );
+    }
+  });
+
+  it('llms-full.txt carries the whole of every docs, plugin and trust page', () => {
+    const full = site.files.get('llms-full.txt') ?? '';
+    for (const page of site.pages.filter((p) => p.group !== 'home')) {
+      expect(full, page.path).toContain(
+        `Source: ${absolute(page.path)}\n\n${page.markdown.trim()}`,
+      );
+    }
+  });
+});
+
+describe('robots.txt and sitemap.xml', () => {
+  it('robots.txt allows every crawler, the AI ones by name, and disallows nothing', () => {
+    const robots = robotsTxt();
+    expect(site.files.get('robots.txt')).toBe(robots);
+    for (const agent of ['GPTBot', 'ClaudeBot', 'PerplexityBot', 'Google-Extended', 'CCBot']) {
+      expect(NAMED_CRAWLERS).toContain(agent);
+      expect(robots).toContain(`User-agent: ${agent}\nAllow: /\n`);
+    }
+    expect(robots).toContain('User-agent: *\nAllow: /\n');
+    expect(robots).not.toMatch(/Disallow/);
+    expect(robots).toContain('Sitemap: https://vaubaan.com/sitemap.xml');
+  });
+
+  it('sitemap.xml lists every page by its canonical address', () => {
+    const sitemap = site.files.get('sitemap.xml') ?? '';
+    for (const page of site.pages) expect(sitemap).toContain(`<loc>${absolute(page.path)}</loc>`);
+    expect(sitemap.match(/<url>/g)?.length).toBe(site.pages.length);
+  });
+});
+
+describe('plugins.json', () => {
+  it('carries every plugin with its version, status, risks, presets and a health that is never a rate offline', () => {
+    const json = JSON.parse(site.files.get('plugins.json') ?? '{}') as {
+      plugins: { id: string; version: string; status: string; health: { state: string } }[];
+    };
+    expect(json.plugins.map((p) => p.id)).toEqual(site.plugins.map((p) => p.id));
+    for (const plugin of json.plugins) {
+      expect(['stable', 'experimental']).toContain(plugin.status);
+      expect(plugin.health).toEqual({ state: 'not-enough-reports' });
+    }
+  });
+});
+
+describe('links into the repository', () => {
+  it('name files and folders that exist', () => {
+    const missing = new Set<string>();
+    for (const page of site.pages) {
+      for (const match of page.markdown.matchAll(
+        /https:\/\/github\.com\/vaubaan\/gateway\/(?:blob|tree)\/main\/([^)#\s]+)/g,
+      )) {
+        const path = decodeURI(match[1] ?? '').replace(/\/$/, '');
+        if (!existsSync(join(REPO_ROOT, path))) missing.add(`${page.path} → ${path}`);
+      }
+    }
+    expect([...missing]).toEqual([]);
+  });
+
+  it('inside the site name pages that exist', () => {
+    const paths = new Set(site.pages.map((p) => p.path));
+    const files = new Set(site.files.keys());
+    const missing = new Set<string>();
+    for (const page of site.pages) {
+      for (const match of page.markdown.matchAll(/\]\((\/[^)#\s]*)(#[^)\s]*)?\)/g)) {
+        const target = match[1] ?? '';
+        if (!paths.has(target) && !files.has(target.slice(1)))
+          missing.add(`${page.path} → ${target}`);
+      }
+    }
+    expect([...missing]).toEqual([]);
+  });
+});

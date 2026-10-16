@@ -625,9 +625,12 @@ write …)`), instead of GitHub's bare 403. The push token of
   is still gated as a placeholder: nothing is sent until a release publishes it or
   `telemetry.collector_url` names another collector. The project's collector is
   `deploy/collector/schema.sql` (the store) behind the site's endpoint
-  (`apps/website`); it also accepts the reports of the coming `usage-stats` level
-  (decisions with their refusal code and risks, a daily instance profile with a
-  day identifier drawn again every day), which the gateway does not send yet.
+  (`apps/website`). `telemetry.level` (`VAUBAAN_TELEMETRY_LEVEL`) chooses what an
+  enabled instance sends: `plugin-health`, or `usage-stats` (the default), which adds
+  one decision per call (allowed or the refusal code, the risks touched without their
+  environment, whether it asked first) and one profile a day (version, where it runs,
+  runtime, sign-in kinds, and counts of people, missions, accounts and calls as
+  ranges), with an identifier drawn again every day and sent with nothing else.
   A collector of your own now receives `{"plugin_health": [...]}` instead of a JSON
   array.
 - **Embedded store and encryption at rest.** SQLite (`better-sqlite3`, `STRICT` tables,

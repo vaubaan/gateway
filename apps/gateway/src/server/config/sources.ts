@@ -13,6 +13,7 @@
  * handbook table and the example files are derived from it, never the other
  * way round; `keys-doc.test.ts` holds the handbook to it.
  */
+import { TELEMETRY_LEVELS } from '@vaubaan/telemetry';
 import { parse as parseYaml } from 'yaml';
 import { CLIENT_IP_HEADERS } from '../http/client-ip';
 
@@ -188,6 +189,14 @@ const KEY_TABLE = [
     minLength: 32,
   },
   { path: 'telemetry.enabled', env: 'VAUBAAN_TELEMETRY_ENABLED', kind: 'bool', default: false },
+  {
+    path: 'telemetry.level',
+    env: 'VAUBAAN_TELEMETRY_LEVEL',
+    kind: 'string',
+    format: 'enum',
+    default: 'usage-stats',
+    oneOf: TELEMETRY_LEVELS,
+  },
   {
     path: 'telemetry.collector_url',
     env: 'VAUBAAN_TELEMETRY_COLLECTOR_URL',

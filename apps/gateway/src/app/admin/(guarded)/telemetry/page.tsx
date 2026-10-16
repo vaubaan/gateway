@@ -89,6 +89,13 @@ export default async function TelemetryPage({ searchParams }: Props) {
               value: `${state.enabled ? 'on' : 'off'} · ${SOURCE_WORDS[state.source]}`,
             },
             {
+              term: 'What is sent',
+              value:
+                overview.level === 'usage-stats'
+                  ? 'plugin health and usage statistics (telemetry.level: usage-stats)'
+                  : 'plugin health only (telemetry.level: plugin-health)',
+            },
+            {
               term: 'Reports go to',
               value: (
                 <>
@@ -138,8 +145,21 @@ export default async function TelemetryPage({ searchParams }: Props) {
         <div className={styles.prose}>
           <p>
             One report per call a plugin executed, sent in batches. This is the exact request body
-            for one report from this gateway — {PLUGIN_REPORT_KEYS.length} fields and nothing else:
+            for one report from this gateway — {PLUGIN_REPORT_KEYS.length} fields and nothing else
+            {overview.level === 'usage-stats' &&
+              ', then the decision report the same call produces'}
+            :
           </p>
+          {overview.level === 'usage-stats' && (
+            <p>
+              With usage statistics, the gateway also sends one decision per call it decides
+              (allowed, or the refusal code; the permissions it touched, without their environment;
+              whether it asked first), and once a day a profile of this gateway: its version, where
+              it runs, the runtime, the kinds of sign-in, and counts of people, missions, accounts
+              and calls as ranges (“2-5”, never 3). The profile carries an identifier drawn again
+              every day and sent with nothing else.
+            </p>
+          )}
         </div>
         <div className={styles.block}>
           <CodeBlock label="One report" testId="telemetry-sample" copy={false}>
@@ -150,8 +170,8 @@ export default async function TelemetryPage({ searchParams }: Props) {
           <Mono>outcome</Mono> is one of success, upstream-error, classification-error,
           execution-error; <Mono>error_class</Mono> is a fixed keyword or an HTTP status, never a
           message. Never sent: the arguments of a call or a hash of them, resource references,
-          mission identifiers, user identifiers, any identifier of this gateway, its address or its
-          host name, the text of a service’s error.
+          mission identifiers, user identifiers, environment labels, any lasting identifier of this
+          gateway, its address or its host name, the text of a service’s error.
         </Hint>
       </Section>
     </>

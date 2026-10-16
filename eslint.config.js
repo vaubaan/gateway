@@ -32,6 +32,9 @@ export default tseslint.config(
       'vitest.config.ts',
       // Next.js generates this file; the triple-slash reference is required.
       '**/next-env.d.ts',
+      // fumadocs-mdx generates the site's collections (apps/website, `npm run generate`).
+      'apps/website/.source/**',
+      'apps/website/source.config.ts',
     ],
   },
   js.configs.recommended,

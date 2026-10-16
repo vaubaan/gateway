@@ -442,6 +442,17 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     logger,
     build,
     fetch: deps.telemetryFetch,
+    profileSource: {
+      users: async () => (await store.users.list()).filter((u) => u.status === 'active').length,
+      activeMissions: (now) => store.missions.countActive(now.toISOString()),
+      accountsByProvider: async () => {
+        const counts: Record<string, number> = {};
+        for (const c of await store.connections.list()) {
+          if (c.status !== 'revoked') counts[c.provider] = (counts[c.provider] ?? 0) + 1;
+        }
+        return counts;
+      },
+    },
   });
   opened.push(() => telemetry.stop());
   const instance = createInstanceModule({
