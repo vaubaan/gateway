@@ -17,6 +17,7 @@ import context7Plugin from '@vaubaan/plugin-context7';
 import flyPlugin from '@vaubaan/plugin-fly';
 import githubPlugin from '@vaubaan/plugin-github';
 import gmailPlugin from '@vaubaan/plugin-gmail';
+import miroPlugin from '@vaubaan/plugin-miro';
 import railwayPlugin from '@vaubaan/plugin-railway';
 import resendPlugin from '@vaubaan/plugin-resend';
 import { createRegistry, type PluginRegistry, type ProviderPlugin } from '@vaubaan/plugin-sdk';
@@ -39,6 +40,7 @@ export const SHIPPED_PLUGINS: readonly ProviderPlugin[] = [
   gmailPlugin,
   flyPlugin,
   context7Plugin,
+  miroPlugin,
 ];
 
 export async function buildShippedRegistry(): Promise<PluginRegistry> {

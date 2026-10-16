@@ -22,6 +22,7 @@ tracks:
   - plugins/cloudflare-dns/tests/
   - plugins/context7/tests/
   - plugins/gmail/tests/
+  - plugins/miro/tests/
   - plugins/stripe/tests/
   - packages/gateway-core/tests/
   - apps/gateway/tests/
@@ -370,6 +371,11 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/gmail/tests/unit/plugin.test.ts`                                                                  |        27 |
 | `plugins/gmail/tests/unit/q-parser.test.ts`                                                                |        32 |
 | `plugins/gmail/tests/unit/risk-catalog.test.ts`                                                            |        45 |
+| `plugins/miro/tests/unit/classify.test.ts`                                                                 |        16 |
+| `plugins/miro/tests/unit/execute.test.ts`                                                                  |        25 |
+| `plugins/miro/tests/unit/identifiers.test.ts`                                                              |        15 |
+| `plugins/miro/tests/unit/plugin.test.ts`                                                                   |         7 |
+| `plugins/miro/tests/unit/risk-catalog.test.ts`                                                             |         8 |
 | `plugins/railway/tests/unit/classify.test.ts`                                                              |        22 |
 | `plugins/railway/tests/unit/data-model.test.ts`                                                            |         1 |
 | `plugins/railway/tests/unit/identifier-injection.test.ts`                                                  |       294 |
@@ -1073,9 +1079,41 @@ groupings reported, never read as a conjunction), `injection.test.ts`
 segment with no dot, separator or escape; `labelRef` is a label id or a
 label name, never a dot segment), `data-model` (5).
 
+**Miro** (71) — `plugin.test.ts` (7): kit (30 tools, the six named risks
+touched, no fallback hit, `assertIdentifiersRefused` with item, frame and
+connector ids found as path segments), identity, version, catalog path,
+**no environment anywhere** (no `envScopable` entity, no env-scoped risk, no
+qualified preset entry). `classify` (16): the slice of every tool, board
+resolution (a board outside the mission, none, several, more than 50 on
+`list_boards`), **`list_boards` names every board it reads in one list
+segment**, **the objects sent to Miro closed per item type and flat**
+(a card's `assigneeId`, a nested value, a key outside the allowlist), the
+connector rules (distinct ends, snap and shape values, captions), Miro's
+bounds (limits, offset, item type, tag title and colour), **the bulk call:
+1 to 20 elements of the four item types, each closed like its typed tool**.
+`risk-catalog` (8): every tool touches exactly its risks (a deletion
+`content-write` + its delete risk, the bulk call `content-write` +
+`bulk-create`), the presets and their gates (`facilitator` asks first for
+every deletion), one mission at every ceiling under Miro's 100,000 credits a
+minute, **`list_boards` priced at its fan-out (one read per mission board,
+up to 50)**. `identifiers` (15): the board ref round trip (`=` ↔ `~`), **a
+board in Miro's spelling refused, never converted, the ref to use named only
+when the mission holds that board**, hostile board, item, tag and cursor
+values refused with nothing sent (the `~` and `=` of a board spelling on
+another id, a board mixing both), the URL carrying the `%3D`-encoded Miro
+id. `execute` (25): request shapes per
+type, **the type check before an update or a deletion (a frame id given to
+`delete_sticky_note` sends no `DELETE`)**, **`remove_tag` always sends its
+`tag_id` query (without it the request would delete the item)**,
+`parent_frame_id: null`, a `__proto__` key refused, 204 confirmations, 401 / 403 /
+404 / 429 thrown, declined calls with nothing sent, discovery (team from the
+token context, paging, the 500-board ceiling, a board id outside the
+grammar skipped with a warning, refused payloads) and `verify` (missing
+scope, Miro's 400 "invalid token").
+
 **Structural — `apps/gateway/tests/unit/structural/catalog-caps-enforced.test.ts`**
-(12) — ADR [[scope-caps-not-enforced-in-v5-0]]: the v5.0 door has no cap
-stage, so no shipped catalog may declare a `caps` block or an
+(one per shipped plugin, and the cases of the check itself) — ADR [[scope-caps-not-enforced-in-v5-0]]: the v5.0 door has no cap
+stage, so none of the shipped catalogs may declare a `caps` block or an
 infra limit the gateway does not enforce (one test per plugin); the check
 itself flags both and lets the rate ceiling through, and its list of
 enforced limits is pinned to what the code enforces today.

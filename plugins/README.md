@@ -18,8 +18,8 @@ end with a command that checks your work; between steps 4 and 8 the copied
 tests are broken on purpose, and `npx tsc -p plugins/<id> --noEmit` is the
 check to run after each file.
 
-- Shipped plugins: `cloudflare-dns`, `context7`, `fly`, `github`, `gmail` (experimental),
-  `railway`, `resend`, `ssh`, `stripe`, `supabase`, `upstash-redis`, `vercel`.
+- Shipped plugins: every folder of `plugins/` but `_template`, registered in
+  [`shipped-plugins.ts`](../apps/gateway/src/server/compose/shipped-plugins.ts).
   Their modelling notes are indexed in
   [`docs/handbook/providers/README.md`](../docs/handbook/providers/README.md).
 - The scaffold: [`_template`](./_template/README.md), a complete plugin for an

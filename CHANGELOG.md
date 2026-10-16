@@ -655,7 +655,7 @@ write …)`), instead of GitHub's bare 403. The push token of
   (which also checks that every sampled slice reads back as itself), `assertNoWildcard`,
   `assertPresetsValid`, `declaredOnly` and `refusalText`. `plugins/_template` is the
   scaffold and `plugins/README.md` the step-by-step guide.
-- **Ten provider plugins.**
+- **Provider plugins.**
   - **GitHub** `3.0.0` — a company GitHub App; a per-call installation token scoped to
     the repository; one resource per repository. Presets `read-only`, `developer`,
     `release-manager`.
@@ -688,6 +688,10 @@ write …)`), instead of GitHub's bare 403. The push token of
   library index it can query. One permission, `context7.query-docs` (the agent's
   question is sent to Context7), preset `read-only`. No environment. Arguments the
   tools do not declare are refused, the upstream server's aliases included.
+- **Miro plugin** (`@vaubaan/plugin-miro` 0.1.0): boards, items, frames, connectors and
+  tags; the non-expiring access token of a Miro app (`api-key`); one resource per board,
+  no environment; bulk creation of up to 20 items as its own permission; presets
+  `read-only`, `scribe` and `facilitator` (every deletion asks first).
 - **Project files.** `LICENSE`, `CONTRIBUTING.md` (from a fresh clone to a pull
   request), `CODE_OF_CONDUCT.md`, `SECURITY.md` (private reporting, scope, trust model),
   four issue forms and a pull request template; `docs/handbook/threat-model.md` lists

@@ -17,6 +17,7 @@
     "@vaubaan/plugin-fly": "*",
     "@vaubaan/plugin-github": "*",
     "@vaubaan/plugin-gmail": "*",
+    "@vaubaan/plugin-miro": "*",
     "@vaubaan/plugin-railway": "*",
     "@vaubaan/plugin-resend": "*",
     "@vaubaan/plugin-sdk": "*",

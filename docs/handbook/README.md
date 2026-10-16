@@ -80,6 +80,8 @@ One handbook per provider plugin (`plugins/<id>`):
 | [providers/upstash-redis](providers/upstash-redis.md)   | `@vaubaan/plugin-upstash-redis`: plugin and risk model.                                                                                 |
 | [providers/ssh](providers/ssh.md)                       | `@vaubaan/plugin-ssh`: bash over SSH.                                                                                                   |
 | [providers/gmail](providers/gmail.md)                   | `@vaubaan/plugin-gmail`, experimental and classifier-only: it classifies the modelled tools and discovers the mailbox, exposes no tool. |
+| [providers/fly](providers/fly.md)                       | `@vaubaan/plugin-fly`: the apps of one Fly organization, their machines, volumes, secrets, IPs and certificates.                        |
+| [providers/miro](providers/miro.md)                     | `@vaubaan/plugin-miro`: boards, items, frames, connectors and tags.                                                                     |
 
 ## Legacy
 
