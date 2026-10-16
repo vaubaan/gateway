@@ -235,6 +235,29 @@ The cost is two GitHub requests and up to three comparisons for a create, and
 for an update that brings more than one commit; one commit on top of `old` is
 reviewed from `old` alone.
 
+**Amendment of 2026-10-16 — the default branch is always a candidate, and a
+large commit is read by its trees.** Found on the dogfood: a branch cut from
+`main` just after `v5` was merged into it, pushed once `main` had moved on.
+The nearest heads in its history by date were three old `v5` work branches;
+each range held the merge of `v5` into `main` (1762 files against its first
+parent), and the per-commit review refused it ("changes 300 or more files and
+cannot be reviewed") — while `main` brought one commit. The default branch
+was only a fallback when no nearest head was reviewable. Now:
+
+- the default branch's comparison is **always** among the candidates (for a
+  create, and for an update that brings more than one commit), the narrowest
+  kept. It is a branch head like the others: the reasoning above holds;
+- a commit whose file list GitHub truncates (300 files) is no longer a
+  refusal: its `.github`/`workflows` entries are compared with those of each
+  of its parents (`workflowPathsOfCommit`, the trees of the inspection of ADR
+  [git-push-inspected-before-it-leaves](git-push-inspected-before-it-leaves.md)).
+  Equal to one parent's: it runs what that parent runs, and that parent's
+  commits are reviewed or already on a branch — no change. Otherwise the
+  paths that differ from the first parent; unreadable: a change of
+  `.github/workflows/`. The same merge of a large branch into a work branch
+  (test "a merge of a moved v5") is no longer refused either — the stand-in
+  of GitHub listed no file for a merge, which hid it.
+
 ### D4 bis. The capabilities the door advertises
 
 | Capability              | Advertised                | Why                                                                                                                                                          |

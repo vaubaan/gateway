@@ -2860,11 +2860,20 @@ reaches github.com.
   line, hostile ref names, duplicates, 51 commands): whatever is accepted is
   what the door implements, with `report-status`, unique and well-formed
   refs; 2000 mutated byte strings answered, never thrown; the in-flight bound.
-- **`plugins/github/tests/unit/git-moves.test.ts`** (6) — a force-push and a
+- **`plugins/github/tests/unit/git-moves.test.ts`** (7) — a force-push and a
   delete as receive-pack compare-and-swap on the reviewed old id; a provider
   failure on the second ref reported on that ref, before any ref fails the
-  call; an intermediate commit's workflow path counted; a commit of 300 files
-  refused.
+  call; an intermediate commit's workflow path counted; a commit GitHub lists
+  300 files of read by its trees — the same workflows as its parent: none;
+  different: the changed path.
+- **`tests/integration/git/git-remote-base-merge.test.ts`** (1) — **the
+  dogfood refusal of 2026-10-16**: a new branch cut from `main` just after a
+  320-file merge of `v5`, pushed once `main` moved on, with old `v5` work
+  branches as the nearest heads by date — allowed, reviewed from the default
+  branch on its one commit (refused before: "changes 300 or more files and
+  cannot be reviewed"). The stand-in's `commits/{sha}` now lists a merge
+  against its first parent, as GitHub does; with it, `git-remote-base`'s
+  "merge of a moved v5" exercises the tree-based reading of a large merge.
 - **`src/server/missions/bootstrap-kit.test.ts`** (21) — the kit's git step:
   absent without a served repository; the helper reading the variable for the
   instance's origin, never the secret, a store or a URL credential; the

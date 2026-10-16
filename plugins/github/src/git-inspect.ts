@@ -51,7 +51,7 @@ import {
 
 import { targetOf } from './git-credential.ts';
 import { GithubRest } from './git-rest.ts';
-import { branchHeads } from './git-review.ts';
+import { branchHeads } from './git-heads.ts';
 
 /** What an update reports when its workflows could not be compared. */
 export const WORKFLOWS_UNVERIFIED = '.github/workflows/';
@@ -261,6 +261,36 @@ async function inspectOne(on: Inspecting, update: GitRefUpdate): Promise<readonl
     if (state !== null && sameState(tip, state)) return [];
   }
   return changedPaths(objects, before, tip);
+}
+
+const NO_OBJECTS: GitPackObjects = { get: () => undefined, size: 0, complete: true };
+
+/**
+ * The workflow paths one commit at GitHub changes, read by its trees: none
+ * when its guarded state equals that of one of its parents (what it runs
+ * comes from that parent, whose own commits are reviewed or already on a
+ * branch); otherwise the paths that differ from its first parent. The
+ * review's fallback for a commit whose file list GitHub truncates — a large
+ * merge of a branch already at GitHub. Never throws: unknown is a change.
+ */
+export async function workflowPathsOfCommit(
+  rest: GithubRest,
+  sha: string,
+): Promise<readonly string[]> {
+  const objects = new Objects(NO_OBJECTS, rest);
+  try {
+    const commit = await objects.commit(sha);
+    const state = await objects.stateOf(sha);
+    if (commit === null || state === null) return [WORKFLOWS_UNVERIFIED];
+    if (commit.parents.length === 0) {
+      return sameState(state, NO_WORKFLOWS) ? [] : changedPaths(objects, NO_WORKFLOWS, state);
+    }
+    const parents = await Promise.all(commit.parents.map((p) => objects.stateOf(p)));
+    if (parents.some((p) => p !== null && sameState(p, state))) return [];
+    return await changedPaths(objects, parents[0] ?? null, state);
+  } catch {
+    return [WORKFLOWS_UNVERIFIED];
+  }
 }
 
 /** `GitRemoteCapability.inspectPack` for GitHub. Never throws: what it cannot read counts as changed. */

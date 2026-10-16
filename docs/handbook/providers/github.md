@@ -23,6 +23,7 @@ tracks:
   - plugins/github/src/git-inspect.ts
   - plugins/github/src/git-rest.ts
   - plugins/github/src/git-review.ts
+  - plugins/github/src/git-heads.ts
   - plugins/github/src/git-call.ts
   - plugins/github/src/tool-titles.ts
   - plugins/github/tests/unit/
@@ -259,14 +260,20 @@ review.
   a non-fast-forward is compared both ways. The base is the nearest existing
   branch head in the pushed commit's history (`BaseFinder`: the upload-pack
   advertisement's `refs/heads/*`, `GET commits?sha=`, up to 3 candidates, the
-  narrowest comparison): a created ref is compared with it, or with the
-  default branch when none is found; an update with `old`, or with a nearer
-  head when `old..new` brings more than one commit (ADR D4 ter). Each commit the range brings is read
+  narrowest comparison), and the default branch, always a candidate
+  (`branchHeads()` in `git-heads.ts`): a created ref is compared with them;
+  an update with `old`, or with a nearer head or the default branch when
+  `old..new` brings more than one commit (ADR D4 ter and its amendment of
+  2026-10-16). Each commit the range brings is read
   (`GET commits/{sha}`, at most 100 per push): its paths under
   `.github/workflows/` are workflow files of the update even when the tip
-  takes them back. Workflow files: anything under `.github/workflows/`. 300
-  files or 250 commits per comparison, a commit listing 300 files, an
-  unrelated history, an empty repository: not reviewable, refused. Then the push
+  takes them back. A commit GitHub lists 300 files of (a large merge) is read
+  by its trees (`workflowPathsOfCommit`, `git-inspect.ts`): none when its
+  `.github`/`workflows` entries equal one parent's, else the paths that
+  differ from the first parent, `.github/workflows/` when unreadable.
+  Workflow files: anything under `.github/workflows/`. 300 files or 250
+  commits per comparison, an unrelated history, an empty repository: not
+  reviewable, refused. Then the push
   token's permissions must cover `gitPushNeeds(updates)` (`contents: write`,
   plus `workflows: write` when a workflow file changes), or the push is
   refused by the permission's name.
@@ -477,7 +484,7 @@ policy is stored, not derived from the preset.
 
 ## Tests
 
-`npx vitest run plugins/github` — 675 tests, no network:
+`npx vitest run plugins/github` — 676 tests, no network:
 
 - `plugin.test.ts` (17): kit assertions, coverage with samples per tool
   and per git tool (the 18 named risks touched, `fallbackHits` empty), the fallback catching
@@ -537,7 +544,8 @@ policy is stored, not derived from the preset.
   — none; creates against the default branch, an old commit, annotated tags,
   every ref of a push; fail closed: a garbled pack, a thin pack, GitHub
   failing, an `old` GitHub does not hold.
-- `git-moves.test.ts` (6): the ref moves and the review against `mockFetch`.
+- `git-moves.test.ts` (7): the ref moves and the review against `mockFetch`
+  (a commit of 300 files read by its trees: unchanged, changed).
 
 The git remote end to end (review, ref moves, permissions, token
 connection) is tested by the host against a git-backed stand-in of GitHub:

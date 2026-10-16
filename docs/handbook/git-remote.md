@@ -24,6 +24,7 @@ tracks:
   - plugins/github/src/git-rest.ts
   - plugins/github/src/git-review.ts
   - plugins/github/src/git-inspect.ts
+  - plugins/github/src/git-heads.ts
   - plugins/github/src/git-moves.ts
   - plugins/github/src/git-call.ts
   - plugins/github/src/permission-check.ts
@@ -221,15 +222,18 @@ write credential exists. Then `Push.handle()`:
    what no branch already holds (`BaseFinder`, ADR D4 ter): the nearest
    existing branch heads in `new`'s history (the upload-pack advertisement's
    `refs/heads/*`, `GET commits?sha=<new>`, 3 pages, 3 candidates, the
-   narrowest comparison kept) — for a create, or the default branch when none
-   is in reach; for an update, `old`, or a nearer head when `old..new` brings
-   more than one commit; the compare API
+   narrowest comparison kept) and **the default branch, always a candidate**
+   (amendment of 2026-10-16) — for a create; for an update, `old`, or a
+   nearer head or the default branch when `old..new` brings more than one
+   commit; the compare API
    gives fast-forward or not (a non-fast-forward is compared both ways),
    commits, the net changed paths (renames: both names); **each commit the
    range brings** is read (`GET commits/{sha}`, `COMMITS_REVIEWED_MAX` 100 per
    push, 8 at a time) and its paths under `.github/workflows/` count as
-   workflow files of the update. Beyond 300 files or 250 commits per
-   comparison, 100 commits per push, a commit listing 300 files, an unrelated
+   workflow files of the update; a commit GitHub lists 300 files of (a large
+   merge) is read by its trees instead (`workflowPathsOfCommit`: no change
+   when its workflows equal one parent's; unreadable: a change). Beyond 300
+   files or 250 commits per comparison, 100 commits per push, an unrelated
    history, an empty repository: refused. Then the App's permissions: the push
    token must hold `contents: write`, and `workflows: write` when a workflow
    file changes, or the push is refused by the permission's name.

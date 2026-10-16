@@ -395,6 +395,10 @@ export class FakeGithubHost {
       '-r',
       '-M',
       '--root',
+      // A merge against its first parent, as GitHub lists it (without `-m`,
+      // diff-tree lists nothing for a merge).
+      '-m',
+      '--first-parent',
       sha,
     ]);
     const files = out
