@@ -91,11 +91,18 @@ sent with `notifications: { mode: "silent" }`.
 
 **The ancestry check.** Before any request of the call itself, `execute`
 walks the `parent` chain of every id the call acts on (target, parent of a
-new page, data source of an entry, relation targets, the block an append
-follows, the original of a synced copy) until it meets the root: at most 16
+new page, data source of an entry, relation targets, page and database
+mentions and links to a page in written content, the block an append
+follows, the original of a synced copy), before it says anything about the
+object until it meets the root: at most 16
 levels, one `GET` each. A chain that reaches the workspace, an unreadable
-parent or another root is refused. Search results outside the root are
-hidden (`results_hidden`), with at most 25 extra requests to prove them.
+parent or another root is refused. Search results that cannot be
+proven under the root (at most 25 extra requests) are dropped silently,
+neither named nor counted.
+
+**Deleting a block** first lists what is nested in it (at most 20 listings)
+and refuses when it holds a page or a database, or when the tree is larger
+than that: `block-delete` never trashes a page.
 
 ## Catalog
 
@@ -137,7 +144,8 @@ form: the saved mission holds the explicit list of risks.
 
 `MAX_ANCESTRY_DEPTH` 16 levels; `MAX_SEARCH_VERIFY_REQUESTS` 25;
 `list_block_children` with `depth` 2–3: `MAX_BLOCKS_PER_CALL` 500 and
-`MAX_CHILD_REQUESTS` 20; a reply's discussion is looked up in at most 5
+`MAX_CHILD_REQUESTS` 20 (listings and synced-original walks together);
+`MAX_REFERENCE_WALK_REQUESTS` 50 per write; `MAX_DELETE_SCAN_REQUESTS` 20; a reply's discussion is looked up in at most 5
 pages of 100 comments; discovery `MAX_SEARCH_PAGES` 20 per kind and
 `MAX_DISCOVERED_ROOTS` 200. Notion's request limits (100 items per array,
 2 000 characters per string, two levels of nesting and 1 000 blocks per
@@ -146,7 +154,7 @@ its `Retry-After`.
 
 ## Tests
 
-`npx vitest run plugins/notion` — 110 tests: the SDK kit
+`npx vitest run plugins/notion` — 126 tests: the SDK kit
 (`assertPluginWellFormed`, `assertPresetsValid`, `assertNoWildcard`,
 `assertCatalogCoverage` with no fallback hit and no risk untouched,
 `assertIdentifiersRefused` on the same samples), the classifier branch by

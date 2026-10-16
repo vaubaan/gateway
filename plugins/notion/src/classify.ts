@@ -33,6 +33,8 @@ import {
   checkJson,
   checkProperties,
   checkRichText,
+  noReferences,
+  type References,
 } from './content.ts';
 import {
   MAX_TEXT_LENGTH,
@@ -44,6 +46,7 @@ import {
   type ResolvedRoot,
 } from './ids.ts';
 import { PROVIDER_ID, TOOL } from './identity.ts';
+import type { Json } from './json.ts';
 import { notionTools } from './tools.ts';
 
 const DECLARED = declaredArgumentsOf(notionTools);
@@ -123,6 +126,7 @@ export type NotionCall =
       readonly children: unknown;
       readonly icon: unknown;
       readonly cover: unknown;
+      readonly references: References;
     }
   | {
       readonly op: 'updatePage';
@@ -138,13 +142,15 @@ export type NotionCall =
       readonly blockId: string;
       readonly children: unknown;
       readonly position: AppendPosition;
+      readonly references: References;
     }
   | {
       readonly op: 'updateBlock';
       readonly root: ResolvedRoot;
       readonly blockId: string;
       readonly type: string;
-      readonly content: Readonly<Record<string, unknown>>;
+      readonly content: Json;
+      readonly references: References;
     }
   | {
       readonly op: 'deleteBlock';
@@ -158,7 +164,7 @@ export type NotionCall =
       readonly root: ResolvedRoot;
       readonly dataSourceId: string;
       readonly properties: unknown;
-      readonly relationIds: readonly string[];
+      readonly references: References;
       readonly children: unknown;
       readonly icon: unknown;
     }
@@ -168,7 +174,7 @@ export type NotionCall =
       readonly dataSourceId: string;
       readonly pageId: string;
       readonly properties: unknown;
-      readonly relationIds: readonly string[];
+      readonly references: References;
       readonly icon: unknown;
     }
   | ({
@@ -182,6 +188,7 @@ export type NotionCall =
       readonly blockId: string;
       readonly richText: unknown;
       readonly discussionId: string | null;
+      readonly references: References;
     };
 
 type Read = NotionCall | { readonly denied: string };
@@ -268,9 +275,10 @@ function positionOf(args: Args): AppendPosition {
   return deny("position: one of 'end', 'start', 'after_block'");
 }
 
-function relationsOf(value: unknown): readonly string[] {
-  const outcome = checkProperties(value);
-  return 'refused' in outcome ? deny(outcome.refused) : outcome.ok.relationIds;
+/** Children of a new page or entry, when given ; their references collected. */
+function childrenOf(value: unknown, references: References): unknown {
+  if (value !== undefined) checked(checkChildren(value, 'children', references));
+  return value;
 }
 
 /**
@@ -356,16 +364,19 @@ function readOrThrow(tool: string, args: Args, resources: readonly Resource[]): 
         ),
         ...paged(args, DEFAULT_PAGE_SIZE.query),
       };
-    case 'createPage':
+    case 'createPage': {
+      const references = noReferences();
       return {
         op,
         root,
         parentPageId: idArg(args, 'parent_page_id'),
         title: title(args.title, 'title'),
-        children: optional(args.children, (v) => checkChildren(v)),
+        children: childrenOf(args.children, references),
         icon: optional(args.icon, checkIcon),
         cover: optional(args.cover, checkCover),
+        references,
       };
+    }
     case 'updatePage': {
       if (args.title === undefined && args.icon === undefined && args.cover === undefined) {
         return deny('update_page: give a title, an icon or a cover');
@@ -381,27 +392,24 @@ function readOrThrow(tool: string, args: Args, resources: readonly Resource[]): 
     }
     case 'appendBlocks': {
       if (args.children === undefined) return deny('children: required');
-      checked(checkChildren(args.children));
+      const references = noReferences();
+      checked(checkChildren(args.children, 'children', references));
       return {
         op,
         root,
         blockId: idArg(args, 'block_id'),
         children: args.children,
         position: positionOf(args),
+        references,
       };
     }
     case 'updateBlock': {
       const blockId = idArg(args, 'block_id');
       if (blockId === root.ref)
         return deny('block_id: the shared root itself — change a page with notion__update_page');
-      checked(checkBlockUpdate(args.type, args.content));
-      return {
-        op,
-        root,
-        blockId,
-        type: args.type as string,
-        content: args.content as Readonly<Record<string, unknown>>,
-      };
+      const update = checkBlockUpdate(args.type, args.content);
+      if ('refused' in update) return deny(update.refused);
+      return { op, root, blockId, ...update.ok };
     }
     case 'deleteBlock': {
       const blockId = idArg(args, 'block_id');
@@ -435,26 +443,30 @@ function readOrThrow(tool: string, args: Args, resources: readonly Resource[]): 
       };
     case 'createEntry': {
       if (args.properties === undefined) return deny('properties: required');
+      const references = noReferences();
+      checked(checkProperties(args.properties, references));
       return {
         op,
         root,
         dataSourceId: idArg(args, 'data_source_id'),
         properties: args.properties,
-        relationIds: relationsOf(args.properties),
-        children: optional(args.children, (v) => checkChildren(v)),
+        children: childrenOf(args.children, references),
         icon: optional(args.icon, checkIcon),
+        references,
       };
     }
     case 'updateEntry': {
       if (args.properties === undefined) return deny('properties: required');
+      const references = noReferences();
+      checked(checkProperties(args.properties, references));
       return {
         op,
         root,
         dataSourceId: idArg(args, 'data_source_id'),
         pageId: idArg(args, 'page_id'),
         properties: args.properties,
-        relationIds: relationsOf(args.properties),
         icon: optional(args.icon, checkIcon),
+        references,
       };
     }
     case 'listComments':
@@ -466,15 +478,18 @@ function readOrThrow(tool: string, args: Args, resources: readonly Resource[]): 
       };
     case 'createComment': {
       if (args.rich_text === undefined) return deny('rich_text: required');
-      checked(checkRichText(args.rich_text, 'rich_text'));
-      if ((args.rich_text as unknown[]).length === 0)
+      const references = noReferences();
+      checked(checkRichText(args.rich_text, 'rich_text', references));
+      if (Array.isArray(args.rich_text) && args.rich_text.length === 0) {
         return deny('rich_text: the comment is empty');
+      }
       return {
         op,
         root,
         blockId: idArg(args, 'block_id'),
         richText: args.rich_text,
         discussionId: optionalIdArg(args, 'discussion_id'),
+        references,
       };
     }
   }

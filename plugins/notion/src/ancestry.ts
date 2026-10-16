@@ -23,91 +23,47 @@ import { ExecutorRefusal, type ConnectionContext } from '@vaubaan/plugin-sdk';
 
 import { failureOf, send } from './api.ts';
 import { notionId } from './ids.ts';
+import { isObject, type Json } from './json.ts';
+import { ENDPOINT, LABEL, parentRef, type NodeKind } from './parents.ts';
 
-/** The kinds of object a walk meets, each read by its own endpoint. */
-export type NodeKind = 'page' | 'block' | 'database' | 'data_source';
-
-const ENDPOINT: Readonly<Record<NodeKind, string>> = {
-  page: '/pages',
-  block: '/blocks',
-  database: '/databases',
-  data_source: '/data_sources',
-};
-
-const LABEL: Readonly<Record<NodeKind, string>> = {
-  page: 'page',
-  block: 'block',
-  database: 'database',
-  data_source: 'data source',
-};
+export type { NodeKind } from './parents.ts';
 
 /** Most levels walked above a target ; deeper is refused (fail closed). */
 export const MAX_ANCESTRY_DEPTH = 16;
-
-type Json = Readonly<Record<string, unknown>>;
-
-function isObject(value: unknown): value is Json {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 interface Node {
   readonly kind: NodeKind;
   readonly id: string;
 }
 
-/** Where a parent reference leads : the next node, a database met on the way, or a dead end. */
-type Step =
-  | { readonly next: Node; readonly via?: string }
-  | { readonly at: string }
-  | { readonly end: 'outside' | 'unreadable' };
-
-/** The node a Notion parent reference names (parent object reference). */
-function stepOf(parent: unknown): Step {
-  if (!isObject(parent)) return { end: 'unreadable' };
-  const ref = (key: string, kind: NodeKind): Step => {
-    const id = notionId(parent[key]);
-    return id ? { next: { kind, id } } : { end: 'unreadable' };
-  };
-  switch (parent.type) {
-    case 'page_id':
-      return ref('page_id', 'page');
-    case 'block_id':
-      return ref('block_id', 'block');
-    case 'database_id':
-      return ref('database_id', 'database');
-    case 'data_source_id': {
-      const id = notionId(parent.data_source_id);
-      if (!id) return { end: 'unreadable' };
-      // The `database_id` beside it is "provided for convenience" : one hop proves an entry of a database root.
-      const via = parent.database_id === undefined ? undefined : notionId(parent.database_id);
-      if (via === null) return { end: 'unreadable' };
-      return via
-        ? { next: { kind: 'data_source', id }, via }
-        : { next: { kind: 'data_source', id } };
-    }
-    case 'workspace':
-    case 'agent_id':
-      return { end: 'outside' };
-    default:
-      return { end: 'unreadable' };
-  }
+/**
+ * What is above an object : the databases met on the way (each a possible
+ * root, never a node of the walk) and the next node, absent at a dead end
+ * (the workspace, an agent, a shape not known).
+ */
+interface Above {
+  readonly databases: readonly string[];
+  readonly next?: Node;
 }
 
-/** The step above an object of `kind` : a data source names its database and that database's own parent. */
-function stepAbove(kind: NodeKind, object: Json): Step {
-  if (kind !== 'data_source') return stepOf(object.parent);
-  const database = stepOf(object.parent);
-  if (!('next' in database) || database.next.kind !== 'database') return database;
-  if (object.database_parent === undefined) return database;
-  const above = stepOf(object.database_parent);
-  if ('next' in above) return { next: above.next, via: database.next.id };
-  if ('end' in above) return { at: database.next.id, ...above };
-  return above;
+/** A data source names its database and, in `database_parent`, that database's own parent. */
+function above(kind: NodeKind, object: Json): Above {
+  const parent = parentRef(object.parent);
+  if (!('node' in parent)) return { databases: [] };
+  if (kind !== 'data_source') {
+    return { databases: parent.database ? [parent.database] : [], next: parent.node };
+  }
+  if (parent.node.kind !== 'database') return { databases: [] };
+  const database = parent.node.id;
+  // Without `database_parent`, the database itself is the next node, read by its own `GET`.
+  if (object.database_parent === undefined) return { databases: [], next: parent.node };
+  const grand = parentRef(object.database_parent);
+  return 'node' in grand ? { databases: [database], next: grand.node } : { databases: [database] };
 }
 
 export type Verdict = 'in' | 'out' | 'unknown';
 
-/** A budget of requests for a walk whose result may be dropped (search results). */
+/** A budget of requests shared by the walks of one call whose targets are not the call's own. */
 export interface WalkBudget {
   left: number;
 }
@@ -145,14 +101,21 @@ export class Ancestry {
     return answer.body;
   }
 
-  /** Proves `id` under the root, or declines the call. `first` is the target's own answer, when read. */
-  async prove(kind: NodeKind, id: string, first?: Json): Promise<void> {
-    const verdict = await this.walk({ kind, id }, first, null);
+  /**
+   * Proves `id` under the root, or declines the call. `first` is the
+   * target's own answer, when read ; `budget`, when given, bounds the
+   * requests and declines when it runs out (fail closed).
+   */
+  async prove(kind: NodeKind, id: string, first?: Json, budget?: WalkBudget): Promise<void> {
+    const verdict = await this.walk({ kind, id }, first, budget ?? null);
     if (verdict.verdict === 'in') return;
+    const where = `under the shared root '${this.root}' of this call`;
     throw new ExecutorRefusal(
       verdict.tooDeep
-        ? `notion: ${LABEL[kind]} '${id}' could not be shown to be under the shared root '${this.root}' of this call within ${MAX_ANCESTRY_DEPTH} levels`
-        : `notion: ${LABEL[kind]} '${id}' is not under the shared root '${this.root}' of this call`,
+        ? `notion: ${LABEL[kind]} '${id}' could not be shown to be ${where} within ${MAX_ANCESTRY_DEPTH} levels`
+        : verdict.verdict === 'unknown'
+          ? `notion: ${LABEL[kind]} '${id}' could not be shown to be ${where} within the requests this call may spend`
+          : `notion: ${LABEL[kind]} '${id}' is not ${where}`,
     );
   }
 
@@ -171,6 +134,9 @@ export class Ancestry {
     first: Json | undefined,
     budget: WalkBudget | null,
   ): Promise<{ readonly verdict: Verdict; readonly tooDeep?: boolean }> {
+    // `visited` : the nodes read, for the cycle and depth checks ; `met` : every id
+    // to settle once the verdict is known, the databases seen beside a parent included.
+    const visited: string[] = [];
     const met: string[] = [];
     const settle = (verdict: 'in' | 'out') => {
       for (const id of met) (verdict === 'in' ? this.inside : this.outside).add(id);
@@ -180,8 +146,9 @@ export class Ancestry {
     let object: Json | undefined = first;
     for (;;) {
       if (this.inside.has(node.id)) return settle('in');
-      if (this.outside.has(node.id) || met.includes(node.id)) return settle('out');
-      if (met.length > MAX_ANCESTRY_DEPTH) return { verdict: 'out', tooDeep: true };
+      if (this.outside.has(node.id) || visited.includes(node.id)) return settle('out');
+      if (visited.length > MAX_ANCESTRY_DEPTH) return { verdict: 'out', tooDeep: true };
+      visited.push(node.id);
       met.push(node.id);
       if (!object) {
         if (budget) {
@@ -191,26 +158,19 @@ export class Ancestry {
         const path = `${ENDPOINT[node.kind]}/${node.id}`;
         const answer = await send(this.ctx, 'GET', path);
         this.requests += 1;
-        if (answer.status === 404 && met.length > 1) return settle('out'); // an ancestor this token cannot read
+        if (answer.status === 404 && visited.length > 1) return settle('out'); // an ancestor this token cannot read
         if (answer.status < 200 || answer.status >= 300) throw failureOf('GET', path, answer);
         object = isObject(answer.body) ? answer.body : undefined;
       }
       if (!object || notionId(object.id) !== node.id) return settle('out');
-      const step = stepAbove(node.kind, object);
-      if ('next' in step) {
-        if (step.via !== undefined) {
-          if (this.inside.has(step.via)) return settle('in');
-          met.push(step.via);
-        }
-        node = step.next;
-        object = undefined;
-        continue;
+      const step = above(node.kind, object);
+      for (const database of step.databases) {
+        if (this.inside.has(database)) return settle('in');
+        met.push(database);
       }
-      if ('at' in step) {
-        if (this.inside.has(step.at)) return settle('in');
-        met.push(step.at);
-      }
-      return settle('out');
+      if (!step.next) return settle('out');
+      node = step.next;
+      object = undefined;
     }
   }
 }

@@ -284,7 +284,7 @@ describe("the provider's failures are thrown, not refused", () => {
 });
 
 describe('memo within one call', () => {
-  test('search results that share ancestors walk them once ; results outside are hidden, not named', async () => {
+  test('search results that share ancestors walk them once ; results outside are dropped silently, never named or counted', async () => {
     const results = [
       page(CHILD, pageParent(PAGE)),
       page(BLOCK, pageParent(PAGE)),
@@ -305,7 +305,7 @@ describe('memo within one call', () => {
       unknown
     >;
     expect((body.results as { id: string }[]).map((r) => r.id)).toEqual([CHILD, BLOCK]);
-    expect(body.results_hidden).toBe(1);
+    expect('results_hidden' in body).toBe(false);
     expect(JSON.stringify(body)).not.toContain(FOREIGN);
     expect(gets(fetch)).toEqual([`/pages/${PAGE}`, `/databases/${DB}`]);
   });

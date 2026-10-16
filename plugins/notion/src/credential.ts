@@ -23,15 +23,10 @@ import {
 
 import { request } from './api.ts';
 import { API_TOKEN_FIELD, TOOL } from './identity.ts';
+import { isObject } from './json.ts';
 
 /** Where a Workspace Owner creates an internal connection. */
 export const NOTION_CONNECTIONS_PAGE = 'https://app.notion.com/developers/connections';
-
-type Json = Readonly<Record<string, unknown>>;
-
-function isObject(value: unknown): value is Json {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 /** Who a pasted token is : the workspace of an internal connection, or a refusal. */
 export async function verifyNotionToken(ctx: ConnectionContext): Promise<CredentialCheck> {

@@ -18,13 +18,15 @@
  *     original lives) ;
  *   - property values Notion does not let a request set are refused ;
  *   - every id nested in a value (a mention, a link to a page, a relation
- *     target, a person) is read by `notionId` ; relation targets are
- *     returned so that `execute` walks them to the call's root.
+ *     target, a person) is read by `notionId` ; the pages and databases
+ *     they name are collected (`References`) so that `execute` walks each
+ *     to the call's root before the write.
  *
  * Pure : a value in, a refusal sentence or the facts `execute` needs out.
  */
 
 import { MAX_TEXT_LENGTH, malformedId, notionId } from './ids.ts';
+import { isObject, type Json } from './json.ts';
 
 /** Longest array Notion accepts anywhere in a request body. */
 export const MAX_ARRAY_ITEMS = 100;
@@ -123,15 +125,30 @@ const READ_ONLY_PROPERTY_TYPES: ReadonlySet<string> = new Set([
 /** A refusal, or the facts the executor needs from an accepted value. */
 export type Checked<T> = { readonly ok: T } | { readonly refused: string };
 
-export interface PropertyFacts {
-  /** Relation targets, canonical, in order : walked to the call's root by `execute`. */
-  readonly relationIds: readonly string[];
+/**
+ * The pages and databases a written value points at — relation targets,
+ * mentions, links to a page — canonical, without repeats. `execute` walks
+ * each to the call's root before the write : a link must not reach, or show
+ * the title of, an object of another root.
+ */
+export interface References {
+  readonly pages: string[];
+  readonly databases: string[];
 }
 
-type Json = Readonly<Record<string, unknown>>;
+export function noReferences(): References {
+  return { pages: [], databases: [] };
+}
 
-function isObject(value: unknown): value is Json {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+function refer(refs: References | undefined, kind: 'pages' | 'databases', id: string): void {
+  if (refs && !refs[kind].includes(id)) refs[kind].push(id);
+}
+
+/** An accepted block rewrite, typed. */
+export interface BlockUpdate {
+  readonly type: string;
+  readonly content: Json;
+  readonly references: References;
 }
 
 /**
@@ -168,20 +185,25 @@ export function checkJson(value: unknown, path: string, depth = 0): string | nul
   return null;
 }
 
-/** A rich text array : the limits, and every mention reads as a Notion id. */
-export function checkRichText(value: unknown, path: string): string | null {
+/** A rich text array : the limits, and every mention reads as a Notion id (collected in `refs`). */
+export function checkRichText(value: unknown, path: string, refs?: References): string | null {
   if (!Array.isArray(value)) return `${path}: expected an array of rich text objects`;
   const limits = checkJson(value, path);
   if (limits) return limits;
-  return mentionIssue(value, path, 0);
+  return mentionIssue(value, path, 0, refs);
 }
 
-/** Every id a mention names (page, database, user) reads as a Notion id, at any depth. */
-function mentionIssue(value: unknown, path: string, depth: number): string | null {
+/** Every id a mention names (page, database, user) reads as a Notion id, at any depth ; pages and databases are collected. */
+function mentionIssue(
+  value: unknown,
+  path: string,
+  depth: number,
+  refs: References | undefined,
+): string | null {
   if (depth > MAX_JSON_DEPTH) return `${path}: nested too deeply`;
   if (Array.isArray(value)) {
     for (const [i, item] of value.entries()) {
-      const issue = mentionIssue(item, `${path}[${i}]`, depth + 1);
+      const issue = mentionIssue(item, `${path}[${i}]`, depth + 1, refs);
       if (issue) return issue;
     }
     return null;
@@ -192,14 +214,17 @@ function mentionIssue(value: unknown, path: string, depth: number): string | nul
     for (const kind of ['page', 'database', 'user'] as const) {
       const target = mention[kind];
       if (target === undefined) continue;
-      if (!isObject(target) || !notionId(target.id)) {
+      const id = isObject(target) ? notionId(target.id) : null;
+      if (!id) {
         return malformedId(`${path}.mention.${kind}.id`, isObject(target) ? target.id : target);
       }
+      if (kind === 'page') refer(refs, 'pages', id);
+      if (kind === 'database') refer(refs, 'databases', id);
     }
   }
   for (const [key, item] of Object.entries(value)) {
     if (key === 'mention') continue;
-    const issue = mentionIssue(item, `${path}.${key}`, depth + 1);
+    const issue = mentionIssue(item, `${path}.${key}`, depth + 1, refs);
     if (issue) return issue;
   }
   return null;
@@ -207,6 +232,7 @@ function mentionIssue(value: unknown, path: string, depth: number): string | nul
 
 interface BlockWalk {
   count: number;
+  readonly refs: References | undefined;
 }
 
 /**
@@ -214,11 +240,11 @@ interface BlockWalk {
  * nesting and 1 000 blocks in all, creatable types only, no synced
  * duplicate, every id a well-formed Notion id.
  */
-export function checkChildren(value: unknown, path = 'children'): string | null {
+export function checkChildren(value: unknown, path = 'children', refs?: References): string | null {
   if (!Array.isArray(value)) return `${path}: expected an array of block objects`;
   const limits = checkJson(value, path);
   if (limits) return limits;
-  return blocksIssue(value, path, 0, { count: 0 });
+  return blocksIssue(value, path, 0, { count: 0, refs });
 }
 
 function blocksIssue(
@@ -236,10 +262,10 @@ function blocksIssue(
       return `${path}: more than ${MAX_BLOCKS_PER_REQUEST} blocks in one request (Notion's limit)`;
     }
     const where = `${path}[${i}]`;
-    const issue = newBlockIssue(block, where);
-    if (issue) return issue;
-    const type = (block as Json).type as string;
-    const nested = ((block as Json)[type] as Json).children;
+    const checked = newBlock(block, where, walk.refs);
+    if (typeof checked === 'string') return checked;
+    const { type, body } = checked;
+    const nested = body.children;
     if (nested === undefined) continue;
     if (!Array.isArray(nested)) return `${where}.${type}.children: expected an array`;
     const deeper = blocksIssue(nested, `${where}.${type}.children`, level + 1, walk);
@@ -248,8 +274,12 @@ function blocksIssue(
   return null;
 }
 
-/** One new block : `{ type, [type]: {...} }` and an optional `object: "block"`, nothing else. */
-function newBlockIssue(block: unknown, path: string): string | null {
+/** One new block : `{ type, [type]: {...} }` and an optional `object: "block"`, nothing else ; its type and body, or the refusal. */
+function newBlock(
+  block: unknown,
+  path: string,
+  refs: References | undefined,
+): { readonly type: string; readonly body: Json } | string {
   if (!isObject(block)) return `${path}: expected a block object`;
   const type = block.type;
   if (typeof type !== 'string') return `${path}.type: required (the block type)`;
@@ -267,25 +297,33 @@ function newBlockIssue(block: unknown, path: string): string | null {
   }
   const body = block[type];
   if (!isObject(body)) return `${path}.${type}: expected an object`;
-  return blockBodyIssue(type, body, `${path}.${type}`);
+  return blockBodyIssue(type, body, `${path}.${type}`, refs) ?? { type, body };
 }
 
 /** What a block's own object may carry, for a new block and for an update alike. */
-function blockBodyIssue(type: string, body: Json, path: string): string | null {
+function blockBodyIssue(
+  type: string,
+  body: Json,
+  path: string,
+  refs: References | undefined,
+): string | null {
   if (type === 'synced_block' && body.synced_from !== undefined && body.synced_from !== null) {
     return `${path}.synced_from: a synced copy of another block is not created by this plugin (it would show content from wherever the original lives)`;
   }
   if (type === 'link_to_page') {
-    const target = body.page_id ?? body.database_id;
-    if (!notionId(target)) return malformedId(`${path}.page_id`, target);
+    const onDatabase = body.page_id === undefined && body.database_id !== undefined;
+    const target = onDatabase ? body.database_id : body.page_id;
+    const id = notionId(target);
+    if (!id) return malformedId(`${path}.${onDatabase ? 'database_id' : 'page_id'}`, target);
+    refer(refs, onDatabase ? 'databases' : 'pages', id);
   }
   for (const [key, item] of Object.entries(body)) {
     if (key === 'rich_text' || key === 'caption') {
-      const issue = checkRichText(item, `${path}.${key}`);
+      const issue = checkRichText(item, `${path}.${key}`, refs);
       if (issue) return issue;
     }
   }
-  return mentionIssue(body, path, 0);
+  return mentionIssue(body, path, 0, refs);
 }
 
 /**
@@ -293,74 +331,74 @@ function blockBodyIssue(type: string, body: Json, path: string): string | null {
  * updatable type, the object Notion keys by that type, no `children` (a
  * block's children are not updated by this endpoint).
  */
-export function checkBlockUpdate(type: unknown, content: unknown): string | null {
-  if (typeof type !== 'string') return 'type: required (the type of the block to rewrite)';
+export function checkBlockUpdate(type: unknown, content: unknown): Checked<BlockUpdate> {
+  const refused = (reason: string) => ({ refused: reason });
+  if (typeof type !== 'string') return refused('type: required (the type of the block to rewrite)');
   if (CONTAINER_BLOCK_TYPES.has(type)) {
-    return `type: a '${type}' is changed with ${type === 'child_page' ? 'notion__update_page' : 'no tool of this plugin'}`;
+    return refused(
+      `type: a '${type}' is changed with ${type === 'child_page' ? 'notion__update_page' : 'no tool of this plugin'}`,
+    );
   }
-  if (!UPDATABLE_BLOCK_TYPES.has(type)) return `type: a '${type}' block cannot be rewritten here`;
-  if (!isObject(content)) return `content: expected the '${type}' object of the block`;
+  if (!UPDATABLE_BLOCK_TYPES.has(type)) {
+    return refused(`type: a '${type}' block cannot be rewritten here`);
+  }
+  if (!isObject(content)) return refused(`content: expected the '${type}' object of the block`);
   if ('children' in content) {
-    return 'content.children: a block’s children are not rewritten; use notion__append_blocks or notion__delete_block';
+    return refused(
+      'content.children: a block’s children are not rewritten; use notion__append_blocks or notion__delete_block',
+    );
   }
   const limits = checkJson(content, 'content');
-  if (limits) return limits;
-  return blockBodyIssue(type, content, 'content');
+  if (limits) return refused(limits);
+  const references = noReferences();
+  const issue = blockBodyIssue(type, content, 'content', references);
+  return issue ? refused(issue) : { ok: { type, content, references } };
 }
 
 /**
  * Property values of a database entry : the limits, no read-only type, every
  * relation target and person a Notion id. Returns the relation targets.
  */
-export function checkProperties(value: unknown): Checked<PropertyFacts> {
-  if (!isObject(value)) return { refused: 'properties: expected an object keyed by property name' };
+export function checkProperties(value: unknown, references: References): string | null {
+  if (!isObject(value)) return 'properties: expected an object keyed by property name';
   const limits = checkJson(value, 'properties');
-  if (limits) return { refused: limits };
-  const relationIds: string[] = [];
+  if (limits) return limits;
   for (const [name, property] of Object.entries(value)) {
     const path = `properties.${JSON.stringify(name)}`;
-    if (!isObject(property)) return { refused: `${path}: expected a property value object` };
+    if (!isObject(property)) return `${path}: expected a property value object`;
     const keys = Object.keys(property).filter((k) => k !== 'id' && k !== 'type');
     const declared = typeof property.type === 'string' ? [property.type] : [];
     for (const type of [...declared, ...keys]) {
       if (READ_ONLY_PROPERTY_TYPES.has(type)) {
-        return { refused: `${path}: a '${type}' value is computed by Notion and cannot be set` };
+        return `${path}: a '${type}' value is computed by Notion and cannot be set`;
       }
     }
     const relation = property.relation;
     if (relation !== undefined) {
-      if (!Array.isArray(relation)) return { refused: `${path}.relation: expected an array` };
+      if (!Array.isArray(relation)) return `${path}.relation: expected an array`;
       for (const [i, target] of relation.entries()) {
         const id = isObject(target) ? notionId(target.id) : null;
-        if (!id) {
-          return {
-            refused: malformedId(
-              `${path}.relation[${i}].id`,
-              isObject(target) ? target.id : target,
-            ),
-          };
-        }
-        relationIds.push(id);
+        if (!id)
+          return malformedId(`${path}.relation[${i}].id`, isObject(target) ? target.id : target);
+        refer(references, 'pages', id);
       }
     }
     const people = property.people;
     if (people !== undefined) {
-      if (!Array.isArray(people)) return { refused: `${path}.people: expected an array` };
+      if (!Array.isArray(people)) return `${path}.people: expected an array`;
       for (const [i, person] of people.entries()) {
         if (!isObject(person) || !notionId(person.id)) {
-          return {
-            refused: malformedId(`${path}.people[${i}].id`, isObject(person) ? person.id : person),
-          };
+          return malformedId(`${path}.people[${i}].id`, isObject(person) ? person.id : person);
         }
       }
     }
     for (const key of ['title', 'rich_text'] as const) {
       if (property[key] === undefined) continue;
-      const issue = checkRichText(property[key], `${path}.${key}`);
-      if (issue) return { refused: issue };
+      const issue = checkRichText(property[key], `${path}.${key}`, references);
+      if (issue) return issue;
     }
   }
-  return { ok: { relationIds } };
+  return null;
 }
 
 /** A page icon : an emoji, a Notion icon or an `https:` image ; never an upload. */

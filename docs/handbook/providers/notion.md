@@ -292,7 +292,9 @@ writes:
 - **`block-delete`** moves one block and the blocks nested in it to the
   trash ⚠ (nested blocks: §7); restorable in Notion (update a block with
   `in_trash: false`, which this plugin does not offer), hence `costly`, not
-  `irreversible`. Never a page (§5.10).
+  `irreversible`. Never a page or a database, and never a block that holds
+  one (§5.10): otherwise a cheaper permission would trash pages. Its reason
+  also says that deleting a synced original removes it from its copies.
 
 **`page-restore` is a write with a risk of its own (decision 8).** The
 vector argued: `reversibility: reversible` (the page can be trashed again);
@@ -331,12 +333,13 @@ The plugin plans for the lower figure, shared by every mission issued on the
 connection. A tool call costs more than one request (§5.1: one per level of
 the ancestry walk, plus the call itself):
 
-| Call                                          | Requests, typical (depth 3)                     | Worst case                                           |
-| --------------------------------------------- | ----------------------------------------------- | ---------------------------------------------------- |
-| `get_page`, `get_database`, `get_data_source` | 1 + 2 (the target's own `GET` is the first hop) | 1 + `MAX_ANCESTRY_DEPTH` (16)                        |
-| `list_block_children`, query, comments        | 1 + 3                                           | 1 + 16, + up to 20 listings for `depth` > 1          |
-| a write                                       | 1 + 3                                           | 2 + 16, + 16 per relation target or `after_block_id` |
-| `search_content`                              | 1 + the filter's budget                         | 1 + `MAX_SEARCH_VERIFY_REQUESTS` (25)                |
+| Call                                          | Requests, typical (depth 3) | Worst case                                                                                                                                                                                                                                                                                                   |
+| --------------------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `get_page`, `get_database`, `get_data_source` | 1 + 2                       | 1 + `MAX_ANCESTRY_DEPTH` (16): the target's own `GET` is the first hop                                                                                                                                                                                                                                       |
+| `query_data_source`, `list_comments`          | 1 + 3                       | 17 (the walk) + 1                                                                                                                                                                                                                                                                                            |
+| `list_block_children`                         | 2 + 3                       | 17 (the target) + 17 (its synced original, when it is a copy) + 1 (the listing) + `MAX_CHILD_REQUESTS` (20, nested listings and synced-original walks **together**, one budget per call) = 55                                                                                                                |
+| a write                                       | 1 + 3                       | 17 (the target) + 17 per other id walked (a page's parent, an entry's data source, `after_block_id`, a synced original: at most two) + `MAX_REFERENCE_WALK_REQUESTS` (50, every link, mention and relation target together) + 1; `delete_block` + `MAX_DELETE_SCAN_REQUESTS` (20); a reply + 5 comment pages |
+| `search_content`                              | 1 + the filter's budget     | 1 + `MAX_SEARCH_VERIFY_REQUESTS` (25)                                                                                                                                                                                                                                                                        |
 
 - The preset rate limits keep one mission's realistic mix near one call a
   second: `read-only` allows 50 calls a minute in total, `reviewer` 55,
@@ -351,6 +354,13 @@ the ancestry walk, plus the call itself):
   as `UpstreamHttpError(…, status)` with `retry after <n> s` in the
   message. A retried write is also unsafe: Notion's `503` may come after a
   write that was saved.
+- **Known limitation: Notion's per-connection ceiling is not enforced.** The
+  gateway's limits count tool calls per risk and per mission; Notion counts
+  requests per connection, across every mission issued on it and whatever
+  else the workspace runs. One call fans out into 1 to ~100 requests (the
+  table above), so no choice of per-risk ceilings can guarantee the 180
+  requests a minute: the presets keep a realistic mix under it, and beyond
+  it Notion answers `429`, which the agent reads with its `Retry-After`.
 
 ## 4. Coverage
 
@@ -399,7 +409,8 @@ priced against A's budget.
 2. **`execute` proves the claim before anything else.** For the target of
    the call and every other id it acts on — the parent of a new page, the
    data source of an entry, the `after_block_id` of an append, every
-   relation target, the original of a synced copy — it walks the `parent`
+   relation target, page or database mention and link to a page in written
+   content, the original of a synced copy — it walks the `parent`
    chain up with `ctx.fetch` until it meets `R`. Parent shapes read (parent
    object reference): `page_id`, `block_id`, `database_id`,
    `data_source_id` (with its `database_id`), `workspace`, `agent_id`.
@@ -413,7 +424,10 @@ priced against A's budget.
    - **Proven** when an id met on the way (the target itself included)
      equals `R`, or was proven during the call. A `data_source_id` parent
      carries its `database_id`: when that is `R`, one request proves an
-     entry of a database root.
+     entry of a database root. A database met that way is a possible root,
+     not a node of the walk: when the data source's answer lacks
+     `database_parent`, the walk reads that database with its own `GET`
+     (it is not taken for a cycle).
    - **Refused** (`ExecutorRefusal`, before any write and before any read
      result leaves the executor) when the chain reaches `workspace` or an
      `agent_id` parent; meets a parent type it does not know or an id
@@ -435,13 +449,24 @@ root '<R>' of this call`, or `… could not be shown to be under … within
    returned only if proven. The same first hop gives `update_page`,
    `update_entry`, `update_block`, `delete_block`, `trash_page`,
    `restore_page` and `create_comment` the facts they check (§5.4, §5.10,
-   §5.8).
+   §5.8). **The walk comes first, the checks after**: an object outside the
+   root is refused as "not under the shared root" and nothing else — not
+   its type, not whether it is an entry, not its parent.
 4. **Memo within one call, nothing across calls (decision 3).** The walk
    keeps the ids proven in and out during the call (siblings share
    ancestors). Nothing is cached between calls: a page can be moved at any
    moment, and **the SDK offers no state for it** (`credentialCache` is for
    credentials). Known limitation, not an SDK change: every call pays its
    walk.
+
+5. **Budgets.** The walk of the call's own target is bounded by its depth
+   only. Every other walk of one call shares a budget of requests and
+   declines the call when it runs out ("could not be shown … within the
+   requests this call may spend"): the references of a write
+   (`MAX_REFERENCE_WALK_REQUESTS`, §5.4), the synced originals met while
+   expanding `depth` (shared with the listings, `MAX_CHILD_REQUESTS`, §5.7),
+   the results of a search (`MAX_SEARCH_VERIFY_REQUESTS`, dropped rather
+   than declined, §5.2).
 
 **What it costs.** One request per level, at ~3 requests a second for the
 whole connection (§3 "Rate limits"). A data source costs one request for two
@@ -452,7 +477,10 @@ once for a whole page body instead of once per nested block.
 
 - **Time of check, time of use.** A page moved to another root between the
   walk and the write is written in its new place. The window is one
-  request; no tool of this plugin moves pages. Accepted.
+  request; no tool of this plugin moves pages, but a person, or another
+  integration of the workspace, can move one at any moment — in the Notion
+  app or through the API — and the walk cannot see a move that happens after
+  it. Accepted.
 - **The root is the claim, not a proof of "least" root.** Roots are
   top-level by construction (discovery); if the owner later shares a parent
   of root A, missions holding A keep working (the walk still meets A).
@@ -473,8 +501,12 @@ carries its `parent`, the walk of §5.1 runs with the memo shared across
 the result set, and a result is returned only when proven. A result proven
 outside, of an unknown kind, or not proven within
 `MAX_SEARCH_VERIFY_REQUESTS` = 25 extra requests, is dropped; the answer
-carries `results_hidden: <n>`, Notion's `next_cursor`, `has_more` and
-`request_status` when present. Hidden results are never named. `page_size`
+carries Notion's `next_cursor`, `has_more` and `request_status` when
+present. A result that cannot be proven under the root is **dropped
+silently**: neither named nor counted, since a count of hidden results
+would tell the agent that other roots hold matching titles. A page of
+results may therefore hold fewer than `page_size` entries while `has_more`
+is true; the agent pages on. `page_size`
 is always sent (default 20).
 
 Search is also not exhaustive and its index lags; the tool's description
@@ -511,6 +543,16 @@ page has a `title` and no other property; the executor writes it as
   root carries that root's aggregated values into this mission. Recorded,
   accepted. An empty relation or rollup may mean "not shared": the
   description of `get_page` says so.
+- **Links and mentions are walked like relation targets.** On every
+  write, the pages and databases that new content points at — a page or
+  database mention in rich text (titles, properties, blocks, comments), a
+  `link_to_page` block — are collected by `content.ts` and walked to `R`
+  before the write, with relation targets, within one budget of
+  `MAX_REFERENCE_WALK_REQUESTS` = 50 requests for the call. One outside the
+  root, or the budget run out, declines the call: a link would otherwise
+  show readers of this root the title of a page elsewhere, and tell the
+  agent whether an id exists. User mentions are not walked (users belong to
+  no root).
 - **People and mentions** take user ids, read by `notionId`; the plugin
   does not list users (**PO**). Writing a person or a mention on a page or
   an entry notifies nobody (§5.11); in a comment or a rewritten block it
@@ -544,7 +586,8 @@ first level only. `list_block_children` with `depth` 2 or 3 expands nested
 blocks in the same call, after **one** walk for `block_id` — every block met
 below is under it by construction. Nested listings ask for 100 children and
 do not follow their cursor (`children_has_more: true` says so). Ceilings:
-`MAX_BLOCKS_PER_CALL` = 500 and `MAX_CHILD_REQUESTS` = 20 listings; beyond
+`MAX_BLOCKS_PER_CALL` = 500 and `MAX_CHILD_REQUESTS` = 20 requests, nested
+listings and synced-original walks together; beyond
 them, and for a `child_page` / `child_database` (read with its own call), a
 block is not expanded and the answer lists it under `not_expanded` with the
 reason.
@@ -554,7 +597,8 @@ reason.
 A synced block is an original (`synced_from: null`) or a copy
 (`synced_from: { type: "block_id", block_id }`) whose children mirror the
 original, which may live elsewhere. On read, a copy is expanded only when
-its original is proven under `R` (`not_expanded` otherwise); listing the
+its original is proven under `R`, within the request budget the call shares
+with its listings (`not_expanded` otherwise); listing the
 children of a copy, or appending to one, first proves its original. On
 write, appending a copy is refused by the classifier, and a synced block
 cannot be rewritten (`update_block` allow-list).
@@ -580,20 +624,40 @@ plugin reads none of it as an instruction. Said in the reason of
 ### 5.10 Rewriting and deleting a block
 
 - **Same check as every write (decision 11).** Both read the target with
-  `GET /v1/blocks/{id}` (first hop), then walk it to `R`.
+  `GET /v1/blocks/{id}` (first hop) and walk it to `R` **before** any check
+  of its type (§5.1).
 - **`update_block`** takes the block's `type` and the new object for that
   type; the executor sends `{ [type]: content }` to `PATCH /v1/blocks/{id}`.
   The classifier checks `type` against `UPDATABLE_BLOCK_TYPES` and `content`
   with the same limits and nested-id rules as new blocks, without
-  `children`; the executor refuses a block whose real type is not the one
-  given (`is a 'paragraph', not a 'to_do'`), so the agent cannot change a
-  block's type, nor a type check be bypassed by lying about it.
+  `children`, and returns them typed (`checkBlockUpdate`); the executor
+  refuses a block whose real type is not the one given (`is a 'paragraph',
+not a 'to_do'`), so the agent cannot change a block's type. Mentions and
+  links in the new content are walked (§5.4).
 - **`delete_block`** sends `DELETE /v1/blocks/{id}`, which "sets a Block
-  object, including page blocks, to `in_trash: true`". A page id is a
-  block id, so this endpoint would trash a page under the cheaper
-  `block-delete`: the executor refuses a target of type `child_page`
-  ("move it to the trash with `notion__trash_page`") or `child_database`,
-  and the classifier refuses the root itself.
+  object, including page blocks, to `in_trash: true`", and with it what is
+  nested in the block. A page id is a block id, and a toggle, a column or a
+  synced original can hold sub-pages and inline databases: deleting such a
+  block would trash pages under the cheaper `block-delete`. So:
+  - the classifier refuses the root itself; the executor refuses a target of
+    type `child_page` ("move it to the trash with `notion__trash_page`") or
+    `child_database`;
+  - when the target `has_children`, the executor lists its descendants
+    first, breadth first, following each listing's cursor, within
+    `MAX_DELETE_SCAN_REQUESTS` = 20 listings of 100, and **refuses** when one
+    of them is a `child_page` or a `child_database`, or when the budget runs
+    out before the whole tree was seen (fail closed). No `DELETE` is sent
+    then. A synced copy's children are its original's, so a copy whose
+    original holds a page is refused too.
+- **Synced originals, known limitation.** A synced original's content is
+  shown by every copy of it, and a copy may live under another root.
+  Rewriting a block inside a synced original, or deleting the original,
+  changes or removes that content in the copies — a write that reaches
+  beyond the root through Notion's own synchronisation. The API offers no
+  way to list the copies of an original (a copy names its original, never
+  the reverse), so it cannot be detected cheaply: the plugin does not refuse
+  it. `update_block` cannot rewrite a `synced_block` itself (allow-list), and
+  the reason of `block-delete` tells the person granting it.
 
 ### 5.11 Notifications are silent
 
@@ -724,7 +788,7 @@ immediate: a page shared a moment ago may appear only at the next refresh.
 | `update_page`         | `PATCH /v1/pages/{page_id}` (`properties.title`, `icon`, `cover`, `notifications`)                                                   |
 | `append_blocks`       | `PATCH /v1/blocks/{block_id}/children` (`children`, `position` unless `end`, `notifications`)                                        |
 | `update_block`        | `PATCH /v1/blocks/{block_id}` (`{ [type]: content }`)                                                                                |
-| `delete_block`        | `DELETE /v1/blocks/{block_id}`                                                                                                       |
+| `delete_block`        | (descendants: `GET /v1/blocks/{id}/children?page_size=100` ≤ 20) then `DELETE /v1/blocks/{block_id}`                                 |
 | `trash_page`          | `PATCH /v1/pages/{page_id}` (`in_trash: true`, `notifications`)                                                                      |
 | `restore_page`        | `PATCH /v1/pages/{page_id}` (`in_trash: false`, `notifications`)                                                                     |
 | `create_entry`        | `POST /v1/pages` (`parent: { type: "data_source_id", data_source_id }`, `properties`, `children`, `icon`, `notifications`)           |
@@ -742,15 +806,15 @@ documents two different defaults); `start_cursor` is the previous
 One grammar per kind, in `src/ids.ts`, read by `classify` and `execute`
 alike; a value outside its grammar is refused, never repaired.
 
-| Value                                                                                                                              | Grammar                                                                                                                                                                       | Where it lands                                                                                                   | Outside the grammar                              |
-| ---------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| `root`, `page_id`, `parent_page_id`, `block_id`, `database_id`, `data_source_id`, `after_block_id`, `discussion_id`, resource refs | `notionId` — a UUID with dashes or 32 hex characters without ("you may omit dashes from the ID when making requests"); returns the **canonical** form, lower case with dashes | URL path segment (canonical), JSON body (`parent`, `position.after_block.id`, `discussion_id`), slice identifier | `denied` / refusal: `<arg>: malformed Notion id` |
-| ids inside values (relation targets, people, mentions, `link_to_page`, `synced_from`)                                              | `notionId`                                                                                                                                                                    | JSON body; relation targets and synced originals are walked (§5.4, §5.7)                                         | `denied`                                         |
-| ids Notion answers (parents during a walk, search results, discovery, child blocks, `next_cursor`)                                 | `notionId` (`cursor` for a cursor)                                                                                                                                            | the next hop's URL path; resource refs; a query string                                                           | the walk refuses; discovery fails                |
-| `start_cursor`                                                                                                                     | `cursor` — `^[A-Za-z0-9-]{1,128}$` (opaque for Notion; the grammar carries no separator)                                                                                      | query string (`URLSearchParams`) or JSON body; never a path, never a slice                                       | `denied`: `start_cursor: malformed`              |
-| `page_size`, `depth`                                                                                                               | integers 1–100, 1–3                                                                                                                                                           | query string / body; `depth` stays in the executor                                                               | `denied`                                         |
-| `position`, `object`, `type`                                                                                                       | closed lists                                                                                                                                                                  | JSON body, built by the executor                                                                                 | `denied`                                         |
-| `query`, `title`, `filter`, `sorts`, `rich_text`, `properties`, `content`, `children`, `icon`, `cover`                             | not identifiers; JSON values held to `content.ts` (limits, no upload, nested ids). `icon` / `cover` external URLs must be `https:` and ≤ 2 000 characters                     | JSON body only                                                                                                   | `denied`                                         |
+| Value                                                                                                                              | Grammar                                                                                                                                                                       | Where it lands                                                                                                        | Outside the grammar                              |
+| ---------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `root`, `page_id`, `parent_page_id`, `block_id`, `database_id`, `data_source_id`, `after_block_id`, `discussion_id`, resource refs | `notionId` — a UUID with dashes or 32 hex characters without ("you may omit dashes from the ID when making requests"); returns the **canonical** form, lower case with dashes | URL path segment (canonical), JSON body (`parent`, `position.after_block.id`, `discussion_id`), slice identifier      | `denied` / refusal: `<arg>: malformed Notion id` |
+| ids inside values (relation targets, people, mentions, `link_to_page`, `synced_from`)                                              | `notionId`                                                                                                                                                                    | JSON body; relation targets, page and database mentions, links to a page and synced originals are walked (§5.4, §5.7) | `denied`                                         |
+| ids Notion answers (parents during a walk, search results, discovery, child blocks, `next_cursor`)                                 | `notionId` (`cursor` for a cursor)                                                                                                                                            | the next hop's URL path; resource refs; a query string                                                                | the walk refuses; discovery fails                |
+| `start_cursor`                                                                                                                     | `cursor` — `^[A-Za-z0-9-]{1,128}$` (opaque for Notion; the grammar carries no separator)                                                                                      | query string (`URLSearchParams`) or JSON body; never a path, never a slice                                            | `denied`: `start_cursor: malformed`              |
+| `page_size`, `depth`                                                                                                               | integers 1–100, 1–3                                                                                                                                                           | query string / body; `depth` stays in the executor                                                                    | `denied`                                         |
+| `position`, `object`, `type`                                                                                                       | closed lists                                                                                                                                                                  | JSON body, built by the executor                                                                                      | `denied`                                         |
+| `query`, `title`, `filter`, `sorts`, `rich_text`, `properties`, `content`, `children`, `icon`, `cover`                             | not identifiers; JSON values held to `content.ts` (limits, no upload, nested ids). `icon` / `cover` external URLs must be `https:` and ≤ 2 000 characters                     | JSON body only                                                                                                        | `denied`                                         |
 
 A Notion page URL (`https://www.notion.so/Title-<32 hex>`) is not an id and
 is refused with a hint. Canonicalising the two spellings is reading the one
@@ -761,7 +825,7 @@ path segment and a valid slice identifier.
 
 ### 6.4 Tests
 
-`npx vitest run plugins/notion` — 110 tests, no network, no credential:
+`npx vitest run plugins/notion` — 126 tests, no network, no credential:
 
 - `plugin.test.ts`: the kit — `assertPluginWellFormed`,
   `assertPresetsValid`, `assertNoWildcard`, `assertCatalogCoverage` on
@@ -795,6 +859,14 @@ path segment and a valid slice identifier.
 - `identifiers.test.ts`: hostile values (`..`, `%2e%2e`, `%2f`, a UUID with
   `/x`, a line break, `?x=1#y`, empty, overlong) in every id position of
   `classify` and `execute`, nested ids, cursors, the canonical spelling.
+- `boundaries.test.ts`: `delete_block` of a block holding a sub-page, or a
+  database two levels down, or a tree larger than the scan budget: refused,
+  no `DELETE`; a text-only tree over two pages of children: deleted;
+  mentions and links to another root refused in new content, a rewritten
+  block, a comment and an entry title; the shared reference budget; nothing
+  but "not under" said of an object outside the root (`update_page`,
+  `update_entry`, `update_block`, `delete_block`); one budget for listings
+  and synced-original walks; a data source without `database_parent`.
 - `data-model.test.ts`: referential integrity, unique names, and every
   emitted slice and catalog pattern written with the declared entities under
   their declared parents.
@@ -871,6 +943,16 @@ question of the same number in the reviewed draft.
     (an undeclared argument). Where it applies: §5.11.
 13. **Personal access tokens refused at `verify` (PO)**; credential
     `api-key` on an internal connection (§6.1).
+
+Arbitrated by the review of 2026-10-16:
+
+- The walk comes before any check of the object it proves (§5.1).
+- Search drops unprovable results silently, without a count (§5.2).
+- Mentions and links to a page are walked like relation targets, within one
+  budget per call (§5.4).
+- Rewriting or deleting a synced original reaches its copies: documented
+  as a known limitation, since copies cannot be listed (§5.10).
+- Notion's per-connection request ceiling is a known limitation (§3).
 
 Taken while implementing, within the decisions above:
 

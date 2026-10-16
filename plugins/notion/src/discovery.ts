@@ -20,17 +20,13 @@ import type { ConnectionContext, Resource } from '@vaubaan/plugin-sdk';
 import { failureOf, request, send } from './api.ts';
 import { cursor, notionId } from './ids.ts';
 import { PROVIDER_ID } from './identity.ts';
+import { isObject, type Json } from './json.ts';
+import { ENDPOINT, parentRef } from './parents.ts';
 
 /** Search pages read per kind of object (100 objects each). */
 export const MAX_SEARCH_PAGES = 20;
 /** Most roots one connection exposes. */
 export const MAX_DISCOVERED_ROOTS = 200;
-
-type Json = Readonly<Record<string, unknown>>;
-
-function isObject(value: unknown): value is Json {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 function fail(message: string): never {
   throw new Error(`${PROVIDER_ID}: ${message}`);
@@ -68,44 +64,21 @@ async function searchAll(ctx: ConnectionContext, value: 'page' | 'data_source'):
   );
 }
 
-const ENDPOINT = {
-  page_id: '/pages',
-  block_id: '/blocks',
-  database_id: '/databases',
-  data_source_id: '/data_sources',
-} as const;
-
-/** The id a parent reference names and the endpoint that reads it, `'workspace'`, or `null` for a shape not known. */
-function parentOf(
-  parent: unknown,
-): { readonly id: string; readonly path: string; readonly also?: string } | 'workspace' | null {
-  if (!isObject(parent)) return null;
-  if (parent.type === 'workspace') return 'workspace';
-  const type = parent.type;
-  if (
-    type !== 'page_id' &&
-    type !== 'block_id' &&
-    type !== 'database_id' &&
-    type !== 'data_source_id'
-  )
-    return null;
-  const id = notionId(parent[type]);
-  if (!id) return null;
-  const also = type === 'data_source_id' ? notionId(parent.database_id) : null;
-  return { id, path: ENDPOINT[type], ...(also ? { also } : {}) };
-}
-
 /** True when an object with this parent is a root : the workspace, or a parent this token neither found nor reads. */
 async function isTopLevel(
   ctx: ConnectionContext,
   parent: unknown,
   found: ReadonlySet<string>,
 ): Promise<boolean> {
-  const ref = parentOf(parent);
-  if (ref === 'workspace') return true;
-  if (ref === null) return fail('unexpected parent in the search answer');
-  if (found.has(ref.id) || (ref.also !== undefined && found.has(ref.also))) return false;
-  const path = `${ref.path}/${ref.id}`;
+  const ref = parentRef(parent);
+  if ('end' in ref) {
+    if (ref.end === 'workspace') return true;
+    if (ref.end === 'agent') return false; // an agent's instruction page : under no shared page
+    return fail('unexpected parent in the search answer');
+  }
+  const { kind, id } = ref.node;
+  if (found.has(id) || (ref.database !== undefined && found.has(ref.database))) return false;
+  const path = `${ENDPOINT[kind]}/${id}`;
   const answer = await send(ctx, 'GET', path);
   if (answer.status === 404) return true;
   if (answer.status < 200 || answer.status >= 300) throw failureOf('GET', path, answer);

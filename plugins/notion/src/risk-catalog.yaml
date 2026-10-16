@@ -141,8 +141,9 @@ risks:
     reason: >-
       Moves one block of a page, and the blocks nested in it, to Notion's
       trash: it disappears for everyone. It can be restored in Notion, not by
-      the agent. Never a page: moving a page to the trash is its own
-      permission.
+      the agent. Never a page or a database, and never a block that holds
+      one: moving a page to the trash is its own permission. A synced block
+      deleted at its original also disappears wherever it is copied.
     matches: 'notion.root[**].block[*].delete.W'
     infra_limits: { calls_per_minute_max: 10 }
     vector:

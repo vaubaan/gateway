@@ -296,7 +296,7 @@ describe('declined by the executor : nothing is sent', () => {
 });
 
 describe('ceilings', () => {
-  test(`search proves at most ${MAX_SEARCH_VERIFY_REQUESTS} ancestors ; the rest is hidden and counted`, async () => {
+  test(`search proves at most ${MAX_SEARCH_VERIFY_REQUESTS} ancestors ; the rest is dropped, uncounted`, async () => {
     const results = Array.from({ length: 30 }, (_, i) =>
       page(
         `${(i + 1).toString(16).padStart(8, '0')}-0000-4000-8000-000000000000`,
@@ -322,7 +322,7 @@ describe('ceilings', () => {
     ]);
     const body = payload(await execute(ctx(fetch), TOOL.searchContent, { query: 'x' }));
     expect((body.results as unknown[]).length).toBe(MAX_SEARCH_VERIFY_REQUESTS);
-    expect(body.results_hidden).toBe(30 - MAX_SEARCH_VERIFY_REQUESTS);
+    expect('results_hidden' in body).toBe(false);
     expect(body).toMatchObject({ next_cursor: 'next-1', has_more: true });
   });
 
@@ -363,7 +363,7 @@ describe('ceilings', () => {
       id: CHILD,
       reason: 'a sub-page or a database: read it with its own call',
     });
-    expect(notExpanded.slice(1).every((n) => /listings in one call/.test(n.reason))).toBe(true);
+    expect(notExpanded.slice(1).every((n) => /requests in one call/.test(n.reason))).toBe(true);
     expect(notExpanded).toHaveLength(3);
   });
 
