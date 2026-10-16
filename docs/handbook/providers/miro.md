@@ -1,6 +1,6 @@
 ---
 title: Miro provider plugin
-status: draft
+status: current
 date: 2026-10-16
 last_synced: 2026-10-16
 tracks:
@@ -10,22 +10,19 @@ tracks:
 
 # Miro provider plugin
 
-> **Draft, phase 1 of [`provider-modeler`](../../skills/provider-modeler.md):
-> nothing under `plugins/miro/` exists yet.** This page proposes the model
-> for a human review before any code. Decisions already taken by the
-> product owner are marked **(PO)**; the questions left to him are in
-> "Open questions" at the end. Every fact about Miro's API on this page was
-> read on developers.miro.com on 2026-10-16 (see "Sources": Context7 was
-> unavailable, and the product owner authorised a one-off exception). A
-> fact the documentation does not state is marked **⚠ unverified**, and
-> the model is built so that it fails closed when the fact turns out worse
-> than assumed.
+> Model reviewed by the product owner on 2026-10-16 (phase 1 of
+> [`provider-modeler`](../../skills/provider-modeler.md)); his decisions are
+> folded in below ("Decisions"), and the code under `plugins/miro/` follows
+> this page. Facts about Miro's API come from Miro's OpenAPI clients through
+> Context7 and from developers.miro.com (see "Sources"). A fact the
+> documentation does not state is marked **⚠ unverified**, and the model
+> fails closed when the fact turns out worse than assumed.
 
-`@vaubaan/plugin-miro` 0.1.0 (proposed), tool prefix `miro__`, Miro REST API
-v2 (`https://api.miro.com/v2`). Scope v0.1 **(PO)**: "boards + items" —
-list and read boards; read items (generic list and get); create, update and
-delete sticky notes, shapes, texts, cards, frames and connectors; tags
-(read, create, attach, remove — argued in §5.9). **Out of scope (PO)**:
+`@vaubaan/plugin-miro` 0.1.0, tool prefix `miro__`, Miro REST API v2
+(`https://api.miro.com/v2`). Scope v0.1: "boards + items" — list and read
+boards; read items (generic list and get); create, update and delete sticky
+notes, shapes, texts, cards, frames and connectors; create up to 20 items in
+one call; tags (read, create, attach, remove — §5.9). **Out of scope**:
 creating, copying or deleting a board; sharing; board members.
 
 **Token expiry, the deciding fact, in one paragraph** (details §6.1). A
@@ -39,18 +36,60 @@ authorization token" **unchecked** when creating the app. Miro still offers
 that choice, calls it "fine for test applications", recommends expiring
 tokens, and announces no deprecation on the pages read. If Miro drops it,
 the plugin needs a second way, `oauth2` with `refreshable: true` through a
-company app (Open question 2).
+company app.
+
+## Decisions
+
+Taken by the product owner on 2026-10-16 (**PO**), or the draft's own
+proposal kept as the answer to an open question (**default**):
+
+1. **No environment (PO).** No entity is `envScopable`, no risk carries
+   `acceptable_in_envs`, no preset entry is env-qualified. A Miro board has
+   no staging / production notion of its own, and an owner's label would
+   only split budgets. Deletions are held instead by the gate: the
+   daily-work preset `facilitator` puts `gate: approval` on `item-delete`
+   and `frame-delete`.
+2. **Board ref spelled with `~` (PO, re-evaluated after decision 1).** The
+   PO chose it for environment resolution on multi-board missions, which
+   decision 1 removed. Re-evaluated in §5.1: a concrete reason remains —
+   the gateway finds the board a call targets by reading the refs off the
+   slices, and a `[*]` board segment loses it for the audit
+   (`resource_ref`) and the head of an approval request on any mission
+   with more than one board. So the `~` spelling stays, with the ADR
+   [`miro-board-ref-tilde-spelling`](../../decisions/miro-board-ref-tilde-spelling.md)
+   (status proposed).
+3. **Bulk creation in (PO).** `miro__create_items` (`POST
+/v2/boards/{id}/items/bulk`, 1 to 20 items) with its own risk
+   `miro.bulk-create`, so its budget is decided apart from single writes;
+   the same closed argument surface per item type as the typed tools (§5.6).
+4. **Credential `api-key` with a non-expiring token (PO)**, as in §6.1; the
+   `help` says to leave token expiry unchecked and that `boards:write` also
+   allows deleting boards and managing members.
+5. **Non-expiring tokens accepted for v0.1 (default).** An `oauth2` company
+   app comes only if Miro deprecates them.
+6. **Names in board reads passed through (default).** `read-boards` is
+   `pii` (§5.7).
+7. **A board id outside the grammar at discovery is skipped with a warning
+   (default)**, not a failed discovery (§5.1).
+8. **No card assignee in v0.1 (default)** (§5.8).
+9. **No tag update or deletion in v0.1 (default)** (§5.9).
+10. **Frame deletion priced as the worst case (default)** until a test on a
+    scratch board says whether the children survive (§5.4).
+11. **Which team to install the app on** stays to be confirmed on a real
+    account (⚠): the guide tells the person to pick the team that holds the
+    boards.
 
 ## 1. Data model
 
-One plane, `board`. The **board** is the resource; the **environment** is
-the owner's label on it **(PO)**.
+One plane, `board`. The **board** is the resource. No environment
+(Decision 1).
 
 ```
-board[<board ref>]            the resource; labelled staging / prod by its owner (envScopable)
+board[<board ref>]            the resource
   ├─ item[<item id>]          sticky note, shape, text, card (and, read-only, any other item type)
   │    ├─ delete              verb leaf: deleting the item
-  │    └─ tag-link[<tag id>]  a tag attached to the item (attach / remove)
+  │    ├─ tag-link[<tag id>]  a tag attached to the item (attach / remove)
+  │    └─ bulk-create         verb leaf on the collection: up to 20 items in one call
   ├─ frame[<item id>]         a frame: a parent item that contains other items
   │    └─ delete              verb leaf: deleting the frame (children may go with it, §5.4)
   ├─ connector[<id>]          a line between two items
@@ -58,15 +97,16 @@ board[<board ref>]            the resource; labelled staging / prod by its owner
   └─ tag[<tag id>]            a tag of the board (board-scoped vocabulary)
 ```
 
-| Entity      | Parent                       | Cardinalities      | Notes                                                                                                                                                                                                                          |
-| ----------- | ---------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `board`     | —                            | `one`, `unbounded` | The resource (`envScopable: true`). `unbounded` for `list_boards` only.                                                                                                                                                        |
-| `item`      | `board`                      | `one`, `unbounded` | Every item that is not a frame or a connector. Miro's items share one id space (frames are items too: `GET /items?type=frame`).                                                                                                |
-| `frame`     | `board`                      | `one`, `unbounded` | A separate entity although Miro stores it as an item, because deleting one has its own risk (§5.4). Frames are the only parents the platform supports ("Kanban, Mind Map, Table, and User Story Mapping" are not, as parents). |
-| `connector` | `board`                      | `one`, `unbounded` | Its own endpoints (`/connectors`), its own ids; not returned by `GET /items` (the `type` enum has no connector).                                                                                                               |
-| `tag`       | `board`                      | `one`, `unbounded` | "When you create a tag, it is added to the current board". At most 100 per board (documented for the Web SDK and the board UI; the REST page is silent).                                                                       |
-| `tag-link`  | `item`                       | `one`              | Attaching or removing a tag on a card or sticky note (up to 8 tags per item).                                                                                                                                                  |
-| `delete`    | `item`, `frame`, `connector` | `one`              | Verb leaf, declared once per parent (three entries named `delete`; `validateDataModel` checks parents by name only, as Cloudflare DNS and the template do with one).                                                           |
+| Entity        | Parent                       | Cardinalities      | Notes                                                                                                                                                                                                                          |
+| ------------- | ---------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `board`       | —                            | `one`              | The resource. `list_boards` emits one slice per mission board, never `board[*]`.                                                                                                                                               |
+| `item`        | `board`                      | `one`, `unbounded` | Every item that is not a frame or a connector. Miro's items share one id space (frames are items too: `GET /items?type=frame`).                                                                                                |
+| `frame`       | `board`                      | `one`              | A separate entity although Miro stores it as an item, because deleting one has its own risk (§5.4). Frames are the only parents the platform supports ("Kanban, Mind Map, Table, and User Story Mapping" are not, as parents). |
+| `connector`   | `board`                      | `one`, `unbounded` | Its own endpoints (`/connectors`), its own ids; not returned by `GET /items` (the `type` enum has no connector).                                                                                                               |
+| `tag`         | `board`                      | `one`, `unbounded` | "When you create a tag, it is added to the current board". At most 100 per board (documented for the Web SDK and the board UI; the REST page is silent).                                                                       |
+| `tag-link`    | `item`                       | `one`, `unbounded` | Attaching or removing a tag on a card or sticky note (up to 8 tags per item); `unbounded` for `list_item_tags`.                                                                                                                |
+| `delete`      | `item`, `frame`, `connector` | `one`              | Verb leaf, declared once per parent (three entries named `delete`; `validateDataModel` checks parents by name only).                                                                                                           |
+| `bulk-create` | `item`                       | `one`              | Verb leaf on the item collection (`item.bulk-create`, no item id): the bulk call, priced by its own risk (§5.6).                                                                                                               |
 
 Not modelled: board members and sharing (out of scope), images, documents,
 embeds, app cards (readable through `get_item` / `list_items`, not
@@ -75,8 +115,8 @@ writable in v0.1), mind maps, the experimental and flowchart endpoints.
 ## 2. Tool → slice mapping
 
 Every tool takes `board` — the board **ref** (§Identifiers) — as an explicit
-argument. Kit rule (template's `resolveWorkspace`): a `board` given must be
-one of the mission's Miro resources, otherwise `denied`; absent, the
+argument, except `list_boards`. Kit rule (`resolveBoard`): a `board` given
+must be one of the mission's Miro resources, otherwise `denied`; absent, the
 mission's single Miro board; none or several, `denied`. The classifier never
 guesses a board from an item id.
 
@@ -114,8 +154,9 @@ connector, tag id (numeric strings, §Identifiers).
 | `miro__create_tag`         | `board`, **`title`**, `fill_color`                                                                                        | `miro.board[B].tag.W`                                | `POST /v2/boards/{board_id}/tags` (L1)                                         |
 | `miro__attach_tag`         | `board`, **`item_id`**, **`tag_id`**                                                                                      | `miro.board[B].item[I].tag-link[T].W`                | `POST /v2/boards/{board_id}/items/{item_id}?tag_id=…` (L1)                     |
 | `miro__remove_tag`         | `board`, **`item_id`**, **`tag_id`**                                                                                      | `miro.board[B].item[I].tag-link[T].W`                | `DELETE /v2/boards/{board_id}/items/{item_id}?tag_id=…` (L1)                   |
+| `miro__create_items`       | `board`, **`items`** (1–20 of `{ type, data, style, position, geometry, parent_frame_id }`)                               | `miro.board[B].item.bulk-create.W`                   | `POST /v2/boards/{board_id}/items/bulk` (L2 per item)                          |
 
-29 tools. L1–L3 are Miro's rate-limit levels (§3, "Rate limits"); a level
+30 tools. L1–L3 are Miro's rate-limit levels (§3, "Rate limits"); a level
 not written was not stated on a page read.
 
 Titles (`toolTitles`): "List the boards", "Read a board", "List a board's
@@ -125,22 +166,31 @@ note", "Delete a sticky note", "Add a shape", "Edit a shape", "Delete a
 shape", "Add a text", "Edit a text", "Delete a text", "Add a card", "Edit a
 card", "Delete a card", "Add a frame", "Edit a frame", "Delete a frame",
 "Connect two items", "Edit a connector", "Delete a connector", "Create a
-tag", "Tag an item", "Remove a tag from an item".
+tag", "Tag an item", "Remove a tag from an item", "Add several items at
+once".
 
 **Refused by the classifier** (`denied`, audited, never executed): an
-unknown tool; `board` outside the mission, malformed, ambiguous, or absent
-with zero / several Miro boards; an id outside its grammar (`item_id`,
-`frame_id`, `connector_id`, `tag_id`, `start_item_id`, `end_item_id`,
+unknown tool; `board` outside the mission, malformed, given in Miro's
+spelling (`uXjVOD6LSME=`: the refusal names the ref to use), ambiguous, or
+absent with zero / several Miro boards; more than 50 Miro boards on a
+`list_boards`; an id outside its grammar (`item_id`, `frame_id`,
+`connector_id`, `tag_id`, `start_item_id`, `end_item_id`,
 `parent_frame_id`); `start_item_id` equal to `end_item_id` (Miro's own
 rule: "startItem.id must be different from endItem.id"); `limit` outside
-10–50 on items and connectors, 1–50 on tags (Miro's bounds); a `type`
-outside Miro's item-type enum; a key of `data`, `style`, `position` or
-`geometry` outside the tool's allowlist (§ "Undeclared arguments"); a
-`captions` list longer than 20 or a caption over 200 characters (Miro's
-limits); a tag `title` over 120 characters; an undeclared argument.
-
-**Bulk creation is not offered** (`POST /v2/boards/{board_id}/items/bulk`,
-up to 20 items in one transactional call, frames included). Argued in §5.6.
+10–50 on items and connectors, 1–50 on tags (Miro's bounds); an `offset`
+that is not an integer from 0 to 10,000; a `type` outside Miro's item-type
+enum; a `cursor` outside its grammar; a `data`, `style`, `position` or
+`geometry` that is not an object, a key of one of them outside the tool's
+allowlist, or a value that is not a string, number, boolean or `null`
+(§ "Undeclared arguments"); a `captions` list longer than 20, a caption over
+200 characters or with a key outside `content`, `position`,
+`textAlignVertical`; a snap value outside `auto`, `top`, `right`, `bottom`,
+`left`; a connector `shape` outside `straight`, `elbowed`, `curved`; a tag
+`title` empty or over 120 characters, a `fill_color` outside Miro's twelve
+tag colours; an `items` list empty or longer than 20, an element that is not
+an object, with a key outside `type`, `data`, `style`, `position`,
+`geometry`, `parent_frame_id`, or with a `type` other than `sticky_note`,
+`shape`, `text`, `card`; an undeclared argument.
 
 ### Undeclared arguments
 
@@ -149,247 +199,111 @@ The plugin **refuses undeclared arguments** in `classify` and again in
 declaredArgumentsOf(miroTools)`, wrapped in one exported
 `undeclaredArgument(tool, args)`), **and** closes one level deeper: the
 four objects a write forwards to Miro — `data`, `style`, `position`,
-`geometry` — are checked key by key against an allowlist per tool, taken
-from Miro's request schemas (e.g. sticky note `data`: `content`, `shape`;
-`style`: `fillColor`, `textAlign`, `textAlignVertical`; `position`: `x`,
-`y`; `geometry`: `width`, `height`). An unknown key is `denied` in
-`classify` and declined in `execute`, because those objects are forwarded
-as JSON and a field Miro adds later (or an undocumented one) would
-otherwise reach the board unpriced. `parent` is **not** one of them: the
-parent is the flat identifier `parent_frame_id` (§5.3), which the executor
-writes as `parent: { id }` itself. Values inside the allowlisted keys are
-Miro's business (an enum Miro rejects comes back as a 400). No `routing`
-argument.
+`geometry` — are checked key by key against an allowlist per item type,
+taken from Miro's request schemas:
+
+| Type          | `data`                                   | `style`                                                                                                                                                       | `geometry`                    |
+| ------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| `sticky_note` | `content`, `shape`                       | `fillColor`, `textAlign`, `textAlignVertical`                                                                                                                 | `width`, `height`             |
+| `shape`       | `content`, `shape`                       | `borderColor`, `borderOpacity`, `borderStyle`, `borderWidth`, `color`, `fillColor`, `fillOpacity`, `fontFamily`, `fontSize`, `textAlign`, `textAlignVertical` | `width`, `height`, `rotation` |
+| `text`        | `content` (required on create)           | `color`, `fillColor`, `fillOpacity`, `fontFamily`, `fontSize`, `textAlign`                                                                                    | `width`, `rotation`           |
+| `card`        | `title`, `description`, `dueDate`        | `cardTheme`                                                                                                                                                   | `width`, `height`, `rotation` |
+| `frame`       | `format`, `title`, `type`, `showContent` | `fillColor`                                                                                                                                                   | `width`, `height`             |
+
+A connector's `style` takes `color`, `strokeColor`, `strokeStyle`,
+`strokeWidth`, `fontSize`, `startStrokeCap`, `endStrokeCap`,
+`textOrientation`; a caption `content`, `position`, `textAlignVertical`.
+
+`position` is `x`, `y` for every type. Each value must be a string, a
+number, a boolean or `null`: an object or a list inside one of these keys
+is refused, so nothing nested reaches Miro unread. An unknown key is
+`denied` in `classify` and declined in `execute`, because those objects are
+forwarded as JSON and a field Miro adds later (or an undocumented one)
+would otherwise reach the board unpriced. `parent` is **not** one of them:
+the parent is the flat identifier `parent_frame_id` (§5.3), which the
+executor writes as `parent: { id }` itself. Values inside the allowlisted
+keys are Miro's business (an enum Miro rejects comes back as a 400). No
+`routing` argument.
 
 ## 3. Catalog and presets
 
-5 named risks + the fallback. **Reads are account-scoped** (an owner need
-not label a board for an agent to read it); **every write is env-scoped**
-(`acceptable_in_envs: [staging, prod]`), so an unlabelled board can be read
-but not changed, and a production board's writes have their own budget
-(Open question 5 on the labels).
+6 named risks + the fallback. No risk is env-scoped (Decision 1).
 
 Layering, as in Cloudflare DNS: `content-write` matches every write under a
 board (`board[**].…[**].W` patterns are recursive), so a deletion touches
-`content-write` **and** its delete risk. A mission that may delete must be
-able to edit; a mission that edits need not be able to delete.
+`content-write` **and** its delete risk, and a bulk creation touches
+`content-write` **and** `bulk-create`. A mission that may delete must be
+able to edit; a mission that edits need not be able to delete or to create
+twenty items in one call.
 
 ```yaml
-provider: miro
-catalog_version: 1
-catalog_date: 2026-10-16
-
 risks:
-  # ─── Reads ───────────────────────────────────────────────────────────────
-
-  - id: miro.read-boards
-    label: 'Read board details'
-    reason: >-
-      Name, description, team, links and sharing policy of the selected
-      boards, with the names of the people who own, created, last modified
-      and last opened them. No email address is returned.
+  - id: miro.read-boards #           board details, with people's names
     matches: 'miro.board[*].R'
-    infra_limits: { calls_per_minute_max: 200 }
-    vector:
-      reversibility: reversible
-      blast: single
-      data: pii
-      cost: free
-      visibility: internal
-      persistence: stateless
+    infra_limits: { calls_per_minute_max: 100 }
+    vector: { reversible, single, pii, free, internal, stateless }
 
-  - id: miro.read-board-content
-    label: 'Read the items, connectors and tags of a board'
-    reason: >-
-      Everything written on the board: sticky notes, texts, cards, shapes,
-      frames, connectors and tags, with their position and the id of who
-      created them. Content written by people, which can carry
-      instructions aimed at the agent.
+  - id: miro.read-board-content #    items, connectors, tags
     matches:
       - 'miro.board[**].item[**].R'
-      - 'miro.board[**].frame[**].R'
       - 'miro.board[**].connector[**].R'
       - 'miro.board[**].tag[**].R'
-    infra_limits: { calls_per_minute_max: 300 }
-    vector:
-      reversibility: reversible
-      blast: single
-      data: data
-      cost: free
-      visibility: internal
-      persistence: stateless
+    infra_limits: { calls_per_minute_max: 200 }
+    vector: { reversible, single, data, free, internal, stateless }
 
-  # ─── Writes ──────────────────────────────────────────────────────────────
-
-  - id: miro.content-write
-    label: 'Add and edit items on a board'
-    reason: >-
-      Creates or edits sticky notes, shapes, texts, cards, frames and
-      connectors, moves an item in or out of a frame, creates tags and
-      tags items. Seen at once by everyone on the board; reversible by
-      editing again, but the previous text is not kept by the gateway.
-      Every deletion touches this permission too.
+  - id: miro.content-write #         add and edit; every deletion and bulk call too
     matches:
       - 'miro.board[**].item[**].W'
       - 'miro.board[**].frame[**].W'
       - 'miro.board[**].connector[**].W'
       - 'miro.board[**].tag[**].W'
-      - 'miro.board[*].item.W'
-      - 'miro.board[*].frame.W'
-      - 'miro.board[*].connector.W'
-      - 'miro.board[*].tag.W'
-    acceptable_in_envs: [staging, prod]
     infra_limits: { calls_per_minute_max: 200 }
-    vector:
-      reversibility: reversible
-      blast: single
-      data: data
-      cost: free
-      visibility: team
-      persistence: session
-    vector_overrides:
-      prod: { reversibility: costly }
+    vector: { reversible, single, data, free, team, session }
 
-  - id: miro.item-delete
-    label: 'Delete an item or a connector'
-    reason: >-
-      Removes a sticky note, shape, text, card or connector. Deleting an
-      item also removes the connectors attached to it. The REST API has no
-      restore: the content must be written again.
+  - id: miro.bulk-create #           up to 20 items in one call
+    matches: 'miro.board[**].item.bulk-create.W'
+    infra_limits: { calls_per_minute_max: 10 }
+    vector: { costly, bulk, data, free, team, session }
+
+  - id: miro.item-delete #           a sticky note, shape, text, card or connector
     matches:
       - 'miro.board[**].item[**].delete.W'
       - 'miro.board[**].connector[**].delete.W'
-    acceptable_in_envs: [staging, prod]
-    infra_limits: { calls_per_minute_max: 40 }
-    vector:
-      reversibility: costly
-      blast: single
-      data: data
-      cost: free
-      visibility: team
-      persistence: session
+    infra_limits: { calls_per_minute_max: 30 }
+    vector: { costly, single, data, free, team, session }
 
-  - id: miro.frame-delete
-    label: 'Delete a frame'
-    reason: >-
-      Removes a frame, which can group up to 5000 items. Miro's
-      documentation does not say whether the items inside go with it, so
-      this permission assumes they may: a whole section of the board, with
-      no restore through the API.
+  - id: miro.frame-delete #          a frame, and maybe what it holds
     matches: 'miro.board[**].frame[**].delete.W'
-    acceptable_in_envs: [staging, prod]
     infra_limits: { calls_per_minute_max: 10 }
-    vector:
-      reversibility: irreversible
-      blast: bulk
-      data: data
-      cost: free
-      visibility: team
-      persistence: session
+    vector: { irreversible, bulk, data, free, team, session }
 
-  # ─── Fallback (required) ─────────────────────────────────────────────────
-
-  - id: miro.uncategorized-write
-    label: 'Uncategorized Miro write'
-    reason: >-
-      Catch-all for writes without a dedicated entry. Seen in an audit, it
-      means a tool classifies to a slice no entry covers: add the entry.
-    matches: 'miro.[**].W'
+  - id: miro.uncategorized-write #   the fallback
+    matches: 'miro.**.W'
     fallback: true
-    acceptable_in_envs: [staging, prod]
-    vector:
-      reversibility: costly
-      blast: bulk
-      data: data
-      cost: free
-      visibility: team
-      persistence: session
-
-presets:
-  - id: read-only
-    label: Read-only
-    description: Board details and everything on the selected boards. Nothing is changed.
-    entries:
-      - risk_id: miro.read-boards
-        quota: 1000
-        rate_limit: { max: 30, window_seconds: 60 }
-        gate: auto
-      - risk_id: miro.read-board-content
-        quota: 5000
-        rate_limit: { max: 120, window_seconds: 60 }
-        gate: auto
-
-  - id: scribe
-    label: Scribe
-    description: Read the boards, then add and edit sticky notes, texts, cards, shapes, frames, connectors and tags. Never deletes anything.
-    entries:
-      - risk_id: miro.read-boards
-        quota: 1000
-        rate_limit: { max: 30, window_seconds: 60 }
-        gate: auto
-      - risk_id: miro.read-board-content
-        quota: 5000
-        rate_limit: { max: 120, window_seconds: 60 }
-        gate: auto
-      - risk_id: miro[staging].content-write
-        quota: 2000
-        rate_limit: { max: 60, window_seconds: 60 }
-        gate: auto
-      - risk_id: miro[prod].content-write
-        quota: 1000
-        rate_limit: { max: 30, window_seconds: 60 }
-        gate: auto
-
-  - id: facilitator
-    label: Facilitator
-    description: Run a workshop board end to end. Deleting on a production board, and deleting any frame, asks first.
-    entries:
-      - risk_id: miro.read-boards
-        quota: 1000
-        rate_limit: { max: 30, window_seconds: 60 }
-        gate: auto
-      - risk_id: miro.read-board-content
-        quota: 5000
-        rate_limit: { max: 120, window_seconds: 60 }
-        gate: auto
-      - risk_id: miro[staging].content-write
-        quota: 2000
-        rate_limit: { max: 60, window_seconds: 60 }
-        gate: auto
-      - risk_id: miro[prod].content-write
-        quota: 1000
-        rate_limit: { max: 30, window_seconds: 60 }
-        gate: auto
-      - risk_id: miro[staging].item-delete
-        quota: 300
-        rate_limit: { max: 20, window_seconds: 60 }
-        gate: auto
-      - risk_id: miro[prod].item-delete
-        quota: 50
-        rate_limit: { max: 5, window_seconds: 60 }
-        gate: approval
-      - risk_id: miro[staging].frame-delete
-        quota: 10
-        rate_limit: { max: 2, window_seconds: 60 }
-        gate: approval
-      - risk_id: miro[prod].frame-delete
-        quota: 5
-        rate_limit: { max: 1, window_seconds: 60 }
-        gate: approval
 ```
 
-**Why these five.** One decision per intent: _see the board_ (details, with
-people's names), _see what is on it_, _change it_, _remove one thing_,
-_remove a section_. Creating and editing share one risk because an edit can
-empty an item as surely as a deletion and both are reversible by writing
-again; splitting them would ask a person a question with no different
-answer. Connectors and tags ride on the item risks: a connector or a tag is
-a mark on the board like a sticky note (§5.5, §5.9). Frames get their own
-deletion risk because one call can take away a section (§5.4).
+The file itself (`plugins/miro/src/risk-catalog.yaml`) carries the labels
+and the reasons people read.
 
-**Deliberately in no preset:** the fallback only. `prod` frame deletion is
-in `facilitator`, behind approval, because a facilitator tidies boards
-after a workshop; a mission that should never do it drops it.
+| Preset        | Risks (quota per period, rate limit, gate)                                                                                                                                                                                     |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `read-only`   | `read-boards` 1000, 30/min, auto; `read-board-content` 5000, 120/min, auto.                                                                                                                                                    |
+| `scribe`      | the reads; `content-write` 2000, 60/min, auto; `bulk-create` 100, 5/min, auto. Never deletes.                                                                                                                                  |
+| `facilitator` | the daily-work preset: the reads; `content-write` 2000, 60/min, auto; `bulk-create` 100, 5/min, auto; `item-delete` 300, 20/min, **approval**; `frame-delete` 10, 2/min, **approval**. Every deletion asks first (Decision 1). |
+
+**Why these six.** One decision per intent: _see the board_ (details, with
+people's names), _see what is on it_, _change it_, _fill it in bulk_,
+_remove one thing_, _remove a section_. Creating and editing share one risk
+because an edit can empty an item as surely as a deletion and both are
+reversible by writing again; splitting them would ask a person a question
+with no different answer. Bulk creation has its own risk (Decision 3)
+because a mission's quota counts **calls**: one bulk call adds up to twenty
+items for one unit of `content-write`, so its budget is set apart.
+Connectors and tags ride on the item risks: a connector or a tag is a mark
+on the board like a sticky note (§5.5, §5.9). Frames get their own deletion
+risk because one call can take away a section (§5.4).
+
+**Deliberately in no preset:** the fallback only.
 
 **Vectors.** `read-boards` is `pii` because the board object carries the
 **names** of its owner, creator, last modifier and last opener
@@ -397,8 +311,7 @@ after a workshop; a mission that should never do it drops it.
 schema). Item reads carry only user **ids** (`createdBy`, `modifiedBy`:
 `id`, `type`), so `read-board-content` is `data`. `content-write` is
 `team` visibility (board members see it live); a board shared by public
-link makes it wider, which the owner expresses by the `prod` label and
-not by the catalog.
+link makes it wider, which the catalog cannot see.
 
 ### Rate limits
 
@@ -415,16 +328,17 @@ the connection shares the 100,000 credits**. How the catalog respects it:
 
 | Risk                 | Typical call cost (credits)                         | `calls_per_minute_max` | Credits / min at that ceiling |
 | -------------------- | --------------------------------------------------- | ---------------------- | ----------------------------- |
-| `read-boards`        | 50 (L1)                                             | 200                    | 10,000                        |
-| `read-board-content` | 50–100 (L1 get, L2 list)                            | 300                    | ≤ 30,000                      |
+| `read-boards`        | 50 (L1)                                             | 100                    | 5,000                         |
+| `read-board-content` | 50–100 (L1 get, L2 list)                            | 200                    | ≤ 20,000                      |
 | `content-write`      | 100 create; 150 update (L1 type check + L2 `PATCH`) | 200                    | ≤ 30,000                      |
-| `item-delete`        | 550 (L1 type check + L3 `DELETE`)                   | 40                     | 22,000                        |
+| `bulk-create`        | 100 per item, ≤ 2,000 a call (L2 per item)          | 10                     | ≤ 20,000                      |
+| `item-delete`        | 550 (L1 type check + L3 `DELETE`)                   | 30                     | 16,500                        |
 | `frame-delete`       | 550                                                 | 10                     | 5,500                         |
 
-A single mission at every ceiling stays under 100,000 (≈ 97,500); the
-presets sit far below (the `facilitator` maxima add up to ≈ 24,000
-credits a minute). Several missions on one connection can still exhaust
-it: `execute` makes **no retry**, a `429` is thrown as
+A single mission at every ceiling stays under 100,000 (≈ 97,000); the
+presets sit far below (the `facilitator` maxima add up to ≈ 38,000 credits
+a minute). Several missions on one connection can still exhaust it:
+`execute` makes **no retry**, a `429` is thrown as
 `UpstreamHttpError(…, 429)` with `X-RateLimit-Reset` in the sentence the
 agent reads.
 
@@ -432,15 +346,16 @@ agent reads.
 
 Every tool is covered by a named risk, none by the fallback.
 
-| Tool(s)                                                                                     | Risk(s) touched                        |
-| ------------------------------------------------------------------------------------------- | -------------------------------------- |
-| `list_boards`, `get_board`                                                                  | `read-boards`                          |
-| `list_items`, `get_item`, `list_connectors`, `get_connector`, `list_tags`, `list_item_tags` | `read-board-content`                   |
-| `create_*` (sticky note, shape, text, card, frame, connector), `create_tag`                 | `content-write` (env)                  |
-| `update_*` (sticky note, shape, text, card, frame, connector)                               | `content-write` (env)                  |
-| `attach_tag`, `remove_tag`                                                                  | `content-write` (env)                  |
-| `delete_sticky_note`, `delete_shape`, `delete_text`, `delete_card`, `delete_connector`      | `content-write` + `item-delete` (env)  |
-| `delete_frame`                                                                              | `content-write` + `frame-delete` (env) |
+| Tool(s)                                                                                     | Risk(s) touched                  |
+| ------------------------------------------------------------------------------------------- | -------------------------------- |
+| `list_boards`, `get_board`                                                                  | `read-boards`                    |
+| `list_items`, `get_item`, `list_connectors`, `get_connector`, `list_tags`, `list_item_tags` | `read-board-content`             |
+| `create_*` (sticky note, shape, text, card, frame, connector), `create_tag`                 | `content-write`                  |
+| `update_*` (sticky note, shape, text, card, frame, connector)                               | `content-write`                  |
+| `attach_tag`, `remove_tag`                                                                  | `content-write`                  |
+| `create_items`                                                                              | `content-write` + `bulk-create`  |
+| `delete_sticky_note`, `delete_shape`, `delete_text`, `delete_card`, `delete_connector`      | `content-write` + `item-delete`  |
+| `delete_frame`                                                                              | `content-write` + `frame-delete` |
 
 `risksUntouched` over realistic samples: none.
 
@@ -454,17 +369,27 @@ no grammar; the trailing `=` suggests base64 padding ⚠. A slice identifier
 holds `[a-zA-Z0-9_./~-]` only, so `=` cannot be carried, and the SDK's
 answer, `identSegment`, would write the board as `[*]`.
 
-`[*]` keeps the risk decision right (every pattern above uses `board[**]`
-or `board[*]`) but breaks the environment: the default resolver finds the
-board's label by comparing the slice's identifiers with the resources'
-refs (`resourceEnvResolver`, `packages/policy-engine/src/qualify.ts`). With
-`board[*]` it finds none, and falls back to the label only when the mission
-holds **exactly one** Miro board. A mission on two boards would see every
-write refused (every write risk is env-scoped). That is fail-closed, but
-it makes multi-board missions useless.
+**Re-evaluated without environments (Decision 2).** The PO chose the `~`
+spelling because `[*]` defeated the environment resolver on multi-board
+missions; Decision 1 removed environments, so that reason is gone. What
+`[*]` would still cost:
 
-**Proposed: the ref is a slice-safe spelling of the board id**, bijective
-by grammar:
+- the **risk decision**: nothing — every pattern of the catalog is
+  `board[**]` or `board[*]`, and the classifier checks the `board` argument
+  against the mission's resources before it emits anything;
+- the **target of the call**: the gateway's resource stage
+  (`apps/gateway/src/server/execution/resource-stage.ts`, `citedRefs`)
+  finds the resource a call targets by reading the refs off the slices.
+  With `board[*]` it finds none, and falls back to the mission's resource
+  only when the mission holds exactly one. On a mission with two boards,
+  every call would be audited with `resource_ref: null`, and an approval
+  request — "Delete a frame · <board>" — would lose the board the person
+  must decide on. That is the concrete remaining reason, so **the `~`
+  spelling is kept** (ADR
+  [`miro-board-ref-tilde-spelling`](../../decisions/miro-board-ref-tilde-spelling.md),
+  proposed). If environments return, it serves them too.
+
+**The ref is a slice-safe spelling of the board id**, bijective by grammar:
 
 - the Miro board id grammar `MIRO_BOARD_ID = ^[A-Za-z0-9_-]{1,62}={0,2}$`
   (letters, digits, `_`, `-`, then at most two `=` at the end; no `~`, no
@@ -476,27 +401,23 @@ by grammar:
   accepted by the grammar, so the mapping is one to one.
 
 The tools take the **ref** (what `list_boards` and the mission show), the
-slice carries it as is (`miro.board[uXjVOD6LSME~]…`), the owner sees and
-labels it, and `execute` turns it back into the Miro id for the URL. An
-agent that passes the Miro spelling (`uXjVOD6LSME=`, copied from a board
-link) is refused with a sentence naming the ref to use; it is not
-converted (refuse, never repair). This departs from the kit's "use the
-provider's id" by spelling, not by value, and is Open question 1 (an ADR
-if accepted). The two alternatives: `identSegment` and one board per
-mission (no new rule, multi-board missions cannot write), or widening the
-slice grammar with `=` (a spec change, out of a plugin's reach).
+slice carries it as is (`miro.board[uXjVOD6LSME~]…`), and `execute` turns
+it back into the Miro id for the URL. An agent that passes the Miro
+spelling (`uXjVOD6LSME=`, copied from a board link) is refused with a
+sentence naming the ref to use; it is not converted (refuse, never repair).
 
 A board id outside `MIRO_BOARD_ID` at discovery (a `/`, a `+`, a `~`, an
 inner `=`) is **left out of the resources** with a logger warning naming
-how many were skipped, rather than failing the discovery. One unusual board
-should not make a team unconnectable; a board that is not offered cannot be
-selected, so nothing is widened (Open question 7).
+how many were skipped, rather than failing the discovery (Decision 7). One
+unusual board should not make a team unconnectable; a board that is not
+offered cannot be selected, so nothing is widened.
 
 ### 5.2 Item ids, and the item type behind a typed tool
 
 Item, frame, connector and tag ids are numeric strings in every example
 (`3458764517517819000`, `3074457363306854000`) ⚠. Grammar `MIRO_ITEM_ID =
-^[0-9]{1,24}$`: safe for a path segment and a slice identifier.
+^[0-9]{1,24}$`: safe for a path segment and a slice identifier. An id given
+as a JSON number is refused (a 19-digit number loses precision in JSON).
 
 Miro's items share one id space, and the classifier cannot know whether
 `item_id` names a sticky note or a frame (no network). The model relies on
@@ -529,7 +450,7 @@ frame request schema has none).
 Miro's reference says only "Deletes a frame from a board"; the frame and
 parent/child pages say nothing about the children ⚠. The catalog assumes
 the worst: `frame-delete` is `irreversible` and `bulk`, gated by approval
-in every preset that has it. If a test on a scratch board shows the
+in the preset that has it. If a test on a scratch board shows the
 children survive (moved to the canvas), the vector drops to `costly` /
 `single` in a later catalog version — never the other way without notice.
 Whether moving or resizing a frame carries its children is not stated
@@ -545,34 +466,53 @@ start item or the end item". So:
 - creating or updating a connector changes neither item: one slice on the
   connector (`connector.W` / `connector[C].W`). `start_item_id` and
   `end_item_id` are read with `MIRO_ITEM_ID` (they travel in the JSON
-  body, never the path) and must differ;
+  body, never the path) and must differ when both are given;
 - an `update_connector` may re-point either end (`startItem`, `endItem`
   are optional fields of the `PATCH`): still one connector write;
 - deleting an **item** silently deletes its connectors. `item-delete`'s
   reason says so; no extra slice is emitted, because the classifier cannot
   know which connectors exist, and the effect is the same kind (a line
   between two items goes, reversible by drawing it again);
+- an end is attached by `snapTo` only (`start_snap_to`, `end_snap_to`);
+  the relative `position` of an end is not offered (Miro takes one or the
+  other);
 - whether the two ends must be on the same board is not stated ⚠: the
   path names one board, and an id of another board would be answered by
   Miro, not by the gateway.
 
-### 5.6 Bulk creation left out
+### 5.6 Bulk creation
 
-`POST /items/bulk` creates up to 20 items "in any mix of types",
+`POST /items/bulk` creates 1 to 20 items "of the same or different type",
 transactionally ("none of the items will be created" on one failure), at
-Level 2 per item. Left out of v0.1 because a mission's quota counts
-**calls**: one bulk call would create 20 items for one unit of
-`content-write`, and its body mixes types (frames included) that would
-each need a slice. If wanted, it comes as `create_items` with one slice
-per element and a dedicated `bulk-item-create` risk (Open question 4).
+Level 2 per item (Decision 3). `miro__create_items` takes `items`, a list
+of 1 to 20 objects `{ type, data, style, position, geometry,
+parent_frame_id }`:
+
+- `type` is one of the four item types the typed tools write:
+  `sticky_note`, `shape`, `text`, `card`. Miro's bulk endpoint also takes
+  `frame`, `image`, `document`, `embed` and `app_card`; they are refused,
+  because the typed tools do not write them either (and Miro's bulk schema
+  defines no `data` for a frame), so the bulk call can do nothing a single
+  call could not;
+- `data`, `style`, `position`, `geometry` follow the allowlist of that type
+  (§ "Undeclared arguments"); a `text` needs `data.content`;
+- `parent_frame_id` is read with `MIRO_ITEM_ID` and written
+  `parent: { id }`, as for the typed tools.
+
+One slice, `miro.board[B].item.bulk-create.W`, touches `content-write`
+(the recursive `item[**].W`) and `bulk-create`. Every element creates an
+item on the same collection, so one slice says everything the call does;
+per-element slices would add nothing the matcher reads (one counter per
+risk per call). The size of the call is held by `bulk-create`'s own quota
+and its ceiling of 10 calls a minute (≤ 200 items, ≤ 20,000 credits).
 
 ### 5.7 Reading and personal data
 
-- `GET /v2/boards` and `GET /v2/boards/{id}`: `owner`, `createdBy`,
-  `modifiedBy`, `lastOpenedBy` carry `id`, `name`, `type`;
-  `currentUserMembership` carries `id`, `name`, `role`. **No email** in any
-  board schema. Names are personal data: `read-boards` is `pii`, and the
-  result is passed as Miro returns it (Open question 6 on stripping names).
+- `GET /v2/boards/{id}`: `owner`, `createdBy`, `modifiedBy`,
+  `lastOpenedBy` carry `id`, `name`, `type`; `currentUserMembership`
+  carries `id`, `name`, `role`. **No email** in any board schema. Names are
+  personal data: `read-boards` is `pii`, and the result is passed as Miro
+  returns it (Decision 6).
 - Item, connector and tag reads: `createdBy` / `modifiedBy` are `id` and
   `type` only. A card's `assigneeId` is a user id.
 - Board members (`/v2/boards/{id}/members`) are not called by any tool.
@@ -582,11 +522,11 @@ per element and a dedicated `bulk-item-create` risk (Open question 4).
 
 ### 5.8 Cards: no assignee in v0.1
 
-`create_card` / `update_card` do not allow `assigneeId` in their `data`
-allowlist. Assigning a card to a person writes a user id the agent would
-have to find elsewhere (board members are out of scope), and Miro may
-notify the assignee ⚠. `title`, `description` and `dueDate` are allowed
-(Open question 8).
+`create_card` / `update_card` (and a `card` in `create_items`) do not allow
+`assigneeId` in their `data` allowlist (Decision 8). Assigning a card to a
+person writes a user id the agent would have to find elsewhere (board
+members are out of scope), and Miro may notify the assignee ⚠. `title`,
+`description` and `dueDate` are allowed.
 
 ### 5.9 Tags: why in, and which part
 
@@ -596,12 +536,12 @@ plain: `POST /tags`, attach `POST /items/{item_id}?tag_id=…`, remove
 They are `content-write`: a tag on a card is a mark on the board, removed
 as easily as it is added.
 
-Out of v0.1: **`update_tag` and `delete_tag`**. Deleting a tag removes it
-"from all cards and sticky notes on the board", and renaming it changes it
-on all of them: a board-wide effect from one call, which would deserve its
-own risk for a small gain. Tag changes "will not be reflected on the board
-in realtime" (viewers refresh), which is Miro's behaviour, not a risk.
-`tag_id` travels in the query string (`URLSearchParams`), read with
+Out of v0.1 (Decision 9): **`update_tag` and `delete_tag`**. Deleting a tag
+removes it "from all cards and sticky notes on the board", and renaming it
+changes it on all of them: a board-wide effect from one call, which would
+deserve its own risk for a small gain. Tag changes "will not be reflected
+on the board in realtime" (viewers refresh), which is Miro's behaviour, not
+a risk. `tag_id` travels in the query string (`URLSearchParams`), read with
 `MIRO_ITEM_ID`; it is in the slice as `tag-link[T]`.
 
 ### 5.10 Pagination and ceilings
@@ -609,14 +549,16 @@ in realtime" (viewers refresh), which is Miro's behaviour, not a risk.
 - Items and connectors: cursor pagination, `limit` 10–50 (default 10),
   `cursor` from the previous answer. One tool call is one page; the agent
   passes `cursor` back. `cursor` is an opaque string (example
-  `MzQ1ODc2NDUyMjQ5MDA4Mjg5NX4=`) sent in the query only, bounded to 512
-  characters, never in a path or a slice.
-- Tags: offset pagination, `limit` 1–50 (default 20).
+  `MzQ1ODc2NDUyMjQ5MDA4Mjg5NX4=`) sent in the query only, grammar
+  `^[A-Za-z0-9+/=_~.-]{1,512}$`, never in a path or a slice.
+- Tags: offset pagination, `limit` 1–50 (default 20), `offset` 0–10,000.
 - Boards: offset pagination, `limit` up to 50 (used by discovery only).
 - `list_boards` makes **no listing call**: it answers from the mission's
-  boards, one `GET /v2/boards/{id}` each (Level 1), so a mission never
+  boards, one `GET /v2/boards/{id}` each (Level 1), as a list of
+  `{ ref, board }` (the ref to pass back, and Miro's answer), so a mission never
   learns the names of boards it was not given. At most 50 boards per
-  mission are read (`MAX_LISTED_BOARDS`); more is declined.
+  mission are read (`MAX_LISTED_BOARDS`); more is refused by the
+  classifier.
 
 ### 5.11 What a token reaches, and discovery
 
@@ -625,10 +567,12 @@ the provided access token". A token is created by installing the app on
 **one team** (the token context, `GET /v1/oauth-token`, names one `team`);
 whether it reaches boards of the user's other teams is not stated ⚠.
 Discovery therefore asks for the installed team only: `team_id` from the
-token context, which also makes new boards appear immediately (other
-filters "allow a few seconds for indexing"). An Enterprise Content Admin
-token can list private boards whose content stays refused: such a board is
-discovered, and its content calls answer an error, thrown as Miro's status.
+token context (read again at each discovery: `verify` returns an account
+name and an expiry, it cannot store metadata), which also makes new boards
+appear immediately (other filters "allow a few seconds for indexing"). An
+Enterprise Content Admin token can list private boards whose content stays
+refused: such a board is discovered, and its content calls answer an
+error, thrown as Miro's status.
 
 ### 5.12 Deletion as a verb leaf
 
@@ -638,7 +582,7 @@ patterns are recursive, a deletion touches it too (§3, layering).
 
 ## 6. Credential, discovery, execution, tests
 
-### 6.1 Credential (**PO**: `api-key`, token first)
+### 6.1 Credential (`api-key`, token first)
 
 One `api-key` spec, no alternative, no company app in v0.1 (ADR
 [`company-apps-kept-where-they-add-something`](../../decisions/company-apps-kept-where-they-add-something.md),
@@ -662,9 +606,9 @@ REST quickstart: "Install app and get OAuth token"):
 boards, board members, or items") and `boards:write` ("create, update, or
 delete boards, board members, or items"); there is **no item-only scope**.
 The token itself can therefore delete boards and manage members; the
-gateway refuses it because no tool does it, which is the reason the `help`
-text says so. (The quickstart writes `board:read`; the scopes reference
-writes `boards:read`, used here ⚠.)
+gateway refuses it because no tool does it, which is why the `help` text
+says so. (The quickstart writes `board:read`; the scopes reference writes
+`boards:read`, used here ⚠.)
 
 **Expiry, settled.**
 
@@ -685,52 +629,53 @@ field is documented there), so the guide insists on step 2.
 - Field `access_token`: `secret: true`, required, `pattern`
   `^[A-Za-z0-9._~+/=-]{20,512}$` — loose on purpose: Miro documents no
   token format ⚠; `verify` is the real check.
-- `createUrl`: Miro's "Your apps" settings page ⚠ (exact URL to confirm).
+- `createUrl`: `https://miro.com/app/settings/user-profile/apps`, Miro's
+  "Your apps" settings page ⚠ (exact URL to confirm).
 - `verify(ctx)`: `GET https://api.miro.com/v1/oauth-token` (token
   context: `type`, `team`, `organization`, `scopes`, `user`, `createdBy`).
   `account` = "`<team name>` (Miro team)"; refuses the token
-  (`UpstreamAuthError`) when the answer is a 400 ("invalid token") or
-  401, and declines with a sentence when `scopes` lack `boards:read` or
-  `boards:write`; `expiresAt` = `null`. `team.id` goes to the connection
-  metadata (`team_id`, grammar `MIRO_ITEM_ID`) for discovery.
+  (`UpstreamAuthError`, 401) when the answer is a 400 ("invalid token") or
+  401, and (`UpstreamAuthError`, 403, with a sentence) when `scopes` lack
+  `boards:read` or `boards:write`; `expiresAt` = `null`.
 - `guide`: the four steps above; permissions `boards:read` (read) → the
-  eight read tools, `boards:write` (read-write) → the 21 write tools;
+  eight read tools, `boards:write` (read-write) → the 22 write tools;
   `recommendedExpiryDays`: `null`; `docsUrl`: Miro's REST quickstart.
 - `help`: "Create a Miro app with only boards:read and boards:write, leave
-  'Expire user authorization token' unchecked, and install it on the one
-  team whose boards the agents may work on. The token can do everything
-  those scopes allow on every board of that team, including deleting
-  boards; the gateway limits what agents do with it, not the token itself."
-- `manualRevocation`: "In Miro, open Settings → Your apps and delete the
-  app, or uninstall it from the team; its token stops working." ⚠ (menu
+  'Expire user authorization token' unchecked, and install it on the team
+  whose boards the agents may work on. boards:write also lets the token
+  delete boards and manage board members; the gateway limits what agents
+  do with it, not the token itself." (Decision 4.)
+- `manualRevocation`: "In Miro, open Settings, Your apps, and delete the
+  app or uninstall it from the team; its token stops working." ⚠ (menu
   path to confirm). No declarative `revocation`: Miro's
   `POST /v2/oauth/revoke` needs `clientId` and `clientSecret`, which an
   `api-key` connection does not hold.
 
-Rejected for v0.1: an `oauth2` company app (one app per instance,
-expiring tokens refreshed by the gateway). It adds short-lived tokens, at
-the cost of an app registration per instance; Open question 2.
-
 ### 6.2 Discovery
 
-`discoverResources(ctx)`: `GET /v2/boards?team_id=<team_id>&limit=50&offset=N`
-(Level 1), following `offset` until a page shorter than 50, `total`, or
-`MAX_DISCOVERED_BOARDS` = 500 (logger warning when reached). The answer is
-checked with a type guard (`data` a list of objects with string `id` and
-`name`); a payload it does not recognise fails discovery. Each board:
-`ref` = `boardRefOf(id)` (§5.1; outside the grammar → skipped with a
-warning), `displayName` = `name`, `metadata` = `{ team_id, view_link }`
-(`viewLink` kept only when it starts with `https://miro.com/app/board/`).
-No `env`: the owner labels.
+`discoverResources(ctx)`: `GET /v1/oauth-token` for the team id (grammar
+`MIRO_ITEM_ID`; anything else fails discovery), then
+`GET /v2/boards?team_id=<team_id>&limit=50&offset=N` (Level 1), following
+`offset` until a page shorter than 50, `total`, or `MAX_DISCOVERED_BOARDS`
+= 500 (logger warning when reached). The answer is checked with a type
+guard (`data` a list of objects with string `id` and `name`); a payload it
+does not recognise fails discovery. Each board: `ref` = `boardRefOf(id)`
+(§5.1; outside the grammar → skipped with a warning), `displayName` =
+`name`, `metadata` = `{ team_id, view_link }` (`viewLink` kept only when it
+starts with `https://miro.com/app/board/`). No `env`.
 
 ### 6.3 Execution
 
 - Base `https://api.miro.com/v2` (constant), `Authorization: Bearer
 <access_token>` (`expectCredentialKind(…, 'api-key')`), JSON bodies.
-- The board in the URL is `encodeURIComponent(miroIdOf(ref))` of the
-  board the classifier resolved (`resolveBoard`, shared); item ids are
-  `MIRO_ITEM_ID` and go in as they are; `tag_id`, `cursor`, `limit`,
-  `offset`, `type`, `parent_item_id` go through `URLSearchParams`.
+- One reader for both sides: `readMiroCall(tool, args, resources)` returns
+  the board, the identifiers, the query and the body of the call, or a
+  denial; `classify` turns it into slices, `execute` into requests. Neither
+  reads `args` past it.
+- The board in the URL is `encodeURIComponent(miroIdOf(ref))` of the board
+  the reader resolved (`=` → `%3D`, as Miro's own OpenAPI client sends it);
+  item ids are `MIRO_ITEM_ID` and go in as they are; `tag_id`, `cursor`,
+  `limit`, `offset`, `type`, `parent_item_id` go through `URLSearchParams`.
 - Bodies are built field by field: the four allowlisted objects (§2), the
   `parent: { id }` from `parent_frame_id`, the connector's
   `startItem` / `endItem` from the two ids and their `snapTo`.
@@ -740,10 +685,10 @@ No `env`: the owner labels.
   connection expired); 403 (`insufficientPermissions`, a missing scope) →
   `UpstreamAuthError(…, 403)`, a failed call that changes nothing; any
   other failed status (Miro answers **404 for "invalid access"** on
-  writes, 400 for a malformed body, 429) → `UpstreamHttpError`. Declined
-  calls (`ExecutorRefusal` under `declining`): unknown tool, unresolved
-  board, malformed id, undeclared argument or nested key, a type check
-  that fails.
+  writes, 400 for a malformed body, 429) → `UpstreamHttpError`, a 429 with
+  `X-RateLimit-Reset` in the message. Declined calls (`ExecutorRefusal`
+  under `declining`): unknown tool, unresolved board, malformed id,
+  undeclared argument or nested key, a type check that fails.
 
 ### Identifiers
 
@@ -754,28 +699,28 @@ No `env`: the owner labels.
 | `item_id`, `frame_id`, `connector_id`                               | `MIRO_ITEM_ID` — `^[0-9]{1,24}$`                | URL path segment; slice `item[I]` / `frame[F]` / `connector[C]` | `denied` / declined: `<arg>: malformed id`        |
 | `tag_id`                                                            | `MIRO_ITEM_ID`                                  | query string (`tag_id=`); slice `tag-link[T]`                   | `denied` / declined                               |
 | `start_item_id`, `end_item_id`, `parent_frame_id` (or `null`)       | `MIRO_ITEM_ID`                                  | JSON body only                                                  | `denied` / declined                               |
-| `team_id` (connection metadata)                                     | `MIRO_ITEM_ID`                                  | query string of discovery only                                  | discovery fails                                   |
-| `cursor`                                                            | printable ASCII, 1–512, no whitespace           | query string only                                               | `denied`                                          |
+| `team_id` (token context)                                           | `MIRO_ITEM_ID`                                  | query string of discovery only                                  | discovery fails                                   |
+| `cursor`                                                            | `^[A-Za-z0-9+/=_~.-]{1,512}$`                   | query string only                                               | `denied`                                          |
 | `data`, `style`, `position`, `geometry` values; `title`, `captions` | none — never an identifier                      | JSON body                                                       | keys outside the allowlist `denied`               |
 
 One grammar function per kind, shared by `classify` and `execute` (ADR
 [`plugin-identifiers-one-grammar-for-classify-and-execute`](../../decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md)).
 `..`, `.`, `%2e%2e`, `%2f`, a line break, `?x=1#y` fail every grammar.
 
-### 6.4 Tests (planned)
+### 6.4 Tests
 
 - `plugin.test.ts`: the SDK kit (`assertPluginWellFormed`,
   `assertPresetsValid`, `assertNoWildcard`, `assertCatalogCoverage` with
   one sample per tool, `fallbackHits` empty, `risksUntouched` empty), and
-  `assertIdentifiersRefused` on the same samples. The board travels as
-  `%3D`-encoded Miro id, not as the sample's ref, so the board is given to
-  the kit through `routes`; item ids are found as path identifiers.
+  `assertIdentifiersRefused` on the same samples (item ids are found as
+  path identifiers; the board travels `%3D`-encoded, not as the sample's
+  ref, and has its own cases in `identifiers.test.ts`).
 - `classify.test.ts`: every branch (board resolution, each grammar, equal
-  connector ends, limits, nested keys, undeclared arguments).
+  connector ends, limits, nested keys, bulk elements, undeclared
+  arguments).
 - `risk-catalog.test.ts`: the exact risks each tool touches; deletions
-  touch `content-write` + their delete risk; a write on an unlabelled board
-  is refused, on two labelled boards in one mission resolves each label
-  (the reason of §5.1).
+  touch `content-write` + their delete risk, the bulk call
+  `content-write` + `bulk-create`; the preset gates.
 - `identifiers.test.ts`: `boardRefOf` / `miroIdOf` round trip, hostile
   values to `classify` and `execute`, no request sent on a refusal.
 - `execute.test.ts` against `mockFetch`: request shapes, the type check
@@ -785,16 +730,15 @@ One grammar function per kind, shared by `classify` and `execute` (ADR
 
 ## Sources
 
-**Context7 exception.** The project rule is Context7 for provider
-documentation. On 2026-10-16 every Context7 call
-(`resolve-library-id` "Miro REST API", "Miro"; `query-docs`
-`/websites/developers_miro`), including a retry after the coordinator
-reported a new API key, answered _"Monthly quota exceeded"_. **No fact on
-this page comes from Context7.** The product owner authorised, as a
-one-off exception, WebFetch restricted to developers.miro.com (and
-help.miro.com only if the developer docs pointed there for token setup;
-they did not, so help.miro.com was not used). Every page below was read
-with WebFetch on 2026-10-16.
+**Context7** (2026-10-16): `/miroapp/api-clients`, Miro's OpenAPI-generated
+Node client — the bulk endpoint (`createItems`, `POST
+/v2/boards/{board_id}/items/bulk`, "up to 20 items", transactional), the
+board id sent with `encodeURIComponent`, `ShapeCreateRequest`,
+`ShapeStyleForCreate`, `FrameCreateRequest`, `ConnectorCreationData`,
+`GenericItemUpdate`. `/websites/developers_miro` answered nothing usable
+for request schemas. Phase 1 (same day) found Context7 out of quota and
+used WebFetch on developers.miro.com, authorised by the product owner; the
+remaining request schemas were read the same way on 2026-10-16.
 
 | Fact                                                                              | Page                                                                                                                                                                                                                      |
 | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -809,45 +753,18 @@ with WebFetch on 2026-10-16.
 | Developer team limits, sharing an app with another team                           | https://developers.miro.com/docs/developer-team.md, https://developers.miro.com/docs/share-an-app-outside-of-a-developer-team.md                                                                                          |
 | Rate limits (credits, levels, headers, 429)                                       | https://developers.miro.com/reference/rate-limiting                                                                                                                                                                       |
 | Boards list and board object (ids, names, no email, pagination)                   | https://developers.miro.com/reference/get-boards-1.md, https://developers.miro.com/reference/get-specific-board-1.md                                                                                                      |
-| Items list / get, item ids, cursor                                                | https://developers.miro.com/reference/get-items-1.md, https://developers.miro.com/reference/get-specific-item-1.md, https://developers.miro.com/reference/get-items-within-frame.md                                       |
+| Items list / get, item ids, cursor, type enum                                     | https://developers.miro.com/reference/get-items-1.md, https://developers.miro.com/reference/get-specific-item-1.md, https://developers.miro.com/reference/get-items-within-frame.md                                       |
 | Generic delete, position / parent update                                          | https://developers.miro.com/reference/delete-item-1.md, https://developers.miro.com/reference/update-item-position-or-parent-1.md                                                                                         |
-| Sticky notes, shapes, texts, cards                                                | https://developers.miro.com/reference/create-sticky-note-item-1.md, …/update-sticky-note-item-1.md, …/delete-sticky-note-item-1.md, …/create-shape-item-1.md, …/create-text-item-1.md, …/create-card-item-1.md            |
+| Sticky notes, shapes, texts, cards (request schemas)                              | https://developers.miro.com/reference/create-sticky-note-item-1.md, …/update-sticky-note-item-1.md, …/delete-sticky-note-item-1.md, …/create-shape-item-1.md, …/create-text-item-1.md, …/create-card-item-1.md            |
 | Frames                                                                            | https://developers.miro.com/reference/create-frame-item.md, …/update-frame-item.md, …/delete-frame-item.md, https://developers.miro.com/docs/frame-1.md, https://developers.miro.com/docs/children-inside-parent-items.md |
 | Connectors                                                                        | https://developers.miro.com/reference/create-connector-1.md, …/update-connector-1.md, …/get-connectors-1.md, https://developers.miro.com/docs/connector_intro.md                                                          |
 | Tags                                                                              | https://developers.miro.com/docs/tag-concepts.md, https://developers.miro.com/reference/create-tag.md, …/get-tags-from-board.md, …/attach-tag-to-item.md, …/remove-tag-from-item.md, …/delete-tag.md                      |
-| Bulk creation                                                                     | https://developers.miro.com/reference/create-items.md                                                                                                                                                                     |
+| Bulk creation                                                                     | https://developers.miro.com/reference/create-items.md; Context7 `/miroapp/api-clients` (`createItems`)                                                                                                                    |
 | Miro's own MCP server (OAuth 2.1, not used)                                       | https://developers.miro.com/docs/miro-mcp.md                                                                                                                                                                              |
 
 Unanswered by these pages (⚠ above): what happens to a frame's children
 on deletion or move; whether typed endpoints refuse another item type;
-the board-id and token alphabets; whether a token reaches boards outside
-its team; the exact settings URL; whether a card assignee is notified.
-
-## Open questions
-
-1. **Board ref spelling (§5.1).** Accept a ref that writes the board id's
-   trailing `=` as `~` (multi-board missions work, one new rule, an ADR), or
-   keep the Miro id and `identSegment` (no new rule, but a mission that
-   writes must hold a single board)? Recommendation: the `~` ref.
-2. **Non-expiring tokens.** `api-key` works only with them. Accept that
-   dependency for v0.1 and add an `oauth2` company app (expiring, refreshed
-   by the gateway) only if Miro deprecates them, or plan the second way now?
-3. **Which team to install on.** The quickstart installs on the Developer
-   team (3 boards); a company's boards live on its real team. Confirm on a
-   real account that "Install app and get OAuth token" offers that team,
-   or document the app's installation URL ("Share app") as step 4.
-4. **Bulk creation (§5.6).** Out of v0.1, or in with a dedicated
-   `bulk-item-create` risk?
-5. **Environment labels.** `[staging, prod]` as Notion's draft, or Miro
-   wording (`sandbox`, `client`)? A label outside the list makes writes
-   refused.
-6. **Names in board reads (§5.7).** Pass them (useful to an agent asked "who
-   owns this board"), as proposed, or strip `name` from user objects and
-   make `read-boards` `metadata`?
-7. **A board id outside the grammar at discovery.** Skip it with a warning
-   (proposed) or fail the discovery as the template does?
-8. **Card assignee (§5.8).** Leave `assigneeId` out of v0.1, as proposed?
-9. **Tag update and deletion (§5.9).** Out of v0.1, as proposed, or in with
-   a `tag-delete` risk (board-wide)?
-10. **Frame deletion check.** Allow a test on a scratch board to settle
-    whether children are deleted, before the catalog is final?
+the board-id, item-id, team-id and token alphabets; whether a token
+reaches boards outside its team; the exact settings URL and menu path;
+whether a card assignee is notified; which team "Install app and get OAuth
+token" offers.

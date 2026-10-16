@@ -681,6 +681,10 @@ write …)`), instead of GitHub's bare 403. The push token of
     rooted at the `from` domain and classified by recipient zone. Presets `read-only`,
     `developer`, `marketing-operator`, `domain-admin`.
   - **Gmail** `0.3.0`, experimental — classifier only: no tool is exposed.
+- **Miro plugin** (`@vaubaan/plugin-miro` 0.1.0): boards, items, frames, connectors and
+  tags; the non-expiring access token of a Miro app (`api-key`); one resource per board,
+  no environment; bulk creation of up to 20 items as its own permission; presets
+  `read-only`, `scribe` and `facilitator` (every deletion asks first).
 - **Project files.** `LICENSE`, `CONTRIBUTING.md` (from a fresh clone to a pull
   request), `CODE_OF_CONDUCT.md`, `SECURITY.md` (private reporting, scope, trust model),
   four issue forms and a pull request template; `docs/handbook/threat-model.md` lists
