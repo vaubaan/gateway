@@ -207,6 +207,19 @@ names, and the notes about them do too.
 
 ### Added
 
+- **Restore, and moving an instance to another host.** `node apps/gateway/restore.mjs
+<file or https URL> --sha256 <hex>` puts a copy made by `backup.mjs` back after
+  checking its SHA-256, SQLite's integrity check, a schema this image can migrate (an
+  older one is fine, a newer one is refused) and that the instance's master keys open
+  every stored secret; `--dry-run` checks only; a store that exists is replaced only
+  with `--force`, gateway stopped, and is kept aside, never deleted. A new instance can
+  start from a copy with no shell: `VAUBAAN_RESTORE_FROM` (a file path or an https URL,
+  a secret never logged; http refused) and `VAUBAAN_RESTORE_SHA256` make its first boot
+  restore the copy before opening the store; a refused restore stops the boot and
+  writes nothing, and once the store exists the variables only bring a warning.
+  `VAUBAAN_RESTORE_MAX_MB` caps the copy (1024 by default). The procedure, new key and
+  reseal included: `deploy/railway.md` §9. ADR
+  `restore-verifies-before-it-replaces-and-runs-at-first-boot`.
 - **Fly.io plugin** (`@vaubaan/plugin-fly` 0.1.0, catalog 1): the apps of one Fly
   organization — machines, images, volumes and snapshots, secrets, IP addresses,
   certificates and logs — through the Machines API, with an organization token checked

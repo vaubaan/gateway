@@ -135,6 +135,47 @@ export function sealedVersionsOf(db: StoreDb): SealedVersionCount[] {
   );
 }
 
+/** What opening every blob of one table and key version found. */
+export interface SealedOpenCount {
+  readonly table: SealedTable;
+  readonly keyVersion: number;
+  readonly count: number;
+  /** Blobs that did not open with the key configured for their version (or had none). */
+  readonly unreadable: number;
+}
+
+/**
+ * Opens every blob of any database handle with the given encryptor and drops each
+ * plaintext at once: whether these keys open everything a store copy holds (the
+ * `restore` command, on its read-only candidate). Nothing is written.
+ */
+export async function openEverySealedBlobOf(
+  db: StoreDb,
+  encryptor: Encryptor,
+): Promise<SealedOpenCount[]> {
+  const out: SealedOpenCount[] = [];
+  for (const column of SEALED_COLUMNS) {
+    const rows = db
+      .prepare<[], SealedRow>(
+        `SELECT ${column.idColumn} AS id, ${column.blobColumn} AS blob, key_version
+         FROM ${column.table} WHERE ${column.blobColumn} IS NOT NULL
+         ORDER BY key_version, ${column.idColumn}`,
+      )
+      .all();
+    const byVersion = new Map<number, { count: number; unreadable: number }>();
+    for (const row of rows) {
+      const entry = byVersion.get(row.key_version) ?? { count: 0, unreadable: 0 };
+      entry.count += 1;
+      if (!(await opens(encryptor, column.associatedData(row.id), row))) entry.unreadable += 1;
+      byVersion.set(row.key_version, entry);
+    }
+    for (const [keyVersion, entry] of byVersion) {
+      out.push({ table: column.table, keyVersion, ...entry });
+    }
+  }
+  return out;
+}
+
 export function createSealedBlobsRepo(ctx: RepoContext): SealedBlobsRepo {
   const { db, encryptor } = ctx;
 
