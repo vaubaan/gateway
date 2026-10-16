@@ -645,6 +645,13 @@ export const INVARIANTS: readonly Invariant[] = [
         tests: ['the database — a segment of the Management API path'],
       },
       {
+        file: 'plugins/notion/tests/unit/identifiers.test.ts',
+        tests: [
+          'the root : refused when malformed, whatever the mission holds',
+          'the undashed spelling is named in the canonical form, in the slice and in the path',
+        ],
+      },
+      {
         file: 'plugins/_template/tests/unit/plugin.test.ts',
         tests: [
           'an identifier that is not one path segment is refused, never escaped',

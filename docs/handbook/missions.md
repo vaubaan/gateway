@@ -378,6 +378,7 @@ own. The values in force are therefore the catalogs' — at this commit:
 | gmail          | `read-only`, `developer` (plugin `experimental`)                  |
 | context7       | `read-only`                                                       |
 | miro           | `read-only`, `scribe`, `facilitator`                              |
+| notion         | `read-only`, `reviewer`, `editor`                                 |
 
 They are provisional until the `mission-presets-default-values` ADR (plan §5.5).
 The picker labels each preset with its width on this connection
