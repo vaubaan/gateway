@@ -49,6 +49,7 @@ const REPOSITORY = `${REPO_COMPONENT}(?:/${REPO_COMPONENT})+`;
  * An image reference the guard accepts : a repository (registry host first,
  * no port), an optional tag, and a mandatory sha256 digest.
  */
+// nosemgrep: detect-redos -- every repetition of REPO_COMPONENT starts with a separator ([._-] or /) outside [a-z0-9], so a string splits one way only: linear, no backtracking (pinned by identifiers.test.ts)
 export const PINNED_IMAGE = new RegExp(
   `^(${REPOSITORY})(?::([A-Za-z0-9_][A-Za-z0-9_.-]{0,127}))?@sha256:[a-f0-9]{64}$`,
 );
@@ -58,6 +59,7 @@ export const PINNED_IMAGE = new RegExp(
  * components, optionally ending with `/` (`ghcr.io/acme/app`,
  * `registry.fly.io/`). Matched at a path boundary (`imageRefusal`).
  */
+// nosemgrep: detect-redos -- every repetition of REPO_COMPONENT starts with a separator ([._-] or /) outside [a-z0-9], so a string splits one way only: linear, no backtracking (pinned by identifiers.test.ts)
 export const IMAGE_PREFIX = new RegExp(`^${REPO_COMPONENT}(?:/${REPO_COMPONENT})*/?$`);
 
 /** The separator of the `image_prefixes` field and metadata. */
