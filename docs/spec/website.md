@@ -221,10 +221,13 @@ accepted.
 
 ## 4. Release
 
-- The site is built and reviewed on preview deployments from now on.
-- It goes public at vaubaan.com on the day the repository is public and a
-  first image is published, so that every GitHub link and every install
-  command works. Until then the domain keeps answering as it does.
+- The site is public at vaubaan.com since 2026-10-16, before the repository
+  is (product owner's decision of that day: the site publishes nothing of
+  the code that is not already meant to be public). Until the repository is
+  public and a first image is published, its GitHub links answer 404 to a
+  visitor and the install commands cannot be run as written; the pages say
+  the project is pre-release.
+- `telemetry.vaubaan.com` serves the collector from the same deployment.
 - The collector's URL becomes the gateway's default in the same release
   (gateway telemetry ADR D4: one line).
 
