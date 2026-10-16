@@ -168,3 +168,40 @@ describe('the cursor : query string only', () => {
     expect(url.searchParams.get('cursor')).toBe('a/../b+=');
   });
 });
+
+describe('review cases of 2026-10-16', () => {
+  test('the ~ and = of a board spelling never pass on another id', async () => {
+    const cases = (hostile: string): [string, Record<string, unknown>][] => [
+      [TOOL.getItem, { board: BOARD, item_id: hostile }],
+      [TOOL.deleteFrame, { board: BOARD, frame_id: hostile }],
+      [TOOL.removeTag, { board: BOARD, item_id: ITEM, tag_id: hostile }],
+    ];
+    for (const hostile of ['123~', '123=', '~', '=', `${ITEM}~`]) {
+      for (const [tool, args] of cases(hostile)) {
+        expect('denied' in classifyMiro(tool, args, [workshop]), `${tool} ${hostile}`).toBe(true);
+        const fetch = mockFetch([]);
+        expect((await executeMiro(context(fetch), tool, args)).isError).toBe(true);
+        expect(fetch.calls).toHaveLength(0);
+      }
+    }
+  });
+
+  test('a board mixing both spellings is refused', async () => {
+    for (const hostile of ['abc~=', 'abc=~', 'a~b', 'abc~~~']) {
+      expect(classifyMiro(TOOL.getBoard, { board: hostile }, [workshop])).toEqual({
+        denied: 'board: malformed board ref',
+      });
+      const fetch = mockFetch([]);
+      expect((await executeMiro(context(fetch), TOOL.getBoard, { board: hostile })).isError).toBe(
+        true,
+      );
+      expect(fetch.calls).toHaveLength(0);
+    }
+  });
+
+  test("a board in Miro's spelling the mission does not hold gets no hint", () => {
+    expect(classifyMiro(TOOL.getBoard, { board: 'o9J_kzlUDmo=' }, [workshop])).toEqual({
+      denied: 'board: malformed board ref',
+    });
+  });
+});

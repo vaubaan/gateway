@@ -47,10 +47,11 @@ const B = `miro.board[${BOARD}]`;
 
 describe('slices', () => {
   test('reads', () => {
+    // One slice, the boards read as a list : the audit keeps every one of them.
     expect(slices(TOOL.listBoards, {}, [workshop, retro])).toEqual([
-      `miro.board[${BOARD}].R`,
-      `miro.board[${OTHER_BOARD}].R`,
+      `miro.board[${BOARD},${OTHER_BOARD}].R`,
     ]);
+    expect(slices(TOOL.listBoards, {})).toEqual([`miro.board[${BOARD}].R`]);
     expect(slices(TOOL.getBoard, { board: BOARD })).toEqual([`${B}.R`]);
     expect(slices(TOOL.listItems, { board: BOARD })).toEqual([`${B}.item[*].R`]);
     expect(slices(TOOL.getItem, { board: BOARD, item_id: ITEM })).toEqual([`${B}.item[${ITEM}].R`]);
@@ -166,7 +167,14 @@ describe('board resolution', () => {
       }),
     );
     expect(denied(TOOL.listBoards, {}, many)).toMatch(/at most 50/);
-    expect(slices(TOOL.listBoards, {}, many.slice(0, 50))).toHaveLength(50);
+    const fifty = slices(TOOL.listBoards, {}, many.slice(0, 50));
+    expect(fifty).toHaveLength(1);
+    expect(fifty[0]).toBe(
+      `miro.board[${many
+        .slice(0, 50)
+        .map((b) => b.ref)
+        .join(',')}].R`,
+    );
   });
 
   test('a malformed board is refused', () => {

@@ -137,9 +137,9 @@ and add your sign-in provider.
 │  PLUGINS (one per service)                  STORE (embedded database)    │
 │  data model · classifier · catalog of       accounts, credentials        │
 │  permissions with presets · executor        encrypted under your master  │
-│  github, vercel, supabase, railway,         key, accesses, missions,     │
-│  stripe, resend, cloudflare-dns,            keys (as digests), counters, │
-│  upstash-redis, ssh, gmail (experimental)   requests, activity           │
+│  one folder of plugins/ per service         key, accesses, missions,     │
+│  (GitHub, Stripe, Supabase…;                keys (as digests), counters, │
+│  the list: plugins/README.md)               requests, activity           │
 └──────────────────────────────────────────────────────────────────────────┘
        │ ephemeral or decrypted credential, used for the call
        ▼

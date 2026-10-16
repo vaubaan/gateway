@@ -248,6 +248,45 @@ describe('requests', () => {
     expect(fetch.calls).toHaveLength(3);
   });
 
+  test('remove_tag deletes the link, never the item : the tag_id query is always sent', async () => {
+    const fetch = mockFetch([
+      { method: 'DELETE', url: `${BOARD_PATH}/items/${ITEM}?tag_id=${TAG}`, status: 204 },
+    ]);
+    await executeMiro(context(fetch), TOOL.removeTag, { board: BOARD, item_id: ITEM, tag_id: TAG });
+    expect(fetch.calls.map((c) => `${c.method} ${c.url}`)).toEqual([
+      `DELETE ${BOARD_PATH}/items/${ITEM}?tag_id=${TAG}`,
+    ]);
+    // Without its query the same request deletes the item : it is never sent so.
+    const bare = mockFetch([]);
+    const result = await executeMiro(context(bare), TOOL.removeTag, {
+      board: BOARD,
+      item_id: ITEM,
+    });
+    expect(result.isError).toBe(true);
+    expect(bare.calls).toHaveLength(0);
+  });
+
+  test('parent_frame_id null puts a new item on the canvas', async () => {
+    const fetch = mockFetch([{ method: 'POST', url: `${BOARD_PATH}/texts`, body: {} }]);
+    await executeMiro(context(fetch), TOOL.createText, {
+      board: BOARD,
+      data: { content: 'T' },
+      parent_frame_id: null,
+    });
+    expect(fetch.calls[0]!.json).toEqual({ data: { content: 'T' }, parent: { id: null } });
+  });
+
+  test('a __proto__ key in data is refused, and nothing is sent', async () => {
+    const data: unknown = JSON.parse('{"content":"x","__proto__":{"polluted":true}}');
+    const fetch = mockFetch([]);
+    const reason = await refusalText(
+      executeMiro(context(fetch), TOOL.createStickyNote, { board: BOARD, data }),
+    );
+    expect(reason).toMatch(/^data\.__proto__: not a field this tool sends to Miro/);
+    expect(fetch.calls).toHaveLength(0);
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
   test('bulk : one POST, a list of { type, …body }', async () => {
     const fetch = mockFetch([
       { method: 'POST', url: `${BOARD_PATH}/items/bulk`, status: 201, body: { data: [] } },

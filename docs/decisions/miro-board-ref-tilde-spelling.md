@@ -1,14 +1,17 @@
 ---
 title: The Miro plugin names a board by its id with the trailing `=` written `~`
-status: proposed
+status: accepted
 date: 2026-10-16
 ---
 
 # The Miro plugin names a board by its id with the trailing `=` written `~`
 
-> **Proposed** on 2026-10-16 with the Miro plugin (`@vaubaan/plugin-miro`
-> 0.1.0), for the product owner to confirm. Handbook:
-> [`providers/miro.md`](../handbook/providers/miro.md) §5.1.
+> **Accepted** on 2026-10-16 by the product owner, Renaud Pelissier, who
+> chose "ref spelled with `~` + ADR" for the Miro plugin
+> (`@vaubaan/plugin-miro` 0.1.0). Handbook:
+> [`providers/miro.md`](../handbook/providers/miro.md) §5.1. The exception
+> is local to this plugin: the plugin kit, the SDK and the slice grammar are
+> unchanged.
 
 ## Context
 
@@ -16,8 +19,26 @@ The plugin kit (`plugins/README.md`, step 6) asks that a resource `ref` be
 "the provider's stable id". A Miro board id looks like `uXjVOD6LSME=`: the
 documentation gives no grammar, and the trailing `=` reads as base64
 padding. A slice identifier holds `[a-zA-Z0-9_./~-]` only (spec
-`gateway-risk-model.md` §3), so `=` cannot be carried, and the SDK's answer
-for such a value, `identSegment`, writes the identifier as `[*]`.
+`gateway-risk-model.md` §3), so `=` cannot be carried.
+
+The kit has a rule for that case (`plugins/README.md`, step 4, "An
+identifier the slice grammar cannot carry is written as 'any'"): build the
+segment with `identSegment(value)`, which writes `[*]`, and **never escape
+the identifier**, "the slice would no longer be the name an owner writes".
+The rule protects one thing: that the identifier in a slice is the very
+string a person reads and writes elsewhere — in the interface, in a mission.
+An escape would make the slice say `uXjVOD6LSME~` while everything else says
+`uXjVOD6LSME=`.
+
+That reason does not hold here, because the spelling is not an escape
+applied to the slice alone: the `ref` itself is spelled with `~`. The ref
+discovery stores, the ref the interface shows and a mission selects, the
+`board` argument an agent passes and the slice identifier are one and the
+same string, `uXjVOD6LSME~`; only `execute` turns it back into Miro's
+spelling, for the URL. Nothing a person writes is a pattern over board ids
+either: missions store explicit risk ids, not slice patterns, and every
+catalog pattern names boards as `board[*]` or `board[**]`. So the slice
+stays "the name an owner writes" — the name the gateway shows them.
 
 The product owner first chose a slice-safe spelling because `[*]` defeated
 the environment resolver on a mission holding several boards. The Miro model
@@ -48,9 +69,12 @@ The `ref` of a Miro board is its Miro id with each trailing `=` written `~`:
   outside its grammar, shared by `classify`, `execute` and discovery.
 - Tools take the ref, slices carry it as is, `execute` turns it back into the
   Miro id for the URL (`encodeURIComponent`, `=` → `%3D`).
-- A `board` argument in Miro's spelling is refused with a sentence naming the
-  ref to use — never converted (refuse, never repair, ADR
-  [`plugin-identifiers-one-grammar-for-classify-and-execute`](./plugin-identifiers-one-grammar-for-classify-and-execute.md)).
+- A `board` argument in Miro's spelling is refused — never converted
+  (refuse, never repair, ADR
+  [`plugin-identifiers-one-grammar-for-classify-and-execute`](./plugin-identifiers-one-grammar-for-classify-and-execute.md));
+  the refusal names the ref to use only when the mission holds that board.
+- The exception is this plugin's: no change to the kit's rule, which keeps
+  applying to every other plugin and to every other identifier of this one.
 - A board id outside the Miro grammar at discovery is left out of the
   resources, with a warning.
 

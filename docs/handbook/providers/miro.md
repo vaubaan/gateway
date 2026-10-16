@@ -57,7 +57,7 @@ proposal kept as the answer to an open question (**default**):
    (`resource_ref`) and the head of an approval request on any mission
    with more than one board. So the `~` spelling stays, with the ADR
    [`miro-board-ref-tilde-spelling`](../../decisions/miro-board-ref-tilde-spelling.md)
-   (status proposed).
+   (accepted by the product owner on 2026-10-16).
 3. **Bulk creation in (PO).** `miro__create_items` (`POST
 /v2/boards/{id}/items/bulk`, 1 to 20 items) with its own risk
    `miro.bulk-create`, so its budget is decided apart from single writes;
@@ -99,7 +99,7 @@ board[<board ref>]            the resource
 
 | Entity        | Parent                       | Cardinalities      | Notes                                                                                                                                                                                                                          |
 | ------------- | ---------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `board`       | —                            | `one`              | The resource. `list_boards` emits one slice per mission board, never `board[*]`.                                                                                                                                               |
+| `board`       | —                            | `one`, `bounded`   | The resource. `list_boards` names the boards it reads as a list (`board[a~,b~]`), never `board[*]`.                                                                                                                            |
 | `item`        | `board`                      | `one`, `unbounded` | Every item that is not a frame or a connector. Miro's items share one id space (frames are items too: `GET /items?type=frame`).                                                                                                |
 | `frame`       | `board`                      | `one`              | A separate entity although Miro stores it as an item, because deleting one has its own risk (§5.4). Frames are the only parents the platform supports ("Kanban, Mind Map, Table, and User Story Mapping" are not, as parents). |
 | `connector`   | `board`                      | `one`, `unbounded` | Its own endpoints (`/connectors`), its own ids; not returned by `GET /items` (the `type` enum has no connector).                                                                                                               |
@@ -123,38 +123,38 @@ guesses a board from an item id.
 `B` = the resolved board ref; `I`, `F`, `C`, `T` = an item, frame,
 connector, tag id (numeric strings, §Identifiers).
 
-| Tool                       | Arguments (required in **bold**)                                                                                          | Slice(s)                                             | Miro endpoint(s)                                                               |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `miro__list_boards`        | —                                                                                                                         | `miro.board[B].R` for each Miro board of the mission | `GET /v2/boards/{id}` per mission board (L1 each), no listing call (§5.10)     |
-| `miro__get_board`          | `board`                                                                                                                   | `miro.board[B].R`                                    | `GET /v2/boards/{board_id}` (L1)                                               |
-| `miro__list_items`         | `board`, `type`, `parent_frame_id`, `limit`, `cursor`                                                                     | `miro.board[B].item[*].R`                            | `GET /v2/boards/{board_id}/items` (L2; `parent_item_id` when a frame is given) |
-| `miro__get_item`           | `board`, **`item_id`**                                                                                                    | `miro.board[B].item[I].R`                            | `GET /v2/boards/{board_id}/items/{item_id}` (L1)                               |
-| `miro__list_connectors`    | `board`, `limit`, `cursor`                                                                                                | `miro.board[B].connector[*].R`                       | `GET /v2/boards/{board_id}/connectors` (L2)                                    |
-| `miro__get_connector`      | `board`, **`connector_id`**                                                                                               | `miro.board[B].connector[C].R`                       | `GET /v2/boards/{board_id}/connectors/{connector_id}`                          |
-| `miro__list_tags`          | `board`, `limit`, `offset`                                                                                                | `miro.board[B].tag[*].R`                             | `GET /v2/boards/{board_id}/tags` (L1)                                          |
-| `miro__list_item_tags`     | `board`, **`item_id`**                                                                                                    | `miro.board[B].item[I].tag-link[*].R`                | `GET /v2/boards/{board_id}/items/{item_id}/tags`                               |
-| `miro__create_sticky_note` | `board`, `data`, `style`, `position`, `geometry`, `parent_frame_id`                                                       | `miro.board[B].item.W`                               | `POST /v2/boards/{board_id}/sticky_notes` (L2)                                 |
-| `miro__update_sticky_note` | `board`, **`item_id`**, `data`, `style`, `position`, `geometry`, `parent_frame_id`                                        | `miro.board[B].item[I].W`                            | `GET …/items/{id}` (type check, L1), `PATCH …/sticky_notes/{item_id}` (L2)     |
-| `miro__delete_sticky_note` | `board`, **`item_id`**                                                                                                    | `miro.board[B].item[I].delete.W`                     | `GET …/items/{id}` (L1), `DELETE …/sticky_notes/{item_id}` (L3)                |
-| `miro__create_shape`       | as `create_sticky_note`                                                                                                   | `miro.board[B].item.W`                               | `POST /v2/boards/{board_id}/shapes` (L2)                                       |
-| `miro__update_shape`       | as `update_sticky_note`                                                                                                   | `miro.board[B].item[I].W`                            | `GET …/items/{id}`, `PATCH …/shapes/{item_id}` (L2)                            |
-| `miro__delete_shape`       | `board`, **`item_id`**                                                                                                    | `miro.board[B].item[I].delete.W`                     | `GET …/items/{id}`, `DELETE …/shapes/{item_id}`                                |
-| `miro__create_text`        | `board`, **`data`**, `style`, `position`, `geometry`, `parent_frame_id`                                                   | `miro.board[B].item.W`                               | `POST /v2/boards/{board_id}/texts` (L2)                                        |
-| `miro__update_text`        | as `update_sticky_note`                                                                                                   | `miro.board[B].item[I].W`                            | `GET …/items/{id}`, `PATCH …/texts/{item_id}` (L2)                             |
-| `miro__delete_text`        | `board`, **`item_id`**                                                                                                    | `miro.board[B].item[I].delete.W`                     | `GET …/items/{id}`, `DELETE …/texts/{item_id}`                                 |
-| `miro__create_card`        | as `create_sticky_note` (no `assigneeId`, §5.8)                                                                           | `miro.board[B].item.W`                               | `POST /v2/boards/{board_id}/cards` (L2)                                        |
-| `miro__update_card`        | as `update_sticky_note` (no `assigneeId`)                                                                                 | `miro.board[B].item[I].W`                            | `GET …/items/{id}`, `PATCH …/cards/{item_id}` (L2)                             |
-| `miro__delete_card`        | `board`, **`item_id`**                                                                                                    | `miro.board[B].item[I].delete.W`                     | `GET …/items/{id}`, `DELETE …/cards/{item_id}`                                 |
-| `miro__create_frame`       | `board`, **`data`**, `style`, `position`, `geometry`                                                                      | `miro.board[B].frame.W`                              | `POST /v2/boards/{board_id}/frames` (L2)                                       |
-| `miro__update_frame`       | `board`, **`frame_id`**, `data`, `style`, `position`, `geometry`                                                          | `miro.board[B].frame[F].W`                           | `GET …/items/{id}`, `PATCH …/frames/{item_id}` (L2)                            |
-| `miro__delete_frame`       | `board`, **`frame_id`**                                                                                                   | `miro.board[B].frame[F].delete.W`                    | `GET …/items/{id}`, `DELETE …/frames/{item_id}` (L3)                           |
-| `miro__create_connector`   | `board`, **`start_item_id`**, **`end_item_id`**, `start_snap_to`, `end_snap_to`, `shape`, `captions`, `style`             | `miro.board[B].connector.W`                          | `POST /v2/boards/{board_id}/connectors` (L2)                                   |
-| `miro__update_connector`   | `board`, **`connector_id`**, `start_item_id`, `end_item_id`, `start_snap_to`, `end_snap_to`, `shape`, `captions`, `style` | `miro.board[B].connector[C].W`                       | `PATCH /v2/boards/{board_id}/connectors/{connector_id}` (L2)                   |
-| `miro__delete_connector`   | `board`, **`connector_id`**                                                                                               | `miro.board[B].connector[C].delete.W`                | `DELETE /v2/boards/{board_id}/connectors/{connector_id}`                       |
-| `miro__create_tag`         | `board`, **`title`**, `fill_color`                                                                                        | `miro.board[B].tag.W`                                | `POST /v2/boards/{board_id}/tags` (L1)                                         |
-| `miro__attach_tag`         | `board`, **`item_id`**, **`tag_id`**                                                                                      | `miro.board[B].item[I].tag-link[T].W`                | `POST /v2/boards/{board_id}/items/{item_id}?tag_id=…` (L1)                     |
-| `miro__remove_tag`         | `board`, **`item_id`**, **`tag_id`**                                                                                      | `miro.board[B].item[I].tag-link[T].W`                | `DELETE /v2/boards/{board_id}/items/{item_id}?tag_id=…` (L1)                   |
-| `miro__create_items`       | `board`, **`items`** (1–20 of `{ type, data, style, position, geometry, parent_frame_id }`)                               | `miro.board[B].item.bulk-create.W`                   | `POST /v2/boards/{board_id}/items/bulk` (L2 per item)                          |
+| Tool                       | Arguments (required in **bold**)                                                                                          | Slice(s)                                                 | Miro endpoint(s)                                                               |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `miro__list_boards`        | —                                                                                                                         | `miro.board[B1,B2,…].R`, every Miro board of the mission | `GET /v2/boards/{id}` per mission board (L1 each), no listing call (§5.10)     |
+| `miro__get_board`          | `board`                                                                                                                   | `miro.board[B].R`                                        | `GET /v2/boards/{board_id}` (L1)                                               |
+| `miro__list_items`         | `board`, `type`, `parent_frame_id`, `limit`, `cursor`                                                                     | `miro.board[B].item[*].R`                                | `GET /v2/boards/{board_id}/items` (L2; `parent_item_id` when a frame is given) |
+| `miro__get_item`           | `board`, **`item_id`**                                                                                                    | `miro.board[B].item[I].R`                                | `GET /v2/boards/{board_id}/items/{item_id}` (L1)                               |
+| `miro__list_connectors`    | `board`, `limit`, `cursor`                                                                                                | `miro.board[B].connector[*].R`                           | `GET /v2/boards/{board_id}/connectors` (L2)                                    |
+| `miro__get_connector`      | `board`, **`connector_id`**                                                                                               | `miro.board[B].connector[C].R`                           | `GET /v2/boards/{board_id}/connectors/{connector_id}`                          |
+| `miro__list_tags`          | `board`, `limit`, `offset`                                                                                                | `miro.board[B].tag[*].R`                                 | `GET /v2/boards/{board_id}/tags` (L1)                                          |
+| `miro__list_item_tags`     | `board`, **`item_id`**                                                                                                    | `miro.board[B].item[I].tag-link[*].R`                    | `GET /v2/boards/{board_id}/items/{item_id}/tags`                               |
+| `miro__create_sticky_note` | `board`, `data`, `style`, `position`, `geometry`, `parent_frame_id`                                                       | `miro.board[B].item.W`                                   | `POST /v2/boards/{board_id}/sticky_notes` (L2)                                 |
+| `miro__update_sticky_note` | `board`, **`item_id`**, `data`, `style`, `position`, `geometry`, `parent_frame_id`                                        | `miro.board[B].item[I].W`                                | `GET …/items/{id}` (type check, L1), `PATCH …/sticky_notes/{item_id}` (L2)     |
+| `miro__delete_sticky_note` | `board`, **`item_id`**                                                                                                    | `miro.board[B].item[I].delete.W`                         | `GET …/items/{id}` (L1), `DELETE …/sticky_notes/{item_id}` (L3)                |
+| `miro__create_shape`       | as `create_sticky_note`                                                                                                   | `miro.board[B].item.W`                                   | `POST /v2/boards/{board_id}/shapes` (L2)                                       |
+| `miro__update_shape`       | as `update_sticky_note`                                                                                                   | `miro.board[B].item[I].W`                                | `GET …/items/{id}`, `PATCH …/shapes/{item_id}` (L2)                            |
+| `miro__delete_shape`       | `board`, **`item_id`**                                                                                                    | `miro.board[B].item[I].delete.W`                         | `GET …/items/{id}`, `DELETE …/shapes/{item_id}`                                |
+| `miro__create_text`        | `board`, **`data`**, `style`, `position`, `geometry`, `parent_frame_id`                                                   | `miro.board[B].item.W`                                   | `POST /v2/boards/{board_id}/texts` (L2)                                        |
+| `miro__update_text`        | as `update_sticky_note`                                                                                                   | `miro.board[B].item[I].W`                                | `GET …/items/{id}`, `PATCH …/texts/{item_id}` (L2)                             |
+| `miro__delete_text`        | `board`, **`item_id`**                                                                                                    | `miro.board[B].item[I].delete.W`                         | `GET …/items/{id}`, `DELETE …/texts/{item_id}`                                 |
+| `miro__create_card`        | as `create_sticky_note` (no `assigneeId`, §5.8)                                                                           | `miro.board[B].item.W`                                   | `POST /v2/boards/{board_id}/cards` (L2)                                        |
+| `miro__update_card`        | as `update_sticky_note` (no `assigneeId`)                                                                                 | `miro.board[B].item[I].W`                                | `GET …/items/{id}`, `PATCH …/cards/{item_id}` (L2)                             |
+| `miro__delete_card`        | `board`, **`item_id`**                                                                                                    | `miro.board[B].item[I].delete.W`                         | `GET …/items/{id}`, `DELETE …/cards/{item_id}`                                 |
+| `miro__create_frame`       | `board`, **`data`**, `style`, `position`, `geometry`                                                                      | `miro.board[B].frame.W`                                  | `POST /v2/boards/{board_id}/frames` (L2)                                       |
+| `miro__update_frame`       | `board`, **`frame_id`**, `data`, `style`, `position`, `geometry`                                                          | `miro.board[B].frame[F].W`                               | `GET …/items/{id}`, `PATCH …/frames/{item_id}` (L2)                            |
+| `miro__delete_frame`       | `board`, **`frame_id`**                                                                                                   | `miro.board[B].frame[F].delete.W`                        | `GET …/items/{id}`, `DELETE …/frames/{item_id}` (L3)                           |
+| `miro__create_connector`   | `board`, **`start_item_id`**, **`end_item_id`**, `start_snap_to`, `end_snap_to`, `shape`, `captions`, `style`             | `miro.board[B].connector.W`                              | `POST /v2/boards/{board_id}/connectors` (L2)                                   |
+| `miro__update_connector`   | `board`, **`connector_id`**, `start_item_id`, `end_item_id`, `start_snap_to`, `end_snap_to`, `shape`, `captions`, `style` | `miro.board[B].connector[C].W`                           | `PATCH /v2/boards/{board_id}/connectors/{connector_id}` (L2)                   |
+| `miro__delete_connector`   | `board`, **`connector_id`**                                                                                               | `miro.board[B].connector[C].delete.W`                    | `DELETE /v2/boards/{board_id}/connectors/{connector_id}`                       |
+| `miro__create_tag`         | `board`, **`title`**, `fill_color`                                                                                        | `miro.board[B].tag.W`                                    | `POST /v2/boards/{board_id}/tags` (L1)                                         |
+| `miro__attach_tag`         | `board`, **`item_id`**, **`tag_id`**                                                                                      | `miro.board[B].item[I].tag-link[T].W`                    | `POST /v2/boards/{board_id}/items/{item_id}?tag_id=…` (L1)                     |
+| `miro__remove_tag`         | `board`, **`item_id`**, **`tag_id`**                                                                                      | `miro.board[B].item[I].tag-link[T].W`                    | `DELETE /v2/boards/{board_id}/items/{item_id}?tag_id=…` (L1)                   |
+| `miro__create_items`       | `board`, **`items`** (1–20 of `{ type, data, style, position, geometry, parent_frame_id }`)                               | `miro.board[B].item.bulk-create.W`                       | `POST /v2/boards/{board_id}/items/bulk` (L2 per item)                          |
 
 30 tools. L1–L3 are Miro's rate-limit levels (§3, "Rate limits"); a level
 not written was not stated on a page read.
@@ -171,7 +171,8 @@ once".
 
 **Refused by the classifier** (`denied`, audited, never executed): an
 unknown tool; `board` outside the mission, malformed, given in Miro's
-spelling (`uXjVOD6LSME=`: the refusal names the ref to use), ambiguous, or
+spelling (`uXjVOD6LSME=`: the refusal names the ref to use when the mission
+holds that board), ambiguous, or
 absent with zero / several Miro boards; more than 50 Miro boards on a
 `list_boards`; an id outside its grammar (`item_id`, `frame_id`,
 `connector_id`, `tag_id`, `start_item_id`, `end_item_id`,
@@ -240,7 +241,7 @@ twenty items in one call.
 risks:
   - id: miro.read-boards #           board details, with people's names
     matches: 'miro.board[*].R'
-    infra_limits: { calls_per_minute_max: 100 }
+    infra_limits: { calls_per_minute_max: 10 }
     vector: { reversible, single, pii, free, internal, stateless }
 
   - id: miro.read-board-content #    items, connectors, tags
@@ -248,7 +249,7 @@ risks:
       - 'miro.board[**].item[**].R'
       - 'miro.board[**].connector[**].R'
       - 'miro.board[**].tag[**].R'
-    infra_limits: { calls_per_minute_max: 200 }
+    infra_limits: { calls_per_minute_max: 150 }
     vector: { reversible, single, data, free, internal, stateless }
 
   - id: miro.content-write #         add and edit; every deletion and bulk call too
@@ -257,7 +258,7 @@ risks:
       - 'miro.board[**].frame[**].W'
       - 'miro.board[**].connector[**].W'
       - 'miro.board[**].tag[**].W'
-    infra_limits: { calls_per_minute_max: 200 }
+    infra_limits: { calls_per_minute_max: 150 }
     vector: { reversible, single, data, free, team, session }
 
   - id: miro.bulk-create #           up to 20 items in one call
@@ -269,7 +270,7 @@ risks:
     matches:
       - 'miro.board[**].item[**].delete.W'
       - 'miro.board[**].connector[**].delete.W'
-    infra_limits: { calls_per_minute_max: 30 }
+    infra_limits: { calls_per_minute_max: 20 }
     vector: { costly, single, data, free, team, session }
 
   - id: miro.frame-delete #          a frame, and maybe what it holds
@@ -287,7 +288,7 @@ and the reasons people read.
 
 | Preset        | Risks (quota per period, rate limit, gate)                                                                                                                                                                                     |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `read-only`   | `read-boards` 1000, 30/min, auto; `read-board-content` 5000, 120/min, auto.                                                                                                                                                    |
+| `read-only`   | `read-boards` 1000, 10/min, auto; `read-board-content` 5000, 120/min, auto.                                                                                                                                                    |
 | `scribe`      | the reads; `content-write` 2000, 60/min, auto; `bulk-create` 100, 5/min, auto. Never deletes.                                                                                                                                  |
 | `facilitator` | the daily-work preset: the reads; `content-write` 2000, 60/min, auto; `bulk-create` 100, 5/min, auto; `item-delete` 300, 20/min, **approval**; `frame-delete` 10, 2/min, **approval**. Every deletion asks first (Decision 1). |
 
@@ -324,20 +325,27 @@ credits (2,000 calls a minute), Level 2 = 100 (1,000), Level 3 = 500
 any time without notice".
 
 One connection is one token, hence one user × one app: **every mission on
-the connection shares the 100,000 credits**. How the catalog respects it:
+the connection shares the 100,000 credits**. The catalog prices each risk at
+its **worst-case call**: one `list_boards` is one unit of `read-boards`'
+quota and rate limit, and pays one Level 1 read per mission board, up to
+`MAX_LISTED_BOARDS` = 50 (2,500 credits); one `create_items` is one unit of
+`bulk-create` and pays up to 20 Level 2 creations. How the catalog respects
+it:
 
-| Risk                 | Typical call cost (credits)                         | `calls_per_minute_max` | Credits / min at that ceiling |
-| -------------------- | --------------------------------------------------- | ---------------------- | ----------------------------- |
-| `read-boards`        | 50 (L1)                                             | 100                    | 5,000                         |
-| `read-board-content` | 50–100 (L1 get, L2 list)                            | 200                    | ≤ 20,000                      |
-| `content-write`      | 100 create; 150 update (L1 type check + L2 `PATCH`) | 200                    | ≤ 30,000                      |
-| `bulk-create`        | 100 per item, ≤ 2,000 a call (L2 per item)          | 10                     | ≤ 20,000                      |
-| `item-delete`        | 550 (L1 type check + L3 `DELETE`)                   | 30                     | 16,500                        |
-| `frame-delete`       | 550                                                 | 10                     | 5,500                         |
+| Risk                 | Worst-case call cost (credits)                        | `calls_per_minute_max` | Credits / min at that ceiling |
+| -------------------- | ----------------------------------------------------- | ---------------------- | ----------------------------- |
+| `read-boards`        | 2,500 (`list_boards`: 50 boards × L1); `get_board` 50 | 10                     | ≤ 25,000                      |
+| `read-board-content` | 50–100 (L1 get, L2 list)                              | 150                    | ≤ 15,000                      |
+| `content-write`      | 100 create; 150 update (L1 type check + L2 `PATCH`)   | 150                    | ≤ 22,500                      |
+| `bulk-create`        | 100 per item, ≤ 2,000 a call (L2 per item)            | 10                     | ≤ 20,000                      |
+| `item-delete`        | 550 (L1 type check + L3 `DELETE`)                     | 20                     | 11,000                        |
+| `frame-delete`       | 550                                                   | 10                     | 5,500                         |
 
-A single mission at every ceiling stays under 100,000 (≈ 97,000); the
-presets sit far below (the `facilitator` maxima add up to ≈ 38,000 credits
-a minute). Several missions on one connection can still exhaust it:
+A single mission at every ceiling stays under 100,000 (≤ 99,000, a test
+holds it); the presets sit below (the `facilitator` maxima add up to
+≈ 68,000 credits a minute, most of it `list_boards` on a 50-board mission).
+`read-boards`' ceiling of 10 calls a minute is low for `get_board` alone,
+the price of `list_boards`' fan-out. Several missions on one connection can still exhaust it:
 `execute` makes **no retry**, a `429` is thrown as
 `UpstreamHttpError(…, 429)` with `X-RateLimit-Reset` in the sentence the
 agent reads.
@@ -387,7 +395,7 @@ missions; Decision 1 removed environments, so that reason is gone. What
   must decide on. That is the concrete remaining reason, so **the `~`
   spelling is kept** (ADR
   [`miro-board-ref-tilde-spelling`](../../decisions/miro-board-ref-tilde-spelling.md),
-  proposed). If environments return, it serves them too.
+  accepted on 2026-10-16). If environments return, it serves them too.
 
 **The ref is a slice-safe spelling of the board id**, bijective by grammar:
 
@@ -404,7 +412,9 @@ The tools take the **ref** (what `list_boards` and the mission show), the
 slice carries it as is (`miro.board[uXjVOD6LSME~]…`), and `execute` turns
 it back into the Miro id for the URL. An agent that passes the Miro
 spelling (`uXjVOD6LSME=`, copied from a board link) is refused with a
-sentence naming the ref to use; it is not converted (refuse, never repair).
+sentence naming the ref to use — only when the mission holds that board, so
+a refusal never names a board the mission was not given; it is not
+converted (refuse, never repair).
 
 A board id outside `MIRO_BOARD_ID` at discovery (a `/`, a `+`, a `~`, an
 inner `=`) is **left out of the resources** with a logger warning naming
@@ -554,11 +564,17 @@ a risk. `tag_id` travels in the query string (`URLSearchParams`), read with
 - Tags: offset pagination, `limit` 1–50 (default 20), `offset` 0–10,000.
 - Boards: offset pagination, `limit` up to 50 (used by discovery only).
 - `list_boards` makes **no listing call**: it answers from the mission's
-  boards, one `GET /v2/boards/{id}` each (Level 1), as a list of
+  boards, one `GET /v2/boards/{id}` each (Level 1) — **one quota unit of
+  `read-boards` pays up to 50 upstream reads** (§3, "Rate limits") — as a
+  list of
   `{ ref, board }` (the ref to pass back, and Miro's answer), so a mission never
   learns the names of boards it was not given. At most 50 boards per
   mission are read (`MAX_LISTED_BOARDS`); more is refused by the
-  classifier.
+  classifier. Its one slice names every board read as a list
+  (`miro.board[B1,B2].R`; a single board as `board[B1]`), so the audit
+  keeps all of them, and the gateway's resource stage, which reads list
+  values as it reads identifiers (`citedRefs`), checks each against the
+  mission.
 
 ### 5.11 What a token reaches, and discovery
 

@@ -15,7 +15,9 @@
 #
 # `infra_limits.calls_per_minute_max` keeps one mission at every ceiling
 # under Miro's 100,000 credits a minute per user and app (handbook §3, "Rate
-# limits").
+# limits"), counted at the worst case of each risk : one `list_boards` is one
+# unit of `read-boards` and pays up to 50 upstream reads (one per mission
+# board, `MAX_LISTED_BOARDS`), one `create_items` up to 20 item creations.
 #
 # Adding a risk : append an entry, bump `catalog_version`, update `catalog_date`.
 # Removing or renaming a risk : forbidden — mark it `deprecated: true` and
@@ -33,9 +35,10 @@ risks:
     reason: >-
       Name, description, team, links and sharing policy of the selected
       boards, with the names of the people who own, created, last modified
-      and last opened them. No email address is returned.
+      and last opened them. No email address is returned. Listing the
+      boards reads every board of the mission in one call.
     matches: 'miro.board[*].R'
-    infra_limits: { calls_per_minute_max: 100 }
+    infra_limits: { calls_per_minute_max: 10 }
     vector:
       reversibility: reversible
       blast: single
@@ -55,7 +58,7 @@ risks:
       - 'miro.board[**].item[**].R'
       - 'miro.board[**].connector[**].R'
       - 'miro.board[**].tag[**].R'
-    infra_limits: { calls_per_minute_max: 200 }
+    infra_limits: { calls_per_minute_max: 150 }
     vector:
       reversibility: reversible
       blast: single
@@ -79,7 +82,7 @@ risks:
       - 'miro.board[**].frame[**].W'
       - 'miro.board[**].connector[**].W'
       - 'miro.board[**].tag[**].W'
-    infra_limits: { calls_per_minute_max: 200 }
+    infra_limits: { calls_per_minute_max: 150 }
     vector:
       reversibility: reversible
       blast: single
@@ -114,7 +117,7 @@ risks:
     matches:
       - 'miro.board[**].item[**].delete.W'
       - 'miro.board[**].connector[**].delete.W'
-    infra_limits: { calls_per_minute_max: 30 }
+    infra_limits: { calls_per_minute_max: 20 }
     vector:
       reversibility: costly
       blast: single
@@ -166,7 +169,7 @@ presets:
     entries:
       - risk_id: miro.read-boards
         quota: 1000
-        rate_limit: { max: 30, window_seconds: 60 }
+        rate_limit: { max: 10, window_seconds: 60 }
         gate: auto
       - risk_id: miro.read-board-content
         quota: 5000
@@ -179,7 +182,7 @@ presets:
     entries:
       - risk_id: miro.read-boards
         quota: 1000
-        rate_limit: { max: 30, window_seconds: 60 }
+        rate_limit: { max: 10, window_seconds: 60 }
         gate: auto
       - risk_id: miro.read-board-content
         quota: 5000
@@ -200,7 +203,7 @@ presets:
     entries:
       - risk_id: miro.read-boards
         quota: 1000
-        rate_limit: { max: 30, window_seconds: 60 }
+        rate_limit: { max: 10, window_seconds: 60 }
         gate: auto
       - risk_id: miro.read-board-content
         quota: 5000

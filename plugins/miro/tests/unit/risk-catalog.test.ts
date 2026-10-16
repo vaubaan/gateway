@@ -9,6 +9,7 @@ import { describe, expect, test } from 'vitest';
 // Test-only : which risks a slice touches. A plugin's sources import the SDK alone.
 import { risksTouchedBy } from '@vaubaan/policy-engine';
 
+import { MAX_LISTED_BOARDS } from '../../src/call.ts';
 import { classifyMiro } from '../../src/classify.ts';
 import { TOOL } from '../../src/identity.ts';
 import { miroCatalog } from '../../src/index.ts';
@@ -115,9 +116,10 @@ describe('presets', () => {
   });
 
   test("one mission at every ceiling stays under Miro's 100,000 credits a minute", () => {
-    // Typical credits per call (handbook §3, "Rate limits").
+    // Worst-case credits per call (handbook §3, "Rate limits") : one list_boards is
+    // one unit of read-boards and pays one Level 1 read per mission board.
     const credits: Record<string, number> = {
-      'miro.read-boards': 50,
+      'miro.read-boards': 50 * MAX_LISTED_BOARDS,
       'miro.read-board-content': 100,
       'miro.content-write': 150,
       'miro.bulk-create': 2000,

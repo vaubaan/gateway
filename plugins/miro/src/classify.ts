@@ -21,13 +21,21 @@
  *   3. **Moving into a frame emits no frame slice** (handbook §5.3).
  */
 
-import type { ClassifyOutcome, Resource, Slice, SliceSegment } from '@vaubaan/plugin-sdk';
+import {
+  identSegment,
+  type ClassifyOutcome,
+  type Resource,
+  type Slice,
+  type SliceSegment,
+} from '@vaubaan/plugin-sdk';
 
 import { readMiroCall, type MiroCall } from './call.ts';
 import { PROVIDER_ID } from './identity.ts';
 
 const name = (value: string): SliceSegment => ({ kind: 'name', value });
-const ident = (value: string): SliceSegment => ({ kind: 'ident', value });
+// Every identifier passed its grammar in `readMiroCall`, and every grammar is
+// slice-safe ; `identSegment` is the safety net should one ever widen (`[*]`).
+const ident = (value: string): SliceSegment => identSegment(value);
 const ANY: SliceSegment = { kind: 'ident', value: '*' };
 
 function slice(action: 'R' | 'W', path: readonly SliceSegment[]): Slice {
@@ -37,7 +45,14 @@ function slice(action: 'R' | 'W', path: readonly SliceSegment[]): Slice {
 /** The slices of a call that `readMiroCall` accepted. */
 export function slicesOf(call: MiroCall): Slice[] {
   if (call.op === 'list-boards') {
-    return call.boards.map((ref) => slice('R', [name('board'), ident(ref)]));
+    // One slice naming every board read : a list when there are several, so
+    // the audit keeps them all (the resource stage reads list values too).
+    const [only] = call.boards;
+    const boards: SliceSegment =
+      call.boards.length === 1 && only !== undefined
+        ? ident(only)
+        : { kind: 'list', values: [...call.boards] };
+    return [slice('R', [name('board'), boards])];
   }
   const root: readonly SliceSegment[] = [name('board'), ident(call.board)];
   const entityOf = (kind: string): string => (kind === 'frame' ? 'frame' : 'item');

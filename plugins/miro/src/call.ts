@@ -146,9 +146,13 @@ export function resolveBoard(
   if (args.board !== undefined) {
     const given = args.board;
     if (typeof given === 'string' && given.includes('=') && MIRO_BOARD_ID.test(given)) {
-      return {
-        denied: `board: '${given}' is Miro's spelling of a board id; name the board '${boardRefOf(given) ?? ''}' (as list_boards shows it)`,
-      };
+      // The hint names a board the mission holds, never one it does not.
+      const spelled = boardRefOf(given);
+      return spelled !== null && own.includes(spelled)
+        ? {
+            denied: `board: '${given}' is Miro's spelling of a board id; name the board '${spelled}' (as list_boards shows it)`,
+          }
+        : { denied: 'board: malformed board ref' };
     }
     const ref = boardRef(given);
     if (ref === null) return { denied: 'board: malformed board ref' };

@@ -655,7 +655,7 @@ write …)`), instead of GitHub's bare 403. The push token of
   (which also checks that every sampled slice reads back as itself), `assertNoWildcard`,
   `assertPresetsValid`, `declaredOnly` and `refusalText`. `plugins/_template` is the
   scaffold and `plugins/README.md` the step-by-step guide.
-- **Ten provider plugins.**
+- **Provider plugins.**
   - **GitHub** `3.0.0` — a company GitHub App; a per-call installation token scoped to
     the repository; one resource per repository. Presets `read-only`, `developer`,
     `release-manager`.

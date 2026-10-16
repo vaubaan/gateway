@@ -64,28 +64,28 @@ id outside Miro's grammar is left out, with a warning.
 Thirty tools named `miro__<verb>_<noun>`. Each but `list_boards` takes
 `board`, the ref of one of the mission's boards (it may be omitted when the
 mission holds one board). A board given in Miro's spelling is refused with
-the ref to use.
+the ref to use when the mission holds that board.
 
-| Tool(s)                                                            | Slice                                            |
-| ------------------------------------------------------------------ | ------------------------------------------------ |
-| `list_boards`                                                      | `miro.board[<ref>].R`, one per mission board     |
-| `get_board`                                                        | `miro.board[<ref>].R`                            |
-| `list_items`, `get_item`                                           | `miro.board[<ref>].item[*\|<id>].R`              |
-| `list_connectors`, `get_connector`                                 | `miro.board[<ref>].connector[*\|<id>].R`         |
-| `list_tags`                                                        | `miro.board[<ref>].tag[*].R`                     |
-| `list_item_tags`                                                   | `miro.board[<ref>].item[<id>].tag-link[*].R`     |
-| `create_sticky_note`, `create_shape`, `create_text`, `create_card` | `miro.board[<ref>].item.W`                       |
-| `update_…` of those four                                           | `miro.board[<ref>].item[<id>].W`                 |
-| `delete_…` of those four                                           | `miro.board[<ref>].item[<id>].delete.W`          |
-| `create_frame`                                                     | `miro.board[<ref>].frame.W`                      |
-| `update_frame`                                                     | `miro.board[<ref>].frame[<id>].W`                |
-| `delete_frame`                                                     | `miro.board[<ref>].frame[<id>].delete.W`         |
-| `create_connector`                                                 | `miro.board[<ref>].connector.W`                  |
-| `update_connector`                                                 | `miro.board[<ref>].connector[<id>].W`            |
-| `delete_connector`                                                 | `miro.board[<ref>].connector[<id>].delete.W`     |
-| `create_tag`                                                       | `miro.board[<ref>].tag.W`                        |
-| `attach_tag`, `remove_tag`                                         | `miro.board[<ref>].item[<id>].tag-link[<tag>].W` |
-| `create_items` (1 to 20 items)                                     | `miro.board[<ref>].item.bulk-create.W`           |
+| Tool(s)                                                            | Slice                                                        |
+| ------------------------------------------------------------------ | ------------------------------------------------------------ |
+| `list_boards`                                                      | `miro.board[<ref>,<ref>…].R`, every mission board, one slice |
+| `get_board`                                                        | `miro.board[<ref>].R`                                        |
+| `list_items`, `get_item`                                           | `miro.board[<ref>].item[*\|<id>].R`                          |
+| `list_connectors`, `get_connector`                                 | `miro.board[<ref>].connector[*\|<id>].R`                     |
+| `list_tags`                                                        | `miro.board[<ref>].tag[*].R`                                 |
+| `list_item_tags`                                                   | `miro.board[<ref>].item[<id>].tag-link[*].R`                 |
+| `create_sticky_note`, `create_shape`, `create_text`, `create_card` | `miro.board[<ref>].item.W`                                   |
+| `update_…` of those four                                           | `miro.board[<ref>].item[<id>].W`                             |
+| `delete_…` of those four                                           | `miro.board[<ref>].item[<id>].delete.W`                      |
+| `create_frame`                                                     | `miro.board[<ref>].frame.W`                                  |
+| `update_frame`                                                     | `miro.board[<ref>].frame[<id>].W`                            |
+| `delete_frame`                                                     | `miro.board[<ref>].frame[<id>].delete.W`                     |
+| `create_connector`                                                 | `miro.board[<ref>].connector.W`                              |
+| `update_connector`                                                 | `miro.board[<ref>].connector[<id>].W`                        |
+| `delete_connector`                                                 | `miro.board[<ref>].connector[<id>].delete.W`                 |
+| `create_tag`                                                       | `miro.board[<ref>].tag.W`                                    |
+| `attach_tag`, `remove_tag`                                         | `miro.board[<ref>].item[<id>].tag-link[<tag>].W`             |
+| `create_items` (1 to 20 items)                                     | `miro.board[<ref>].item.bulk-create.W`                       |
 
 Undeclared arguments are refused, in `classify` and in `execute`. The
 objects sent to Miro (`data`, `style`, `position`, `geometry`) are closed
@@ -110,7 +110,10 @@ risk is env-scoped.
 | `miro.uncategorized-write` | W      | Fallback (`fallback: true`); touched by no tool, in no preset. |
 
 Every risk carries `calls_per_minute_max`, so that one mission at every
-ceiling stays under Miro's 100,000 credits a minute per user and app.
+ceiling stays under Miro's 100,000 credits a minute per user and app,
+counted at each risk's worst-case call: one `list_boards` is one unit of
+`read-boards` and pays up to 50 upstream reads (one per mission board), so
+`read-boards` is held to 10 calls a minute.
 
 ## Presets
 

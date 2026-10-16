@@ -629,6 +629,10 @@ export const INVARIANTS: readonly Invariant[] = [
         tests: ['`record_id` — the record segment of the request path'],
       },
       {
+        file: 'plugins/miro/tests/unit/identifiers.test.ts',
+        tests: ['`item_id` — a segment of the request path, refused before any request'],
+      },
+      {
         file: 'plugins/upstash-redis/tests/unit/identifiers.test.ts',
         tests: ['the database — a segment of the Management API path'],
       },
