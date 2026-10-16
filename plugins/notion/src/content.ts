@@ -209,24 +209,58 @@ function mentionIssue(
     return null;
   }
   if (!isObject(value)) return null;
-  const mention = value.mention;
-  if (isObject(mention)) {
-    for (const kind of ['page', 'database', 'user'] as const) {
-      const target = mention[kind];
-      if (target === undefined) continue;
-      const id = isObject(target) ? notionId(target.id) : null;
-      if (!id) {
-        return malformedId(`${path}.mention.${kind}.id`, isObject(target) ? target.id : target);
-      }
-      if (kind === 'page') refer(refs, 'pages', id);
-      if (kind === 'database') refer(refs, 'databases', id);
-    }
+  if ('mention' in value) {
+    const issue = checkMention(value.mention, `${path}.mention`, refs);
+    if (issue) return issue;
   }
   for (const [key, item] of Object.entries(value)) {
     if (key === 'mention') continue;
     const issue = mentionIssue(item, `${path}.${key}`, depth + 1, refs);
     if (issue) return issue;
   }
+  return null;
+}
+
+/**
+ * The mentions this plugin writes : a page, a database, a user, a date.
+ * Every other kind (`data_source`, `link_mention`, `link_preview`,
+ * `template_mention`…) is refused : each names or previews an object whose
+ * place the walk cannot prove, or one Notion resolves at write time.
+ */
+export const MENTION_TYPES: ReadonlySet<string> = new Set(['page', 'database', 'user', 'date']);
+
+/** One mention object : `{ type, [type]: … }` and nothing else ; the page or database it names collected. */
+function checkMention(mention: unknown, path: string, refs: References | undefined): string | null {
+  if (!isObject(mention) || typeof mention.type !== 'string' || !MENTION_TYPES.has(mention.type)) {
+    return `${path}.type: one of 'page', 'database', 'user', 'date'`;
+  }
+  const type = mention.type;
+  for (const key of Object.keys(mention)) {
+    if (key !== 'type' && key !== type) return `${path}.${key}: not part of a '${type}' mention`;
+  }
+  const target = mention[type];
+  if (!isObject(target)) return `${path}.${type}: expected an object`;
+  if (type === 'date') return null;
+  for (const key of Object.keys(target)) {
+    if (key !== 'id' && key !== 'object') return `${path}.${type}.${key}: not part of a mention`;
+  }
+  const id = notionId(target.id);
+  if (!id) return malformedId(`${path}.${type}.id`, target.id);
+  if (type === 'page') refer(refs, 'pages', id);
+  if (type === 'database') refer(refs, 'databases', id);
+  return null;
+}
+
+/** A link to a page : exactly `{ type: "page_id", page_id }` or `{ type: "database_id", database_id }`. */
+function checkLinkToPage(body: Json, path: string, refs: References | undefined): string | null {
+  const field = body.type === 'page_id' || body.type === 'database_id' ? body.type : null;
+  if (!field) return `${path}.type: 'page_id' or 'database_id'`;
+  for (const key of Object.keys(body)) {
+    if (key !== 'type' && key !== field) return `${path}.${key}: not part of a '${field}' link`;
+  }
+  const id = notionId(body[field]);
+  if (!id) return malformedId(`${path}.${field}`, body[field]);
+  refer(refs, field === 'page_id' ? 'pages' : 'databases', id);
   return null;
 }
 
@@ -310,13 +344,7 @@ function blockBodyIssue(
   if (type === 'synced_block' && body.synced_from !== undefined && body.synced_from !== null) {
     return `${path}.synced_from: a synced copy of another block is not created by this plugin (it would show content from wherever the original lives)`;
   }
-  if (type === 'link_to_page') {
-    const onDatabase = body.page_id === undefined && body.database_id !== undefined;
-    const target = onDatabase ? body.database_id : body.page_id;
-    const id = notionId(target);
-    if (!id) return malformedId(`${path}.${onDatabase ? 'database_id' : 'page_id'}`, target);
-    refer(refs, onDatabase ? 'databases' : 'pages', id);
-  }
+  if (type === 'link_to_page') return checkLinkToPage(body, path, refs);
   for (const [key, item] of Object.entries(body)) {
     if (key === 'rich_text' || key === 'caption') {
       const issue = checkRichText(item, `${path}.${key}`, refs);

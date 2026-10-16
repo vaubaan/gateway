@@ -15,6 +15,7 @@ import {
   MAX_DELETE_SCAN_REQUESTS,
   MAX_REFERENCE_WALK_REQUESTS,
 } from '../../src/execute.ts';
+import { classifyNotion } from '../../src/classify.ts';
 import { TOOL } from '../../src/identity.ts';
 import { notionPlugin } from '../../src/index.ts';
 import {
@@ -32,6 +33,7 @@ import {
   dbRoot,
   page,
   pageParent,
+  pageRoot,
   served,
   sourceParent,
   worldFetch,
@@ -231,16 +233,18 @@ describe('an object outside the root is described by nothing but that', () => {
     }
   });
 
-  test('update_entry on a page of another root : "not under", not "not an entry"', async () => {
+  test('update_entry on a page of another root : "not under", not "not an entry", nothing sent', async () => {
+    const fetch = worldFetch();
     const refused = await refusalText(
-      execute(ctx(worldFetch(), [dbRoot]), TOOL.updateEntry, {
+      execute(ctx(fetch, [dbRoot]), TOOL.updateEntry, {
         data_source_id: DS,
         page_id: FOREIGN,
-        properties: {},
+        properties: { Done: { checkbox: true } },
       }),
     );
     expect(refused).toMatch(/is not under the shared root/);
     expect(refused).not.toMatch(/not an entry/);
+    expect(writes(fetch)).toEqual([]);
   });
 });
 
@@ -296,5 +300,143 @@ describe('a data source answered without database_parent', () => {
       `/data_sources/${source}`,
       `/databases/${db}`,
     ]);
+  });
+});
+
+describe('a link or a mention says exactly what it points at', () => {
+  const append = (child: unknown) => ({ block_id: PAGE, children: [child] });
+  const mention = (value: unknown) => ({
+    type: 'paragraph',
+    paragraph: { rich_text: [{ type: 'mention', mention: value }] },
+  });
+
+  test.each([
+    [
+      'a database link carrying a page id too',
+      { type: 'database_id', page_id: PAGE, database_id: FOREIGN },
+    ],
+    [
+      'a page link carrying a database id too',
+      { type: 'page_id', page_id: PAGE, database_id: FOREIGN },
+    ],
+    ['a page link whose type says database', { type: 'database_id', page_id: PAGE }],
+    ['a link without a type', { page_id: PAGE }],
+    ['a link with another key', { type: 'page_id', page_id: PAGE, url: 'https://x.io' }],
+  ])('%s : refused by classify and by execute, nothing sent', async (_, link) => {
+    const args = append({ type: 'link_to_page', link_to_page: link });
+    expect('denied' in classifyNotion(TOOL.appendBlocks, args, [pageRoot])).toBe(true);
+    const fetch = mockFetch([]);
+    expect((await execute(ctx(fetch), TOOL.appendBlocks, args)).isError).toBe(true);
+    expect(fetch.calls).toEqual([]);
+  });
+
+  test.each([
+    ['data_source', { type: 'data_source', data_source: { id: FOREIGN } }],
+    ['link_mention', { type: 'link_mention', link_mention: { href: 'https://x.io' } }],
+    ['link_preview', { type: 'link_preview', link_preview: { url: 'https://x.io' } }],
+    [
+      'template_mention',
+      { type: 'template_mention', template_mention: { type: 'template_mention_date' } },
+    ],
+    ['a kind not known', { type: 'custom', custom: {} }],
+    ['no type', { page: { id: PAGE } }],
+    ['a second target', { type: 'page', page: { id: PAGE }, database: { id: FOREIGN } }],
+    ['an extra field on the target', { type: 'page', page: { id: PAGE, url: 'https://x.io' } }],
+  ])('a mention of %s : refused by classify and by execute, nothing sent', async (_, value) => {
+    const args = append(mention(value));
+    const outcome = classifyNotion(TOOL.appendBlocks, args, [pageRoot]);
+    expect('denied' in outcome ? outcome.denied : '').toMatch(/mention/);
+    const fetch = mockFetch([]);
+    expect((await execute(ctx(fetch), TOOL.appendBlocks, args)).isError).toBe(true);
+    expect(fetch.calls).toEqual([]);
+  });
+
+  test('a user and a date mention are written ; a user is not walked', async () => {
+    const fetch = worldFetch();
+    const args = {
+      block_id: PAGE,
+      rich_text: [
+        { type: 'mention', mention: { type: 'user', user: { object: 'user', id: FOREIGN } } },
+        { type: 'mention', mention: { type: 'date', date: { start: '2026-10-16' } } },
+      ],
+    };
+    expect((await execute(ctx(fetch), TOOL.createComment, args)).isError).toBeUndefined();
+    expect(fetch.calls.some((c) => c.url.includes(FOREIGN))).toBe(false);
+  });
+
+  test('a reference that does not exist, or is not shared : the same refusal', async () => {
+    const missing = hex(0x900);
+    const fetch = worldFetch({
+      method: 'GET',
+      url: `${NOTION_API_BASE}/pages/${missing}`,
+      status: 404,
+      body: { object: 'error', code: 'object_not_found' },
+    });
+    const args = append(mention({ type: 'page', page: { id: missing } }));
+    expect(await refusalText(execute(ctx(fetch), TOOL.appendBlocks, args))).toBe(
+      `notion: page '${missing}' is not under the shared root '${ROOT}' of this call`,
+    );
+    expect(writes(fetch)).toEqual([]);
+  });
+});
+
+describe('the pre-delete scan never reads a synced original', () => {
+  const ORIGIN = hex(0xa00);
+  const OUTSIDE_SUBPAGE = hex(0xa01);
+  const COPY = hex(0xa02);
+  const copy = (id: string, parent: unknown) =>
+    block(id, 'synced_block', parent, {
+      has_children: true,
+      synced_block: { synced_from: { type: 'block_id', block_id: ORIGIN } },
+    });
+  const leaks = (fetch: ReturnType<typeof mockFetch>, text: string) =>
+    [ORIGIN, OUTSIDE_SUBPAGE].some(
+      (id) => text.includes(id) || fetch.calls.some((c) => c.url.includes(id)),
+    );
+
+  test('a toggle holding a synced copy of an outside original with a sub-page : deleted, nothing of the outside read or named', async () => {
+    const toggle = block(TOGGLE, 'toggle', pageParent(PAGE), { has_children: true });
+    // Strict : only these routes answer. The copy's children (the original's tree) have none.
+    const fetch = mockFetch([
+      served('blocks', toggle),
+      served('pages', page(PAGE, pageParent(ROOT))),
+      children(TOGGLE, [copy(COPY, blockParent(TOGGLE))]),
+      {
+        method: 'DELETE',
+        url: `${NOTION_API_BASE}/blocks/${TOGGLE}`,
+        body: { object: 'block', id: TOGGLE },
+      },
+    ]);
+    const result = await execute(ctx(fetch), TOOL.deleteBlock, { block_id: TOGGLE });
+    expect(result.isError).toBeUndefined();
+    expect(writes(fetch).map((c) => c.method)).toEqual(['DELETE']);
+    expect(leaks(fetch, JSON.stringify(result))).toBe(false);
+  });
+
+  test('deleting a synced copy itself : no scan, deleted', async () => {
+    const fetch = mockFetch([
+      served('blocks', copy(COPY, pageParent(PAGE))),
+      served('pages', page(PAGE, pageParent(ROOT))),
+      {
+        method: 'DELETE',
+        url: `${NOTION_API_BASE}/blocks/${COPY}`,
+        body: { object: 'block', id: COPY },
+      },
+    ]);
+    const result = await execute(ctx(fetch), TOOL.deleteBlock, { block_id: COPY });
+    expect(result.isError).toBeUndefined();
+    expect(leaks(fetch, JSON.stringify(result))).toBe(false);
+  });
+
+  test('a block whose has_children is absent is scanned (fail closed)', async () => {
+    const quiet = { ...block(TOGGLE, 'toggle', pageParent(PAGE)), has_children: undefined };
+    const fetch = worldFetch(
+      served('blocks', quiet),
+      children(TOGGLE, [block(CHILD, 'child_page', blockParent(TOGGLE))]),
+    );
+    expect(await refusalText(execute(ctx(fetch), TOOL.deleteBlock, { block_id: TOGGLE }))).toMatch(
+      /contains a page/,
+    );
+    expect(writes(fetch)).toEqual([]);
   });
 });

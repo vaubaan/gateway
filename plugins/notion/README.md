@@ -102,7 +102,13 @@ neither named nor counted.
 
 **Deleting a block** first lists what is nested in it (at most 20 listings)
 and refuses when it holds a page or a database, or when the tree is larger
-than that: `block-delete` never trashes a page.
+than that: `block-delete` never trashes a page. Synced copies are not
+scanned: their children are their original's, which deleting a copy does
+not trash and which the scan never reads.
+
+A `link_to_page` is exactly `{ type: "page_id", page_id }` or
+`{ type: "database_id", database_id }`, and a mention is a `page`,
+`database`, `user` or `date` mention; anything else is refused.
 
 ## Catalog
 
@@ -154,7 +160,7 @@ its `Retry-After`.
 
 ## Tests
 
-`npx vitest run plugins/notion` — 126 tests: the SDK kit
+`npx vitest run plugins/notion` — 144 tests: the SDK kit
 (`assertPluginWellFormed`, `assertPresetsValid`, `assertNoWildcard`,
 `assertCatalogCoverage` with no fallback hit and no risk untouched,
 `assertIdentifiersRefused` on the same samples), the classifier branch by

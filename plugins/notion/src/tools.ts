@@ -68,7 +68,7 @@ export const notionTools: readonly McpToolDeclaration[] = [
   {
     name: TOOL.searchContent,
     description:
-      "Search page and database titles within one root. Notion's search matches titles only, is not exhaustive and lags behind recent changes; results outside the root are hidden (results_hidden). To find entries of a database, query its data source instead.",
+      "Search page and database titles within one root. Notion's search matches titles only, is not exhaustive and lags behind recent changes; results that cannot be shown to be under the root are left out. To find entries of a database, query its data source instead.",
     inputSchema: {
       type: 'object',
       properties: {

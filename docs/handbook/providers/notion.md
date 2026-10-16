@@ -209,8 +209,17 @@ again by `execute`, which applies the same reader):
   its type's object; a `synced_block` with `synced_from` set (a copy: §5.7);
 - a file upload anywhere in a forwarded value — a `file_upload` key or
   `type: "file_upload"` (file uploads are out of scope, **PO**);
-- a mention (`page`, `database`, `user`), a `link_to_page` target, a
-  relation target or a person whose id is not a Notion id;
+- a mention of any kind but `page`, `database`, `user` and `date`
+  (`MENTION_TYPES`: `data_source`, `link_mention`, `link_preview`,
+  `template_mention` and anything else are refused), a mention object with a
+  key other than `type` and its type's object, or a target with a key other
+  than `id` (and `object`);
+- a `link_to_page` other than exactly `{ type: "page_id", page_id }` or
+  `{ type: "database_id", database_id }`: no missing or mismatched `type`,
+  no second id beside the one its `type` names, no other key — a link
+  carrying two ids would have only one of them walked;
+- a mention, a `link_to_page` target, a relation target or a person whose
+  id is not a Notion id;
 - on `update_block`, a `type` outside `UPDATABLE_BLOCK_TYPES` (text,
   heading, list, to-do, toggle, quote, callout, code, equation, media,
   bookmark, embed, table, table row), and `content.children` (a block's
@@ -550,9 +559,11 @@ page has a `title` and no other property; the executor writes it as
   before the write, with relation targets, within one budget of
   `MAX_REFERENCE_WALK_REQUESTS` = 50 requests for the call. One outside the
   root, or the budget run out, declines the call: a link would otherwise
-  show readers of this root the title of a page elsewhere, and tell the
-  agent whether an id exists. User mentions are not walked (users belong to
-  no root).
+  show readers of this root the title of a page elsewhere. A reference this
+  token cannot read (`404` on its own id) gets the same "not under the
+  shared root" refusal as one under another root, so the refusal tells the
+  agent nothing about whether the id exists elsewhere. User mentions are not
+  walked (users belong to no root); date mentions name nothing.
 - **People and mentions** take user ids, read by `notionId`; the plugin
   does not list users (**PO**). Writing a person or a mention on a page or
   an entry notifies nobody (§5.11); in a comment or a rewritten block it
@@ -642,13 +653,20 @@ not a 'to_do'`), so the agent cannot change a block's type. Mentions and
   - the classifier refuses the root itself; the executor refuses a target of
     type `child_page` ("move it to the trash with `notion__trash_page`") or
     `child_database`;
-  - when the target `has_children`, the executor lists its descendants
+  - unless the target says `has_children: false` (an absent value is read
+    as "may have some", fail closed), the executor lists its descendants
     first, breadth first, following each listing's cursor, within
     `MAX_DELETE_SCAN_REQUESTS` = 20 listings of 100, and **refuses** when one
     of them is a `child_page` or a `child_database`, or when the budget runs
     out before the whole tree was seen (fail closed). No `DELETE` is sent
-    then. A synced copy's children are its original's, so a copy whose
-    original holds a page is refused too.
+    then;
+  - **synced copies are not scanned.** A copy's children are its original's,
+    which may live under another root, and deleting a copy trashes nothing
+    of the original. So the scan never lists the children of a copy — the
+    target itself or one met on the way — and never reads the original's
+    tree. Every block it lists is therefore nested in the proven target, and
+    the only id a refusal names (the page or database found) is under the
+    root.
 - **Synced originals, known limitation.** A synced original's content is
   shown by every copy of it, and a copy may live under another root.
   Rewriting a block inside a synced original, or deleting the original,
@@ -825,7 +843,7 @@ path segment and a valid slice identifier.
 
 ### 6.4 Tests
 
-`npx vitest run plugins/notion` — 126 tests, no network, no credential:
+`npx vitest run plugins/notion` — 144 tests, no network, no credential:
 
 - `plugin.test.ts`: the kit — `assertPluginWellFormed`,
   `assertPresetsValid`, `assertNoWildcard`, `assertCatalogCoverage` on
@@ -865,8 +883,15 @@ path segment and a valid slice identifier.
   mentions and links to another root refused in new content, a rewritten
   block, a comment and an entry title; the shared reference budget; nothing
   but "not under" said of an object outside the root (`update_page`,
-  `update_entry`, `update_block`, `delete_block`); one budget for listings
-  and synced-original walks; a data source without `database_parent`.
+  `update_entry`, `update_block`, `delete_block`; nothing sent); one budget
+  for listings and synced-original walks; a data source without
+  `database_parent`; `link_to_page` with two ids, a mismatched or missing
+  `type` or another key, and mention kinds outside the allow-list, refused
+  by `classify` and `execute` with nothing sent; user and date mentions
+  written, users not walked; a reference answered `404` refused as "not
+  under"; a toggle holding a synced copy of an outside original deleted
+  without reading or naming anything of the original; a synced copy deleted
+  without a scan; an absent `has_children` scanned.
 - `data-model.test.ts`: referential integrity, unique names, and every
   emitted slice and catalog pattern written with the declared entities under
   their declared parents.

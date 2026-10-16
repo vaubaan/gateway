@@ -158,7 +158,9 @@ export class Ancestry {
         const path = `${ENDPOINT[node.kind]}/${node.id}`;
         const answer = await send(this.ctx, 'GET', path);
         this.requests += 1;
-        if (answer.status === 404 && visited.length > 1) return settle('out'); // an ancestor this token cannot read
+        // An ancestor this token cannot read is outside every root. So is a reference's own
+        // id (a budgeted walk) : "exists elsewhere" and "not shared" get the same refusal.
+        if (answer.status === 404 && (visited.length > 1 || budget)) return settle('out');
         if (answer.status < 200 || answer.status >= 300) throw failureOf('GET', path, answer);
         object = isObject(answer.body) ? answer.body : undefined;
       }

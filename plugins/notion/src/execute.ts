@@ -223,7 +223,12 @@ async function run(
             : `notion: block '${call.blockId}' is a database, which this plugin does not delete`,
         );
       }
-      if (block.has_children === true) await refuseNestedContainers(ctx, call.blockId);
+      // A synced copy shows its original's content without holding it : deleting the
+      // copy trashes nothing of the original, whose tree is never read from here.
+      // Absent `has_children` is read as "may have some" (fail closed).
+      if (block.has_children !== false && syncedOriginOf(block) === null) {
+        await refuseNestedContainers(ctx, call.blockId);
+      }
       return request(ctx, 'DELETE', `/blocks/${call.blockId}`);
     }
     case 'trashPage':
@@ -287,7 +292,11 @@ async function proveReferences(walk: Ancestry, references: References): Promise<
  * Deleting a block trashes everything nested in it, pages and databases
  * included : the descendants are listed first, within a budget, and the
  * deletion is refused when one is a page or a database, or when the budget
- * runs out before the whole tree was seen (fail closed).
+ * runs out before the whole tree was seen (fail closed). A synced copy met on
+ * the way is not descended into : its children are its original's, which may
+ * live under another root and which deleting the copy does not trash. Every
+ * block listed is therefore nested in the proven target, so naming one in a
+ * refusal names an object under the root.
  */
 async function refuseNestedContainers(ctx: ExecuteContext, blockId: string): Promise<void> {
   const queue: string[] = [blockId];
@@ -318,7 +327,7 @@ async function refuseNestedContainers(ctx: ExecuteContext, blockId: string): Pro
             `notion: block '${blockId}' contains ${child.type === 'child_page' ? 'a page' : 'a database'} ('${id}'), which deleting it would trash — move the page to the trash with notion__trash_page, or delete the other blocks one by one`,
           );
         }
-        if (child.has_children === true) queue.push(id);
+        if (child.has_children !== false && syncedOriginOf(child) === null) queue.push(id);
       }
       startCursor = listed.has_more === true ? cursor(listed.next_cursor) : null;
       if (listed.has_more === true && !startCursor) {
