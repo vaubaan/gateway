@@ -551,7 +551,7 @@ for a result. `ctx.signal` is passed to both requests.
 
 ### 6.5 Tests
 
-`npx vitest run plugins/context7` — 54 tests, no network
+`npx vitest run plugins/context7` — 58 tests, no network
 (`tests/unit/support.ts` holds the shared context and the upstream answers
 as the live calls showed them):
 
@@ -564,11 +564,12 @@ as the live calls showed them):
   frozen surface (exactly the two tools of `tools/list`, descriptions and
   schemas unchanged, the schemas checked live, no alias declared, a title
   per tool);
-- `classify.test.ts` (10): each tool, the `@` and `+` forms on `[*]`, the
+- `classify.test.ts` (14): each tool, the `@` and `+` forms on `[*]`, the
   only risk touched, an unknown tool, no or a foreign resource, a resource
   that is not the index or several, every alias and an invented argument
   denied, 25 malformed library ids, the free-text bounds (500 accepted, 501
-  refused);
+  refused), and the library-id pattern refusing four hostile ids at once
+  (why its Semgrep `detect-redos` finding is suppressed, a false positive);
 - `execute.test.ts` (25): the JSON-RPC body (prefix stripped, arguments as
   classified, nothing else) and the headers (Bearer, no other key header),
   SSE and bare JSON answers, refusals with `fetch.calls` empty, the hostile

@@ -17,6 +17,7 @@ import {
   TOOL_PREFIX,
   classifyContext7,
   context7Catalog,
+  libraryId,
   malformedText,
 } from '../../src/index.ts';
 import { index } from './support.ts';
@@ -219,4 +220,24 @@ describe('classifyContext7 — refusals', () => {
       slices(TOOL.resolveLibraryId, { libraryName: 'Next.js', query: 'x'.repeat(500) }),
     ).toHaveLength(1);
   });
+});
+
+describe('libraryId — linear on hostile input (the detect-redos suppression)', () => {
+  // Each repetition of the pattern starts with '/', which its segment class does
+  // not hold, so a string splits one way only; the length is capped at 500 first.
+  const hostile = [
+    `/${'a'.repeat(498)}!`,
+    `${'/a'.repeat(249)}/!`,
+    `${'/.'.repeat(250)}`,
+    `/${'a'.repeat(50_000)}`,
+  ];
+
+  test.each(hostile.map((value, index) => [index, value] as const))(
+    'refuses hostile id %i at once',
+    (_index, value) => {
+      const started = performance.now();
+      expect(libraryId(value)).toBeNull();
+      expect(performance.now() - started).toBeLessThan(250);
+    },
+  );
 });

@@ -121,7 +121,7 @@ call is rethrown as the abort.
 
 ## Tests
 
-`npx vitest run plugins/context7` — 54 tests: the SDK kit
+`npx vitest run plugins/context7` — 58 tests: the SDK kit
 (`assertPluginWellFormed`, `assertPresetsValid`, `assertNoWildcard`,
 `assertCatalogCoverage`, `assertIdentifiersRefused` with no identifier in a
 URL), the frozen upstream surface, the classifier branch by branch (every

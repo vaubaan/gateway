@@ -51,6 +51,7 @@ const DOT_ONLY_SEGMENT = /\/\.+(?=\/|$)/;
 /** The value as a Context7 library id, or `null`. Shared by `classify` and `execute`. */
 export function libraryId(value: unknown): string | null {
   if (typeof value !== 'string' || value.length > MAX_TEXT_LENGTH) return null;
+  // nosemgrep: detect-redos -- each repetition of LIBRARY_ID starts with '/', outside its segment class, so a string splits one way only (linear), and the length is capped at 500 above (pinned by classify.test.ts)
   if (!LIBRARY_ID.test(value) || DOT_ONLY_SEGMENT.test(value)) return null;
   return value;
 }
