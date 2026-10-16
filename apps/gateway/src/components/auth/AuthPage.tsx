@@ -9,7 +9,9 @@
  * tokens, so it follows the theme the person chose like every other page.
  */
 import { PRODUCT } from '@/lib/vocabulary';
+import type { InstanceIdentity } from '@/server/instance';
 
+import { brandTooltip } from '../shell/instance-label';
 import styles from './auth.module.css';
 
 export function AuthPage({
@@ -17,8 +19,11 @@ export function AuthPage({
   footer,
   children,
 }: {
-  /** Where this gateway lives: the host of its public address. Absent when the page cannot know. */
-  instance?: string | null;
+  /**
+   * Which gateway this is: its name (or the host of its public address when it
+   * has none), the host in the tooltip. Absent when the page cannot know.
+   */
+  instance?: InstanceIdentity | null;
   /** The build line (`BuildFooter`), given by a server page; a client page has none. */
   footer?: React.ReactNode;
   children: React.ReactNode;
@@ -30,9 +35,13 @@ export function AuthPage({
           <span className={styles.brandMark} aria-hidden="true">
             {PRODUCT.mark}
           </span>
-          <span className={styles.brandText}>
+          <span className={styles.brandText} title={instance ? brandTooltip(instance) : undefined}>
             <span className={styles.brandName}>{PRODUCT.name}</span>
-            {instance && <span className={styles.brandInstance}>{instance}</span>}
+            {instance && (
+              <span className={styles.brandInstance} data-testid="instance-name">
+                {instance.label}
+              </span>
+            )}
           </span>
         </div>
         {children}

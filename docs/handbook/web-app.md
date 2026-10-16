@@ -2,7 +2,7 @@
 title: Web app — route map, layouts, shell, design system
 status: current
 date: 2026-10-13
-last_synced: 2026-10-15
+last_synced: 2026-10-16
 tracks:
   - apps/gateway/src/app/layout.tsx
   - apps/gateway/src/app/(app)/page.tsx
@@ -15,6 +15,10 @@ tracks:
   - apps/gateway/src/styles/tokens.css
   - apps/gateway/src/components/ui/
   - apps/gateway/src/components/shell/
+  - apps/gateway/src/lib/instance.ts
+  - apps/gateway/src/app/(public)/login/page.tsx
+  - apps/gateway/src/app/admin/bootstrap/page.tsx
+  - apps/gateway/src/app/admin/(guarded)/page.tsx
   - apps/gateway/src/lib/vocabulary.ts
   - apps/gateway/src/lib/dates.ts
   - apps/gateway/src/lib/theme.ts
@@ -178,12 +182,22 @@ only.
 - **`(public)/layout.tsx`** — the pages reachable without a session (`/login`):
   it renders its children and nothing else; the page draws its own frame
   (`AuthPage`, [Pages outside the shell](#pages-outside-the-shell)).
+- **The title of a page** (what a browser tab shows) is "<name> · Vaubaan"
+  (`documentTitle`, `components/shell/instance-label.ts`): `(public)/layout`,
+  `(app)/layout`, `admin/(guarded)/layout` and `/admin/bootstrap` export
+  `generateMetadata = instanceMetadata` (`lib/instance.ts`), which reads
+  `root.instance.name.identity()`. `<name>` is the instance's name, or the host
+  of the public URL when it has none ([configuration](configuration.md),
+  "Instance name"). The root layout's static "Vaubaan Gateway" stays for the
+  pages outside these segments (`not-found`, errors).
 - **`not-found.tsx` and `error.tsx`**, at the root and under `(app)/`, and
   `global-error.tsx`: what is rendered for an address that matches nothing
   and for a page that failed, inside the shell and outside it (same section).
 - **`(app)/layout.tsx`** — the human surface: `currentPrincipal()`; no
   principal → `redirect('/login')`; otherwise
-  `<AppShell principal instance>`, `instance` being the host of the public URL.
+  `<AppShell principal instance>`, `instance` being
+  `root.instance.name.identity()` (`InstanceIdentity`: `label`, `name`, `host`,
+  `source`).
 - **`(app)/settings/connected-apps/layout.tsx`** — connected apps are a page of Settings: the
   page inside `SettingsFrame` (the local navigation of Settings).
 - **`admin/(guarded)/layout.tsx`** — `adminDecision()`; no session → the
@@ -282,7 +296,7 @@ and one footer for the whole product.
   <div.app>
     <a.skip href="#main">           "Skip to the page", shown on focus
     <aside.side>
-      <Link.brand href="/">         the mark, "Vaubaan", the host of the gateway
+      <Link.brand href="/">         the mark, "Vaubaan", the name of the gateway
       <nav aria-label="Main">       NavLinks: a <ul> of seven entries
       <div.foot>                    UserMenu, ThemeToggle
     <div.main>
@@ -310,9 +324,13 @@ seven is the budget (style guide §1).
   the number of open requests awaiting the signed-in person as creator, in
   amber, nothing at zero and nothing for the bootstrap operator
   ([requests](requests.md)). `data-testid="open-request-count"`.
-- **The brand** leads to `/`, the one home. Under the name it prints
-  `instance`, the host of the public URL. There is no health line and no
-  version string in the navigation.
+- **The brand** leads to `/`, the one home. Under "Vaubaan" it prints
+  `instance.label` (`data-testid="instance-name"`): the instance's name, or
+  the host of the public URL when it has none. Its tooltip (`brandTooltip`)
+  is "Vaubaan · <name> · <host>", so the address stays one hover away; in the
+  collapsed form, where the words are visually hidden, the tooltip says it.
+  The name is a React child and an attribute value, never markup. There is
+  no health line and no version string in the navigation.
 
 **The person and the theme**, at the foot:
 
@@ -509,19 +527,20 @@ of `lib/vocabulary.ts`.
 
 `components/auth/AuthPage.tsx` is the frame of a page that has no shell: one
 narrow column in the middle of the window — the mark, the product and the
-host of the gateway (`instance`), then the page — and the build line the page
+name of the gateway (`instance.label`, the host in the tooltip, as in the
+shell), then the page — and the build line the page
 passes as `footer`. `AuthHeading` is its title and its one sentence. It reads
 the tokens, so it follows the theme like any page, and has no hook: `error.tsx`
 (a client component) uses it too.
 
-| Page                               | Says                                                                                                                                                                                                                                                                                                         |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `/login`                           | "Sign in to `<host>`" and one plain link per sign-in provider ("Continue with <name>"), the install-token link while it is valid; the closed error codes of a failed attempt; a signed-in person is sent to the home, and the sign-in it starts returns there ([authentication](authentication.md), "Pages") |
-| `/admin/bootstrap`                 | "Set up this gateway": the bootstrap token form while it is active, otherwise that it no longer works ([authentication](authentication.md))                                                                                                                                                                  |
-| `app/not-found.tsx`                | an address that matches no page, and a page of Administration asked by someone who does not administer: "This page does not exist", the way to the home, nothing about what exists                                                                                                                           |
-| `(app)/not-found.tsx`              | `notFound()` thrown by a page of the application — an unknown mission, account or service, or one that is not the reader's: the shell stays, the title is "Not found" (`data-testid="not-found"`)                                                                                                            |
-| `(app)/error.tsx`, `app/error.tsx` | a page failed while rendering: "This page could not be shown", "Try again" (`reset`), and the digest the server logged the error under as a reference to quote (`page-error`, `error-reference`)                                                                                                             |
-| `app/global-error.tsx`             | the root layout itself failed: it replaces the document, imports the style sheet and reads no session and no theme cookie                                                                                                                                                                                    |
+| Page                               | Says                                                                                                                                                                                                                                                                                                                                                  |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/login`                           | "Sign in to `<name>`" (the host when the instance has no name) and one plain link per sign-in provider ("Continue with <name>"), the install-token link while it is valid; the closed error codes of a failed attempt; a signed-in person is sent to the home, and the sign-in it starts returns there ([authentication](authentication.md), "Pages") |
+| `/admin/bootstrap`                 | "Set up this gateway": the bootstrap token form while it is active, otherwise that it no longer works ([authentication](authentication.md))                                                                                                                                                                                                           |
+| `app/not-found.tsx`                | an address that matches no page, and a page of Administration asked by someone who does not administer: "This page does not exist", the way to the home, nothing about what exists                                                                                                                                                                    |
+| `(app)/not-found.tsx`              | `notFound()` thrown by a page of the application — an unknown mission, account or service, or one that is not the reader's: the shell stays, the title is "Not found" (`data-testid="not-found"`)                                                                                                                                                     |
+| `(app)/error.tsx`, `app/error.tsx` | a page failed while rendering: "This page could not be shown", "Try again" (`reset`), and the digest the server logged the error under as a reference to quote (`page-error`, `error-reference`)                                                                                                                                                      |
+| `app/global-error.tsx`             | the root layout itself failed: it replaces the document, imports the style sheet and reads no session and no theme cookie                                                                                                                                                                                                                             |
 
 ## Self-contained documents — `server/http/document.ts`
 

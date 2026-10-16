@@ -852,6 +852,14 @@ Waiting for you, Missions, Accounts, Activity, Reference, Settings — and one
 home. A page is offered an act only when the instance would take it, and the
 instance checks again when the act arrives.
 
+Above the navigation, the product and **the instance's name** (§4.3), so
+that someone with several instances open knows which one they are looking
+at; the host of its public URL stays one hover away. The title of every
+page — what a browser tab shows — carries the name too ("<name> ·
+Vaubaan"), and so does the sign-in page. Without a name, the host of the
+public URL stands in its place. The name is shown as text, never
+interpreted as markup.
+
 - **Now** — the home, and the only one. It has three forms. _Something
   waits_: what my missions ask of me comes first — each request with who
   asks, on which mission, the tool and the room left — then the missions that
@@ -985,10 +993,16 @@ instance checks again when the act arrives.
   that one person signing in through two providers is two people; teams (the
   local ones are kept here); accounts without owner (name a new owner — the
   administrator's only act on an account); registered apps (the OAuth
-  clients of the management door: approve, disable); telemetry. Acts that
-  stop, remove or hand over something are asked first. The public URL, the
-  retention and the other keys of §4.3 are set in the instance configuration
-  and shown in the interface, not edited there.
+  clients of the management door: approve, disable); telemetry; and **the
+  instance's name**, on the setup page, which an administrator sets or
+  clears (clearing it brings back the host). Acts that stop, remove or hand
+  over something are asked first. The public URL, the retention and the
+  other keys of §4.3 are set in the instance configuration and shown in the
+  interface, not edited there — except the instance's name and the
+  telemetry opt-in, which the administrator sets in the interface unless
+  the configuration sets them: a value the configuration sets is shown
+  read-only, and the configuration wins. Every change made in the interface
+  is audited.
 
 Styling follows [style-guide](./style-guide.md).
 
@@ -1027,7 +1041,13 @@ a mounted file, never committing anything:
   provider B. A group without a provider is accepted while one provider
   is configured, and refused once there are several;
 - the **telemetry opt-in** and the collector URL (default supplied,
-  overridable, disableable).
+  overridable, disableable);
+- optionally, the instance's **name**: what the interface shows to tell
+  this instance from another one of the same company (§4.2). From 1 to 64
+  characters once the spaces around it are trimmed, without control
+  characters; it is a label, never markup. When it is not set here, an
+  administrator may set it on the Administration page; when neither sets
+  it, the host of the public URL is shown instead.
 
 Optional keys have defaults; among them the **absolute lifetime of a
 delegation** (ninety days), the **audit retention** (ninety days) and the

@@ -2,7 +2,7 @@
 title: Integration tests
 status: current
 date: 2026-10-13
-last_synced: 2026-10-15
+last_synced: 2026-10-16
 tracks:
   - vitest.config.ts
   - scripts/release-lib.test.mjs
@@ -116,9 +116,10 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/authority/mission-grounds.test.ts`                                                |        27 |
 | `apps/gateway/src/server/compose/compose.test.ts`                                                          |        17 |
 | `apps/gateway/src/server/config/duration.test.ts`                                                          |         2 |
-| `apps/gateway/src/server/config/keys-doc.test.ts`                                                          |        39 |
+| `apps/gateway/src/server/config/instance-name.test.ts`                                                     |        11 |
+| `apps/gateway/src/server/config/keys-doc.test.ts`                                                          |        42 |
 | `apps/gateway/src/server/config/load.property.test.ts`                                                     |         6 |
-| `apps/gateway/src/server/config/load.test.ts`                                                              |        54 |
+| `apps/gateway/src/server/config/load.test.ts`                                                              |        62 |
 | `apps/gateway/src/server/config/sign-in.test.ts`                                                           |        15 |
 | `apps/gateway/src/server/connections/codec-and-keypair.test.ts`                                            |        12 |
 | `apps/gateway/src/server/connections/credentials.test.ts`                                                  |        15 |
@@ -139,6 +140,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/http/doors.property.test.ts`                                                      |         7 |
 | `apps/gateway/src/server/http/healthz.test.ts`                                                             |         4 |
 | `apps/gateway/src/server/http/security-headers.test.ts`                                                    |         6 |
+| `apps/gateway/src/server/instance/settings.test.ts`                                                        |         6 |
 | `apps/gateway/src/server/logging/logging.test.ts`                                                          |         6 |
 | `apps/gateway/src/server/management/door.test.ts`                                                          |         4 |
 | `apps/gateway/src/server/management/hard-deny.test.ts`                                                     |        16 |
@@ -183,7 +185,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/telemetry/outcome.test.ts`                                                        |        30 |
 | `apps/gateway/src/server/telemetry/settings.test.ts`                                                       |         7 |
 | `apps/gateway/src/server/telemetry/stats.test.ts`                                                          |        11 |
-| `apps/gateway/tests/integration/audit/admin-mutations.test.ts`                                             |        61 |
+| `apps/gateway/tests/integration/audit/admin-mutations.test.ts`                                             |        65 |
 | `apps/gateway/tests/integration/audit/audit-query.test.ts`                                                 |        35 |
 | `apps/gateway/tests/integration/audit/events-agent-label.test.ts`                                          |         3 |
 | `apps/gateway/tests/integration/audit/mission-session.test.ts`                                             |        21 |
@@ -222,6 +224,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/git/git-remote-review.test.ts`                                             |        13 |
 | `apps/gateway/tests/integration/git/git-remote-security.test.ts`                                           |        37 |
 | `apps/gateway/tests/integration/git/git-remote.test.ts`                                                    |        14 |
+| `apps/gateway/tests/integration/instance/instance-name.test.ts`                                            |         7 |
 | `apps/gateway/tests/integration/management/hard-deny.test.ts`                                              |         6 |
 | `apps/gateway/tests/integration/management/management-door.test.ts`                                        |        34 |
 | `apps/gateway/tests/integration/management/output-schemas.test.ts`                                         |         9 |
@@ -271,7 +274,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/app/now-and-waiting.test.tsx`                                                     |        30 |
 | `apps/gateway/tests/unit/app/shell-and-vocabulary.test.ts`                                                 |        23 |
 | `apps/gateway/tests/unit/components/success-tone.test.ts`                                                  |         2 |
-| `apps/gateway/tests/unit/server/auth/mutation-guard.test.ts`                                               |       351 |
+| `apps/gateway/tests/unit/server/auth/mutation-guard.test.ts`                                               |       378 |
 | `apps/gateway/tests/unit/server/budget/decide.test.ts`                                                     |        20 |
 | `apps/gateway/tests/unit/server/budget/gates.test.ts`                                                      |         9 |
 | `apps/gateway/tests/unit/server/budget/live-policy.test.ts`                                                |         3 |
@@ -1146,7 +1149,7 @@ enforced limits is pinned to what the code enforces today.
 > [[docker-image-and-config-format]]. Co-located under
 > `apps/gateway/src/server/**` unless a path says otherwise.
 
-- **`config/load.test.ts`** (54) — minimal env-only configuration with
+- **`config/load.test.ts`** (62) — minimal env-only configuration with
   defaults; every missing required key named at once with its variable(s);
   `public_url` http refused, non-URL and query string refused, trailing
   slash stripped, sub-path kept; master key length / base64; bootstrap
@@ -1163,7 +1166,10 @@ enforced limits is pinned to what the code enforces today.
   `previous_keys` duplicate version, `*_FILE` alone and both-set error; a
   master key is registered with the redactor in the form it was configured
   in; an explicit `telemetry.enabled`, true or false, is told from one that
-  is not set; **`KEYS` and the example files stay in sync** (every variable
+  is not set; **the instance name**: not set by default nor by a blank
+  value, read from the environment and trimmed, the file wins over the
+  environment, 65 characters or a control character refused naming
+  `instance_name` and `VAUBAAN_INSTANCE_NAME`; **`KEYS` and the example files stay in sync** (every variable
   in `.env.example`, every YAML leaf in `gateway.example.yaml`); **the
   example YAML is fully commented out** — it parses to an empty document
   and, copied as is, overrides nothing from the environment;
@@ -1176,11 +1182,31 @@ enforced limits is pinned to what the code enforces today.
   and integer spellings per source**: a variable reads `yes`, `ON`, `1` and
   `True` as true; the file takes a YAML boolean and a YAML number and
   refuses the spellings `yes`, `"true"`, `on` and a quoted integer.
-- **`config/keys-doc.test.ts`** (35) — **structural: the key table of the
+- **`config/instance-name.test.ts`** (11) — `checkInstanceName`, the one
+  rule of the loader and of Setup: trimmed; empty refused; 1 to 64
+  characters counted as code points (64 astral characters pass); a newline,
+  a tab, NUL, a C1 control, a line separator, a right-to-left override and
+  an isolate refused; markup kept as plain text.
+- **`instance/settings.test.ts`** (6) — **who names the instance**: the host
+  while nothing does; an administrator's name stored trimmed, with
+  `before` / `after`; a blank value clears it; the configuration wins over
+  a stored name and refuses every change without touching the store; an
+  invalid name stores nothing; a stored value that fails the check is
+  ignored.
+- **`tests/integration/instance/instance-name.test.ts`** (7) — **the
+  Administration POST on a real root**: the host stands in by default; a
+  name is stored in `instance_config`, audited once as `config-changed` on
+  `instance-config:instance-name`, a same-value save writes nothing, a
+  blank one clears it (audited); too long or with a control character →
+  `?name-problem=<code>`, nothing stored or audited; a non-administrator
+  (403), no session (401) and a foreign origin (403) change nothing;
+  `VAUBAAN_INSTANCE_NAME` wins over a stored name and the POST answers
+  `locked`.
+- **`config/keys-doc.test.ts`** (42) — **structural: the key table of the
   configuration handbook is the loader's.** The table of
   `docs/handbook/configuration.md` has the six columns the test reads and
   lists each key once; it has a row for every key of `KEYS` and no other
-  row; for each of the 29 keys the type, the default, the bounds and the
+  row; for each key the type, the default, the bounds and the
   variables written in the row are the loader's; the provider-app family is
   documented with the fields the loader accepts.
 - **`config/duration.test.ts`** (2) — `30s 10m 24h 7d`; rejects the rest.

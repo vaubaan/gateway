@@ -22,8 +22,10 @@ import { Button, StatusMark, SubNav, SubNavFrame, ToastProvider } from '@/compon
 import { currentTheme } from '@/lib/theme-server';
 import { ACTIONS, NAV, NAV_ORDER, PRODUCT, ROLE_WORDS, type NavKey } from '@/lib/vocabulary';
 import type { Principal } from '@/server/auth';
+import type { InstanceIdentity } from '@/server/instance';
 
 import { BuildFooter } from './BuildFooter';
+import { brandTooltip } from './instance-label';
 import { NavLinks, type NavItem } from './NavLinks';
 import { OpenRequestCount } from './OpenRequestCount';
 import { settingsNav } from './settings-nav';
@@ -76,8 +78,11 @@ export async function AppShell({
   children,
 }: {
   principal: Principal;
-  /** Where this gateway lives, under the brand: the host of its public address. */
-  instance: string;
+  /**
+   * Which gateway this is, under the brand: its name, or the host of its public
+   * address when it has none; the host stays in the tooltip.
+   */
+  instance: InstanceIdentity;
   children: React.ReactNode;
 }) {
   const theme = await currentTheme();
@@ -100,17 +105,15 @@ export async function AppShell({
           Skip to the page
         </a>
         <aside className={styles.side}>
-          <Link
-            href={NAV.now.href}
-            className={styles.brand}
-            title={`${PRODUCT.name} · ${instance}`}
-          >
+          <Link href={NAV.now.href} className={styles.brand} title={brandTooltip(instance)}>
             <span className={styles.brandMark} aria-hidden="true">
               {PRODUCT.mark}
             </span>
             <span className={styles.brandText}>
               <span className={styles.brandName}>{PRODUCT.name}</span>
-              <span className={styles.brandInstance}>{instance}</span>
+              <span className={styles.brandInstance} data-testid="instance-name">
+                {instance.label}
+              </span>
             </span>
           </Link>
           <nav className={styles.nav} aria-label="Main">
@@ -164,7 +167,7 @@ export function AdminShell({
   children,
 }: {
   principal: Principal;
-  instance: string;
+  instance: InstanceIdentity;
   children: React.ReactNode;
 }) {
   return (

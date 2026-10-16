@@ -25,6 +25,7 @@ import {
   readEnvSecret,
   resolveRefs,
 } from './secret-refs';
+import { INSTANCE_NAME_MAX_LENGTH } from './instance-name';
 import { DEFAULT_TELEMETRY_COLLECTOR_URL } from './telemetry-default';
 import {
   CLIENT_REGISTRATION_POLICIES,
@@ -67,6 +68,8 @@ export interface KeySpec {
   readonly https?: boolean;
   /** Shortest value accepted, in characters. */
   readonly minLength?: number;
+  /** Longest value accepted, in characters. */
+  readonly maxLength?: number;
 }
 
 export const CONFIG_FILE_ENV = 'VAUBAAN_CONFIG_FILE';
@@ -106,6 +109,13 @@ const KEY_TABLE = [
     format: 'url',
     required: 'always',
     https: true,
+  },
+  {
+    path: 'instance_name',
+    env: 'VAUBAAN_INSTANCE_NAME',
+    kind: 'string',
+    minLength: 1,
+    maxLength: INSTANCE_NAME_MAX_LENGTH,
   },
   { path: 'trusted_proxies', env: 'VAUBAAN_TRUSTED_PROXIES', kind: 'list' },
   { path: 'self_resources', env: 'VAUBAAN_SELF_RESOURCES', kind: 'list' },

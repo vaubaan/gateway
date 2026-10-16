@@ -2,9 +2,12 @@
 title: Instance configuration, crypto and composition root
 status: current
 date: 2026-10-13
-last_synced: 2026-10-15
+last_synced: 2026-10-16
 tracks:
   - apps/gateway/src/server/config/
+  - apps/gateway/src/server/instance/
+  - apps/gateway/src/app/api/admin/instance-name/route.ts
+  - apps/gateway/tests/integration/instance/
   - apps/gateway/src/server/crypto/
   - apps/gateway/src/server/reseal/
   - apps/gateway/src/server/store/repositories/sealed-blobs.ts
@@ -359,6 +362,7 @@ default or a bound, change `KEYS` and this table together.
 | Key                                               | Type       | Default                                    | Bounds                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Environment variable                                                                                                                                                                                                                                                                   | Consumed by                                                                                                                                                                                                                                                        |
 | ------------------------------------------------- | ---------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `public_url`                                      | URL        | required                                   | https; no query or fragment; a trailing `/` is stripped, a sub-path is kept                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | `VAUBAAN_PUBLIC_URL`                                                                                                                                                                                                                                                                   | every module that builds an address: provider callbacks, request URLs, the bootstrap kit, the OAuth issuer and its endpoints, origin checks                                                                                                                        |
+| `instance_name`                                   | string     | —                                          | 1 to 64 characters; trimmed; no control character, line or paragraph separator, nor bidirectional override or isolate (`checkInstanceName`, `config/instance-name.ts`); blank is not set                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `VAUBAAN_INSTANCE_NAME`                                                                                                                                                                                                                                                                | `instance/settings.ts` (`InstanceNameService`). Not set: Setup (`/admin`) decides, and without a name the host of `public_url` is shown; set: that name, and the field is read-only                                                                                |
 | `trusted_proxies`                                 | list       | —                                          | —; each entry an IP address or a CIDR block (prefix 0–32 for IPv4, 0–128 for IPv6)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `VAUBAAN_TRUSTED_PROXIES`                                                                                                                                                                                                                                                              | `http/client-ip.ts`, the one reading of `X-Forwarded-For`: execution door, request page, OAuth endpoints, management gate                                                                                                                                          |
 | `self_resources`                                  | list       | —                                          | —; each entry `<provider>:<ref>` (a plugin id, then the resource ref as discovery stores it); `railway:$RAILWAY_PROJECT_ID` is always added when Railway sets that variable                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | `VAUBAAN_SELF_RESOURCES`                                                                                                                                                                                                                                                               | `config/self-resources.ts`: the instance's own resources, never reachable by a mission — refused at issuance (`resource-self`), left out of the mission context at execution, flagged on the account page                                                          |
 | `client_ip_header`                                | enum       | —                                          | `x-real-ip`, `cf-connecting-ip`, `true-client-ip`, `fly-client-ip`; not together with `trusted_proxies`; off by default                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `VAUBAAN_CLIENT_IP_HEADER`                                                                                                                                                                                                                                                             | `http/client-ip.ts`: trusted-edge mode, the client address is that header's value (one IP, else unknown); safe only behind an edge that overwrites it (ADR [client-address-from-a-trusted-edge-header](../decisions/client-address-from-a-trusted-edge-header.md)) |
@@ -481,6 +485,46 @@ Where it is enforced (each reads `config.selfResources` through
 | Mission detail and kit (`missions/mission-service.ts`) | not listed; a duplicated mission drops it                                                                                                                                    |
 | Account page (`accounts/[id]/account-view.tsx`)        | tagged "this instance's own project: never reachable by a mission", not counted as reachable                                                                                 |
 | Unbound tools (`execution/resource-stage.ts`)          | a connection that reaches one is `hosts_instance`: the plugin's `unboundTools` (Railway's agent) are refused on it and left out of `tools/list`; the account page says so    |
+
+### Instance name
+
+What the interface calls this instance (spec §4.2, §4.3), so that someone
+with several instances open can tell them apart. `InstanceNameService`
+(`server/instance/settings.ts`, `root.instance.name`) follows the rule of
+every setting the file and the Administration page share (telemetry's
+toggle, the sign-in providers, the company apps):
+
+| `instance_name` in the file / environment | Stored (`instance_config` key `instance.name`) | Shown (`label`)        | `source`  | Field     |
+| ----------------------------------------- | ---------------------------------------------- | ---------------------- | --------- | --------- |
+| set                                       | ignored                                        | that name              | `config`  | read-only |
+| not set                                   | a name                                         | that name              | `admin`   | editable  |
+| not set                                   | none                                           | the host of public_url | `default` | editable  |
+
+`identity()` answers `{ label, name, host, source }` and reads the store on
+every call (no copy in memory: a name saved by another replica is seen at
+the next page). One rule checks a name wherever it comes from:
+`checkInstanceName` (`config/instance-name.ts`) trims it and accepts 1 to 64
+code points without a control character (`\p{Cc}`), a line or paragraph
+separator, or a bidirectional embedding, override or isolate; the loader
+refuses a bad `instance_name` at boot like any other key, and a stored value
+that fails the check (a row written by hand) is ignored. The name is only
+ever rendered as text: a React child, a `title` attribute, the document
+`<title>`.
+
+`POST /api/admin/instance-name` (`instance/handlers.ts`), form field `name`:
+operator only, origin-checked (`guardMutation`). A non-blank name is saved
+trimmed; a blank one deletes the key (the host is shown again). A change
+writes one `config-changed` entry on `instance-config:instance-name` with
+`before` / `after` `{ name, source }`; a save that changes neither writes
+none. Every answer redirects to `/admin#instance-name`; a refusal adds
+`?name-problem=locked|invalid|empty|too-long|control-character`.
+
+Where it shows ([web-app](web-app.md), "The shell"): under the brand of the
+shell and of the sign-in frame (the host in the tooltip), in "Sign in to
+<name>", and in the title of the pages of `(app)`, Administration, `/login`
+and `/admin/bootstrap` (`generateMetadata = instanceMetadata`,
+`lib/instance.ts`: "<name> · Vaubaan"). The consent screen of the
+authorization server (`server/http/document.ts`) keeps its own title.
 
 ### Changing the identity provider
 
@@ -814,7 +858,9 @@ tests use `memoryStoreDeps` (the `:memory:` store) and `fakePlugin()` from
 ## Tests
 
 Co-located `*.test.ts` under `src/server/**` (config loader: named
-failures, https rule, precedence, admin rule, secret references, provider
+failures, https rule, precedence, admin rule, the instance name (bounds,
+trim, file over environment) and `instance/settings.test.ts` (who names the
+instance), secret references, provider
 env parsing, key rotation, `KEYS` against both example files, the
 authorization-server keys (defaults, both sources, the `1h` cap, a refresh
 token that outlives the access token, the 60 s reuse-window cap), the
@@ -839,7 +885,10 @@ configured master key and reopened without re-migrating, a risk id of a
 provider the shipped registry does not hold refused (`UnknownRiskIdError`),
 unreadable `store.path` named in the exit
 message) plus
-the structural test `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`
+the integration test `apps/gateway/tests/integration/instance/instance-name.test.ts`
+(the Administration POST: stored and audited, cleared, invalid names,
+non-administrators and foreign origins refused, read-only when the
+configuration names the instance), the structural test `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`
 (no literal URL, secret or project ref in the v5 perimeter except
 `telemetry-default.ts` and `deploy/config/*.example*`),
 `apps/gateway/tests/unit/structural/example-config-providers.test.ts` (the
