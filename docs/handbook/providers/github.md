@@ -2,7 +2,7 @@
 title: GitHub provider plugin
 status: current
 date: 2026-10-13
-last_synced: 2026-10-14
+last_synced: 2026-10-16
 tracks:
   - plugins/github/src/token.ts
   - plugins/github/src/index.ts
@@ -189,24 +189,24 @@ repository and organisation of its account with coarse scopes.
 
 ## Files
 
-| File                      | Role                                                                                                                                                                                                                                                                                                       |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/index.ts`            | `definePlugin` → `githubPlugin` v3.1.0.                                                                                                                                                                                                                                                                    |
-| `src/risk-catalog.yaml`   | 18 risks + fallback, 3 presets, `catalog_version: 6`.                                                                                                                                                                                                                                                      |
-| `src/data-model.ts`       | Plane `repo`, 17 entities (`delete` under `release` is a verb leaf); `branch` is `envScopable`.                                                                                                                                                                                                            |
-| `src/tools.ts`            | 26 tools. Retired by risk-model §7.2 #1 and not declared: `dispatch_workflow`, `cancel_workflow_run`, `rerun_workflow_run`.                                                                                                                                                                                |
-| `src/call.ts`             | The grammar of every identifier (`ownerName`, `repoName`, `repoFullName`, `repoPath`, `revision`, `branchName`, `tagName`, `pullRequestHead`, `positiveInteger`, `workflowRef`) and `readGithubCall`, the one reader `classify` and `execute` share; the refusal wording (`repositoryNotSelectedMessage`). |
-| `src/classify.ts`         | `classifyGithub(tool, args, resources)` = `readGithubCall` then `slicesOf(call)`; `isWorkflowPath`.                                                                                                                                                                                                        |
-| `src/credential.ts`       | `githubCredential` (app-install spec), `installationTokenFor(ctx, scope)`.                                                                                                                                                                                                                                 |
-| `src/app-install.ts`      | `buildAppJwt`, `mintInstallationToken`, `installationIdOf`, `GITHUB_API_BASE`, `GITHUB_API_HEADERS`.                                                                                                                                                                                                       |
-| `src/execute.ts`          | `executeGithub` (the body run under the SDK's `declining`), `discoverGithubResources`, `MINT_PERMISSIONS`, discovery paging constants (100 per page, 10 pages at most).                                                                                                                                    |
-| `src/app-manifest.ts`     | `GITHUB_APP_PERMISSIONS`, `githubManifestRegistration`, `buildGithubManifest`, `githubRegisteredApp`, `GITHUB_LOGIN_PATTERN`.                                                                                                                                                                              |
-| `src/permission-check.ts` | `needsOf(call)`, `assertAppPermissions(call, granted)`, `assertGranted`, `missingPermissionSentence`, `declineMissingPermissions`, `mintPermissions`, `MINT_NEEDS`, `gitFetchNeeds`, `gitPushNeeds`.                                                                                                       |
-| `src/credential-keys.ts`  | `GITHUB_APP_CONFIG`, `GITHUB_WEB_BASE` (shared by the credential spec and the manifest flow).                                                                                                                                                                                                              |
-| `src/token-cache.ts`      | `installationTokenForCall(ctx, repo)`: per-call token served from `ctx.credentialCache`, 50 min at most, 5 min expiry margin.                                                                                                                                                                              |
-| `src/octokit-dispatch.ts` | `dispatchGithubTool(octokit, call, args)`: checked call → Octokit call; reads the pull request before a merge and declines (`ExecutorRefusal`) a base other than the declared one.                                                                                                                         |
-| `src/git-call.ts`         | `GIT_FETCH_TOOL`, `GIT_PUSH_TOOL`, `readGitCall` (the one reader of the git tools' arguments, shared by `classify` and `execute`), `pushedRef` (branches and tags only, `refs/vaubaan/` reserved).                                                                                                         |
-| `src/git-remote.ts`       | `githubGitRemote` (the plugin's `gitRemote`): `upstream` (credential per access), `review`, `compareUrl`, `insteadOf`, `abilities`; `executeGit` (the ref moves).                                                                                                                                          |
+| File                      | Role                                                                                                                                                                                                                                                                                                                 |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/index.ts`            | `definePlugin` → `githubPlugin` v3.2.0.                                                                                                                                                                                                                                                                              |
+| `src/risk-catalog.yaml`   | 18 risks + fallback, 3 presets, `catalog_version: 7`.                                                                                                                                                                                                                                                                |
+| `src/data-model.ts`       | Plane `repo`, 17 entities (`delete` under `release` is a verb leaf); `branch` is `envScopable`.                                                                                                                                                                                                                      |
+| `src/tools.ts`            | 26 tools. Retired by risk-model §7.2 #1 and not declared: `dispatch_workflow`, `cancel_workflow_run`, `rerun_workflow_run`.                                                                                                                                                                                          |
+| `src/call.ts`             | The grammar of every identifier (`ownerName`, `repoName`, `repoFullName`, `repoPath`, `revision`, `branchName`, `tagName`, `pullRequestHead`, `positiveInteger`, `workflowRef`) and `readGithubCall`, the one reader `classify` and `execute` share; the refusal wording (`repositoryNotSelectedMessage`).           |
+| `src/classify.ts`         | `classifyGithub(tool, args, resources)` = `readGithubCall` then `slicesOf(call)`; `isWorkflowPath`.                                                                                                                                                                                                                  |
+| `src/credential.ts`       | `githubCredential` (app-install spec), `installationTokenFor(ctx, scope)`.                                                                                                                                                                                                                                           |
+| `src/app-install.ts`      | `buildAppJwt`, `mintInstallationToken`, `installationIdOf`, `GITHUB_API_BASE`, `GITHUB_API_HEADERS`.                                                                                                                                                                                                                 |
+| `src/execute.ts`          | `executeGithub` (the body run under the SDK's `declining`), `discoverGithubResources`, `MINT_PERMISSIONS`, discovery paging constants (100 per page, 10 pages at most).                                                                                                                                              |
+| `src/app-manifest.ts`     | `GITHUB_APP_PERMISSIONS`, `githubManifestRegistration`, `buildGithubManifest`, `githubRegisteredApp`, `GITHUB_LOGIN_PATTERN`.                                                                                                                                                                                        |
+| `src/permission-check.ts` | `needsOf(call)`, `assertAppPermissions(call, granted)`, `assertGranted`, `missingPermissionSentence`, `declineMissingPermissions`, `mintPermissions`, `MINT_NEEDS`, `gitFetchNeeds`, `gitPushNeeds`.                                                                                                                 |
+| `src/credential-keys.ts`  | `GITHUB_APP_CONFIG`, `GITHUB_WEB_BASE` (shared by the credential spec and the manifest flow).                                                                                                                                                                                                                        |
+| `src/token-cache.ts`      | `installationTokenForCall(ctx, repo)`: per-call token served from `ctx.credentialCache`, 50 min at most, 5 min expiry margin.                                                                                                                                                                                        |
+| `src/octokit-dispatch.ts` | `dispatchGithubTool(octokit, call, args)`: checked call → Octokit call; reads the pull request before a merge and declines (`ExecutorRefusal`) a base other than the declared one.                                                                                                                                   |
+| `src/git-call.ts`         | `GIT_FETCH_TOOL`, `GIT_PUSH_TOOL`, `readGitCall` (the one reader of the git tools' arguments, shared by `classify` and `execute`), `pushedRef` (branches and tags only, `refs/vaubaan/` reserved).                                                                                                                   |
+| `src/git-remote.ts`       | `githubGitRemoteOf(catalog)` (the plugin's `gitRemote`, built in `index.ts` as `githubGitRemote`): `upstream` (credential per access), `review`, `compareUrl`, `insteadOf`, `abilities`; `workingBranchesOf(catalog)` (the branch list of `feature-branch-write`, read from the YAML); `executeGit` (the ref moves). |
 
 ## The git remote
 
@@ -268,7 +268,10 @@ review.
   `workflows: write` "for a git push that changes a file under
   .github/workflows/".
 - **Interface**: `insteadOf: https://github.com/` (the setup kit's rewrite),
-  `abilities` (what each permission means for git, for the mission page),
+  `abilities` (what each permission means for git, for the mission page;
+  the working-branch line lists the globs of `feature-branch-write`'s
+  pattern, read from the catalog by `workingBranchesOf`, so the YAML is the
+  one list),
   `compareUrl` (the request page's link to GitHub's comparison).
 
 ## Tool → slice mapping
@@ -382,6 +385,14 @@ outside the ident class before it reaches a slice.
 
 ## Catalog decisions
 
+- **Working branches by name**: `feature-branch-write` matches
+  `feature/*, feat/*, fix/*, chore/*, bug/*, docs/*, refactor/*` for branch,
+  file and bulk writes (the three patterns carry the same list). `feat/*`
+  came in catalog v7 (plugin 3.2.0): the Conventional Commits prefix, this
+  repository's own convention, had fallen to the fallback. The other branch
+  risks (`workflow-write-via-file`, `bulk-file-write`, `create-pr`'s
+  `propose-to`, `git-push`, `force-push`, `branch-delete`) match `branch[**]`
+  and enumerate no prefix.
 - **Protected branches by name**, not by the owner's environment label:
   `merge-protected` matches `main, master, prod, production, release-*`
   for direct writes, bulk writes and merges. A GitHub resource's `env`
@@ -575,9 +586,11 @@ connection) is tested by the host against a git-backed stand-in of GitHub:
   mission that holds `create-release`** — they are separate risks (catalog
   v4); add `delete-release`.
 - **A write is refused with `github.uncategorized-write` missing** — the
-  branch matches neither the feature/\* conventions nor a protected name,
-  so only the fallback caught it. Rename the branch, or have the creator
-  add the fallback to the mission explicitly.
+  branch matches neither the working-branch prefixes (`feature/*`,
+  `feat/*`, `fix/*`, `chore/*`, `bug/*`, `docs/*`, `refactor/*`) nor a
+  protected name, so only the fallback caught it (a `git push` of
+  `feat/<slug>` did, before catalog v7). Rename the branch, or have the
+  creator add the fallback to the mission explicitly.
 - **`mockFetch: unexpected GET …`** in tests — Octokit built a URL no route
   covers; the message names it.
 

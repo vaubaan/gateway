@@ -76,6 +76,7 @@ One handbook per provider plugin (`plugins/<id>`):
 | [providers/stripe](providers/stripe.md)                 | `@vaubaan/plugin-stripe`: modelling and runtime.                                                                                        |
 | [providers/resend](providers/resend.md)                 | `@vaubaan/plugin-resend`: modelling and runtime.                                                                                        |
 | [providers/cloudflare-dns](providers/cloudflare-dns.md) | `@vaubaan/plugin-cloudflare-dns`: modelling and runtime.                                                                                |
+| [providers/context7](providers/context7.md)             | `@vaubaan/plugin-context7`: rewraps the official Context7 MCP server (library documentation).                                           |
 | [providers/upstash-redis](providers/upstash-redis.md)   | `@vaubaan/plugin-upstash-redis`: plugin and risk model.                                                                                 |
 | [providers/ssh](providers/ssh.md)                       | `@vaubaan/plugin-ssh`: bash over SSH.                                                                                                   |
 | [providers/gmail](providers/gmail.md)                   | `@vaubaan/plugin-gmail`, experimental and classifier-only: it classifies the modelled tools and discovers the mailbox, exposes no tool. |

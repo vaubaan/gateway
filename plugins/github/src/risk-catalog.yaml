@@ -21,8 +21,8 @@
 # creator adds it explicitly when a mission needs unconventional branches.
 
 provider: github
-catalog_version: 6
-catalog_date: 2026-10-14
+catalog_version: 7
+catalog_date: 2026-10-16
 
 risks:
   # ---------------------------------------------------------------
@@ -99,9 +99,9 @@ risks:
       Reversible (`git revert` or branch delete). No production side
       effect until merged. This is the heart of the coding-agent flow.
     matches:
-      - 'github.repo[**].branch[feature/*,fix/*,chore/*,bug/*,docs/*,refactor/*].W'
-      - 'github.repo[**].branch[feature/*,fix/*,chore/*,bug/*,docs/*,refactor/*].file[**].W'
-      - 'github.repo[**].branch[feature/*,fix/*,chore/*,bug/*,docs/*,refactor/*].files-bulk.W'
+      - 'github.repo[**].branch[feature/*,feat/*,fix/*,chore/*,bug/*,docs/*,refactor/*].W'
+      - 'github.repo[**].branch[feature/*,feat/*,fix/*,chore/*,bug/*,docs/*,refactor/*].file[**].W'
+      - 'github.repo[**].branch[feature/*,feat/*,fix/*,chore/*,bug/*,docs/*,refactor/*].files-bulk.W'
     vector:
       reversibility: reversible
       blast: single

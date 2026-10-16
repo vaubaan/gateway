@@ -629,6 +629,14 @@ export const INVARIANTS: readonly Invariant[] = [
         tests: ['`record_id` — the record segment of the request path'],
       },
       {
+        file: 'plugins/context7/tests/unit/execute.test.ts',
+        tests: ['hostile identifiers : what classify refuses, execute does not send'],
+      },
+      {
+        file: 'plugins/context7/tests/unit/plugin.test.ts',
+        tests: ['hostile identifiers are refused by classify and by execute, or never reach a URL'],
+      },
+      {
         file: 'plugins/miro/tests/unit/identifiers.test.ts',
         tests: ['`item_id` — a segment of the request path, refused before any request'],
       },

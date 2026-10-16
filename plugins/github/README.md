@@ -11,14 +11,14 @@ Contract: [`docs/handbook/plugin-sdk.md`](../../docs/handbook/plugin-sdk.md),
 ADRs [`plugin-contract-and-credential-spec`](../../docs/decisions/plugin-contract-and-credential-spec.md),
 [`plugin-identifiers-one-grammar-for-classify-and-execute`](../../docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md),
 [`plugin-arguments-closed-surface-and-typed-refusals`](../../docs/decisions/plugin-arguments-closed-surface-and-typed-refusals.md).
-Plugin version 3.1.0, catalog version 4.
+Plugin version 3.2.0, catalog version 7.
 
 ## Layout
 
 | File                      | Role                                                                                                                                       |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | `src/index.ts`            | `definePlugin({...})` → `githubPlugin` (default export).                                                                                   |
-| `src/risk-catalog.yaml`   | 14 risks + fallback, 3 presets. Loaded by the SDK at boot; the only catalog artefact.                                                      |
+| `src/risk-catalog.yaml`   | 18 risks + fallback, 3 presets. Loaded by the SDK at boot; the only catalog artefact.                                                      |
 | `src/data-model.ts`       | Plane `repo`: repo → branch → file / commit; tag, release (→ `delete`, a verb leaf), pull_request, issue → comment, workflow → run, rules. |
 | `src/tools.ts`            | 26 MCP tools `github__<verb>_<noun>`; every repo-scoped tool takes `owner` + `repo`.                                                       |
 | `src/call.ts`             | The grammar of every identifier and `readGithubCall`, the one reader `classify` and `execute` share.                                       |
@@ -45,27 +45,27 @@ are not entities: `branch[X].merge-into`, `branch[X].propose-to[Y]`,
 
 ## Catalog
 
-| Risk                              | Covers                                                                                        |
-| --------------------------------- | --------------------------------------------------------------------------------------------- |
-| `github.read-code`                | branches, files, commits, tags (reads)                                                        |
-| `github.read-meta`                | PRs, issues, comments, releases, workflows and runs, branch protection (reads)                |
-| `github.search-global`            | `search_code`, `search_issues` — account-shaped, not bounded to mission resources             |
-| `github.feature-branch-write`     | branch, file and bulk writes on `feature/*, fix/*, chore/*, bug/*, docs/*, refactor/*`        |
-| `github.merge-protected`          | any write or PR merge into `main, master, prod, production, release-*`                        |
-| `github.workflow-write-via-file`  | a file write under `.github/workflows/*.yml` (privilege-escalation vector)                    |
-| `github.bulk-file-write`          | `push_files` with 2+ files                                                                    |
-| `github.create-pr`                | `create_pull_request`                                                                         |
-| `github.comment-write`            | `add_issue_comment`                                                                           |
-| `github.create-release`           | `create_release` (release record + tag): `release.W`, `tag[**].W`                             |
-| `github.delete-release`           | `delete_release`: `release[**].delete.W`, its own verb leaf — not covered by `create-release` |
-| `github.branch-protection-write`  | `update_branch_protection` (posture shift)                                                    |
-| `github.mint-install-token-clone` | `mint_install_token` with `purpose=clone`                                                     |
-| `github.mint-install-token-push`  | `mint_install_token` with `purpose=push`                                                      |
-| `github.git-push`                 | every ref a push through the git remote moves (leaf `push`), beside the branch's own risk     |
-| `github.force-push`               | a non-fast-forward update of a branch through the git remote (leaf `force`)                   |
-| `github.branch-delete`            | a branch deleted through the git remote (leaf `delete`); the branch's own risk counts too     |
-| `github.tag-write`                | a tag pushed or deleted through the git remote; overlaps `create-release` on `tag[**].W`      |
-| `github.uncategorized-write`      | fallback `github.**.W` — counts only when no specific entry matched the write                 |
+| Risk                              | Covers                                                                                         |
+| --------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `github.read-code`                | branches, files, commits, tags (reads)                                                         |
+| `github.read-meta`                | PRs, issues, comments, releases, workflows and runs, branch protection (reads)                 |
+| `github.search-global`            | `search_code`, `search_issues` — account-shaped, not bounded to mission resources              |
+| `github.feature-branch-write`     | branch, file and bulk writes on `feature/*, feat/*, fix/*, chore/*, bug/*, docs/*, refactor/*` |
+| `github.merge-protected`          | any write or PR merge into `main, master, prod, production, release-*`                         |
+| `github.workflow-write-via-file`  | a file write under `.github/workflows/*.yml` (privilege-escalation vector)                     |
+| `github.bulk-file-write`          | `push_files` with 2+ files                                                                     |
+| `github.create-pr`                | `create_pull_request`                                                                          |
+| `github.comment-write`            | `add_issue_comment`                                                                            |
+| `github.create-release`           | `create_release` (release record + tag): `release.W`, `tag[**].W`                              |
+| `github.delete-release`           | `delete_release`: `release[**].delete.W`, its own verb leaf — not covered by `create-release`  |
+| `github.branch-protection-write`  | `update_branch_protection` (posture shift)                                                     |
+| `github.mint-install-token-clone` | `mint_install_token` with `purpose=clone`                                                      |
+| `github.mint-install-token-push`  | `mint_install_token` with `purpose=push`                                                       |
+| `github.git-push`                 | every ref a push through the git remote moves (leaf `push`), beside the branch's own risk      |
+| `github.force-push`               | a non-fast-forward update of a branch through the git remote (leaf `force`)                    |
+| `github.branch-delete`            | a branch deleted through the git remote (leaf `delete`); the branch's own risk counts too      |
+| `github.tag-write`                | a tag pushed or deleted through the git remote; overlaps `create-release` on `tag[**].W`       |
+| `github.uncategorized-write`      | fallback `github.**.W` — counts only when no specific entry matched the write                  |
 
 A write on `main` touches `merge-protected`; a write on `feature/x`
 touches `feature-branch-write`; a write on `wip-x` matches no specific

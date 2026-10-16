@@ -681,6 +681,13 @@ write …)`), instead of GitHub's bare 403. The push token of
     rooted at the `from` domain and classified by recipient zone. Presets `read-only`,
     `developer`, `marketing-operator`, `domain-admin`.
   - **Gmail** `0.3.0`, experimental — classifier only: no tool is exposed.
+- **Context7 plugin** (`@vaubaan/plugin-context7` 0.1.0): agents look up library
+  documentation through the gateway. The official Context7 MCP server is rewrapped
+  (`resolve-library-id`, `query-docs`, frozen from its `tools/list`); a Context7 API
+  key is the account, checked at Context7 before it is stored, and one resource, the
+  library index it can query. One permission, `context7.query-docs` (the agent's
+  question is sent to Context7), preset `read-only`. No environment. Arguments the
+  tools do not declare are refused, the upstream server's aliases included.
 - **Miro plugin** (`@vaubaan/plugin-miro` 0.1.0): boards, items, frames, connectors and
   tags; the non-expiring access token of a Miro app (`api-key`); one resource per board,
   no environment; bulk creation of up to 20 items as its own permission; presets
@@ -693,6 +700,11 @@ write …)`), instead of GitHub's bare 403. The push token of
 
 ### Changed
 
+- **GitHub plugin** (`@vaubaan/plugin-github` 3.2.0, catalog v7): `github.feature-branch-write`
+  also covers `feat/*` branches (the Conventional Commits prefix), for branch, file and
+  bulk writes and for `git push`; such a write fell to `github.uncategorized-write` and
+  was refused on a mission without the fallback. The git remote's description of the
+  permission now reads its branch list from the catalog.
 - **The Docker build no longer takes a `NODE_IMAGE` argument**: the base image is
   written, version and digest, on the first `FROM` line, so that Dependabot can propose
   its refresh. To build on another base, edit that line.

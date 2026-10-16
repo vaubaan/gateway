@@ -346,7 +346,11 @@ your tools really do is checked in step 8, by `assertCatalogCoverage`.
 `toolPrefixFor(PROVIDER_ID)` as `<prefix><verb>_<noun>`; `tools.ts` gives each
 a description and a JSON input schema. Every tool that acts on a resource
 takes the resource's `ref` (the identifier `discoverResources` returns,
-step 6) as an explicit argument. The `properties` of the schema are the
+step 6) as an explicit argument. The one exception is a rewrapped upstream
+tool whose frozen schema has no resource argument: it is acceptable only
+when a connection has exactly one resource, so the classifier resolves the
+mission's single resource and refuses none or several, and the plugin's
+handbook argues why (`context7`, §1 and §2). The `properties` of the schema are the
 whole argument surface of the tool: an argument is declared there before
 the classifier or the executor may use it (see "Only declared arguments"
 below).
