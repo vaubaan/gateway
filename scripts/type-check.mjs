@@ -3,8 +3,10 @@
  * `npm run type-check`: the `type-check` script of every workspace, several at
  * once (one per core), instead of `npm run --workspaces`, which runs them one
  * after the other. Each `tsc` is incremental (`tsconfig.base.json`), so a run
- * after a small change re-checks little. The output of a workspace is printed
- * whole once it ends; the exit code is 1 if any failed.
+ * after a small change re-checks little. A script that is a plain `tsc …`
+ * runs as `node <typescript>/bin/tsc …`, without npm (on a two-core runner,
+ * starting npm 22 times cost more than the checks). The output of a workspace
+ * is printed whole once it ends; the exit code is 1 if any failed.
  */
 import { spawn } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -12,6 +14,7 @@ import { availableParallelism } from 'node:os';
 import { join, resolve } from 'node:path';
 
 const ROOT = resolve(import.meta.dirname, '..');
+const TSC = join(ROOT, 'node_modules/typescript/bin/tsc');
 
 function workspaces() {
   /** @type {{ workspaces: string[] }} */
@@ -21,20 +24,27 @@ function workspaces() {
     return readdirSync(join(ROOT, parent), { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
       .map((entry) => join(parent, entry.name))
-      .filter((dir) => {
+      .flatMap((dir) => {
         const manifest = join(ROOT, dir, 'package.json');
-        return (
-          existsSync(manifest) &&
-          JSON.parse(readFileSync(manifest, 'utf8')).scripts?.['type-check'] !== undefined
-        );
+        if (!existsSync(manifest)) return [];
+        /** @type {{ scripts?: Record<string, string> }} */
+        const workspace = JSON.parse(readFileSync(manifest, 'utf8'));
+        const script = workspace.scripts?.['type-check'];
+        return script === undefined ? [] : [{ dir, script }];
       });
   });
 }
 
-function check(dir) {
+/** `tsc` and plain arguments only: anything else goes through npm. */
+const PLAIN_TSC = /^tsc(?: [\w./-]+)*$/;
+
+function check({ dir, script }) {
   return new Promise((done) => {
     const started = Date.now();
-    const child = spawn('npm', ['run', '--silent', 'type-check'], {
+    const [command, args] = PLAIN_TSC.test(script)
+      ? [process.execPath, [TSC, ...script.split(' ').slice(1)]]
+      : ['npm', ['run', '--silent', 'type-check']];
+    const child = spawn(command, args, {
       cwd: join(ROOT, dir),
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -53,8 +63,8 @@ function check(dir) {
 const queue = workspaces();
 const results = [];
 const lanes = Array.from({ length: Math.min(availableParallelism(), queue.length) }, async () => {
-  for (let dir = queue.shift(); dir !== undefined; dir = queue.shift()) {
-    results.push(await check(dir));
+  for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
+    results.push(await check(next));
   }
 });
 await Promise.all(lanes);

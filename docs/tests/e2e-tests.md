@@ -19,13 +19,13 @@ real accounts: the **cutover acceptance scenario** (spec
 [pivot-v4-to-v5-on-prem-mission-tokens](../decisions/pivot-v4-to-v5-on-prem-mission-tokens.md)
 D7 step 1). Everything automated in this file exists to make that run boring.
 
-| Check                                                              | Runs                                     | Real IdP | Real provider | Real coding agent |
-| ------------------------------------------------------------------ | ---------------------------------------- | -------- | ------------- | ----------------- |
-| [Cutover acceptance scenario](#cutover-acceptance-scenario-manual) | **by hand**, once, by the instance owner | yes      | yes           | yes (Claude Code) |
-| [Cutover smoke](#cutover-smoke-automated)                          | CI job `e2e`, `npm run test:e2e:v5`      | no       | no            | no                |
-| [Other browser specs](#other-browser-specs-automated)              | CI job `e2e`, `npm run test:e2e:v5`      | no       | no            | no                |
-| [Container smoke](#container-smoke-automated)                      | CI job `docker`, `npm run docker:smoke`  | no       | no            | no                |
-| [Manual checks by feature](#manual-checks-by-feature)              | by hand, when the feature changes        | yes      | yes           | partly            |
+| Check                                                              | Runs                                                                | Real IdP | Real provider | Real coding agent |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------- | -------- | ------------- | ----------------- |
+| [Cutover acceptance scenario](#cutover-acceptance-scenario-manual) | **by hand**, once, by the instance owner                            | yes      | yes           | yes (Claude Code) |
+| [Cutover smoke](#cutover-smoke-automated)                          | CI job `e2e`, `npm run test:e2e:v5`                                 | no       | no            | no                |
+| [Other browser specs](#other-browser-specs-automated)              | CI job `e2e`, `npm run test:e2e:v5`                                 | no       | no            | no                |
+| [Container smoke](#container-smoke-automated)                      | release job `image`, weekly CI job `docker`, `npm run docker:smoke` | no       | no            | no                |
+| [Manual checks by feature](#manual-checks-by-feature)              | by hand, when the feature changes                                   | yes      | yes           | partly            |
 
 Nothing automated touches a real identity provider, a real provider or a real
 coding agent, and nothing manual is ever run by CI.
@@ -238,7 +238,8 @@ What it stands on, and therefore does **not** prove:
 One configuration, `apps/gateway/tests/e2e/v5/playwright.config.ts`, one
 project (Chromium, 1280×800), one worker. `npm run test:e2e` is an alias of
 `npm run test:e2e:v5`, which builds the app then runs Playwright; the CI job
-`e2e` runs the same command after `npx playwright install chromium` (the
+`e2e` (on a push to `main` or `v5` and in the release gates, not on a pull
+request) runs the same command after `npx playwright install chromium` (the
 browser cached by Playwright version; the runner image already holds the
 system libraries Chromium needs). It is not part of `npm run ci`.
 

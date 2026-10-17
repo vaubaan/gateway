@@ -168,9 +168,9 @@ jobs:
   lint: # if code
     - npm run generate --workspace @vaubaan/website # the .source/ collections its types need
     - npm run lint # pull request: ESLint cache restored; push: every file
-  test: # if code; two shards
-    - npx vitest run --project shared --no-isolate --shard=<n>/2
-    - npx vitest run --project isolated # first shard only
+  test: # if code; three shards
+    - npx vitest run --project shared --no-isolate --shard=<n>/3
+    - npx vitest run --project isolated # last shard only
   docs: # if not code
     - npm run format:check
     - npx vitest run <every test file naming docs/ or a .md file>
@@ -183,12 +183,12 @@ jobs:
   sast: # timeout 10 min
     - checkout semgrep/semgrep-rules at a pinned commit
     - docker run --network none semgrep/semgrep@sha256:… scripts/sast.sh
-  e2e: # if code; timeout 20 min
+  e2e: # if code, not on a pull request (push to main/v5, release gates); timeout 20 min
     - npx playwright install chromium # browser cached by version; the runner has Chrome's libraries
     - npm run test:e2e:v5 # next build (no tsc pass), then Playwright on the ephemeral instance
     - npx vitest run … standalone-* demo/ # the suites that need the build (skipped in `test`)
     - on failure: upload test-results/v5 (traces, screenshots) for 7 days
-  docker: # if code (always on the schedule)
+  docker: # schedule and manual runs of ci.yml only (each release builds its own image)
     - docker/build-push-action (deploy/docker/Dockerfile, push: false, load: true,
       GitHub Actions layer cache; scripts/stamp-commit.sh first writes the
       checked-out commit into apps/gateway/build-commit.txt, no build argument)
@@ -204,6 +204,14 @@ content did not change is not linted again when a type it imports changed,
 so a push to `main` or `v5` lints every file. `next build` skips its own
 tsc pass when `VAUBAAN_BUILD_TYPECHECKED=1` (`npm run ci`, CI); the image
 build type-checks as before.
+
+**What a pull request waits for.** `check`, `lint`, `test` and the
+security jobs: about two minutes. The browser tests (`e2e`, a production
+build and fifteen scenarios in series, about four minutes) run after the
+merge, on the push to `main`, and in the release gates; the image (`docker`,
+about five minutes) is built by the release pipeline for each architecture,
+and weekly by this workflow for the vulnerability scan. A browser
+regression is therefore seen on `main`, never in a release.
 
 **Documentation only.** A push or pull request that changes only `docs/**`
 or Markdown files runs `scope`, `docs` and the security jobs (`audit`,
@@ -553,7 +561,7 @@ in a comment.
 | Job       | Runs on      | Permissions                                                                                               | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | --------- | ------------ | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `plan`    | tag, dry run | `contents: read`                                                                                          | `scripts/release-plan.mjs`: the tag names the version of `package.json`, is the highest release so far, and `CHANGELOG.md` has its dated section; the tagged commit is on `main` (a pre-release: or on `v5`). Outputs the version, the image tags and the release notes.                                                                                                                                                                                                                                                                                                                                                                           |
-| `gates`   | tag, dry run | `contents: read`                                                                                          | Calls `ci.yml` itself (`workflow_call`): `scope` (always `code=true` there), `check`, `lint`, `test`, `audit`, `e2e`, `docker`. A release passes what a pull request passes, by construction.                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `gates`   | tag, dry run | `contents: read`                                                                                          | Calls `ci.yml` itself (`workflow_call`): `scope` (always `code=true` there), `check`, `lint`, `test`, `audit`, `secrets`, `sast`, `e2e`. A release passes what a pull request passes, and the browser tests; the image is built, smoke-tested and scanned by `image` below.                                                                                                                                                                                                                                                                                                                                                                        |
 | `image`   | tag, dry run | `contents: read`                                                                                          | One native runner per architecture (`ubuntu-24.04`, `ubuntu-24.04-arm`; no emulation): builds the image without reading any cache, runs `deploy/docker/smoke.sh` on it with the expected version, commit and architecture, scans it with Trivy (`scripts/image-scan.sh`: a fixed HIGH or CRITICAL fails the release before anything is pushed), writes its SBOM (SPDX, Syft) as a workflow artefact.                                                                                                                                                                                                                                               |
 | `push`    | tag only     | `contents: read`, `packages: write`                                                                       | Per architecture, after `gates` and `image`: pushes the image to GHCR **by digest, without a tag**, from the layers `image` built in this run, with BuildKit's SBOM and provenance (`mode=max`) attached; pulls that digest back and runs the smoke test on it; writes the SBOM of what was pushed.                                                                                                                                                                                                                                                                                                                                                |
 | `publish` | tag only     | `contents: read`, `packages: write`, `id-token: write`, `attestations: write`, `artifact-metadata: write` | `scripts/release-image-index.sh`: assembles the two digests into one multi-architecture image under `<version>`, with its OCI annotations; signs a build-provenance attestation for its digest (`actions/attest`, stored on GitHub and next to the image) and verifies it at once with `gh attestation verify` as an operator would (repository, signer workflow, tag) — no attestation, or one that does not verify, fails the job; only then points the aliases of a final release (`<major>.<minor>`, `latest`) at that digest. A version tag never moves: an existing one is kept when it holds the same images (a re-run), refused otherwise. |
