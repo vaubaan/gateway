@@ -474,7 +474,8 @@ build is the latency measurement of the authority re-check
 more are skipped, which need `.next/standalone`: the six standalone tests
 (`standalone-native-addons` 3, `standalone-plugin-catalogs` 3), `demo-smoke`
 (17) and four tests of
-`demo-safety`; `npm run ci` builds first, so they run there. Each plugin has one
+`demo-safety`; `npm run ci` builds first, so they run there, and in CI the
+`e2e` job runs them after its build (the `test` job does not build). Each plugin has one
 classifier suite, `classify.test.ts`, on its v5 entry point
 `classify(tool, args, resources)`, and its adapter scenarios in
 `execute.test.ts` / `plugin.test.ts` on `plugin.execute` with `mockFetch`.

@@ -1,0 +1,25 @@
+name: setup
+description: >-
+  Node 22 and the dependencies of the lockfile. node_modules is cached by the
+  hash of package-lock.json: on a hit nothing is installed; on a miss `npm ci`
+  installs exactly the lockfile (or fails) and the result is cached. The cache
+  is written by a run of this repository from that same lockfile; `npm audit
+  signatures` (job `check`) verifies what it holds on every run.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: '22'
+    - id: modules
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          node_modules
+          apps/*/node_modules
+          packages/*/node_modules
+          plugins/*/node_modules
+        key: node-modules-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('package-lock.json') }}
+    - if: steps.modules.outputs.cache-hit != 'true'
+      shell: bash
+      run: npm ci --no-audit --no-fund

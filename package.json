@@ -15,11 +15,11 @@
     "plugins/*"
   ],
   "scripts": {
-    "type-check": "npm run --workspaces --if-present type-check",
-    "lint": "node --max-old-space-size=6144 node_modules/eslint/bin/eslint.js . --max-warnings=0",
+    "type-check": "node scripts/type-check.mjs",
+    "lint": "node --max-old-space-size=6144 node_modules/eslint/bin/eslint.js . --max-warnings=0 --cache --cache-location .cache/eslint/ --cache-strategy content",
     "lint:fix": "node --max-old-space-size=6144 node_modules/eslint/bin/eslint.js . --fix",
     "format": "prettier --write .",
-    "format:check": "prettier --check .",
+    "format:check": "prettier --check . --cache --cache-location .cache/prettier --cache-strategy content",
     "build": "npm run --workspaces --if-present build",
     "test": "vitest run --project shared --no-isolate && vitest run --project isolated",
     "test:watch": "vitest",
@@ -32,7 +32,7 @@
     "release:prepare": "node scripts/release-prepare.mjs",
     "docker:build": "docker build -f deploy/docker/Dockerfile -t vaubaan-gateway:local .",
     "docker:smoke": "deploy/docker/smoke.sh vaubaan-gateway:local",
-    "ci": "npm run type-check && npm run lint && npm run format:check && npm run build && npm run test"
+    "ci": "npm run type-check && npm run lint && npm run format:check && VAUBAAN_BUILD_TYPECHECKED=1 npm run build && npm run test"
   },
   "devDependencies": {
     "@eslint/js": "9.39.4",

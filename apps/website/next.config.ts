@@ -17,6 +17,10 @@ function workspaceDependencies(): string[] {
 }
 
 const nextConfig: NextConfig = {
+  // `npm run type-check` has checked this app when VAUBAAN_BUILD_TYPECHECKED=1
+  // (`npm run ci`, the CI jobs that build): the build skips its second tsc pass.
+  // Any other build (the image, a developer's) type-checks as usual.
+  typescript: { ignoreBuildErrors: process.env.VAUBAAN_BUILD_TYPECHECKED === '1' },
   transpilePackages: workspaceDependencies(),
   poweredByHeader: false,
   // The site sets no cookie and loads nothing from a third party (website spec §1.1).

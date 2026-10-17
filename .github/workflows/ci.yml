@@ -30,24 +30,127 @@ permissions:
   contents: read
 
 jobs:
-  check:
-    if: github.event_name != 'schedule'
+  # What this run has to check (scripts/ci-scope.sh): `code=false` when a push
+  # or a pull request changes documentation only (docs/**, *.md). Then the
+  # `docs` job runs instead of check, lint, test, e2e and docker. A schedule,
+  # a manual run, a release (workflow_call) or a new branch checks everything.
+  scope:
     runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      code: ${{ steps.scope.outputs.code }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '22'
-          cache: npm
-      - run: npm ci --no-audit --no-fund
+          fetch-depth: 0
+          persist-credentials: false
+      - id: scope
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || '' }}
+        run: scripts/ci-scope.sh "$BASE" HEAD | tee -a "$GITHUB_OUTPUT"
+
+  # Types, format, registry signatures, the website build. Incremental: the
+  # tsc build info and the Prettier cache of the last run are restored, so a
+  # small change re-checks little (the caches hold results, never a verdict:
+  # a file whose content changed is checked again).
+  check:
+    needs: scope
+    if: github.event_name != 'schedule' && needs.scope.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
       # Every installed package carries the registry's signature, and those
       # that publish a provenance attestation have a valid one.
       - run: npm audit signatures
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            **/tsconfig.tsbuildinfo
+            !node_modules/**
+            .cache/prettier
+          key: check-cache-${{ github.sha }}
+          restore-keys: check-cache-
       - run: npm run type-check
-      - run: npm run lint
       - run: npm run format:check
-      - run: npm run build
-      - run: npm run test
+      # The gateway is built by `e2e` (and by `docker`, in the image).
+      - run: npm run build --workspace @vaubaan/website
+        env:
+          VAUBAAN_BUILD_TYPECHECKED: '1'
+
+  # Type-aware ESLint. On a pull request the cache of the last run is restored
+  # and only the files whose content changed are linted; a push to a
+  # protected branch lints everything (a type changed in one file can make a
+  # rule fail in another file that did not change).
+  lint:
+    needs: scope
+    if: github.event_name != 'schedule' && needs.scope.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+      - if: github.event_name == 'pull_request'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cache/eslint
+          key: eslint-cache-${{ github.sha }}
+          restore-keys: eslint-cache-
+      # The website imports the collections fumadocs generates (.source/);
+      # without them its types do not resolve (`type-check` generates them in
+      # `check`, this job does not run it).
+      - run: npm run generate --workspace @vaubaan/website
+      - run: npm run lint
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cache/eslint
+          key: eslint-cache-${{ github.sha }}
+
+  # Vitest, in two shards. Each runs its half of the `shared` project without
+  # isolation; the first also runs the `isolated` project (npm run test).
+  test:
+    needs: scope
+    if: github.event_name != 'schedule' && needs.scope.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+      - run: npx vitest run --project shared --no-isolate --shard="${{ matrix.shard }}/2"
+      - if: matrix.shard == 1
+        run: npx vitest run --project isolated
+
+  # A documentation-only change: the format of the changed files, and the tests
+  # that read documentation (the structural index against the spec, the key
+  # table of the configuration handbook, …): every test file naming `docs/`
+  # or a `.md` file.
+  docs:
+    needs: scope
+    if: github.event_name != 'schedule' && needs.scope.outputs.code == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            **/tsconfig.tsbuildinfo
+            !node_modules/**
+            .cache/prettier
+          key: check-cache-${{ github.sha }}
+          restore-keys: check-cache-
+      - run: npm run format:check
+      - name: Tests that read documentation
+        run: |
+          mapfile -t files < <(git ls-files '*.test.ts' '*.test.tsx' '*.test.mjs' |
+            xargs grep -lE "docs/|\.md['\"\`]")
+          npx vitest run --project shared --no-isolate "${files[@]}"
 
   # Dependency audit: `npm audit --omit=dev` against the reviewed allowlist
   # (.github/audit-allowlist.json). Fails on an advisory that is not allowlisted
@@ -119,19 +222,34 @@ jobs:
   #
   # e2e and docker do not wait for `check`: they start with it, so the run
   # lasts as long as its longest job, not the sum of three.
+  #
+  # The browser is cached by Playwright version. Its system libraries are not
+  # installed: the runner image ships Google Chrome, and with it everything
+  # Chromium needs. The build skips its tsc pass (`check` type-checks).
   e2e:
-    if: github.event_name != 'schedule'
+    needs: scope
+    if: github.event_name != 'schedule' && needs.scope.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - uses: ./.github/actions/setup
+      - id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >>"$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          node-version: '22'
-          cache: npm
-      - run: npm ci --no-audit --no-fund
-      - run: npx playwright install --with-deps chromium
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - run: npx playwright install chromium
       - run: npm run test:e2e:v5
+        env:
+          VAUBAAN_BUILD_TYPECHECKED: '1'
+      # The Vitest suites that need the build (`.next/standalone`, the demo
+      # server): `test` does not build, so they are skipped there and run here.
+      - run: >-
+          npx vitest run --project shared --no-isolate
+          apps/gateway/tests/integration/standalone-
+          apps/gateway/tests/integration/demo/
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -150,6 +268,8 @@ jobs:
   # packages the image ships, fails the job. The vulnerability database is
   # cached for a day.
   docker:
+    needs: scope
+    if: needs.scope.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
