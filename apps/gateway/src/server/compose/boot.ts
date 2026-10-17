@@ -17,7 +17,7 @@ import { createLogger, createRedactor, guardConsole } from '../logging';
 import { SlidingWindowRateLimiter } from '../rate-limit';
 import { currentSetup, publishSetup } from '../setup/state';
 import { loadBootConfig, loadBootConfigOrSetup } from './boot-config';
-import { getRoot, type RootDeps } from './root';
+import { getRoot, rootStarted, type RootDeps } from './root';
 
 /**
  * Routes Next.js's own error printing through the redactor of the built root — or
@@ -57,12 +57,13 @@ export type BootState = 'ready' | 'setup';
 
 /**
  * Starts the instance: the composition root, or setup mode. With an injected
- * `loadConfig` (tests, the demo) the root is built from it and setup mode never
- * applies.
+ * `loadConfig` (tests), or a root already started in this process (the demo
+ * builds it before the server starts), the root is what it is and setup mode
+ * never applies.
  */
 export async function startInstance(deps: BootDeps = {}): Promise<BootState> {
   const { env, readFile, ...rootDeps } = deps;
-  if (rootDeps.loadConfig) {
+  if (rootDeps.loadConfig || rootStarted()) {
     await getRoot(rootDeps);
     return 'ready';
   }
@@ -79,11 +80,14 @@ export async function startInstance(deps: BootDeps = {}): Promise<BootState> {
     redact: redactor,
     write: rootDeps.logWrite,
   }).child({ component: 'gateway' });
+  // The path of the key file and whether an install token exists: never a value.
+  const keyFilePath = setup.masterKeyFile;
+  const hasInstallToken = setup.config.bootstrapToken !== null;
   logger.warn('starting in setup mode: the master key file is absent and a restore is configured', {
-    key_file: setup.masterKeyFile,
+    key_file: keyFilePath,
     store_path: setup.config.store.path,
     public_origin: setup.config.publicUrl.origin,
-    bootstrap_token: setup.config.bootstrapToken !== null ? 'set' : 'not set',
+    has_install_token: hasInstallToken,
     remedy: 'open /admin/bootstrap and hand the gateway the key file of the copy',
   });
   publishSetup({

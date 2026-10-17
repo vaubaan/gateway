@@ -152,9 +152,11 @@ export function createSetupHandlers(state: SetupState): SetupHandlers {
           });
         }
         state.lastRefusal = { message, at: toIso(new Date()) };
+        // What a refused first boot prints on stderr otherwise: the restore names the
+        // check that failed, never the source; nothing else of the boot quotes a value.
         logger.error('setup: the boot refused the received key; the key file was removed', {
           path,
-          reason: message,
+          failure: message,
         });
         return refused('restore-refused');
       }

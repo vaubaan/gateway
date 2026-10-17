@@ -642,6 +642,11 @@ export function getRoot(deps?: RootDeps): Promise<GatewayRoot> {
   return g[GLOBAL_KEY];
 }
 
+/** Whether a root is being built or built in this process (the demo builds it before the server starts). */
+export function rootStarted(): boolean {
+  return (globalThis as GlobalWithRoot)[GLOBAL_KEY] !== undefined;
+}
+
 /** Closes and forgets the process-wide root. Tests only. */
 export async function resetRoot(): Promise<void> {
   const g = globalThis as GlobalWithRoot;
