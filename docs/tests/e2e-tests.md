@@ -765,3 +765,5 @@ asks deliberately, the creator reads the justification, selects a permission
 and its limits, reviews and grants it, and the same key replays successfully.
 The creator then removes it through the mission editor; the same call is
 refused again. Existing approval and limit browser scenarios remain required.
+The cutover smoke also checks that the execution tool list includes
+`vaubaan__request_permission` alongside tools from the mission's provider.
