@@ -238,8 +238,9 @@ What it stands on, and therefore does **not** prove:
 One configuration, `apps/gateway/tests/e2e/v5/playwright.config.ts`, one
 project (Chromium, 1280×800), one worker. `npm run test:e2e` is an alias of
 `npm run test:e2e:v5`, which builds the app then runs Playwright; the CI job
-`e2e` runs the same command after `npx playwright install --with-deps
-chromium` (the browser cached by Playwright version). It is not part of `npm run ci`.
+`e2e` runs the same command after `npx playwright install chromium` (the
+browser cached by Playwright version; the runner image already holds the
+system libraries Chromium needs). It is not part of `npm run ci`.
 
 ### The ephemeral instance
 

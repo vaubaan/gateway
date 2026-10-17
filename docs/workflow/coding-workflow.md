@@ -166,6 +166,7 @@ jobs:
     - npm run format:check # Prettier cache restored
     - npm run build --workspace @vaubaan/website # VAUBAAN_BUILD_TYPECHECKED=1
   lint: # if code
+    - npm run generate --workspace @vaubaan/website # the .source/ collections its types need
     - npm run lint # pull request: ESLint cache restored; push: every file
   test: # if code; two shards
     - npx vitest run --project shared --no-isolate --shard=<n>/2
@@ -183,7 +184,7 @@ jobs:
     - checkout semgrep/semgrep-rules at a pinned commit
     - docker run --network none semgrep/semgrep@sha256:… scripts/sast.sh
   e2e: # if code; timeout 20 min
-    - npx playwright install --with-deps chromium # the browser cached by version
+    - npx playwright install chromium # browser cached by version; the runner has Chrome's libraries
     - npm run test:e2e:v5 # next build (no tsc pass), then Playwright on the ephemeral instance
     - npx vitest run … standalone-* demo/ # the suites that need the build (skipped in `test`)
     - on failure: upload test-results/v5 (traces, screenshots) for 7 days

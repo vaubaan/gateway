@@ -97,6 +97,10 @@ jobs:
           path: .cache/eslint
           key: eslint-cache-${{ github.sha }}
           restore-keys: eslint-cache-
+      # The website imports the collections fumadocs generates (.source/);
+      # without them its types do not resolve (`type-check` generates them in
+      # `check`, this job does not run it).
+      - run: npm run generate --workspace @vaubaan/website
       - run: npm run lint
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -219,8 +223,9 @@ jobs:
   # e2e and docker do not wait for `check`: they start with it, so the run
   # lasts as long as its longest job, not the sum of three.
   #
-  # The browser is cached by Playwright version (its system libraries are
-  # installed each run). The build skips its tsc pass (`check` type-checks).
+  # The browser is cached by Playwright version. Its system libraries are not
+  # installed: the runner image ships Google Chrome, and with it everything
+  # Chromium needs. The build skips its tsc pass (`check` type-checks).
   e2e:
     needs: scope
     if: github.event_name != 'schedule' && needs.scope.outputs.code == 'true'
@@ -235,7 +240,7 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install chromium
       - run: npm run test:e2e:v5
         env:
           VAUBAAN_BUILD_TYPECHECKED: '1'
