@@ -25,15 +25,14 @@ research was validated by the product owner on 2026-10-16 (answers marked
 [`secret-arguments-masked-in-the-approval-view`](../../decisions/secret-arguments-masked-in-the-approval-view.md).
 Contributor guide: [`plugins/fly/README.md`](../../../plugins/fly/README.md).
 
-**Why.** Vaubaan's managed offer runs one isolated gateway instance per
-customer in a Fly organization: one app on its own private network per
-tenant, a volume (SQLite), secrets (master key, sign-in configuration), an
-image from a private registry, autostop for the free tier, a region per
-customer, rolling image upgrades with a snapshot before, daily snapshots, a
-certificate for `<client>.vaubaan.app`. A coding agent, and later the
-provisioner of the private `vaubaan/cloud` repository, operates this
-through the dogfood gateway, under a mission. The tool surface is what that
-work needs, and nothing that hands out a Fly credential.
+**Why.** A company that runs apps on Fly — gateway instances among them —
+wants an agent to operate them under a mission, without holding a Fly
+credential: apps on their own private networks, volumes (a gateway's
+SQLite), secrets (a gateway's master key and sign-in configuration), images
+from a private registry, autostop, a region per app, rolling image upgrades
+with a snapshot first, daily snapshots, certificates for its hostnames. The
+tool surface is what that work needs, and nothing that hands out a Fly
+credential.
 
 ## Sources
 
@@ -115,9 +114,8 @@ Every leaf name is unique in the plane (`app-destroy`, `machine-destroy`,
 it acts on without its path.
 
 **Environment: the owner's label on the app** (Railway and Supabase
-precedent, no `envOf`): `prod` for customer instances — the free tier
-included **(PO, Q10)** — and `staging` for canary and internal instances. No
-third label. The app name is never parsed for an environment.
+precedent, no `envOf`): `prod` for production apps **(PO, Q10)** and
+`staging` for canary and internal apps. No third label. The app name is never parsed for an environment.
 
 ## 2. Tool → slice mapping
 
@@ -163,7 +161,7 @@ machine namespace) are refused as undeclared.
 out a Fly credential), `/tokens/*` (token plumbing; `tokens/current` serves
 the check at paste only), `/secretkeys/*` (decrypt and sign), custom
 certificate upload (a private key in the body), machine metadata, signals,
-memory, organization-wide machine and volume lists (they cross tenants),
+memory, organization-wide machine and volume lists (they reach past the mission's apps),
 Managed Postgres.
 
 ## 3. Catalog and presets
@@ -178,11 +176,11 @@ resource, so no label can exist), `volume-create` (empty) and
 
 | Risk                            | Vector (rev / blast / data / cost / vis / persist)               | Why it is its own decision                                 |
 | ------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------- |
-| `read-org`                      | reversible / account / metadata / free / internal / stateless    | The list of apps is the list of customers.                 |
+| `read-org`                      | reversible / account / metadata / free / internal / stateless    | App names can tell what the organization runs.             |
 | `read-runtime`                  | reversible / single / data / free / internal / stateless         | Configs hold plain env variables.                          |
 | `read-secret-names`             | reversible / single / metadata / …                               | Names and digests; values redacted.                        |
 | `read-logs`                     | reversible / single / pii / …                                    | Logs carry customer data.                                  |
-| `app-create`                    | reversible / account / metadata / moderate / internal / posture  | A new tenant; own network required.                        |
+| `app-create`                    | reversible / account / metadata / moderate / internal / posture  | A new app; own network required.                           |
 | `app-destroy`                   | irreversible / env / pii / free / public / posture               | Volumes and snapshots go with the app.                     |
 | `machine-create`                | reversible / single / metadata / moderate / internal / session   | Billed VM; touches config and image too.                   |
 | `machine-config-write`          | costly / single / secret / moderate / public / posture           | A config can run anything with the app's secrets.          |
@@ -190,7 +188,7 @@ resource, so no label can exist), `volume-create` (empty) and
 | `scale`                         | reversible / single / metadata / unbounded / internal / session  | Cost.                                                      |
 | `machine-power`                 | reversible / single / metadata / free / public / session         | Availability only.                                         |
 | `machine-destroy`               | costly / single / metadata / free / public / session             | Rebuild needed; volumes stay.                              |
-| `machine-exec`                  | irreversible / env / secret / free / internal / posture          | Reads the master key and every sealed account of a tenant. |
+| `machine-exec`                  | irreversible / env / secret / free / internal / posture          | Reads every secret of the app (a gateway: its master key). |
 | `volume-create`                 | reversible / single / metadata / moderate / internal / session   | Empty storage.                                             |
 | `volume-restore`                | costly / single / pii / moderate / internal / session            | Copies data, possibly old.                                 |
 | `volume-extend`                 | irreversible / single / metadata / moderate / internal / posture | Never shrinks.                                             |
@@ -199,7 +197,7 @@ resource, so no label can exist), `volume-create` (empty) and
 | `volume-destroy`                | irreversible / single / pii / free / internal / posture          | Only snapshots remain.                                     |
 | `secret-write`                  | costly / env / secret / free / internal / posture                | A wrong master key or sign-in setting locks an instance.   |
 | `ip-write` / `ip-release`       | reversible / … / public / posture; irreversible for release      | Exposure and cost; a released dedicated address is lost.   |
-| `certificate-write` / `-remove` | reversible / costly, public / posture                            | HTTPS of a customer hostname.                              |
+| `certificate-write` / `-remove` | reversible / costly, public / posture                            | HTTPS of a public hostname.                                |
 
 `machine-config-write` and `deploy` override `visibility: internal` on
 staging. Each risk carries `infra_limits.calls_per_minute_max` under Fly's
@@ -275,10 +273,10 @@ outside the mission, malformed). A resource whose ref is not an app name is
 never used. `org_slug` is no argument: `create_app` and discovery take the
 connection's organization, so a call never leaves it.
 
-### 5.2 One organization hosts every customer
+### 5.2 One organization hosts many apps
 
-Discovery lists every tenant app. A mission selects apps; quotas are per
-mission, so a `fleet-upgrade` mission over many tenants has its quotas
+Discovery lists every app of the organization. A mission selects apps; quotas are per
+mission, so a `fleet-upgrade` mission over many apps has its quotas
 raised deliberately. Machine, volume and snapshot ids are always under
 `/apps/{A}/…`: an id of another app answers 404 at Fly.
 
@@ -347,23 +345,24 @@ declared; `timeout` is capped at 60 s; stdout and stderr are cut at 64 KiB.
 must be listed under one of the app's current volumes (50 searched). A
 snapshot of a destroyed volume cannot be restored through the plugin.
 
-### 5.10 Self resources and the control plane **(PO, Q7, Q8)**
+### 5.10 Self resources and the hosting organization **(PO, Q7, Q8)**
 
 An instance on Fly counts `fly:$FLY_APP_NAME` among its self resources
-(`config/self-resources.ts`), as Railway's project. **Rule: the control
-plane (the `vaubaan/cloud` provisioner, any Vaubaan app that is not a
-tenant) lives in a Fly organization separate from the tenants', never
-connected to the gateway it hosts.** Organization-level calls (`create_app`,
-`list_apps`) are not bound to a resource, and an organization token reaches
-every app. Any other non-tenant app in the tenant organization is listed in
-`self_resources` as `fly:<app name>`. Tenants are gateways too: `deploy`,
-`machine-config-write` and `exec` on one reach every account its customer
-connected, hence `data: secret`.
+(`config/self-resources.ts`), as Railway's project. **Rule: the Fly
+organization that hosts a gateway is never connected to that gateway; a
+Fly account names another organization.** Organization-level calls
+(`create_app`, `list_apps`) are not bound to a resource, and an
+organization token reaches every app. Any other app of the connected
+organization that must stay out of reach is listed in `self_resources` as
+`fly:<app name>`. An app may itself run a gateway: `deploy`,
+`machine-config-write` and `exec` on it reach every account connected to
+that gateway, hence `data: secret`.
 
 ### 5.11 Network isolation **(PO, Q3)**
 
 `create_app` without `network` is refused: an app on the organization's
-default network reaches every other tenant over the private network.
+default network reaches every other app of the organization over the
+private network.
 
 ### 5.12 Autostop, region, size
 

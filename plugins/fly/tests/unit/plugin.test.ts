@@ -32,7 +32,7 @@ import {
 
 const M = { app: 'acme-gw', machine_id: 'm1' };
 const V = { app: 'acme-gw', volume_id: 'vol_1' };
-const H = { app: 'acme-gw', hostname: 'acme.vaubaan.app' };
+const H = { app: 'acme-gw', hostname: 'acme.example.com' };
 
 /** One realistic call per tool, and the refusals worth showing. */
 export const SAMPLES: ToolSamples = {

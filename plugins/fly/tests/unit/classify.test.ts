@@ -375,15 +375,15 @@ describe('secrets, addresses, certificates, logs', () => {
   });
 
   test('certificates : request and check write, removal has its own leaf', () => {
-    const H = { app: 'acme-gw', hostname: 'acme.vaubaan.app' };
+    const H = { app: 'acme-gw', hostname: 'acme.example.com' };
     expect(risks(TOOL.requestCertificate, H)).toEqual(['fly.certificate-write']);
     expect(risks(TOOL.checkCertificate, H)).toEqual(['fly.certificate-write']);
     expect(risks(TOOL.removeCertificate, H)).toEqual(['fly.certificate-remove']);
     expect(risks(TOOL.getCertificate, H)).toEqual(['fly.read-runtime']);
-    expect(denial(TOOL.requestCertificate, { ...H, hostname: '*.vaubaan.app' })).toMatch(
+    expect(denial(TOOL.requestCertificate, { ...H, hostname: '*.example.com' })).toMatch(
       /^hostname:/,
     );
-    expect(denial(TOOL.requestCertificate, { ...H, hostname: 'Acme.vaubaan.app' })).toMatch(
+    expect(denial(TOOL.requestCertificate, { ...H, hostname: 'Acme.example.com' })).toMatch(
       /^hostname:/,
     );
     expect(denial(TOOL.requestCertificate, { ...H, hostname: 'localhost' })).toMatch(/^hostname:/);

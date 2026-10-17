@@ -35,7 +35,7 @@ export function app(name: string, env: 'prod' | 'staging', id: string): Resource
   };
 }
 
-/** A customer instance in production. */
+/** A production app. */
 export const acme = app('acme-gw', 'prod', 'app-acme');
 /** A canary instance. */
 export const canary = app('canary-gw', 'staging', 'app-canary');

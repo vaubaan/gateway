@@ -84,7 +84,7 @@ export function landingFaq(serviceNames: readonly string[]): Faq[] {
     {
       question: 'Is there a hosted version?',
       answer:
-        'No. Vaubaan Gateway runs on your own infrastructure only: there is no hosted service and no account to create. A managed offer may come later; nothing is open today.',
+        'No. Vaubaan Gateway runs on your own infrastructure only: there is no hosted service and no account to create.',
     },
     {
       question: 'Is it ready for production?',

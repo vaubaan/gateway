@@ -88,7 +88,7 @@ export const flyCredential: ApiKeyCredentialSpec = {
       'Install flyctl and sign in as a member of the organization the agents will work in.',
       'Create an organization token: fly tokens create org --org <slug> --name vaubaan-gateway --expiry 2160h.',
       'Attenuate it so it cannot touch billing, membership or the organization itself: write [{"type":"NoAdminFeatures","body":{}}] to caveats.json, then run fly tokens attenuate -f caveats.json -t "<token>".',
-      'Paste the attenuated token here, with the organization slug. Keep the organization that hosts this gateway or its control plane separate: never connect it here.',
+      'Paste the attenuated token here, with the organization slug. Keep the organization that hosts this gateway separate: never connect it here.',
       'Fly tokens carry no permission choice beyond their caveats: Vaubaan decides who may do what.',
     ],
     permissions: [],

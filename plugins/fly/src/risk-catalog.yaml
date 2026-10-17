@@ -18,9 +18,9 @@ risks:
   - id: fly.read-org
     label: 'List the apps and regions of the organization'
     reason: >-
-      App names, ids and networks, and the platform regions. In an
-      organization that hosts one app per customer, the list of apps is the
-      list of customers; the answer is filtered to the apps of the mission.
+      App names, ids and networks, and the platform regions. App names can
+      tell what the organization runs; the answer is filtered to the apps of
+      the mission.
     matches:
       - 'fly.org[*].region[*].R'
       - 'fly.org[*].app[*].R'
@@ -116,7 +116,7 @@ risks:
     label: 'Destroy an app'
     reason: >-
       Removes the app with its machines, addresses, certificates, volumes and
-      their snapshots. For a customer instance, its data is gone for good.
+      their snapshots. Its data is gone for good.
     matches: 'fly.org[*].app[*].app-destroy.W'
     acceptable_in_envs: [staging, prod]
     infra_limits: { calls_per_minute_max: 2 }
@@ -693,7 +693,7 @@ presets:
 
   - id: provisioner
     label: Provisioner
-    description: 'Create and configure customer instances: apps, machines, volumes, addresses, certificates. Secrets, restores and destruction ask first; commands inside a machine are not included.'
+    description: 'Create and configure apps: machines, volumes, addresses, certificates. Secrets, restores and destruction ask first; commands inside a machine are not included.'
     entries:
       - risk_id: fly.read-org
         quota: 2000

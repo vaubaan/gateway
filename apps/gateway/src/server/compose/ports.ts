@@ -2,10 +2,9 @@
  * Ports of the composition root.
  *
  * Everything that holds state or talks to the outside world is reached
- * through one of these interfaces so that the single-process v5 deployment
- * (SQLite, in-memory windows) and a later hosted deployment (Postgres, Redis)
- * differ only in the implementations the root is built with
- * (plan §3.1; `_common.md` "keep the hosted/managed path open").
+ * through one of these interfaces so that the single-process deployment
+ * (SQLite, in-memory windows) and any later one differ only in the
+ * implementations the root is built with (plan §3.1).
  *
  * The embedded store (`../store`) and the plugin registry
  * (`@vaubaan/plugin-sdk`) are owned by their own modules; the root
