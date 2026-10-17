@@ -22,7 +22,7 @@ const MACHINE_ID: Schema = { type: 'string', description: 'The machine id (from 
 const VOLUME_ID: Schema = { type: 'string', description: 'The volume id (`vol_…`).' };
 const HOSTNAME: Schema = {
   type: 'string',
-  description: 'The hostname of the certificate, lower case (`acme.vaubaan.app`). No wildcard.',
+  description: 'The hostname of the certificate, lower case (`app.example.com`). No wildcard.',
 };
 const IMAGE: Schema = {
   type: 'string',

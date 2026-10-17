@@ -24,8 +24,8 @@ things open because they shape every later feature:
    are mutually exclusive ("it does not trace custom server files… these
    cannot be used together"). The MCP doors, the OAuth authorization
    server, the OIDC callback and `/healthz` are not UI; where do they run?
-   Renaud's constraint: a hosted, managed version will exist later, so the
-   shape must not preclude horizontal scaling.
+   Renaud's constraint: the shape must not preclude horizontal scaling
+   later.
 2. **Configuration.** Spec §4.3 lists what the operator provides and
    requires "startup fails with a message naming the variable"; the plan
    adds "env vars and/or a mounted file", precedence and secret references

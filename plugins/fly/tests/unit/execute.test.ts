@@ -189,10 +189,10 @@ describe('requests', () => {
         { method: 'POST', url: `${API}/apps/acme-gw/certificates/acme`, body: {} },
       ],
       TOOL.requestCertificate,
-      { app: 'acme-gw', hostname: 'acme.vaubaan.app' },
+      { app: 'acme-gw', hostname: 'acme.example.com' },
     ));
     await textOf(result);
-    expect(fetch.calls[1]!.json).toEqual({ hostname: 'acme.vaubaan.app' });
+    expect(fetch.calls[1]!.json).toEqual({ hostname: 'acme.example.com' });
   });
 
   test('logs are read from the logs endpoint with the filters', async () => {
@@ -485,7 +485,7 @@ describe('volume restore reads from the same app only', () => {
       name: 'data',
       region: 'cdg',
       size_gb: 1,
-      snapshot_id: 'vs_of_another_tenant',
+      snapshot_id: 'vs_of_another_app',
     });
     expect(await refusalText(result)).toMatch(/is not a snapshot of a volume of app 'acme-gw'/);
     expect(fetch.calls.some((c) => c.method === 'POST')).toBe(false);

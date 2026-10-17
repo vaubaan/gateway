@@ -16,8 +16,8 @@ extends:
 The image ships `backup` (a consistent `VACUUM INTO` copy of the store, ADR
 [master-key-rotation-reseals-every-blob](master-key-rotation-reseals-every-blob.md),
 amendment) but nothing that puts a copy back. Moving an instance to another
-host — the managed offer moves an existing Railway instance to a new Fly
-machine; a self-hoster changes server or recovers from a backup — meant
+host — from Railway to a new Fly machine, to another server, or back from
+a backup — meant
 dropping a file on the new volume by hand (`machine exec`, `railway ssh`,
 `docker cp`) while the server was stopped, with nothing checking that the file
 was the one meant, that it was a sound store, that this image could migrate it,
@@ -97,8 +97,8 @@ empty store, when an operator can place a file without a shell trick.
 ## Consequences
 
 - A new machine starts from another instance's store with two variables and no
-  shell: the managed move of an instance and a self-hoster's move use the same
-  path, in the open-source image.
+  shell: every move of an instance, whatever the hosts, uses the same path,
+  in the open-source image.
 - What is restored has been proven, before it replaced anything, to be the file
   meant, sound, migratable by this image and readable by this instance's keys.
   A store whose keys were left behind is refused on the new host instead of

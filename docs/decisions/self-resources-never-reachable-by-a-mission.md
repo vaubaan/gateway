@@ -21,13 +21,12 @@ extends:
 > machine (Fly docs, "Runtime environment"). With the `fly` plugin, whose
 > resources are apps by name, the host now adds `fly:$FLY_APP_NAME` to the
 > self resources exactly as it adds `railway:$RAILWAY_PROJECT_ID` (source
-> `fly`; the configuration cannot remove it). The managed offer also keeps
-> its control plane in a **Fly organization separate from the tenants'**,
-> never connected to the gateway it hosts: resource binding does not cover
-> organization-level calls (creating an app names no resource), the same
-> reason the deploy guide gives a separate Railway workspace. Any other
-> Vaubaan app in the tenant organization is listed in `self_resources` as
-> `fly:<app name>`. Handbooks: [configuration](../handbook/configuration.md),
+> `fly`; the configuration cannot remove it). The Fly organization that
+> hosts a gateway is **never connected to that gateway**: resource binding
+> does not cover organization-level calls (creating an app names no
+> resource), the same reason the deploy guide gives a separate Railway
+> workspace. Any other app of the connected organization that must stay out
+> of reach is listed in `self_resources` as `fly:<app name>`. Handbooks: [configuration](../handbook/configuration.md),
 > [fly](../handbook/providers/fly.md) §5.10.
 
 ## Context

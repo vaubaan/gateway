@@ -3,8 +3,8 @@
 Fly.io for Vaubaan Gateway: the apps of one Fly organization, their
 machines and images, volumes and snapshots, secrets, IP addresses and
 certificates, through the Machines REST API (`https://api.machines.dev/v1`),
-and the app logs `fly logs` reads. Written for running one gateway instance
-per customer on Fly, usable for any Fly organization.
+and the app logs `fly logs` reads. Usable for any Fly organization, gateway
+instances included.
 
 Handbook (the model and its reasons):
 [`docs/handbook/providers/fly.md`](../../docs/handbook/providers/fly.md).

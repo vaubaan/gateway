@@ -34,17 +34,13 @@ describe('readSelfResources', () => {
   });
 
   it('a configured entry naming the platform app is not added twice', () => {
-    const selves = readSelfResources(
-      ['fly:gw', 'fly:control-plane'],
-      { [FLY_APP_ENV]: 'gw' },
-      noIssue,
-    );
+    const selves = readSelfResources(['fly:gw', 'fly:ops-tools'], { [FLY_APP_ENV]: 'gw' }, noIssue);
     expect(selves).toEqual([
       { provider: 'fly', ref: 'gw', source: 'fly' },
-      { provider: 'fly', ref: 'control-plane', source: 'config' },
+      { provider: 'fly', ref: 'ops-tools', source: 'config' },
     ]);
-    expect(isSelfResource(selves, 'fly', 'control-plane')).toBe(true);
-    expect(isSelfResource(selves, 'fly', 'tenant-acme')).toBe(false);
+    expect(isSelfResource(selves, 'fly', 'ops-tools')).toBe(true);
+    expect(isSelfResource(selves, 'fly', 'acme-gw')).toBe(false);
   });
 
   it('an empty FLY_APP_NAME adds nothing; a malformed entry is reported', () => {

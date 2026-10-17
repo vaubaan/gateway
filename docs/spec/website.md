@@ -56,8 +56,7 @@ proposition (gateway threat model, "Accepted risks").
 
 ### 1.1 Explicitly out of scope
 
-- **No account, no sign-up, no sign-in.** The managed offer is not open yet;
-  the site may announce it and collect nothing.
+- **No account, no sign-up, no sign-in.** The site collects nothing.
 - **No cookie, no third-party tracker, no analytics script.** A site that
   asks to be trusted with telemetry does not track its visitors.
 - **No instance data on the site** beyond the public aggregates of §2.4.
@@ -246,6 +245,3 @@ accepted.
    (`search_docs`, `get_page`, `list_plugins`, `get_plugin`) would let an agent
    that configures an instance query the docs as tools. After the first
    version, if `llms.txt` and the Markdown pages prove insufficient.
-5. **Managed offer.** When it opens, sign-up lives elsewhere
-   (`console.vaubaan.com`), not on this site; customer instances are on
-   `<slug>.vaubaan.app`.
