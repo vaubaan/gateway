@@ -104,8 +104,8 @@ type-check` at the root fans out to all of them.
 
 | Script                             | What it does                                                                                            |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `npm run ci`                       | type-check, lint, format:check, build, test — CI's `check` job gate                                     |
-| `npm run type-check`               | `tsc --noEmit` in every workspace                                                                       |
+| `npm run ci`                       | type-check, lint, format:check, build, test — the gate of CI's `check`, `lint` and `test` jobs          |
+| `npm run type-check`               | `tsc --noEmit` in every workspace, in parallel, incremental (`scripts/type-check.mjs`)                  |
 | `npm run lint` / `lint:fix`        | ESLint over the repository                                                                              |
 | `npm run format` / `format:check`  | Prettier write / check                                                                                  |
 | `npm run build`                    | every workspace `build` (today: `next build` of `apps/gateway`)                                         |
@@ -147,21 +147,32 @@ and `workflow_call` — the release pipeline calls this file as its gates
 ([Release](#the-release-pipeline-githubworkflowsreleaseyml)). One concurrency
 group per workflow and ref with `cancel-in-progress` (`github.workflow` is
 the caller's name in a called run, so a release and the CI of the same ref
-never cancel each other); `permissions: contents: read`. Single Linux runner,
-Node 22, `npm ci --no-audit --no-fund`: exactly the lockfile, or a failure.
+never cancel each other); `permissions: contents: read`. Linux runners,
+Node 22. Every job that needs the dependencies goes through
+`.github/actions/setup`: `node_modules` is cached by the hash of
+`package-lock.json`; on a miss, `npm ci --no-audit --no-fund` installs
+exactly the lockfile, or fails. The jobs run in parallel: a run lasts as long
+as its longest job.
 Every action is pinned by commit, as
 in `release.yml`, with the release it is in a comment: a tag can be moved, a
 commit cannot.
 
 ```yaml
 jobs:
-  check:
-    - npm audit signatures # registry signatures and provenance of what npm ci installed
-    - npm run type-check
-    - npm run lint
+  scope: # scripts/ci-scope.sh: code=false when only docs/** or *.md changed
+  check: # if code
+    - npm audit signatures # registry signatures and provenance of what is installed
+    - npm run type-check # every workspace in parallel, tsc incremental (build info cached)
+    - npm run format:check # Prettier cache restored
+    - npm run build --workspace @vaubaan/website # VAUBAAN_BUILD_TYPECHECKED=1
+  lint: # if code
+    - npm run lint # pull request: ESLint cache restored; push: every file
+  test: # if code; two shards
+    - npx vitest run --project shared --no-isolate --shard=<n>/2
+    - npx vitest run --project isolated # first shard only
+  docs: # if not code
     - npm run format:check
-    - npm run build # next build (Turbopack); standalone output
-    - npm run test # vitest run
+    - npx vitest run <every test file naming docs/ or a .md file>
   audit: # no install; timeout 5 min
     - node scripts/audit-gate.mjs # npm audit --omit=dev against .github/audit-allowlist.json
     - node scripts/lockfile-gate.mjs # npmjs registry only, https, sha512, the package named
@@ -171,11 +182,11 @@ jobs:
   sast: # timeout 10 min
     - checkout semgrep/semgrep-rules at a pinned commit
     - docker run --network none semgrep/semgrep@sha256:… scripts/sast.sh
-  e2e: # in parallel with check; timeout 20 min
-    - npx playwright install --with-deps chromium
-    - npm run test:e2e:v5 # next build, then Playwright on the ephemeral instance
+  e2e: # if code; timeout 20 min
+    - npx playwright install chromium # browser cached by version; the runner has Chrome's libraries
+    - npm run test:e2e:v5 # next build (no tsc pass), then Playwright on the ephemeral instance
     - on failure: upload test-results/v5 (traces, screenshots) for 7 days
-  docker: # in parallel with check
+  docker: # if code (always on the schedule)
     - docker/build-push-action (deploy/docker/Dockerfile, push: false, load: true,
       GitHub Actions layer cache; scripts/stamp-commit.sh first writes the
       checked-out commit into apps/gateway/build-commit.txt, no build argument)
@@ -183,9 +194,24 @@ jobs:
     - scripts/image-scan.sh vaubaan-gateway:ci # Trivy; vulnerability DB cached a day
 ```
 
+**Caches.** `type-check`, `format:check` and `lint` keep what they already
+checked (`*.tsbuildinfo`, `.cache/prettier`, `.cache/eslint`; gitignored)
+and check again only what changed, by content. A cache holds results, never
+a verdict on a changed file. The one blind spot is ESLint's: a file whose
+content did not change is not linted again when a type it imports changed,
+so a push to `main` or `v5` lints every file. `next build` skips its own
+tsc pass when `VAUBAAN_BUILD_TYPECHECKED=1` (`npm run ci`, CI); the image
+build type-checks as before.
+
+**Documentation only.** A push or pull request that changes only `docs/**`
+or Markdown files runs `scope`, `docs` and the security jobs (`audit`,
+`secrets`, `sast`): the tests that read the documentation — the structural
+index against the spec, the key table of the configuration handbook — still
+run.
+
 Weekly (Monday 05:23 UTC, `schedule`), the same file runs its security jobs
-only — `audit`, `secrets`, `sast` and `docker` with its scan; `check` and
-`e2e` are skipped — so a new advisory or a new rule finds what an unchanged
+only — `audit`, `secrets`, `sast` and `docker` with its scan; `check`,
+`lint`, `test`, `docs` and `e2e` are skipped — so a new advisory or a new rule finds what an unchanged
 tree already ships. GitHub runs a schedule from the default branch only:
 it starts at the cutover. Every other branch is scanned for secrets on each
 push by `.github/workflows/secrets.yml`.
@@ -525,7 +551,7 @@ in a comment.
 | Job       | Runs on      | Permissions                                                                                               | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | --------- | ------------ | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `plan`    | tag, dry run | `contents: read`                                                                                          | `scripts/release-plan.mjs`: the tag names the version of `package.json`, is the highest release so far, and `CHANGELOG.md` has its dated section; the tagged commit is on `main` (a pre-release: or on `v5`). Outputs the version, the image tags and the release notes.                                                                                                                                                                                                                                                                                                                                                                           |
-| `gates`   | tag, dry run | `contents: read`                                                                                          | Calls `ci.yml` itself (`workflow_call`): `check`, `audit`, `e2e`, `docker`. A release passes what a pull request passes, by construction.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `gates`   | tag, dry run | `contents: read`                                                                                          | Calls `ci.yml` itself (`workflow_call`): `scope` (always `code=true` there), `check`, `lint`, `test`, `audit`, `e2e`, `docker`. A release passes what a pull request passes, by construction.                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `image`   | tag, dry run | `contents: read`                                                                                          | One native runner per architecture (`ubuntu-24.04`, `ubuntu-24.04-arm`; no emulation): builds the image without reading any cache, runs `deploy/docker/smoke.sh` on it with the expected version, commit and architecture, scans it with Trivy (`scripts/image-scan.sh`: a fixed HIGH or CRITICAL fails the release before anything is pushed), writes its SBOM (SPDX, Syft) as a workflow artefact.                                                                                                                                                                                                                                               |
 | `push`    | tag only     | `contents: read`, `packages: write`                                                                       | Per architecture, after `gates` and `image`: pushes the image to GHCR **by digest, without a tag**, from the layers `image` built in this run, with BuildKit's SBOM and provenance (`mode=max`) attached; pulls that digest back and runs the smoke test on it; writes the SBOM of what was pushed.                                                                                                                                                                                                                                                                                                                                                |
 | `publish` | tag only     | `contents: read`, `packages: write`, `id-token: write`, `attestations: write`, `artifact-metadata: write` | `scripts/release-image-index.sh`: assembles the two digests into one multi-architecture image under `<version>`, with its OCI annotations; signs a build-provenance attestation for its digest (`actions/attest`, stored on GitHub and next to the image) and verifies it at once with `gh attestation verify` as an operator would (repository, signer workflow, tag) — no attestation, or one that does not verify, fails the job; only then points the aliases of a final release (`<major>.<minor>`, `latest`) at that digest. A version tag never moves: an existing one is kept when it holds the same images (a re-run), refused otherwise. |

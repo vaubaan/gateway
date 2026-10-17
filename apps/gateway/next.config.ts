@@ -135,6 +135,10 @@ export const LEGACY_REDIRECTS: readonly {
 ];
 
 const nextConfig: NextConfig = {
+  // `npm run type-check` has checked this app when VAUBAAN_BUILD_TYPECHECKED=1
+  // (`npm run ci`, the CI jobs that build): the build skips its second tsc pass.
+  // Any other build (the image, a developer's) type-checks as usual.
+  typescript: { ignoreBuildErrors: process.env.VAUBAAN_BUILD_TYPECHECKED === '1' },
   redirects: async () => LEGACY_REDIRECTS.map((rule) => ({ ...rule, permanent: true })),
   env: {
     NEXT_PUBLIC_COMMIT_SHA: commitSha,
