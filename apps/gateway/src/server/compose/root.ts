@@ -51,6 +51,7 @@ import type { Store } from '../store';
 import type { CacheClient, RateLimiter, SessionStore } from './ports';
 import { checkProviderApps, checkSelfResources, RegistryCatalogIndex } from './registry';
 import { wireManagementDoor, type ManagementDoorModule } from './management';
+import { clearSetup, currentSetup, SetupModeError } from '../setup/state';
 import { loadBootConfig } from './boot-config';
 import { buildShippedRegistry } from './shipped-plugins';
 import { openEmbeddedStore, type StoreContext } from './store';
@@ -629,6 +630,9 @@ type GlobalWithRoot = typeof globalThis & { [GLOBAL_KEY]?: Promise<GatewayRoot> 
 export function getRoot(deps?: RootDeps): Promise<GatewayRoot> {
   const g = globalThis as GlobalWithRoot;
   if (!g[GLOBAL_KEY]) {
+    // In setup mode there is no configuration to build from (the environment is
+    // scrubbed): only the setup's own completion, with its loader, builds the root.
+    if (currentSetup() && !deps?.loadConfig) return Promise.reject(new SetupModeError());
     const pending = buildRoot(deps);
     g[GLOBAL_KEY] = pending;
     pending.catch(() => {
@@ -643,6 +647,7 @@ export async function resetRoot(): Promise<void> {
   const g = globalThis as GlobalWithRoot;
   const pending = g[GLOBAL_KEY];
   delete g[GLOBAL_KEY];
+  clearSetup();
   if (pending) {
     try {
       await (await pending).close();

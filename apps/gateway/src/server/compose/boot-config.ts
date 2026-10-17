@@ -9,6 +9,10 @@
  * configuration error, never a reason to mint a new key. Without the opt-in the
  * behaviour is the loader's: a missing key is an error (exit 78).
  *
+ * One more outcome for the boot alone (`loadBootConfigOrSetup`): the key file is
+ * absent, `restore.from` is set and the store is empty — the instance starts in
+ * setup mode and the setup page receives the key (`server/setup/`).
+ *
  * The operator commands (`reseal`, `restore`, `backup`, `import-v4`) keep
  * `loadProcessConfig()`: they never generate anything.
  */
@@ -20,7 +24,9 @@ import {
   scrubSecretEnv,
   type LoadedConfig,
   type LoadOptions,
+  type SetupOutcome,
 } from '../config';
+import type { EnvSource } from '../config/secret-refs';
 import {
   generateMasterKeyText,
   writeMasterKeyFile,
@@ -41,22 +47,52 @@ export interface BootConfigDeps extends LoadOptions {
 
 const MASTER_KEY_PATH = 'encryption.master_key';
 
+/**
+ * What a boot starts from: a configuration, or setup mode — the key file is absent,
+ * a restore is configured, the store is empty — with the environment the final
+ * load will read once the key arrives (`process.env` itself has been scrubbed).
+ */
+export type BootConfigOutcome =
+  | { readonly kind: 'ready'; readonly loaded: LoadedConfig }
+  | { readonly kind: 'setup'; readonly setup: SetupOutcome; readonly env: EnvSource };
+
 export function loadBootConfig(deps: BootConfigDeps = {}): LoadedConfig {
+  const outcome = loadBootConfigOrSetup(deps);
+  if (outcome.kind === 'ready') return outcome.loaded;
+  // A restore without the key of the copy: the boot has no key to verify it with.
+  throw new ConfigError([
+    {
+      path: MASTER_KEY_PATH,
+      env: outcome.setup.issue.env,
+      message: `${outcome.setup.issue.message} (a restore needs the key the copy was sealed with; put the file back)`,
+    },
+  ]);
+}
+
+export function loadBootConfigOrSetup(deps: BootConfigDeps = {}): BootConfigOutcome {
   const env = deps.env ?? process.env;
   const options: LoadOptions = { env, readFile: deps.readFile };
   const outcome = loadInstanceConfigOrSetup(options);
-  if (outcome.kind === 'ready') return finish(outcome.loaded, env, deps.scrub ?? true, false);
+  if (outcome.kind === 'ready') {
+    return { kind: 'ready', loaded: finish(outcome.loaded, env, deps.scrub ?? true, false) };
+  }
 
   const envNames = envNamesFor(MASTER_KEY_PATH).slice(1);
   if (outcome.reason !== 'generate') {
-    // A restore without the key of the copy: the boot has no key to verify it with.
-    throw new ConfigError([
-      {
-        path: MASTER_KEY_PATH,
-        env: outcome.issue.env,
-        message: `${outcome.issue.message} (a restore needs the key the copy was sealed with; put the file back)`,
-      },
-    ]);
+    if ((deps.storeHasContent ?? storeHasContent)(outcome.config.store.path)) {
+      throw new ConfigError([
+        {
+          path: MASTER_KEY_PATH,
+          env: outcome.issue.env,
+          message: `${outcome.issue.message} (the store already holds data: put the key file back)`,
+        },
+      ]);
+    }
+    // Setup mode: the final load reads a snapshot of the environment, so the
+    // process's own can be scrubbed now (ADR secrets-leave-the-process-environment-after-load).
+    const snapshot: Record<string, string | undefined> = { ...env };
+    if (deps.scrub ?? true) scrubSecretEnv(env, outcome.secretEnvNames);
+    return { kind: 'setup', setup: outcome, env: snapshot };
   }
   const { masterKeyFile: path } = outcome;
   const storePath = outcome.config.store.path;
@@ -93,7 +129,7 @@ export function loadBootConfig(deps: BootConfigDeps = {}): LoadedConfig {
       },
     ]);
   }
-  return finish(again.loaded, env, deps.scrub ?? true, true);
+  return { kind: 'ready', loaded: finish(again.loaded, env, deps.scrub ?? true, true) };
 }
 
 function finish(

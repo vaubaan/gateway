@@ -9,9 +9,16 @@ import type { Metadata } from 'next';
 import { documentTitle } from '@/components/shell/instance-label';
 import { getRoot } from '@/server/compose';
 import type { InstanceIdentity } from '@/server/instance';
+import { currentSetup } from '@/server/setup';
 
-/** The identity of this instance, for a server component. */
+/** The identity of this instance, for a server component; in setup mode, the configuration's. */
 export async function instanceIdentity(): Promise<InstanceIdentity> {
+  const setup = currentSetup();
+  if (setup) {
+    const host = setup.config.publicUrl.host;
+    const name = setup.config.instanceName;
+    return { label: name ?? host, name, host, source: name === null ? 'default' : 'config' };
+  }
   return (await getRoot()).instance.name.identity();
 }
 

@@ -267,7 +267,11 @@ environment.
   from a copy: set `VAUBAAN_RESTORE_FROM` and `VAUBAAN_RESTORE_SHA256` and its
   first boot restores it before opening the store (handbook
   [store](../docs/handbook/store.md#restore); the whole move:
-  [railway.md](railway.md#9-moving-an-instance)). With Compose, stop the
+  [railway.md](railway.md#9-moving-an-instance)). Without the key file on
+  the new volume (`VAUBAAN_MASTER_KEY_FILE` named, file absent), the gateway
+  starts in setup mode: `/admin/bootstrap` asks for the bootstrap token and
+  the key file the former instance handed out, then runs the same restore
+  (handbook [configuration](../docs/handbook/configuration.md#setup-mode-the-setup-receives-the-key-for-a-restore)). With Compose, stop the
   gateway and run the command with `docker compose run --rm gateway node
 apps/gateway/restore.mjs …`.
 - **Key rotation**: generate a new key, set `encryption.key_version` to

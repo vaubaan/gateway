@@ -8,7 +8,12 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { KEY_BYTES } from './aead';
-import { generateMasterKeyText, masterKeyFileText, writeMasterKeyFile } from './master-key-file';
+import {
+  generateMasterKeyText,
+  masterKeyFileText,
+  parseMasterKeyText,
+  writeMasterKeyFile,
+} from './master-key-file';
 
 describe('the master key file', () => {
   const dirs: string[] = [];
@@ -28,6 +33,18 @@ describe('the master key file', () => {
     expect(Buffer.from(a.trim(), 'base64')).toHaveLength(KEY_BYTES);
     expect(a).not.toBe(b);
     expect(masterKeyFileText(new Uint8Array(KEY_BYTES))).toBe(`${'A'.repeat(43)}=\n`);
+  });
+
+  it('is read back as the loader reads it: 32 bytes, base64 or base64url, whitespace around', () => {
+    const text = generateMasterKeyText();
+    expect(parseMasterKeyText(text)).toHaveLength(KEY_BYTES);
+    expect(parseMasterKeyText(`  ${text.trim()}  \n`)).toEqual(parseMasterKeyText(text));
+    const url = Buffer.from(parseMasterKeyText(text) ?? []).toString('base64url');
+    expect(parseMasterKeyText(url)).toEqual(parseMasterKeyText(text));
+    expect(parseMasterKeyText('')).toBeNull();
+    expect(parseMasterKeyText('not a key')).toBeNull();
+    expect(parseMasterKeyText(Buffer.alloc(16).toString('base64'))).toBeNull();
+    expect(parseMasterKeyText(`${text.trim()}\n${text.trim()}`)).toBeNull();
   });
 
   it('is written with mode 0600 and never over an existing file', () => {

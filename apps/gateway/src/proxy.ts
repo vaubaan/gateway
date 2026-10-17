@@ -11,6 +11,7 @@ import { randomBytes } from 'node:crypto';
 import { NextResponse, type NextRequest } from 'next/server';
 
 import { ownsItsPolicy, publishedHttps, securityHeaders } from './server/http/security-headers';
+import { currentSetup, servedInSetupMode, SETUP_PAGE } from './server/setup/state';
 
 const NONCE_BYTES = 16;
 
@@ -26,6 +27,12 @@ export const config = {
 };
 
 export function proxy(request: NextRequest): NextResponse {
+  // Setup mode: the instance has no root yet; every page but the setup's goes
+  // to the setup page, at the public address (never a forwarded host).
+  const setup = currentSetup();
+  if (setup && !servedInSetupMode(request.nextUrl.pathname)) {
+    return NextResponse.redirect(new URL(SETUP_PAGE, setup.config.publicUrl));
+  }
   if (ownsItsPolicy(request.nextUrl.pathname)) return NextResponse.next();
   const nonce = randomBytes(NONCE_BYTES).toString('base64');
   const headers = securityHeaders({

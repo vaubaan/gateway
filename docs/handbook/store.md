@@ -2,7 +2,7 @@
 title: Store — embedded SQLite, schema and migrations, repositories
 status: current
 date: 2026-10-13
-last_synced: 2026-10-16
+last_synced: 2026-10-17
 tracks:
   - apps/gateway/migrations/
   - apps/gateway/src/server/store/
@@ -827,7 +827,11 @@ file does not exist or is empty, the copy is restored as above, then the store o
 and migrates as usual. A refusal stops the boot with a message naming the failure kind
 and the check (never the source), and leaves no store: the next start tries again.
 When the store exists, one `warn` line and nothing else, at each boot until the
-variables are removed. The restore never re-seals: moving the copy to the new
+variables are removed. When the key file named by the configuration is absent
+too, the instance starts in **setup mode** and the setup page receives the key
+of the copy before this same first-boot restore runs (handbook
+[configuration](configuration.md#setup-mode-the-setup-receives-the-key-for-a-restore)).
+The restore never re-seals: moving the copy to the new
 instance's key is the reseal's job (`deploy/railway.md`, "Moving an instance").
 The Docker smoke test runs the command and the first-boot restore in the image
 (step 13).

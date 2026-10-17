@@ -282,8 +282,11 @@ export interface InstanceConfig {
   readonly log: { readonly level: LogLevel };
 }
 
-/** Every secret string of a configuration, for the log redactor. */
-export function secretValues(config: InstanceConfig): string[] {
+/**
+ * Every secret string of a configuration, for the log redactor. A `SetupConfig`
+ * (setup mode: no master key yet) yields everything but the keys.
+ */
+export function secretValues(config: InstanceConfig | SetupConfig): string[] {
   const out: string[] = [];
   if (config.idp) out.push(config.idp.clientSecret);
   for (const provider of config.signIn) out.push(provider.clientSecret);
@@ -295,8 +298,10 @@ export function secretValues(config: InstanceConfig): string[] {
     if (app.clientSecret) out.push(app.clientSecret);
     if (app.privateKey) out.push(app.privateKey);
   }
-  out.push(...keyEncodings(config.encryption.masterKey));
-  for (const key of config.encryption.previousKeys.values()) out.push(...keyEncodings(key));
+  if ('encryption' in config) {
+    out.push(...keyEncodings(config.encryption.masterKey));
+    for (const key of config.encryption.previousKeys.values()) out.push(...keyEncodings(key));
+  }
   return out.filter((s) => s.length > 0);
 }
 
