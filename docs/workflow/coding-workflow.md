@@ -183,8 +183,9 @@ jobs:
     - checkout semgrep/semgrep-rules at a pinned commit
     - docker run --network none semgrep/semgrep@sha256:… scripts/sast.sh
   e2e: # if code; timeout 20 min
-    - npx playwright install chromium # browser cached by version; the runner has Chrome's libraries
+    - npx playwright install --with-deps chromium # the browser cached by version
     - npm run test:e2e:v5 # next build (no tsc pass), then Playwright on the ephemeral instance
+    - npx vitest run … standalone-* demo/ # the suites that need the build (skipped in `test`)
     - on failure: upload test-results/v5 (traces, screenshots) for 7 days
   docker: # if code (always on the schedule)
     - docker/build-push-action (deploy/docker/Dockerfile, push: false, load: true,

@@ -219,9 +219,8 @@ jobs:
   # e2e and docker do not wait for `check`: they start with it, so the run
   # lasts as long as its longest job, not the sum of three.
   #
-  # The browser is cached by Playwright version. Its system libraries are not
-  # installed: the runner image ships Google Chrome, and with it everything
-  # Chromium needs. The build skips its tsc pass (`check` type-checks).
+  # The browser is cached by Playwright version (its system libraries are
+  # installed each run). The build skips its tsc pass (`check` type-checks).
   e2e:
     needs: scope
     if: github.event_name != 'schedule' && needs.scope.outputs.code == 'true'
@@ -236,10 +235,16 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
-      - run: npx playwright install chromium
+      - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e:v5
         env:
           VAUBAAN_BUILD_TYPECHECKED: '1'
+      # The Vitest suites that need the build (`.next/standalone`, the demo
+      # server): `test` does not build, so they are skipped there and run here.
+      - run: >-
+          npx vitest run --project shared --no-isolate
+          apps/gateway/tests/integration/standalone-
+          apps/gateway/tests/integration/demo/
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
