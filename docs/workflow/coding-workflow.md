@@ -109,7 +109,7 @@ type-check` at the root fans out to all of them.
 | `npm run lint` / `lint:fix`        | ESLint over the repository                                                                              |
 | `npm run format` / `format:check`  | Prettier write / check                                                                                  |
 | `npm run build`                    | every workspace `build` (today: `next build` of `apps/gateway`)                                         |
-| `npm run test` / `test:watch`      | Vitest, whole suite                                                                                     |
+| `npm run test` / `test:watch`      | Vitest, whole suite (`test`: project `shared` without isolation, then `isolated`)                       |
 | `npm run test:e2e` (`test:e2e:v5`) | builds `apps/gateway`, then Playwright on the ephemeral instance (CI job `e2e`)                         |
 | `npm run dev`                      | `next dev` of `apps/gateway`                                                                            |
 | `npm run demo`                     | builds when the sources changed, then the demo instance on `http://localhost:3210` (handbook demo-mode) |
@@ -171,11 +171,11 @@ jobs:
   sast: # timeout 10 min
     - checkout semgrep/semgrep-rules at a pinned commit
     - docker run --network none semgrep/semgrep@sha256:… scripts/sast.sh
-  e2e: # needs: check; timeout 20 min
+  e2e: # in parallel with check; timeout 20 min
     - npx playwright install --with-deps chromium
     - npm run test:e2e:v5 # next build, then Playwright on the ephemeral instance
     - on failure: upload test-results/v5 (traces, screenshots) for 7 days
-  docker: # needs: check
+  docker: # in parallel with check
     - docker/build-push-action (deploy/docker/Dockerfile, push: false, load: true,
       GitHub Actions layer cache; scripts/stamp-commit.sh first writes the
       checked-out commit into apps/gateway/build-commit.txt, no build argument)

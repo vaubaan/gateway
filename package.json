@@ -21,7 +21,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "build": "npm run --workspaces --if-present build",
-    "test": "vitest run",
+    "test": "vitest run --project shared --no-isolate && vitest run --project isolated",
     "test:watch": "vitest",
     "test:e2e": "npm run test:e2e:v5",
     "test:e2e:v5": "npm run build --workspace @vaubaan/gateway-app && playwright test -c apps/gateway/tests/e2e/v5/playwright.config.ts",

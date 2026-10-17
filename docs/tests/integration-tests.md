@@ -52,6 +52,18 @@ packages/*/src/**/*.test.ts            apps/*/src/**/*.test.ts
 scripts/*.test.mjs
 ```
 
+`npm run test` runs two Vitest projects of that config. `shared` — every
+file but those below — with `--no-isolate`: each worker (`forks`) keeps
+one module graph for all the files it runs, instead of re-evaluating the
+composition root for each file. A test there must therefore leave no
+module state behind (each builds its own root on a `:memory:` store).
+`isolated` — `apps/*/tests/unit/app/**`, the files that replace a module
+with `vi.mock` — runs each file on a fresh graph: without isolation a mock
+applies or not by the order the files ran in.
+`tests/unit/structural/module-mocks-isolated.test.ts` refuses a `vi.mock`
+anywhere else. A plain `npx vitest run` isolates every file (slower, same
+result).
+
 `apps/*/tests/e2e/**` is excluded (Playwright, see
 [`e2e-tests.md`](./e2e-tests.md)), and so is `apps/gateway/tests/manual/`
 (no `*.test.ts` there). Every test runs in the `node` environment. No test
