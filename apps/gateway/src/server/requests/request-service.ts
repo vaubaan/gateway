@@ -1,3 +1,4 @@
+import type { MissionService } from '../missions/mission-service';
 /**
  * `RequestService` — what happens to a request after the refusal dropped it
  * (spec §2.3 Request, §3.4, §3.5, §4.2 "Request inbox", §6 "requests are
@@ -98,6 +99,7 @@ export interface RequestActor {
 const MS_PER_SECOND = 1000;
 
 export interface RequestServiceDeps {
+  readonly missions?: Pick<MissionService, 'permissionOptions'>;
   readonly store: Pick<
     Store,
     'requests' | 'missions' | 'sessions' | 'approvals' | 'audit' | 'auditWriter' | 'users'
@@ -302,7 +304,16 @@ export interface ApprovalView {
   readonly options: readonly ApprovalOption[];
 }
 
-export type RequestView = ClaimView | ApprovalView;
+export interface PermissionView {
+  readonly kind: 'permission';
+  readonly request: RequestSummary;
+  readonly mission: RequestMissionView;
+  readonly asker: RequestAsker | null;
+  readonly events: readonly SessionEventLine[];
+  readonly reason: string;
+  readonly editor: Awaited<ReturnType<MissionService['permissionOptions']>>;
+}
+export type RequestView = ClaimView | ApprovalView | PermissionView;
 
 export type ViewResult =
   | { readonly outcome: 'ok'; readonly view: RequestView }
@@ -461,6 +472,31 @@ export class RequestService {
     const { request, mission } = owned;
     const now = this.deps.clock.now();
     const summary = this.summaryOf(request, mission, now, await this.resourceOf(request));
+    if (request.kind === 'permission') {
+      const details = await this.deps.store.requests.permissionDetails(request.id);
+      const state = deriveMissionState(budgetMissionOf(mission), [], now);
+      return {
+        outcome: 'ok',
+        view: {
+          kind: 'permission',
+          request: summary,
+          mission: {
+            id: mission.id,
+            name: mission.name,
+            state: state.kind,
+            expires_at: mission.expiresAt,
+            period_seconds: mission.periodSeconds,
+          },
+          asker: await this.askerOf(request),
+          events: [],
+          reason: details?.reason ?? '',
+          editor:
+            summary.state === 'open'
+              ? ((await this.deps.missions?.permissionOptions(user, mission.id)) ?? null)
+              : null,
+        },
+      };
+    }
     if (request.kind !== 'claim') {
       return { outcome: 'ok', view: await this.approvalView(request, mission, summary, now) };
     }
@@ -508,6 +544,56 @@ export class RequestService {
     const owned = await this.own(user, requestId);
     if (!owned) return { ok: false, reason: 'forbidden' };
     switch (owned.request.kind) {
+      case 'permission': {
+        if (
+          typeof raw !== 'object' ||
+          raw === null ||
+          !('resolution' in raw) ||
+          raw.resolution !== 'refuse'
+        ) {
+          return {
+            ok: false,
+            reason: 'invalid',
+            problem: {
+              code: 'invalid-decision',
+              message: 'Add permissions using the mission editor, or refuse.',
+            },
+          };
+        }
+        const result = await this.deps.store.requests.decidePermission(
+          requestId,
+          user.id,
+          (ctx) => {
+            ctx.recordEvent({
+              kind: 'request',
+              actorUserId: user.id,
+              riskId: ctx.request.riskId,
+              details: { request_id: requestId, request_kind: 'permission', state: 'refused' },
+            });
+            return { state: 'refused', decision: { resolution: 'refuse' } };
+          },
+        );
+        if (result.status === 'not-open')
+          return {
+            ok: false,
+            reason: 'not-open',
+            state: effectiveState(result.request, this.deps.clock.now()),
+          };
+        await this.deps.store.auditWriter.write({
+          kind: 'admin',
+          ts: toIso(this.deps.clock.now()),
+          user_id: user.id,
+          act: 'request-refused',
+          object: { type: 'request', id: requestId },
+          before: null,
+          after: { mission_id: owned.mission.id, risk_ids: owned.request.riskIds },
+          delegated_client_id: null,
+        });
+        return {
+          ok: true,
+          request: this.summaryOf(result.request, owned.mission, this.deps.clock.now()),
+        };
+      }
       case 'claim': {
         const parsed = parseClaimDecision(raw);
         if (!parsed.ok) return { ok: false, reason: 'invalid', problem: parsed.problem };
@@ -742,7 +828,7 @@ export class RequestService {
       missionId: mission.id,
       tool,
       argumentsHash: fingerprint,
-      refusalCode: 'approval-required',
+      refusalCode: request.kind === 'permission' ? 'risk-not-accepted' : 'approval-required',
     });
     const touched = new Set<RiskId>([...(audited?.risks_touched ?? []), ...request.riskIds]);
     const risks: TouchedRiskLine[] = budget.policy
@@ -823,6 +909,21 @@ export class RequestService {
    * (a replay is refused again and points to the same request).
    */
   private async askerOf(request: RequestRecord): Promise<RequestAsker | null> {
+    if (request.kind === 'permission') {
+      const details = await this.deps.store.requests.permissionDetails(request.id);
+      if (!details) return null;
+      const member = details.holder.startsWith('member:');
+      const id = details.holder.slice(member ? 7 : 6);
+      const user = member ? await this.deps.store.users.getById(id) : null;
+      return {
+        token_kind: member ? 'member' : 'named',
+        user_id: member ? id : null,
+        holder: user?.email ?? id,
+        agent_label: null,
+        tool: request.tool,
+        refused_calls: 1,
+      };
+    }
     if (!request.sessionId) return null;
     const events = await this.deps.store.sessions.listEvents(request.sessionId, {
       kinds: [REFUSED_CALL_KIND],
@@ -864,7 +965,7 @@ export class RequestService {
       missionId: request.missionId,
       tool: request.tool,
       argumentsHash: request.fingerprint,
-      refusalCode: 'approval-required',
+      refusalCode: request.kind === 'permission' ? 'risk-not-accepted' : 'approval-required',
     });
     return audited?.resource_ref ?? null;
   }

@@ -508,6 +508,11 @@ export function stageFailureReason(stage: DecisionStage, thrown: unknown): strin
 const HOST_BUILT = Symbol('host-built reason');
 
 export interface CallPipelineDeps {
+  readonly permissionRefusal?: (
+    ctx: MissionContext,
+    call: CallRequest,
+    missing: readonly RiskId[],
+  ) => Promise<string>;
   readonly resources: ResourceStage;
   readonly risks: RiskStage;
   readonly budget: BudgetStage;
@@ -571,6 +576,38 @@ function isOutcome(
     | { readonly targeted: TargetedCall; readonly classified: ClassifiedCall },
 ): x is CallOutcome {
   return 'audit' in x;
+}
+
+export function callAuditBase(ctx: MissionContext, call: CallRequest, now: Date): CallAuditEntry {
+  // Who called is the token's holder, read from the authenticated context:
+  // nothing the caller sends can change it (the agent label is the declared part).
+  const attribution = tokenAttributionOf(ctx.token);
+  return {
+    kind: 'call',
+    ts: now.toISOString(),
+    mission_id: ctx.mission.id,
+    token_id: attribution.token_id,
+    token_kind: attribution.token_kind,
+    token_holder: attribution.holder,
+    session_id: ctx.session?.id ?? null,
+    connection_id: null,
+    resource_ref: null,
+    tool: call.tool,
+    arguments_hash: fingerprintArguments(call.args),
+    slices_executed: [],
+    risks_touched: [],
+    accepted_risks_snapshot: acceptedRisksOf(ctx),
+    decision: 'refused',
+    refusal_code: null,
+    refusal_reason: null,
+    approval_id: null,
+    remaining_budget: null,
+    agent_label: call.agent_label,
+    upstream_latency_ms: null,
+    upstream_error: null,
+    client_ip: call.client.ip,
+    client_user_agent: call.client.user_agent,
+  };
 }
 
 export class CallPipeline {
@@ -646,14 +683,14 @@ export class CallPipeline {
         // Its hash is still the canonical one (the value reads `null` there), so the
         // entry joins the others of the same arguments. A BigInt has no canonical
         // form and cannot come from a JSON body: the entry then carries no arguments.
-        this.baseEntry(ctx, unfaithful.kind === 'bigint' ? { ...call, args: {} } : call, now),
+        callAuditBase(ctx, unfaithful.kind === 'bigint' ? { ...call, args: {} } : call, now),
         `argument '${unfaithful.path}' is ${unfaithful.value}: ${expected}`,
         // The path is made of names the caller chose: the caller reads it, the audit
         // keeps what was wrong.
         `an argument is ${unfaithful.value}: ${expected}`,
       );
     }
-    const base = this.baseEntry(ctx, call, now);
+    const base = callAuditBase(ctx, call, now);
 
     const inactive = checkMissionActive(ctx, now);
     if (inactive) return this.refused(base, inactive);
@@ -683,7 +720,7 @@ export class CallPipeline {
     audited: string = reason,
   ): Promise<CallOutcome> {
     return this.rejected(
-      this.baseEntry(ctx, call, this.now()),
+      callAuditBase(ctx, call, this.now()),
       reason,
       auditReason(audited, call.args),
     );
@@ -738,19 +775,35 @@ export class CallPipeline {
         );
       case 'classify-denied':
         return this.rejected(entry, verdict.reason, auditReason(verdict.reason, call.args));
-      case 'deny':
+      case 'deny': {
+        const refusal = refuse.riskNotAccepted({
+          missing_risks: verdict.missing_risks,
+          executed_slices: verdict.executed_slices,
+          hint: verdict.hint,
+        });
+        let reference: string | undefined;
+        if (this.deps.permissionRefusal && verdict.missing_risks.length > 0) {
+          const saved = await this.attempt('risk', call, entry, () =>
+            this.deps.permissionRefusal!(ctx, call, verdict.missing_risks),
+          );
+          if (!saved.ok) return saved.outcome;
+          reference = saved.value;
+        }
         return this.refused(
           {
             ...entry,
             slices_executed: verdict.executed_slices,
             risks_touched: verdict.risks_touched,
           },
-          refuse.riskNotAccepted({
-            missing_risks: verdict.missing_risks,
-            executed_slices: verdict.executed_slices,
-            hint: verdict.hint,
-          }),
+          reference
+            ? {
+                ...refusal,
+                refusal_id: reference,
+                hint: `${refusal.hint} Only if your assigned task requires these permissions, call vaubaan__request_permission with refusal_id=${reference} and a reason, then give its URL to the human. Do not retry without their answer.`,
+              }
+            : refusal,
         );
+      }
       case 'allow':
         return {
           risks_touched: verdict.risks_touched,
@@ -855,38 +908,6 @@ export class CallPipeline {
     };
     await this.deps.audit.write(entry);
     return { kind: 'failed', error: failure.detail, refusal: failure.refusal, audit: entry };
-  }
-
-  private baseEntry(ctx: MissionContext, call: CallRequest, now: Date): CallAuditEntry {
-    // Who called is the token's holder, read from the authenticated context:
-    // nothing the caller sends can change it (the agent label is the declared part).
-    const attribution = tokenAttributionOf(ctx.token);
-    return {
-      kind: 'call',
-      ts: now.toISOString(),
-      mission_id: ctx.mission.id,
-      token_id: attribution.token_id,
-      token_kind: attribution.token_kind,
-      token_holder: attribution.holder,
-      session_id: ctx.session?.id ?? null,
-      connection_id: null,
-      resource_ref: null,
-      tool: call.tool,
-      arguments_hash: fingerprintArguments(call.args),
-      slices_executed: [],
-      risks_touched: [],
-      accepted_risks_snapshot: acceptedRisksOf(ctx),
-      decision: 'refused',
-      refusal_code: null,
-      refusal_reason: null,
-      approval_id: null,
-      remaining_budget: null,
-      agent_label: call.agent_label,
-      upstream_latency_ms: null,
-      upstream_error: null,
-      client_ip: call.client.ip,
-      client_user_agent: call.client.user_agent,
-    };
   }
 
   private async refused(base: CallAuditEntry, refusal: Refusal): Promise<CallOutcome> {

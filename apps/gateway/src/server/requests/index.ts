@@ -1,3 +1,4 @@
+import type { MissionService } from '../missions/mission-service';
 /**
  * Requests to the creator: the inbox, the creator's
  * view of a claim or of an approval request, its decision and events, the
@@ -35,6 +36,7 @@ export interface RequestsModule {
 }
 
 export interface RequestsModuleDeps {
+  readonly missions?: Pick<MissionService, 'permissionOptions'>;
   readonly config: Pick<
     InstanceConfig,
     'publicUrl' | 'trustedProxies' | 'clientIpHeader' | 'approvals'
@@ -54,6 +56,7 @@ export interface RequestsModuleDeps {
 export function createRequestsModule(deps: RequestsModuleDeps): RequestsModule {
   const logger = deps.logger.child({ component: 'requests' });
   const service = new RequestService({
+    missions: deps.missions,
     store: deps.store,
     registry: deps.registry,
     grounds: deps.grounds,

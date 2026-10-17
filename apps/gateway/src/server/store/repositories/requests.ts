@@ -1,3 +1,4 @@
+import { createPermissionRequests, type PermissionRequestsRepo } from './permission-requests.ts';
 import { withImmediateTransaction } from '../db.ts';
 import { openSealedColumn, sealText, type Encryptor } from '../encryptor.ts';
 import { InvariantError, NotFoundError } from '../errors.ts';
@@ -140,7 +141,7 @@ export interface ApprovalDecisionContext {
   recordEvent(event: NewEvent): EventRecord | null;
 }
 
-export interface RequestsRepo {
+export interface RequestsRepo extends PermissionRequestsRepo {
   create(input: CreateRequestInput): Promise<RequestRecord>;
   /** Seals arguments for a request that a decision transaction will drop. */
   prepareArguments(args: unknown): Promise<PreparedArguments>;
@@ -173,6 +174,11 @@ export interface RequestsRepo {
    * request is an `InvariantError`.
    */
   decideApproval<R extends RequestDecisionOutcome>(
+    id: string,
+    decidedByUserId: string,
+    apply: (ctx: ApprovalDecisionContext) => R,
+  ): Promise<RequestDecisionResult<R>>;
+  decidePermission<R extends RequestDecisionOutcome>(
     id: string,
     decidedByUserId: string,
     apply: (ctx: ApprovalDecisionContext) => R,
@@ -309,14 +315,14 @@ export function insertRequestSync(
   input: InsertRequestInput,
   now: Iso,
 ): RequestRecord {
-  if (input.kind === 'approval' && (!input.tool || !input.fingerprint)) {
+  if (input.kind !== 'claim' && (!input.tool || !input.fingerprint)) {
     throw new InvariantError('an approval request carries a tool and a fingerprint');
   }
   if (input.kind === 'claim' && input.riskIds !== undefined) {
     throw new InvariantError('a claim is about one risk');
   }
   // An approval request lists its risks; a claim stores none (its risk is `risk_id`).
-  const risks = input.kind === 'approval' ? riskIdsColumn(input.riskIds ?? [input.riskId]) : null;
+  const risks = input.kind !== 'claim' ? riskIdsColumn(input.riskIds ?? [input.riskId]) : null;
   if (risks !== null && risks.riskId !== input.riskId) {
     throw new InvariantError('the risk of an approval request is the first of its risks');
   }
@@ -529,6 +535,7 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
   }
 
   return {
+    ...createPermissionRequests(ctx),
     prepareArguments,
     async create(input) {
       const { arguments: args, ...rest } = input;
@@ -574,7 +581,18 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
         ),
       );
     },
+    async decidePermission(id, decidedByUserId, apply) {
+      const now = nowIso(ctx);
+      return withImmediateTransaction(db, () =>
+        decideOpenSync(id, 'permission', decidedByUserId, now, (request, session) =>
+          apply(approvalContext(request, session, now)),
+        ),
+      );
+    },
     async sweepExpired() {
+      db.prepare(
+        'DELETE FROM permission_refusals WHERE expires_at <= ? AND request_id IS NULL',
+      ).run(nowIso(ctx));
       const now = nowIso(ctx);
       return withImmediateTransaction(db, () =>
         overdue

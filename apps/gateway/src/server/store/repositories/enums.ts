@@ -50,7 +50,11 @@ export const STORED_MISSION_STATUSES = membersOf<Exclude<MissionStatus, 'orphane
   revoked: true,
 });
 
-export const REQUEST_KINDS = membersOf<RequestKind>({ claim: true, approval: true });
+export const REQUEST_KINDS = membersOf<RequestKind>({
+  claim: true,
+  approval: true,
+  permission: true,
+});
 
 export const REQUEST_STATES = membersOf<RequestState>({
   open: true,
@@ -91,6 +95,8 @@ export const ADMIN_ACTS = membersOf<AdminAct>({
   'gate-opened': true,
   'gate-changed': true,
   'limits-changed': true,
+  'permissions-changed': true,
+  'permission-requested': true,
   'approval-granted': true,
   'request-refused': true,
   'delegation-granted': true,

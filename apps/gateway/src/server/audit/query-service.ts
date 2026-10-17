@@ -468,7 +468,12 @@ class NameCache {
     return memo(this.labels, `request:${id}`, async () => {
       const request = await this.store.requests.getById(id);
       if (!request) return null;
-      const what = request.kind === 'approval' ? 'a call of' : 'the limit of';
+      const what =
+        request.kind === 'permission'
+          ? 'permissions for'
+          : request.kind === 'approval'
+            ? 'a call of'
+            : 'the limit of';
       const mission = (await this.mission(request.missionId)).name;
       return `${what} ${mission ?? request.missionId}`;
     });

@@ -4785,3 +4785,19 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
   — `npm run ci` runs type-check + lint + format:check + build + test (this
   suite).
 - E2E (Playwright, container smoke): [`./e2e-tests.md`](./e2e-tests.md).
+
+## Creator permission edits and explicit requests
+
+Covers [specification §3.3 bis](../spec/vaubaan-gateway.md#33-bis-editing-permissions-and-asking-for-a-missing-permission).
+`apps/gateway/tests/integration/missions/permissions.test.ts` covers no automatic
+request, deliberate asking, deduplication, reference ownership/expiry, quota
+preservation, stale snapshots, creator-only decisions, same-origin edits,
+concurrent decisions, request expiry, request ceilings, stale admitted calls,
+stricter gates and retired approvals after removal/re-addition, current-share
+validation, and auditing successful, duplicate and invalid request-tool calls.
+Existing limit, gate, authority
+and approval suites remain required.
+
+`apps/gateway/tests/integration/store/permission-migration.test.ts` verifies a
+schema-15 upgrade preserves encrypted open arguments and existing approvals,
+with no foreign-key violation.

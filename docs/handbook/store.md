@@ -213,9 +213,9 @@ five-id catalog).
   with no resource…), driver errors (`SqliteError` with `code`) for constraint
   violations the schema catches (`UNIQUE`, `FOREIGN KEY`, `CHECK`).
 
-## Schema (`0001_schema.sql` … `0015_git_pending_refs.sql`)
+## Schema (`0001_schema.sql` … `0016_permission_requests.sql`)
 
-Schema version 15. `0001` creates every table and trigger; `0002` only replaces the
+Schema version 16. `0001` creates every table and trigger; `0002` only replaces the
 `audit_risks` delete trigger (see Audit); `0003` adds `web_sessions`; `0004` adds the
 owner-curation columns of `connection_resources` (plain `ADD COLUMN`s); `0005` adds
 `approvals.tool` (`NOT NULL DEFAULT ''`: a row written before it matches no call) and
@@ -948,3 +948,14 @@ The Docker smoke test runs the command and the first-boot restore in the image
 - `tests/integration/compose/boot.test.ts` (handbook [configuration](configuration.md)) — the
   composition root opening this store on a temporary file with the real encryptor
   and the registry-backed catalog index.
+
+## Permission requests (migration 0016)
+
+`0016_permission_requests.sql` rebuilds `requests` with the third kind
+`permission` and preserves all rows, argument blobs and approvals. Approvals
+are copied and recreated as children; foreign-key enforcement remains on.
+`permission_refusals` holds short-lived, token-bound refusal references and
+the request they produced. `permission_requests` holds the holder, token,
+justification and sorted risk set used for deduplication. Request expiry and
+decision state remain in `requests`. The migration test verifies an upgrade
+from schema 15 with both an encrypted open request and an existing grant.

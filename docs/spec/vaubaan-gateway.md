@@ -226,12 +226,14 @@ company registered at a provider).
   approval, revocation). Call events are also audit entries.
 - **Request** — a message from the executor to the mission creator,
   dropped by the gateway into the **creator's inbox** and referenced by
-  a URL carried in the refusal. Only the creator, authenticated by the
-  IdP, can answer it. Two kinds:
+  a URL carried in the refusal or returned by a deliberate permission request. Only the creator, authenticated by the
+  IdP, can answer it. Three kinds:
   - **Claim** — when the budget is exhausted: reset or extension.
   - **Approval request** — when the action touches a risk whose gate is
     `approval`: grant or refusal for that precise action. One request
     covers the call, however many gated risks it touches.
+  - **Permission request** — deliberately raised by an agent after a missing-permission
+    refusal; the creator adds the requested permissions with limits, or refuses (§3.3 bis).
 - **Approval** — the positive answer to an approval request. Bound to
   the mission, the tool, and the exact fingerprint of the call's
   arguments, and covering every gated risk that call touches. Single-use,
@@ -344,7 +346,7 @@ Instance                          (one company, one trust domain)
 │     ├── Mission tokens[]        (one per member who generated theirs, plus named tokens;
 │     │                            each rotated or revoked on its own)
 │     └── Session?                (created on first call; events[]; counters per RiskId)
-│           └── Requests[]        (claims and approval requests, dropped by the gateway,
+│           └── Requests[]        (claims, approval and permission requests,
 │                                  decided by the creator)
 └── Audit                         (cross-cutting, append-only)
 ```
@@ -367,7 +369,7 @@ Instance                          (one company, one trust domain)
 | **Budget**         | Per accepted `RiskId`: quota per period, rate limit per sliding window. Mandatory for every accepted risk.                                                                                               |
 | **Session**        | History of the mission. Counters per `RiskId` and per period. Created on the first call, never recreated.                                                                                                |
 | **Event**          | Session entry: allowed call, refused call, request, extension, reset, approval, rotation, revocation.                                                                                                    |
-| **Request**        | Claim (reset or extension) or approval request (one precise action), addressed to the creator. States: open, granted, refused, expired.                                                                  |
+| **Request**        | Claim, approval for one precise action, or explicit request for missing permissions, addressed to the creator. States: open, granted, refused, expired.                                                  |
 | **Approval**       | Creator's grant for one action: `(mission, tool, argument fingerprint)`, covering the gated risks of that call. Single-use, short-lived.                                                                 |
 | **Audit**          | One entry per call and per administrative act. Append-only.                                                                                                                                              |
 
@@ -425,7 +427,8 @@ revoke the missions the target already issued; it turns them `orphaned`
 **Request**: `open` → `granted` | `refused` | `expired` (unanswered
 after a configured delay). A `granted` claim produces an extension or
 reset event on the session. A `granted` approval request produces an
-approval, consumed by the first identical call, or expired.
+approval, consumed by the first identical call, or expired. A granted permission
+request changes the mission's permissions; it does not execute the refused call.
 
 ### 2.4 The cross-cutting invariant — "the executor never sees a provider credential"
 
@@ -558,8 +561,8 @@ The gate has a default value, `auto`.
   expiry is allowed; the absence of a quota is not.
 - **Changing the limits.** The creator may change, per risk already in
   the mission, its quota per period and its rate limit, up or down, at any
-  time while the mission is not revoked or orphaned. Never a risk added or
-  removed (that is a new mission), never the period nor the rate window,
+  time while the mission is not revoked or orphaned. Adding or removing risks
+  follows the permission-edit rule below; never the period nor the rate window,
   never on behalf of the creator by a delegation. A change is bounded
   exactly as an issuance is — the creator's authority on the connection at
   that instant, the catalog's ceilings, a quota that is a number — and is
@@ -589,11 +592,40 @@ The gate has a default value, `auto`.
   source of truth for what happened. The two must agree; a structural
   test checks it (§10).
 
+### 3.3 bis Editing permissions and asking for a missing permission
+
+The creator, signed in through the human interface, may add and remove
+permissions on the mission's existing accounts and resources. Additions require
+explicit limits and a gate, validated as at issuance against the creator's
+current authority. The change applies to every holder with the same keys,
+session and history. Consumed budget is never reset, including when a removed
+permission is added again. Revoked and orphaned missions cannot be edited.
+The creator reviews the additions and removals before saving; concurrent edits
+cannot silently overwrite each other. Changes and decisions are audited.
+
+A missing-permission refusal opens no request automatically. The agent may
+explicitly request its missing permissions, using a reference to that refusal
+and explaining why the assigned task needs them. The reference is valid for
+15 minutes and belongs to the authenticated mission and token. A request
+contains the observed tool and missing permissions; its justification is
+identified as the agent's text. Only the creator may answer: add permissions
+with explicit budgets and gates, using the same validation as a direct edit,
+or refuse. An answer never executes the call; the agent must retry.
+
+Open requests with the same mission, holder and missing permissions are reused.
+At most ten new permission requests per mission may be created in a rolling
+24 hours. A reference already used returns its existing request, even after a
+decision. Requests share the inbox, creator-only access and configured expiry
+of the other requests. Neither execution nor delegated credentials may grant
+them or change a live mission's permissions.
+
 ### 3.4 Requests to the creator — the claim
 
-Every escalation to a human goes through a single mechanism: the gateway
-refuses the call, drops a **request** into the creator's inbox, and puts
-the request's URL into the refusal. The executor, or the human steering
+Claims and approval requests are automatic: the gateway refuses the call,
+drops a **request** into the creator's inbox, and puts
+the request's URL into the refusal. Permission requests (§3.3 bis) use the same
+inbox but require the executor to ask explicitly after the refusal.
+The executor, or the human steering
 it, opens or forwards it. The creator also finds it in their inbox
 without anyone forwarding anything.
 
@@ -652,7 +684,7 @@ the risk's gate to `approval` at issuance, or later.
 - The gate does not replace the budget: an approved action counts
   against the risk's quota and rate limit.
 
-Both kinds of request share the inbox, the page, the IdP
+All kinds of request share the inbox, the page, the IdP
 authentication, the states and the expiry delay. That delay is the
 request's: an unanswered approval request expires like a claim, and its
 sealed arguments are erased then; the short validity configured for
@@ -667,7 +699,7 @@ The v4 machine-to-machine escalation channel (`escalation_channel` set
 on a child token by its parent) disappears along with machine-to-machine
 delegation. In v5, every refusal that calls for more authority goes up to
 a human: `budget-exhausted` through a claim, `approval-required` through
-an approval request, `risk-not-accepted` through re-issuance of the
+an approval request, `risk-not-accepted` through a permission edit of the
 mission by its creator.
 
 ## 4. Format / Layout
@@ -690,7 +722,8 @@ decision and the same audit.
   with the catalog, check `risks_touched ⊆ accepted_risks`, budget check,
   upstream credential mint, forward, audit.
 - **Structured refusals**, each with an agent-readable `hint`:
-  - `risk-not-accepted`: list of missing risks, slices executed.
+  - `risk-not-accepted`: list of missing risks, slices executed, and a short-lived
+    refusal reference for an explicit permission request (§3.3 bis).
     Unchanged since v4.
   - `budget-exhausted`: `RiskId`, quota for the period, consumed, end of
     period, **claim URL**.

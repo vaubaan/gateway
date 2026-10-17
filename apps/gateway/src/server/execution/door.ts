@@ -66,6 +66,8 @@ import {
 } from '@modelcontextprotocol/server';
 import {
   AUTH_REQUIRED_HTTP_STATUS,
+  callAuditBase,
+  type AuditWriter,
   checkMissionActive,
   refusalToRpcError,
   rpcError,
@@ -105,6 +107,9 @@ const TOOLS_CALL_METHOD = 'tools/call';
 const PROGRESS_NOTIFICATION = 'notifications/progress';
 
 export interface ExecutionDoorDeps extends MissionAdmissionDeps {
+  readonly permissionAudit?: AuditWriter;
+  readonly permissionTool?: ListToolsResult['tools'][number];
+  readonly requestPermission?: (ctx: MissionContext, args: unknown) => Promise<CallToolResult>;
   readonly registry: PluginRegistry;
   readonly budget: Pick<SessionService, 'stateOf'>;
   readonly pipeline: CallPipeline;
@@ -184,15 +189,31 @@ export class ExecutionDoor {
     if (inactive) return json(HTTP_FORBIDDEN, refusalToRpcError(null, inactive));
     const state = await this.deps.budget.stateOf(budgetMissionOf(gate.mission), now);
     const creator = await this.deps.store.users.getById(gate.mission.creatorUserId);
+    const catalog = buildCatalog(
+      gate.ctx,
+      this.deps.registry,
+      state,
+      { creator: creator?.email ?? null },
+      this.deps.gitRemote ?? null,
+    );
+    const tool = this.deps.permissionTool;
     return json(
       200,
-      buildCatalog(
-        gate.ctx,
-        this.deps.registry,
-        state,
-        { creator: creator?.email ?? null },
-        this.deps.gitRemote ?? null,
-      ),
+      tool
+        ? {
+            ...catalog,
+            tools: [
+              ...catalog.tools,
+              {
+                name: tool.name,
+                provider: 'vaubaan',
+                description: tool.description ?? '',
+                callable: true,
+              },
+            ],
+            callable_tools: [...catalog.callable_tools, tool.name],
+          }
+        : catalog,
     );
   }
 
@@ -273,11 +294,46 @@ export class ExecutionDoor {
       if (inactive) throw refusalError(inactive);
       // Plugin tool declarations are JSON Schema documents (`McpToolDeclaration`);
       // the SDK types the same documents as JSON values.
-      return { tools: callableTools(ctx, this.deps.registry) as ListToolsResult['tools'] };
+      return {
+        tools: [
+          ...callableTools(ctx, this.deps.registry),
+          ...(this.deps.permissionTool ? [this.deps.permissionTool] : []),
+        ] as ListToolsResult['tools'],
+      };
     });
 
     server.setRequestHandler(TOOLS_CALL_METHOD, async (request, { mcpReq }) => {
       const { name, arguments: args, _meta: meta } = request.params;
+      if (name === this.deps.permissionTool?.name && this.deps.requestPermission) {
+        const inactive = checkMissionActive(ctx, this.clock.now());
+        if (inactive) throw refusalError(inactive);
+        const entry = callAuditBase(
+          ctx,
+          {
+            tool: name,
+            args: args ?? {},
+            agent_label: this.agentLabel(scope, meta),
+            client: scope.client,
+          },
+          this.clock.now(),
+        );
+        let response: CallToolResult;
+        try {
+          response = await this.deps.requestPermission(ctx, args ?? {});
+        } catch (error) {
+          await this.deps.permissionAudit?.write({
+            ...entry,
+            refusal_reason: 'permission request failed',
+          });
+          throw error;
+        }
+        await this.deps.permissionAudit?.write({
+          ...entry,
+          decision: response.isError ? 'refused' : 'allowed',
+          refusal_reason: response.isError ? 'permission request refused' : null,
+        });
+        return response;
+      }
       const onPart = this.progressForwarder(mcpReq, ctx);
       const outcome = await this.deps.pipeline.execute(ctx, {
         tool: name,

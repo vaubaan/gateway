@@ -110,7 +110,7 @@ const EDIT_LIMITS = 'limits';
 /** What waits on this mission, as the banner shows it. */
 interface Waiting {
   readonly id: string;
-  readonly kind: 'claim' | 'approval';
+  readonly kind: 'claim' | 'approval' | 'permission';
   readonly labels: readonly string[];
   /** An approval: what the agent wants to do, as the banner heads it. */
   readonly call: RequestCall | null;
@@ -525,13 +525,18 @@ export default async function MissionPage({ params, searchParams }: Props) {
           editingLimits ? (
             'Change a limit up or down. What was used stays used.'
           ) : isCreator && detail.limits_editable ? (
-            <ButtonLink
-              href={`${missionPath}?edit=${EDIT_LIMITS}#permissions`}
-              size="sm"
-              data-testid="change-limits"
-            >
-              {MISSION_ACTIONS.changeLimits}
-            </ButtonLink>
+            <>
+              <ButtonLink href={`${missionPath}/permissions`} size="sm">
+                Modify permissions
+              </ButtonLink>
+              <ButtonLink
+                href={`${missionPath}?edit=${EDIT_LIMITS}#permissions`}
+                size="sm"
+                data-testid="change-limits"
+              >
+                {MISSION_ACTIONS.changeLimits}
+              </ButtonLink>
+            </>
           ) : (
             'The explicit list this mission carries.'
           )

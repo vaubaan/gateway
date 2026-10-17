@@ -407,6 +407,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
   });
   // Starts the expiry sweeper of the inbox.
   const requests = createRequestsModule({
+    missions: missions.service,
     config,
     store,
     registry,

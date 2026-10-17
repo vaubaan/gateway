@@ -207,6 +207,11 @@ names, and the notes about them do too.
 
 ### Added
 
+- Creators can add or remove mission permissions without replacing keys or
+  resetting usage. Agents can explicitly request missing permissions after a
+  refusal; the creator reviews and grants the edit or refuses it in Waiting for
+  you. Requests are bound to the refusing key, deduplicated and rate limited.
+
 - **Restore, and moving an instance to another host.** `node apps/gateway/restore.mjs
 <file or https URL> --sha256 <hex>` puts a copy made by `backup.mjs` back after
   checking its SHA-256, SQLite's integrity check, a schema this image can migrate (an

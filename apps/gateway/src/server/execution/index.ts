@@ -1,3 +1,5 @@
+import { fingerprintArguments } from '@vaubaan/gateway-core';
+import { permissionRequestTool, requestPermission } from './permission-request';
 /**
  * Execution MCP door (spec §4.1, §2.4, §6, §7.5): the pipeline
  * of `@vaubaan/gateway-core` with its real stages, the bearer dispatch, the
@@ -37,7 +39,7 @@ import { createUpstreamStage } from './upstream-stage';
 export interface ExecutionModuleDeps {
   readonly config: Pick<
     InstanceConfig,
-    'publicUrl' | 'trustedProxies' | 'clientIpHeader' | 'mcp' | 'selfResources'
+    'publicUrl' | 'trustedProxies' | 'clientIpHeader' | 'mcp' | 'selfResources' | 'requests'
   >;
   readonly store: Store;
   readonly registry: PluginRegistry;
@@ -85,6 +87,18 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
   const credentialCache = new ConnectionCredentialCache(deps.cache);
 
   const stages: ExecutionStages = {
+    permissionRefusal: (ctx, call, missing) =>
+      deps.store.requests.recordPermissionRefusal({
+        missionId: ctx.mission.id,
+        tokenId: ctx.token.id,
+        holder:
+          ctx.token.holder.kind === 'member'
+            ? `member:${ctx.token.holder.user_id}`
+            : `named:${ctx.token.holder.name}`,
+        tool: call.tool,
+        fingerprint: fingerprintArguments(call.args),
+        riskIds: missing,
+      }),
     resources: createResourceStage({
       registry: deps.registry,
       connections: deps.store.connections,
@@ -122,6 +136,9 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
     rateLimiter: deps.rateLimiter,
   });
   const door = new ExecutionDoor({
+    permissionTool: permissionRequestTool,
+    permissionAudit: deps.store.auditWriter,
+    requestPermission: (ctx, args) => requestPermission(deps.store, deps.config, ctx, args, clock),
     config: deps.config,
     store: deps.store,
     registry: deps.registry,

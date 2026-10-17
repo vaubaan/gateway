@@ -1,9 +1,13 @@
 ---
-title: Requests — claims and approval requests, the request URL, the creator's decision, the inbox
+title: Requests — claims, approvals and permission requests, the creator's decision, the inbox
 status: current
 date: 2026-10-13
-last_synced: 2026-10-14
+last_synced: 2026-10-17
 tracks:
+  - apps/gateway/src/server/store/repositories/permission-requests.ts
+  - apps/gateway/src/server/execution/permission-request.ts
+  - apps/gateway/src/server/missions/permission-edit.ts
+  - apps/gateway/migrations/0016_permission_requests.sql
   - apps/gateway/src/server/requests/
   - apps/gateway/src/app/r/
   - apps/gateway/src/app/api/requests/
@@ -31,12 +35,11 @@ tracks:
   - apps/gateway/src/server/compose/root.ts
 ---
 
-# Requests — claims and approval requests, the request URL, the creator's decision, the inbox
+# Requests — claims, approvals and permission requests, the creator's decision, the inbox
 
 What happens to a request once a refusal dropped it into the creator's inbox:
 the URL the refusal carries, who may open it, what the creator sees and
-decides, the events, the expiry. Two kinds share everything but their
-decision: a **claim** (a quota at zero, §3.4) and an **approval request** (a
+decides, the events, the expiry. The two automatic kinds are a **claim** (a quota at zero, §3.4) and an **approval request** (a
 risk gated `approval`, §3.5; section [Approvals](#approvals)). Spec:
 [vaubaan-gateway](../spec/vaubaan-gateway.md) §0 (Request, Claim, Approval
 request, Approval), §2.3 (Request states), §3.4, §3.5, §4.2 "Request inbox",
@@ -46,11 +49,48 @@ the request page per IP"), §7.6, §7.7. Decisions:
 [atomic-budget-accounting](../decisions/atomic-budget-accounting.md) (amendment
 "The approval gate").
 
-The request row itself is **not** created here: the budget's
+For claims and approvals, the request row itself is **not** created here: the budget's
 `SessionService.recordCall` inserts it inside the refusal transaction — an
 approval request with the call's arguments sealed — and reuses the open one
 on a replay ([budget-and-sessions](budget-and-sessions.md)). This module
 starts from that row.
+
+## Permission requests
+
+A third kind, `permission`, is created only by an explicit call to
+`vaubaan__request_permission` (`execution/permission-request.ts`). A
+`risk-not-accepted` refusal carries `refusal_id`, stored by the pipeline's
+`permissionRefusal` hook. The git pipeline shares the hook; its textual hint also
+prints the reference. A reference lasts 15 minutes and binds the missing risks,
+observed tool and argument fingerprint to the mission, token and holder. It
+contains no raw arguments and creates no inbox item.
+
+`store/repositories/permission-requests.ts` resolves the reference and creates
+or reuses a request in one immediate transaction. A reference belonging to
+another token is refused. Reusing a previously asked reference returns its
+request even after closure. Fresh references for the same mission, holder and
+sorted missing-risk set reuse an open request. Ten new requests per mission
+per rolling day is the ceiling; duplicate lookups consume no slot. The reason
+is trimmed and limited to 1–1000 characters. The normal configured request
+expiry applies. The sweeper also removes expired unused references.
+
+`RequestService` includes these requests in `inbox`, `openCount`, `waiting` and
+`answered`. `view` checks creator ownership before loading the justification,
+labelled **The agent says**, or the permission editor. The asker comes from
+`permission_requests`, including when no budget session existed at refusal.
+A creator grants through the shared mission editor; the policy replacement and
+request closure are atomic. A refusal goes through `decidePermission`, leaves
+the policy unchanged and is audited. Neither answer runs the call. Existing
+keys keep working; the executor retries after the creator answers.
+
+Every call to the request tool is audited, including duplicate lookups and invalid
+input; the call audit contains the argument fingerprint, never the reason.
+`permission-requested` records creation with the authenticated token and actor
+(member user, or creator for a machine key, explicitly marked as an agent
+request). `permissions-changed` records a grant and its request id;
+`request-refused` records a refusal. Request events are added when a session
+exists. The request's reason is not an instruction to the gateway and is never
+used for authorization. Single-use permission exceptions are not offered.
 
 ## Layout
 

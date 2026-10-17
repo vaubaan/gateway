@@ -377,7 +377,11 @@ describe('management door — tools of a delegated agent', () => {
       const executor = await connectWithToken(rig, EXECUTION_URL, issued.token.secret);
       const callable = (await executor.listTools()).tools.map((tool) => tool.name);
       expect(callable.length).toBeGreaterThan(0);
-      expect(callable.every((name) => name.startsWith('github__'))).toBe(true);
+      expect(
+        callable.every(
+          (name) => name.startsWith('github__') || name === 'vaubaan__request_permission',
+        ),
+      ).toBe(true);
       await executor.close();
       const wrongDoor = await toolsList(rig, MANAGEMENT_URL, bearer(issued.token.secret));
       expect(wrongDoor.status).toBe(403);

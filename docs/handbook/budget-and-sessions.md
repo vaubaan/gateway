@@ -232,7 +232,7 @@ const result = await service.recordCall({
 2. runs `sessions.decideAndDecrement({ missionId, riskIds, periodStart })`; inside the
    transaction: replaces the quota and the rate of each touched risk of the caller's
    `mission.policy` by the values the store holds now (`ctx.limits` → `livePolicy`; the
-   accepted risks and the gates stay the caller's), so a limit the creator changed after
+   gates are read live too, and a touched risk no longer stored is removed), so a limit the creator changed after
    the mission was loaded is the one that decides — no call decided after the change
    commits passes above it (ADR
    [mission-limits-editable-after-issuance](../decisions/mission-limits-editable-after-issuance.md));
@@ -501,3 +501,13 @@ COUNT(audit allowed)` per risk after a mixed run**, a credit event with malforme
 - Spec [vaubaan-gateway](../spec/vaubaan-gateway.md) §2.3, §3.2–3.5, §6, §7.5–7.9, §10.
 - Neighbouring handbooks: [store](store.md), [gateway-core](gateway-core.md),
   [configuration](configuration.md) (the `RateLimiter` port and the root's wiring).
+
+## Live permission edits
+
+`livePolicy(policy, limits, touched)` preserves untouched lines and rereads the
+limits and gate of each touched line inside the decision transaction. A removed
+touched line fails closed; it cannot execute using the admission snapshot.
+`prepareApprovalArguments` prepares a sealed blob before the transaction for
+any nonempty risk set because a human can set a gate while encryption awaits.
+The blob is retained only when an approval request is actually created. Policy
+edits never reset counters or rate windows.

@@ -625,3 +625,11 @@ pivot D1; the Upstash ADR is superseded).
   `AuditWriter` implementation), [execution-door](./execution-door.md)
   (the door and the stages), [mcp-gateway](./legacy/mcp-gateway.md) (legacy v4
   orchestration, historical).
+
+## Missing-permission references
+
+`CallPipelineDeps.permissionRefusal` optionally stores evidence of a denied
+risk check and returns a reference. `RiskNotAcceptedRefusal.refusal_id` and its
+hint carry that reference to the executor. The hook does not open a request or
+change the refusal decision. The application's implementation and the explicit
+request tool are described in [requests](requests.md#permission-requests).

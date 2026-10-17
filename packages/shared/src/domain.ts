@@ -287,6 +287,7 @@ export type SessionEventKind =
   | 'approval'
   | 'gate-opened'
   | 'gate-changed'
+  | 'permissions-changed'
   | 'limits-changed'
   | 'rotation'
   | 'revocation';
@@ -314,7 +315,7 @@ export interface SessionCounter {
   readonly consumed: number;
 }
 
-export type RequestKind = 'claim' | 'approval';
+export type RequestKind = 'claim' | 'approval' | 'permission';
 export type RequestStatus = 'open' | 'granted' | 'refused' | 'expired';
 
 /** A message from the executor to the creator, dropped by the gateway. */

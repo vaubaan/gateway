@@ -23,7 +23,7 @@
  * each other; each only calls the other's functions once the store is being built.
  */
 
-import { isMissionTokenKind, type MissionTokenKind } from '@vaubaan/shared';
+import { isMissionTokenKind, GATES, type Gate, type MissionTokenKind } from '@vaubaan/shared';
 
 import { withImmediateTransaction } from '../db.ts';
 import { NotFoundError } from '../errors.ts';
@@ -42,6 +42,7 @@ import {
   DEFAULT_LIST_LIMIT,
   nowIso,
   parseJsonObject,
+  parseEnum,
   placeholders,
   requireRow,
   toJson,
@@ -103,6 +104,7 @@ export interface DecideContext {
 
 /** The limits of one accepted risk as `mission_policy` holds them. */
 export interface StoredLimits {
+  readonly gate?: Gate;
   readonly quota: number;
   readonly rateLimit: number;
   readonly rateWindowSeconds: number;
@@ -248,6 +250,7 @@ interface CounterRow {
 }
 
 interface LimitsRow {
+  gate: string;
   risk_id: string;
   quota: number;
   rate_limit: number;
@@ -482,12 +485,13 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
     // the decision (or the decision for the update) instead of interleaving.
     const rows = db
       .prepare<string[], LimitsRow>(
-        `SELECT risk_id, quota, rate_limit, rate_window_seconds FROM mission_policy
+        `SELECT risk_id, quota, rate_limit, rate_window_seconds, gate FROM mission_policy
          WHERE mission_id = ? AND risk_id IN (${placeholders(riskIds.length)})`,
       )
       .all(missionId, ...riskIds);
     for (const row of rows) {
       result.set(row.risk_id, {
+        gate: parseEnum(GATES, row.gate, 'mission_policy.gate'),
         quota: row.quota,
         rateLimit: row.rate_limit,
         rateWindowSeconds: row.rate_window_seconds,

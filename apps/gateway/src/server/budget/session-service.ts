@@ -24,8 +24,8 @@
  * The limits that decide are the ones stored when the transaction runs, not the ones of
  * the mission the caller loaded: `DecideContext.limits` reads the policy rows of the
  * touched risks inside the transaction, so a limit the creator lowers is in force for
- * the very next decision, whatever was loaded before it (`livePolicy`). The accepted
- * risks and the gates are the caller's: a limits edit changes neither.
+ * the very next decision, whatever was loaded before it (`livePolicy`). The same
+ * read refreshes gates and rejects permissions removed since admission.
  *
  * The credit an allowed call consumes is never refunded: if the upstream call then
  * fails, the audit keeps `decision: allowed` with `upstream_error` and the counter keeps
@@ -156,7 +156,10 @@ export class SessionService {
     const result = await this.deps.sessions.decideAndDecrement(
       { missionId: mission.id, riskIds: risks, periodStart: period.start },
       (ctx): TransactionOutcome => {
-        const live: BudgetMission = { ...mission, policy: livePolicy(mission.policy, ctx.limits) };
+        const live: BudgetMission = {
+          ...mission,
+          policy: livePolicy(mission.policy, ctx.limits, risks),
+        };
         const gated = gatedRisks(live, risks);
         const openedGates = this.openedGates(ctx, gated, period);
         const decision = decide({
@@ -226,7 +229,10 @@ export class SessionService {
     const result = await this.deps.sessions.decideAndDecrement(
       { missionId: mission.id, riskIds: risks, periodStart: period.start },
       (ctx): TransactionOutcome | PreflightPass => {
-        const live: BudgetMission = { ...mission, policy: livePolicy(mission.policy, ctx.limits) };
+        const live: BudgetMission = {
+          ...mission,
+          policy: livePolicy(mission.policy, ctx.limits, risks),
+        };
         const decision = decide({
           policy: live.policy,
           risks_touched: risks,
@@ -279,8 +285,8 @@ export class SessionService {
     input: RecordCallInput,
     risks: readonly RiskId[],
   ): Promise<PreparedArguments | null> {
-    const gated = gatedRisks(input.mission, risks).length > 0;
-    return gated ? this.deps.requests.prepareArguments(input.args ?? {}) : null;
+    // A gate can change while encryption awaits; prepare for the policy read in the transaction.
+    return risks.length > 0 ? this.deps.requests.prepareArguments(input.args ?? {}) : null;
   }
 
   /** The gates the creator opened for this period, among the gated risks of the call. */
@@ -500,23 +506,27 @@ export class SessionService {
 }
 
 /**
- * The caller's policy with the quota and the rate of each risk as stored now
- * (`DecideContext.limits`). Only the limits move: which risks are accepted and how
- * each is gated stay what the caller loaded.
+ * Reread the quota, rate and gate of touched risks inside the decision transaction.
+ * A touched risk that was removed is dropped, so the decision fails closed instead
+ * of executing with stale authority. Untouched lines stay available to the caller.
  */
 export function livePolicy(
   policy: MissionPolicy,
   limits: ReadonlyMap<RiskId, StoredLimits>,
+  touched: readonly RiskId[] = [],
 ): MissionPolicy {
-  return policy.map((entry) => {
-    const stored = limits.get(entry.risk_id);
-    if (!stored) return entry;
-    return {
-      ...entry,
-      quota: stored.quota,
-      rate_limit: { max: stored.rateLimit, window_seconds: stored.rateWindowSeconds },
-    };
-  });
+  return policy
+    .filter((entry) => !touched.includes(entry.risk_id) || limits.has(entry.risk_id))
+    .map((entry) => {
+      const stored = limits.get(entry.risk_id);
+      if (!stored) return entry;
+      return {
+        ...entry,
+        gate: stored.gate ?? entry.gate,
+        quota: stored.quota,
+        rate_limit: { max: stored.rateLimit, window_seconds: stored.rateWindowSeconds },
+      };
+    });
 }
 
 /** The touched risks the mission gates `approval`, in policy order. */

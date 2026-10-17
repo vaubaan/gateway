@@ -94,6 +94,7 @@ export function titleOf(item: WaitingItem): React.ReactNode {
 /** The shorter statement of an inbox item. */
 export function shortTitleOf(item: WaitingItem): React.ReactNode {
   const { request } = item;
+  if (request.kind === 'permission') return `Permission requested: ${permissionsOf(request)}`;
   if (request.kind !== 'approval') return limitReachedOn(request.risk_label, item.period_seconds);
   return request.call ? <CallHeadline call={request.call} /> : permissionsOf(request);
 }
@@ -111,6 +112,12 @@ export function resetWords(periodEnd: string | null, now: Date): string | null {
 export function WaitingDescription({ item, who, now }: { item: WaitingItem; who: Who; now: Date }) {
   const { request, budget, period, period_seconds: periodSeconds } = item;
   const [line] = budget;
+  if (request.kind === 'permission')
+    return (
+      <>
+        {who.words}, on {request.mission.name} · asks to add {permissionsOf(request)}
+      </>
+    );
   if (request.kind === 'approval') {
     return (
       <>
@@ -159,14 +166,14 @@ export function WaitingList({
             context={
               <>
                 {/* The head says what the agent wants to do; the permission it needs is the second line. */}
-                {request.kind === 'approval' && request.call && (
+                {request.kind !== 'claim' && request.call && (
                   <>needs “{permissionsOf(request)}” · </>
                 )}
                 {request.mission.name} · {who.words}
               </>
             }
             meta={
-              request.kind === 'approval'
+              request.kind !== 'claim'
                 ? `${agoSentence(request.created_at, now)} · expires ${until(request.expires_at, now)}`
                 : `${agoSentence(request.created_at, now)}${reset ? ` · ${reset} anyway` : ''}`
             }
