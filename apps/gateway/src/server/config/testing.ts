@@ -31,7 +31,11 @@ export function validEnv(
 export function fakeFiles(files: Record<string, string>): (path: string) => string {
   return (path) => {
     const content = files[path];
-    if (content === undefined) throw new Error(`ENOENT: no such file, open '${path}'`);
+    if (content === undefined) {
+      throw Object.assign(new Error(`ENOENT: no such file or directory, open '${path}'`), {
+        code: 'ENOENT',
+      });
+    }
     return content;
   };
 }

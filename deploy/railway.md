@@ -32,18 +32,18 @@ What Railway's documentation says, as read for this guide (through Context7,
 
 ## 2. Variables
 
-| Variable                                 | Value                                                                   |
-| ---------------------------------------- | ----------------------------------------------------------------------- |
-| `RAILWAY_DOCKERFILE_PATH`                | `deploy/docker/Dockerfile`                                              |
-| `RAILWAY_RUN_UID`                        | `0` — the entrypoint gives `/data` to the gateway's user and drops root |
-| `VAUBAAN_PUBLIC_URL`                     | `https://<your domain>`                                                 |
-| `VAUBAAN_STORE_PATH`                     | `/data/gateway.db`                                                      |
-| `VAUBAAN_MASTER_KEY`                     | `npm run gen-master-key`; keep a copy outside Railway (step 6)          |
-| `VAUBAAN_ADMIN_EMAILS`                   | your address, as GitHub has it as your primary verified email           |
-| `VAUBAAN_SIGN_IN_GITHUB_KIND`            | `github`                                                                |
-| `VAUBAAN_SIGN_IN_GITHUB_CLIENT_ID`       | from step 3                                                             |
-| `VAUBAAN_SIGN_IN_GITHUB_CLIENT_SECRET`   | from step 3                                                             |
-| `VAUBAAN_SIGN_IN_GITHUB_INVITATION_ONLY` | `true` (or `VAUBAAN_SIGN_IN_GITHUB_ALLOWED_EMAIL_DOMAINS`)              |
+| Variable                                 | Value                                                                                                                                                                                                                                                                                                          |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RAILWAY_DOCKERFILE_PATH`                | `deploy/docker/Dockerfile`                                                                                                                                                                                                                                                                                     |
+| `RAILWAY_RUN_UID`                        | `0` — the entrypoint gives `/data` to the gateway's user and drops root                                                                                                                                                                                                                                        |
+| `VAUBAAN_PUBLIC_URL`                     | `https://<your domain>`                                                                                                                                                                                                                                                                                        |
+| `VAUBAAN_STORE_PATH`                     | `/data/gateway.db`                                                                                                                                                                                                                                                                                             |
+| `VAUBAAN_MASTER_KEY`                     | `npm run gen-master-key`; keep a copy outside Railway (step 6). Or let the gateway generate it on the volume: `VAUBAAN_MASTER_KEY_FILE=/data/master.key` and `VAUBAAN_MASTER_KEY_GENERATE=1` instead, then download it from the setup page (handbook configuration, "Master key generated at the first start") |
+| `VAUBAAN_ADMIN_EMAILS`                   | your address, as GitHub has it as your primary verified email                                                                                                                                                                                                                                                  |
+| `VAUBAAN_SIGN_IN_GITHUB_KIND`            | `github`                                                                                                                                                                                                                                                                                                       |
+| `VAUBAAN_SIGN_IN_GITHUB_CLIENT_ID`       | from step 3                                                                                                                                                                                                                                                                                                    |
+| `VAUBAAN_SIGN_IN_GITHUB_CLIENT_SECRET`   | from step 3                                                                                                                                                                                                                                                                                                    |
+| `VAUBAAN_SIGN_IN_GITHUB_INVITATION_ONLY` | `true` (or `VAUBAAN_SIGN_IN_GITHUB_ALLOWED_EMAIL_DOMAINS`)                                                                                                                                                                                                                                                     |
 
 `PORT` is set by Railway and honoured by the server; do not set it. With a
 sign-in provider in the configuration no bootstrap token is needed; set

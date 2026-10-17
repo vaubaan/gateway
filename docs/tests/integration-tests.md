@@ -2,7 +2,7 @@
 title: Integration tests
 status: current
 date: 2026-10-13
-last_synced: 2026-10-16
+last_synced: 2026-10-17
 tracks:
   - vitest.config.ts
   - scripts/release-lib.test.mjs
@@ -1249,6 +1249,14 @@ enforced limits is pinned to what the code enforces today.
 > [[docker-image-and-config-format]]. Co-located under
 > `apps/gateway/src/server/**` unless a path says otherwise.
 
+- **`config/load.property.test.ts`** (7) — seeded properties of the loader:
+  any YAML file and any environment value end in a configuration or a
+  `ConfigError`, pollute nothing; **an absent master key file** with any mix of
+  `VAUBAAN_MASTER_KEY[_FILE]`, `VAUBAAN_MASTER_KEY_GENERATE`,
+  `VAUBAAN_RESTORE_FROM`/`SHA256` and `VAUBAAN_BOOTSTRAP_TOKEN_FILE` ends in a
+  configuration, a `setup` outcome (the master key's file only, only with the
+  opt-in or a restore source, no `encryption` block) or a `ConfigError`; the
+  counter-examples kept as cases; durations.
 - **`config/load.test.ts`** (62) — minimal env-only configuration with
   defaults; every missing required key named at once with its variable(s);
   `public_url` http refused, non-URL and query string refused, trailing
@@ -1302,6 +1310,53 @@ enforced limits is pinned to what the code enforces today.
   (403), no session (401) and a foreign origin (403) change nothing;
   `VAUBAAN_INSTANCE_NAME` wins over a stored name and the POST answers
   `locked`.
+- **`config/master-key-absent.test.ts`** (11) — **the one tolerated absence**
+  (ADR [[master-key-generated-and-handed-over-by-the-instance]]): an absent
+  master key file is the error it was without the opt-in; with
+  `generate_master_key` it is a `setup` outcome of `loadInstanceConfigOrSetup`
+  carrying the path, the reason and everything else (no `encryption` block),
+  while `loadInstanceConfig` still errors with the hint to start the gateway;
+  with `restore.from` a `setup` outcome with reason `restore`, and the hint
+  about the copy's key; another absent secret file is still named; any other
+  problem is reported with it, never a setup outcome; a `${file:…}` reference
+  in the YAML file counts; with the file present the flag is the steady state
+  and `masterKeyFile` names the file (null for a key by value); the flag on a
+  key by value, and with `restore.from`, are refused naming
+  `encryption.generate_master_key`.
+- **`compose/boot-config.test.ts`** (8) — `loadBootConfig` over fakes: the key
+  file written (43 base64 characters, `=`, newline) when absent and opted in,
+  and the configuration loaded with it (`masterKeyGenerated`); an existing file
+  read, nothing written; **refused when the store holds data**, naming the key
+  file, the store and `VAUBAAN_MASTER_KEY_FILE`, nothing written; without the
+  opt-in the error of old; with `restore.from` and no key, "a restore needs the
+  key the copy was sealed with"; a write failure named; the secret variables
+  deleted from the environment, the `_FILE` path included; the generator's
+  text is what the loader reads.
+- **`crypto/master-key-file.test.ts`** (3) — 32 random bytes in base64 on one
+  line, different every time; written with mode 0600 and never over an
+  existing file (`EEXIST`); a missing directory named (`ENOENT`).
+- **`tests/integration/compose/master-key-generation.test.ts`** (5) — the real
+  boot on a temporary directory: the file written (0600, the key the root
+  holds), one `info` line with the path and never the key,
+  `master_key.generated_at` in the store, the handover pending; the next
+  start reuses the file (a secret sealed before still opens) and logs no
+  generation; **a store with data and no key file → exit 78**, "already holds
+  data", no file written; without the opt-in → exit 78 naming the file, no
+  store written; an empty store file counts as no store.
+- **`tests/integration/instance/master-key-handover.test.ts`** (8) — the
+  download for an operator who just signed in: the attachment
+  `vaubaan-master-key.txt` holding the key as its file does, `no-store`, one
+  `master-key-downloaded` entry by name with the version and the page, never
+  the key; the bootstrap operator from the setup step, audited as `bootstrap`,
+  no box needed; from Settings the box must be ticked
+  (`?key-problem=not-confirmed`); **a sign-in older than ten minutes is refused
+  from either page** (`?key-problem=sign-in-again`), nothing written; no
+  session (401), a plain user (403), a foreign origin (403); **no audit entry,
+  no key** (a failing writer refuses the download); the handover: pending once
+  generated, an unticked box refused, the ticked one sets
+  `master_key.handed_over_at` and writes one `config-changed`, a second
+  confirmation keeps the timestamp and writes nothing; a plain user and a
+  foreign origin cannot confirm.
 - **`config/keys-doc.test.ts`** (43) — **structural: the key table of the
   configuration handbook is the loader's.** The table of
   `docs/handbook/configuration.md` has the six columns the test reads and

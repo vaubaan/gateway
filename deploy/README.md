@@ -47,12 +47,25 @@ ports 80 and 443 reachable (Caddy obtains the certificate).
 git clone <this repository> && cd vaubaan-gateway
 cp deploy/config/.env.example deploy/config/.env
 cp deploy/config/gateway.example.yaml deploy/config/gateway.yaml
-npm run gen-master-key                     # paste into VAUBAAN_MASTER_KEY (or a secret file)
 openssl rand -hex 24                       # paste into VAUBAAN_BOOTSTRAP_TOKEN
-$EDITOR deploy/config/.env                 # GATEWAY_DOMAIN, VAUBAAN_PUBLIC_URL, VAUBAAN_ADMIN_EMAILS, the two secrets
+$EDITOR deploy/config/.env                 # GATEWAY_DOMAIN, VAUBAAN_PUBLIC_URL, VAUBAAN_ADMIN_EMAILS, the token
 docker compose --env-file deploy/config/.env -f deploy/compose.yaml up -d --build
 curl -s https://<your domain>/healthz
 ```
+
+The encryption key is generated on the data volume at the first start: the
+example `.env` sets `VAUBAAN_MASTER_KEY_FILE=/data/master.key` and
+`VAUBAAN_MASTER_KEY_GENERATE=1`, the gateway writes the file (32 random
+bytes, base64, mode 0600) and the setup page hands it to you — download it
+and keep it outside the host; a backup of the store opens with it only.
+Nothing is generated once the store holds data: a key missing on an existing
+store stops the container with exit code 78. To provide the key yourself
+instead, `npm run gen-master-key` (needs Node.js) into `VAUBAAN_MASTER_KEY`
+or a secret file named by `VAUBAAN_MASTER_KEY_FILE`, and leave the generate
+variable unset. An administrator can download the key again later from
+Administration → Encryption, after a fresh sign-in; every download is
+recorded in the activity (handbook
+[configuration](../docs/handbook/configuration.md#master-key-generated-at-the-first-start)).
 
 Pass `--env-file deploy/config/.env` on every Compose command (`up`, `down`,
 `logs`, `config`): Compose reads `GATEWAY_DOMAIN` from it and hands that one
@@ -97,7 +110,8 @@ at the service and entered on the same page, or set in the configuration
 (`providers.<id>.*`, then read-only there).
 
 Minimum to start: `public_url` (https), `store.path`,
-`encryption.master_key`, the admin rule (`admin.group` or `admin.emails`)
+`encryption.master_key` (or its file with `encryption.generate_master_key`),
+the admin rule (`admin.group` or `admin.emails`)
 and `bootstrap_token` (until an IdP is configured). Anything missing stops
 the container with exit code 78 and a message naming every key:
 
@@ -196,7 +210,7 @@ docker run -d --name vaubaan -p 127.0.0.1:3000:3000 \
   -v vaubaan-data:/data \
   -e VAUBAAN_PUBLIC_URL=https://gateway.example.com \
   -e VAUBAAN_STORE_PATH=/data/gateway.db \
-  -e VAUBAAN_MASTER_KEY="$(node scripts/gen-master-key.mjs)" \
+  -e VAUBAAN_MASTER_KEY_FILE=/data/master.key -e VAUBAAN_MASTER_KEY_GENERATE=1 \
   -e VAUBAAN_ADMIN_EMAILS=ops@example.com \
   -e VAUBAAN_BOOTSTRAP_TOKEN="$(openssl rand -hex 24)" \
   vaubaan-gateway:local

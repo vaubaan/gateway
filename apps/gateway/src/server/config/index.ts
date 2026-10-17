@@ -1,10 +1,13 @@
 export {
   loadInstanceConfig,
+  loadInstanceConfigOrSetup,
   loadProcessConfig,
   MASTER_KEY_BYTES,
   scrubSecretEnv,
+  type ConfigLoadOutcome,
   type LoadOptions,
   type LoadedConfig,
+  type SetupOutcome,
 } from './load';
 export { ConfigError, errorMessage, formatIssue, type ConfigIssue } from './errors';
 export { parseDuration } from './duration';
@@ -41,9 +44,11 @@ export {
   isLogLevel,
   isProviderAppField,
   secretValues,
+  type AbsentMasterKeyReason,
   type AdminRule,
   type ClientRegistrationPolicy,
   type EncryptionConfig,
+  type EncryptionKeys,
   type IdpClaimMapping,
   type IdpConfig,
   type InstanceConfig,
@@ -53,5 +58,6 @@ export {
   type ProviderAppField,
   type SelfResource,
   type SelfResourceSource,
+  type SetupConfig,
   type TelemetryConfig,
 } from './types';

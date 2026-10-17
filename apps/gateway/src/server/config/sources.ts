@@ -22,6 +22,7 @@ import {
   type EnvSource,
   type FileReader,
   type SourceContext,
+  type SourceTrace,
   defaultFileReader,
   readEnvSecret,
   resolveRefs,
@@ -154,6 +155,14 @@ const KEY_TABLE = [
     min: 1,
   },
   { path: 'encryption.previous_keys', env: 'VAUBAAN_MASTER_KEY_PREVIOUS', kind: 'secret-map' },
+  // The key generated at the first start when its file is absent (ADR
+  // master-key-generated-and-handed-over-by-the-instance).
+  {
+    path: 'encryption.generate_master_key',
+    env: 'VAUBAAN_MASTER_KEY_GENERATE',
+    kind: 'bool',
+    default: false,
+  },
   {
     path: 'idp.issuer',
     env: 'VAUBAAN_IDP_ISSUER',
@@ -424,8 +433,9 @@ export function readEnvSource(
   env: EnvSource,
   issues: IssueList,
   readFile: FileReader = defaultFileReader,
+  trace?: SourceTrace,
 ): RawTree {
-  const ctx: SourceContext = { env, readFile, issues };
+  const ctx: SourceContext = { env, readFile, issues, trace };
   const tree: RawTree = {};
   for (const spec of KEYS) {
     const value = readEnvValue(ctx, spec);
@@ -628,10 +638,11 @@ export function readFileSource(
   env: EnvSource,
   issues: IssueList,
   readFile: FileReader = defaultFileReader,
+  trace?: SourceTrace,
 ): FileSourceResult | null {
   const path = env[CONFIG_FILE_ENV];
   if (path === undefined || path.trim() === '') return null;
-  const ctx: FileContext = { env, readFile, issues, secretVariables: new Set() };
+  const ctx: FileContext = { env, readFile, issues, trace, secretVariables: new Set() };
   let text: string;
   try {
     text = readFile(path);

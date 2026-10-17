@@ -111,6 +111,7 @@ export const ADMIN_ACTS = membersOf<AdminAct>({
   'user-sessions-ended': true,
   'invitation-added': true,
   'invitation-removed': true,
+  'master-key-downloaded': true,
   'config-changed': true,
 });
 

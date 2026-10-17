@@ -144,6 +144,7 @@ function demoConfig(origin: string, storePath: string, idp: DemoIdp, providers: 
     return {
       configFile: null,
       secretEnvNames: [],
+      masterKeyGenerated: false,
       config: {
         ...loaded.config,
         publicUrl: new URL(origin),

@@ -347,6 +347,17 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       post('/api/admin/instance-name', headers, { name: 'Dalae prod' }),
     ),
   ),
+  // The rightful caller's session was just created: fresh, so the file is handed over.
+  'masterKey.handlers.download': form('operator', 200, (rig, headers) =>
+    rig.root.masterKey.handlers.download(
+      post('/api/admin/master-key/download', headers, { from: 'settings', confirmed: 'on' }),
+    ),
+  ),
+  'masterKey.handlers.confirmHandover': form('operator', 303, (rig, headers) =>
+    rig.root.masterKey.handlers.confirmHandover(
+      post('/api/admin/master-key/handed-over', headers, { confirmed: 'on' }),
+    ),
+  ),
   'oauth.handlers.decide': form('user', 303, (rig, headers) =>
     rig.root.oauth.handlers.decide(
       post('/oauth/authorize/decision', headers, { consent: rig.consentId, decision: 'approve' }),
@@ -409,6 +420,7 @@ const SURFACES = [
   'requests',
   'telemetry',
   'instance',
+  'masterKey',
   'shares',
   'groups',
   'users',
