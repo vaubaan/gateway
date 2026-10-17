@@ -35,15 +35,27 @@ function workspaces() {
   });
 }
 
-/** `tsc` and plain arguments only: anything else goes through npm. */
-const PLAIN_TSC = /^tsc(?: [\w./-]+)*$/;
+const PLAIN_ARGUMENT = /^[\w./-]+$/;
+
+/**
+ * `tsc` and plain arguments only (no quote, no shell syntax): anything else
+ * goes through npm.
+ * @param {string} script
+ * @returns {string[] | undefined} the arguments of tsc
+ */
+function plainTsc(script) {
+  const [command, ...args] = script.split(' ');
+  return command === 'tsc' && args.every((arg) => PLAIN_ARGUMENT.test(arg)) ? args : undefined;
+}
 
 function check({ dir, script }) {
   return new Promise((done) => {
     const started = Date.now();
-    const [command, args] = PLAIN_TSC.test(script)
-      ? [process.execPath, [TSC, ...script.split(' ').slice(1)]]
-      : ['npm', ['run', '--silent', 'type-check']];
+    const tscArgs = plainTsc(script);
+    const [command, args] =
+      tscArgs === undefined
+        ? ['npm', ['run', '--silent', 'type-check']]
+        : [process.execPath, [TSC, ...tscArgs]];
     const child = spawn(command, args, {
       cwd: join(ROOT, dir),
       stdio: ['ignore', 'pipe', 'pipe'],
