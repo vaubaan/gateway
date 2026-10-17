@@ -2,7 +2,7 @@
 title: Coding workflow
 status: current
 date: 2026-05-22
-last_synced: 2026-10-14
+last_synced: 2026-10-16
 tracks:
   - .github/
   - .semgrep/
@@ -30,6 +30,8 @@ tracks:
   - scripts/release-prepare.mjs
   - scripts/release-plan.mjs
   - scripts/release-image-index.sh
+  - scripts/stamp-commit.sh
+  - .gitattributes
   - CHANGELOG.md
 ---
 
@@ -175,7 +177,8 @@ jobs:
     - on failure: upload test-results/v5 (traces, screenshots) for 7 days
   docker: # needs: check
     - docker/build-push-action (deploy/docker/Dockerfile, push: false, load: true,
-      GitHub Actions layer cache, build-arg GIT_COMMIT_SHA=${{ github.sha }})
+      GitHub Actions layer cache; scripts/stamp-commit.sh first writes the
+      checked-out commit into apps/gateway/build-commit.txt, no build argument)
     - deploy/docker/smoke.sh vaubaan-gateway:ci
     - scripts/image-scan.sh vaubaan-gateway:ci # Trivy; vulnerability DB cached a day
 ```
@@ -347,7 +350,10 @@ for the prebuilt `argon2` and `better-sqlite3` addons). The runner stage copies 
 standalone output, runs as uid 10001, exposes `PORT` (3000), declares the
 `/data` volume and a `HEALTHCHECK` on `/healthz`. The base image is named,
 with its digest, on the `FROM … AS base` line itself (no build argument, so
-Dependabot can propose its bumps); build argument: `GIT_COMMIT_SHA`. The
+Dependabot can propose its bumps); no build argument: the commit `/healthz`
+reports is the stamp `git archive` writes into `apps/gateway/build-commit.txt`
+(the CI and release jobs run `scripts/stamp-commit.sh`; ADR
+[deployed-commit-stamped-by-git-archive](../decisions/deployed-commit-stamped-by-git-archive.md)). The
 `deps` stage runs `npm ci`, as the CI jobs do. The runner stage removes the
 package managers of the base image (npm, npx, corepack, yarn): the gateway
 never runs them, and the smoke test checks they are gone. `.dockerignore` keeps `.git`, docs, test

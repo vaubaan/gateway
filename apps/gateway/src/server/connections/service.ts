@@ -92,7 +92,7 @@ import {
   OAuth2TokenError,
   type OAuth2Client,
 } from './oauth2';
-import { connectionCredentialKind, connectionOwnerOf } from './mapping';
+import { connectionCredentialKind, connectionOwnerOf, connectionPublicFields } from './mapping';
 import type { PendingConnect, PendingConnectStore, PendingFlowKind } from './pending';
 import { generateEd25519KeyPair, type SshKeyPair } from './ssh-keypair';
 
@@ -1531,7 +1531,7 @@ export class ConnectionService {
       unavailableTools: registered && spec ? unavailableToolsOf(registered.plugin, spec) : [],
       ownerLabel: await this.ownerLabel(connection),
       publicKey: typeof metadata.public_key === 'string' ? metadata.public_key : null,
-      fields: stringValues(metadata.fields),
+      fields: connectionPublicFields(connection),
       discovery: discoveryOf(metadata.discovery),
     };
   }
@@ -1726,13 +1726,6 @@ function sameList(list: readonly string[], current: unknown): boolean {
     current.length === list.length &&
     current.every((value, index) => value === list[index])
   );
-}
-
-function stringValues(value: unknown): Record<string, string> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return {};
-  const out: Record<string, string> = {};
-  for (const [key, v] of Object.entries(value)) if (typeof v === 'string') out[key] = v;
-  return out;
 }
 
 function discoveryOf(value: unknown): DiscoveryRecord | null {

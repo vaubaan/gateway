@@ -2,7 +2,7 @@
 title: Execution door — /mcp, the call pipeline's stages, the agent label, streaming, the catalog
 status: current
 date: 2026-10-13
-last_synced: 2026-10-15
+last_synced: 2026-10-16
 tracks:
   - apps/gateway/src/server/execution/
   - apps/gateway/src/server/git/paths.ts
@@ -415,7 +415,13 @@ and "Order of a call"; ADR
    none → rejection `…this mission holds no <Provider> connection.`
 4. `allowed` = the context's resources on that connection; `known` = every
    resource row of the connection.
-5. `plugin.classify(tool, args, allowed)`:
+5. `plugin.classify(tool, args, allowed, connection)`, where `connection`
+   is `classifyConnectionOf(MissionConnection)`: the connection's public form
+   fields (`public_fields`, loaded by `loadMissionContext` from
+   `metadata.fields` through `connectionPublicFields`), nothing secret. The
+   risk stage hands the same view to `evaluateCallForToken`, so the slices
+   it audits are the ones this stage resolved (a Fly call cites
+   `org[<the connection's org>]`):
    - slices → `citedRefs(slices, knownRefs)`: the `ident` and `list` segments
      that equal a known ref. A cited ref outside `allowed` →
      `resource-not-in-mission`. Otherwise the target resource is the first
@@ -423,7 +429,7 @@ and "Order of a call"; ADR
      mission's single resource on the connection, or `null` (account-level
      tool).
    - denied, and the connection knows refs the mission does not hold →
-     `plugin.classify(tool, args, known)`; if that resolves to a ref outside
+     `plugin.classify(tool, args, known, connection)`; if that resolves to a ref outside
      `allowed` → `resource-not-in-mission` naming it. This is the path of a
      resource never selected, discovered after issuance, or selected and stale
      since.

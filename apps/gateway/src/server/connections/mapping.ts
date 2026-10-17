@@ -60,3 +60,19 @@ export function connectionCredentialKind(
   const stored = record.metadata?.credential_kind;
   return typeof stored === 'string' && isCredentialKind(stored) ? stored : primaryKind;
 }
+
+/**
+ * The non-secret fields of the form a connection was made with
+ * (`metadata.fields`, the visible values only; secrets live in the sealed
+ * credential). Shown on the account page and handed to the plugin's
+ * classifier (`ClassifyConnection`). Anything that is not a string is dropped.
+ */
+export function connectionPublicFields(record: {
+  readonly metadata?: ConnectionRecord['metadata'];
+}): Record<string, string> {
+  const value = record.metadata?.fields;
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return {};
+  const out: Record<string, string> = {};
+  for (const [key, v] of Object.entries(value)) if (typeof v === 'string') out[key] = v;
+  return out;
+}

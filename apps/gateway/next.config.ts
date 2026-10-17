@@ -4,14 +4,60 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 // Build-time stamps frozen into the bundle: shown in the UI footer and by
-// `/healthz`. Docker builds pass GIT_COMMIT_SHA (no .git in the image);
-// local builds fall back to `git rev-parse`.
-function resolveCommitSha(): string {
-  if (process.env.GIT_COMMIT_SHA) return process.env.GIT_COMMIT_SHA.slice(0, 7);
+// `/healthz`. The commit is only ever one the build can see for itself (ADR
+// deployed-commit-stamped-by-git-archive): never a variable someone set by hand.
+
+/**
+ * Stamped by `git archive` with the full id of the archived commit
+ * (`.gitattributes`: `export-subst`); in a checkout it still reads `$Format:%H$`.
+ */
+export const COMMIT_STAMP_FILE = 'build-commit.txt';
+
+const FULL_COMMIT_ID = /^[0-9a-f]{40}$/;
+const SHORT_COMMIT_LENGTH = 7;
+
+/** The short commit a stamp file holds, or `null` when it was never stamped (a checkout). */
+export function commitFromStamp(text: string | null): string | null {
+  const value = text?.trim() ?? '';
+  return FULL_COMMIT_ID.test(value) ? value.slice(0, SHORT_COMMIT_LENGTH) : null;
+}
+
+/**
+ * The commit of the build: the stamp written by `git archive` (a deployed
+ * tree, the image built by the CI), else the checkout's own HEAD (`-dirty`
+ * when tracked files differ from it), else `unknown` — never a guess.
+ */
+export function resolveCommitSha(sources: {
+  readonly stamp: string | null;
+  readonly checkout: () => string | null;
+}): string {
+  return commitFromStamp(sources.stamp) ?? sources.checkout() ?? 'unknown';
+}
+
+function readStamp(): string | null {
   try {
-    return execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
+    return readFileSync(resolve(__dirname, COMMIT_STAMP_FILE), 'utf8');
   } catch {
-    return 'unknown';
+    return null;
+  }
+}
+
+function git(args: string): string {
+  return execSync(`git ${args}`, {
+    cwd: __dirname,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  }).trim();
+}
+
+/** HEAD of the checkout this build runs in, or `null` without one (an archive, the image). */
+function checkoutCommit(): string | null {
+  try {
+    const head = git('rev-parse HEAD').slice(0, SHORT_COMMIT_LENGTH);
+    const dirty = git('status --porcelain --untracked-files=no') !== '';
+    return dirty ? `${head}-dirty` : head;
+  } catch {
+    return null;
   }
 }
 
@@ -40,7 +86,7 @@ function workspaceDependencies(): string[] {
   return Object.keys(deps).filter((name) => name.startsWith('@vaubaan/'));
 }
 
-const commitSha = resolveCommitSha();
+const commitSha = resolveCommitSha({ stamp: readStamp(), checkout: checkoutCommit });
 
 /** Files of this directory that no trace may carry into the standalone output. */
 const NEVER_SHIPPED = [

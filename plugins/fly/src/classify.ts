@@ -4,7 +4,10 @@
  * Spec : docs/spec/gateway-risk-model.md §7. Handbook : docs/handbook/providers/fly.md §2.
  *
  * Pure. Every identifier and value is read by `readFlyCall`, the reader
- * `execute` uses too ; this module only says what the call touches. A call
+ * `execute` uses too ; this module only says what the call touches. The
+ * `org[<slug>]` segment names the connection's organization (its public form
+ * field), else the one the mission's apps share, else `org[*]` : the catalog
+ * matches `org[*]`, so the name is for the reader, never a way around a risk. A call
  * that does several things returns one slice per thing : creating a machine
  * writes the collection, a configuration and an image ; replacing a config
  * may change the image and the size as well.
@@ -13,6 +16,7 @@
 import {
   ANY_IDENT,
   identSegment,
+  type ClassifyConnection,
   type ClassifyOutcome,
   type Resource,
   type Slice,
@@ -172,8 +176,9 @@ export function classifyFly(
   tool: string,
   args: Readonly<Record<string, unknown>>,
   resources: readonly Resource[],
+  connection?: ClassifyConnection,
 ): ClassifyOutcome {
-  const call = readFlyCall(tool, args, resources);
+  const call = readFlyCall(tool, args, resources, connection);
   if (isDenial(call)) return call;
   const slices = readSlices(call) ?? writeSlices(call);
   // A tool of the list that maps to nothing is a defect of this module : refuse it.

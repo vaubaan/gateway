@@ -35,6 +35,19 @@ import type { ToolResultPartSink } from './streaming.ts';
  */
 export type ClassifyOutcome = { readonly slices: readonly Slice[] } | { readonly denied: string };
 
+/**
+ * What `classify` may know of the connection a call goes through : the
+ * non-secret fields of the form the connection was made with (a Fly
+ * organization slug, a team id), as the connection recorded them. Never a
+ * secret, never the credential. Absent when the host has none to give
+ * (catalog tooling, tests) : a classifier then cites what the resources say,
+ * or a wildcard, and never anything narrower than it knows.
+ * ADR classify-sees-the-connection-public-fields.
+ */
+export interface ClassifyConnection {
+  readonly fields: Readonly<Record<string, string>>;
+}
+
 /** Minimal logger the host injects. No `console` in plugins. */
 export interface PluginLogger {
   debug(message: string, data?: Readonly<Record<string, unknown>>): void;
@@ -218,12 +231,15 @@ export interface ProviderPlugin {
    * credential. `resources` are the mission's resources on this connection,
    * so the classifier can derive the environment and refuse refs the
    * arguments do not identify. A call touching several entities returns
-   * several slices.
+   * several slices. `connection` carries the connection's public form
+   * fields (`ClassifyConnection`), so a slice can name what the connection
+   * is bound to (an organization) when no resource of the mission says it.
    */
   classify(
     tool: string,
     args: Readonly<Record<string, unknown>>,
     resources: readonly Resource[],
+    connection?: ClassifyConnection,
   ): ClassifyOutcome;
 
   /**

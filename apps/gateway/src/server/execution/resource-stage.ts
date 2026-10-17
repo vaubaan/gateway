@@ -41,6 +41,7 @@ import {
 } from '@vaubaan/gateway-core';
 import {
   unavailableToolReason,
+  type ClassifyConnection,
   type ClassifyOutcome,
   type PluginRegistry,
   type ProviderPlugin,
@@ -70,13 +71,21 @@ export function citedRefs(slices: readonly Slice[], known: ReadonlySet<string>):
   return cited;
 }
 
+/** What the classifier is shown of a connection: its public form fields, nothing else. */
+export function classifyConnectionOf(
+  connection: Pick<MissionConnection, 'public_fields'>,
+): ClassifyConnection {
+  return { fields: connection.public_fields ?? {} };
+}
+
 function classifySafely(
   plugin: ProviderPlugin,
   call: CallRequest,
   resources: readonly MissionResource[],
+  connection: MissionConnection,
 ): ClassifyOutcome {
   try {
-    return plugin.classify(call.tool, call.args, resources);
+    return plugin.classify(call.tool, call.args, resources, classifyConnectionOf(connection));
   } catch (err) {
     // A classifier is pure and total by contract; one that throws is refused, not trusted.
     return { denied: `the classifier failed: ${err instanceof Error ? err.message : String(err)}` };
@@ -193,7 +202,7 @@ export function createResourceStage(deps: ResourceStageDeps): ResourceStage {
       );
       const knownRefs = new Set(known.map((r) => r.ref));
 
-      const narrow = classifySafely(plugin, call, allowed);
+      const narrow = classifySafely(plugin, call, allowed, connection);
       if ('slices' in narrow) {
         const cited = citedRefs(narrow.slices, knownRefs);
         const foreign = cited.find((ref) => !allowedRefs.has(ref));
@@ -204,7 +213,7 @@ export function createResourceStage(deps: ResourceStageDeps): ResourceStage {
       }
 
       if (known.some((r) => !allowedRefs.has(r.ref))) {
-        const wide = classifySafely(plugin, call, known);
+        const wide = classifySafely(plugin, call, known, connection);
         if ('slices' in wide) {
           const foreign = citedRefs(wide.slices, knownRefs).find((ref) => !allowedRefs.has(ref));
           if (foreign !== undefined) return notInMission(foreign, connection, allowed);

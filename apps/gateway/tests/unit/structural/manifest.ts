@@ -427,6 +427,21 @@ export const INVARIANTS: readonly Invariant[] = [
     ],
   },
   {
+    id: 'deployed-commit-is-known',
+    statement:
+      'The commit /healthz reports is the one git archive stamped, else the checkout HEAD, else unknown: no build argument or environment variable feeds it.',
+    source: 'ADR deployed-commit-stamped-by-git-archive; deploy/railway.md §5',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/deployed-commit.test.ts`,
+        tests: [
+          'no build argument or variable names a commit',
+          'an archive of a commit carries that commit',
+        ],
+      },
+    ],
+  },
+  {
     id: 'no-secret-no-argument-in-logs',
     statement:
       'No log line is handed call arguments or a secret: tokens by prefix, arguments by hash, and the redactor removes every configured secret.',

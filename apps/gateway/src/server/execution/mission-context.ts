@@ -38,6 +38,7 @@ import { isSelfResource, type SelfResource } from '../config';
 import {
   connectionCredentialKind,
   connectionOwnerOf,
+  connectionPublicFields,
   connectionSummaryOf,
 } from '../connections/mapping';
 import type { Store } from '../store';
@@ -95,6 +96,8 @@ export async function loadMissionContext(
       ...connectionSummaryOf(connection),
       owner: await ownerOf(store, connection),
       credential_kind: connectionCredentialKind(connection, null),
+      // What the classifier may cite of the connection (a Fly organization): never a secret.
+      public_fields: connectionPublicFields(connection),
       // Any resource it reaches, selected or not, stale or not: the credential still reaches it.
       hosts_instance: discovered.some((r) =>
         isSelfResource(selfResources, connection.provider, r.ref),

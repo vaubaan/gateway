@@ -44,8 +44,10 @@ RUN npm ci --no-audit --no-fund
 # build: next build with output: 'standalone' (apps/gateway/next.config.ts).
 # ---------------------------------------------------------------------------
 FROM base AS build
-ARG GIT_COMMIT_SHA=unknown
-ENV GIT_COMMIT_SHA=${GIT_COMMIT_SHA}
+# No commit argument: the commit /healthz reports is read from
+# apps/gateway/build-commit.txt, which `git archive` stamps (export-subst);
+# a context that is not an archive builds `unknown`. A build argument could be
+# fed by a stale platform variable (ADR deployed-commit-stamped-by-git-archive).
 # The whole dependency tree: the hoisted node_modules and the ones npm nests
 # under a workspace when two majors of a package coexist (apps/gateway/node_modules).
 COPY --from=deps /app ./

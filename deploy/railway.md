@@ -150,6 +150,17 @@ local `.env`) and Railway builds it with the Dockerfile. Then open
 `https://<your domain>/healthz` (it answers the version and the commit) and
 sign in.
 
+**The commit `/healthz` answers is the archived one, by construction.**
+`git archive` writes the id of the commit it archives into
+`apps/gateway/build-commit.txt` (`.gitattributes`: `export-subst`), and the
+build reads it from there: check it before uploading with
+`cat /tmp/vaubaan-release/apps/gateway/build-commit.txt` — it must equal
+`git rev-parse HEAD`. Nothing else feeds that stamp: a service variable
+`GIT_COMMIT_SHA` is ignored (delete it if an older guide made you set it:
+it once kept an old commit on `/healthz` across deployments), and a tree
+that is not an archive builds `unknown` rather than a guess (ADR
+[deployed-commit-stamped-by-git-archive](../docs/decisions/deployed-commit-stamped-by-git-archive.md)).
+
 Never run `railway up` from your working copy: it uploads the directory you
 are in. The repository's `.railwayignore` keeps `.env*`, keys (`*.pem`,
 `*.key`, `id_*`), `.mcp.json`, `deploy/config/gateway.yaml`, `.vaubaan/`,

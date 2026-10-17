@@ -92,6 +92,10 @@ export type MissionConnection = Pick<Connection, 'id' | 'provider' | 'display_na
   /** The connection can reach a resource that hosts this gateway (`self_resources`):
    *  the plugin's `unboundTools` are unavailable on it. Absent: false. */
   readonly hosts_instance?: boolean;
+  /** The non-secret fields of the connection's form (a Fly organization
+   *  slug), handed to the plugin's classifier so a slice can name what the
+   *  connection is bound to. Absent: none. */
+  readonly public_fields?: Readonly<Record<string, string>>;
 };
 
 /** One resource a mission may touch, hydrated from its selection (spec §0
