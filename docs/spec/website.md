@@ -247,4 +247,5 @@ accepted.
    that configures an instance query the docs as tools. After the first
    version, if `llms.txt` and the Markdown pages prove insufficient.
 5. **Managed offer.** When it opens, sign-up lives elsewhere
-   (`app.vaubaan.com`), not on this site.
+   (`console.vaubaan.com`), not on this site; customer instances are on
+   `<slug>.vaubaan.app`.
