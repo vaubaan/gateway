@@ -42,6 +42,7 @@ interface RefusalBase<C extends RefusalCode> {
 
 /** Unchanged since v4: missing risks and the slices the call executed. */
 export interface RiskNotAcceptedRefusal extends RefusalBase<'risk-not-accepted'> {
+  readonly refusal_id?: string;
   readonly missing_risks: readonly RiskId[];
   readonly executed_slices: readonly Slice[];
 }

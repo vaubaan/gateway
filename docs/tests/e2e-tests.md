@@ -758,3 +758,14 @@ Run it again after a change of Next.js version, of the MCP SDK, of
 - Transient resources, when a scenario must create one, are named
   `vaubaan-e2e-<spec-hash6>-<run-uuid8>` and removed by the scenario's
   teardown; there is no sweeper job.
+
+## Permission request and direct edit
+
+Covers [mission permissions](../handbook/missions.md#adding-and-removing-permissions-after-issuance).
+`apps/gateway/tests/e2e/v5/permission-request.spec.ts`: the agent is refused,
+asks deliberately, the creator reads the justification, selects a permission
+and its limits, reviews and grants it, and the same key replays successfully.
+The creator then removes it through the mission editor; the same call is
+refused again. Existing approval and limit browser scenarios remain required.
+The cutover smoke also checks that the execution tool list includes
+`vaubaan__request_permission` alongside tools from the mission's provider.

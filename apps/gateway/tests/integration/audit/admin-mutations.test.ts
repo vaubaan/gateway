@@ -696,6 +696,7 @@ const RULES: Readonly<Record<string, Rule>> = {
   },
 
   // ── missions ──────────────────────────────────────────────────────────────
+  'MissionService.permissionOptions': READ,
   'MissionService.issuanceContext': READ,
   'MissionService.preview': READ,
   'MissionService.draftFrom': READ,
@@ -763,6 +764,22 @@ const RULES: Readonly<Record<string, Rule>> = {
     writes: { act: 'gate-changed', object: 'mission', actor: 'alice' },
   },
 
+  'MissionService.changePermissions': {
+    kind: 'mutation',
+    target: missions,
+    prepare: (rig) => rig.issue(),
+    drive: (rig, mission: MissionRecord) =>
+      rig.root.missions.service.changePermissions(rig.alice.user, mission.id, {
+        policy: [],
+        expected_policy: mission.policy.map((p) => ({
+          risk_id: p.riskId,
+          quota: p.quota,
+          rate_limit: { max: p.rateLimit, window_seconds: p.rateWindowSeconds },
+          gate: p.gate,
+        })),
+      }),
+    writes: { act: 'permissions-changed', object: 'mission', actor: 'alice' },
+  },
   'MissionService.setLimits': {
     kind: 'mutation',
     target: missions,
@@ -1497,6 +1514,7 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'mission-token-revoked',
       'oauth-client-approved',
       'period-reset',
+      'permissions-changed',
       'request-refused',
       'resource-edited',
       'resources-discovered',

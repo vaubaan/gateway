@@ -137,7 +137,12 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   const listed = await kitToolsList(token);
   expect(listed.status).toBe(200);
   expect(listed.tools).toContain('github__list_branches');
-  expect(listed.tools.every((name) => name.startsWith('github__'))).toBe(true);
+  expect(listed.tools).toContain('vaubaan__request_permission');
+  expect(
+    listed.tools.every(
+      (name) => name.startsWith('github__') || name === 'vaubaan__request_permission',
+    ),
+  ).toBe(true);
 
   // Then an MCP client, as a coding agent's runtime connects.
   const executor = (agent = await connectAgent(token, AGENT_LABEL));

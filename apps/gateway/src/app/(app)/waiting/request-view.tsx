@@ -1,3 +1,4 @@
+import { PermissionsEditor } from '../missions/[id]/permissions-editor';
 /**
  * One request, as its creator reads it — in the order they need it: who asks
  * and on which mission, exactly what will run (the call, its arguments, the
@@ -990,6 +991,50 @@ function ClaimBody({
 }
 
 export function RequestView(props: RequestViewProps) {
+  if (props.view.kind === 'permission') {
+    const { view } = props;
+    return (
+      <article className={styles.request} data-testid="request-view" data-kind="permission">
+        <RequestStatement
+          verb={
+            <>
+              <Asking asker={view.asker} viewerId={props.viewerId} /> requests permissions on{' '}
+              <Link href={missionPath(view.mission.id)}>{view.mission.name}</Link>
+            </>
+          }
+          status={<StateMark request={view.request} />}
+        >
+          {view.request.call ? <CallHeadline call={view.request.call} /> : 'Missing permissions'}
+        </RequestStatement>
+        <Notices {...props} view={view} />
+        <h3>The agent says</h3>
+        <blockquote>{view.reason}</blockquote>
+        <ul>
+          {view.request.risks.map((r) => (
+            <li key={r.risk_id}>
+              {r.label} <Mono>{r.risk_id}</Mono>
+            </li>
+          ))}
+        </ul>
+        <p>
+          This request asks to change the mission for every key. It does not run the refused call.
+        </p>
+        {view.editor && (
+          <PermissionsEditor
+            data={view.editor}
+            requestId={view.request.id}
+            requested={view.request.risks.map((r) => r.risk_id)}
+          />
+        )}
+        {view.request.state === 'open' && (
+          <form method="post" action={`/api/requests/${view.request.id}/decide`}>
+            <input type="hidden" name="resolution" value="refuse" />
+            <Button type="submit">Refuse permission request</Button>
+          </form>
+        )}
+      </article>
+    );
+  }
   return (
     <article className={styles.request} data-testid="request-view" data-kind={props.view.kind}>
       {props.view.kind === 'claim' ? (

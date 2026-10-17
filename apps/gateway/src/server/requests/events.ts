@@ -93,6 +93,7 @@ function describeRequest(details: RequestEventDetails): string {
       ? `The ${kind} expired unanswered`
       : `The creator refused the ${kind}`;
   }
+  if (details.request_kind === 'permission') return 'The agent requested missing permissions';
   if (details.request_kind !== 'approval') return 'A claim was dropped in the creator’s inbox';
   const risks = details.risk_ids?.length ?? 1;
   return `An approval request for ${details.tool || 'a tool'} was dropped in the creator’s inbox${coveringRisks(risks)}`;

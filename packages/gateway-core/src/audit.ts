@@ -144,6 +144,8 @@ export type AdminAct =
   | 'gate-changed'
   /** The creator changed the limits of accepted risks on the mission itself (quota per
    *  period, calls per rate window): `before` and `after` list each changed risk. */
+  | 'permissions-changed'
+  | 'permission-requested'
   | 'limits-changed'
   | 'approval-granted'
   | 'request-refused'

@@ -113,7 +113,7 @@ const NEVER_WORK_AROUND =
  */
 export const REFUSAL_GUIDANCE: Readonly<Record<RefusalCode, string>> = {
   'risk-not-accepted':
-    'the mission does not hold the permission for this action. Do not look for another way to obtain the same effect. Tell the human which permissions are missing (`missing_risks`); only the mission creator can enlarge the mission.',
+    'the mission does not hold the permission for this action. Do not look for another way to obtain the same effect. If the assigned task requires these permissions, call `vaubaan__request_permission` with the returned `refusal_id` and a reason, then give `request_url` to the human and wait. Otherwise stop this action. Only the mission creator can enlarge the mission.',
   'budget-exhausted':
     'the limit of that permission is reached for the period. Stop that kind of action, hand `claim_url` to the human so the mission creator can reset or raise the limit, and continue with work that does not need it. Do not retry in a loop.',
   'approval-required':

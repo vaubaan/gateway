@@ -249,7 +249,7 @@ function isCountsByRisk(value: unknown): value is Readonly<Record<RiskId, number
 }
 
 function isRequestKind(value: unknown): value is RequestKind {
-  return value === 'claim' || value === 'approval';
+  return value === 'claim' || value === 'approval' || value === 'permission';
 }
 
 function isRequestClosedState(value: unknown): value is RequestClosedState {

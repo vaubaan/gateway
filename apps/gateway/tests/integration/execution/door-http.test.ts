@@ -165,8 +165,12 @@ describe('execution door over HTTP: real GitHub plugin, mocked upstream', () => 
       const client = await connect(instance, mission.token, { modern: era === MODERN_REVISION });
 
       const { tools } = await client.listTools();
-      expect(tools.length).toBe(githubPlugin.tools.length);
-      expect(tools.every((t) => t.name.startsWith('github__'))).toBe(true);
+      expect(tools.length).toBe(githubPlugin.tools.length + 1);
+      expect(
+        tools.every(
+          (t) => t.name.startsWith('github__') || t.name === 'vaubaan__request_permission',
+        ),
+      ).toBe(true);
       expect(tools.find((t) => t.name === 'github__list_branches')?.inputSchema).toMatchObject({
         type: 'object',
         required: ['owner', 'repo'],
@@ -257,7 +261,7 @@ describe('execution door over HTTP: real GitHub plugin, mocked upstream', () => 
     });
     expect(status).toBe(200);
     expect(headers.get('content-type')).toContain('application/json');
-    expect((body.result?.tools as unknown[]).length).toBe(githubPlugin.tools.length);
+    expect((body.result?.tools as unknown[]).length).toBe(githubPlugin.tools.length + 1);
   });
 
   it('is stateless: GET and DELETE open or close nothing', async () => {
@@ -287,12 +291,17 @@ describe('execution door over HTTP: real GitHub plugin, mocked upstream', () => 
         return (body.result?.tools as { name: string }[]).map((t) => t.name);
       };
 
-      expect((await list(githubOnly)).every((name) => name.startsWith('github__'))).toBe(true);
+      expect(
+        (await list(githubOnly)).every(
+          (name) => name.startsWith('github__') || name === 'vaubaan__request_permission',
+        ),
+      ).toBe(true);
       expect((await list(depotOnly)).sort()).toEqual([
         'depot__purge',
         'depot__read_item',
         'depot__whoami',
         'depot__write_item',
+        'vaubaan__request_permission',
       ]);
     });
 
@@ -318,9 +327,10 @@ describe('execution door over HTTP: real GitHub plugin, mocked upstream', () => 
       const { tools } = catalog;
       // The whole surface of the instance, with what this mission can call flagged.
       expect(tools.some((t) => t.provider === 'github' && !t.callable)).toBe(true);
-      expect(tools.filter((t) => t.callable).map((t) => t.provider)).toEqual(
-        Array(4).fill('depot'),
-      );
+      expect(tools.filter((t) => t.callable).map((t) => t.provider)).toEqual([
+        ...Array<string>(4).fill('depot'),
+        'vaubaan',
+      ]);
       expect([...catalog.callable_tools].sort()).toEqual(
         tools
           .filter((t) => t.callable)

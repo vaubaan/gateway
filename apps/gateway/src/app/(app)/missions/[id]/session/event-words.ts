@@ -61,6 +61,7 @@ const KNOWN: Readonly<Record<SessionEventKind, true>> = {
   'gate-opened': true,
   'gate-changed': true,
   'limits-changed': true,
+  'permissions-changed': true,
   rotation: true,
   revocation: true,
 };
@@ -81,6 +82,8 @@ export function eventWords(
   if (!isKnown(event.kind)) return { outcome: event.kind, tone: null, lines: [] };
   const answered = event.request_id !== null && !options.requestOpen;
   switch (event.kind) {
+    case 'permissions-changed':
+      return { outcome: 'permissions changed', tone: null, lines: [] };
     case 'call-allowed':
       return {
         outcome: 'allowed',

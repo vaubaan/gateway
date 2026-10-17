@@ -1,0 +1,27 @@
+.editor {
+  display: grid;
+  gap: var(--space-4);
+}
+.scroll {
+  overflow-x: auto;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+.table caption {
+  text-align: left;
+  padding: var(--space-4) 0;
+  font-weight: var(--weight-strong);
+}
+.table th,
+.table td {
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.table input[type='number'] {
+  min-width: 5rem;
+  max-width: 8rem;
+}

@@ -85,6 +85,13 @@ export interface RemovedMember {
 export type StoredMissionStatus = Exclude<MissionStatus, 'orphaned'>;
 
 export interface MissionsRepo {
+  changePermissions(
+    id: string,
+    policy: readonly MissionPolicyEntry[],
+    expected: readonly MissionPolicyEntry[],
+    actor: string,
+    requestId?: string,
+  ): Promise<MissionRecord | null>;
   create(input: CreateMissionInput): Promise<MissionRecord>;
   getById(id: string): Promise<MissionRecord | null>;
   listForCreator(userId: string): Promise<MissionRecord[]>;
@@ -700,6 +707,74 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
         deletePolicy.run(id);
         writePolicy(id, policy);
         touch.run(now, id);
+        return requireMission(id);
+      });
+    },
+    async changePermissions(id, policy, expected, actor, requestId) {
+      validatePolicy(ctx, policy);
+      const key = (lines: readonly MissionPolicyEntry[]) =>
+        JSON.stringify(
+          [...lines]
+            .sort((a, b) => a.riskId.localeCompare(b.riskId))
+            .map((p) => [p.riskId, p.quota, p.rateLimit, p.rateWindowSeconds, p.gate]),
+        );
+      return withImmediateTransaction(db, () => {
+        const mission = requireMission(id);
+        if (
+          mission.creatorUserId !== actor ||
+          mission.status === 'revoked' ||
+          key(mission.policy) !== key(expected)
+        )
+          return null;
+        const now = nowIso(ctx);
+        if (requestId) {
+          const request = db.prepare<[string, string, string], { risk_ids_json: string }>(
+            "SELECT risk_ids_json FROM requests WHERE id = ? AND mission_id = ? AND kind = 'permission' AND state = 'open' AND expires_at > ?",
+          );
+          const row = request.get(requestId, id, now);
+          if (!row) return null;
+          const risks = JSON.parse(row.risk_ids_json) as string[];
+          if (!risks.every((risk) => policy.some((p) => p.riskId === risk))) return null;
+        }
+        const removed = mission.policy.filter((p) => !policy.some((n) => n.riskId === p.riskId));
+        deletePolicy.run(id);
+        writePolicy(id, policy);
+        touch.run(now, id);
+        const session = sessions.sessionOfMission(id);
+        if (session) {
+          for (const p of removed)
+            sessions.recordEvent(
+              session.id,
+              {
+                kind: 'gate-changed',
+                riskId: p.riskId,
+                actorUserId: actor,
+                details: { gate: 'approval', gate_before: p.gate },
+              },
+              now,
+            );
+          sessions.recordEvent(
+            session.id,
+            {
+              kind: 'permissions-changed',
+              actorUserId: actor,
+              details: { before: mission.policy, after: policy, request_id: requestId ?? null },
+            },
+            now,
+          );
+        }
+        // An unconsumed approval must not survive removal and re-addition of its risk.
+        for (const p of removed) {
+          db.prepare(
+            `UPDATE approvals SET consumed_at = ? WHERE mission_id = ? AND consumed_at IS NULL
+            AND (risk_id = ? OR EXISTS (SELECT 1 FROM json_each(approvals.risk_ids_json) WHERE value = ?))`,
+          ).run(now, id, p.riskId, p.riskId);
+        }
+        if (requestId)
+          db.prepare(
+            `UPDATE requests SET state = 'granted', decided_at = ?, decided_by_user_id = ?,
+          decision_json = ?, args_blob = NULL, key_version = NULL WHERE id = ?`,
+          ).run(now, actor, JSON.stringify({ resolution: 'add-permissions' }), requestId);
         return requireMission(id);
       });
     },

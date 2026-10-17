@@ -1,3 +1,4 @@
+import { permissionEditSchema, policyKey } from './permission-edit';
 /**
  * `MissionService` — preview, issue, duplicate, rotate, revoke, and the gate
  * of a risk edited after issuance (spec §3.1, §3.2, §3.5, §7.4, §7.8; pivot
@@ -1105,6 +1106,108 @@ export class MissionService {
       });
     }
     return { ok: true, mission: written.mission, changed };
+  }
+
+  async permissionOptions(user: AuthoritySubject, missionId: string) {
+    const mission = await this.ownMission(user, missionId);
+    if (!mission || gateEditBlockedBy(mission)) return null;
+    const reached = await this.detailConnections(mission);
+    const candidates: {
+      risk_id: string;
+      label: string;
+      level: string;
+      reason: string;
+      available: boolean;
+      ceiling: number | null;
+    }[] = [];
+    for (const selected of mission.connections) {
+      const connection = await this.deps.store.connections.getById(selected.connectionId);
+      if (!connection) continue;
+      const context = await this.issuanceConnection(user, connection);
+      if (!context) continue;
+      const resources = reached.find((r) => r.id === connection.id)?.resources ?? [];
+      for (const risk of context.risks) {
+        const line: MissionPolicyEntry = {
+          risk_id: risk.risk_id,
+          quota: 1,
+          rate_limit: { max: 1, window_seconds: 60 },
+          gate: 'approval',
+        };
+        const issues = checkPolicyLines(context, resources, [line], 0).issues;
+        candidates.push({
+          risk_id: risk.risk_id,
+          label: risk.label,
+          level: risk.level,
+          reason: issues.map((i) => i.message).join(' '),
+          available: issues.length === 0,
+          ceiling: risk.rate_ceiling_per_minute,
+        });
+      }
+    }
+    return {
+      missionId: mission.id,
+      missionName: mission.name,
+      policy: budgetMissionOf(mission).policy,
+      periodSeconds: mission.periodSeconds,
+      candidates,
+    };
+  }
+
+  /** Shared by a direct edit and the creator's answer to a permission request. */
+  async changePermissions(user: AuthoritySubject, missionId: string, raw: unknown) {
+    const mission = await this.ownMission(user, missionId);
+    if (!mission) return { ok: false as const, reason: 'not-found' };
+    const parsed = permissionEditSchema.safeParse(raw);
+    if (!parsed.success) return { ok: false as const, reason: 'invalid-edit' };
+    const edit = parsed.data;
+    const blocked = gateEditBlockedBy(mission);
+    if (blocked) return { ok: false as const, reason: 'inactive', state: blocked };
+    const before = budgetMissionOf(mission).policy;
+    if (policyKey(before) !== policyKey(edit.expected_policy))
+      return { ok: false as const, reason: 'conflict' };
+    if (new Set(edit.policy.map((p) => p.risk_id)).size !== edit.policy.length)
+      return { ok: false as const, reason: 'invalid-edit' };
+    // Existing lines use the dedicated limits and gate controls; this edit adds/removes.
+    const previous = new Map(before.map((p) => [p.risk_id, p]));
+    if (
+      edit.policy.some(
+        (p) => previous.has(p.risk_id) && policyKey([p]) !== policyKey([previous.get(p.risk_id)!]),
+      )
+    ) {
+      return { ok: false as const, reason: 'invalid-edit' };
+    }
+    const additions = edit.policy.filter((p) => !previous.has(p.risk_id));
+    const issues = await this.limitIssues(user, mission, additions);
+    if (issues.length) return { ok: false as const, reason: 'refused', issues };
+    const asStored = (lines: readonly MissionPolicyEntry[]) =>
+      lines.map((p) => ({
+        riskId: p.risk_id,
+        quota: p.quota,
+        rateLimit: p.rate_limit.max,
+        rateWindowSeconds: p.rate_limit.window_seconds,
+        gate: p.gate,
+      }));
+    if (policyKey(before) === policyKey(edit.policy) && !edit.request_id)
+      return { ok: true as const, mission };
+    const written = await this.deps.store.missions.changePermissions(
+      mission.id,
+      asStored(edit.policy),
+      asStored(before),
+      user.id,
+      edit.request_id,
+    );
+    if (!written) return { ok: false as const, reason: 'conflict' };
+    await this.deps.store.auditWriter.write({
+      kind: 'admin',
+      ts: toIso(this.deps.clock.now()),
+      user_id: user.id,
+      act: 'permissions-changed',
+      object: { type: 'mission', id: mission.id },
+      before: { policy: before },
+      after: { policy: edit.policy, request_id: edit.request_id ?? null },
+      delegated_client_id: null,
+    });
+    return { ok: true as const, mission: written };
   }
 
   /**

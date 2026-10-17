@@ -169,9 +169,15 @@ describe('restore of a store copy', () => {
   });
 
   it('refuses a tampered copy: by its hash, and by SQLite when the hash is of the tampered file', async () => {
+    // Corrupt a live table page; a rebuilt schema can leave free pages in the middle.
+    const db = openDb({ path: backup });
+    const rootPage = db
+      .prepare<[], { rootpage: number }>("SELECT rootpage FROM sqlite_master WHERE name = 'users'")
+      .get()!.rootpage;
+    const pageSize = db.pragma('page_size', { simple: true }) as number;
+    db.close();
     const bytes = readFileSync(backup);
-    // Overwrite the middle of the file: page content, past the header.
-    bytes.fill(0x5a, Math.floor(bytes.length / 2), Math.floor(bytes.length / 2) + 2048);
+    bytes.fill(0x5a, (rootPage - 1) * pageSize, (rootPage - 1) * pageSize + 2048);
     writeFileSync(backup, bytes);
     const byHash = await refusal(restore());
     expect(byHash.message).toContain('SHA-256 mismatch');
@@ -208,11 +214,11 @@ describe('restore of a store copy', () => {
 
     // Older: the last migration is not recorded (as if an earlier image wrote it).
     const older = openDb({ path: backup });
-    older.prepare('DELETE FROM schema_migrations WHERE version >= 15').run();
+    older.prepare('DELETE FROM schema_migrations WHERE version >= 16').run();
     older.close();
     const report = await restore({ sha256: sha256Of(backup), dryRun: true });
-    expect(report.schemaVersion).toBe(14);
-    expect(report.shippedSchemaVersion).toBe(15);
+    expect(report.schemaVersion).toBe(15);
+    expect(report.shippedSchemaVersion).toBe(16);
   });
 
   it('refuses a copy whose key version this instance does not hold, or whose key does not fit', async () => {

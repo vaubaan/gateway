@@ -58,3 +58,17 @@ The gateway answers with a code and what to do; it never holds a call waiting.
 | `resource-not-in-mission` | the resource is not selected in the mission                             | the creator may add it                                                                                   |
 
 The kit's instructions list every code the instance can return. Stopping a mission or removing an access stops every call at once.
+
+## Add a forgotten permission
+
+The mission's creator can open **Modify permissions**, select the missing
+permissions and choose their limits and whether to ask first. Review the
+additions and removals, then save. Every person and key on the mission receives
+the same change. Keys, history and used calls stay; removing and adding a
+permission again does not reset its consumption.
+
+An agent that receives `risk-not-accepted` may deliberately ask through
+`vaubaan__request_permission`, using the refusal's `refusal_id` and a reason.
+Nothing appears in your inbox until the agent asks. In **Waiting for you**, read
+what the agent says, add permissions through the same editor, or refuse.
+Granting changes the mission; the agent still needs to retry its call.

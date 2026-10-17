@@ -106,7 +106,7 @@ describe('migration runner', () => {
     );
   });
 
-  it('ships the fifteen migrations 0001 to 0015 in the default directory', () => {
+  it('ships the sixteen migrations 0001 to 0016 in the default directory', () => {
     const shipped = loadMigrations(DEFAULT_MIGRATIONS_DIR);
     expect(shipped.map((m) => [m.version, m.name])).toEqual([
       [1, 'schema'],
@@ -124,6 +124,7 @@ describe('migration runner', () => {
       [13, 'request_covers_the_call'],
       [14, 'sign_in_providers_and_invitations'],
       [15, 'git_pending_refs'],
+      [16, 'permission_requests'],
     ]);
   });
 });

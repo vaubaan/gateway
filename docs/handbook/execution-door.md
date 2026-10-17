@@ -1325,3 +1325,18 @@ textParts(response.body))`, or call `ctx.emitPart` yourself and await it.
   [budget-and-sessions](budget-and-sessions.md), [connections](connections.md),
   [missions](missions.md), [configuration](configuration.md),
   [plugin-sdk](plugin-sdk.md).
+
+## Explicit permission requests
+
+The host adds `vaubaan__request_permission` to `tools/list` and `/mcp/catalog`,
+under provider `vaubaan`. It passes the same mission admission, active-state
+and surface-rate checks; it is not dispatched to a provider or charged as a
+provider call. `permission-request.ts` accepts a refusal reference and a reason,
+then returns the request URL, state and expiry. It grants no authority.
+
+The pipeline's optional `permissionRefusal` hook persists references when the
+risk stage refuses a nonempty set of missing risks. Both the MCP and git
+pipelines receive it. Its failure fails the call closed. The refusal hint
+names the tool and includes the reference so git output is usable too. The
+bootstrap kit explains that the agent asks only when its assigned task needs
+the refused permission. [Request lifecycle](requests.md#permission-requests).

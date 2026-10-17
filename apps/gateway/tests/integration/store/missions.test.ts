@@ -650,7 +650,7 @@ describe('missions repository', () => {
       (ctx) => ({ allow: false, limits: ctx.limits }),
     );
     expect([...seen.outcome.limits]).toEqual([
-      ['github.code-read', { quota: 3, rateLimit: 4, rateWindowSeconds: 60 }],
+      ['github.code-read', { quota: 3, rateLimit: 4, rateWindowSeconds: 60, gate: 'auto' }],
     ]);
   });
 });

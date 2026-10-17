@@ -29,6 +29,7 @@ export interface MissionHandlerDeps {
 }
 
 export interface MissionHandlers {
+  changePermissions(request: Request, missionId: string): Promise<Response>;
   preview(request: Request): Promise<Response>;
   issue(request: Request): Promise<Response>;
   rotate(request: Request, missionId: string): Promise<Response>;
@@ -140,6 +141,21 @@ export function createMissionHandlers(deps: MissionHandlerDeps): MissionHandlers
   }
 
   return {
+    async changePermissions(request, missionId) {
+      const principal = await userOf(request);
+      if (principal instanceof Response) return principal;
+      const raw: unknown = await request.json().catch(() => null);
+      const result = await deps.service.changePermissions(principal.user, missionId, raw);
+      if (result.ok) return json(200, { mission: { id: result.mission.id } });
+      return json(
+        result.reason === 'not-found'
+          ? 404
+          : result.reason === 'conflict' || result.reason === 'inactive'
+            ? 409
+            : 422,
+        { error: result.reason, ...('issues' in result ? { issues: result.issues } : {}) },
+      );
+    },
     async preview(request) {
       const principal = await userOf(request);
       if (principal instanceof Response) return principal;

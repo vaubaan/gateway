@@ -2,7 +2,7 @@
 title: Missions — authority, issuance, presets, resources, members and tokens, bootstrap kit
 status: current
 date: 2026-10-13
-last_synced: 2026-10-15
+last_synced: 2026-10-17
 tracks:
   - apps/gateway/src/server/authority/
   - apps/gateway/src/server/missions/
@@ -863,6 +863,37 @@ route answers `{ mission: { id }, risk_id, gate, previous, opening_closed }`.
 `MissionService.get()` gives each policy line `gate_open_until`: the end of the period the
 creator opened the gate for, or `null` (always `null` on a mission that is not active);
 the page shows it next to the gate.
+
+## Adding and removing permissions after issuance
+
+`MissionService.permissionOptions` prepares the catalog choices for the creator on
+existing mission resources. `changePermissions` accepts `{ policy,
+expected_policy, request_id? }`, parsed strictly by `permission-edit.ts`. The
+expected policy is the complete list displayed to the human; a stale list is a
+409 conflict. Existing lines keep their limits and gates (their dedicated
+controls still edit those). New lines use `checkPolicyLines`, exactly as issuance
+does, with the creator's current authority. Removal requires no new grant.
+
+`MissionsRepo.changePermissions` rechecks the snapshot and stored mission status
+inside its write transaction, replaces the policy, records the session change,
+and optionally closes an open permission request of this same mission. All
+requested risks must be included to grant it. An expired, refused or already
+answered request changes nothing. Counters and keys are untouched, even when a
+removed risk is added again. Removal closes earlier gate openings and retires
+unconsumed approvals covering the removed risk.
+
+`POST /api/missions/:id/permissions` requires a human session and same origin.
+The management door does not expose the method. `permissions-editor.tsx` is shared
+by `/missions/:id/permissions` (the mission's **Modify permissions** link) and a
+permission request in Waiting for you. It lists additions and removals in a
+confirmation, including the budgets and gates of additions and the impact on
+all keys. Server refusals and conflicts stay visible in that confirmation.
+
+An edit writes `permissions-changed` in the administrative audit with the full
+before/after policy, and on the session when one exists. Execution reads live
+limits and gates in the budget transaction; a removed risk in a stale admitted
+call fails closed before upstream execution. See [requests](requests.md#permission-requests)
+and [the decision](../decisions/mission-permissions-and-explicit-requests.md).
 
 ## Changing the limits after issuance — `MissionService.setLimits(user, missionId, edits)`
 

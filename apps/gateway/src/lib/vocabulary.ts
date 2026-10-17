@@ -754,6 +754,8 @@ export const ACT_WORDS = {
   'invitation-added': 'invited an address',
   'invitation-removed': 'removed an invitation',
   'config-changed': 'changed the configuration',
+  'permissions-changed': 'changed the permissions of a mission',
+  'permission-requested': 'requested missing permissions',
   'limits-changed': 'changed the limits of a mission',
   'mission-member-left': 'left a mission',
 } as const;
