@@ -442,6 +442,18 @@ export const INVARIANTS: readonly Invariant[] = [
     ],
   },
   {
+    id: 'module-mocks-isolated',
+    statement:
+      'A test file that replaces a module runs isolated; every other file shares its worker’s module graph, so a mock outside the isolated project would apply or not by the order the files ran in.',
+    source: 'vitest.config.ts (ISOLATED_TESTS); docs/tests/integration-tests.md',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/module-mocks-isolated.test.ts`,
+        tests: ['replaces a module only in a file of the isolated project'],
+      },
+    ],
+  },
+  {
     id: 'no-secret-no-argument-in-logs',
     statement:
       'No log line is handed call arguments or a secret: tokens by prefix, arguments by hash, and the redactor removes every configured secret.',
