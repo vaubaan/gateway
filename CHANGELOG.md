@@ -9,6 +9,8 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+## [2.0.0-alpha.1] - 2026-10-18
+
 The first release of the on-prem gateway. It replaces the earlier hosted product
 (last release: tag `v4-final`) and shares no database with it: an instance starts
 empty, and a one-shot importer carries an organization of the hosted product into
@@ -1028,4 +1030,5 @@ write …)`), instead of GitHub's bare 403. The push token of
   package with a review date, and an audit that printed nothing is a broken gate, not a
   pass.
 
-[Unreleased]: https://github.com/vaubaan/gateway/compare/v4-final...HEAD
+[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.1...HEAD
+[2.0.0-alpha.1]: https://github.com/vaubaan/gateway/compare/v4-final...v2.0.0-alpha.1
