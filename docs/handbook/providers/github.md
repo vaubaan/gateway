@@ -635,6 +635,11 @@ connection) is tested by the host against a git-backed stand-in of GitHub:
   protected name, so only the fallback caught it (a `git push` of
   `feat/<slug>` did, before catalog v7). Rename the branch, or have the
   creator add the fallback to the mission explicitly.
+- **"needs the GitHub App permission Actions (actions: read) … does not hold"
+  while the installation shows Actions "Read and write"** — fixed: a level
+  above the declared one covers it (`accessCovers`). Before the fix, any
+  installation granted more than the plugin declares was refused. A cached
+  per-call token keeps the old answer for up to 50 minutes.
 - **`mockFetch: unexpected GET …`** in tests — Octokit built a URL no route
   covers; the message names it.
 
