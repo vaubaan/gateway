@@ -2,7 +2,7 @@
 title: Coding workflow
 status: current
 date: 2026-05-22
-last_synced: 2026-10-16
+last_synced: 2026-10-18
 tracks:
   - .github/
   - .semgrep/
@@ -441,8 +441,9 @@ Decision and rejected alternatives: the amendment "Release" of the ADR
 [repository-layout-and-contribution-workflow](../decisions/repository-layout-and-contribution-workflow.md#amendment-2026-10-13--release).
 The public product name is v2 while the repository's plan calls the same
 work v5; release tags are `v2.x.y`. Nothing has been released yet: no
-`v2.*` tag exists, no image is published, and the cutover of the `v5`
-branch to `main` ([below](#cutover-of-v5-to-main)) comes first.
+`v2.*` tag exists and no image is published. The cutover of the `v5`
+branch to `main` ([below](#cutover-of-v5-to-main)) is done, so releases
+are cut from `main`.
 
 ### One version
 
@@ -558,14 +559,14 @@ concurrency group per ref, never cancelled. `permissions: {}` at the top;
 each job states its own. Every action is pinned by commit, with the version
 in a comment.
 
-| Job       | Runs on      | Permissions                                                                                               | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| --------- | ------------ | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `plan`    | tag, dry run | `contents: read`                                                                                          | `scripts/release-plan.mjs`: the tag names the version of `package.json`, is the highest release so far, and `CHANGELOG.md` has its dated section; the tagged commit is on `main` (a pre-release: or on `v5`). Outputs the version, the image tags and the release notes.                                                                                                                                                                                                                                                                                                                                                                           |
-| `gates`   | tag, dry run | `contents: read`                                                                                          | Calls `ci.yml` itself (`workflow_call`): `scope` (always `code=true` there), `check`, `lint`, `test`, `audit`, `secrets`, `sast`, `e2e`. A release passes what a pull request passes, and the browser tests; the image is built, smoke-tested and scanned by `image` below.                                                                                                                                                                                                                                                                                                                                                                        |
-| `image`   | tag, dry run | `contents: read`                                                                                          | One native runner per architecture (`ubuntu-24.04`, `ubuntu-24.04-arm`; no emulation): builds the image without reading any cache, runs `deploy/docker/smoke.sh` on it with the expected version, commit and architecture, scans it with Trivy (`scripts/image-scan.sh`: a fixed HIGH or CRITICAL fails the release before anything is pushed), writes its SBOM (SPDX, Syft) as a workflow artefact.                                                                                                                                                                                                                                               |
-| `push`    | tag only     | `contents: read`, `packages: write`                                                                       | Per architecture, after `gates` and `image`: pushes the image to GHCR **by digest, without a tag**, from the layers `image` built in this run, with BuildKit's SBOM and provenance (`mode=max`) attached; pulls that digest back and runs the smoke test on it; writes the SBOM of what was pushed.                                                                                                                                                                                                                                                                                                                                                |
-| `publish` | tag only     | `contents: read`, `packages: write`, `id-token: write`, `attestations: write`, `artifact-metadata: write` | `scripts/release-image-index.sh`: assembles the two digests into one multi-architecture image under `<version>`, with its OCI annotations; signs a build-provenance attestation for its digest (`actions/attest`, stored on GitHub and next to the image) and verifies it at once with `gh attestation verify` as an operator would (repository, signer workflow, tag) — no attestation, or one that does not verify, fails the job; only then points the aliases of a final release (`<major>.<minor>`, `latest`) at that digest. A version tag never moves: an existing one is kept when it holds the same images (a re-run), refused otherwise. |
-| `release` | tag only     | `contents: write`                                                                                         | Refuses to start without the verified attestation of `publish`; then `gh release create --verify-tag`: title `Vaubaan Gateway <version>`, body from the changelog section plus the pull and verify commands, the two SBOM files as assets; marked pre-release, or latest for a final version.                                                                                                                                                                                                                                                                                                                                                      |
+| Job       | Runs on      | Permissions                                                                                               | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| --------- | ------------ | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `plan`    | tag, dry run | `contents: read`                                                                                          | `scripts/release-plan.mjs`: the tag names the version of `package.json`, is the highest release so far, and `CHANGELOG.md` has its dated section; the tagged commit is on `main` (a pre-release: or on `v5`). Outputs the version, the image tags, the release notes, and what this repository can publish — the architectures to build and whether an attestation is signed ([below](#on-a-private-repository)); its summary lists what is left out, if anything.                                                                                                                                                                                                                                                                                                                                                                                          |
+| `gates`   | tag, dry run | `contents: read`                                                                                          | Calls `ci.yml` itself (`workflow_call`): `scope` (always `code=true` there), `check`, `lint`, `test`, `audit`, `secrets`, `sast`, `e2e`. A release passes what a pull request passes, and the browser tests; the image is built, smoke-tested and scanned by `image` below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `image`   | tag, dry run | `contents: read`                                                                                          | One native runner per architecture of the plan (`ubuntu-24.04`, `ubuntu-24.04-arm`; no emulation): builds the image without reading any cache, runs `deploy/docker/smoke.sh` on it with the expected version, commit and architecture, scans it with Trivy (`scripts/image-scan.sh`: a fixed HIGH or CRITICAL fails the release before anything is pushed), writes its SBOM (SPDX, Syft) as a workflow artefact.                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `push`    | tag only     | `contents: read`, `packages: write`                                                                       | Per architecture, after `gates` and `image`: pushes the image to GHCR **by digest, without a tag**, from the layers `image` built in this run, with BuildKit's SBOM and provenance (`mode=max`) attached; pulls that digest back and runs the smoke test on it; writes the SBOM of what was pushed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `publish` | tag only     | `contents: read`, `packages: write`, `id-token: write`, `attestations: write`, `artifact-metadata: write` | `scripts/release-image-index.sh`: assembles the digests — exactly one per planned architecture, checked — into one image index under `<version>`, with its OCI annotations; signs a build-provenance attestation for its digest (`actions/attest`, stored on GitHub and next to the image) and verifies it at once with `gh attestation verify` as an operator would (repository, signer workflow, tag) — no attestation, or one that does not verify, fails the job; only then points the aliases of a final release (`<major>.<minor>`, `latest`) at that digest. On a private repository the plan has decided there is no attestation: both steps are skipped, a step writes that to the summary, and the aliases move on that decision. A version tag never moves: an existing one is kept when it holds the same images (a re-run), refused otherwise. |
+| `release` | tag only     | `contents: write`                                                                                         | Refuses to start without the verified attestation of `publish` when the plan expected one; then `gh release create --verify-tag`: title `Vaubaan Gateway <version>`, body from the changelog section plus the pull and verify commands and, on a private repository, a paragraph on what was left out; one SBOM file per architecture as assets; marked pre-release, or latest for a final version.                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
 Image: `ghcr.io/<owner>/<repository>`, lower-cased — today
 `ghcr.io/vaubaan/gateway`. Tags: `<version>`; a final release
@@ -577,9 +578,9 @@ A dry run runs `plan`, `gates` and `image`; the three jobs that hold a write
 permission are skipped, so nothing is pushed, attested, tagged or released.
 When the changelog has no section for the version of the tree yet, the dry
 run warns and previews `Unreleased` instead of failing. GitHub only offers a
-manual run for a workflow file present on the default branch: until the
-cutover puts `release.yml` on `main`, there is no dry run on GitHub. A tag
-has no such limit — it runs the workflow file of its own commit.
+manual run for a workflow file present on the default branch, `main`; the
+run may select any ref. A tag has no such limit — it runs the workflow file
+of its own commit.
 
 A tag never publishes an image the gates did not pass (`push` needs
 `gates`), never tags an image that was not smoke-tested from the registry
@@ -599,12 +600,33 @@ both. The smoke test loads the two addons on each architecture at every
 release, so a dependency bump that loses one fails the release instead of
 shipping a broken image.
 
-Two things are required of the repository, and the workflow cannot give
-them to itself: the `ubuntu-24.04-arm` runner, and artifact attestations,
-which GitHub offers to public repositories on every plan and to private
-ones on Enterprise Cloud only — on a private repository without it,
-`publish` fails at the attestation: the image exists under its version tag,
-`latest` has not moved and no GitHub release is created.
+#### On a private repository
+
+Two things the pipeline uses are GitHub's to give, not the workflow's: the
+`ubuntu-24.04-arm` hosted runner, which public repositories get and a
+private repository gets only on a plan that includes it (a job asking for
+it otherwise waits for a runner that never comes), and artifact
+attestations, which GitHub offers to public repositories on every plan and
+to private ones on Enterprise Cloud only. So the plan reads
+`github.event.repository.private` and decides, once, what this repository
+publishes (`publicationScope` in `scripts/release-lib.mjs`):
+
+| Repository | Architectures                   | Attestation                                     | Everything else                                                           |
+| ---------- | ------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------- |
+| public     | `linux/amd64` and `linux/arm64` | signed, verified, required by `release`         | gates, smoke tests, scan, SBOMs, image index, version tag, GitHub release |
+| private    | `linux/amd64` only              | none; the aliases of a final release still move | the same                                                                  |
+
+This is what anyone who forks the repository and keeps the fork private
+gets, and the decision is never silent: the summary of the `plan` job
+lists what is left out and why, `publish` writes the same under the
+digest it tagged, and the GitHub release carries a paragraph "Built from a
+private repository" with the same two items and no verify command. The
+dry run takes the same decision, so a rehearsal on a private repository
+builds `amd64` only and waits for nothing. `scripts/release-image-index.sh`
+is told the planned architectures and refuses a set of digests that does
+not match them exactly: a `push` job that did not run is a failure, not a
+smaller image. A public repository gets the whole plan, unchanged, and
+there a missing attestation still fails `publish` and `release`.
 
 The release scripts are plain Node (`scripts/release-lib.mjs`, pure
 functions; `release-prepare.mjs` and `release-plan.mjs` do the I/O) and are
@@ -652,10 +674,11 @@ version comment change together.
 
 ### Cutover of `v5` to `main`
 
-`main` still holds the v4 tree (its last SaaS release is the tag
-`v4-final`). Bringing `v5` onto `main` is one manual step, done by Renaud and by nobody else: no
-feature branch, workflow or agent merges into `main`, pushes to it or opens
-that pull request.
+Done on 2026-10-16: the merge commit `681415ed` brought `v5` onto `main`
+(the last v4 release is the tag `v4-final`; the v4 `main` is tagged
+`main-before-v5`). It was one manual step, done by Renaud and by nobody
+else: no feature branch, workflow or agent merged into `main`, pushed to it
+or opened that pull request. The procedure, kept for the record:
 
 1. Before: the work planned for the first release is merged into `v5`, CI is green on `v5`, the manual
    cutover acceptance scenario of

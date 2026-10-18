@@ -3,10 +3,13 @@
 # `publish` job of .github/workflows/release.yml, in two steps with the
 # attestation between them, so that `latest` never names an unattested image:
 #
-#   release-image-index.sh create <image> <version> <digests-dir>
+#   release-image-index.sh create <image> <version> <digests-dir> <architectures>
 #       Creates <image>:<version> from the per-architecture digests (one empty
 #       file per digest in <digests-dir>, named by its hex) and prints the
 #       digest of the result; also written to $GITHUB_OUTPUT as `digest`.
+#       <architectures> names the ones the plan decided ("amd64 arm64", or
+#       "amd64" alone on a private repository): one digest per architecture,
+#       no more, no fewer — a job that did not push is not papered over.
 #       A version tag never moves: when <image>:<version> already exists it is
 #       kept if it holds exactly these platform images (a re-run of the same
 #       release), refused otherwise.
@@ -39,15 +42,30 @@ platform_images_of() {
     | sort
 }
 
+# Architectures of the platform images under a reference, one per line, sorted.
+platform_architectures_of() {
+  docker buildx imagetools inspect "$1" --raw \
+    | jq -r '.manifests[]? | select(.platform.architecture != "unknown") | .platform.architecture' \
+    | sort
+}
+
 create() {
-  local image="$1" version="$2" digests_dir="$3"
-  local sources=() arguments=() name annotation expected existing digest
+  local image="$1" version="$2" digests_dir="$3" architectures="$4"
+  local sources=() arguments=() name annotation expected existing digest planned found
+
+  planned="$(tr ' ' '\n' <<<"$architectures" | sed '/^$/d' | sort)"
+  [ -n "$planned" ] || fail "no architecture planned (fourth argument)"
 
   for name in "$digests_dir"/*; do
     [ -e "$name" ] || fail "no architecture digest in ${digests_dir}"
     sources+=("${image}@sha256:$(basename "$name")")
   done
-  [ "${#sources[@]}" -ge 2 ] || fail "expected one digest per architecture, found ${#sources[@]} in ${digests_dir}"
+  [ "${#sources[@]}" -eq "$(wc -l <<<"$planned")" ] \
+    || fail "expected one digest per planned architecture ($(paste -sd' ' <<<"$planned")), found ${#sources[@]} in ${digests_dir}"
+
+  found="$(for name in "${sources[@]}"; do platform_architectures_of "$name"; done | sort)"
+  [ "$found" = "$planned" ] \
+    || fail "the pushed digests are for [$(paste -sd' ' <<<"$found")], the plan was [$(paste -sd' ' <<<"$planned")]"
 
   expected="$(for name in "${sources[@]}"; do platform_images_of "$name"; done | sort)"
   [ -n "$expected" ] || fail "the pushed digests hold no platform image"
@@ -87,8 +105,8 @@ alias_tags() {
 
 case "${1:-}" in
   create)
-    [ "$#" -eq 4 ] || fail "usage: release-image-index.sh create <image> <version> <digests-dir>"
-    create "$2" "$3" "$4"
+    [ "$#" -eq 5 ] || fail "usage: release-image-index.sh create <image> <version> <digests-dir> <architectures>"
+    create "$2" "$3" "$4" "$5"
     ;;
   alias)
     [ "$#" -ge 3 ] || fail "usage: release-image-index.sh alias <image> <digest> <tag>..."
@@ -96,6 +114,6 @@ case "${1:-}" in
     alias_tags "$@"
     ;;
   *)
-    fail "usage: release-image-index.sh (create <image> <version> <digests-dir> | alias <image> <digest> <tag>...)"
+    fail "usage: release-image-index.sh (create <image> <version> <digests-dir> <architectures> | alias <image> <digest> <tag>...)"
     ;;
 esac

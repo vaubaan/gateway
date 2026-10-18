@@ -461,7 +461,7 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/vercel/tests/unit/team-pin.test.ts`                                                               |        99 |
 | `scripts/audit-gate.test.mjs`                                                                              |        29 |
 | `scripts/lockfile-gate.test.mjs`                                                                           |        12 |
-| `scripts/release-lib.test.mjs`                                                                             |        50 |
+| `scripts/release-lib.test.mjs`                                                                             |        55 |
 | **TOTAL** (`npx vitest run --reporter=json`, 2026-10-14, with a build; 321 files; 10481 passed, 1 skipped) | **10482** |
 
 The table is generated from the JSON report of one run of the whole suite
@@ -4409,17 +4409,21 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
 > Covers: [`coding-workflow.md`](../workflow/coding-workflow.md#release)
 > ("One version", "Versioning policy", "Pre-releases", "Cutting a release");
 > ADR [[repository-layout-and-contribution-workflow]], amendment "Release"
-> (R1 to R3, R6, R10). No network, no registry, no tag: the workflow itself
-> (`.github/workflows/release.yml`) is checked with `actionlint` and by its
-> dry run, not by this suite.
+> (R1 to R3, R6, R10, R14). No network, no registry, no tag: the workflow
+> itself (`.github/workflows/release.yml`) is checked with `actionlint` and by
+> its dry run, not by this suite.
 
-- **`scripts/release-lib.test.mjs`** (50) — **versions**: a final version and
+- **`scripts/release-lib.test.mjs`** (55) — **versions**: a final version and
   the three pre-release stages parse; a leading `v`, two or four numbers, a
   leading zero, `rc1`, `preview.1`, build metadata and free text are refused;
   semver precedence orders `alpha < beta < rc < final` and numbers
   numerically. **Image tags**: a final release gives `<version>`,
   `<major>.<minor>` and `latest`; **a pre-release gives its own version only**.
-  **A tag**: must name the version of `package.json` and be the highest
+  **What the repository can publish**: a public repository gets both
+  architectures, each on a runner of its own architecture, the attestation
+  and nothing left out; a private one gets `amd64` only and no attestation,
+  with the two reasons spelled out (the `ubuntu-24.04-arm` runner, Enterprise
+  Cloud). **A tag**: must name the version of `package.json` and be the highest
   release among the existing tags (tags that are not releases, such as
   `v4-final`, are ignored). **Release notes from a fixture changelog**
   (`scripts/fixtures/CHANGELOG.fixture.md`): the body of a dated section
@@ -4438,9 +4442,13 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
   in a temporary copy of the files they touch: `release:prepare` edits the
   three files and prints the tag command without running it; a refusal
   writes nothing; the plan of a tag writes the notes and the workflow
-  outputs, fails while the changes are still titled `Unreleased` and when the
-  tag is not the version of `package.json`; a dry run previews `Unreleased`
-  with a warning. **The repository itself** has an `Unreleased` section and a
+  outputs (version, pre-release, image tags, matrix, architectures,
+  platforms, attestation, what is left out), fails while the changes are
+  still titled `Unreleased` and when the tag is not the version of
+  `package.json`; the plan of a private repository writes a one-entry matrix,
+  `attest=false` and the two items left out, and prints a notice for each; a
+  visibility that is neither `true` nor `false` is refused; a dry run previews
+  `Unreleased` with a warning. **The repository itself** has an `Unreleased` section and a
   version the scripts accept.
 - **`apps/gateway/tests/unit/structural/version-single-source.test.ts`** (4) —
   **one source for the version**: what `next.config.ts` stamps into the build

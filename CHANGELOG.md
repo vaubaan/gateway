@@ -676,12 +676,16 @@ write …)`), instead of GitHub's bare 403. The push token of
   documented examples of the configuration. `GET /healthz` answers; the version and the
   commit are in the footer of every page, the consent screen included; logs are JSON
   lines with token-prefix and secret redaction.
-- **Releases.** Pushing a tag `v2.x.y` is meant to publish the image for `linux/amd64`
-  and `linux/arm64` to `ghcr.io/vaubaan/gateway` with an SBOM and a signed
-  build-provenance attestation, and to create the GitHub release from this file. What a
-  version number promises — configuration keys, refusal codes, the plugin contract,
-  catalog ids — is written in `docs/workflow/coding-workflow.md`; pulling and verifying
-  an image in `deploy/README.md`.
+- **Releases.** Pushing a tag `v2.x.y` publishes the image for `linux/amd64` and
+  `linux/arm64` to `ghcr.io/vaubaan/gateway` with an SBOM and a signed build-provenance
+  attestation, and creates the GitHub release from this file. From a private
+  repository — a fork kept private, or this one before it is public — a release is
+  `linux/amd64` only and unattested, because GitHub reserves the arm64 runner and
+  artifact attestations for public repositories; the run summary and the release notes
+  say so, and everything else is the same. What a version number promises —
+  configuration keys, refusal codes, the plugin contract, catalog ids — is written in
+  `docs/workflow/coding-workflow.md`; pulling and verifying an image in
+  `deploy/README.md`.
 - **`npm run demo`: the whole interface in your browser, nothing to register.** One
   command starts the real application on `http://localhost:3210` with a demo identity
   provider (a picker of three people, no password), simulated GitHub, Stripe, Cloudflare

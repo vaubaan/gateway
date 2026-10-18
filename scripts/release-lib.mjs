@@ -114,6 +114,66 @@ export function imageTags(version) {
 }
 
 /**
+ * The architectures a release is built for, each on a hosted runner of its
+ * own architecture (no emulation). `node_arch` is what `process.arch` answers
+ * there; the container smoke test checks it.
+ */
+export const ARCHITECTURES = Object.freeze([
+  Object.freeze({ arch: 'amd64', runner: 'ubuntu-24.04', node_arch: 'x64' }),
+  Object.freeze({ arch: 'arm64', runner: 'ubuntu-24.04-arm', node_arch: 'arm64' }),
+]);
+
+/**
+ * @typedef {object} PublicationScope
+ * @property {readonly { arch: string, runner: string, node_arch: string }[]} architectures
+ *   the matrix of the `image` and `push` jobs
+ * @property {boolean} attestation whether `publish` signs and verifies a
+ *   build-provenance attestation
+ * @property {readonly string[]} leftOut what this repository does not get, and
+ *   why — one Markdown sentence each, for the run summary and the release notes
+ */
+
+/**
+ * What a run of the release workflow publishes from this repository. A public
+ * repository gets the whole plan. A private one gets what GitHub gives it:
+ * no `ubuntu-24.04-arm` hosted runner (a job asking for one on a plan without
+ * it waits for a runner that never comes) and no artifact attestation (public
+ * repositories, or Enterprise Cloud). So it ships `linux/amd64` only, without
+ * a build-provenance attestation, and says so — never silently. Everything
+ * else — gates, smoke tests, scan, SBOMs, image index, version tag, GitHub
+ * release — is the same.
+ * @param {{ privateRepository: boolean }} input
+ * @returns {PublicationScope}
+ */
+export function publicationScope({ privateRepository }) {
+  if (!privateRepository) {
+    return { architectures: ARCHITECTURES, attestation: true, leftOut: [] };
+  }
+  return {
+    architectures: ARCHITECTURES.filter((architecture) => architecture.arch === 'amd64'),
+    attestation: false,
+    leftOut: [
+      'The `linux/arm64` image: GitHub offers the `ubuntu-24.04-arm` hosted runner to public ' +
+        'repositories; on a private repository without a plan that includes it, the job would ' +
+        'wait forever for a runner. The image is `linux/amd64` only.',
+      'The build-provenance attestation: GitHub offers artifact attestations to public ' +
+        'repositories and, among private ones, to GitHub Enterprise Cloud only. There is nothing ' +
+        "to `gh attestation verify`; BuildKit's provenance and SBOM inside the image, and the SPDX " +
+        'SBOM of the release, are unaffected.',
+    ],
+  };
+}
+
+/**
+ * The platforms of a scope, for prose: "`linux/amd64` and `linux/arm64`".
+ * @param {PublicationScope} scope
+ * @returns {string}
+ */
+export function platformsText(scope) {
+  return scope.architectures.map((architecture) => `\`linux/${architecture.arch}\``).join(' and ');
+}
+
+/**
  * The tag being released must name the version of `package.json` and be the
  * highest release so far: `latest` and `<major>.<minor>` only move forward.
  * @param {{ tag: string, manifestVersion: string, existingTags: readonly string[] }} input
