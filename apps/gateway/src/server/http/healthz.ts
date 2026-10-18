@@ -11,7 +11,7 @@ import type { StoreLiveness } from '../compose/ports';
 import type { Logger } from '../logging';
 
 export interface HealthBody {
-  readonly status: 'ok' | 'degraded' | 'unavailable';
+  readonly status: 'ok' | 'degraded' | 'unavailable' | 'setup';
   readonly version?: string;
   readonly commit?: string;
   readonly uptime_seconds?: number;
@@ -60,6 +60,22 @@ export function unavailableResponse(): Response {
     reason: 'composition root failed; see server log',
   };
   return new Response(JSON.stringify(body), { status: 503, headers: HEADERS });
+}
+
+/**
+ * Setup mode: the process is alive and serves the setup page, nothing else. 200,
+ * so the platform's health check keeps the container up while the key is awaited.
+ */
+export function setupResponse(deps: Omit<HealthDeps, 'store' | 'logger'>): Response {
+  const now = (deps.now ?? (() => new Date()))();
+  const body: HealthBody = {
+    status: 'setup',
+    version: deps.build.version,
+    commit: deps.build.commit,
+    uptime_seconds: Math.floor((now.getTime() - deps.startedAt.getTime()) / MS_PER_SECOND),
+    reason: 'waiting for the master key on the setup page',
+  };
+  return new Response(JSON.stringify(body), { status: 200, headers: HEADERS });
 }
 
 /** Mounts `/healthz` on any host that provides its dependencies lazily (the root satisfies them). */

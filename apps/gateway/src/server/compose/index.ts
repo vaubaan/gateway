@@ -6,7 +6,15 @@ export {
   type GatewayRoot,
   type RootDeps,
 } from './root';
-export { bootOrExit, EXIT_BOOT_ERROR, EXIT_CONFIG_ERROR, type BootIo } from './boot';
+export {
+  bootOrExit,
+  EXIT_BOOT_ERROR,
+  EXIT_CONFIG_ERROR,
+  startInstance,
+  type BootDeps,
+  type BootIo,
+  type BootState,
+} from './boot';
 export type {
   CacheClient,
   RateLimitDecision,

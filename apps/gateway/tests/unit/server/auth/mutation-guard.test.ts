@@ -497,6 +497,11 @@ const MUTATING_ROUTES = routeFiles(APP)
   .map((path) => ({ name: relative(APP, path), source: readFileSync(path, 'utf8') }))
   .filter((route) => MUTATING_METHOD.test(route.source));
 
+/** The setup route is one of them, so its exemption below names a route that exists. */
+const SETUP_ROUTE_PRESENT = MUTATING_ROUTES.some(
+  (route) => route.name === 'api/setup/master-key/route.ts',
+);
+
 describe('the mutation guard covers every mutating handler', () => {
   let rig: Rig;
 
@@ -568,23 +573,34 @@ describe('the mutation guard covers every mutating handler', () => {
     expect(handlers.sort()).toEqual(classified.sort());
   });
 
-  it('finds the mutating routes of the app', () => {
+  it('finds the mutating routes of the app, the setup route among them', () => {
     expect(MUTATING_ROUTES.length).toBeGreaterThanOrEqual(GUARDED.length);
+    expect(SETUP_ROUTE_PRESENT).toBe(true);
   });
 
-  it.each(MUTATING_ROUTES)('$name delegates to a guarded mutation only', ({ source }) => {
-    const delegations = [...source.matchAll(DELEGATION)]
-      .map((match) => match[1] ?? '')
-      .filter(
-        (delegation) => !BEARER_DOORS.test(delegation) && !(delegation in PROTOCOL_ENDPOINTS),
-      );
-    for (const delegation of delegations) expect(Object.keys(MUTATIONS)).toContain(delegation);
-    if (delegations.length === 0) {
-      expect(source).toMatch(
-        /\.(?:execution|management)\.handlers\.|\.oauth\.handlers\.(?:register|token|revoke)\(/,
-      );
-    }
-  });
+  /**
+   * Setup mode has no store, so no session: the route is authenticated by the
+   * bootstrap token of the configuration, origin-checked, throttled
+   * (`server/setup/handlers.ts`; `tests/integration/compose/setup-mode-restore.test.ts`).
+   */
+  const SETUP_ROUTES = ['api/setup/master-key/route.ts'];
+
+  it.each(MUTATING_ROUTES.filter((route) => !SETUP_ROUTES.includes(route.name)))(
+    '$name delegates to a guarded mutation only',
+    ({ source }) => {
+      const delegations = [...source.matchAll(DELEGATION)]
+        .map((match) => match[1] ?? '')
+        .filter(
+          (delegation) => !BEARER_DOORS.test(delegation) && !(delegation in PROTOCOL_ENDPOINTS),
+        );
+      for (const delegation of delegations) expect(Object.keys(MUTATIONS)).toContain(delegation);
+      if (delegations.length === 0) {
+        expect(source).toMatch(
+          /\.(?:execution|management)\.handlers\.|\.oauth\.handlers\.(?:register|token|revoke)\(/,
+        );
+      }
+    },
+  );
 
   describe.each(Object.keys(PROTOCOL_ENDPOINTS))('%s', (name) => {
     const method = name.slice(name.lastIndexOf('.') + 1) as 'register' | 'token' | 'revoke';

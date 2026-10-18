@@ -10,6 +10,9 @@ tracks:
   - apps/gateway/tests/integration/instance/
   - apps/gateway/src/server/crypto/
   - apps/gateway/src/server/master-key/
+  - apps/gateway/src/server/setup/
+  - apps/gateway/src/app/api/setup/
+  - apps/gateway/src/app/admin/bootstrap/page.tsx
   - apps/gateway/src/app/admin/(guarded)/encryption/page.tsx
   - apps/gateway/src/app/api/admin/master-key/
   - apps/gateway/src/server/reseal/
@@ -69,6 +72,7 @@ apps/gateway/src/
     crypto/
       master-key-file.ts        the key file: 32 random bytes, base64, 0600, never over an existing file
     master-key/                 the master key as the instance speaks of it: generated here or not, handed over or not, download (root.masterKey)
+    setup/                      setup mode: the state on globalThis, the handler that receives the key of a copy to restore
       aead.ts                   XChaCha20-Poly1305 core, per-connection key, blob format
       encryptor.ts              Encryptor port + createEncryptor(config.encryption)
     logging/
@@ -117,7 +121,11 @@ deploy/config/                  gateway.example.yaml, .env.example (every key do
    immediately when `NEXT_PHASE === 'phase-production-build'` or the
    runtime is not `nodejs`.
 2. At server start `register()` imports `compose/boot` and awaits
-   `bootOrExit()`, which awaits `getRoot()`.
+   `bootOrExit()`, which awaits `startInstance()`: `loadBootConfigOrSetup()`
+   then `getRoot()` with the loaded configuration — or, when the master key
+   file is absent, `restore.from` is set and the store is empty, **setup
+   mode** ([below](#setup-mode-the-setup-receives-the-key-for-a-restore)):
+   no root, the setup page receives the key.
 3. `getRoot()` memoises the promise of `buildRoot()` on
    `globalThis[Symbol.for('vaubaan.gateway.root')]`. Route handlers,
    server components and tests call the same function and get the same
@@ -775,9 +783,9 @@ the administrator. `deploy/config/.env.example` ships that way.
    error of old with a hint (`the gateway writes it at its first start`, or
    `a restore needs the key the copy was sealed with`): the operator commands
    never generate anything.
-2. The reason must be `generate`: an absent key with `restore.from` fails the
-   boot (exit 78) with that hint — the setup receiving the key of a copy is the
-   next step, not this one.
+2. The reason must be `generate`: an absent key with `restore.from` is setup
+   mode when the store is empty ([below](#setup-mode-the-setup-receives-the-key-for-a-restore)),
+   and exit 78 with that hint once the store holds data.
 3. `storeHasContent(store.path)` (`restore/restore.ts`, the rule of the
    first-boot restore: an empty file is no store) must be false, else exit 78
    naming the key file and the store: _a key missing on an existing store is a
@@ -831,6 +839,54 @@ filename="vaubaan-master-key.txt"`, `Cache-Control: no-store`.
 - Nothing of the key reaches a log line, an audit entry, a refusal or a page:
   the redactor holds the key in every encoding (`secretValues`), and the pages
   show the path, the version and the dates.
+
+### Setup mode: the setup receives the key for a restore
+
+ADR [master-key-generated-and-handed-over-by-the-instance](../decisions/master-key-generated-and-handed-over-by-the-instance.md),
+amendment. Moving an instance to a new host without a shell: the new machine
+has `restore.from` and `restore.sha256`, an empty volume and no key file.
+
+- **The boot** (`startInstance`, `compose/boot.ts`): `loadBootConfigOrSetup`
+  returns `kind: 'setup'` (the `SetupOutcome` of the loader, reason
+  `restore`, and a **snapshot** of the environment); the process's own
+  environment is scrubbed at once. No root is built. One `warn` line
+  (`starting in setup mode`: the key file, the store path, the public origin,
+  whether a bootstrap token is set, the remedy) and the state is published
+  (`publishSetup`, `server/setup/state.ts`, on `globalThis`): the validated
+  `SetupConfig`, the key file path, a logger whose redactor holds every
+  secret of that configuration, the build, a rate limiter, and `complete()`.
+  `/healthz` answers 200 `{ status: 'setup', reason }` (`setupResponse`); the
+  proxy (`proxy.ts`) sends every path but `/admin/bootstrap`,
+  `/api/setup/**`, `/healthz` and the assets (`servedInSetupMode`) to
+  `/admin/bootstrap`, at `public_url`; `getRoot()` rejects with
+  `SetupModeError` unless called with a `loadConfig` (the completion). A
+  store that holds data with an absent key stays exit 78
+  (`the store already holds data: put the key file back`).
+- **The page**: `/admin/bootstrap` renders "Restore this gateway"
+  (`SetupKeyPage`, handbook [authentication](authentication.md), "Pages"):
+  the bootstrap token and the key file; without a `bootstrap_token` in the
+  configuration it says the gateway cannot receive the key here
+  (`setup-no-token`).
+- **`POST /api/setup/master-key`** (`createSetupHandlers(state).receiveKey`,
+  multipart `token` + `key`; 404 outside setup mode): origin-checked against
+  `public_url`; `AUTH_LIMITS.bootstrapPerInstance` (10 per 10 min,
+  `too-many-attempts`); the token compared in constant time, every wrong one
+  counted (`bootstrap-refused`, then `setup-locked` at `BOOTSTRAP_MAX_MISSES`
+  for the rest of this start); the file at most `MAX_KEY_FILE_BYTES` (4096)
+  and `parseMasterKeyText` (`crypto/master-key-file.ts`: 32 bytes, base64 or
+  base64url, one line — the loader's rule; else `key-invalid`, `key-missing`
+  for no file). Then `writeMasterKeyFile` (0600, `wx`: a second upload while
+  one is being installed is `key-busy`) and `complete()`: `getRoot` with
+  `loadBootConfig({ env: snapshot })` → the normal boot, `restoreAtFirstBoot`
+  included (hash, integrity, migrations, **every sealed blob opens with the
+  received key**), the store opens, the root serves. A boot that throws
+  removes the key file (`unlink`), keeps the message as `lastRefusal` (shown
+  on the page: the restore's message names the check, never the source) and
+  answers `restore-refused`; setup mode goes on. Success clears the state
+  (`clearSetup`) and sends the browser to `/admin/bootstrap`, now the token
+  sign-in of the restored instance. Every refusal is
+  `303 /admin/bootstrap?error=<code>`; no log line, page or URL carries the
+  key or the token.
 
 ### Rotating the master key
 
@@ -1018,7 +1074,11 @@ format, 0600, never over an existing file;
 temporary directory, the file written, the log line, the second start, the
 refusals at exit 78; `tests/integration/instance/master-key-handover.test.ts`:
 the download audited by name before it leaves, the fresh-sign-in rule, the
-confirmation and every refusal), the structural test `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`
+confirmation and every refusal; `tests/integration/compose/setup-mode-restore.test.ts`:
+setup mode on a real copy — no root, the environment scrubbed, the health
+answer, the redirected paths, every refusal, a wrong key refused by the
+restore and removed again, the right key restoring the copy and the gateway
+serving), the structural test `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`
 (no literal URL, secret or project ref in the v5 perimeter except
 `telemetry-default.ts` and `deploy/config/*.example*`),
 `apps/gateway/tests/unit/structural/example-config-providers.test.ts` (the

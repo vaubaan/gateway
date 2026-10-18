@@ -105,10 +105,63 @@ configuration error, exit 78 (ADR
 - The download is the one place the key is read back out of the process. It is
   limited to an operator with a fresh session, audited first, and the audit is
   visible to every operator.
-- The loader's outcome type (`SetupOutcome`) is what the next step builds on:
-  the setup receiving the key file for a restore when the store is empty and
-  the key is absent (`reason: 'restore'`). This ADR does not implement it; the
-  boot still fails that case with a message naming the key.
+- The loader's outcome type (`SetupOutcome`) is what the amendment below
+  builds on: the setup receiving the key file for a restore when the store is
+  empty and the key is absent (`reason: 'restore'`).
+
+## Amendment 2026-10-17 — the setup receives the key for a restore
+
+**Context.** Moving an instance to a new host without a shell: the new
+machine has `restore.from`, an empty volume and no key file — the key of the
+copy is in the hands of the administrator, as a file this ADR handed out.
+Failing the boot (the rule above for `reason: 'restore'`) sends them back to
+a shell.
+
+**Decision.**
+
+7. **Setup mode.** When the master key file is absent, `restore.from` is set
+   and the store is empty, the boot builds no root: it publishes a setup
+   state (`server/setup/state.ts`, on `globalThis` like the root's handle)
+   holding the validated configuration without its key, a logger with the
+   redactor of that configuration, and the environment the final load will
+   read — a snapshot, so the process's own environment is scrubbed at once
+   (ADR secrets-leave-the-process-environment-after-load). `/healthz` answers
+   200 with `status: 'setup'` (the container must stay up); the proxy sends
+   every other path to `/admin/bootstrap`; `getRoot()` rejects
+   (`SetupModeError`) for anyone but the setup's own completion. A store that
+   holds data with an absent key is, as before, exit 78.
+8. **The setup page receives the key.** `/admin/bootstrap` in setup mode is
+   "Restore this gateway": the bootstrap token of the configuration — the
+   only credential there is before a store exists; without one in the
+   configuration the page says the gateway cannot receive the key here — and
+   the key file as an upload (`POST /api/setup/master-key`, multipart).
+   Origin-checked against `public_url`, constant-time comparison, the
+   bootstrap window of the sign-in (`AUTH_LIMITS.bootstrapPerInstance`), and
+   after `BOOTSTRAP_MAX_MISSES` wrong tokens this start accepts no more. The
+   file must hold 32 bytes in base64, one line, as `master_key` reads it.
+9. **Then the existing first boot, unchanged.** The key is written to the
+   configured path (0600, never over an existing file — a concurrent second
+   upload is "busy") and the normal boot runs: `restoreAtFirstBoot` with
+   every verification (hash, SQLite integrity, migrations, every sealed blob
+   opens with the received key), the store opens, the root serves. A refused
+   boot removes the key file again, keeps the refusal's message for the page
+   (the restore names the check that failed, never the source) and stays in
+   setup mode: the next upload tries again. Nothing of the key or of the
+   token reaches a log line, the page or a URL.
+
+**Consequences.** A move to a new host is two variables and two uploads on a
+page, with the same guarantees as the restore from a shell. Setup mode is a
+third state of a process (ready, setup, exiting) that the proxy, the health
+check and the root's handle know about; nothing else does. The environment
+snapshot holds the secrets on the heap until the key arrives, as the
+configuration does afterwards.
+
+**Rejected.** Accepting the key pasted in a text field (a file is what was
+handed out, and a text field invites the shell history back); keeping the
+written key after a refused restore (the next attempt could not write it,
+and a wrong key on the volume looks like a right one); building a partial
+root to serve the page (the setup needs the configuration, a logger and a
+rate limiter, nothing a root is for).
 
 ## Rejected alternatives
 

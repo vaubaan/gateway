@@ -226,6 +226,14 @@ names, and the notes about them do too.
   page), never the key. `deploy/config/.env.example` ships with the generated key;
   `npm run gen-master-key` stays for whoever provides it. ADR
   `master-key-generated-and-handed-over-by-the-instance`.
+- **Moving an instance to a new host without a shell: the setup receives the key.**
+  With `VAUBAAN_RESTORE_FROM` set, an empty volume and no key file, the gateway
+  starts in setup mode instead of stopping: `/healthz` says `setup`, every page leads
+  to `/admin/bootstrap`, which asks for the bootstrap token and the key file the
+  former instance handed out. The key is written on the volume, the copy is checked
+  with it (hash, integrity, schema, every stored secret opens) and restored, and the
+  gateway serves; a key that does not open the copy is removed again and the page
+  says which check failed. Same ADR, amendment.
 - **Restore, and moving an instance to another host.** `node apps/gateway/restore.mjs
 <file or https URL> --sha256 <hex>` puts a copy made by `backup.mjs` back after
   checking its SHA-256, SQLite's integrity check, a schema this image can migrate (an

@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { ConfigError, loadInstanceConfig } from '../config';
 import { TEST_MASTER_KEY, fakeFiles, validEnv } from '../config/testing';
 import { generateMasterKeyText } from '../crypto/master-key-file';
-import { loadBootConfig, type BootConfigDeps } from './boot-config';
+import { loadBootConfig, loadBootConfigOrSetup, type BootConfigDeps } from './boot-config';
 
 const KEY_FILE = '/data/master.key';
 const STORE = '/data/gateway.db';
@@ -99,6 +99,47 @@ describe('loadBootConfig', () => {
     );
     expect(() => loadBootConfig(deps)).toThrow(/a restore needs the key the copy was sealed with/);
     expect(written).toEqual({});
+  });
+
+  it('with restore.from, no key and an empty store, the boot starts in setup mode with a scrubbed environment', () => {
+    const { deps, env, written } = harness(
+      {},
+      {
+        scrub: true,
+        env: {
+          VAUBAAN_MASTER_KEY_GENERATE: undefined,
+          VAUBAAN_RESTORE_FROM: '/backups/copy.sqlite',
+          VAUBAAN_RESTORE_SHA256: 'b'.repeat(64),
+        },
+      },
+    );
+    const outcome = loadBootConfigOrSetup(deps);
+    expect(outcome.kind).toBe('setup');
+    if (outcome.kind !== 'setup') return;
+    expect(outcome.setup.reason).toBe('restore');
+    expect(outcome.setup.masterKeyFile).toBe(KEY_FILE);
+    expect(written).toEqual({});
+    expect(env.VAUBAAN_RESTORE_FROM).toBeUndefined();
+    expect(env.VAUBAAN_BOOTSTRAP_TOKEN).toBeUndefined();
+    expect(env.VAUBAAN_MASTER_KEY_FILE).toBeUndefined();
+    // The snapshot the final load reads still carries them.
+    expect(outcome.env.VAUBAAN_RESTORE_FROM).toBe('/backups/copy.sqlite');
+    expect(outcome.env.VAUBAAN_MASTER_KEY_FILE).toBe(KEY_FILE);
+  });
+
+  it('with restore.from, no key and a store that holds data, it is a configuration error', () => {
+    const { deps } = harness(
+      {},
+      {
+        storeHasContent: (path) => path === STORE,
+        env: {
+          VAUBAAN_MASTER_KEY_GENERATE: undefined,
+          VAUBAAN_RESTORE_FROM: '/backups/copy.sqlite',
+          VAUBAAN_RESTORE_SHA256: 'b'.repeat(64),
+        },
+      },
+    );
+    expect(() => loadBootConfigOrSetup(deps)).toThrow(/the store already holds data/);
   });
 
   it('turns a write failure into a configuration error naming the file', () => {

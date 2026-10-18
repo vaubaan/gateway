@@ -15,6 +15,8 @@ tracks:
   - apps/gateway/src/app/api/auth/
   - apps/gateway/src/app/api/admin/identity-provider/route.ts
   - apps/gateway/src/app/api/admin/master-key/
+  - apps/gateway/src/app/api/setup/
+  - apps/gateway/src/server/setup/
   - apps/gateway/src/app/admin/(guarded)/encryption/page.tsx
   - apps/gateway/src/app/api/admin/sign-in-providers/
   - apps/gateway/src/server/config/sign-in.ts
@@ -858,7 +860,15 @@ millisecond of a deactivation is refused.
   comes back as `?error=bootstrap-refused` (`bootstrap-error`); a visitor who
   already holds a
   bootstrap session is redirected to `/admin`. The page sits outside every
-  layout and renders the build footer itself.
+  layout and renders the build footer itself. **In setup mode** (handbook
+  [configuration](configuration.md#setup-mode-the-setup-receives-the-key-for-a-restore):
+  no root yet, a restore configured, the key file absent) the same address
+  is "Restore this gateway" (`SetupKeyPage`, `setup-key-form`): the bootstrap
+  token and the key file of the copy, posted as multipart to
+  `POST /api/setup/master-key`; a refusal comes back as `?error=<code>`
+  (`setup-error`, `SETUP_ERROR_MESSAGES`), and a refused restore shows the
+  check that failed; without a bootstrap token in the configuration the page
+  says the gateway cannot receive the key here (`setup-no-token`).
 - **`/admin`** — **Setup**: a checklist (`Rows` with a `CheckMark` each) that
   says what a fresh install needs, what is done and what is left, each line
   read from the service that owns the fact: sign-in (`auth.idp.current()`),

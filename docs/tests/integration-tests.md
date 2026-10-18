@@ -1323,18 +1323,37 @@ enforced limits is pinned to what the code enforces today.
   and `masterKeyFile` names the file (null for a key by value); the flag on a
   key by value, and with `restore.from`, are refused naming
   `encryption.generate_master_key`.
-- **`compose/boot-config.test.ts`** (8) — `loadBootConfig` over fakes: the key
+- **`tests/integration/compose/setup-mode-restore.test.ts`** (7) — **setup
+  mode on a real copy** (ADR amendment): with `restore.from`, an empty store
+  and no key file, `startInstance` builds no root — the store and the key
+  file absent, `getRoot()` rejects (`SetupModeError`), the secrets gone from
+  the environment, `/healthz` 200 `status: setup`, the paths served and the
+  ones redirected, the log naming neither the source nor the token; a foreign
+  origin (403), a wrong token (`bootstrap-refused`, counted), a missing, a
+  malformed and an oversized key (`key-missing`, `key-invalid`) write
+  nothing; **a key that does not open the copy** is refused by the restore
+  (`verify`), the key file removed, setup mode kept, the message naming no
+  source; **the right key** is written 0600, the copy verified and restored,
+  the root serves with the carried secret, nothing generated; two uploads at
+  once: one lands, the other is `key-busy`; a store that holds data with an
+  absent key is exit 78, not setup mode; without a bootstrap token the page
+  receives nothing (`no-bootstrap-token`).
+- **`compose/boot-config.test.ts`** (10) — `loadBootConfig` over fakes: the key
   file written (43 base64 characters, `=`, newline) when absent and opted in,
   and the configuration loaded with it (`masterKeyGenerated`); an existing file
   read, nothing written; **refused when the store holds data**, naming the key
   file, the store and `VAUBAAN_MASTER_KEY_FILE`, nothing written; without the
-  opt-in the error of old; with `restore.from` and no key, "a restore needs the
-  key the copy was sealed with"; a write failure named; the secret variables
-  deleted from the environment, the `_FILE` path included; the generator's
-  text is what the loader reads.
-- **`crypto/master-key-file.test.ts`** (3) — 32 random bytes in base64 on one
-  line, different every time; written with mode 0600 and never over an
-  existing file (`EEXIST`); a missing directory named (`ENOENT`).
+  opt-in the error of old; with `restore.from` and no key, `loadBootConfig`
+  says "a restore needs the key the copy was sealed with" while
+  `loadBootConfigOrSetup` is a `setup` outcome with the environment scrubbed
+  and a snapshot kept, and a configuration error once the store holds data; a
+  write failure named; the secret variables deleted from the environment, the
+  `_FILE` path included; the generator's text is what the loader reads.
+- **`crypto/master-key-file.test.ts`** (4) — 32 random bytes in base64 on one
+  line, different every time; `parseMasterKeyText` reads it back as the
+  loader does (base64 or base64url, whitespace around, one line only, 32
+  bytes only); written with mode 0600 and never over an existing file
+  (`EEXIST`); a missing directory named (`ENOENT`).
 - **`tests/integration/compose/master-key-generation.test.ts`** (5) — the real
   boot on a temporary directory: the file written (0600, the key the root
   holds), one `info` line with the path and never the key,
