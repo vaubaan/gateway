@@ -159,7 +159,16 @@ describe('reading the declaration', () => {
     expect(accessCovers(THINGS, 'write', 'read')).toBe(true);
     expect(accessCovers(THINGS, 'read', 'write')).toBe(false);
     expect(accessCovers(THINGS, undefined, 'read')).toBe(false);
-    expect(accessCovers(THINGS, 'admin', 'read')).toBe(false);
+    expect(accessCovers(THINGS, 'owner', 'read')).toBe(false);
+  });
+
+  test('a granted level the declaration does not list still covers the levels below it', () => {
+    // GitHub reports Actions "write" on an installation whose plugin needs only "read".
+    const readOnly: AppPermission = { ...THINGS, levels: [THINGS.levels[0]!] };
+    expect(accessCovers(readOnly, 'write', 'read')).toBe(true);
+    expect(accessCovers(THINGS, 'admin', 'write')).toBe(true);
+    expect(accessCovers(readOnly, 'read', 'write')).toBe(false);
+    expect(missingPermissions([readOnly], { things: 'read' }, { things: 'write' })).toEqual([]);
   });
 
   test('unconditional needs leave out the levels a tool needs only sometimes', () => {

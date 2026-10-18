@@ -338,7 +338,11 @@ what the manifest requests and what the plugin checks a call against. The
 SDK reads it in `app-permissions.ts`: `defaultPermissionChoice` (every
 highest level), `checkPermissionChoice` (a level or `NO_ACCESS` per
 permission; a mandatory one kept; anything undeclared refused),
-`toolsLostAt`, `accessCovers`, `unconditionalNeeds(permissions, tool)` (the
+`toolsLostAt`, `accessCovers` (a granted level covers the declared levels
+below it, and so does a level the declaration does not list but the provider
+orders above: `read` < `write` < `admin` — an installation holding Actions
+"Read and write" covers tools that need only "Read"),
+`unconditionalNeeds(permissions, tool)` (the
 levels a tool needs on every call; `onlyWhen` needs are the plugin's to
 check), `missingPermissions` and `tokenPermissionsOf(permissions, excluded)`
 (the token guide's permissions read off the same declaration when the

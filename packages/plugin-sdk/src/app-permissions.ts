@@ -91,6 +91,14 @@ export function toolsLostAt(permission: AppPermission, access: string): readonly
   return out;
 }
 
+/**
+ * The order of the access words providers grant (GitHub: read < write <
+ * admin). A provider may grant a level the plugin does not declare — an
+ * installation holding Actions "Read and write" while the plugin's tools need
+ * only "Read" — and that level still covers the ones below it.
+ */
+const ACCESS_ORDER: readonly string[] = ['read', 'write', 'admin'];
+
 /** True when `granted` is `needed` or a level above it. */
 export function accessCovers(
   permission: AppPermission,
@@ -98,7 +106,11 @@ export function accessCovers(
   needed: string,
 ): boolean {
   const want = accessRank(permission, needed);
-  return want >= 0 && accessRank(permission, granted) >= want;
+  if (want < 0) return false;
+  if (accessRank(permission, granted) >= want) return true;
+  const grantedOrder = granted === undefined ? -1 : ACCESS_ORDER.indexOf(granted);
+  const neededOrder = ACCESS_ORDER.indexOf(needed);
+  return grantedOrder >= 0 && neededOrder >= 0 && grantedOrder >= neededOrder;
 }
 
 /**
