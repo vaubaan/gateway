@@ -41,6 +41,17 @@ interface CachedToken {
 export interface CallGrant {
   readonly token: string;
   readonly permissions: Readonly<Record<string, string>>;
+  /**
+   * Served from the cache rather than minted for this call : what it says
+   * the installation holds may predate a permission an administrator granted
+   * since, so a refusal for a missing permission is worth one fresh mint.
+   */
+  readonly cached: boolean;
+}
+
+/** `fresh` : skip the cached entry, mint, and put the new grant in its place. */
+export interface GrantOptions {
+  readonly fresh?: boolean;
 }
 
 export function installationTokenCacheKey(repo: string | undefined): string {
@@ -65,18 +76,23 @@ export async function installationTokenForCall(
   return (await installationGrantForCall(ctx, repo, now)).token;
 }
 
-/** `installationTokenForCall`, with the permissions the installation holds. */
+/**
+ * `installationTokenForCall`, with the permissions the installation holds.
+ * With `fresh`, the cached grant is dropped : a token is minted and replaces
+ * it, so the calls that follow see what the installation holds now.
+ */
 export async function installationGrantForCall(
   ctx: ExecuteContext,
   repo: string | undefined,
   now: () => number = Date.now,
+  options: GrantOptions = {},
 ): Promise<CallGrant> {
   const cache = ctx.credentialCache;
   const key = installationTokenCacheKey(repo);
-  if (cache) {
+  if (cache && options.fresh !== true) {
     const cached = await cache.get<CachedToken>(key);
     if (cached && secondsLeft(cached.expiresAt, now()) > 0) {
-      return { token: cached.token, permissions: cached.permissions ?? {} };
+      return { token: cached.token, permissions: cached.permissions ?? {}, cached: true };
     }
   }
   const minted = await installationTokenFor(ctx, repo ? { repositories: [repo] } : {});
@@ -91,5 +107,5 @@ export async function installationGrantForCall(
       );
     }
   }
-  return { token: minted.token, permissions: minted.permissions };
+  return { token: minted.token, permissions: minted.permissions, cached: false };
 }

@@ -114,6 +114,17 @@ export class GithubRest {
     return `/repos/${this.target.owner}/${this.target.repo}`;
   }
 
+  /**
+   * Drop the grant of `access` and mint it afresh (once GitHub refused a
+   * request for a permission the cached token lacks): the next requests carry
+   * the new token. Returns what GitHub reports the new token may do.
+   */
+  async renew(access: GitAccess): Promise<Readonly<Record<string, string>>> {
+    const grant = await gitGrant(this.ctx, this.target, access, { fresh: true });
+    this.tokens.set(access, grant.token);
+    return grant.permissions;
+  }
+
   async request(
     access: GitAccess,
     method: 'GET' | 'POST' | 'PATCH' | 'DELETE',

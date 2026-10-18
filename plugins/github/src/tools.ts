@@ -230,6 +230,46 @@ export const githubTools: readonly McpToolDeclaration[] = [
       required: ['owner', 'repo'],
     },
   },
+  {
+    name: 'github__list_workflow_jobs',
+    description:
+      'List the jobs of a workflow run: name, status, conclusion, steps with their conclusions, html_url, started and completed times. Pass a job `id` to `github__get_job_logs`.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...repoArgs,
+        run_id: { type: 'number', description: 'The workflow run id (from `list_workflow_runs`).' },
+        filter: {
+          type: 'string',
+          enum: ['latest', 'all'],
+          description: 'Jobs of the latest attempt of the run (default) or of every attempt.',
+        },
+        per_page: { type: 'number' },
+      },
+      required: ['owner', 'repo', 'run_id'],
+    },
+  },
+  {
+    name: 'github__get_job_logs',
+    description:
+      'Read the log of one workflow job as plain text, bounded: at most `max_bytes` (default 65536, at most 1048576). With `tail: true` the end of the log is kept, where a failure usually is. The answer says when the log was truncated.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...repoArgs,
+        job_id: { type: 'number', description: 'The job id (from `list_workflow_jobs`).' },
+        max_bytes: {
+          type: 'number',
+          description: 'Most bytes of the log returned (default 65536, at most 1048576).',
+        },
+        tail: {
+          type: 'boolean',
+          description: 'Keep the end of the log instead of its beginning (default false).',
+        },
+      },
+      required: ['owner', 'repo', 'job_id'],
+    },
+  },
   // Read - rules (branch protection)
   {
     name: 'github__get_branch_protection',

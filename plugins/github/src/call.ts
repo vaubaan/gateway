@@ -208,6 +208,24 @@ export function workflowRef(value: unknown): string | number | null {
   return /[/\\]/.test(value) || UNPRINTABLE.test(value) ? null : value;
 }
 
+/** Default of `max_bytes` on `get_job_logs` : 64 KiB, enough for the end of a failed step. */
+export const JOB_LOG_DEFAULT_BYTES = 64 * 1024;
+/** Most bytes of a job log one call returns (1 MiB). */
+export const JOB_LOG_MAX_BYTES = 1024 * 1024;
+
+/** `max_bytes` of `get_job_logs` : an integer from 1 to `JOB_LOG_MAX_BYTES`, or `null`. */
+export function logByteCount(value: unknown): number | null {
+  const n = positiveInteger(value);
+  return n !== null && n <= JOB_LOG_MAX_BYTES ? n : null;
+}
+
+/** The `filter` of `list_workflow_jobs` : the latest attempt of the run, or every attempt. */
+export type JobFilter = 'latest' | 'all';
+
+function jobFilter(value: unknown): JobFilter | null {
+  return value === 'latest' || value === 'all' ? value : null;
+}
+
 export interface FileEntry {
   readonly path: string;
   readonly content: string;
@@ -274,6 +292,20 @@ export type RepoCall = { readonly target: RepoTarget } & (
       readonly workflowId: string | number | undefined;
       /** Filter of the listing, sent in the query string ; not a slice segment. */
       readonly branch: string | undefined;
+    }
+  | {
+      readonly tool: 'github__list_workflow_jobs';
+      readonly runId: number;
+      /** Which attempts of the run, sent in the query string ; not a slice segment. */
+      readonly filter: JobFilter | undefined;
+    }
+  | {
+      readonly tool: 'github__get_job_logs';
+      readonly jobId: number;
+      /** Most bytes of the log returned. */
+      readonly maxBytes: number;
+      /** Keep the end of the log rather than its beginning. */
+      readonly tail: boolean;
     }
   | {
       readonly tool: 'github__get_branch_protection' | 'github__update_branch_protection';
@@ -422,6 +454,30 @@ export function readGithubCall(
       const branch = optional(args.branch, branchName);
       if (branch === null) return denied(tool, notABranch(args.branch));
       return { tool, target, workflowId, branch };
+    }
+    case 'github__list_workflow_jobs': {
+      const runId = positiveInteger(args.run_id);
+      if (runId === null) return denied(tool, "requires 'run_id', a positive integer");
+      const filter = optional(args.filter, jobFilter);
+      if (filter === null) return denied(tool, "'filter' must be 'latest' or 'all'");
+      return { tool, target, runId, filter };
+    }
+    case 'github__get_job_logs': {
+      const jobId = positiveInteger(args.job_id);
+      if (jobId === null) return denied(tool, "requires 'job_id', a positive integer");
+      const maxBytes = optional(args.max_bytes, logByteCount);
+      if (maxBytes === null) {
+        return denied(tool, `'max_bytes' must be an integer from 1 to ${JOB_LOG_MAX_BYTES}`);
+      }
+      const tail = optional(args.tail, (v) => (typeof v === 'boolean' ? v : null));
+      if (tail === null) return denied(tool, "'tail' must be true or false");
+      return {
+        tool,
+        target,
+        jobId,
+        maxBytes: maxBytes ?? JOB_LOG_DEFAULT_BYTES,
+        tail: tail ?? false,
+      };
     }
     case 'github__get_branch_protection':
     case 'github__update_branch_protection': {

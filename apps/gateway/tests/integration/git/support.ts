@@ -67,8 +67,11 @@ export interface GitRig extends ExecutionInstance {
     installationId: string,
     permissions: Readonly<Record<string, string>>,
   ): Promise<ConnectionRecord>;
-  /** A mission on another connection, from a shipped preset. */
-  missionOn(connection: ConnectionRecord, preset: string): Promise<IssuedMission>;
+  /** A mission on another connection, from a shipped preset or an explicit policy. */
+  missionOn(
+    connection: ConnectionRecord,
+    preset: string | readonly MissionPolicyEntry[],
+  ): Promise<IssuedMission>;
   /** The agent's git: `key` in `VAUBAAN_MISSION_TOKEN`, nothing else configured. */
   git(
     cwd: string,
@@ -188,9 +191,17 @@ export async function openGitRig(options: GitRigOptions = {}): Promise<GitRig> {
       return connection;
     },
     async missionOn(connection, preset) {
+      const entry =
+        typeof preset === 'string'
+          ? { connection_id: connection.id, preset }
+          : {
+              connection_id: connection.id,
+              resources: { scope: 'selected' as const, resource_refs: [REPOSITORY] },
+              policy: [...preset],
+            };
       const issued = await instance.root.missions.service.issue(instance.ada, {
         name: `On ${connection.displayName}`,
-        connections: [{ connection_id: connection.id, preset }],
+        connections: [entry],
         period: { kind: 'recurring', length_seconds: 86_400 },
         expires_at: null,
       });

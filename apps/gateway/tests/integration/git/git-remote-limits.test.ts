@@ -178,19 +178,88 @@ describe("the permissions of the company's App (one declaration, app-manifest.ts
 
     mkdirSync(join(repo, '.github', 'workflows'), { recursive: true });
     await commit(repo, '.github/workflows/new.yml', 'name: new\non: push\njobs: {}\n');
+    const sentBefore = receivePackPosts();
     const result = await rig.git(repo, ['push', 'origin', 'feature/code'], mission.token);
     expect(result.code).not.toBe(0);
     expect(result.stderr).toContain(
       'github__git_push needs the GitHub App permission Workflows (workflows: write',
     );
     expect(await rig.host.refOf(REPOSITORY, 'refs/heads/feature/code')).toBe(sha);
+    // Declined before the pack left: nothing was sent to GitHub's receive-pack.
+    expect(receivePackPosts()).toBe(sentBefore);
     // Refused before the decision: audited, nothing counted.
     const pushes = (await rig.root.store.audit.list({ missionId: mission.mission.id })).filter(
       (e): e is AuditCallRecord => e.kind === 'call' && e.tool === 'github__git_push',
     );
     expect(pushes.at(-1)).toMatchObject({ decision: 'refused', refusal_code: null });
   });
+
+  it("the mission decides a workflow change first, whatever the installation's token holds", async () => {
+    const noWorkflows = await rig.installation('6262', { metadata: 'read', contents: 'write' });
+    const mission = await rig.missionOn(noWorkflows, [
+      line('github.read-code'),
+      line('github.git-push'),
+      line('github.feature-branch-write'),
+    ]);
+    const repo = await cloneWith(mission);
+    ok(await rig.git(repo, ['checkout', '-q', '-b', 'feature/ci-12'], null));
+    mkdirSync(join(repo, '.github', 'workflows'), { recursive: true });
+    await commit(repo, '.github/workflows/new.yml', 'name: new\non: push\njobs: {}\n');
+    const sentBefore = receivePackPosts();
+    const result = await rig.git(repo, ['push', 'origin', 'feature/ci-12'], mission.token);
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain(
+      'permission github.workflow-write-via-file is not in this mission',
+    );
+    expect(result.stderr).not.toContain('GitHub App permission');
+    expect(receivePackPosts()).toBe(sentBefore);
+  });
+
+  it('a permission granted on the App is seen at the next push, not 50 minutes later', async () => {
+    const late = await rig.installation('7171', { metadata: 'read', contents: 'write' });
+    const mission = await rig.missionOn(late, [
+      line('github.read-code'),
+      line('github.git-push'),
+      line('github.feature-branch-write'),
+      line('github.workflow-write-via-file'),
+    ]);
+    const repo = await cloneWith(mission);
+    ok(await rig.git(repo, ['checkout', '-q', '-b', 'feature/late'], null));
+    await commit(repo, 'late.txt', 'late');
+    // A push token minted and cached while the installation lacks `workflows`.
+    ok(await rig.git(repo, ['push', '-q', 'origin', 'feature/late'], mission.token));
+
+    mkdirSync(join(repo, '.github', 'workflows'), { recursive: true });
+    const sha = await commit(
+      repo,
+      '.github/workflows/late.yml',
+      'name: late\non: push\njobs: {}\n',
+    );
+    const refused = await rig.git(repo, ['push', 'origin', 'feature/late'], mission.token);
+    expect(refused.stderr).toContain('needs the GitHub App permission Workflows');
+
+    // The administrator grants Workflows; the organisation accepts it.
+    rig.host.installations.set('7171', {
+      metadata: 'read',
+      contents: 'write',
+      workflows: 'write',
+    });
+    const minted = rig.host.minted.length;
+    ok(await rig.git(repo, ['push', '-q', 'origin', 'feature/late'], mission.token));
+    expect(await rig.host.refOf(REPOSITORY, 'refs/heads/feature/late')).toBe(sha);
+    // The cached grant without `workflows` was dropped and minted afresh.
+    expect(rig.host.minted.slice(minted).some((m) => m.permissions?.workflows === 'write')).toBe(
+      true,
+    );
+  });
 });
+
+/** Everything the door sent to GitHub's git endpoint that writes: receive-pack posts. */
+function receivePackPosts(): number {
+  return rig.host.requests.filter(
+    (r) => r.host === 'git' && r.method === 'POST' && r.path.endsWith('/git-receive-pack'),
+  ).length;
+}
 
 describe('temporary refs of a pending approval', () => {
   it('are swept once the request expired', async () => {

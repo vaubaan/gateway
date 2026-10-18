@@ -79,6 +79,14 @@ const samples = {
   ],
   github__list_workflows: [{ args: { ...repo } }],
   github__list_workflow_runs: [{ args: { ...repo } }, { args: { ...repo, workflow_id: 'ci.yml' } }],
+  github__list_workflow_jobs: [
+    { args: { ...repo, run_id: 7 } },
+    { args: { ...repo, run_id: 7, filter: 'all' } },
+  ],
+  github__get_job_logs: [
+    { args: { ...repo, job_id: 9 } },
+    { args: { ...repo, job_id: 9, max_bytes: 1024, tail: true } },
+  ],
   github__get_branch_protection: [{ args: { ...repo, branch: 'main' } }],
   github__merge_pull_request: [
     { args: { ...repo, pull_number: 1 } },
@@ -138,15 +146,15 @@ describe('github plugin — structural kit', () => {
     assertNoWildcard(githubPlugin);
   });
 
-  test('26 tools declared, all prefixed', () => {
-    expect(githubPlugin.tools).toHaveLength(26);
+  test('28 tools declared, all prefixed', () => {
+    expect(githubPlugin.tools).toHaveLength(28);
     for (const t of githubPlugin.tools) expect(t.name.startsWith('github__')).toBe(true);
   });
 
   test('every tool classifies to slices a named risk covers ; no sample slice lands on the fallback', () => {
     const report = assertCatalogCoverage(githubPlugin, samples, { resources });
     // The 26 MCP tools and the git remote's two.
-    expect(report.toolsChecked).toBe(28);
+    expect(report.toolsChecked).toBe(30);
     // The 18 named risks, in catalog order ; the fallback is not among them.
     expect(report.risksTouched).toEqual([
       'github.read-code',
@@ -182,7 +190,7 @@ describe('github plugin — structural kit', () => {
       // The installation token is minted before the call that carries the identifiers.
       routes: [mintRoute()],
     });
-    expect(report.toolsChecked).toBe(26);
+    expect(report.toolsChecked).toBe(28);
     // Found by running the samples : the arguments that are a segment of a request path.
     expect([...new Set(report.pathIdentifiers.map((p) => p.argument))].sort()).toEqual([
       'branch',
@@ -234,7 +242,7 @@ describe('github catalog — presets', () => {
 
   test('ships read-only, developer and release-manager', () => {
     expect(presets.map((p) => p.id)).toEqual(['read-only', 'developer', 'release-manager']);
-    expect(githubCatalog.catalog.catalog_version).toBe(7);
+    expect(githubCatalog.catalog.catalog_version).toBe(8);
   });
 
   test('read-only grants reads only, no search, gate auto', () => {

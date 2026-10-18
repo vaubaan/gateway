@@ -180,6 +180,10 @@ function repoSlices(call: Extract<GithubCall, { target: unknown }>): Slice[] {
           : 'workflow-run.R';
       return [build(`${repo}.${tail}`)];
     }
+    case 'github__list_workflow_jobs':
+      return [build(`${repo}.workflow-run[${call.runId}].job.R`)];
+    case 'github__get_job_logs':
+      return [build(`${repo}.job[${call.jobId}].log.R`)];
     case 'github__get_branch_protection':
       return [build(`${repo}.branch-protection[${asIdent(call.branch)}].R`)];
 

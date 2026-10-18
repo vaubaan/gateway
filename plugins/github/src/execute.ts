@@ -43,11 +43,17 @@ import { installationTokenFor } from './credential.ts';
 import { githubTokenOf, MINT_NEEDS_THE_APP } from './token.ts';
 import { isGitTool } from './git-call.ts';
 import { executeGit } from './git-remote.ts';
+import { readJobLogs } from './job-logs.ts';
 import { dispatchGithubTool, type OctokitLike } from './octokit-dispatch.ts';
 import {
+  HTTP_FORBIDDEN,
   assertAppPermissions,
   declineMissingPermissions,
+  isMissingPermissionRefusal,
+  missingPermissionSentence,
   mintPermissions,
+  needsOf,
+  refusedForPermissionSentence,
 } from './permission-check.ts';
 import { installationGrantForCall } from './token-cache.ts';
 
@@ -95,39 +101,110 @@ async function executeRead(
   if (call.tool === MINT_TOOL) return mintInstallTokenTool(ctx, call);
 
   // A token connection sends the pasted token itself; what it may do is what
-  // its owner ticked at GitHub, which GitHub enforces. Through the App, least
-  // privilege : the per-call token only sees the repository the call names ;
-  // account-shaped tools (search) get an installation-wide token. Reused across
-  // calls when the host provides a connection-scoped cache. What the
-  // installation holds is checked before anything else is sent: a missing
-  // permission is declined by name, not left to GitHub's 403.
-  let token: string;
+  // its owner ticked at GitHub, which GitHub enforces.
   if (ctx.credential.kind === 'api-key') {
-    token = githubTokenOf(ctx);
-  } else {
-    const grant = await installationGrantForCall(
-      ctx,
-      'target' in call ? call.target.repo : undefined,
-    );
-    assertAppPermissions(call, grant.permissions);
-    token = grant.token;
+    try {
+      return await send(ctx, call, args, githubTokenOf(ctx));
+    } catch (e: unknown) {
+      throw asAuthError(e);
+    }
   }
+  return sendThroughTheApp(ctx, call, args);
+}
+
+/**
+ * A call through the company's App. Least privilege : the per-call token only
+ * sees the repository the call names ; account-shaped tools (search) get an
+ * installation-wide token. Reused across calls when the host provides a
+ * connection-scoped cache. What the installation holds is checked before
+ * anything is sent: a missing permission is declined by name, not left to
+ * GitHub's 403.
+ *
+ * A cached grant may predate a permission an administrator granted since
+ * (it lives up to 50 minutes). So when it lacks what the call needs, or when
+ * GitHub refuses the call for a missing permission ("Resource not accessible
+ * by integration"), the grant is dropped and minted afresh — once — and the
+ * call is checked and sent again — once. Refused again, the call is declined
+ * by the permission's name.
+ */
+async function sendThroughTheApp(
+  ctx: ExecuteContext,
+  call: SentCall,
+  args: Readonly<Record<string, unknown>>,
+): Promise<McpToolResult> {
+  const repo = 'target' in call ? call.target.repo : undefined;
+  const needs = needsOf(call);
+  let grant = await installationGrantForCall(ctx, repo);
+  let mintedAfresh = !grant.cached;
+  const renew = async (): Promise<void> => {
+    grant = await installationGrantForCall(ctx, repo, Date.now, { fresh: true });
+    mintedAfresh = true;
+  };
+  if (!mintedAfresh && missingPermissionSentence(call.tool, needs, grant.permissions) !== null) {
+    await renew();
+  }
+  assertAppPermissions(call, grant.permissions);
+  let refusal: unknown;
+  try {
+    return await send(ctx, call, args, grant.token);
+  } catch (e: unknown) {
+    if (!refusedForAPermission(e)) throw asAuthError(e);
+    refusal = e;
+  }
+  if (!mintedAfresh) {
+    await renew();
+    assertAppPermissions(call, grant.permissions);
+    try {
+      return await send(ctx, call, args, grant.token);
+    } catch (e: unknown) {
+      if (!refusedForAPermission(e)) throw asAuthError(e);
+      refusal = e;
+    }
+  }
+  throw new ExecutorRefusal(refusedForPermissionSentence(call.tool, needs, messageOf(refusal)));
+}
+
+/** Every call but the credential mint, which leaves the gateway. */
+type SentCall = Exclude<GithubCall, { tool: typeof MINT_TOOL }>;
+
+/** One request of a checked call with `token` : the job log read bounded, any other tool over Octokit. */
+async function send(
+  ctx: ExecuteContext,
+  call: SentCall,
+  args: Readonly<Record<string, unknown>>,
+  token: string,
+): Promise<McpToolResult> {
+  if (call.tool === 'github__get_job_logs') return readJobLogs(ctx, token, call);
   const octokit: OctokitLike = new Octokit({
     auth: token,
     request: { fetch: ctx.fetch, ...(ctx.signal ? { signal: ctx.signal } : {}) },
     // Octokit logs failed requests ; route them to the host logger, never to the console.
     log: octokitLog(ctx.logger),
   });
-  try {
-    return json(await dispatchGithubTool(octokit, call, args));
-  } catch (e: unknown) {
-    const status = (e as { status?: number }).status;
-    if (status === 401 || status === 403) {
-      const msg = e instanceof Error ? e.message : String(e);
-      throw new UpstreamAuthError(`github rejected the credential: ${msg}`, status);
-    }
-    throw e;
+  return json(await dispatchGithubTool(octokit, call, args));
+}
+
+function statusOf(e: unknown): number | undefined {
+  const status = (e as { status?: unknown } | null)?.status;
+  return typeof status === 'number' ? status : undefined;
+}
+
+function messageOf(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
+/** GitHub refused the call because the installation token lacks a permission. */
+function refusedForAPermission(e: unknown): boolean {
+  return statusOf(e) === HTTP_FORBIDDEN && isMissingPermissionRefusal(HTTP_FORBIDDEN, messageOf(e));
+}
+
+/** 401 / 403 from GitHub → `UpstreamAuthError` ; anything else as it is. */
+function asAuthError(e: unknown): unknown {
+  const status = statusOf(e);
+  if (status === 401 || status === HTTP_FORBIDDEN) {
+    return new UpstreamAuthError(`github rejected the credential: ${messageOf(e)}`, status);
   }
+  return e;
 }
 
 /**

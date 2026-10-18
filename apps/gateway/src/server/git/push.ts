@@ -12,7 +12,11 @@
  *               CI workflows (`gitRemote.inspectPack`); a change found is
  *               prechecked again: a mission that may not change CI is refused
  *               before any byte leaves (ADR git-push-inspected-before-it-leaves)
- *   5. store    the pack at the provider under temporary refs (`temporary-refs.ts`)
+ *   4b. admit   the plugin asked whether its credential can carry the push
+ *               (`gitRemote.admitPush`: a CI workflow change needs the
+ *               provider permission to change workflows) — after the
+ *               mission's decision, before any byte leaves
+ *   5. store   the pack at the provider under temporary refs (`temporary-refs.ts`)
  *   6. review   each update at the provider (`gitRemote.review`), the
  *               inspection's workflow paths added to it
  *   7. decide   one call, the reviewed updates as arguments
@@ -143,6 +147,9 @@ export class Push {
         );
         if (refused) return this.answer(refused, list, format);
       }
+      // The mission has decided on what the push changes; whether the
+      // provider's credential can carry it is asked now, before a byte leaves.
+      await this.admit(refs, inspected);
       await refs.store(pack, list);
       const review = withInspection(await this.review(refs, list), inspected);
       const outcome = await this.deps.pipeline.execute(
@@ -200,6 +207,32 @@ export class Push {
       }
       return { ...u, workflow_files: [...(own?.workflow_files ?? [])] };
     });
+  }
+
+  /**
+   * The plugin's word on its credential (`gitRemote.admitPush`): a push the
+   * account cannot carry — a CI workflow change without the permission to
+   * change workflows — is refused by name with nothing sent. Asked after the
+   * mission's precheck, so the mission's decision never depends on the
+   * account. The plugin may have renewed its credential: the write endpoint
+   * is asked for again before the store.
+   */
+  private async admit(refs: TemporaryRefs, inspected: readonly GitReviewedUpdate[]): Promise<void> {
+    const { target } = this.input;
+    const admitPush = target.remote.admitPush?.bind(target.remote);
+    if (!admitPush || inspected.every((u) => u.new === null)) return;
+    const { execCtx } = await refs.upstream();
+    let refusal: string | null;
+    try {
+      refusal = await admitPush(execCtx, target.repository, inspected);
+    } catch (err) {
+      throw new PushStop(
+        `the gateway could not tell whether the ${target.plugin.displayName} account can carry this push (${errorName(err)}); push again`,
+        `the admission of the push failed (${errorName(err)})`,
+      );
+    }
+    if (refusal !== null) throw new PushStop(refusal, refusal);
+    await refs.renewUpstream();
   }
 
   private async review(

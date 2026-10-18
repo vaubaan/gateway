@@ -14,6 +14,9 @@ extends:
 > [threat-model](../handbook/threat-model.md). Spec:
 > [vaubaan-gateway §4.1 ter "Git remote"](../spec/vaubaan-gateway.md) (unchanged: the
 > spec already requires a workflow change to be decided as `workflow-write-via-file`).
+>
+> Amended 2026-10-18: the provider credential is admitted before the pack
+> leaves, after the mission's decision — see the amendment at the end.
 
 ## Context
 
@@ -59,7 +62,8 @@ found — runs the precheck again with those paths in the updates. A mission
 without `github.workflow-write-via-file` is refused there with the usual typed
 refusal (`risk-not-accepted`), audited, and **nothing** reaches GitHub — not
 even the temporary ref. The rest of the push is unchanged: store, review,
-decision, move. The decision covers the union of what the inspection and the
+decision, move (amended 2026-10-18: an admission of the provider credential
+comes before the store). The decision covers the union of what the inspection and the
 review found (`withInspection`), so neither can make a push look smaller.
 
 **D2 — Objects are authenticated by their hash.** The SDK's pack reader keeps
@@ -152,3 +156,86 @@ leaves objects unknown or bases out — more refusals, never fewer.
 - **Inspect intermediate commits too** — GitHub runs the tip; the provider
   review already reads every commit of the range.
 - **Fetch the pushed objects back from GitHub** — needs them stored first.
+
+## Amendment 2026-10-18 — the provider credential is admitted before the pack leaves, after the mission decided
+
+### Context
+
+Dogfooding on 2026-10-16 (frictions 9 to 12 of that day's handoff) showed
+three gaps around the permission GitHub asks for a change under
+`.github/workflows/` (the App permission Workflows):
+
+- **The pack left before the missing permission was found.** The push token
+  of an installation without Workflows is minted with `contents: write`
+  alone (GitHub answers 422 to the first set; the plugin falls back). The
+  review declined such a push by name — but the review runs after the store,
+  and GitHub had already refused the store: the agent read GitHub's
+  rejection relayed, not the gateway's sentence.
+- **A permission granted on the App was not seen for up to 50 minutes.** The
+  push grant (`git-token:<repo>:write`) and the API tools' grant are cached
+  with what GitHub reported; one minted before the administrator granted
+  Workflows kept saying "no Workflows" until it expired.
+- **The mission's decision must not depend on the token.** The review, run
+  before the decision, refused by the App's permission a push the mission
+  would have refused for `workflow-write-via-file`, so which refusal an
+  agent read depended on what the installation held.
+
+### Decision
+
+1. **Admission.** `GitRemoteCapability` gains an optional
+   `admitPush(ctx, repository, inspected)` → a refusing sentence or `null`.
+   The host asks it after the precheck on the inspection (D1) — so the
+   mission decides first, whatever the token holds — and before the store; a
+   sentence refuses the push, audited, nothing sent; a throw refuses it too.
+   The host then asks `upstream` again (`TemporaryRefs.renewUpstream`), so
+   the pack leaves with the credential admitted. GitHub's admission: the
+   push token must cover `contents: write`, and `workflows: write` when the
+   inspection found a workflow change, read from the permissions GitHub
+   reported for the token minted (the 422 fallback is kept, and logged by
+   permission name, never silent to the decision).
+2. **One fresh mint on a stale grant.** A grant served from the cache that
+   falls short of what a push or a call needs is dropped and minted afresh
+   once before anything is declined; a call or a ref move GitHub refuses for
+   a missing permission (a 403 "Resource not accessible by integration", a
+   receive-pack "… without `workflows` permission") is retried once with a
+   token minted afresh. Refused again, the refusal names the permission. A
+   grant minted for the very call is not minted twice. A store GitHub
+   refuses drops the connection's cached credentials.
+3. **The review no longer reads the token.** The decision runs on what the
+   review found; the token is checked by the admission before the store and
+   by the move (`executeGit`) after the decision — the latter covers a
+   workflow file only an intermediate commit changes, which the inspection
+   (tips only, D5) does not see.
+
+### Consequences
+
+- A workflow-touching push on an installation without Workflows is refused
+  by the gateway's sentence, with nothing sent to GitHub; a mission without
+  `workflow-write-via-file` is refused for that permission on any
+  installation.
+- A permission granted on the App is seen at the next push or call. Cost:
+  one extra mint (two on an installation still without it: 422, then the
+  fallback) when a cached grant falls short or GitHub refuses for a
+  permission.
+- A workflow change only an intermediate commit brings, on an installation
+  without Workflows, is still stored first and refused by GitHub (GitHub's
+  words, relayed); the refused store drops the cached credentials. It is
+  declined by name at the move when GitHub accepted the store.
+- The SDK contract grows by one optional member; a plugin without it
+  behaves as before.
+
+### Rejected alternatives
+
+- **Decline in `inspectPack`** — it runs before the mission's precheck, so
+  the token would again decide which refusal the agent reads; and a throw
+  there reads "could not tell whether this push changes CI workflows".
+- **Mint the push token without narrowing it, to read every permission the
+  installation holds** — a broader token for every push, to learn one bit.
+- **Ask `GET /app/installations/{id}` for the installation's permissions** —
+  one more request per push, and the token's own report already says what
+  the push can carry.
+- **Shorter cache lifetimes** — every call pays for a rare event, and a
+  permission granted a minute ago is still not seen.
+- **Retry the store at the host on GitHub's workflow refusal** — the host
+  would read provider-specific words; the admission prevents the common case,
+  and the refused store drops the cached credentials for the next push.
