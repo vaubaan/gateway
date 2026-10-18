@@ -176,6 +176,15 @@ export class TemporaryRefs {
   }
 
   /**
+   * Ask the plugin for the write endpoint again, in the same context: the
+   * plugin may have renewed its credential since (`gitRemote.admitPush`).
+   */
+  async renewUpstream(): Promise<void> {
+    this.connection = null;
+    await this.upstream();
+  }
+
+  /**
    * Send the pack — already read whole, inspected and decided on — to the
    * provider under one temporary ref per created or moved ref.
    */
@@ -262,6 +271,10 @@ export class TemporaryRefs {
     }
     const failed = stored.map((s) => report.refs.get(s.temporary)).find((r) => !r || !r.ok);
     if (report.unpack !== 'ok' || failed !== undefined) {
+      // A refusal may come from a credential minted before a permission was
+      // granted (GitHub: "… without `workflows` permission"): the next push
+      // starts from a fresh one.
+      await this.deps.credentialCache.drop(target.connection.id);
       const detail =
         report.unpack !== 'ok'
           ? report.unpack

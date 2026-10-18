@@ -23,6 +23,8 @@ tracks:
   - plugins/github/src/git-inspect.ts
   - plugins/github/src/git-rest.ts
   - plugins/github/src/git-review.ts
+  - plugins/github/src/git-credential.ts
+  - plugins/github/src/git-moves.ts
   - plugins/github/src/git-heads.ts
   - plugins/github/src/git-call.ts
   - plugins/github/src/tool-titles.ts
@@ -163,6 +165,22 @@ GitHub answers 422 when the installation lacks one, and the mint is retried
 with `contents: write` and `metadata: read` only; a second 422 is declined by
 name.
 
+**A permission granted since the token was cached** (an administrator adds it
+to the App, the organisation accepts it) is seen at the next call, not when
+the cached entry expires (up to 50 minutes). `installationGrantForCall` says
+whether the grant came from the cache (`cached`) and takes `{ fresh: true }`
+to drop it and mint anew. `execute` (`sendThroughTheApp`) mints afresh
+**once** when a cached grant lacks what the call needs, before declining it,
+and when GitHub refuses the call for a missing permission
+(`isMissingPermissionRefusal`: a 403 "Resource not accessible by
+integration") it mints afresh once and sends the call once more. Refused
+again — or refused with a grant minted for this very call — the call is
+declined by name (`refusedForPermissionSentence`: `github__list_workflows was
+refused by GitHub for a permission this installation of the company's App
+lacks (GitHub: “…”), with a token minted afresh. It needs Actions (actions:
+read, “Read”). …`). Any other 403 (a rate limit) stays an
+`UpstreamAuthError`; a token connection is never re-minted.
+
 ## Connecting with a fine-grained token
 
 Beside the App, the plugin declares a second way (`alternativeCredentials`,
@@ -194,26 +212,27 @@ repository and organisation of its account with coarse scopes.
 
 ## Files
 
-| File                      | Role                                                                                                                                                                                                                                                                                                                                |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/index.ts`            | `definePlugin` → `githubPlugin` v3.3.0.                                                                                                                                                                                                                                                                                             |
-| `src/risk-catalog.yaml`   | 18 risks + fallback, 3 presets, `catalog_version: 8`.                                                                                                                                                                                                                                                                               |
-| `src/data-model.ts`       | Plane `repo`, 19 entities (`delete` under `release` is a verb leaf); `branch` is `envScopable`.                                                                                                                                                                                                                                     |
-| `src/tools.ts`            | 28 tools. Retired by risk-model §7.2 #1 and not declared: `dispatch_workflow`, `cancel_workflow_run`, `rerun_workflow_run`.                                                                                                                                                                                                         |
-| `src/call.ts`             | The grammar of every identifier (`ownerName`, `repoName`, `repoFullName`, `repoPath`, `revision`, `branchName`, `tagName`, `pullRequestHead`, `positiveInteger`, `workflowRef`) and `readGithubCall`, the one reader `classify` and `execute` share; the refusal wording (`repositoryNotSelectedMessage`).                          |
-| `src/classify.ts`         | `classifyGithub(tool, args, resources)` = `readGithubCall` then `slicesOf(call)`; `isWorkflowPath`.                                                                                                                                                                                                                                 |
-| `src/credential.ts`       | `githubCredential` (app-install spec), `installationTokenFor(ctx, scope)`.                                                                                                                                                                                                                                                          |
-| `src/app-install.ts`      | `buildAppJwt`, `mintInstallationToken`, `installationIdOf`, `GITHUB_API_BASE`, `GITHUB_API_HEADERS`.                                                                                                                                                                                                                                |
-| `src/execute.ts`          | `executeGithub` (the body run under the SDK's `declining`), `discoverGithubResources`, `MINT_PERMISSIONS`, discovery paging constants (100 per page, 10 pages at most).                                                                                                                                                             |
-| `src/app-manifest.ts`     | `GITHUB_APP_PERMISSIONS`, `githubManifestRegistration`, `buildGithubManifest`, `githubRegisteredApp`, `GITHUB_LOGIN_PATTERN`.                                                                                                                                                                                                       |
-| `src/permission-check.ts` | `needsOf(call)`, `assertAppPermissions(call, granted)`, `assertGranted`, `missingPermissionSentence`, `declineMissingPermissions`, `mintPermissions`, `MINT_NEEDS`, `gitFetchNeeds`, `gitPushNeeds`.                                                                                                                                |
-| `src/credential-keys.ts`  | `GITHUB_APP_CONFIG`, `GITHUB_WEB_BASE` (shared by the credential spec and the manifest flow).                                                                                                                                                                                                                                       |
-| `src/token-cache.ts`      | `installationTokenForCall(ctx, repo)`: per-call token served from `ctx.credentialCache`, 50 min at most, 5 min expiry margin.                                                                                                                                                                                                       |
-| `src/octokit-dispatch.ts` | `dispatchGithubTool(octokit, call, args)`: checked call → Octokit call; reads the pull request before a merge and declines (`ExecutorRefusal`) a base other than the declared one.                                                                                                                                                  |
-| `src/job-logs.ts`         | `readJobLogs`: `get_job_logs` — the API's redirect read with `redirect: 'manual'`, the https download fetched without the token, the body read bounded (`readBounded`: the first `max_bytes`, or with `tail` the last, at most `JOB_LOG_TAIL_READ_MAX` streamed).                                                                   |
-| `src/git-call.ts`         | `GIT_FETCH_TOOL`, `GIT_PUSH_TOOL`, `readGitCall` (the one reader of the git tools' arguments, shared by `classify` and `execute`), `pushedRef` (branches and tags only, `refs/vaubaan/` reserved).                                                                                                                                  |
-| `src/git-remote.ts`       | `githubGitRemoteOf(catalog)` (the plugin's `gitRemote`, built in `index.ts` as `githubGitRemote`): `upstream` (credential per access), `inspectPack`, `review`, `compareUrl`, `insteadOf`, `abilities`; `workingBranchesOf(catalog)` (the branch list of `feature-branch-write`, read from the YAML); `executeGit` (the ref moves). |
-| `src/git-inspect.ts`      | `inspectPack`: what each pushed tip changes under `.github/workflows/`, decided before the pack leaves the gateway; `workflowPathsOfCommit` (a commit GitHub lists 300 files of, read by its trees); `WORKFLOWS_UNVERIFIED`, `INSPECT_HEAD_BASES_MAX`, `INSPECT_WALK_MAX`.                                                          |
+| File                      | Role                                                                                                                                                                                                                                                                                                                                             |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/index.ts`            | `definePlugin` → `githubPlugin` v3.3.0.                                                                                                                                                                                                                                                                                                          |
+| `src/risk-catalog.yaml`   | 18 risks + fallback, 3 presets, `catalog_version: 8`.                                                                                                                                                                                                                                                                                            |
+| `src/data-model.ts`       | Plane `repo`, 19 entities (`delete` under `release` is a verb leaf); `branch` is `envScopable`.                                                                                                                                                                                                                                                  |
+| `src/tools.ts`            | 28 tools. Retired by risk-model §7.2 #1 and not declared: `dispatch_workflow`, `cancel_workflow_run`, `rerun_workflow_run`.                                                                                                                                                                                                                      |
+| `src/call.ts`             | The grammar of every identifier (`ownerName`, `repoName`, `repoFullName`, `repoPath`, `revision`, `branchName`, `tagName`, `pullRequestHead`, `positiveInteger`, `workflowRef`) and `readGithubCall`, the one reader `classify` and `execute` share; the refusal wording (`repositoryNotSelectedMessage`).                                       |
+| `src/classify.ts`         | `classifyGithub(tool, args, resources)` = `readGithubCall` then `slicesOf(call)`; `isWorkflowPath`.                                                                                                                                                                                                                                              |
+| `src/credential.ts`       | `githubCredential` (app-install spec), `installationTokenFor(ctx, scope)`.                                                                                                                                                                                                                                                                       |
+| `src/app-install.ts`      | `buildAppJwt`, `mintInstallationToken`, `installationIdOf`, `GITHUB_API_BASE`, `GITHUB_API_HEADERS`.                                                                                                                                                                                                                                             |
+| `src/execute.ts`          | `executeGithub` (the body run under the SDK's `declining`), `discoverGithubResources`, `MINT_PERMISSIONS`, discovery paging constants (100 per page, 10 pages at most).                                                                                                                                                                          |
+| `src/app-manifest.ts`     | `GITHUB_APP_PERMISSIONS`, `githubManifestRegistration`, `buildGithubManifest`, `githubRegisteredApp`, `GITHUB_LOGIN_PATTERN`.                                                                                                                                                                                                                    |
+| `src/permission-check.ts` | `needsOf(call)`, `assertAppPermissions(call, granted)`, `assertGranted`, `missingPermissionSentence`, `declineMissingPermissions`, `mintPermissions`, `MINT_NEEDS`, `gitFetchNeeds`, `gitPushNeeds`, `isMissingPermissionRefusal`, `refusedForPermissionSentence`.                                                                               |
+| `src/credential-keys.ts`  | `GITHUB_APP_CONFIG`, `GITHUB_WEB_BASE` (shared by the credential spec and the manifest flow).                                                                                                                                                                                                                                                    |
+| `src/token-cache.ts`      | `installationTokenForCall(ctx, repo)`, `installationGrantForCall(ctx, repo, now, { fresh })`: per-call token served from `ctx.credentialCache` (`cached`), 50 min at most, 5 min expiry margin; `fresh` replaces the entry.                                                                                                                      |
+| `src/octokit-dispatch.ts` | `dispatchGithubTool(octokit, call, args)`: checked call → Octokit call; reads the pull request before a merge and declines (`ExecutorRefusal`) a base other than the declared one.                                                                                                                                                               |
+| `src/job-logs.ts`         | `readJobLogs`: `get_job_logs` — the API's redirect read with `redirect: 'manual'`, the https download fetched without the token, the body read bounded (`readBounded`: the first `max_bytes`, or with `tail` the last, at most `JOB_LOG_TAIL_READ_MAX` streamed).                                                                                |
+| `src/git-call.ts`         | `GIT_FETCH_TOOL`, `GIT_PUSH_TOOL`, `readGitCall` (the one reader of the git tools' arguments, shared by `classify` and `execute`), `pushedRef` (branches and tags only, `refs/vaubaan/` reserved).                                                                                                                                               |
+| `src/git-remote.ts`       | `githubGitRemoteOf(catalog)` (the plugin's `gitRemote`, built in `index.ts` as `githubGitRemote`): `upstream` (credential per access), `inspectPack`, `admitPush`, `review`, `compareUrl`, `insteadOf`, `abilities`; `workingBranchesOf(catalog)` (the branch list of `feature-branch-write`, read from the YAML); `executeGit` (the ref moves). |
+| `src/git-inspect.ts`      | `inspectPack`: what each pushed tip changes under `.github/workflows/`, decided before the pack leaves the gateway; `workflowPathsOfCommit` (a commit GitHub lists 300 files of, read by its trees); `WORKFLOWS_UNVERIFIED`, `INSPECT_HEAD_BASES_MAX`, `INSPECT_WALK_MAX`.                                                                       |
+| `src/git-credential.ts`   | `gitGrant(ctx, target, access, { fresh })` (the push or fetch token, cached per repository and access as `git-token:<repo>:<access>`, `cached` said), `GIT_TOKEN_PERMISSIONS`, `admitPush` (the push token against the inspection, before the pack leaves), `upstream`, `repositoryOf`.                                                          |
 
 ## The git remote
 
@@ -225,13 +244,16 @@ the pipeline decides and audits but that are **not MCP tools** (refused on
 `github__git_push { repository, updates[] }`, whose arguments are the host's
 review.
 
-- **Credential** (`gitGrant`). An App connection mints a token for the one
+- **Credential** (`gitGrant`, `git-credential.ts`). An App connection mints a token for the one
   repository: `contents: read` to fetch and review; to push,
   `contents: write` + `workflows: write`, or `contents: write` alone when the
   installation lacks `workflows` (GitHub answers 422 to the first; the mint
-  falls back, as `mint_install_token` does), and a refusal naming the
+  falls back, as `mint_install_token` does, and says so in the log — the
+  permission names, never a token), and a refusal naming the
   permission when even that is refused. Cached per repository and access in
-  `ctx.credentialCache`, with the permissions GitHub reported. A token
+  `ctx.credentialCache` (`git-token:<repo>:<access>`, 50 minutes at most), with the permissions GitHub reported
+  for the token: what the fallback left out is known, and `admitPush` acts on
+  it. `{ fresh: true }` drops the cached grant and mints anew. A token
   connection (`api-key`, field `token`, the fine-grained personal access
   token) presents its token; its permissions are unknown, nothing is
   declined on a guess. The git transport is `Basic x-access-token:<token>` to
@@ -255,6 +277,20 @@ review.
   neither in the pack nor at GitHub, an API error, a truncated tree —
   reports `.github/workflows/` (`WORKFLOWS_UNVERIFIED`). Only tips: GitHub
   runs the workflows of the pushed tip. A deletion changes nothing.
+- **Admit** (`admitPush`, `git-credential.ts`; SDK `GitRemoteCapability.admitPush`),
+  asked by the host **after** the mission's precheck on the inspection and
+  **before** the pack is stored: the push token must cover
+  `gitPushNeeds(inspected)` — `contents: write`, plus `workflows: write` when
+  an update's tip changes `.github/workflows/`. A grant from the cache that
+  falls short is minted afresh once (an administrator may have granted
+  Workflows since); still short, the push is refused by the permission's name
+  (`github__git_push needs the GitHub App permission Workflows (workflows:
+write, …)`) and nothing reaches GitHub. Because the mission decides first,
+  a mission without `github.workflow-write-via-file` is refused for that
+  permission whatever the installation holds — the mission's decision never
+  depends on the token (friction 12 of 2026-10-16). A token connection's
+  permissions are unknown: nothing is declined on a guess. The host then asks
+  `upstream` again, so the pack leaves with the token admitted.
 - **Review** (`review`, `git-review.ts`). For each ref: `GET git/ref/<ref>`
   must equal the client's `old` (else stale info — a lie about `old` would
   keep commits out of the review); a tag's `new` and `old` are peeled to the
@@ -280,10 +316,9 @@ review.
   differ from the first parent, `.github/workflows/` when unreadable.
   Workflow files: anything under `.github/workflows/`. 300 files or 250
   commits per comparison, an unrelated history, an empty repository: not
-  reviewable, refused. Then the push
-  token's permissions must cover `gitPushNeeds(updates)` (`contents: write`,
-  plus `workflows: write` when a workflow file changes), or the push is
-  refused by the permission's name.
+  reviewable, refused. The review does not read the push token's
+  permissions: the decision comes next, on everything the review found, and
+  the token is checked by `admitPush` before and by `executeGit` after it.
 - **Execute** (`executeGit`, `git-moves.ts`), per ref, in order, reported
   per ref: create `POST git/refs`; fast-forward
   `PATCH git/refs/<ref> force:false`; force (accepted `force-push` only) and
@@ -291,7 +326,15 @@ review.
   whose `old` GitHub checks under the ref's lock (compare-and-swap). A 422 on
   a fast-forward reads "non-fast-forward … fetch first"; a 5xx on a ref after
   the first reports that ref and the next ones are tried; before any ref, it
-  is an upstream error.
+  is an upstream error. Before any ref moves, the push token must cover
+  `gitPushNeeds` of the reviewed updates (a workflow file found by the review
+  in an intermediate commit included), a cached grant short of it minted
+  afresh first, else the push is declined by name. A move GitHub refuses for
+  a permission (`isMissingPermissionRefusal`: a REST 403 "Resource not
+  accessible by integration", a receive-pack "refusing to allow a GitHub App
+  to create or update workflow … without `workflows` permission") is retried
+  once with a token minted afresh (`GithubRest.renew`) when the grant came
+  from the cache; refused again, the ref's error names the permission.
 - **Slices** (`gitSlicesOf`, `classify.ts`): fetch `repo[R].branch.R`,
   `repo[R].tag.R` (`read-code`); every pushed ref `<ref>.push.W`
   (`git-push`); a branch `branch[B].W` (`feature-branch-write`,
@@ -522,7 +565,7 @@ policy is stored, not derived from the preset.
 
 ## Tests
 
-`npx vitest run plugins/github` — 717 tests, no network:
+`npx vitest run plugins/github` — 737 tests, no network:
 
 - `plugin.test.ts` (17): kit assertions, coverage with samples per tool
   and per git tool (the 18 named risks touched, `fallbackHits` empty), the fallback catching
@@ -564,6 +607,17 @@ policy is stored, not derived from the preset.
   URL in neither result nor failure, a non-https location not followed, an
   expired log (410); `readBounded` across chunks, the head read stopping
   early.
+- `permission-remint.test.ts` (16): the family of GitHub refusals for a
+  missing permission (and a rate limit, which is not one); API tools — a
+  cached grant short of the call minted afresh before anything is sent, a
+  403 "not accessible by integration" minted afresh and sent once more,
+  refused again declined by name, a grant minted for the call not minted
+  twice, another 403 left an `UpstreamAuthError`; `admitPush` — code admitted
+  and a workflow change declined by name on an installation without
+  Workflows, a permission granted since the grant was cached seen at once
+  (the cache entry replaced), a fresh grant not minted twice; the ref moves —
+  a fast-forward and a force-push refused for a permission moved with a
+  token minted afresh, refused again named on the ref.
 - `token-cache.test.ts` (5): a mint per call without a host cache, one mint
   per repository scope with one, no token served or stored close to its
   expiry, lifetime bounded by what is left of the token,

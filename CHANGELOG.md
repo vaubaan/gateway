@@ -802,6 +802,21 @@ write …)`), instead of GitHub's bare 403. The push token of
 
 ### Changed
 
+- **A permission granted on the GitHub App is seen at the next call or push**, not
+  when the cached token expires (up to 50 minutes). A cached installation token that
+  lacks what a call or a push needs is minted afresh once before anything is declined;
+  a call or a ref move GitHub refuses for a missing permission ("Resource not
+  accessible by integration", "… without `workflows` permission") is tried once more
+  with a token minted afresh, then refused by the permission's name.
+- **A git push that changes `.github/workflows/` is refused before its pack leaves**
+  when the installation's token lacks Workflows: `github__git_push needs the GitHub App
+permission Workflows …`, with nothing sent to GitHub (it used to be stored at GitHub
+  first and refused there). The mission is asked first: a mission without
+  `github.workflow-write-via-file` is refused for that permission, whatever the
+  installation holds. The plugin SDK's git remote gains an optional `admitPush`, asked
+  after the mission's decision and before the store (amendment of 2026-10-18 to ADR
+  `git-push-inspected-before-it-leaves`); the review no longer reads the token.
+
 - **GitHub plugin** (`@vaubaan/plugin-github` 3.2.0, catalog v7): `github.feature-branch-write`
   also covers `feat/*` branches (the Conventional Commits prefix), for branch, file and
   bulk writes and for `git push`; such a write fell to `github.uncategorized-write` and

@@ -157,19 +157,30 @@ decided and audited like any call:
 - **Upstream credential**: an installation token for the one repository,
   `contents: read` to fetch, `contents: write` (+ `workflows: write` when
   the installation holds it) to push; or the token of a token connection
-  (`api-key`, field `token`).
+  (`api-key`, field `token`). Cached 50 minutes at most per repository and
+  access, with the permissions GitHub reported for it.
+- **Admission** (`admitPush`), after the mission decided on what the push's
+  own objects change and before the pack leaves: a CI workflow change on a
+  token without `workflows: write` is refused by the permission's name, with
+  nothing sent to GitHub. A cached token short of it is minted afresh once
+  first, so a permission granted on the App is seen at the next push. The
+  mission's own check (`github.workflow-write-via-file`) never depends on
+  the token: it comes first.
 - **Review** (`review`): each ref's value is read at GitHub (`GET git/ref`) —
   a client's `old` that differs is refused as stale — then the compare API
   gives fast-forward or not, commits, changed paths and workflow files
   (anything under `.github/workflows/`), and every commit of the range is
   read for workflow changes (at most 100 per push). Over 300 files or 250
-  commits the push is refused: split it. A workflow change without `workflows: write`
-  is refused by the permission's name (`permission-check.ts`).
+  commits the push is refused: split it. The review does not look at the
+  token: the decision comes next.
 - **Moves** (`execute` of `github__git_push`), per ref, reported per ref:
   `POST git/refs`, `PATCH git/refs/<ref>` `force: false` for a
   fast-forward; an accepted force-push or delete through GitHub's
   receive-pack with the reviewed `old` as the expected value
-  (compare-and-swap); a provider failure on one ref reports that ref.
+  (compare-and-swap); a provider failure on one ref reports that ref. The
+  token must cover what the review found (`permission-check.ts`); a move
+  GitHub refuses for a missing permission is tried once more with a token
+  minted afresh, then named on the ref.
 - **Interface words**: `insteadOf` (`https://github.com/`, rewritten to the
   instance by the setup kit) and `abilities` (what each risk means for git,
   sorted on the mission page), `compareUrl` (GitHub's comparison, linked
@@ -284,12 +295,18 @@ npx vitest run plugins/github
 - `job-logs.test.ts` — the jobs of a run and the bounded log of a job:
   slices, refused arguments, the redirect followed without the token, head
   and tail truncation.
+- `permission-remint.test.ts` — a stale cached grant minted afresh once (API
+  tools, `admitPush`, the ref moves), GitHub's missing-permission refusals
+  retried once then named.
 - `token-cache.test.ts` — connection-scoped reuse of installation tokens.
 - `app-manifest.test.ts` — the permission declaration, the manifest per
   choice, the code exchange, and the refusal of a call by its missing permission.
 
 A call the App has no permission for is declined by name
 (`github__create_branch needs the GitHub App permission Contents …`), never
-left to GitHub's 403.
+left to GitHub's 403. A permission granted on the App since the token was
+cached is seen at the next call: a cached token short of the call, or one
+GitHub refuses with "Resource not accessible by integration", is minted
+afresh once and the call sent once more.
 
-717 tests; none reaches GitHub.
+737 tests; none reaches GitHub.

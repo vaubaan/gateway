@@ -69,7 +69,7 @@ apps/gateway/src/server/git/                  host-agnostic, never imports `next
   pack-buffer.ts    readPack(): the pack read whole, at most git.max_pack_mb
   push-stop.ts      PushStop, tooLarge(), interrupted()
   command-list.ts   readPushCommands(), commandListIssue(), provisional(), ACCEPTED_PUSH_CAPABILITIES
-  temporary-refs.ts TemporaryRefs (store, keepForApproval, cleanUp), deleteTemporaryRefs(), temporaryRefName()
+  temporary-refs.ts TemporaryRefs (upstream, renewUpstream, store, keepForApproval, cleanUp), deleteTemporaryRefs(), temporaryRefName()
   report.ts         reportOf(), refuseAll(), messagesOf(), refOutcomes()
   in-flight.ts      InFlightPushes, inMemoryInFlightPushes() (single-process only)
   constants.ts      HTTP statuses, units, every bound of the door
@@ -88,7 +88,7 @@ packages/plugin-sdk/src/git/
   upload-pack.ts   readV2RequestHead() (exactly one command), advertisementWithout(), lsRefsWithout()
   advertisement.ts parse/encodeAdvertisement() (v0/v1)
   pack.ts          readPackObjects() (bounded, hashed, never throws), parseCommit/Tree/Tag(), applyDelta()
-  remote.ts        GitRemoteCapability (pushRisk, inspectPack, abilities, insteadOf…), GitRefUpdate, GitInspectedUpdate, GitReviewedUpdate, GIT_TEMPORARY_REF_PREFIX
+  remote.ts        GitRemoteCapability (pushRisk, inspectPack, admitPush, abilities, insteadOf…), GitRefUpdate, GitInspectedUpdate, GitReviewedUpdate, GIT_TEMPORARY_REF_PREFIX
 plugins/github/src/
   git-remote.ts      githubGitRemote: the capability, assembled from the modules below
   git-credential.ts  gitGrant(), upstream(), repositoryOf(), GIT_TOKEN_PERMISSIONS
@@ -209,13 +209,25 @@ write credential exists. Then `Push.handle()`:
    refused by the permission's name, audited, **before any byte leaves**. A
    plugin that throws or leaves an update out refuses the push. Nothing is
    inspected for a push of deletions only.
+   Then **admit** (`gitRemote.admitPush`, optional; amendment of 2026-10-18 to
+   the ADR): once the mission has decided, the plugin says whether its
+   credential can carry the push — for GitHub, the push token must hold
+   `workflows: write` when the inspection found a workflow change, a cached
+   token short of it being minted afresh once — and a sentence refuses the
+   push by name, audited, **before any byte leaves**. Asked after the
+   precheck, so the mission's own refusal (`workflow-write-via-file`) comes
+   first whatever the token holds. The write endpoint is then asked for again
+   (`TemporaryRefs.renewUpstream`): the pack leaves with the credential
+   admitted. A plugin that throws refuses the push.
 5. **Store** (`TemporaryRefs.store`) the pack at GitHub under temporary refs
    `refs/vaubaan/<32 random hex>` (`temporaryRefName`; no mission id: every
    reader of the repository at GitHub can list them): first the mission's
    ceiling (`MAX_TEMPORARY_REFS_PER_MISSION`, 100), then each ref recorded in
    `git_pending_refs` with the ref it stands for and the deadline
    `now + git.request_timeout + 5 min`, then the pack sent untouched (the
-   command list and the buffered pack, two chunks).
+   command list and the buffered pack, two chunks). A store GitHub refuses (its
+   report names the ref) drops the connection's cached credentials, so the next
+   push starts from a token minted afresh.
 6. **Review** (`gitRemote.review`, `git-review.ts`): for each ref, its value
    at GitHub (`GET git/ref/<ref>`) must equal the client's `old` — a client
    that claims a later `old` is refused as _stale info_ —; a **tag** is
@@ -242,9 +254,9 @@ write credential exists. Then `Push.handle()`:
    merge) is read by its trees instead (`workflowPathsOfCommit`: no change
    when its workflows equal one parent's; unreadable: a change). Beyond 300
    files or 250 commits per comparison, 100 commits per push, an unrelated
-   history, an empty repository: refused. Then the App's permissions: the push
-   token must hold `contents: write`, and `workflows: write` when a workflow
-   file changes, or the push is refused by the permission's name.
+   history, an empty repository: refused. The review does not read the push
+   token's permissions (amendment of 2026-10-18): the decision comes first;
+   the token is checked by the admission before and by the move after.
 7. **Decide**: one `github__git_push { repository, updates[] }`, the reviewed
    updates as arguments, each with the inspection's workflow paths added
    (`withInspection`: the union, so neither can make a push look smaller): one
@@ -257,7 +269,11 @@ write credential exists. Then `Push.handle()`:
    receive-pack command `<old> <new|0> <ref>` with an empty pack — a
    compare-and-swap GitHub checks under the ref's lock. A provider failure on
    one ref reports that ref (`GitHub did not apply this update`) and the next
-   ones are tried; a failure before any ref fails the call.
+   ones are tried; a failure before any ref fails the call. Before any ref
+   moves the push token must cover what the review found (a workflow file of
+   an intermediate commit included), else declined by name; a move GitHub
+   refuses for a missing permission is tried once more with a token minted
+   afresh, then named on the ref.
 9. **Clean up** (`TemporaryRefs.cleanUp`) on every path — success, refusal,
    provider failure, a client gone mid-pack: `deleteTemporaryRefs`
    (receive-pack, compare-and-swap on the object id, per ref; a ref GitHub

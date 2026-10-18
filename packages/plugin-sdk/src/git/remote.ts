@@ -162,6 +162,21 @@ export interface GitRemoteCapability {
     objects: GitPackObjects,
   ): Promise<readonly GitInspectedUpdate[]>;
   /**
+   * Whether the provider credential of this connection can carry the push,
+   * asked once the mission has decided on what the inspection found and
+   * BEFORE the pack is stored at the provider: the sentence that refuses it
+   * (a permission the account lacks, by name), or `null`. The mission's
+   * decision never depends on it — it is asked after the precheck — and the
+   * host asks `upstream` again afterwards, so a credential renewed here is
+   * the one the pack is sent with. A throw refuses the push. Absent: the
+   * provider's own refusal, once the pack is sent, is the only one.
+   */
+  admitPush?(
+    ctx: ExecuteContext,
+    repository: string,
+    updates: readonly GitInspectedUpdate[],
+  ): Promise<string | null>;
+  /**
    * The prefix of the provider's own git URLs (`https://github.com/`). The
    * setup kit rewrites it to the instance (`url.<instance>/git/.insteadOf`),
    * so a hard-coded provider URL, a submodule or a script goes through the

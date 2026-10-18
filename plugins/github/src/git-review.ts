@@ -24,8 +24,11 @@
  *                read (`GET commits/{sha}`), at most `COMMITS_REVIEWED_MAX`
  *                per push; one listing 300 files or more (a large merge) is
  *                read by its trees: its workflows against its parents';
- *   permissions  the push token covers what the updates need, or the push is
- *                refused by the permission's name.
+ *
+ * The review does not look at the push token's permissions: the mission's
+ * decision comes first, on everything the review found. `admitPush` checked
+ * the token against the inspection before the pack left; `execute`
+ * (`git-moves.ts`) checks it again against the review before any ref moves.
  *
  * Limits fail closed: over 300 files or 250 commits per comparison, over
  * `COMMITS_REVIEWED_MAX` commits per push, an unrelated history, an empty
@@ -41,12 +44,11 @@ import {
 
 import { isUnderWorkflowDirectory, repoFullName } from './call.ts';
 import { GITHUB_WEB_BASE } from './credential.ts';
-import { GIT_PUSH_TOOL, pushedRef, type GitRefKind } from './git-call.ts';
-import { gitGrant, targetOf } from './git-credential.ts';
+import { pushedRef, type GitRefKind } from './git-call.ts';
+import { targetOf } from './git-credential.ts';
 import { branchHeads } from './git-heads.ts';
 import { workflowPathsOfCommit } from './git-inspect.ts';
 import { ANCESTORS_PAGE_SIZE, GithubRest, type Comparison } from './git-rest.ts';
-import { gitPushNeeds, missingPermissionSentence } from './permission-check.ts';
 
 /** Commits of one push read one by one for workflow changes (one request each). */
 export const COMMITS_REVIEWED_MAX = 100;
@@ -330,11 +332,6 @@ export async function review(
       workflow_files: [...workflows].sort(),
     });
   }
-  // The push token's permissions cover what these updates need — a workflow
-  // file needs `workflows: write` — or the push is refused by the permission's name.
-  const { permissions } = await gitGrant(ctx, target, 'write');
-  const missing = missingPermissionSentence(GIT_PUSH_TOOL, gitPushNeeds(reviewed), permissions);
-  if (missing !== null) return { ok: false, reason: missing };
   return { ok: true, updates: reviewed };
 }
 

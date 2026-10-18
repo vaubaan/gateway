@@ -240,7 +240,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/execution/pipeline.test.ts`                                                |        26 |
 | `apps/gateway/tests/integration/execution/streaming.test.ts`                                               |        13 |
 | `apps/gateway/tests/integration/execution/team-door.test.ts`                                               |        11 |
-| `apps/gateway/tests/integration/git/git-remote-limits.test.ts`                                             |        10 |
+| `apps/gateway/tests/integration/git/git-remote-limits.test.ts`                                             |        12 |
 | `apps/gateway/tests/integration/git/git-remote-review.test.ts`                                             |        13 |
 | `apps/gateway/tests/integration/git/git-remote-security.test.ts`                                           |        37 |
 | `apps/gateway/tests/integration/git/git-remote.test.ts`                                                    |        16 |
@@ -386,6 +386,7 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/github/tests/unit/git-moves.test.ts`                                                              |        11 |
 | `plugins/github/tests/unit/injection.test.ts`                                                              |       425 |
 | `plugins/github/tests/unit/job-logs.test.ts`                                                               |        22 |
+| `plugins/github/tests/unit/permission-remint.test.ts`                                                      |        16 |
 | `plugins/github/tests/unit/plugin.test.ts`                                                                 |        17 |
 | `plugins/github/tests/unit/risk-catalog.test.ts`                                                           |        80 |
 | `plugins/github/tests/unit/token-cache.test.ts`                                                            |         5 |
@@ -796,7 +797,7 @@ as `UpstreamAuthError`, another status as `UpstreamHttpError`), the catalog
 path resolved with
 `catalogPathNextTo` and present on disk.
 
-**GitHub** (717) — `plugin.test.ts` (17): structural kit (28 tools and the
+**GitHub** (737) — `plugin.test.ts` (17): structural kit (28 tools and the
 git remote's two, the 18 named risks touched), the fallback lint, presets
 `read-only` / `developer` / `release-manager` (catalog v6: `developer` without
 the mint risks, a force-push asking first; `release-manager` pushing tags,
@@ -825,7 +826,13 @@ arguments refused by both sides, the jobs listing cut to its diagnosis
 fields, **the log's redirect followed without the installation token**, the
 log bounded at its beginning or (`tail`) its end with a truncation note, the
 download URL in neither the result nor a failure, a non-https location not
-followed. `git-inspect` (19) and `git-moves` (7): the push inspection and the
+followed. `permission-remint.test.ts` (16): **a permission granted on the
+App is seen at the next call** — a cached grant short of what the call or the
+push needs, or a GitHub 403 "Resource not accessible by integration" / a
+receive-pack "without `workflows` permission", is minted afresh once and the
+call or the move tried once more, refused again by the permission's name;
+`admitPush` declines a workflow change on an installation without Workflows.
+`git-inspect` (19) and `git-moves` (11): the push inspection and the
 ref moves. No `envOf`: the catalog has no
 env-scoped risk.
 
@@ -2947,12 +2954,17 @@ reaches github.com.
   a tag object's id, as GitHub does); an annotated tag of an orphan commit
   refused "no history in common"; 300 files refused, the temporary ref cleaned, audited; no
   key, a wrong key, a revoked mission; the git tools refused over MCP; LFS 501.
-- **`tests/integration/git/git-remote-limits.test.ts`** (10) — the pack cap
+- **`tests/integration/git/git-remote-limits.test.ts`** (12) — the pack cap
   (`VAUBAAN_GIT_MAX_PACK_MB=1`: refused, one audit entry, git's probe not a
   call); the budget of `git-push` and its claim URL; a rotated key, an expired
   mission; an installation without `contents: write` (clone works, push
   refused by name) and without `workflows: write` (code pushed, a workflow
-  change refused by name, nothing counted); a token connection (its token
+  change refused by name before the pack leaves — no receive-pack sent —,
+  nothing counted); **the mission decides first**: on that installation a
+  mission without `workflow-write-via-file` is refused for that permission,
+  not for the App's; **a permission granted on the App is seen at the next
+  push** (the cached push grant without `workflows` minted afresh, the
+  workflow change pushed); a token connection (its token
   upstream, never the key); the sweeper of an expired pending ref; the shared
   admission; the catalog's `git_remote`.
 - **`tests/integration/git/git-remote-security.test.ts`** (37) — **multi-ref

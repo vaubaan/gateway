@@ -127,6 +127,46 @@ export function gitPushNeeds(
 const HOW_TO_ADD =
   'An administrator can add it to the App on GitHub; the organisation then accepts the new permission.';
 
+/** GitHub's HTTP status for a token that authenticates but may not do this. */
+export const HTTP_FORBIDDEN = 403;
+
+/**
+ * GitHub's words for an installation token that lacks a permission: the REST
+ * API's "Resource not accessible by integration", and the git push's
+ * "refusing to allow a GitHub App to create or update workflow … without
+ * `workflows` permission".
+ */
+const MISSING_PERMISSION_WORDS =
+  /Resource not accessible by integration|without [`'"]?workflows[`'"]? permission|refusing to allow a GitHub App/i;
+
+/**
+ * Whether GitHub refused a call for a permission the installation token
+ * lacks — the case where a token minted (and cached) before an
+ * administrator granted the permission is stale. A 403 for any other reason
+ * (a rate limit, a blocked user) is not this.
+ */
+export function isMissingPermissionRefusal(status: number | null, message: string): boolean {
+  return (status === null || status === HTTP_FORBIDDEN) && MISSING_PERMISSION_WORDS.test(message);
+}
+
+/** Longest part of GitHub's message a refusal quotes. */
+const MAX_QUOTED_GITHUB_MESSAGE = 200;
+
+/**
+ * The sentence for a call GitHub still refused for a missing permission
+ * after a token minted afresh: what the call needs, by name, and GitHub's
+ * own words (first line, bounded).
+ */
+export function refusedForPermissionSentence(
+  tool: string,
+  needs: Readonly<Record<string, string>>,
+  githubSaid: string,
+): string {
+  const named = namesOf(missingPermissions(GITHUB_APP_PERMISSIONS, needs, {}));
+  const said = (githubSaid.split('\n')[0] ?? '').slice(0, MAX_QUOTED_GITHUB_MESSAGE);
+  return `${tool} was refused by GitHub for a permission this installation of the company's App lacks (GitHub: “${said}”), with a token minted afresh. It needs ${named}. ${HOW_TO_ADD}`;
+}
+
 function namesOf(missing: ReturnType<typeof missingPermissions>): string {
   return missing
     .map(({ permission, access }) => {
