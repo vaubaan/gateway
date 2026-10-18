@@ -220,6 +220,24 @@ names, and the notes about them do too.
   `env_qualified_risks.default_env`) all read the same effective label. Owner only,
   recorded in the activity (`connection-default-env-set`); migration `0017` adds
   `connections.default_env`. ADR `connection-default-environment-label`.
+- **A mission can be given a whole account, including resources found later.**
+  Creating a mission, "Change" beside an account's resources now offers three
+  choices, each explained in one line: _Every resource known now_ (the default,
+  unchanged: a resource found later is not reached), _The whole account_
+  (every resource of the account, today and found later, except the hidden
+  ones) and _Only the ones I pick_. A mission given a whole account reaches a
+  resource as soon as the account's discovery returns it — no new mission, no
+  new key — and stops reaching one discovery no longer returns. The mission
+  page, the setup kit, `list_my_missions` and the activity
+  (`mission-issued`: `resource_scope` per account) say it. On the management
+  door, `preview_policy` and `issue_mission` accept
+  `resources: { scope: 'connection' }`; `all` keeps meaning "known now". A
+  permission tied to an environment is checked against the resources known when
+  the mission is created; a resource found later gets it once it carries its
+  environment label, its own or the account's default (notice
+  `later-resources-need-env-label`). Missions created
+  before keep exactly what they reached. Schema migration `0018` applies at
+  start (ADR mission-reaches-the-whole-connection-on-request).
 - Creators can add or remove mission permissions without replacing keys or
   resetting usage. Agents can explicitly request missing permissions after a
   refusal; the creator reviews and grants the edit or refuses it in Waiting for

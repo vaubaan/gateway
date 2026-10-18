@@ -1167,6 +1167,8 @@ export const MISSION_WORDS = {
   noKeyWorks: 'No key works on this mission now.',
   notServing: 'No key can be made now: the mission does not serve calls.',
   explicitList: 'Only the accounts you can use. A preset fills an explicit list.',
+  /** An account a mission was given whole (resource scope `connection`). */
+  wholeAccount: 'the whole account, including resources found later',
   peopleLater: 'Just you for now; teammates and machine keys are added after creating.',
   keyAtTheEnd: 'Key shown once.',
   railTitle: 'What this mission will be able to do',
@@ -1236,6 +1238,20 @@ export function expiresOn(at: string | null, now: Date = new Date()): string {
 export function listed(items: readonly string[], max = 4): string {
   if (items.length <= max) return items.join(', ');
   return `${items.slice(0, max).join(', ')} and ${formatNumber(items.length - max)} more`;
+}
+
+/**
+ * What a mission reaches on one account, in a few words: the resources it reaches,
+ * "the account itself, no resource", or — for an account given whole — that later
+ * resources join the ones known now.
+ */
+export function reachedOnAccount(names: readonly string[], reachesLater: boolean, max = 3): string {
+  if (reachesLater) {
+    return names.length === 0
+      ? `${MISSION_WORDS.wholeAccount} (none known yet)`
+      : `${MISSION_WORDS.wholeAccount} (known now: ${listed(names, max)})`;
+  }
+  return names.length === 0 ? 'the account itself, no resource' : listed(names, max);
 }
 
 /** How long ago, inside a sentence: "just now", "4 min ago", "yesterday", "4 d ago". */

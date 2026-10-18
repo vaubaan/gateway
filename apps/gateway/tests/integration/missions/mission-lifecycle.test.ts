@@ -271,6 +271,73 @@ describe('missions: issue, rotate, revoke', () => {
     expect(withStale.preview.issues.map((i) => i.code)).toEqual(['resource-stale']);
   });
 
+  it('the whole connection: the door, the page and the kit read the live list, later resources included', async () => {
+    const connectionId = seeded.github.connection.id;
+    const before = await issued();
+    const { mission, token, kit } = await issued(
+      githubDraft({
+        name: 'Run the whole account',
+        connections: [
+          { connection_id: connectionId, preset: 'developer', resources: { scope: 'connection' } },
+        ],
+      }),
+    );
+    expect(mission.connections).toEqual([
+      { connectionId, resourceScope: 'connection', resourceIds: [] },
+    ]);
+    expect(kit.agent_instructions).toContain(
+      'the whole account, including resources discovered later (known now:',
+    );
+    // The audit of the issuance records the scope, so the width is on record.
+    const issuedEntries = await root.store.audit.list({ kind: 'admin', act: 'mission-issued' });
+    expect(
+      issuedEntries.map(
+        (e) => e.kind === 'admin' && (e.after as { connections: unknown }).connections,
+      ),
+    ).toContainEqual([
+      { connection_id: connectionId, resource_scope: 'connection', resource_ids: [] },
+    ]);
+
+    // Discovery finds a new repository, the owner hides one, another vanishes.
+    const idOf = (ref: string) => seeded.github.resources.find((r) => r.ref === ref)?.id ?? '';
+    await root.store.connections.setResourceHidden(idOf('acme/infra'), true);
+    await root.store.connections.syncDiscoveredResources(connectionId, [
+      { ref: 'acme/app', displayName: 'acme/app' },
+      { ref: 'acme/infra', displayName: 'acme/infra' },
+      { ref: 'acme/new', displayName: 'acme/new' },
+    ]);
+
+    const ctx = await loadMissionContext(
+      root.store,
+      mission,
+      { id: 'token', prefix: token.prefix, holder: { kind: 'named', name: 'test' } },
+      [],
+    );
+    expect(ctx.resources.map((r) => r.ref).sort()).toEqual(['acme/app', 'acme/new']);
+    const detail = await missions.get(seeded.ada, mission.id);
+    expect(detail?.connections[0]?.reaches_later).toBe(true);
+    expect(detail?.connections[0]?.resources.map((r) => r.ref).sort()).toEqual([
+      'acme/app',
+      'acme/new',
+    ]);
+    expect(detail?.kit?.agent_instructions).toContain('`acme/new`');
+    expect(detail?.kit?.agent_instructions).not.toContain('`acme/infra`');
+    expect(detail?.kit?.agent_instructions).not.toContain('`acme/web`');
+
+    // A mission issued on "every resource known now" is not widened by the same discovery.
+    const known = await missions.get(seeded.ada, before.mission.id);
+    expect(known?.connections[0]?.reaches_later).toBe(false);
+    expect(known?.connections[0]?.resources.map((r) => r.ref)).not.toContain('acme/new');
+
+    // The owner's page of the account says it; a copy is as wide as its source.
+    const onAccount = await missions.onConnection(seeded.ada, connectionId);
+    expect(onAccount.find((m) => m.id === mission.id)?.reaches_later).toBe(true);
+    expect(onAccount.find((m) => m.id === before.mission.id)?.reaches_later).toBe(false);
+    const copy = await missions.duplicate(seeded.ada, mission.id);
+    if (!copy.ok) throw new Error('duplicate refused');
+    expect(copy.mission.connections[0]).toMatchObject({ resourceScope: 'connection' });
+  });
+
   it('drops a resource that turned stale when duplicating', async () => {
     const source = await issued();
     await root.store.connections.syncDiscoveredResources(seeded.github.connection.id, [
@@ -404,6 +471,7 @@ describe('missions: issue, rotate, revoke', () => {
       connections: [
         {
           connection_id: seeded.github.connection.id,
+          resource_scope: 'selected',
           resource_ids: seeded.github.resources.map((r) => r.id).sort(),
         },
       ],

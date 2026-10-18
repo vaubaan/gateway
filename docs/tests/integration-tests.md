@@ -2,7 +2,7 @@
 title: Integration tests
 status: current
 date: 2026-10-13
-last_synced: 2026-10-17
+last_synced: 2026-10-18
 tracks:
   - vitest.config.ts
   - scripts/release-lib.test.mjs
@@ -108,11 +108,11 @@ this table says where each requirement lives, and what is not written yet.
 
 | Suite                                                                                                      |     Tests |
 | ---------------------------------------------------------------------------------------------------------- | --------: |
-| `apps/gateway/src/app/(app)/activity/change-lines.test.ts`                                                 |         7 |
+| `apps/gateway/src/app/(app)/activity/change-lines.test.ts`                                                 |         8 |
 | `apps/gateway/src/app/(app)/missions/[id]/session/event-words.test.ts`                                     |         9 |
 | `apps/gateway/src/app/(app)/missions/message-of.test.ts`                                                   |         2 |
 | `apps/gateway/src/app/(app)/missions/mission-view.test.ts`                                                 |        12 |
-| `apps/gateway/src/app/(app)/missions/new/form-state.test.ts`                                               |        40 |
+| `apps/gateway/src/app/(app)/missions/new/form-state.test.ts`                                               |        42 |
 | `apps/gateway/src/components/auth/principal.test.ts`                                                       |         2 |
 | `apps/gateway/src/components/connections/shape.test.ts`                                                    |         5 |
 | `apps/gateway/src/lib/dates.test.ts`                                                                       |         8 |
@@ -162,12 +162,12 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/management/door.test.ts`                                                          |         4 |
 | `apps/gateway/src/server/management/hard-deny.test.ts`                                                     |        16 |
 | `apps/gateway/src/server/management/output-schemas.test.ts`                                                |        10 |
-| `apps/gateway/src/server/management/tools.test.ts`                                                         |        32 |
-| `apps/gateway/src/server/missions/bootstrap-kit.test.ts`                                                   |        21 |
+| `apps/gateway/src/server/management/tools.test.ts`                                                         |        33 |
+| `apps/gateway/src/server/missions/bootstrap-kit.test.ts`                                                   |        22 |
 | `apps/gateway/src/server/missions/catalog-view.test.ts`                                                    |        21 |
 | `apps/gateway/src/server/missions/git-view.test.ts`                                                        |         3 |
 | `apps/gateway/src/server/missions/orphan-reason.test.ts`                                                   |         4 |
-| `apps/gateway/src/server/missions/preview.test.ts`                                                         |        44 |
+| `apps/gateway/src/server/missions/preview.test.ts`                                                         |        50 |
 | `apps/gateway/src/server/missions/summary.test.ts`                                                         |         8 |
 | `apps/gateway/src/server/missions/token-name.test.ts`                                                      |        23 |
 | `apps/gateway/src/server/missions/token.test.ts`                                                           |        10 |
@@ -200,6 +200,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/shares/service.test.ts`                                                           |        24 |
 | `apps/gateway/src/server/store/membership.test.ts`                                                         |        12 |
 | `apps/gateway/src/server/store/resource-env.test.ts`                                                       |         5 |
+| `apps/gateway/src/server/store/mission-reach.test.ts`                                                      |         3 |
 | `apps/gateway/src/server/telemetry/outcome.test.ts`                                                        |        30 |
 | `apps/gateway/src/server/telemetry/settings.test.ts`                                                       |         7 |
 | `apps/gateway/src/server/telemetry/stats.test.ts`                                                          |        11 |
@@ -236,7 +237,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/execution/approval-door.test.ts`                                           |         8 |
 | `apps/gateway/tests/integration/execution/counters-vs-audit.test.ts`                                       |         4 |
 | `apps/gateway/tests/integration/execution/door-http.test.ts`                                               |        23 |
-| `apps/gateway/tests/integration/execution/pipeline.test.ts`                                                |        25 |
+| `apps/gateway/tests/integration/execution/pipeline.test.ts`                                                |        26 |
 | `apps/gateway/tests/integration/execution/streaming.test.ts`                                               |        13 |
 | `apps/gateway/tests/integration/execution/team-door.test.ts`                                               |        11 |
 | `apps/gateway/tests/integration/git/git-remote-limits.test.ts`                                             |        10 |
@@ -245,12 +246,12 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/git/git-remote.test.ts`                                                    |        14 |
 | `apps/gateway/tests/integration/instance/instance-name.test.ts`                                            |         7 |
 | `apps/gateway/tests/integration/management/hard-deny.test.ts`                                              |         6 |
-| `apps/gateway/tests/integration/management/management-door.test.ts`                                        |        35 |
+| `apps/gateway/tests/integration/management/management-door.test.ts`                                        |        36 |
 | `apps/gateway/tests/integration/management/output-schemas.test.ts`                                         |         9 |
 | `apps/gateway/tests/integration/missions/gate.test.ts`                                                     |        20 |
 | `apps/gateway/tests/integration/missions/limits.test.ts`                                                   |        21 |
 | `apps/gateway/tests/integration/missions/mission-handlers.test.ts`                                         |         8 |
-| `apps/gateway/tests/integration/missions/mission-lifecycle.test.ts`                                        |        34 |
+| `apps/gateway/tests/integration/missions/mission-lifecycle.test.ts`                                        |        35 |
 | `apps/gateway/tests/integration/missions/team-interleaving.test.ts`                                        |         6 |
 | `apps/gateway/tests/integration/missions/team.test.ts`                                                     |        34 |
 | `apps/gateway/tests/integration/now/now.test.ts`                                                           |        12 |
@@ -272,7 +273,8 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/store/corrupt-rows.test.ts`                                                |        14 |
 | `apps/gateway/tests/integration/store/delegations.test.ts`                                                 |        20 |
 | `apps/gateway/tests/integration/store/identities.test.ts`                                                  |        11 |
-| `apps/gateway/tests/integration/store/missions.test.ts`                                                    |        21 |
+| `apps/gateway/tests/integration/store/missions.test.ts`                                                    |        22 |
+| `apps/gateway/tests/integration/store/whole-connection-migration.test.ts`                                  |         1 |
 | `apps/gateway/tests/integration/store/oauth-clients.test.ts`                                               |        16 |
 | `apps/gateway/tests/integration/store/ownership-and-orphans.test.ts`                                       |        13 |
 | `apps/gateway/tests/integration/store/request-covers-the-call-migration.test.ts`                           |         1 |
@@ -1591,8 +1593,9 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   what is not an instant; and **no source of the pages hands a date to the
   browser's locale** (`toLocaleDateString`, `toLocaleTimeString`,
   `Intl.DateTimeFormat`, a bare `toLocaleString()`).
-- **`src/app/(app)/activity/change-lines.test.ts`** (7) — **a change of the
-  record in words**: a created mission names its account, its resources and
+- **`src/app/(app)/activity/change-lines.test.ts`** (8) — **a change of the
+  record in words**: a mission given a whole account says so, an empty list
+  reads "no resource"; a created mission names its account, its resources and
   each permission with its limits and whether it asks first, with the id
   beside the name and no raw account or resource id left; a change says what
   changed and what it was, and leaves out what did not; a status reads in
@@ -1817,9 +1820,10 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   idempotent re-run, incremental apply of a new file, checksum
   immutability of an applied file (boot refused), full rollback of a
   failing file (nothing recorded, no table left), a database carrying a
-  migration this image does not ship is refused, the fifteen shipped
-  migrations `0001`-`0015` in the default directory (`0015_git_pending_refs`:
-  the temporary refs of the git remote).
+  migration this image does not ship is refused, the eighteen shipped
+  migrations `0001`-`0018` in the default directory
+  (`0018_mission_reaches_the_whole_connection`: the resource scope
+  `connection`).
 - **`unit/server/store/db.test.ts`** (2) — `isSqliteVersionAtLeast`
   against `MIN_SQLITE_VERSION`: major, minor and patch compared in order;
   a missing or malformed component counts as zero.
@@ -1894,7 +1898,19 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   wildcard risk ids refused by the catalog check** (`*`, `github.*`,
   unknown, empty) and **by the schema `CHECK`** when bypassed, empty
   restriction allowed, active-for-targets listing and revocation.
-- **`integration/store/missions.test.ts`** (18) — creation with
+- **`src/server/store/mission-reach.test.ts`** (3) — `reachedResources`, the
+  one rule of the three readers: an explicit selection minus stale and self (a
+  hidden one picked stays); `all` with an empty list reaches nothing; scope
+  `connection` is the live list minus hidden, stale and self, and loses a
+  resource discovery no longer returns.
+- **`integration/store/whole-connection-migration.test.ts`** (1) — migration
+  `0018` on a schema-17 database: a `selected` and an `all` selection keep
+  their scope and resource rows, `foreign_key_check` is clean, `connection`
+  is accepted afterwards and an unknown scope refused, a resource row still
+  needs its selection, deleting a mission still cascades.
+- **`integration/store/missions.test.ts`** (22) — a whole-connection
+  selection stored as its scope with no resource row, and refused with ids;
+  creation with
   connections and policy rows, resource selection per connection,
   inconsistent selections refused (`selected` without resources, `all`
   with resources, resource of another connection, no connection), policy
@@ -2354,7 +2370,13 @@ Unit, co-located (210 with the authority suite):
   provider. **Resource selection**: `all` → the explicit list; by id or by ref;
   a foreign resource; an empty selection; hidden and stale left out of `all`; a
   hidden one selectable, a stale one refused and unable to resolve an env; a
-  connection with no resource. **Env-qualified ids**: pass with a labelled
+  connection with no resource. **The whole connection** (`connection`):
+  judged on the resources known now and resolved as the scope, not a list
+  (`reaches_later`, the summary says it); passes on a connection with no
+  resource yet; an env-qualified id still needs a resource known now carrying
+  its label, and the notice `later-resources-need-env-label` names the
+  env-scoped ids accepted; no such notice when the plugin derives the
+  environment; `all` stays the list known now. **Env-qualified ids**: pass with a labelled
   resource, shown and refused without, no label needed when the plugin derives
   the env. **Mandatory budget**: no budget, half a budget, zero / negative /
   fractional / infinite values, the catalog's rate ceiling. **Presets**:
@@ -2414,7 +2436,10 @@ included` equals the catalog; where the environment comes from (Vercel: the
 - **`summary.test.ts`** (8) — the three lines (can / cannot / quantities) for a
   recurring and a one-off mission, the empty form, label truncation, period and
   expiry phrases.
-- **`bootstrap-kit.test.ts`** (16) — the secret only in the env snippet; MCP
+- **`bootstrap-kit.test.ts`** (22) — an account given whole reads "the whole
+  account, including resources discovered later" with the refs known now (or
+  "none known yet") and that a created resource is reached once discovered;
+  the secret only in the env snippet; MCP
   configuration with the instance URL and `${VAUBAAN_MISSION_TOKEN}`; the agent
   block, in the interface's words around the protocol's names (accounts,
   refs, permissions with their limits, "runs freely" / "asks the mission
@@ -2437,7 +2462,11 @@ included` equals the catalog; where the environment comes from (Vercel: the
   under the wrong algorithm nor under an unknown one; uniqueness; prefix of
   a live token only; the draft schema
   (unknown keys refused, every malformed field named).
-- **`src/app/(app)/missions/new/form-state.test.ts`** (40) — initial state
+- **`src/app/(app)/missions/new/form-state.test.ts`** (42) — the three
+  resource choices (every resource known now, the whole account, only the ones
+  I pick), each explained; the whole account sent as its scope, the others as
+  the ticked list; ticking a box is picking; a whole-connection proposal
+  loads as such; initial state
   (nothing included, hidden and stale resources unticked, daily period, no
   expiry); a preset fills the policy and the draft sent is the explicit
   enumeration; the untouched preset follows the resource selection and says
@@ -2490,7 +2519,13 @@ included` equals the catalog; where the environment comes from (Vercel: the
 Integration, `:memory:` store, the real root with the shipped plugins,
 connections and resources seeded through the repositories (36):
 
-- **`tests/integration/missions/mission-lifecycle.test.ts`** (34) — **issue →
+- **`tests/integration/missions/mission-lifecycle.test.ts`** (35) — **a
+  mission issued on the whole connection**: stored `connection` with no id,
+  audited with `resource_scope`; after discovery finds a repository, the owner
+  hides one and another vanishes, the door, the detail and the kit all read
+  the new one and neither the hidden nor the vanished; a mission issued on
+  "every resource known now" is not widened by the same discovery; the
+  account page flags it (`reaches_later`); a copy keeps the scope. **issue →
   the token verifies → rotate → the old token is `retired/rotated` → revoke →
   `retired/revoked` and gateway-core's `checkMissionActive` answers
   `mission-inactive`**; malformed bearer, unknown prefix and wrong secret answer
@@ -2697,7 +2732,7 @@ calls sent as JSON-RPC to `root.execution.handlers.mcp`.
   —, a non-token bearer costs nothing); upstream
   credential cache (scoped per connection, dropped on demand, unreachable
   after the connection row changed, lifetime capped).
-- **`integration/execution/pipeline.test.ts`** (25)
+- **`integration/execution/pipeline.test.ts`** (26)
   - _allowed call_: forwarded to the plugin, the touched risk decremented,
     one audit entry with connection, resource ref, canonical
     `arguments_hash`, `remaining_budget`; the decrypted credential reaches
@@ -2723,7 +2758,10 @@ calls sent as JSON-RPC to `root.execution.handlers.mcp`.
   - _resource selection_: a selected resource gone stale is refused naming
     it while a hidden one still works; a mission stored `all` with an empty
     list covers nothing, including a resource discovered later, and still
-    calls an account-level tool.
+    calls an account-level tool; **a mission issued on the whole connection
+    reaches a resource discovered after issuance** (the plugin's
+    `ctx.resources` is that live list), not a hidden one, and no longer one
+    the next discovery does not return.
   - _structural rejections_ (`-32602`, audit `refused` with no code):
     unknown tool, a provider the mission has no connection for, unplaceable
     arguments. **A classifier that throws** (invariant
@@ -4142,8 +4180,10 @@ Unit, beside the code (`apps/gateway/src/server/management/`):
   and never more of the token than the masked prefix.
   **Descriptions** state the rules of issuance (explicit RiskIds only, one
   connection per provider, a budget for every risk, labelled resources for
-  env-qualified ids, the user is the creator and answers every request); the
-  schemas refuse unknown keys; an answer is structured content and text, a
+  env-qualified ids, the user is the creator and answers every request) and
+  tell `all` (known now) from `connection` (the whole connection, later
+  resources included); the draft schema accepts `{ scope: 'connection' }` and
+  refuses it with ids; the schemas refuse unknown keys; an answer is structured content and text, a
   refusal a tool error with its code.
 - **`hard-deny.test.ts`** (16) — **structural**: the module's dependency type has
   exactly `admit`, `missions`, `catalog`, `rateLimit`, `build`, `logger`; no
@@ -4176,7 +4216,10 @@ composition root on the `:memory:` store with the shipped plugins and the
 simulated IdP; the agent is the official MCP client holding a delegated token
 obtained through registration, sign-in, consent and code exchange):
 
-- **`management-door.test.ts`** (35)
+- **`management-door.test.ts`** (36) — a mission issued on the whole
+  connection: previewed (`resource_scope: connection`), issued (kit wording,
+  stored scope), listed (`resource_scopes`, and per connection with
+  `mission_id`); a draft's `all` reads back `selected`.
   - The door lists exactly the seven tools, each with a description and a
     strict input schema; the server instructions carry the rules.
   - **Reading**: an owner sees their connections with the whole catalog,

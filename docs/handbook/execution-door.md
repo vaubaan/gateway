@@ -2,7 +2,7 @@
 title: Execution door — /mcp, the call pipeline's stages, the agent label, streaming, the catalog
 status: current
 date: 2026-10-13
-last_synced: 2026-10-16
+last_synced: 2026-10-18
 tracks:
   - apps/gateway/src/server/execution/
   - apps/gateway/src/server/git/paths.ts
@@ -23,6 +23,7 @@ tracks:
   - apps/gateway/src/server/missions/mission-service.ts
   - packages/gateway-core/tests/unit/pipeline.test.ts
   - apps/gateway/src/server/missions/bootstrap-kit.ts
+  - apps/gateway/src/server/store/mission-reach.ts
   - packages/plugin-sdk/src/plugin.ts
   - packages/plugin-sdk/src/streaming.ts
   - deploy/caddy/Caddyfile
@@ -333,13 +334,24 @@ one, with its holder (`{ id, prefix, holder }`); `selfResources` is
 - `connections` — one `MissionConnection` per `mission.connections` entry, with
   the current `status` and `owner.display` (the user's email, or the group's
   name).
-- `resources` — the rows of `connections.listResources` whose id is in the
-  mission's `resourceIds` **and** whose `staleSince` is null **and** that is
-  not one of the instance's own (`isSelfResource`, handbook
+- `resources` — `reachedResources(selection, connections.listResources(…),
+isSelf)` (`store/mission-reach.ts`, the function the mission page and the
+  bootstrap kit call too; handbook [missions](missions.md), "What a mission
+  reaches on a connection"). For an explicit selection: the rows whose id is in
+  the mission's `resourceIds` **and** whose `staleSince` is null **and** that
+  are not one of the instance's own (`isSelfResource`, handbook
   [configuration](configuration.md) "Self resources": a stored selection that
-  names it still cannot reach it). Scope `all` with an empty list yields
-  nothing: the selection is never hydrated from the live list. Hidden
-  resources stay.
+  names it still cannot reach it); hidden ones stay. Scope `all` with an empty
+  list yields nothing: that selection is never hydrated from the live list.
+  Scope `connection` (the creator gave the whole account, ADR
+  [mission-reaches-the-whole-connection-on-request](../decisions/mission-reaches-the-whole-connection-on-request.md))
+  **is** the live list, read on every request: every row neither hidden, nor
+  stale, nor the instance's own — so `resource-not-in-mission` no longer fires
+  for a resource discovered after issuance, and does for one discovery no
+  longer returns. The same array is what a plugin's `execute` receives as
+  `ctx.resources`: a "list" tool that filters its answer to the mission
+  (`fly__list_apps`, `cloudflare_dns__list_zones`) sees exactly what the
+  resource stage allows.
 - `policy` — `mission.policy` through `policyEntryOf` (budget).
 - `session` — `sessions.getByMission`, or `null` before the first call.
 

@@ -451,6 +451,58 @@ describe('management door — tools of a delegated agent', () => {
       await agent.close();
     });
 
+    it('issues on the whole connection when asked: previewed, issued and listed with that scope', async () => {
+      const agent = await rig.agentOf(ADA);
+      const draft = draftOn(github, ['github.read-code'], {
+        connections: [
+          {
+            connection_id: github,
+            resources: { scope: 'connection' },
+            policy: [
+              {
+                risk_id: 'github.read-code',
+                quota: 20,
+                rate_limit: { max: 5, window_seconds: 60 },
+                gate: 'auto',
+              },
+            ],
+          },
+        ],
+      });
+      const preview = await agent.call<PreviewView>('preview_policy', draft);
+      expect(preview.data).toMatchObject({ ok: true });
+      expect(preview.data.connections[0]?.resource_scope).toBe('connection');
+
+      const issued = await issue(agent, draft);
+      expect(issued.bootstrap_kit.agent_instructions).toContain(
+        'the whole account, including resources discovered later',
+      );
+      const record = await rig.root.store.missions.getById(issued.mission.mission_id);
+      expect(record?.connections).toEqual([
+        { connectionId: github, resourceScope: 'connection', resourceIds: [] },
+      ]);
+
+      const listed = await agent.call<MissionsAnswer>('list_my_missions');
+      expect(listed.data.missions[0]?.resource_scopes).toEqual([
+        { connection_id: github, resource_scope: 'connection' },
+      ]);
+      const one = await agent.call<MissionsAnswer>('list_my_missions', {
+        mission_id: issued.mission.mission_id,
+      });
+      const detail = one.data.missions[0];
+      expect(detail && 'connections' in detail && detail.connections[0]?.resource_scope).toBe(
+        'connection',
+      );
+
+      // `all` is listed as the resources stored at issuance.
+      const known = await issue(agent, draftOn(github, ['github.read-code'], { name: 'Known' }));
+      const again = await agent.call<MissionsAnswer>('list_my_missions');
+      expect(
+        again.data.missions.find((m) => m.mission_id === known.mission.mission_id)?.resource_scopes,
+      ).toEqual([{ connection_id: github, resource_scope: 'selected' }]);
+      await agent.close();
+    });
+
     it('refuses a draft beyond the authority, whole, with the uncovered list — and issues nothing', async () => {
       await shareWithBob();
       const agent = await rig.agentOf(BOB);

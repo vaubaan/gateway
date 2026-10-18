@@ -192,13 +192,23 @@ export interface MissionPolicyEntry {
   readonly gate: Gate;
 }
 
-export const RESOURCE_SCOPES = ['all', 'selected'] as const;
+/**
+ * How a mission's selection on one connection is stored:
+ *
+ *   selected    the explicit ids stored at issuance (a draft's `all` is stored so)
+ *   all         an empty list: nothing was known at issuance; reaches none
+ *   connection  no ids: the whole connection, resources discovered later included,
+ *               resolved at read time (ADR mission-reaches-the-whole-connection-on-request)
+ *
+ * What a mission reaches is `reachedResources` (`mission-reach.ts`), for every reader.
+ */
+export const RESOURCE_SCOPES = ['all', 'selected', 'connection'] as const;
 export type ResourceScope = (typeof RESOURCE_SCOPES)[number];
 
 export interface MissionConnection {
   readonly connectionId: string;
   readonly resourceScope: ResourceScope;
-  /** Selected resource ids; empty when `resourceScope` is `all`. */
+  /** Selected resource ids; empty when `resourceScope` is `all` or `connection`. */
   readonly resourceIds: readonly string[];
 }
 

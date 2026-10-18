@@ -164,6 +164,15 @@ describe('management door — every answer matches its advertised output schema'
       period: { kind: 'recurring', length_seconds: 3600 },
       expires_at: null,
     });
+    // The whole connection: a notice about labels of later resources rides along.
+    await yes(ada, 'preview_policy', {
+      name: 'The whole account',
+      connections: [
+        { connection_id: supabase, preset: 'read-only', resources: { scope: 'connection' } },
+      ],
+      period: { kind: 'one-off' },
+      expires_at: null,
+    });
     await ada.close();
   });
 

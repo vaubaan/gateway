@@ -74,8 +74,9 @@ function canLine(connection: IssuanceConnection, preview: ConnectionPreview): st
   const byId = new Map(connection.risks.map((r) => [r.risk_id, r]));
   const accepted = preview.passes.flatMap((p) => byId.get(p.risk_id) ?? []);
   const top = mostSevere(accepted);
-  const where =
-    preview.resources_total === 0
+  const where = preview.reaches_later
+    ? 'the whole account, resources found later included'
+    : preview.resources_total === 0
       ? 'the account'
       : `${preview.resources.length} of ${plural(preview.resources_total, 'resource')}`;
   const upTo = top ? `, up to "${shortLabel(top.label)}" (${top.level})` : '';

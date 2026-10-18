@@ -11,7 +11,7 @@
  *   minute, and whether it asks first. Nothing in it stands for "all".
  */
 import { AllowSummary, EnvTag, GateMark, Mono } from '@/components/ui';
-import { count, formatNumber, gateWordOf, listed, TERMS } from '@/lib/vocabulary';
+import { count, formatNumber, gateWordOf, reachedOnAccount, TERMS } from '@/lib/vocabulary';
 import { groupVariants } from '@/server/missions/catalog-view';
 import type { IssuanceConnection } from '@/server/missions/model';
 import { defaultResources } from '@/server/missions/preview';
@@ -60,7 +60,7 @@ export function accountLines(
 
 function resourceNames(connection: IssuanceConnection, state: ConnectionState): string {
   const names = selectedResources(connection, state).map((r) => r.display_name || r.ref);
-  return names.length === 0 ? 'the account itself, no resource' : listed(names, 3);
+  return reachedOnAccount(names, state.resourceScope === 'connection');
 }
 
 export function RailSummary({

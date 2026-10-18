@@ -109,6 +109,7 @@ export const MANAGEMENT_INSTRUCTIONS = [
   '- Every accepted risk needs a budget: a quota per period and a rate limit. A preset supplies them; otherwise you must.',
   '- A RiskId qualified with an environment, such as `supabase[prod].row-write`, is only usable when a selected resource carries that environment label (`env_qualified_risks` in `list_my_connections`).',
   '- One connection per provider in a mission. Select the resources the task needs, not all of them.',
+  "- Resources: `{ scope: 'all' }` is every resource known now, stored as that list — a resource discovered later is NOT reached. `{ scope: 'connection' }` is the whole connection, resources discovered later included (hidden ones excepted): use it only when the task creates resources or operates the whole account, and say so to the user.",
   '- A risk outside the user’s authority is refused, with the list of what is not covered. You cannot obtain it here: remove it, or tell the user.',
   '',
   'The user is the creator of every mission you issue and sees it marked as issued by you. Requests raised by a mission — a claim for more budget, an approval of an action — are answered by the user alone, in the web interface. This door cannot answer a request, open a gate, extend a budget, reset a period, connect a provider, share or revoke a connection, or call a provider tool. A mission token opens the execution door only, not this one.',
@@ -170,6 +171,7 @@ export const MANAGEMENT_TOOLS: readonly ManagementToolDefinition[] = [
     description: [
       'Lists the missions of the user, newest first — the ones they created (`role: creator`) and the ones another user shared with them as a member (`role: member`, read-only from this door) —: state (`active`, `expired`, `orphaned`, `revoked`), `orphan` — why an orphaned mission lost its authority and whether it can come back —, policy with what is left of each quota this period, the current period of the session, the masked token prefix, and which client issued it when it was issued by delegation.',
       'With `mission_id`, returns that mission with its connections and the resources it reaches.',
+      '`resource_scopes` says, per connection, whether the mission reaches the resources stored at issuance (`selected`) or the whole connection, resources discovered later included (`connection`).',
       'Reading only: a budget cannot be extended, a period reset or a gate changed from here — the user does that in the web interface, when the executing agent hands them the URL of a refusal.',
     ].join(' '),
     inputSchema: z
@@ -190,6 +192,7 @@ export const MANAGEMENT_TOOLS: readonly ManagementToolDefinition[] = [
     description: [
       'Checks a mission draft without issuing anything. Answers `ok`, the `issues` that block it, `uncovered` — the accepted risks outside the user’s authority, per connection —, and `policy`: exactly what the mission could call, with the budget of each risk.',
       'Rules: explicit RiskIds only; one connection per provider; either `preset` alone (the preset, bounded by the user’s authority) or `policy` with a quota and a rate limit for every risk (a named `preset` then supplies the missing budgets); an environment-qualified id needs a selected resource labelled with that environment; `period` and `expires_at` are mandatory (`expires_at` may be null).',
+      "Resources per connection: `{ scope: 'all' }` (default) — every resource known now, a resource discovered later is not reached; `{ scope: 'connection' }` — the whole connection, resources discovered later included, environment labels checked on the resources known now (notice `later-resources-need-env-label`); `{ scope: 'selected', resource_refs: [...] }` — only those.",
       'Call it until `ok` is true, then pass the same draft to `issue_mission`. A risk listed in `uncovered` cannot be obtained here: remove it.',
     ].join(' '),
     inputSchema: missionDraftSchema,
@@ -202,7 +205,7 @@ export const MANAGEMENT_TOOLS: readonly ManagementToolDefinition[] = [
     description: [
       'Issues a mission from a draft that `preview_policy` accepts. The creator is the user, not you: the mission appears under their name, marked as issued by this client, and they alone answer the requests it raises (claims for more budget, approvals of gated actions) in the web interface.',
       'The answer contains `token.secret` — the mission token, shown this once and never again — and `bootstrap_kit`: the environment variable, the MCP configuration and the instruction block to give the agent that will execute the mission. The mission token opens the execution door only; it is not accepted here. Do not write it anywhere but where the kit says.',
-      'A draft that exceeds the user’s authority is refused whole, with `uncovered`; nothing is narrowed silently. Issue the narrowest mission that does the task: the mission and its width are visible to the user.',
+      "A draft that exceeds the user’s authority is refused whole, with `uncovered`; nothing is narrowed silently. Issue the narrowest mission that does the task: the mission and its width are visible to the user. `resources: { scope: 'connection' }` gives the whole connection, resources discovered later included; `all` only the resources known now.",
     ].join(' '),
     inputSchema: missionDraftSchema,
     run: (tools, actor, args) => tools.issueMission(actor, args),

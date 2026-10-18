@@ -18,7 +18,7 @@ import { explainOrphan } from '../missions/orphan-reason';
 import { expandPreset, previewDraft } from '../missions/preview';
 import { ACME_CATALOG, acmeConnection } from '../missions/testing';
 import { enumerateCatalog } from '../missions/catalog-view';
-import { MANAGEMENT_TOOLS } from './definitions';
+import { MANAGEMENT_INSTRUCTIONS, MANAGEMENT_TOOLS } from './definitions';
 import { toolResultOf } from './door';
 import type { ManagementActor, ManagementCatalog, ManagementMissions } from './ports';
 import {
@@ -746,6 +746,12 @@ describe('tool definitions and results', () => {
     expect(text.preview_policy).toContain('one connection per provider');
     expect(text.preview_policy).toContain('a quota and a rate limit for every risk');
     expect(text.preview_policy).toContain('labelled with that environment');
+    // `all` and `connection` are told apart where a draft is composed.
+    expect(text.preview_policy).toContain("`{ scope: 'connection' }` — the whole connection");
+    expect(text.preview_policy).toContain('a resource discovered later is not reached');
+    expect(text.issue_mission).toContain("`resources: { scope: 'connection' }`");
+    expect(text.list_my_missions).toContain('`resource_scopes`');
+    expect(MANAGEMENT_INSTRUCTIONS).toContain("`{ scope: 'connection' }` is the whole connection");
     expect(text.issue_mission).toContain('The creator is the user, not you');
     expect(text.issue_mission).toContain('shown this once');
     expect(text.issue_mission).toContain('they alone answer the requests');
@@ -761,6 +767,15 @@ describe('tool definitions and results', () => {
     expect(preview?.inputSchema.safeParse(DRAFT).success).toBe(true);
     expect(preview?.inputSchema.safeParse({ ...DRAFT, accepted_risks: ['*'] }).success).toBe(false);
     expect(preview?.inputSchema.safeParse({ name: 'x' }).success).toBe(false);
+    const whole = (resources: unknown) => ({
+      ...DRAFT,
+      connections: [{ ...DRAFT.connections[0], resources }],
+    });
+    expect(preview?.inputSchema.safeParse(whole({ scope: 'connection' })).success).toBe(true);
+    expect(
+      preview?.inputSchema.safeParse(whole({ scope: 'connection', resource_ids: ['r1'] })).success,
+    ).toBe(false);
+    expect(preview?.inputSchema.safeParse(whole({ scope: 'everything' })).success).toBe(false);
     const revoke = MANAGEMENT_TOOLS.find((tool) => tool.name === 'revoke_mission');
     expect(revoke?.inputSchema.safeParse({ mission_id: 'm1' }).success).toBe(true);
     expect(revoke?.inputSchema.safeParse({ mission_id: 'm1', force: true }).success).toBe(false);

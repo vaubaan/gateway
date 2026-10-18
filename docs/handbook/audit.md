@@ -2,7 +2,7 @@
 title: Audit — search, mission session view, retention, administrative entries
 status: current
 date: 2026-10-13
-last_synced: 2026-10-16
+last_synced: 2026-10-18
 tracks:
   - apps/gateway/src/server/budget/retention.ts
   - apps/gateway/src/server/audit/
@@ -197,7 +197,9 @@ in the detail of a line, in mono.
   and its object as the protocol names them, who made it, then **what changed
   in words** (`changeLines`, `activity/change-lines.ts`, pure;
   `data-testid="change-line"`): the account by its name, the resources by
-  theirs, each permission with its limits and whether it asks first ("Read
+  theirs ("the whole account, including resources found later" for a mission
+  issued with `resource_scope: connection`, "no resource" for an empty list),
+  each permission with its limits and whether it asks first ("Read
   code · 200 a day · 60 a minute · runs freely", its id in mono beside it), a
   status in the words of its object ("stopped · was running" for a mission),
   a value that changed with what it was, and nothing for a value that did not

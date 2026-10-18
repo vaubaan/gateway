@@ -2,7 +2,7 @@
 title: Management door — authorization server, delegated tokens, admission, tools
 status: current
 date: 2026-10-13
-last_synced: 2026-10-14
+last_synced: 2026-10-18
 tracks:
   - apps/gateway/src/server/oauth-as/
   - apps/gateway/src/server/management/
@@ -755,6 +755,22 @@ validated by the SDK before the method runs; unknown keys are refused
 (`.strict()`). `preview_policy` and `issue_mission` take a mission draft —
 `missionDraftSchema` of `missions/draft-schema.ts`, the very schema the
 creation form parses, with the descriptions an agent reads.
+
+**Resources of a draft: `all` or `connection`** (ADR
+[mission-reaches-the-whole-connection-on-request](../decisions/mission-reaches-the-whole-connection-on-request.md)).
+`resources: { scope: 'all' }` (the default) is every resource known now,
+stored as that list: a resource discovered later is not reached.
+`{ scope: 'connection' }` is the whole connection, resources discovered later
+included (hidden ones excepted), environment labels checked on the resources
+known now (notice `later-resources-need-env-label`). The instructions of the
+door, the descriptions of `preview_policy` and `issue_mission` and the draft
+schema state the difference; the instructions still ask to select what the
+task needs. The answers carry the scope: `preview_policy` per connection
+(`resource_scope`: `selected` or `connection`, `resources` being what is
+reached now), `list_my_missions` per mission (`resource_scopes: [{
+connection_id, resource_scope }]`) and per connection of a mission read with
+`mission_id` (`connections[].resource_scope`). A draft's `all` reads back as
+`selected`: it is stored as the list it resolved to.
 
 **Answers** (`toolResultOf`) are `structuredContent`, repeated as JSON text
 for clients that only read text, in the shape the tool's `outputSchema`

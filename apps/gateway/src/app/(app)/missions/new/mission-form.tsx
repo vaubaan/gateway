@@ -33,6 +33,8 @@ import {
   CardHeader,
   CardTitle,
   Checkbox,
+  ChoiceChip,
+  ChoiceRow,
   ConfirmDialog,
   Dialog,
   EnvTag,
@@ -98,7 +100,9 @@ import {
   PERIOD_CHOICES,
   periodChoiceOf,
   periodOf,
+  RESOURCE_CHOICES,
   setIncluded,
+  setResourceScope,
   setResources,
   startEmpty,
   type ConnectionState,
@@ -164,6 +168,7 @@ type PendingDiscard =
 const EMPTY: ConnectionState = {
   included: false,
   mode: 'preset',
+  resourceScope: 'all',
   resourceIds: [],
   presetId: '',
   entries: {},
@@ -549,6 +554,7 @@ export function MissionForm({
                   connection.resources.filter((r) => r.hidden && cs.resourceIds.includes(r.id))
                     .length;
                 const listedCount = connection.resources.length;
+                const whole = cs.resourceScope === 'connection';
                 const selected = connection.resources.filter((r) => cs.resourceIds.includes(r.id));
                 const envs = [...new Set(selected.flatMap((r) => (r.env ? [r.env] : [])))];
                 const editorOpen = openEditors.has(connection.id);
@@ -582,29 +588,39 @@ export function MissionForm({
                       <span className={styles.accountResources}>
                         {!cs.included ? (
                           'not in this mission'
-                        ) : listedCount === 0 ? (
-                          'the account itself, no resource'
                         ) : (
                           <>
                             <span className={styles.resourceNames}>
-                              {selected.length === 0
-                                ? 'No resource'
-                                : listed(
-                                    selected.map((r) => r.display_name || r.ref),
-                                    2,
-                                  )}
+                              {whole
+                                ? MISSION_WORDS.wholeAccount
+                                : listedCount === 0
+                                  ? 'the account itself, no resource'
+                                  : selected.length === 0
+                                    ? 'No resource'
+                                    : listed(
+                                        selected.map((r) => r.display_name || r.ref),
+                                        2,
+                                      )}
                             </span>
                             {envs.map((env) => (
                               <EnvTag key={env} env={env} />
                             ))}
-                            <span className={styles.resourceCount}>
-                              {cs.resourceIds.length} of {total}
-                            </span>
+                            {listedCount > 0 && (
+                              <span className={styles.resourceCount}>
+                                {whole
+                                  ? `${cs.resourceIds.length} known now`
+                                  : `${cs.resourceIds.length} of ${total}`}
+                              </span>
+                            )}
                             <Button
                               type="button"
                               size="sm"
                               aria-expanded={openResources.has(connection.id)}
-                              aria-label={`${MISSION_ACTIONS.change} the resources of ${name}: ${cs.resourceIds.length} of ${total} ${total === 1 ? 'resource' : 'resources'}`}
+                              aria-label={`${MISSION_ACTIONS.change} the resources of ${name}: ${
+                                whole
+                                  ? MISSION_WORDS.wholeAccount
+                                  : `${cs.resourceIds.length} of ${total} ${total === 1 ? 'resource' : 'resources'}`
+                              }`}
                               onClick={() => toggleResources(connection.id)}
                             >
                               {MISSION_ACTIONS.change}
@@ -614,47 +630,76 @@ export function MissionForm({
                       </span>
                     </div>
 
-                    {cs.included && openResources.has(connection.id) && listedCount > 0 && (
-                      <div
-                        className={styles.resources}
-                        role="group"
-                        aria-label={`Resources of ${name}`}
-                      >
-                        {connection.resources.map((r) => (
-                          <Checkbox
-                            key={r.id}
-                            checked={cs.resourceIds.includes(r.id)}
-                            // Discovery no longer returns it, or it hosts this
-                            // instance: never part of a new mission.
-                            disabled={r.stale || r.self}
-                            aria-label={`Resource ${r.ref}`}
-                            onChange={(e) =>
-                              patchConnection(
-                                connection.id,
-                                setResources(
-                                  connection,
-                                  cs,
-                                  e.target.checked
-                                    ? [...cs.resourceIds, r.id]
-                                    : cs.resourceIds.filter((id) => id !== r.id),
-                                ),
-                              )
-                            }
-                          >
-                            <span className={styles.resource}>
-                              {r.display_name || r.ref}
-                              {r.display_name && r.display_name !== r.ref && (
-                                <span className={styles.quietText}> {r.ref}</span>
-                              )}
-                              <EnvTag env={r.env} />
-                              {r.hidden && <Tag>hidden by its owner</Tag>}
-                              {r.stale && <Tag tone="warn">no longer found</Tag>}
-                              {r.self && <Tag tone="warn">{ACCOUNT_WORDS.self}</Tag>}
-                            </span>
-                          </Checkbox>
-                        ))}
+                    {cs.included && openResources.has(connection.id) && (
+                      <div className={styles.resourceScope} data-testid="resource-scope">
+                        <ChoiceRow legend={`Resources of ${name} the mission reaches`}>
+                          {RESOURCE_CHOICES.map((choice) => (
+                            <ChoiceChip
+                              key={choice.id}
+                              name={`resource-scope-${connection.id}`}
+                              value={choice.id}
+                              checked={cs.resourceScope === choice.id}
+                              onChange={() =>
+                                patchConnection(
+                                  connection.id,
+                                  setResourceScope(connection, cs, choice.id),
+                                )
+                              }
+                              label={choice.label}
+                              hint={choice.hint}
+                            />
+                          ))}
+                        </ChoiceRow>
+                        <p className={styles.quietText}>
+                          {RESOURCE_CHOICES.find((c) => c.id === cs.resourceScope)?.explanation}
+                        </p>
                       </div>
                     )}
+
+                    {cs.included &&
+                      openResources.has(connection.id) &&
+                      cs.resourceScope !== 'connection' &&
+                      listedCount > 0 && (
+                        <div
+                          className={styles.resources}
+                          role="group"
+                          aria-label={`Resources of ${name}`}
+                        >
+                          {connection.resources.map((r) => (
+                            <Checkbox
+                              key={r.id}
+                              checked={cs.resourceIds.includes(r.id)}
+                              // Discovery no longer returns it, or it hosts this
+                              // instance: never part of a new mission.
+                              disabled={r.stale || r.self}
+                              aria-label={`Resource ${r.ref}`}
+                              onChange={(e) =>
+                                patchConnection(
+                                  connection.id,
+                                  setResources(
+                                    connection,
+                                    cs,
+                                    e.target.checked
+                                      ? [...cs.resourceIds, r.id]
+                                      : cs.resourceIds.filter((id) => id !== r.id),
+                                  ),
+                                )
+                              }
+                            >
+                              <span className={styles.resource}>
+                                {r.display_name || r.ref}
+                                {r.display_name && r.display_name !== r.ref && (
+                                  <span className={styles.quietText}> {r.ref}</span>
+                                )}
+                                <EnvTag env={r.env} />
+                                {r.hidden && <Tag>hidden by its owner</Tag>}
+                                {r.stale && <Tag tone="warn">no longer found</Tag>}
+                                {r.self && <Tag tone="warn">{ACCOUNT_WORDS.self}</Tag>}
+                              </span>
+                            </Checkbox>
+                          ))}
+                        </div>
+                      )}
 
                     {cs.included && (
                       <PresetPanel
@@ -915,6 +960,8 @@ function noticeHeadline(notice: PreviewNotice, connection: IssuanceConnection): 
       return `No environment label on ${refs}: permissions tied to an environment are refused there.`;
     case 'resource-env-not-in-catalog':
       return `The environment label of ${refs} is not one this service knows: permissions tied to an environment are refused there.`;
+    case 'later-resources-need-env-label':
+      return 'A resource found later gets permissions tied to an environment only once it carries its environment label.';
   }
 }
 

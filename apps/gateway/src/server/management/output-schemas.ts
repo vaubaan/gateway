@@ -49,6 +49,12 @@ const summary = z
 
 const resourceRef = z.looseObject({ ref: z.string(), env: z.string().nullable() });
 
+const resourceScope = z
+  .string()
+  .describe(
+    '`selected`: the resources stored at issuance (`resources`). `connection`: the whole connection — `resources` are the ones known now, and resources discovered later are reached too.',
+  );
+
 const connectionsAnswer = z.looseObject({
   connections: z.array(
     z.looseObject({
@@ -170,6 +176,9 @@ const missionsAnswer = z.looseObject({
           'Masked prefix of the user’s own token of this mission; the secret is never shown again.',
         ),
       connection_ids: z.array(z.string()),
+      resource_scopes: z.array(
+        z.looseObject({ connection_id: z.string(), resource_scope: resourceScope }),
+      ),
       policy: z.array(
         z.looseObject({
           risk_id: riskId,
@@ -187,6 +196,7 @@ const missionsAnswer = z.looseObject({
             provider: z.string(),
             display_name: z.string(),
             status: z.string(),
+            resource_scope: resourceScope,
             resources: z.array(resourceRef),
           }),
         )
@@ -221,6 +231,7 @@ const previewAnswer = z.looseObject({
       connection_id: z.string(),
       provider: z.string(),
       display_name: z.string(),
+      resource_scope: resourceScope,
       resources: z.array(resourceRef),
       preset: z.looseObject({ id: z.string(), label: z.string() }).nullable(),
       passes: z.array(policyLine),

@@ -131,7 +131,10 @@ function resolveResources(
   index: number,
 ): ResourceResolution {
   const wanted = draft.resources ?? { scope: 'all' };
-  if (wanted.scope === 'all') return { selected: defaultResources(connection), issues: [] };
+  // `connection` is judged on what it reaches now; later resources join at read time.
+  if (wanted.scope === 'all' || wanted.scope === 'connection') {
+    return { selected: defaultResources(connection), issues: [] };
+  }
 
   const where = { connection_index: index, connection_id: connection.id };
   const byId = new Map(connection.resources.map((r) => [r.id, r]));
@@ -503,6 +506,42 @@ export function envNotices(
 }
 
 /**
+ * What the creator of a whole-connection selection (scope `connection`) is not
+ * told by the per-resource notices: a resource discovered after issuance
+ * carries no environment label until someone sets it, and env-scoped risks are
+ * refused on it until then. Nothing to say when the plugin derives the
+ * environment from the call, when the connection has a default environment
+ * (later resources inherit it), or when the catalog has no env-scoped risk.
+ */
+export function laterResourcesNotice(
+  connection: Pick<
+    IssuanceConnection,
+    'risks' | 'derives_env' | 'display_name' | 'provider_label' | 'default_env'
+  >,
+  passes: readonly Pick<MissionPolicyEntry, 'risk_id'>[],
+  where: Where,
+): PreviewNotice[] {
+  // A connection default labels every resource found later (ADR
+  // connection-default-environment-label): nothing to wait for.
+  if (connection.derives_env || connection.default_env !== null) return [];
+  const envScoped = connection.risks.filter((r) => r.env !== null);
+  if (envScoped.length === 0) return [];
+  const scopedIds = new Set(envScoped.map((r) => r.risk_id));
+  const accepted = passes.map((p) => p.risk_id).filter((id) => scopedIds.has(id));
+  return [
+    {
+      code: 'later-resources-need-env-label',
+      message: `"${connection.display_name}" is given whole, resources found later included. The environment of a ${connection.provider_label} risk was checked against the resources known now: a resource found later reaches the risks that depend on the environment${
+        accepted.length > 0 ? ` (${list(accepted)})` : ''
+      } only once it carries its environment label on the connection's page (or the connection has a default environment); until then such a call is refused (risk-not-accepted).`,
+      resource_refs: [],
+      risk_ids: accepted,
+      ...where,
+    },
+  ];
+}
+
+/**
  * Lines of a policy checked exactly as issuance checks the explicit lines of a draft
  * on one connection (`classifyLines`, then `issuesOf`): known to the catalog, inside
  * the creator's authority now, resolvable on the selected resources, with a budget
@@ -535,6 +574,7 @@ export function previewConnection(
 ): ConnectionOutcome {
   const where: Where = { connection_index: index, connection_id: connection.id };
   const resources = resolveResources(connection, draft, index);
+  const reachesLater = draft.resources?.scope === 'connection';
   const preset = resolvePreset(connection, draft, resources.selected, where);
 
   // A draft with explicit lines accepts exactly those; a draft with only a
@@ -565,6 +605,7 @@ export function previewConnection(
       provider: connection.provider,
       display_name: connection.display_name,
       resources: resources.selected,
+      reaches_later: reachesLater,
       resources_total: resourcesTotal(connection, resources.selected),
       preset: preset.preset ? { id: preset.preset.id, label: preset.preset.label } : null,
       passes: buckets.passes,
@@ -575,7 +616,10 @@ export function previewConnection(
       skipped_from_preset: buckets.skipped,
     },
     issues,
-    notices: envNotices(connection, resources.selected, buckets.passes, where),
+    notices: [
+      ...envNotices(connection, resources.selected, buckets.passes, where),
+      ...(reachesLater ? laterResourcesNotice(connection, buckets.passes, where) : []),
+    ],
   };
 }
 
@@ -727,7 +771,9 @@ export function previewDraft(context: PreviewContext, draft: MissionDraft): Miss
 
   const resolved: ResolvedDraftConnection[] = previews.map((p) => ({
     connection_id: p.connection_id,
-    resources: { scope: 'selected', resource_ids: p.resources.map((r) => r.id) },
+    resources: p.reaches_later
+      ? { scope: 'connection' }
+      : { scope: 'selected', resource_ids: p.resources.map((r) => r.id) },
     preset: p.preset?.id ?? null,
     policy: p.passes,
   }));

@@ -169,8 +169,9 @@ company registered at a provider).
 
 - **Mission** — a named objective for which a user issues a token. A
   mission carries one or more connections and, within each, the
-  **resources it may touch** (all of the connection's resources by
-  default), a closed set of accepted risks, a budget, an optional
+  **resources it may touch** (all of the connection's resources known at
+  issuance by default; the whole connection, resources discovered later
+  included, when the creator chooses it — §3.1), a closed set of accepted risks, a budget, an optional
   recurrence and an optional expiry. The
   creator of the mission is the only one who can enlarge it.
 - **Mission member** — a user to whom the creator gave access to the
@@ -519,9 +520,20 @@ Rules:
   issuance. A call whose arguments cite a resource outside the mission's
   selection is refused with `resource-not-in-mission`, before any risk is
   evaluated. A resource discovered on the connection later is not covered
-  until the creator adds it. This is the v4 binding, carried by the
-  mission instead of the project: least privilege by resource, not only
-  by risk.
+  until the creator adds it — unless the creator chose, explicitly, **the
+  whole connection**: then the mission reaches every resource of the
+  connection that discovery returns at the time of the call, known at
+  issuance or discovered later, except the ones the owner hid and the
+  instance's own; a resource discovery no longer returns is not reached.
+  That choice is never a default and never applied to a mission issued
+  with another selection; the mission page and the bootstrap kit state it
+  ("the whole account, including resources found later") with the
+  resources known now. Environment-qualified risks are checked at issuance
+  against the resources known then; a resource discovered later reaches
+  them once it carries the label (ADR
+  mission-reaches-the-whole-connection-on-request). This is the v4
+  binding, carried by the mission instead of the project: least privilege
+  by resource, not only by risk.
 - **The instance's own resources.** A resource that hosts or runs the
   instance (on Railway, the project it runs in; elsewhere, what the
   operator lists in the configuration) is never a mission resource,
@@ -935,7 +947,9 @@ interpreted as markup.
   ends; a mission that waits for my answer says so on its row, and a mission
   a connected app prepared names the app. **Creating**, on one screen: a name
   (or a copy of one of my missions, or an agent's proposal pasted in); the
-  accounts and, within each, the resources (all by default) and a **preset**
+  accounts and, within each, the resources — every resource known now (the
+  default), the whole account including resources found later, or the ones
+  I pick, each choice explained in one line — and a **preset**
   — each saying what it yields within what I may allow, and why when it
   would allow nothing — or the permissions **one by one**, each with its
   limits and whether it asks me first, one click from any preset; how often
@@ -1120,7 +1134,8 @@ the MCP tool names, the refusal codes and the fields keep the protocol's.
 2. The client's MCP configuration (instance URL, authorization header by
    reference to the variable).
 3. An instruction block for the agent: whose key it holds, connections
-   carried, resource refs, accepted risks, budget, what to do on each
+   carried, resource refs (and, for a connection issued whole, that
+   resources found later are reached too), accepted risks, budget, what to do on each
    structured refusal (in particular: hand the request URL to the human,
    never try to work around it) and when the key itself stops working.
 4. When the instance is the git remote of repositories of the mission

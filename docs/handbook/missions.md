@@ -2,11 +2,13 @@
 title: Missions — authority, issuance, presets, resources, members and tokens, bootstrap kit
 status: current
 date: 2026-10-13
-last_synced: 2026-10-17
+last_synced: 2026-10-18
 tracks:
   - apps/gateway/src/server/authority/
   - apps/gateway/src/server/missions/
   - apps/gateway/src/server/store/membership.ts
+  - apps/gateway/src/server/store/mission-reach.ts
+  - apps/gateway/migrations/0018_mission_reaches_the_whole_connection.sql
   - apps/gateway/src/server/store/errors.ts
   - apps/gateway/src/server/store/repositories/missions.ts
   - apps/gateway/src/server/users/service.ts
@@ -92,6 +94,7 @@ apps/gateway/src/server/missions/
   testing.ts             ACME_CATALOG, acmeConnection(), seedConnection(), catalogEnvs() — tests only
 apps/gateway/src/server/store/
   membership.ts          membershipOf(), isOnMission(), MEMBERSHIPS — who a user is to a mission      (pure)
+  mission-reach.ts       reachedResources(), reachesLaterResources() — what a mission reaches on a connection (pure)
   errors.ts              TokenNotIssuableError, TOKEN_NOT_ISSUABLE_REASONS — a token insert the store refused
   repositories/missions.ts  MissionsRepo — issueToken() and addMember() are described below; the rest in handbook store
 apps/gateway/src/app/(app)/missions/
@@ -180,7 +183,7 @@ mission serves calls.
   "connections": [
     {
       "connection_id": "…", // or "provider": "github" when the creator holds exactly one active one
-      "resources": { "scope": "all" }, // or { "scope": "selected", "resource_ids": […], "resource_refs": […] }
+      "resources": { "scope": "all" }, // or { "scope": "connection" }, or { "scope": "selected", "resource_ids": […], "resource_refs": […] }
       "preset": "developer", // optional, a preset id of the connection's plugin
       "policy": [
         // optional
@@ -278,7 +281,8 @@ The management door answers `preview_policy` with this shape
 **Notices — what passes but the creator should know.** `notices` is a list of
 `PreviewNotice { code, message, connection_index?, connection_id?,
 resource_refs, risk_ids }`. A notice never blocks: `ok` is `issues.length === 0`
-and ignores it. Both codes (`PREVIEW_NOTICE_CODES`) come from `envNotices` and
+and ignores it. The codes (`PREVIEW_NOTICE_CODES`) come from `envNotices`
+(and, for a whole-connection selection, `laterResourcesNotice`) and
 state one rule of the policy engine ([policy-engine](policy-engine.md)): at call
 time an env-scoped risk touched on a resource whose environment label is
 absent, or is not an environment the risk is acceptable in, **refuses the call**
@@ -287,10 +291,11 @@ mission reaches the account-scoped risks only. (The same refusal meets a call
 that names resources of different environments: none can be chosen for it —
 ADR [decision-stages-fail-closed-and-audited](../decisions/decision-stages-fail-closed-and-audited.md), D2.)
 
-| Code                          | When                                                                                                                                             |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `resource-without-env`        | a selected resource has no environment label — neither its own nor the connection's default — on a connection whose catalog has env-scoped risks |
-| `resource-env-not-in-catalog` | a selected resource is labelled with an environment (`dev`, a typo) that no risk of the catalog is acceptable in                                 |
+| Code                             | When                                                                                                                                                                                      |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `resource-without-env`           | a selected resource has no environment label — neither its own nor the connection's default — on a connection whose catalog has env-scoped risks                                          |
+| `resource-env-not-in-catalog`    | a selected resource is labelled with an environment (`dev`, a typo) that no risk of the catalog is acceptable in                                                                          |
+| `later-resources-need-env-label` | scope `connection` on a catalog with env-scoped risks and no default environment on the connection: a resource found later carries no label until someone sets it (`resource_refs` empty) |
 
 `resource_refs` carries the refs of the resources, `risk_ids` the env-scoped
 ids the draft accepts on that connection (unreachable there). The message
@@ -309,7 +314,8 @@ suggests. The creation form lists them in the block of the account they concern
 **Hidden and stale resources** (handbook [connections](connections.md)).
 `IssuanceResource` carries `hidden` and `stale` (`staleSince !== null`).
 `defaultResources(connection)` — neither hidden nor stale — is what
-`{ scope: 'all' }` resolves to and what the form ticks by default. A creator may
+`{ scope: 'all' }` resolves to, what `{ scope: 'connection' }` reaches at
+issuance, and what the form ticks by default. A creator may
 select a hidden resource explicitly (the form lists it, unticked, with a
 `hidden` badge); a stale one is never accepted (`resource-stale`; its checkbox
 is disabled), so it cannot resolve an env-qualified risk either.
@@ -408,6 +414,21 @@ is decided, not an oversight (product owner, 2026-10-13, ADR
 a mission is bounded by its budget, its gates and its revocation, and a
 default date would stop scheduled agents at a moment nobody chose.
 
+**The whole connection** (`{ scope: 'connection' }`, ADR
+[mission-reaches-the-whole-connection-on-request](../decisions/mission-reaches-the-whole-connection-on-request.md)).
+`resolveResources` judges it on `defaultResources(connection)` — what it
+reaches now — and never refuses it for being empty: a Fly organisation with no
+app yet is the case it exists for. `ConnectionPreview.reaches_later` is `true`,
+`resolved[].resources` stays `{ scope: 'connection' }` (not a list), and the
+summary's "can" line says "the whole account, resources found later included".
+An env-qualified risk still needs a resource **known now** carrying its label
+(`unresolvable-env` otherwise); when the catalog has env-scoped risks and the
+plugin does not derive the environment, and the connection has no default
+environment (`default_env`, which later resources inherit), `laterResourcesNotice` adds the notice
+`later-resources-need-env-label` (`resource_refs: []`, `risk_ids`: the
+env-scoped ids accepted): a resource found later reaches them only once
+labelled. Nothing defaults to this scope: the draft default stays `all`.
+
 ## Issuance — `MissionService.issue(user, draft)`
 
 1. `issuanceContext(user)`: `authority.connectionsOf(user)`, minus `revoked`
@@ -423,8 +444,9 @@ default date would stop scheduled agents at a moment nobody chose.
    resource discovered later is not covered (spec §3.1). A connection on which
    nothing resolved (no resource known, or every resource hidden) is stored
    `all` with an empty list, because the store refuses an empty `selected`
-   (`selectionRecordOf`). See "What a mission reaches" below for how that row is
-   read.
+   (`selectionRecordOf`). A draft that said `connection` is stored
+   `resourceScope: 'connection'` with no id (the store refuses ids under it).
+   See "What a mission reaches" below for how each row is read.
 4. Token: `issueTokenTo` (`token-issuer.ts`) for the creator as holder
    (`{ kind: 'member', userId: creatorUserId }`): `mintMissionToken()` →
    `vbn_live_<8>_<32>` and its SHA-256 digest; a prefix already taken is
@@ -436,7 +458,7 @@ default date would stop scheduled agents at a moment nobody chose.
    is built field by field by `issuedAuditOf` (type `MissionIssuedAudit`) in
    snake_case domain shapes only — the audit is immutable, so it never inherits
    the naming of a store record — and a test pins it:
-   `{ name, connections: [{ connection_id, resource_ids }], policy: [{ risk_id,
+   `{ name, connections: [{ connection_id, resource_scope, resource_ids }], policy: [{ risk_id,
 quota, rate_limit: { max, window_seconds }, gate }], period: { kind,
 length_seconds? }, expires_at, token_prefix }`. Never the secret.
 6. Returns `{ ok: true, mission, token: { secret, prefix }, kit, preview }`.
@@ -467,23 +489,40 @@ the creator's.
 
 ### What a mission reaches on a connection — one rule, three readers
 
-A mission reaches, on each of its connections, **exactly the resource ids stored
-at issuance that discovery still returns**. Scope `all` with an empty list means
-"none known at issuance", never "everything discovered later". The execution
-door enforces it (`loadMissionContext`, handbook
-[execution-door](execution-door.md)); the two human-facing readers say the same
-thing:
+One function says it: `reachedResources(selection, discovered, isSelf)`
+(`store/mission-reach.ts`, pure, beside `membershipOf`), read at every read of
+the mission, never cached:
 
-- `MissionService.get` (`detailConnections`) lists, per connection, the stored
-  ids that are not stale — an empty list for a connection that had no resource
-  at issuance, whatever it discovered since; the page then shows "the account
-  itself, no resource";
+| Stored scope | What the mission reaches                                                                                                                        |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `selected`   | **exactly the resource ids stored at issuance that discovery still returns**                                                                    |
+| `all`        | nothing: the list was empty at issuance ("none known then"), whatever was discovered since                                                      |
+| `connection` | **every resource discovery returns now**, known at issuance or discovered later, except the hidden ones; one that vanishes is no longer reached |
+
+Whatever the scope, a stale resource and one of the instance's own are not
+reached. A hidden resource selected on purpose stays reached (hiding is a
+listing preference of the owner); under `connection` hiding keeps a resource
+out of "everything". `all` never means "everything discovered later": only a
+creator's explicit choice of `connection` does, and nothing turns one into the
+other (no mission is widened by an upgrade or a discovery).
+
+The execution door enforces it (`loadMissionContext`, handbook
+[execution-door](execution-door.md)); the two human-facing readers call the same
+function and say the same thing:
+
+- `MissionService.get` (`detailConnections`) lists, per connection, what is
+  reached now (`resources`) and whether later resources join
+  (`reaches_later`) — an empty list for a connection that had no resource at
+  issuance under `all`, whatever it discovered since; the page then shows "the
+  account itself, no resource", or, under `connection`, "the whole account,
+  including resources found later" with the ones known now;
 - the bootstrap kit ("Setup kit" on the pages: issuance, rotation, revisited page)
-  is built from that same list, so the agent is never told it may touch a resource the door refuses
-  with `resource-not-in-mission`.
+  is built from that same list and flag, so the agent is never told it may
+  touch a resource the door refuses with `resource-not-in-mission`.
 
-A hidden resource selected on purpose stays reached (hiding is a listing
-preference of the owner); a stale one is dropped by all three.
+"Discovered" means the connection's resource rows: a resource a mission
+creates (`fly__create_app`) is reached once discovery returns it — today the
+owner's "refresh" on the account page. The kit says so to the agent.
 
 - **`draftFrom(user, missionId)` / `duplicate(...)`** — the creator's own
   mission as a draft: same connections, the selected resources that still exist
@@ -493,7 +532,8 @@ preference of the owner); a stale one is dropped by all three.
   creator's _current_ authority and gets its own token, session and budget.
   A source that stored no resource on a connection is drafted `{ scope: 'all' }`:
   the copy is a new issuance and resolves "all" against the resources known when
-  _it_ is issued, while the source keeps reaching none.
+  _it_ is issued, while the source keeps reaching none. A whole-connection source
+  is drafted `{ scope: 'connection' }`: the copy is as wide as its source.
 - **`rotate`** — creator only; the mission must be `active` and unexpired
   (`deriveMissionState`); the **creator's own** token becomes `rotated` and
   every other holder's token is untouched ("Members and tokens" below; "Replace
@@ -1019,9 +1059,22 @@ stays in view while the steps scroll.
    the include checkbox, "`<service>` · `<name>`", on what ground they hold it
    ("you own it", or "access given to you · may allow 12 of 17"), and at the
    right the resources selected with their environment labels and "N of M".
-   **Change** unfolds the resource checkboxes (all ticked by default except
-   the ones hidden by the owner; the ones discovery no longer returns are
-   disabled). "Show experimental services" appears only when the reader holds
+   For an account given whole it reads "the whole account, including
+   resources found later" and "N known now".
+   **Change** unfolds the three choices of how far the mission reaches
+   (`RESOURCE_CHOICES`, a `ChoiceRow` of `ChoiceChip`s with a short hint each,
+   then the one-line explanation of the chosen one, `data-testid="resource-scope"`):
+   **Every resource known now** (the default, `all`), **The whole account** —
+   including resources found later (`connection`), **Only the ones I pick**
+   (`selected`). Under the first and the last, the resource checkboxes (all
+   ticked by default except the ones hidden by the owner; the ones discovery no
+   longer returns are disabled); ticking or unticking one is picking
+   (`setResources` sets `selected`). `setResourceScope` puts the default set
+   back for `all` and `connection`. `draftResourcesOf` sends
+   `{ scope: 'connection' }` for the whole account, the ticked list otherwise
+   (so the confirmation lists what is stored); `loadResolved` loads a
+   whole-connection proposal as such. An account with no resource known offers
+   the choice too. "Show experimental services" appears only when the reader holds
    an account of an `experimental` plugin. A reader with a single usable
    account finds it included. Then the presets, below.
 3. **Limits and lifetime** — "Limits reset" (every hour, day, week, or never),
@@ -1146,7 +1199,8 @@ Read by the creator and by the teammates. In the order a person needs it:
    in (`missionMark`: nothing for a running mission), and one line: who
    created it and when, relative ("Created by you 2 h ago", `RelativeTime`
    `data-testid="mission-created"`), each service with its resources and their
-   environment labels, how often the limits reset, when it ends. Under it, a
+   environment labels — for an account given whole, "`<name>`, the whole
+   account, including resources found later" (`data-testid="whole-account"`) — how often the limits reset, when it ends. Under it, a
    discreet details line (`data-testid="mission-details"`): "Mission id" and
    the last 8 characters of its id (`shortId`, `server/missions/short-id.ts`:
    a UUIDv7 starts with its timestamp, the end is random), the whole id in the
@@ -1315,7 +1369,10 @@ ${VAUBAAN_MISSION_TOKEN}' } } } }`: the variable by reference, never the
    the execution door builds its check from; "attribution only … not an
    identity" (handbook [execution-door](execution-door.md), "Agent label") —
    then "Accounts and resources you may touch" (the refs, with their
-   env labels), "Permissions and limits" (each id with its label, its limit
+   env labels; for an account given whole, `KitConnection.reaches_later`:
+   "the whole account, including resources discovered later (known now: …)"
+   or "(none known yet)", and that a resource created on the account is
+   reached once the gateway has discovered it), "Permissions and limits" (each id with its label, its limit
    per period, its rate limit and "runs freely" or "asks the mission creator
    first, each time"; how often the limits reset and when the mission ends),
    then one line per

@@ -337,6 +337,50 @@ describe('execution door: the call pipeline', () => {
       }
     });
 
+    it('the whole connection: a resource discovered after issuance is reached, a hidden or vanished one is not', async () => {
+      const empty = await executionInstance({ spaces: [] });
+      try {
+        const mission = await empty.issue({ policy: [line(READ)], wholeConnection: true });
+        expect(mission.mission.connections[0]).toMatchObject({
+          resourceScope: 'connection',
+          resourceIds: [],
+        });
+        const { connections } = empty.root.store;
+        const found = await connections.syncDiscoveredResources(empty.connection.id, [
+          { ref: 'late', displayName: 'late' },
+          { ref: 'kept-out', displayName: 'kept-out' },
+        ]);
+        await connections.setResourceHidden(
+          found.find((r) => r.ref === 'kept-out')?.id ?? '',
+          true,
+        );
+
+        const late = await empty.call(mission, 'depot__read_item', { space: 'late' });
+        expect(late.error).toBeUndefined();
+        // The plugin sees the live list, so a "list" tool filtered to the mission shows it.
+        expect(empty.depot.calls.at(-1)?.ctx.resources.map((r) => r.ref)).toEqual(['late']);
+
+        const hidden = await empty.call(mission, 'depot__read_item', { space: 'kept-out' });
+        expect(hidden.error?.data).toMatchObject({
+          code: 'resource-not-in-mission',
+          allowed_resources: [{ ref: 'late', env: null, display_name: 'late' }],
+        });
+
+        // The next discovery no longer returns `late`: the mission no longer reaches it.
+        await connections.syncDiscoveredResources(empty.connection.id, [
+          { ref: 'kept-out', displayName: 'kept-out' },
+        ]);
+        const gone = await empty.call(mission, 'depot__read_item', { space: 'late' });
+        expect(gone.error?.data).toMatchObject({
+          code: 'resource-not-in-mission',
+          cited_ref: 'late',
+          allowed_resources: [],
+        });
+      } finally {
+        await empty.close();
+      }
+    });
+
     it('rate-limited: risk, limit and delay; the quota is not consumed', async () => {
       const mission = await instance.issue({
         policy: [line(READ, 10, { rate_limit: { max: 1, window_seconds: 60 } })],

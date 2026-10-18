@@ -124,6 +124,21 @@ describe('missions repository', () => {
     );
   });
 
+  it('stores a whole-connection selection as its scope, with no resource row', async () => {
+    const m = await create({
+      connections: [{ connectionId: connection, resourceScope: 'connection', resourceIds: [] }],
+    });
+    expect(m.connections).toEqual([
+      { connectionId: connection, resourceScope: 'connection', resourceIds: [] },
+    ]);
+    expect(
+      store.db
+        .prepare('SELECT COUNT(*) AS n FROM mission_resources WHERE mission_id = ?')
+        .get(m.id),
+    ).toEqual({ n: 0 });
+    expect((await store.missions.getById(m.id))?.connections).toEqual(m.connections);
+  });
+
   it('rejects inconsistent resource selections', async () => {
     await expect(
       create({
@@ -135,6 +150,13 @@ describe('missions repository', () => {
         connections: [{ connectionId: connection, resourceScope: 'all', resourceIds: [resourceA] }],
       }),
     ).rejects.toThrow(InvariantError);
+    await expect(
+      create({
+        connections: [
+          { connectionId: connection, resourceScope: 'connection', resourceIds: [resourceA] },
+        ],
+      }),
+    ).rejects.toThrow(/'connection' scope lists resources/);
     await expect(
       create({
         connections: [

@@ -21,6 +21,7 @@ import {
   gateWordOf,
   limitsResetEvery,
   listed,
+  MISSION_WORDS,
   perPeriod,
 } from '@/lib/vocabulary';
 
@@ -188,7 +189,13 @@ function accountLines(value: Json, names: ChangeNames): ChangeLine[] {
       label: 'Account',
       value: [
         nameOf(names, entry.connection_id),
-        resources.length > 0 ? listed(resources, 4) : 'every resource',
+        // `resource_scope` is recorded since the whole-account choice exists; an empty
+        // list without it is "none known when the mission was created".
+        entry.resource_scope === 'connection'
+          ? MISSION_WORDS.wholeAccount
+          : resources.length > 0
+            ? listed(resources, 4)
+            : 'no resource',
       ].join(' · '),
     };
   });

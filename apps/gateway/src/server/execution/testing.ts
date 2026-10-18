@@ -278,6 +278,8 @@ export interface ExecutionInstance {
     readonly policy: readonly MissionPolicyEntry[];
     /** Resource refs; default: every seeded space. */
     readonly spaces?: readonly string[];
+    /** Issue on the whole connection (scope `connection`); `spaces` is then ignored. */
+    readonly wholeConnection?: boolean;
     readonly period?: MissionDraft['period'];
     readonly name?: string;
   }): Promise<IssuedMission>;
@@ -360,9 +362,11 @@ export async function executionInstance(
         connections: [
           {
             connection_id: connection.id,
-            resources: input.spaces
-              ? { scope: 'selected', resource_refs: [...input.spaces] }
-              : { scope: 'all' },
+            resources: input.wholeConnection
+              ? { scope: 'connection' }
+              : input.spaces
+                ? { scope: 'selected', resource_refs: [...input.spaces] }
+                : { scope: 'all' },
             policy: [...input.policy],
           },
         ],
