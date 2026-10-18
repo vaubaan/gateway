@@ -243,7 +243,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/git/git-remote-limits.test.ts`                                             |        10 |
 | `apps/gateway/tests/integration/git/git-remote-review.test.ts`                                             |        13 |
 | `apps/gateway/tests/integration/git/git-remote-security.test.ts`                                           |        37 |
-| `apps/gateway/tests/integration/git/git-remote.test.ts`                                                    |        14 |
+| `apps/gateway/tests/integration/git/git-remote.test.ts`                                                    |        16 |
 | `apps/gateway/tests/integration/instance/instance-name.test.ts`                                            |         7 |
 | `apps/gateway/tests/integration/management/hard-deny.test.ts`                                              |         6 |
 | `apps/gateway/tests/integration/management/management-door.test.ts`                                        |        36 |
@@ -382,7 +382,7 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/github/tests/unit/classify.test.ts`                                                               |        69 |
 | `plugins/github/tests/unit/data-model.test.ts`                                                             |         1 |
 | `plugins/github/tests/unit/execute.test.ts`                                                                |        25 |
-| `plugins/github/tests/unit/git-moves.test.ts`                                                              |         6 |
+| `plugins/github/tests/unit/git-moves.test.ts`                                                              |        11 |
 | `plugins/github/tests/unit/injection.test.ts`                                                              |       415 |
 | `plugins/github/tests/unit/plugin.test.ts`                                                                 |        17 |
 | `plugins/github/tests/unit/risk-catalog.test.ts`                                                           |        71 |
@@ -2922,7 +2922,7 @@ reaches github.com.
   empty, no end, too long refused; **a property test over 3000 generated
   heads**); the listing filters (the capabilities moved off a hidden first
   ref, the placeholder line, v2 untouched, `ls-refs`).
-- **`tests/integration/git/git-remote.test.ts`** (14) — clone with protocol v2
+- **`tests/integration/git/git-remote.test.ts`** (16) — clone with protocol v2
   (the header relayed) and v0, the key never upstream, a read token for one
   repository, one `github__git_fetch` entry; a fetch after an upstream push; a
   repository outside the mission named; a feature branch pushed (risks
@@ -2932,7 +2932,11 @@ reaches github.com.
   temporary ref kept while the request is open, the request's arguments and
   GitHub comparison link, grant, the same push again passes**; a workflow
   change asks first; tags and deletions need `tag-write` and
-  `branch-delete`; 300 files refused, the temporary ref cleaned, audited; no
+  `branch-delete`; **an annotated tag** (`git tag -a`) pushed and reviewed
+  through the commit it points at, the ref holding the tag object, then a
+  lightweight tag of the same commit (the stand-in's compare answers 404 to
+  a tag object's id, as GitHub does); an annotated tag of an orphan commit
+  refused "no history in common"; 300 files refused, the temporary ref cleaned, audited; no
   key, a wrong key, a revoked mission; the git tools refused over MCP; LFS 501.
 - **`tests/integration/git/git-remote-limits.test.ts`** (10) — the pack cap
   (`VAUBAAN_GIT_MAX_PACK_MB=1`: refused, one audit entry, git's probe not a
@@ -3010,12 +3014,17 @@ reaches github.com.
   line, hostile ref names, duplicates, 51 commands): whatever is accepted is
   what the door implements, with `report-status`, unique and well-formed
   refs; 2000 mutated byte strings answered, never thrown; the in-flight bound.
-- **`plugins/github/tests/unit/git-moves.test.ts`** (7) — a force-push and a
+- **`plugins/github/tests/unit/git-moves.test.ts`** (11) — a force-push and a
   delete as receive-pack compare-and-swap on the reviewed old id; a provider
   failure on the second ref reported on that ref, before any ref fails the
   call; an intermediate commit's workflow path counted; a commit GitHub lists
   300 files of read by its trees — the same workflows as its parent: none;
-  different: the changed path.
+  different: the changed path; **tags**: an annotated tag reviewed through
+  the commit it points at (every compare and listing names the commit, never
+  the tag object; the ref still moved to the tag object), a lightweight tag
+  as the commit itself (no tag read), an annotated tag of a commit no branch
+  reaches refused "no history in common", a tag naming a blob refused "does
+  not point at a commit".
 - **`tests/integration/git/git-remote-base-merge.test.ts`** (1) — **the
   dogfood refusal of 2026-10-16**: a new branch cut from `main` just after a
   320-file merge of `v5`, pushed once `main` moved on, with old `v5` work

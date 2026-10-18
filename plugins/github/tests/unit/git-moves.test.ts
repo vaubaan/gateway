@@ -264,6 +264,168 @@ describe('review', () => {
     expect(reviewed).toMatchObject({ ok: true, updates: [{ workflow_files: [] }] });
   });
 
+  /** `main` at `OLD`; `NEW` one commit on top of it, on no branch yet. */
+  const mainAtOld: MockRoute[] = [
+    {
+      method: 'GET',
+      url: 'https://github.com/acme/app.git/info/refs?service=git-upload-pack',
+      respond: () =>
+        Buffer.from(
+          encodeAdvertisement({
+            service: 'git-upload-pack',
+            refs: [{ oid: OLD, name: 'refs/heads/main' }],
+            capabilities: [],
+          }),
+        ).toString('latin1'),
+    },
+    { method: 'GET', url: API, body: { default_branch: 'main' } },
+    {
+      method: 'GET',
+      url: `${API}/commits?sha=${NEW}&per_page=100&page=1`,
+      body: [{ sha: NEW }, { sha: OLD }],
+    },
+    {
+      method: 'GET',
+      url: new RegExp(`^${API}/compare/(${OLD}|main)\\.\\.\\.${NEW}$`),
+      body: {
+        status: 'ahead',
+        ahead_by: 1,
+        total_commits: 1,
+        commits: [{ sha: NEW }],
+        files: [{ filename: 'src/a.ts' }],
+      },
+    },
+    {
+      method: 'GET',
+      url: `${API}/git/commits/${NEW}`,
+      body: { sha: NEW, tree: { sha: '1'.repeat(40) }, parents: [{ sha: OLD }] },
+    },
+  ];
+  const absentTag = (name: string): MockRoute => ({
+    method: 'GET',
+    url: `${API}/git/ref/tags/${name}`,
+    status: 404,
+    body: { message: 'Not Found' },
+  });
+
+  test('an annotated tag is reviewed through the commit it points at', async () => {
+    const TAG = 'd'.repeat(40);
+    const fetch = mockFetch([
+      mintRoute(),
+      absentTag('v1.0.0'),
+      ...mainAtOld,
+      // GitHub holds no commit under the tag object's id, a tag.
+      { method: 'GET', url: `${API}/git/commits/${TAG}`, status: 404, body: { message: 'no' } },
+      {
+        method: 'GET',
+        url: `${API}/git/tags/${TAG}`,
+        body: { sha: TAG, tag: 'v1.0.0', object: { sha: NEW, type: 'commit' } },
+      },
+    ]);
+    const reviewed = await review(executeCtx(fetch), 'acme/app', [
+      { ref: 'refs/tags/v1.0.0', old: null, new: TAG },
+    ]);
+    expect(reviewed).toEqual({
+      ok: true,
+      updates: [
+        {
+          ref: 'refs/tags/v1.0.0',
+          old: null,
+          // The ref is moved to the tag object, its message kept.
+          new: TAG,
+          kind: 'create',
+          commits: 1,
+          files: ['src/a.ts'],
+          workflow_files: [],
+        },
+      ],
+    });
+    // Every comparison and listing names the commit, never the tag object.
+    const compared = fetch.calls.filter(
+      (c) => c.url.includes('/compare/') || c.url.includes('/commits?'),
+    );
+    expect(compared.length).toBeGreaterThan(0);
+    expect(compared.every((c) => c.url.includes(NEW) && !c.url.includes(TAG))).toBe(true);
+  });
+
+  test('a lightweight tag is reviewed as the commit itself', async () => {
+    const fetch = mockFetch([mintRoute(), absentTag('v1.0.1'), ...mainAtOld]);
+    const reviewed = await review(executeCtx(fetch), 'acme/app', [
+      { ref: 'refs/tags/v1.0.1', old: null, new: NEW },
+    ]);
+    expect(reviewed).toMatchObject({
+      ok: true,
+      updates: [
+        { ref: 'refs/tags/v1.0.1', new: NEW, kind: 'create', commits: 1, files: ['src/a.ts'] },
+      ],
+    });
+    expect(fetch.calls.some((c) => c.url.includes('/git/tags/'))).toBe(false);
+  });
+
+  test('an annotated tag of a commit no branch reaches is refused as unrelated history', async () => {
+    const TAG = 'd'.repeat(40);
+    const ORPHAN = 'e'.repeat(40);
+    const fetch = mockFetch([
+      mintRoute(),
+      absentTag('v2.0.0'),
+      mainAtOld[0]!,
+      mainAtOld[1]!,
+      { method: 'GET', url: `${API}/git/commits/${TAG}`, status: 404, body: { message: 'no' } },
+      {
+        method: 'GET',
+        url: `${API}/git/tags/${TAG}`,
+        body: { sha: TAG, object: { sha: ORPHAN, type: 'commit' } },
+      },
+      {
+        method: 'GET',
+        url: `${API}/git/commits/${ORPHAN}`,
+        body: { sha: ORPHAN, tree: { sha: '1'.repeat(40) }, parents: [] },
+      },
+      {
+        method: 'GET',
+        url: `${API}/commits?sha=${ORPHAN}&per_page=100&page=1`,
+        body: [{ sha: ORPHAN }],
+      },
+      {
+        method: 'GET',
+        url: `${API}/compare/main...${ORPHAN}`,
+        status: 404,
+        body: { message: 'No common ancestor' },
+      },
+    ]);
+    const reviewed = await review(executeCtx(fetch), 'acme/app', [
+      { ref: 'refs/tags/v2.0.0', old: null, new: TAG },
+    ]);
+    expect(reviewed).toEqual({
+      ok: false,
+      reason: 'refs/tags/v2.0.0 cannot be reviewed: it has no history in common with main',
+    });
+  });
+
+  test('a tag that names no commit cannot be reviewed', async () => {
+    const TAG = 'd'.repeat(40);
+    const BLOB = 'f'.repeat(40);
+    const fetch = mockFetch([
+      mintRoute(),
+      absentTag('v3.0.0'),
+      { method: 'GET', url: `${API}/git/commits/${TAG}`, status: 404, body: { message: 'no' } },
+      {
+        method: 'GET',
+        url: `${API}/git/tags/${TAG}`,
+        body: { sha: TAG, object: { sha: BLOB, type: 'blob' } },
+      },
+      { method: 'GET', url: `${API}/git/commits/${BLOB}`, status: 404, body: { message: 'no' } },
+      { method: 'GET', url: `${API}/git/tags/${BLOB}`, status: 404, body: { message: 'no' } },
+    ]);
+    const reviewed = await review(executeCtx(fetch), 'acme/app', [
+      { ref: 'refs/tags/v3.0.0', old: null, new: TAG },
+    ]);
+    expect(reviewed).toEqual({
+      ok: false,
+      reason: 'refs/tags/v3.0.0 cannot be reviewed: it does not point at a commit',
+    });
+  });
+
   test('a commit GitHub lists 300 files of, whose workflows differ from its parent’s, is a workflow change', async () => {
     const fetch = mockFetch([
       mintRoute(),

@@ -2,7 +2,7 @@
 title: Git remote — /git/<owner>/<repo>.git, the second door of the execution surface
 status: current
 date: 2026-10-14
-last_synced: 2026-10-16
+last_synced: 2026-10-18
 tracks:
   - apps/gateway/src/server/git/
   - apps/gateway/src/app/git/
@@ -218,7 +218,15 @@ write credential exists. Then `Push.handle()`:
    command list and the buffered pack, two chunks).
 6. **Review** (`gitRemote.review`, `git-review.ts`): for each ref, its value
    at GitHub (`GET git/ref/<ref>`) must equal the client's `old` — a client
-   that claims a later `old` is refused as _stale info_ —; the **base** is
+   that claims a later `old` is refused as _stale info_ —; a **tag** is
+   reviewed through the commit it points at: an annotated tag's `new` (and
+   `old`, on a move) is a tag object with no history of its own, peeled
+   (`GET git/commits|tags/{sha}`, 4 deep at most, as the inspection does) to
+   the commit GitHub's compare and listing can read, under the same
+   `tag-write` as a lightweight tag — the tag message is no security
+   boundary; a tag naming no commit (a blob, a tree) is refused "does not
+   point at a commit", and the ref is still moved to the tag object; the
+   **base** is
    what no branch already holds (`BaseFinder`, ADR D4 ter): the nearest
    existing branch heads in `new`'s history (the upload-pack advertisement's
    `refs/heads/*`, `GET commits?sha=<new>`, 3 pages, 3 candidates, the

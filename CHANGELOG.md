@@ -9,6 +9,15 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The git remote accepts an annotated tag.** A push of `git tag -a` was
+  rejected with "cannot be reviewed: it has no history in common with …": the
+  review compared the tag object itself, which has no commit history. A tag is
+  now reviewed through the commit it points at, annotated or lightweight, under
+  the same `github.tag-write`; a tag of a commit no branch reaches is still
+  refused with the same words, and a tag that names no commit is refused too.
+
 ## [2.0.0-alpha.1] - 2026-10-18
 
 The first release of the on-prem gateway. It replaces the earlier hosted product
