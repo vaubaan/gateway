@@ -343,6 +343,7 @@ test('Settings leads a person to their own pages and an administrator to the gat
     'Accounts without owner',
     'Telemetry',
     'Registered apps',
+    'Encryption',
   ]);
   // An administrator is offered the interface reference, under Administration.
   await expect(ops.getByTestId('settings-interface-reference')).toContainText(
