@@ -286,6 +286,17 @@
 .accountOff .accountResources {
   color: var(--ink-3);
 }
+/* How far the mission reaches on an account: the three choices and the line that explains the chosen one. */
+.resourceScope {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 0 27px;
+  font-size: var(--text-sm);
+}
+.resourceScope p {
+  max-width: var(--measure);
+  margin: 0;
+}
 .resources {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));

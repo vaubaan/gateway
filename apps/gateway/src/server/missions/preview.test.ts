@@ -1,8 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
-import type { DraftConnection, IssuanceConnection, MissionDraft, PreviewIssueCode } from './model';
+import type {
+  DraftConnection,
+  IssuanceConnection,
+  MissionDraft,
+  PreviewIssueCode,
+  ResolvedDraftConnection,
+} from './model';
 import { budgetProblem, envNotices, previewConnection, previewDraft, uncoveredOf } from './preview';
 import { ACME_HIDDEN, ACME_RESOURCES, ACME_STALE, acmeConnection } from './testing';
+
+/** The explicit ids a resolved line carries; `undefined` for a whole-connection line. */
+function idsOf(line: ResolvedDraftConnection | undefined): readonly string[] | undefined {
+  return line?.resources.scope === 'selected' ? line.resources.resource_ids : undefined;
+}
 
 const NOW = new Date('2026-10-13T09:00:00.000Z');
 const BUDGET = { quota: 10, rate_limit: { max: 5, window_seconds: 60 } } as const;
@@ -268,11 +279,7 @@ describe('previewDraft — resource selection', () => {
     const curated = acmeConnection({ resources: [...ACME_RESOURCES, ACME_HIDDEN, ACME_STALE] });
     const p = preview([{ connection_id: 'conn-acme', preset: 'reader' }], [curated]);
     expect(p.ok).toBe(true);
-    expect(p.resolved[0]?.resources.resource_ids).toEqual([
-      'res-app-staging',
-      'res-app-prod',
-      'res-scratch',
-    ]);
+    expect(idsOf(p.resolved[0])).toEqual(['res-app-staging', 'res-app-prod', 'res-scratch']);
     expect(p.connections[0]?.resources_total).toBe(3);
   });
 
@@ -313,7 +320,7 @@ describe('previewDraft — resource selection', () => {
 
     const all = preview([{ connection_id: 'conn-acme', preset: 'reader' }], [withSelf]);
     expect(all.ok).toBe(true);
-    expect(all.resolved[0]?.resources.resource_ids).not.toContain('res-self');
+    expect(idsOf(all.resolved[0])).not.toContain('res-self');
     expect(all.connections[0]?.resources_total).toBe(3);
 
     for (const resources of [
@@ -365,7 +372,7 @@ describe('previewDraft — resource selection', () => {
       [acmeConnection({ resources: [] })],
     );
     expect(p.ok).toBe(true);
-    expect(p.resolved[0]?.resources.resource_ids).toEqual([]);
+    expect(idsOf(p.resolved[0])).toEqual([]);
   });
 });
 
@@ -784,5 +791,80 @@ describe('previewDraft — notices (never blocking)', () => {
     const p = preview(all);
     expect(p.notices.length).toBeGreaterThan(0);
     expect(p.ok).toBe(true);
+  });
+});
+
+describe('previewDraft — the whole connection (scope `connection`)', () => {
+  it('is judged on the resources known now and resolved as the scope, not as a list', () => {
+    const curated = acmeConnection({ resources: [...ACME_RESOURCES, ACME_HIDDEN, ACME_STALE] });
+    const p = preview(
+      [{ connection_id: 'conn-acme', preset: 'reader', resources: { scope: 'connection' } }],
+      [curated],
+    );
+    expect(p.ok).toBe(true);
+    expect(p.resolved[0]?.resources).toEqual({ scope: 'connection' });
+    expect(p.connections[0]?.reaches_later).toBe(true);
+    // What it reaches now: neither hidden nor stale.
+    expect(p.connections[0]?.resources.map((r) => r.id)).toEqual([
+      'res-app-staging',
+      'res-app-prod',
+      'res-scratch',
+    ]);
+    expect(p.summary.can).toContain('the whole account, resources found later included');
+  });
+
+  it('passes on a connection with no resource yet: later ones will be reached', () => {
+    const empty = acmeConnection({ resources: [] });
+    const p = preview(
+      [{ connection_id: 'conn-acme', preset: 'reader', resources: { scope: 'connection' } }],
+      [empty],
+    );
+    expect(p.ok).toBe(true);
+    expect(p.resolved[0]?.resources).toEqual({ scope: 'connection' });
+  });
+
+  it('checks an env-qualified risk against the resources known now, and says later ones need a label', () => {
+    const line = {
+      risk_id: 'acme[prod].write',
+      quota: 5,
+      rate_limit: { max: 1, window_seconds: 60 },
+    };
+    const refused = preview(
+      [{ connection_id: 'conn-acme', resources: { scope: 'connection' }, policy: [line] }],
+      [acmeConnection({ resources: [] })],
+    );
+    expect(codes(refused)).toEqual(['unresolvable-env']);
+
+    const p = preview([
+      { connection_id: 'conn-acme', resources: { scope: 'connection' }, policy: [line] },
+    ]);
+    expect(p.ok).toBe(true);
+    expect(p.notices.filter((n) => n.code === 'later-resources-need-env-label')).toEqual([
+      expect.objectContaining({
+        connection_id: 'conn-acme',
+        resource_refs: [],
+        risk_ids: ['acme[prod].write'],
+      }),
+    ]);
+  });
+
+  it('says nothing about later labels when the plugin derives the environment, or the connection has a default', () => {
+    for (const connection of [
+      acmeConnection({ derives_env: true }),
+      acmeConnection({ default_env: 'staging' }),
+    ]) {
+      const p = preview(
+        [{ connection_id: 'conn-acme', preset: 'reader', resources: { scope: 'connection' } }],
+        [connection],
+      );
+      expect(p.notices.map((n) => n.code)).not.toContain('later-resources-need-env-label');
+    }
+  });
+
+  it('`all` stays the list known now: no later resource, no notice about one', () => {
+    const p = preview([{ connection_id: 'conn-acme', preset: 'reader' }]);
+    expect(p.connections[0]?.reaches_later).toBe(false);
+    expect(p.resolved[0]?.resources.scope).toBe('selected');
+    expect(p.notices.map((n) => n.code)).not.toContain('later-resources-need-env-label');
   });
 });

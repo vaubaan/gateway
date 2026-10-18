@@ -58,6 +58,7 @@ import {
   limitColumn,
   limitsResetEvery,
   listed,
+  reachedOnAccount,
   MISSION_ACTIONS,
   MISSION_WORDS,
   periodWord,
@@ -198,13 +199,10 @@ export default async function MissionPage({ params, searchParams }: Props) {
         .map((connection) => ({
           key: connection.id,
           title: `${connection.provider_label} · ${connection.display_name}`,
-          note:
-            connection.resources.length === 0
-              ? 'the account itself, no resource'
-              : listed(
-                  connection.resources.map((r) => r.display_name || r.ref),
-                  3,
-                ),
+          note: reachedOnAccount(
+            connection.resources.map((r) => r.display_name || r.ref),
+            connection.reaches_later,
+          ),
           rows: detail.policy
             .filter((entry) => parseRiskId(entry.risk_id)?.provider === connection.provider)
             .map((entry) => ({
@@ -322,12 +320,18 @@ export default async function MissionPage({ params, searchParams }: Props) {
               <span key={connection.id}>
                 {' · '}
                 {connection.provider_label}{' '}
-                {connection.resources.length === 0
-                  ? connection.display_name
-                  : listed(
-                      connection.resources.map((r) => r.display_name || r.ref),
-                      2,
-                    )}
+                {connection.reaches_later ? (
+                  <span data-testid="whole-account">
+                    {connection.display_name}, {MISSION_WORDS.wholeAccount}
+                  </span>
+                ) : connection.resources.length === 0 ? (
+                  connection.display_name
+                ) : (
+                  listed(
+                    connection.resources.map((r) => r.display_name || r.ref),
+                    2,
+                  )
+                )}
                 {[...new Set(connection.resources.flatMap((r) => (r.env ? [r.env] : [])))].map(
                   (env) => (
                     <span key={env} className={styles.inlineTag}>

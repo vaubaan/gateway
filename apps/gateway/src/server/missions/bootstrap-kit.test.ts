@@ -77,6 +77,29 @@ describe('buildBootstrapKit', () => {
     });
   });
 
+  it('3 — says when an account is given whole: resources discovered later, and the ones known now', () => {
+    const whole = buildBootstrapKit({
+      ...INPUT,
+      connections: [
+        {
+          provider_label: 'Fly.io',
+          display_name: 'acme-org',
+          resources: [{ ref: 'acme-api', env: 'prod' }],
+          reaches_later: true,
+        },
+        { provider_label: 'Fly.io', display_name: 'empty-org', resources: [], reaches_later: true },
+      ],
+    }).agent_instructions;
+    expect(whole).toContain(
+      '- Fly.io "acme-org" — the whole account, including resources discovered later (known now: `acme-api` (prod)).',
+    );
+    expect(whole).toContain(
+      '- Fly.io "empty-org" — the whole account, including resources discovered later (none known yet).',
+    );
+    expect(whole).toContain('is reached once the gateway has discovered it');
+    expect(whole).not.toContain('tools of the account itself only');
+  });
+
   it('3 — tells the agent its connections, resource refs, accepted risks and budget', () => {
     const text = kit.agent_instructions;
     expect(text).toContain('## Vaubaan mission "Ship the billing page"');

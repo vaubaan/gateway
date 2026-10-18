@@ -56,7 +56,10 @@ export interface KitResource {
 export interface KitConnection {
   readonly provider_label: string;
   readonly display_name: string;
+  /** What the mission reaches now. */
   readonly resources: readonly KitResource[];
+  /** Issued on the whole connection: resources discovered later are reached too. */
+  readonly reaches_later?: boolean;
 }
 
 export interface KitPolicyLine extends MissionPolicyEntry {
@@ -161,6 +164,15 @@ function resourceLine(resource: KitResource): string {
   return resource.env ? `\`${resource.ref}\` (${resource.env})` : `\`${resource.ref}\``;
 }
 
+/** A connection issued whole: what it reaches now, and that later resources join. */
+function wholeAccount(c: KitConnection): string {
+  const known =
+    c.resources.length === 0
+      ? 'none known yet'
+      : `known now: ${c.resources.map(resourceLine).join(', ')}`;
+  return `the whole account, including resources discovered later (${known}). A resource created or added on the account is reached once the gateway has discovered it (the account's resources are refreshed); until then a call that cites it is refused with \`resource-not-in-mission\`.`;
+}
+
 function policyLine(entry: KitPolicyLine, period: DraftPeriod): string {
   const gate =
     entry.gate === 'approval' ? 'asks the mission creator first, each time' : 'runs freely';
@@ -237,6 +249,7 @@ function agentInstructions(
 ): string {
   const { mission } = input;
   const connections = input.connections.map((c) => {
+    if (c.reaches_later) return `- ${c.provider_label} "${c.display_name}" — ${wholeAccount(c)}`;
     const resources =
       c.resources.length === 0
         ? 'no resource (tools of the account itself only)'

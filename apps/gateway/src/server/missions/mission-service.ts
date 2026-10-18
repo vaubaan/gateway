@@ -62,6 +62,7 @@ import type { Logger } from '../logging';
 import type { Store } from '../store';
 import { TokenNotIssuableError } from '../store/errors';
 import { isOnMission, membershipOf, type Membership } from '../store/membership';
+import { reachedResources, reachesLaterResources } from '../store/mission-reach';
 import { toIso, type Clock } from '../store/clock';
 import type {
   ConnectionRecord,
@@ -69,6 +70,7 @@ import type {
   MissionConnection as MissionConnectionRecord,
   MissionRecord,
   MissionTokenRecord,
+  ResourceScope,
   UserRecord,
 } from '../store/types';
 import {
@@ -231,6 +233,8 @@ export interface MissionOnConnection {
   readonly orphan_cause: OrphanCause | null;
   /** The resources of THIS connection the mission was issued on: explicit ids. */
   readonly resource_ids: readonly string[];
+  /** True when it was issued on the whole connection: every resource, later ones included. */
+  readonly reaches_later: boolean;
   /** Accepted risks that belong to this connection's provider. */
   readonly permissions: number;
   /** How many of them wait for the creator's approval. */
@@ -401,7 +405,10 @@ export interface MissionDetailConnection {
   readonly provider_label: string;
   readonly display_name: string;
   readonly status: string;
+  /** What the mission reaches now (`reachedResources`). */
   readonly resources: readonly IssuanceResource[];
+  /** Issued on the whole connection: resources discovered later are reached too. */
+  readonly reaches_later: boolean;
 }
 
 export interface MissionDetailRisk extends MissionPolicyEntry {
@@ -461,12 +468,17 @@ function toIssuanceResource(r: ConnectionResourceRecord, self: boolean): Issuanc
 }
 
 /**
- * What a mission stores per connection. Every selection is an explicit list
- * of ids; a connection on which nothing resolved (no resource known, or every
- * resource hidden) stores scope `all` with an empty list, because the store
- * requires a non-empty list for `selected`. Readers treat that row as "none".
+ * What a mission stores per connection. A whole-connection selection is stored
+ * as scope `connection` with no id: what it reaches is read when the mission is
+ * read (`reachedResources`). Every other selection is an explicit list of ids;
+ * a connection on which nothing resolved (no resource known, or every resource
+ * hidden) stores scope `all` with an empty list, because the store requires a
+ * non-empty list for `selected`. Readers treat that row as "none".
  */
 function selectionRecordOf(resolved: ResolvedDraftConnection): MissionConnectionRecord {
+  if (resolved.resources.scope === 'connection') {
+    return { connectionId: resolved.connection_id, resourceScope: 'connection', resourceIds: [] };
+  }
   const resourceIds = resolved.resources.resource_ids;
   return {
     connectionId: resolved.connection_id,
@@ -485,6 +497,8 @@ export interface MissionIssuedAudit {
   readonly name: string;
   readonly connections: readonly {
     readonly connection_id: string;
+    /** `connection`: the whole connection, later resources included; `resource_ids` empty. */
+    readonly resource_scope: ResourceScope;
     readonly resource_ids: readonly string[];
   }[];
   readonly policy: readonly MissionPolicyEntry[];
@@ -498,6 +512,7 @@ function issuedAuditOf(mission: MissionRecord, tokenPrefix: string): MissionIssu
     name: mission.name,
     connections: mission.connections.map((c) => ({
       connection_id: c.connectionId,
+      resource_scope: c.resourceScope,
       resource_ids: [...c.resourceIds],
     })),
     policy: mission.policy.map(policyEntryOf),
@@ -649,7 +664,8 @@ export class MissionService {
    * A source that stored no resource on a connection (scope `all`, empty
    * list) is drafted as `{ scope: 'all' }`: the copy is a new issuance and
    * resolves "all" against the resources known when it is issued. The source
-   * itself keeps reaching none.
+   * itself keeps reaching none. A whole-connection source is drafted
+   * `{ scope: 'connection' }`: the copy is as wide as its source, no wider.
    */
   async draftFrom(user: AuthoritySubject, missionId: string): Promise<MissionDraft | null> {
     const mission = await this.ownMission(user, missionId);
@@ -662,9 +678,9 @@ export class MissionService {
       connections.push({
         connection_id: c.connectionId,
         resources:
-          c.resourceScope === 'all'
-            ? { scope: 'all' }
-            : { scope: 'selected', resource_ids: await this.survivingResources(c, provider) },
+          c.resourceScope === 'selected'
+            ? { scope: 'selected', resource_ids: await this.survivingResources(c, provider) }
+            : { scope: c.resourceScope },
         preset: null,
         policy: mission.policy
           .map(policyEntryOf)
@@ -840,6 +856,7 @@ export class MissionService {
         expires_at: mission.expiresAt,
         orphan_cause: orphan?.cause ?? null,
         resource_ids: selection?.resourceIds ?? [],
+        reaches_later: selection ? reachesLaterResources(selection) : false,
         permissions: accepted.length,
         asks_first: accepted.filter((entry) => entry.gate === 'approval').length,
         readable: membership === 'creator' || membership === 'member',
@@ -1628,28 +1645,27 @@ export class MissionService {
   }
 
   /**
-   * The connections of a mission with the resources it reaches — the same rule
-   * as `loadMissionContext`: only the ids stored at issuance, never the
-   * connection's live list, and not the ones discovery no longer returns nor
-   * the instance's own.
+   * The connections of a mission with the resources it reaches — the rule of
+   * `loadMissionContext`, the same function (`reachedResources`): the ids stored
+   * at issuance, or the connection's live list for a whole-connection mission,
+   * never the ones discovery no longer returns nor the instance's own.
    */
   private async detailConnections(mission: MissionRecord): Promise<MissionDetailConnection[]> {
     const details: MissionDetailConnection[] = [];
     for (const c of mission.connections) {
       const connection = await this.deps.store.connections.getById(c.connectionId);
       if (!connection) continue;
-      const selected = new Set(c.resourceIds);
-      const reached =
-        selected.size === 0
-          ? []
-          : (await this.deps.store.connections.listResources(c.connectionId)).filter(
-              (r) => selected.has(r.id) && !isStale(r) && !this.isSelf(connection.provider, r),
-            );
+      const reached = reachedResources(
+        c,
+        await this.deps.store.connections.listResources(c.connectionId),
+        (r) => this.isSelf(connection.provider, r),
+      );
       details.push({
         ...connectionSummaryOf(connection),
         provider_label:
           this.deps.registry.get(connection.provider)?.plugin.displayName ?? connection.provider,
         resources: reached.map((r) => toIssuanceResource(r, false)),
+        reaches_later: reachesLaterResources(c),
       });
     }
     return details;
@@ -1691,6 +1707,7 @@ export class MissionService {
         provider_label: c.provider_label,
         display_name: c.display_name,
         resources: c.resources.map((r) => ({ ref: r.ref, env: r.env })),
+        reaches_later: c.reaches_later,
       })),
       policy,
       token,

@@ -30,6 +30,7 @@ import {
   type MissionIssuer,
   type MissionOverview,
   type MissionPreview,
+  reachesLaterResources,
 } from '../missions';
 import type { ProviderCatalog } from './ports';
 
@@ -319,6 +320,12 @@ export interface MissionView {
    */
   readonly token_prefix: string | null;
   readonly connection_ids: readonly string[];
+  /**
+   * Per connection, how far the mission reaches: `selected` — the resources
+   * stored at issuance (a draft's `all` is stored so); `connection` — the whole
+   * connection, resources discovered later included.
+   */
+  readonly resource_scopes: readonly ResourceScopeView[];
   readonly policy: readonly MissionPolicyView[];
   /** Accepted risks whose quota is spent for the period: calls on them are refused with a claim URL. */
   readonly exhausted: readonly RiskId[];
@@ -332,6 +339,17 @@ function issuedViaView(issuer: MissionIssuer | null, viewer: MissionViewer): Iss
     this_client: issuer.client_id === viewer.clientId,
     this_delegation: issuer.delegation_id === viewer.delegationId,
   };
+}
+
+export interface ResourceScopeView {
+  readonly connection_id: string;
+  readonly resource_scope: 'selected' | 'connection';
+}
+
+function resourceScopeOf(
+  c: MissionOverview['mission']['connections'][number],
+): ResourceScopeView['resource_scope'] {
+  return reachesLaterResources(c) ? 'connection' : 'selected';
 }
 
 export function missionView(
@@ -360,6 +378,10 @@ export function missionView(
     issued_via: issuedViaView(overview.issuedVia, viewer),
     token_prefix: overview.token ? maskToken(overview.token.prefix) : null,
     connection_ids: mission.connections.map((c) => c.connectionId),
+    resource_scopes: mission.connections.map((c) => ({
+      connection_id: c.connectionId,
+      resource_scope: resourceScopeOf(c),
+    })),
     policy: mission.policy.map((entry) => ({
       risk_id: entry.riskId,
       quota: entry.quota,
@@ -377,7 +399,12 @@ export interface MissionDetailView extends MissionView {
     readonly provider: string;
     readonly display_name: string;
     readonly status: string;
-    /** The resources the mission reaches: the ones selected at issuance that still exist. */
+    /** `connection`: issued whole, resources discovered later are reached too. */
+    readonly resource_scope: 'selected' | 'connection';
+    /**
+     * The resources the mission reaches now: the ones selected at issuance that still
+     * exist, or, for `connection`, every resource discovery returns that is not hidden.
+     */
     readonly resources: readonly { readonly ref: string; readonly env: string | null }[];
   }[];
   /** Risk labels, and until when a gated risk was opened by the creator for the period. */
@@ -400,6 +427,7 @@ export function missionDetailView(
       provider: c.provider,
       display_name: c.display_name,
       status: c.status,
+      resource_scope: c.reaches_later ? 'connection' : 'selected',
       resources: c.resources.map((r) => ({ ref: r.ref, env: r.env })),
     })),
     policy_details: detail.policy.map((entry) => ({
@@ -443,6 +471,8 @@ export interface PreviewView {
     readonly connection_id: string;
     readonly provider: string;
     readonly display_name: string;
+    /** `connection`: resources discovered later are reached too; `resources` are the ones known now. */
+    readonly resource_scope: 'selected' | 'connection';
     readonly resources: readonly { readonly ref: string; readonly env: string | null }[];
     readonly preset: { readonly id: string; readonly label: string } | null;
     readonly passes: MissionPreview['policy'];
@@ -470,6 +500,7 @@ export function previewView(preview: MissionPreview): PreviewView {
       connection_id: c.connection_id,
       provider: c.provider,
       display_name: c.display_name,
+      resource_scope: c.reaches_later ? 'connection' : 'selected',
       resources: c.resources.map((r) => ({ ref: r.ref, env: r.env })),
       preset: c.preset,
       passes: c.passes,

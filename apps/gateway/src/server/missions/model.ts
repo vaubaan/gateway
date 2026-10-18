@@ -36,15 +36,22 @@ export interface DraftPolicyEntry {
 }
 
 /**
- * The resources a mission may touch on one connection. `all` is resolved at
- * issuance to the resources known then — the ones the owner did not hide and
- * discovery still returns — and persisted as that explicit list:
- * a resource discovered later is not covered (spec §3.1 "Resource selection").
- * A selection names resources by id (the interface) or by ref (an agent's
- * proposal, which only knows refs).
+ * The resources a mission may touch on one connection (spec §3.1 "Resource
+ * selection"):
+ *
+ * - `all` is resolved at issuance to the resources known then — the ones the
+ *   owner did not hide and discovery still returns — and persisted as that
+ *   explicit list: a resource discovered later is not covered;
+ * - `connection` is the whole connection, resources discovered later
+ *   included (hidden ones excepted), resolved each time the mission is read —
+ *   only ever chosen explicitly (ADR
+ *   mission-reaches-the-whole-connection-on-request);
+ * - `selected` names resources by id (the interface) or by ref (an agent's
+ *   proposal, which only knows refs).
  */
 export type DraftResources =
   | { readonly scope: 'all' }
+  | { readonly scope: 'connection' }
   | {
       readonly scope: 'selected';
       readonly resource_ids?: readonly string[];
@@ -232,6 +239,7 @@ export interface PreviewIssue {
 export const PREVIEW_NOTICE_CODES = [
   'resource-without-env',
   'resource-env-not-in-catalog',
+  'later-resources-need-env-label',
 ] as const;
 export type PreviewNoticeCode = (typeof PREVIEW_NOTICE_CODES)[number];
 
@@ -239,11 +247,14 @@ export type PreviewNoticeCode = (typeof PREVIEW_NOTICE_CODES)[number];
  * Something the creator should know about a draft that can be issued as
  * written. A notice never blocks (`MissionPreview.ok` ignores it).
  *
- * Both codes are about the same runtime rule: an env-scoped risk touched on a
+ * Every code is about the same runtime rule: an env-scoped risk touched on a
  * resource whose environment label is absent, or is not one the risk is
  * acceptable in, refuses the call (`risk-not-accepted`) whatever the mission
  * accepts. On such a resource the mission therefore reaches the account-scoped
- * risks only.
+ * risks only. `later-resources-need-env-label` says it of the resources a
+ * whole-connection mission (scope `connection`) will reach after issuance:
+ * checked against the resources known now, the mission reaches env-scoped
+ * permissions on a later one only once it is labelled (`resource_refs` empty).
  */
 export interface PreviewNotice {
   readonly code: PreviewNoticeCode;
@@ -273,8 +284,13 @@ export interface ConnectionPreview {
   readonly connection_id: string;
   readonly provider: string;
   readonly display_name: string;
-  /** The resources the mission would be persisted with (explicit, even for `all`). */
+  /**
+   * The resources the mission would be persisted with (explicit, even for `all`);
+   * for `connection`, the ones it reaches now — later ones join them.
+   */
   readonly resources: readonly IssuanceResource[];
+  /** True for scope `connection`: resources discovered after issuance are reached too. */
+  readonly reaches_later: boolean;
   /** Size of "all resources" on this connection, plus the hidden ones selected explicitly. */
   readonly resources_total: number;
   readonly preset: { readonly id: string; readonly label: string } | null;
@@ -301,10 +317,15 @@ export interface MissionSummaryLines {
   readonly quantities: string;
 }
 
-/** The draft with every alias resolved (connection ids, resource ids, explicit entries). */
+/**
+ * The draft with every alias resolved (connection ids, resource ids, explicit entries).
+ * `connection` stays a scope: what it reaches is read when the mission is read.
+ */
 export interface ResolvedDraftConnection {
   readonly connection_id: string;
-  readonly resources: { readonly scope: 'selected'; readonly resource_ids: readonly string[] };
+  readonly resources:
+    | { readonly scope: 'selected'; readonly resource_ids: readonly string[] }
+    | { readonly scope: 'connection' };
   readonly preset: string | null;
   readonly policy: readonly MissionPolicyEntry[];
 }

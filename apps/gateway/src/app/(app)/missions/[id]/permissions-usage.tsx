@@ -17,7 +17,7 @@ import {
   PermissionRow,
   PermissionTable,
 } from '@/components/ui';
-import { formatNumber, gateWordOf, listed, usage, usedColumn } from '@/lib/vocabulary';
+import { formatNumber, gateWordOf, reachedOnAccount, usage, usedColumn } from '@/lib/vocabulary';
 import type { MissionDetail } from '@/server/missions';
 import type { CatalogRisk } from '@/server/missions/model';
 import { riskReferencePath } from '@/server/providers/links';
@@ -120,14 +120,10 @@ export function PermissionsUsage({
         <PermissionGroup
           key={connection.id}
           title={`${connection.provider_label} · ${connection.display_name}`}
-          note={
-            connection.resources.length === 0
-              ? 'the account itself, no resource'
-              : listed(
-                  connection.resources.map((r) => r.display_name || r.ref),
-                  3,
-                )
-          }
+          note={reachedOnAccount(
+            connection.resources.map((r) => r.display_name || r.ref),
+            connection.reaches_later,
+          )}
         >
           {entries.map(rowOf)}
         </PermissionGroup>

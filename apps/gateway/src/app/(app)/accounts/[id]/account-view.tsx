@@ -394,11 +394,13 @@ function missionFacts(
   const reached = mission.resource_ids.flatMap((id) => refs.get(id) ?? []);
   const facts = [
     mission.creator.id === youId ? 'you' : mission.creator.label,
-    reached.length === 0
-      ? 'no resource of this account'
-      : reached.length <= 2
-        ? reached.join(', ')
-        : count(reached.length, TERMS.resource),
+    mission.reaches_later
+      ? 'the whole account'
+      : reached.length === 0
+        ? 'no resource of this account'
+        : reached.length <= 2
+          ? reached.join(', ')
+          : count(reached.length, TERMS.resource),
     `${count(mission.permissions, TERMS.risk)}${mission.asks_first > 0 ? ` · ${formatNumber(mission.asks_first)} ask first` : ''}`,
   ];
   if (mission.state === 'orphaned' && mission.orphan_cause) {
@@ -576,8 +578,13 @@ export function AccountView({
   const showsEnvironment =
     resources.some((resource) => resource.env !== null) ||
     (!context.labelling.derivesEnv && context.risks.some((risk) => risk.env !== null));
-  const missionsOn = (resourceId: string) =>
-    running.filter((mission) => mission.resource_ids.includes(resourceId)).length;
+  // A mission given the whole account reaches every resource it can, hidden ones excepted.
+  const missionsOn = (resource: ConnectionResourceRecord) =>
+    running.filter(
+      (mission) =>
+        mission.resource_ids.includes(resource.id) ||
+        (mission.reaches_later && !resource.hidden && reachable.includes(resource)),
+    ).length;
 
   const resourceColumns: readonly Column<ConnectionResourceRecord>[] = [
     {
@@ -619,7 +626,7 @@ export function AccountView({
       nowrap: true,
       width: '1%',
       cell: (resource) => {
-        const n = missionsOn(resource.id);
+        const n = missionsOn(resource);
         return n === 0 ? <span className={shared.quiet}>no mission</span> : count(n, TERMS.mission);
       },
     },

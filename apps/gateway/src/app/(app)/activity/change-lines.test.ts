@@ -68,6 +68,24 @@ describe('a change in words', () => {
     expect(JSON.stringify(lines)).not.toMatch(/conn-1|res-1|connection_id|resource_ids|risk_id"/);
   });
 
+  it('says when a mission was given a whole account, and when it reached no resource', () => {
+    const lines = changeLines(
+      null,
+      {
+        connections: [
+          { connection_id: 'conn-1', resource_scope: 'connection', resource_ids: [] },
+          { connection_id: 'conn-1', resource_scope: 'all', resource_ids: [] },
+        ],
+      },
+      NAMES,
+      'mission',
+    );
+    expect(words(lines)).toEqual([
+      'Account: Acme product repositories · the whole account, including resources found later',
+      'Account: Acme product repositories · no resource',
+    ]);
+  });
+
   it('says what changed and what it was, and leaves out what did not change', () => {
     expect(
       words(

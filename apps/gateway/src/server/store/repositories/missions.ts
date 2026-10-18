@@ -383,7 +383,10 @@ function connectionToRecord(row: ConnectionRow, resourceIds: string[]): MissionC
   };
 }
 
-/** Every connection either takes all its resources or an explicit, consistent selection. */
+/**
+ * Every connection carries an explicit, consistent selection (`selected`), or no id at
+ * all (`all`: none known at issuance; `connection`: the whole connection, read live).
+ */
 function assertConnectionSelections(
   ctx: RepoContext,
   connections: readonly MissionConnection[],
@@ -398,8 +401,10 @@ function assertConnectionSelections(
     if (c.resourceScope === 'selected' && c.resourceIds.length === 0) {
       throw new InvariantError(`connection ${c.connectionId}: selected scope with no resource`);
     }
-    if (c.resourceScope === 'all' && c.resourceIds.length > 0) {
-      throw new InvariantError(`connection ${c.connectionId}: 'all' scope lists resources`);
+    if (c.resourceScope !== 'selected' && c.resourceIds.length > 0) {
+      throw new InvariantError(
+        `connection ${c.connectionId}: '${c.resourceScope}' scope lists resources`,
+      );
     }
     for (const resourceId of c.resourceIds) {
       const owner = resourceConnection.get(resourceId);

@@ -2,7 +2,7 @@
 title: Store — embedded SQLite, schema and migrations, repositories
 status: current
 date: 2026-10-13
-last_synced: 2026-10-17
+last_synced: 2026-10-18
 tracks:
   - apps/gateway/migrations/
   - apps/gateway/src/server/store/
@@ -73,6 +73,9 @@ apps/gateway/migrations/
   0017_connection_default_env.sql
                                   connections: `default_env`, the owner's label for the resources
                                   without one of their own (schema version 17)
+  0018_mission_reaches_the_whole_connection.sql
+                                  mission_connections (and mission_resources) rebuilt: the
+                                  resource scope `connection` (schema version 18)
 apps/gateway/src/server/store/
   index.ts                        openStore() / openMemoryStore(), Store type, re-exports
   db.ts                           openDb() — better-sqlite3 handle, pragmas, MIN_SQLITE_VERSION,
@@ -219,7 +222,7 @@ five-id catalog).
   with no resource…), driver errors (`SqliteError` with `code`) for constraint
   violations the schema catches (`UNIQUE`, `FOREIGN KEY`, `CHECK`).
 
-## Schema (`0001_schema.sql` … `0017_connection_default_env.sql`)
+## Schema (`0001_schema.sql` … `0018_mission_reaches_the_whole_connection.sql`)
 
 Schema version 17. `0001` creates every table and trigger; `0002` only replaces the
 `audit_risks` delete trigger (see Audit); `0003` adds `web_sessions`; `0004` adds the
@@ -284,7 +287,7 @@ connections repository joins the connection and applies it (`effectiveResourceEn
 | Delegations | `oauth_clients`, `oauth_client_redirect_uris`, `delegations`, `oauth_codes`, `oauth_refresh_tokens`, `oauth_access_tokens` | all secrets stored as hashes by the caller; codes single-use; refresh tokens chain through `replaced_by_id`; `oauth_clients.operator_decision` (`approved`\|`disabled`, NULL while the registration policy decides), `registration` (`dynamic`\|`metadata-document`); `delegations.revoke_reason`; repository and its replay lookups in [management-door](management-door.md)                                       |
 | Connections | `connections`, `connection_resources`                                                                                      | owner = `owner_kind` + `owner_user_id`/`owner_group_id` with a CHECK; status `active\|expired\|revoked\|unowned`; resources unique per `(connection_id, ref)` with an `env` label, its `env_source` (`owner`\|`plugin`), `metadata_json` (provider facts) and `owner_metadata_json` (owner edits), `display_name_edited`, `hidden`, `stale_since` (see Connections below)                                           |
 | Shares      | `shares`, `share_restrictions`                                                                                             | target principal like owner; one `risk_id` row per restriction entry                                                                                                                                                                                                                                                                                                                                                |
-| Missions    | `missions`, `mission_connections`, `mission_resources`, `mission_policy`, `mission_tokens`, `mission_members`              | status `active\|expired\|revoked` (`orphaned` is derived, `0007` refuses it; `exhausted` is per risk, computed); `period_anchor` + nullable `period_seconds`; `resource_scope all\|selected`; policy row = `(quota, rate_limit, rate_window_seconds, gate)`; two partial unique indexes = one `active` token per member and per token name (`0010`, below)                                                          |
+| Missions    | `missions`, `mission_connections`, `mission_resources`, `mission_policy`, `mission_tokens`, `mission_members`              | status `active\|expired\|revoked` (`orphaned` is derived, `0007` refuses it; `exhausted` is per risk, computed); `period_anchor` + nullable `period_seconds`; `resource_scope all\|selected\|connection` (`0017`, below); policy row = `(quota, rate_limit, rate_window_seconds, gate)`; two partial unique indexes = one `active` token per member and per token name (`0010`, below)                              |
 | Sessions    | `sessions`, `session_counters`, `events`                                                                                   | one session per mission (`mission_id` unique); counters keyed `(session_id, risk_id, period_start)`; events are free-form `kind` + JSON details; `events.agent_label` (`0008`) is a copy of the label of a call event, made at insert, for the per-label timeline                                                                                                                                                   |
 | Requests    | `requests`, `approvals`                                                                                                    | `kind claim\|approval`, `state open\|granted\|refused\|expired`; approval requests carry `tool`, `fingerprint`, `risk_ids_json` (every gated risk of the call) and the encrypted `args_blob` (NULL on decision and on expiry); one approval per request, bound to `(mission, tool, fingerprint)` and listing the risks it covers, consumed via `consumed_at`                                                        |
 | Git remote  | `git_pending_refs`                                                                                                         | temporary refs at the provider and their deadline (migration `0015`)                                                                                                                                                                                                                                                                                                                                                |
@@ -976,3 +979,22 @@ justification and sorted risk set used for deduplication. Request expiry and
 decision state remain in `requests`. The migration test verifies an upgrade
 from a schema holding every migration but 0016 (the repositories of this build read
 the later columns), with both an encrypted open request and an existing grant.
+
+## The whole-connection scope (migration 0018)
+
+`0018_mission_reaches_the_whole_connection.sql` widens the CHECK of
+`mission_connections.resource_scope` to `('all', 'selected', 'connection')`
+(ADR
+[mission-reaches-the-whole-connection-on-request](../decisions/mission-reaches-the-whole-connection-on-request.md)).
+A CHECK cannot be altered in place, so the table is rebuilt, and with it
+`mission_resources`, whose composite foreign key names it: both are copied to
+temporary tables, the child dropped first, then the parent (foreign-key
+enforcement stays on, and dropping the parent with children in place would
+cascade), both recreated with their index, and every row copied back as is —
+no mission changes scope. `MissionsRepo.create` stores `connection` with no
+resource row and refuses ids under it (`InvariantError`), as it refuses an empty
+`selected`. What such a row reaches is not stored: `reachedResources`
+(`store/mission-reach.ts`) reads it from the connection's live rows (handbook
+[missions](missions.md)). `tests/integration/store/whole-connection-migration.test.ts`
+upgrades a schema-17 database holding a `selected` and an `all` selection and
+checks the rows, the foreign keys and the new value.

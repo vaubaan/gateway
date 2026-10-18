@@ -53,7 +53,15 @@ const resourcesSchema = z.discriminatedUnion('scope', [
   z
     .object({ scope: z.literal('all') })
     .strict()
-    .describe('Every resource of the connection known now (not the ones discovered later).'),
+    .describe(
+      'Every resource of the connection known now, stored as that list: a resource discovered later is NOT reached. The usual choice.',
+    ),
+  z
+    .object({ scope: z.literal('connection') })
+    .strict()
+    .describe(
+      'The whole connection: every resource known now AND every resource discovered later (except the ones the owner hid). Only when the task creates resources or operates the whole account; the user sees the mission marked so.',
+    ),
   z
     .object({
       scope: z.literal('selected'),
@@ -79,7 +87,9 @@ const connectionSchema = z
       ),
     resources: resourcesSchema
       .optional()
-      .describe('The resources the mission may touch on this connection. Default: all.'),
+      .describe(
+        'The resources the mission may touch on this connection. Default: `all` (every resource known now). `connection` also reaches resources discovered later.',
+      ),
     preset: text
       .nullable()
       .optional()

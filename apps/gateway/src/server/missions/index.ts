@@ -168,6 +168,7 @@ export {
 export { parseTokenName, TOKEN_NAME_MAX_LENGTH, TOKEN_NAME_RULE } from './token-name';
 export type * from './model';
 export { PREVIEW_ISSUE_CODES, PREVIEW_NOTICE_CODES, SEVERITY_LEVELS } from './model';
+export { reachedResources, reachesLaterResources } from '../store/mission-reach';
 export {
   budgetProblem,
   expandPreset,

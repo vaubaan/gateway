@@ -4,23 +4,34 @@
  * request.
  *
  * Spec §3.1 "Resource selection": a mission names, per connection, the
- * resources it may touch; a resource discovered later is not covered. The
- * store keeps explicit resource ids, so the selection is exactly the rows
- * whose id the mission stored — scope `all` with an empty list means "none
- * known at issuance" and is never hydrated from the connection's live list
- * (handbook missions, "Issuance" step 3).
+ * resources it may touch. What it reaches is `reachedResources`
+ * (`store/mission-reach.ts`), the rule the mission page and the bootstrap kit
+ * read too:
  *
- * Of the selected resources, a *stale* one (the last discovery no longer
- * returned it) is left out of `resources`: the mission may not touch it any
- * more, and the resource stage refuses a call that cites it with
- * `resource-not-in-mission`. A *hidden* one stays: hiding is a listing
- * preference of the owner, not a withdrawal.
+ * - an explicit selection is exactly the rows whose id the mission stored —
+ *   scope `all` with an empty list means "none known at issuance" and is never
+ *   hydrated from the connection's live list (handbook missions, "Issuance"
+ *   step 3);
+ * - scope `connection` (the creator chose "the whole account") is the
+ *   connection's live list, read here on every request: a resource discovered
+ *   after issuance is reached, a hidden one is not (ADR
+ *   mission-reaches-the-whole-connection-on-request).
+ *
+ * Either way a *stale* resource (the last discovery no longer returned it) is
+ * left out of `resources`: the mission may not touch it any more, and the
+ * resource stage refuses a call that cites it with `resource-not-in-mission`.
+ * A *hidden* one selected on purpose stays: hiding is a listing preference of
+ * the owner, not a withdrawal.
  *
  * A *self* resource (one of the instance's own hosting, `config.selfResources`,
  * SEC 2026-10-15 H1) is left out too, whatever the mission stored: a policy
  * issued before the instance knew it, or written by hand, still cannot reach
  * it. The plugin then binds no call to it, and the resource stage refuses a
  * call that cites it with `resource-not-in-mission`.
+ *
+ * `resources` is also what a plugin's `execute` receives (`ctx.resources`): a
+ * "list" tool that filters its answer to the mission (`fly__list_apps`,
+ * `cloudflare_dns__list_zones`) sees the same live list.
  *
  * Nothing here is cached: the reads are local (SQLite) and a revocation, an
  * expired connection or a stale resource must be seen by the next call.
@@ -33,7 +44,7 @@ import type {
   MissionResource,
 } from '@vaubaan/gateway-core';
 
-import { isStale, periodOf, policyEntryOf } from '../budget';
+import { periodOf, policyEntryOf } from '../budget';
 import { isSelfResource, type SelfResource } from '../config';
 import {
   connectionCredentialKind,
@@ -42,6 +53,7 @@ import {
   connectionSummaryOf,
 } from '../connections/mapping';
 import type { Store } from '../store';
+import { reachedResources } from '../store/mission-reach';
 import type { ConnectionRecord, ConnectionResourceRecord, MissionRecord } from '../store/types';
 
 export type MissionContextStore = Pick<Store, 'connections' | 'users' | 'groups' | 'sessions'>;
@@ -103,13 +115,10 @@ export async function loadMissionContext(
         isSelfResource(selfResources, connection.provider, r.ref),
       ),
     });
-    const selected = new Set(selection.resourceIds);
-    if (selected.size === 0) continue;
-    for (const record of discovered) {
-      if (!selected.has(record.id) || isStale(record)) continue;
-      if (isSelfResource(selfResources, connection.provider, record.ref)) continue;
-      resources.push(missionResourceOf(connection, record));
-    }
+    const reached = reachedResources(selection, discovered, (r) =>
+      isSelfResource(selfResources, connection.provider, r.ref),
+    );
+    for (const record of reached) resources.push(missionResourceOf(connection, record));
   }
 
   const session = await store.sessions.getByMission(mission.id);

@@ -12,6 +12,7 @@ import type {
   CatalogRisk,
   DraftConnection,
   DraftPeriod,
+  DraftResources,
   IssuanceConnection,
   IssuanceResource,
   MissionDraft,
@@ -38,10 +39,54 @@ export interface EntryState {
  */
 export type PolicyMode = 'preset' | 'custom';
 
+/**
+ * How far a mission reaches on one account (spec §3.1 "Resource selection";
+ * ADR mission-reaches-the-whole-connection-on-request):
+ *
+ *   all         every resource known now (the default) — sent as that explicit list
+ *   connection  the whole account, resources found later included — sent as the scope
+ *   selected    the ones the creator ticks
+ */
+export type ResourceChoice = 'all' | 'connection' | 'selected';
+
+/** The three choices of an account's resources: a short label and hint, and the one-line explanation. */
+export const RESOURCE_CHOICES: readonly {
+  readonly id: ResourceChoice;
+  readonly label: string;
+  readonly hint: string;
+  readonly explanation: string;
+}[] = [
+  {
+    id: 'all',
+    label: 'Every resource known now',
+    hint: 'found later: not reached',
+    explanation:
+      'The resources listed today. One found later is not reached: a new mission would be needed.',
+  },
+  {
+    id: 'connection',
+    label: 'The whole account',
+    hint: 'including resources found later',
+    explanation:
+      'Every resource of the account, today and found later, except the hidden ones. For work that creates resources or runs the whole account.',
+  },
+  {
+    id: 'selected',
+    label: 'Only the ones I pick',
+    hint: 'nothing else is reached',
+    explanation: 'Tick the resources the task needs; nothing else is reached.',
+  },
+];
+
 export interface ConnectionState {
   readonly included: boolean;
   readonly mode: PolicyMode;
-  /** Selected resource ids; by default every resource that is neither hidden nor stale. */
+  /** How far the mission reaches on this account; `all` by default. */
+  readonly resourceScope: ResourceChoice;
+  /**
+   * Selected resource ids; by default every resource that is neither hidden nor
+   * stale. For `all` and `connection`, that default set: what is reached now.
+   */
   readonly resourceIds: readonly string[];
   /** Preset the policy was filled from; '' when none. */
   readonly presetId: string;
@@ -88,6 +133,7 @@ export function initialConnectionState(connection: IssuanceConnection): Connecti
   return {
     included: false,
     mode: 'preset',
+    resourceScope: 'all',
     resourceIds: defaultResources(connection).map((r) => r.id),
     presetId: '',
     entries: {},
@@ -125,12 +171,25 @@ export function selectedResources(
   return connection.resources.filter((r) => selected.has(r.id));
 }
 
+/**
+ * The resources of a draft line: the scope for the whole account, else the
+ * explicit list the creator sees ticked ("every resource known now" included,
+ * so the confirmation lists exactly what is stored).
+ */
+export function draftResourcesOf(
+  state: Pick<ConnectionState, 'resourceScope' | 'resourceIds'>,
+): DraftResources {
+  return state.resourceScope === 'connection'
+    ? { scope: 'connection' }
+    : { scope: 'selected', resource_ids: state.resourceIds };
+}
+
 /** The connection as a draft line that carries only the preset: what "apply the preset" means. */
 function presetDraft(connection: IssuanceConnection, state: ConnectionState): DraftConnection {
   return {
     connection_id: connection.id,
     preset: state.presetId || null,
-    resources: { scope: 'selected', resource_ids: state.resourceIds },
+    resources: draftResourcesOf(state),
   };
 }
 
@@ -268,7 +327,7 @@ function skippedWhy(skipped: SkippedPresetEntry, envs: readonly string[]): strin
  */
 export function explainPreset(
   connection: IssuanceConnection,
-  state: Pick<ConnectionState, 'resourceIds'>,
+  state: Pick<ConnectionState, 'resourceIds'> & Partial<Pick<ConnectionState, 'resourceScope'>>,
   presetId: string,
 ): PresetExplanation | null {
   const preset = connection.presets.find((p) => p.id === presetId);
@@ -276,7 +335,10 @@ export function explainPreset(
   const { preview } = previewConnection(connection, {
     connection_id: connection.id,
     preset: presetId,
-    resources: { scope: 'selected', resource_ids: state.resourceIds },
+    resources: draftResourcesOf({
+      resourceScope: state.resourceScope ?? 'selected',
+      resourceIds: state.resourceIds,
+    }),
   });
   const byId = new Map(preview.passes.map((entry) => [entry.risk_id, entry]));
   const lines = connection.risks.flatMap((risk): ExplainedLine[] => {
@@ -448,7 +510,27 @@ export function setResources(
   state: ConnectionState,
   resourceIds: readonly string[],
 ): ConnectionState {
-  const next = { ...state, resourceIds };
+  // Ticking a box is picking: the list is what the mission reaches, no more.
+  const next: ConnectionState = { ...state, resourceScope: 'selected', resourceIds };
+  if (state.presetId && !state.edited) return applyPreset(connection, next, state.presetId);
+  return next;
+}
+
+/**
+ * Changes how far the mission reaches on the account. `all` and `connection`
+ * reach the default set now (neither hidden nor stale); `selected` starts from
+ * the current ticks. The policy follows as with `setResources`.
+ */
+export function setResourceScope(
+  connection: IssuanceConnection,
+  state: ConnectionState,
+  resourceScope: ResourceChoice,
+): ConnectionState {
+  const resourceIds =
+    resourceScope === 'selected'
+      ? state.resourceIds
+      : defaultResources(connection).map((r) => r.id);
+  const next: ConnectionState = { ...state, resourceScope, resourceIds };
   if (state.presetId && !state.edited) return applyPreset(connection, next, state.presetId);
   return next;
 }
@@ -581,7 +663,7 @@ function numberOf(text: string): number | undefined {
 function draftConnection(connection: IssuanceConnection, state: ConnectionState): DraftConnection {
   return {
     connection_id: connection.id,
-    resources: { scope: 'selected', resource_ids: state.resourceIds },
+    resources: draftResourcesOf(state),
     // The persisted policy is the explicit enumeration: the preset is not sent.
     preset: null,
     policy: connection.risks
@@ -665,7 +747,12 @@ export function loadResolved(
       included: true,
       // Explicit lines are a custom policy: the editor is the honest view of them.
       mode: 'custom',
-      resourceIds: line.resources.resource_ids,
+      ...(line.resources.scope === 'connection'
+        ? {
+            resourceScope: 'connection' as const,
+            resourceIds: defaultResources(connection).map((r) => r.id),
+          }
+        : { resourceScope: 'selected' as const, resourceIds: line.resources.resource_ids }),
       presetId: line.preset ?? '',
       entries: Object.fromEntries(line.policy.map((e) => [e.risk_id, entryOf(e)])),
       edited: true,

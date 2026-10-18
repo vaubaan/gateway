@@ -12,12 +12,14 @@ import {
   describeSkipped,
   discardsEdits,
   draftOf,
+  draftResourcesOf,
   dropUnresolvable,
   editorRows,
   enterCustom,
   expiryOf,
   explainPreset,
   filterRows,
+  initialConnectionState,
   initialFormState,
   issueSentence,
   loadResolved,
@@ -29,8 +31,10 @@ import {
   periodChoiceOf,
   periodOf,
   presetSkipped,
+  RESOURCE_CHOICES,
   selectAll,
   setIncluded,
+  setResourceScope,
   setResources,
   toggleRisk,
   updateEntry,
@@ -74,6 +78,7 @@ describe('creation form — initial state', () => {
     expect(connectionOf(state)).toEqual({
       included: false,
       mode: 'preset',
+      resourceScope: 'all',
       resourceIds: ['res-app-staging', 'res-app-prod', 'res-scratch'],
       presetId: '',
       entries: {},
@@ -584,5 +589,43 @@ describe('creation form — what stands in the way, in the words of the interfac
     expect(
       issueSentence({ code: 'exceeds-authority', message: 'No account named.' }, context),
     ).toBe('No account named.');
+  });
+});
+
+describe('creation form — how far the mission reaches on an account', () => {
+  it('offers three choices; the whole account is sent as its scope, the others as the ticked list', () => {
+    expect(RESOURCE_CHOICES.map((c) => c.id)).toEqual(['all', 'connection', 'selected']);
+    for (const choice of RESOURCE_CHOICES) expect(choice.explanation.length).toBeGreaterThan(20);
+
+    const [connection] = context;
+    if (!connection) throw new Error('no connection');
+    const start = initialConnectionState(connection);
+    expect(draftResourcesOf(start)).toEqual({
+      scope: 'selected',
+      resource_ids: ['res-app-staging', 'res-app-prod', 'res-scratch'],
+    });
+
+    const picked = setResources(connection, start, ['res-app-prod']);
+    expect(picked.resourceScope).toBe('selected');
+
+    const whole = setResourceScope(connection, picked, 'connection');
+    expect(whole.resourceScope).toBe('connection');
+    // What it reaches now is the default set again; later resources join at read time.
+    expect(whole.resourceIds).toEqual(['res-app-staging', 'res-app-prod', 'res-scratch']);
+    expect(draftResourcesOf(whole)).toEqual({ scope: 'connection' });
+
+    const back = setResourceScope(connection, whole, 'all');
+    expect(draftResourcesOf(back)).toEqual({
+      scope: 'selected',
+      resource_ids: ['res-app-staging', 'res-app-prod', 'res-scratch'],
+    });
+  });
+
+  it('loads a whole-connection proposal as such', () => {
+    const state = initialFormState(context);
+    const loaded = loadResolved(context, state, [
+      { connection_id: 'conn-acme', resources: { scope: 'connection' }, preset: null, policy: [] },
+    ]);
+    expect(loaded.connections['conn-acme']?.resourceScope).toBe('connection');
   });
 });
