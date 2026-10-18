@@ -2,7 +2,15 @@
  * The key file the instance writes: the format the loader reads, mode 0600,
  * never over an existing file.
  */
-import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -12,6 +20,7 @@ import {
   generateMasterKeyText,
   masterKeyFileText,
   parseMasterKeyText,
+  writeGeneratedMasterKeyFile,
   writeMasterKeyFile,
 } from './master-key-file';
 
@@ -59,5 +68,45 @@ describe('the master key file', () => {
   it('fails when the directory does not exist, naming it', () => {
     const path = join(tempDir(), 'missing', 'master.key');
     expect(() => writeMasterKeyFile(path, 'x\n')).toThrow(/ENOENT/);
+  });
+
+  it('at generation, creates the missing parent directories (0700) on an empty volume', () => {
+    const root = tempDir();
+    const path = join(root, 'data', 'keys', 'master.key');
+    writeGeneratedMasterKeyFile(path, 'k\n');
+    expect(readFileSync(path, 'utf8')).toBe('k\n');
+    expect(statSync(path).mode & 0o777).toBe(0o600);
+    expect(statSync(join(root, 'data')).mode & 0o777).toBe(0o700);
+    expect(statSync(join(root, 'data', 'keys')).mode & 0o777).toBe(0o700);
+  });
+
+  it('at generation, leaves an existing directory as it is and never writes over a file', () => {
+    const root = tempDir();
+    const dir = join(root, 'keys');
+    mkdirSync(dir, { mode: 0o755 });
+    chmodSync(dir, 0o755);
+    writeGeneratedMasterKeyFile(join(dir, 'master.key'), 'k\n');
+    expect(statSync(dir).mode & 0o777).toBe(0o755);
+    expect(() => writeGeneratedMasterKeyFile(join(dir, 'master.key'), 'other\n')).toThrow(/EEXIST/);
+    expect(readFileSync(join(dir, 'master.key'), 'utf8')).toBe('k\n');
+  });
+
+  it('at generation, fails when a parent is not a directory or cannot be created', () => {
+    const root = tempDir();
+    writeFileSync(join(root, 'keys'), 'not a directory');
+    expect(() => writeGeneratedMasterKeyFile(join(root, 'keys', 'master.key'), 'k\n')).toThrow(
+      /ENOTDIR|EEXIST/,
+    );
+    expect(() =>
+      writeGeneratedMasterKeyFile(join(root, 'keys', 'sub', 'master.key'), 'k\n'),
+    ).toThrow(/ENOTDIR|EEXIST/);
+    if (process.getuid?.() === 0) return; // root ignores directory permissions
+    const locked = join(root, 'locked');
+    mkdirSync(locked, { mode: 0o500 });
+    chmodSync(locked, 0o500);
+    expect(() => writeGeneratedMasterKeyFile(join(locked, 'keys', 'master.key'), 'k\n')).toThrow(
+      /EACCES/,
+    );
+    chmodSync(locked, 0o700);
   });
 });

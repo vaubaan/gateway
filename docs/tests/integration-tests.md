@@ -1372,11 +1372,15 @@ enforced limits is pinned to what the code enforces today.
   and a snapshot kept, and a configuration error once the store holds data; a
   write failure named; the secret variables deleted from the environment, the
   `_FILE` path included; the generator's text is what the loader reads.
-- **`crypto/master-key-file.test.ts`** (4) — 32 random bytes in base64 on one
+- **`crypto/master-key-file.test.ts`** (7) — 32 random bytes in base64 on one
   line, different every time; `parseMasterKeyText` reads it back as the
   loader does (base64 or base64url, whitespace around, one line only, 32
   bytes only); written with mode 0600 and never over an existing file
-  (`EEXIST`); a missing directory named (`ENOENT`).
+  (`EEXIST`); a missing directory named (`ENOENT`) by the plain writer; at
+  generation (`writeGeneratedMasterKeyFile`) the missing parents of a nested
+  path on an empty directory created with mode 0700, an existing directory
+  left as it is, a parent that is a file (`ENOTDIR`/`EEXIST`) or cannot be
+  created (`EACCES`) still an error.
 - **`tests/integration/compose/master-key-generation.test.ts`** (5) — the real
   boot on a temporary directory: the file written (0600, the key the root
   holds), one `info` line with the path and never the key,
