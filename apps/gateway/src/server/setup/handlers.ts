@@ -21,7 +21,7 @@ import { BOOTSTRAP_MAX_MISSES } from '../auth/bootstrap';
 import { AUTH_LIMITS, notAFormResponse, readForm } from '../auth/handlers';
 import { forbiddenOriginResponse, isSameOrigin } from '../auth/origin';
 import { errorMessage } from '../config';
-import { parseMasterKeyText, writeMasterKeyFile } from '../crypto/master-key-file';
+import { parseMasterKeyText, writeGeneratedMasterKeyFile } from '../crypto/master-key-file';
 import { toIso } from '../store/clock';
 import { clearSetup, SETUP_KEY_ACTION, SETUP_PAGE, type SetupState } from './state';
 
@@ -133,7 +133,8 @@ export function createSetupHandlers(state: SetupState): SetupHandlers {
 
       const path = state.masterKeyFile;
       try {
-        writeMasterKeyFile(path, `${text.trim()}\n`);
+        // A new host's empty volume: the key file's directory may not exist yet.
+        writeGeneratedMasterKeyFile(path, `${text.trim()}\n`);
       } catch (err) {
         logger.warn('setup: the key file could not be written', { path, err: errorMessage(err) });
         return refused('key-busy');

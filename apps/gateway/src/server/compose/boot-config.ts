@@ -3,7 +3,8 @@
  *
  * `loadProcessConfig()` with one more outcome: when the configuration names the
  * master key as a file that does not exist and `encryption.generate_master_key`
- * is on, the key is generated here — 32 random bytes, base64, mode 0600 — and
+ * is on, the key is generated here — 32 random bytes, base64, mode 0600, the
+ * missing parent directories created (0700) — and
  * the configuration is loaded again with it. Nothing is generated when the
  * store already holds data: a key missing on an existing store is a
  * configuration error, never a reason to mint a new key. Without the opt-in the
@@ -29,7 +30,7 @@ import {
 import type { EnvSource } from '../config/secret-refs';
 import {
   generateMasterKeyText,
-  writeMasterKeyFile,
+  writeGeneratedMasterKeyFile,
   type MasterKeyFileWriter,
 } from '../crypto/master-key-file';
 import { storeHasContent } from '../restore/restore';
@@ -108,7 +109,10 @@ export function loadBootConfigOrSetup(deps: BootConfigDeps = {}): BootConfigOutc
     ]);
   }
   try {
-    (deps.writeKeyFile ?? writeMasterKeyFile)(path, (deps.generateKey ?? generateMasterKeyText)());
+    (deps.writeKeyFile ?? writeGeneratedMasterKeyFile)(
+      path,
+      (deps.generateKey ?? generateMasterKeyText)(),
+    );
   } catch (err) {
     throw new ConfigError([
       {

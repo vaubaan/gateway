@@ -70,7 +70,7 @@ apps/gateway/src/
       testing.ts                validEnv(), fakeFiles() for tests
       keys-doc.test.ts          structural test: the key table of this handbook against KEYS
     crypto/
-      master-key-file.ts        the key file: 32 random bytes, base64, 0600, never over an existing file
+      master-key-file.ts        the key file: 32 random bytes, base64, 0600, never over an existing file; parents created (0700) at generation and by the setup
     master-key/                 the master key as the instance speaks of it: generated here or not, handed over or not, download (root.masterKey)
     setup/                      setup mode: the state on globalThis, the handler that receives the key of a copy to restore
       aead.ts                   XChaCha20-Poly1305 core, per-connection key, blob format
@@ -791,11 +791,15 @@ the administrator. `deploy/config/.env.example` ships that way.
    naming the key file and the store: _a key missing on an existing store is a
    configuration error, never a reason to generate a new one (put the key file
    back)_.
-4. `writeMasterKeyFile` (`crypto/master-key-file.ts`): 32 random bytes in
-   base64 and a newline — the format `master_key` reads and `gen-master-key`
-   prints —, mode 0600, flag `wx` (never over an existing file). A write
-   failure is a `ConfigError` naming the path (a missing directory, a
-   read-only volume).
+4. `writeGeneratedMasterKeyFile` (`crypto/master-key-file.ts`): the missing
+   parent directories of the path are created first (`mkdir -p`, mode 0700
+   for the ones created, an existing directory left as it is — an empty
+   volume has no `/data/keys/` yet), then `writeMasterKeyFile` writes 32
+   random bytes in base64 and a newline — the format `master_key` reads and
+   `gen-master-key` prints —, mode 0600, flag `wx` (never over an existing
+   file). A failure is a `ConfigError` naming the path, exit 78 (a parent
+   that is not a directory, a directory that cannot be created, a read-only
+   volume).
 5. The configuration is loaded again, now `ready`; the secret variables are
    deleted from the environment (the `_FILE` path included);
    `LoadedConfig.masterKeyGenerated` is `true` for this start only.
@@ -875,8 +879,9 @@ has `restore.from` and `restore.sha256`, an empty volume and no key file.
   for the rest of this start); the file at most `MAX_KEY_FILE_BYTES` (4096)
   and `parseMasterKeyText` (`crypto/master-key-file.ts`: 32 bytes, base64 or
   base64url, one line — the loader's rule; else `key-invalid`, `key-missing`
-  for no file). Then `writeMasterKeyFile` (0600, `wx`: a second upload while
-  one is being installed is `key-busy`) and `complete()`: `getRoot` with
+  for no file). Then `writeGeneratedMasterKeyFile` (the missing parent
+  directories created, 0700 — a new host's empty volume; the file 0600, `wx`:
+  a second upload while one is being installed is `key-busy`) and `complete()`: `getRoot` with
   `loadBootConfig({ env: snapshot })` → the normal boot, `restoreAtFirstBoot`
   included (hash, integrity, migrations, **every sealed blob opens with the
   received key**), the store opens, the root serves. A boot that throws
@@ -1069,7 +1074,8 @@ configuration names the instance), the master key generated and handed over
 (`config/master-key-absent.test.ts`: the tolerated absence and its refusals;
 `compose/boot-config.test.ts`: generation, the store-holds-data refusal, the
 environment scrubbed, over fakes; `crypto/master-key-file.test.ts`: the file's
-format, 0600, never over an existing file;
+format, 0600, never over an existing file, the parent directories created at
+generation;
 `tests/integration/compose/master-key-generation.test.ts`: the real boot on a
 temporary directory, the file written, the log line, the second start, the
 refusals at exit 78; `tests/integration/instance/master-key-handover.test.ts`:
