@@ -28,6 +28,8 @@ export const githubToolTitles: Readonly<Record<string, string>> = {
   github__mint_install_token: 'Get a short-lived token for git',
   github__list_workflows: 'List workflows',
   github__list_workflow_runs: 'List workflow runs',
+  github__list_workflow_jobs: 'List the jobs of a workflow run',
+  github__get_job_logs: 'Read the log of a workflow job',
   github__get_branch_protection: 'Read the protection of a branch',
   github__merge_pull_request: 'Merge a pull request',
   github__delete_file: 'Delete a file on a branch',

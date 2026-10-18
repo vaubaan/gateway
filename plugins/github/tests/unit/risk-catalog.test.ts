@@ -59,6 +59,8 @@ const READS: readonly Row[] = [
   ['list_workflows', 'all', repo, ['read-meta']],
   ['list_workflow_runs', 'of the repository', repo, ['read-meta']],
   ['list_workflow_runs', 'of a workflow', { ...repo, workflow_id: 'ci.yml' }, ['read-meta']],
+  ['list_workflow_jobs', 'of a run', { ...repo, run_id: 7 }, ['read-meta']],
+  ['get_job_logs', 'of a job', { ...repo, job_id: 9, tail: true }, ['read-meta']],
   ['get_branch_protection', 'of main', { ...repo, branch: 'main' }, ['read-meta']],
   ['search_code', 'account-wide', { q: 'foo' }, ['search-global']],
   ['search_issues', 'account-wide', { q: 'foo' }, ['search-global']],

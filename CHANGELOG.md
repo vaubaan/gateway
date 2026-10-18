@@ -247,6 +247,16 @@ names, and the notes about them do too.
   `later-resources-need-env-label`). Missions created
   before keep exactly what they reached. Schema migration `0018` applies at
   start (ADR mission-reaches-the-whole-connection-on-request).
+- **A failed CI can be diagnosed through the gateway** (`@vaubaan/plugin-github` 3.3.0,
+  catalog v8). `github__list_workflow_jobs` lists the jobs of a workflow run — name,
+  status, conclusion, steps with their conclusions, link, start and end — and
+  `github__get_job_logs` returns the log of one job as plain text, at most `max_bytes`
+  (64 KiB by default, 1 MiB at most); `tail: true` keeps the end of the log, and the
+  answer says when it was truncated. Both are reads of `github.read-meta` (two patterns
+  added) under the App permission Actions (read), which the App already asks for. The
+  log's short-lived download link is followed without the installation token and is
+  never logged.
+
 - Creators can add or remove mission permissions without replacing keys or
   resetting usage. Agents can explicitly request missing permissions after a
   refusal; the creator reviews and grants the edit or refuses it in Waiting for

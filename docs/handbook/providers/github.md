@@ -2,7 +2,7 @@
 title: GitHub provider plugin
 status: current
 date: 2026-10-13
-last_synced: 2026-10-16
+last_synced: 2026-10-18
 tracks:
   - plugins/github/src/token.ts
   - plugins/github/src/index.ts
@@ -26,6 +26,7 @@ tracks:
   - plugins/github/src/git-heads.ts
   - plugins/github/src/git-call.ts
   - plugins/github/src/tool-titles.ts
+  - plugins/github/src/job-logs.ts
   - plugins/github/tests/unit/
 ---
 
@@ -138,15 +139,15 @@ sends the installing person to the callback). `POST
 `GITHUB_APP_PERMISSIONS` is the one declaration of what the App may request,
 level by level, with the tools each level serves:
 
-| Permission       | Read                                                               | Write                                                                                              |
-| ---------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
-| `metadata`       | `list_tags` — mandatory, GitHub grants it                          | —                                                                                                  |
-| `contents`       | branches, commits, files, `search_code`, releases, the clone token | branch and file writes, `push_files`, merge, releases, the push token — **sensitive**              |
-| `pull_requests`  | list, get, merge (reads the pull request first)                    | create, merge; on a push token when held                                                           |
-| `issues`         | list, get, `search_issues`                                         | `add_issue_comment`                                                                                |
-| `actions`        | `list_workflows`, `list_workflow_runs`                             | —                                                                                                  |
-| `administration` | `get_branch_protection`                                            | `update_branch_protection` — **sensitive**                                                         |
-| `workflows`      | —                                                                  | a file write, push or delete under `.github/workflows/`; on a push token when held — **sensitive** |
+| Permission       | Read                                                                         | Write                                                                                              |
+| ---------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `metadata`       | `list_tags` — mandatory, GitHub grants it                                    | —                                                                                                  |
+| `contents`       | branches, commits, files, `search_code`, releases, the clone token           | branch and file writes, `push_files`, merge, releases, the push token — **sensitive**              |
+| `pull_requests`  | list, get, merge (reads the pull request first)                              | create, merge; on a push token when held                                                           |
+| `issues`         | list, get, `search_issues`                                                   | `add_issue_comment`                                                                                |
+| `actions`        | `list_workflows`, `list_workflow_runs`, `list_workflow_jobs`, `get_job_logs` | —                                                                                                  |
+| `administration` | `get_branch_protection`                                                      | `update_branch_protection` — **sensitive**                                                         |
+| `workflows`      | —                                                                            | a file write, push or delete under `.github/workflows/`; on a push token when held — **sensitive** |
 
 The permissions of the App are the hard ceiling at GitHub, which matters
 where a repository has no branch protection (private repositories on a free
@@ -195,10 +196,10 @@ repository and organisation of its account with coarse scopes.
 
 | File                      | Role                                                                                                                                                                                                                                                                                                                                |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/index.ts`            | `definePlugin` → `githubPlugin` v3.2.0.                                                                                                                                                                                                                                                                                             |
-| `src/risk-catalog.yaml`   | 18 risks + fallback, 3 presets, `catalog_version: 7`.                                                                                                                                                                                                                                                                               |
-| `src/data-model.ts`       | Plane `repo`, 17 entities (`delete` under `release` is a verb leaf); `branch` is `envScopable`.                                                                                                                                                                                                                                     |
-| `src/tools.ts`            | 26 tools. Retired by risk-model §7.2 #1 and not declared: `dispatch_workflow`, `cancel_workflow_run`, `rerun_workflow_run`.                                                                                                                                                                                                         |
+| `src/index.ts`            | `definePlugin` → `githubPlugin` v3.3.0.                                                                                                                                                                                                                                                                                             |
+| `src/risk-catalog.yaml`   | 18 risks + fallback, 3 presets, `catalog_version: 8`.                                                                                                                                                                                                                                                                               |
+| `src/data-model.ts`       | Plane `repo`, 19 entities (`delete` under `release` is a verb leaf); `branch` is `envScopable`.                                                                                                                                                                                                                                     |
+| `src/tools.ts`            | 28 tools. Retired by risk-model §7.2 #1 and not declared: `dispatch_workflow`, `cancel_workflow_run`, `rerun_workflow_run`.                                                                                                                                                                                                         |
 | `src/call.ts`             | The grammar of every identifier (`ownerName`, `repoName`, `repoFullName`, `repoPath`, `revision`, `branchName`, `tagName`, `pullRequestHead`, `positiveInteger`, `workflowRef`) and `readGithubCall`, the one reader `classify` and `execute` share; the refusal wording (`repositoryNotSelectedMessage`).                          |
 | `src/classify.ts`         | `classifyGithub(tool, args, resources)` = `readGithubCall` then `slicesOf(call)`; `isWorkflowPath`.                                                                                                                                                                                                                                 |
 | `src/credential.ts`       | `githubCredential` (app-install spec), `installationTokenFor(ctx, scope)`.                                                                                                                                                                                                                                                          |
@@ -209,6 +210,7 @@ repository and organisation of its account with coarse scopes.
 | `src/credential-keys.ts`  | `GITHUB_APP_CONFIG`, `GITHUB_WEB_BASE` (shared by the credential spec and the manifest flow).                                                                                                                                                                                                                                       |
 | `src/token-cache.ts`      | `installationTokenForCall(ctx, repo)`: per-call token served from `ctx.credentialCache`, 50 min at most, 5 min expiry margin.                                                                                                                                                                                                       |
 | `src/octokit-dispatch.ts` | `dispatchGithubTool(octokit, call, args)`: checked call → Octokit call; reads the pull request before a merge and declines (`ExecutorRefusal`) a base other than the declared one.                                                                                                                                                  |
+| `src/job-logs.ts`         | `readJobLogs`: `get_job_logs` — the API's redirect read with `redirect: 'manual'`, the https download fetched without the token, the body read bounded (`readBounded`: the first `max_bytes`, or with `tail` the last, at most `JOB_LOG_TAIL_READ_MAX` streamed).                                                                   |
 | `src/git-call.ts`         | `GIT_FETCH_TOOL`, `GIT_PUSH_TOOL`, `readGitCall` (the one reader of the git tools' arguments, shared by `classify` and `execute`), `pushedRef` (branches and tags only, `refs/vaubaan/` reserved).                                                                                                                                  |
 | `src/git-remote.ts`       | `githubGitRemoteOf(catalog)` (the plugin's `gitRemote`, built in `index.ts` as `githubGitRemote`): `upstream` (credential per access), `inspectPack`, `review`, `compareUrl`, `insteadOf`, `abilities`; `workingBranchesOf(catalog)` (the branch list of `feature-branch-write`, read from the YAML); `executeGit` (the ref moves). |
 | `src/git-inspect.ts`      | `inspectPack`: what each pushed tip changes under `.github/workflows/`, decided before the pack leaves the gateway; `workflowPathsOfCommit` (a commit GitHub lists 300 files of, read by its trees); `WORKFLOWS_UNVERIFIED`, `INSPECT_HEAD_BASES_MAX`, `INSPECT_WALK_MAX`.                                                          |
@@ -309,6 +311,34 @@ review.
   one list),
   `compareUrl` (the request page's link to GitHub's comparison).
 
+## Reading a workflow run: jobs and logs
+
+A failed CI is diagnosed through the gateway with three reads of
+`github.read-meta` (catalog v8 added the patterns
+`repo[**].workflow-run[**].job[**].R` and `repo[**].job[**].log[**].R`), all
+under the App permission Actions (read):
+
+- `list_workflow_runs` finds the run;
+- `list_workflow_jobs` (`run_id`, optional `filter: latest | all`, `per_page`)
+  → `GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs`, answered cut down
+  to `total_count` and, per job, `id`, `name`, `status`, `conclusion`,
+  `started_at`, `completed_at`, `html_url`, `run_attempt` and its `steps`
+  (`number`, `name`, `status`, `conclusion`);
+- `get_job_logs` (`job_id`, `max_bytes`, `tail`) →
+  `GET /repos/{owner}/{repo}/actions/jobs/{job_id}/logs`, which answers a 302
+  to a short-lived download URL. The plugin reads that answer with
+  `redirect: 'manual'`, requires an `https:` location, and fetches it
+  **without** the installation token (the URL is signed; the token never
+  leaves for another host). The body is streamed and at most `max_bytes` kept
+  (default 65 536, at most 1 048 576): the beginning, the stream cancelled as
+  soon as more arrives; or with `tail: true` the end, the whole log streamed
+  and only its last bytes kept (a log over 256 MiB is refused in tail mode).
+  The result is plain text; a truncated log starts with
+  `[log truncated: the first N bytes; …]` or
+  `[log truncated: the last N bytes of TOTAL]`. Neither the download URL nor
+  the log is logged or put in an error message. An expired log is GitHub's
+  410, thrown as `UpstreamHttpError`.
+
 ## Tool → slice mapping
 
 Every repo-scoped tool resolves `owner/repo` and refuses a repository that
@@ -363,18 +393,19 @@ the executor; nothing is escaped, trimmed, repaired or defaulted on one side
 only (ADR
 [`plugin-identifiers-one-grammar-for-classify-and-execute`](../../decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md)).
 
-| Argument                                                        | Grammar (`src/call.ts`)                                                                                                                                                            | Where it lands                                                                |
-| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `owner`, `repo`                                                 | `ownerName` (`[A-Za-z0-9_-]`, ≤ 39) and `repoName` (`[A-Za-z0-9._-]`, ≤ 100, not `.` or `..`), together one of the mission's repositories                                          | URL path, token scope, slice `repo[X]`                                        |
-| `repoFullName` (`mint_install_token`), a discovered `full_name` | `repoFullName` — `owner/repo`, exactly one separator, two well-formed names                                                                                                        | token scope, resource ref, slice `repo[X]`                                    |
-| file `path`, `files[].path`                                     | `repoPath` — relative, `/`-separated, no empty, `.` or `..` segment, no backslash, no control character, ≤ 4096 characters                                                         | URL path (`/contents/{path}`) or tree body, slice `file[path]`                |
-| `branch`, `from_branch`, `base`                                 | `branchName` — a git ref name (`git check-ref-format`: no `..`, no component starting with `.` or ending in `.lock`, no blank, none of `~ ^ : ? * [ \`), ≤ 255, not a ref spelling | URL path, query or body, slice `branch[b]` / `branch-protection[b]`           |
-| `head` (`create_pull_request`)                                  | `pullRequestHead` — a `branchName`, or `owner:branch` for a fork                                                                                                                   | body, slice `branch[head]`                                                    |
-| `tag_name`                                                      | `tagName` — a git ref name, never `refs/…`                                                                                                                                         | body, slice `tag[name]`                                                       |
-| `ref`, `sha` (`list_commits`, `get_commit`), `target_commitish` | `revision` — a branch, a tag, a full ref or a SHA, optionally with `~N` / `^N`                                                                                                     | URL path (`/commits/{sha}`), query or body, slice `branch[…]` / `commit[sha]` |
-| `pull_number`, `issue_number`, `release_id`                     | `positiveInteger` — a number, a positive safe integer                                                                                                                              | URL path, slice ident                                                         |
-| `workflow_id`                                                   | `workflowRef` — a positive integer, or one file name (no `/` or `\`, not `.` or `..`, ≤ 255)                                                                                       | URL path, slice `workflow[id]`                                                |
-| the installation id of the connection                           | `installationIdOf` (`src/app-install.ts`) — decimal digits, ≤ 20                                                                                                                   | URL path of the token mint                                                    |
+| Argument                                                             | Grammar (`src/call.ts`)                                                                                                                                                            | Where it lands                                                                |
+| -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `owner`, `repo`                                                      | `ownerName` (`[A-Za-z0-9_-]`, ≤ 39) and `repoName` (`[A-Za-z0-9._-]`, ≤ 100, not `.` or `..`), together one of the mission's repositories                                          | URL path, token scope, slice `repo[X]`                                        |
+| `repoFullName` (`mint_install_token`), a discovered `full_name`      | `repoFullName` — `owner/repo`, exactly one separator, two well-formed names                                                                                                        | token scope, resource ref, slice `repo[X]`                                    |
+| file `path`, `files[].path`                                          | `repoPath` — relative, `/`-separated, no empty, `.` or `..` segment, no backslash, no control character, ≤ 4096 characters                                                         | URL path (`/contents/{path}`) or tree body, slice `file[path]`                |
+| `branch`, `from_branch`, `base`                                      | `branchName` — a git ref name (`git check-ref-format`: no `..`, no component starting with `.` or ending in `.lock`, no blank, none of `~ ^ : ? * [ \`), ≤ 255, not a ref spelling | URL path, query or body, slice `branch[b]` / `branch-protection[b]`           |
+| `head` (`create_pull_request`)                                       | `pullRequestHead` — a `branchName`, or `owner:branch` for a fork                                                                                                                   | body, slice `branch[head]`                                                    |
+| `tag_name`                                                           | `tagName` — a git ref name, never `refs/…`                                                                                                                                         | body, slice `tag[name]`                                                       |
+| `ref`, `sha` (`list_commits`, `get_commit`), `target_commitish`      | `revision` — a branch, a tag, a full ref or a SHA, optionally with `~N` / `^N`                                                                                                     | URL path (`/commits/{sha}`), query or body, slice `branch[…]` / `commit[sha]` |
+| `pull_number`, `issue_number`, `release_id`, `run_id`, `job_id`      | `positiveInteger` — a number, a positive safe integer                                                                                                                              | URL path, slice ident                                                         |
+| `workflow_id`                                                        | `workflowRef` — a positive integer, or one file name (no `/` or `\`, not `.` or `..`, ≤ 255)                                                                                       | URL path, slice `workflow[id]`                                                |
+| `max_bytes`, `tail`, `filter` (`get_job_logs`, `list_workflow_jobs`) | `logByteCount` — an integer from 1 to 1 048 576 (default 65 536); a boolean; `latest` or `all`                                                                                     | how much of the log is returned; query string — not a slice segment           |
+| the installation id of the connection                                | `installationIdOf` (`src/app-install.ts`) — decimal digits, ≤ 20                                                                                                                   | URL path of the token mint                                                    |
 
 Why a grammar per kind and not an escape: Octokit expands a path parameter
 with `encodeURIComponent`, which leaves `.` and `..` untouched, and a URL
@@ -399,6 +430,8 @@ nothing is created.
 | `list_issues` / `get_issue`               | `repo[X].issue.R` / `repo[X].issue[N].R`                                                             |
 | `list_releases`                           | `repo[X].release.R`                                                                                  |
 | `list_workflows` / `list_workflow_runs`   | `repo[X].workflow.R` / `repo[X].workflow-run.R` or `repo[X].workflow[id].workflow-run.R`             |
+| `list_workflow_jobs`                      | `repo[X].workflow-run[run].job.R`                                                                    |
+| `get_job_logs`                            | `repo[X].job[id].log.R`                                                                              |
 | `get_branch_protection`                   | `repo[X].branch-protection[branch].R`                                                                |
 | `search_code` / `search_issues`           | `github.search.code.R` / `github.search.issues.R` (no resource check)                                |
 | `create_branch`                           | `repo[X].branch[name].W`                                                                             |
@@ -489,13 +522,13 @@ policy is stored, not derived from the preset.
 
 ## Tests
 
-`npx vitest run plugins/github` — 676 tests, no network:
+`npx vitest run plugins/github` — 717 tests, no network:
 
 - `plugin.test.ts` (17): kit assertions, coverage with samples per tool
   and per git tool (the 18 named risks touched, `fallbackHits` empty), the fallback catching
   a write on an unconventional branch and a merge into a non-protected one,
   preset invariants, credential spec, resource check.
-- `risk-catalog.test.ts` (71): the table `[tool, arguments, risks touched]`
+- `risk-catalog.test.ts` (80): the table `[tool, arguments, risks touched]`
   evaluated through `classifyGithub` and the shipped catalog — at least one
   row per tool, every risk of the catalog named by a row (protected and
   feature branches, workflow files, bulk pushes, merges, both mint
@@ -517,12 +550,20 @@ policy is stored, not derived from the preset.
   `files`, mint tool (clone/push permission sets, fan-out over mission
   resources, refusals before any call, as `isError` results), discovery
   (metadata, paging to `total_count`, 401).
-- `injection.test.ts` (415): every identifier position fed `..`, `.`,
+- `injection.test.ts` (425): every identifier position fed `..`, `.`,
   `a/../b`, encoded forms, an empty, an overlong and a multi-line value, to
   `classify` and to `execute` — refused by both with nothing sent (not even
   the token mint), or sent as the exact path that was classified; numbers;
   the installation id of the connection and the repository names discovery
-  returns.
+  returns; `run_id` and `job_id` refused unless positive integers.
+- `job-logs.test.ts` (22): the slices of `list_workflow_jobs` and
+  `get_job_logs`, their arguments refused by both sides (run and job ids,
+  `filter`, `max_bytes` out of range, a non-boolean `tail`); the jobs listing
+  cut down to its diagnosis fields; the log redirect followed without the
+  token, plain text, head and tail truncation with their note, the download
+  URL in neither result nor failure, a non-https location not followed, an
+  expired log (410); `readBounded` across chunks, the head read stopping
+  early.
 - `token-cache.test.ts` (5): a mint per call without a host cache, one mint
   per repository scope with one, no token served or stored close to its
   expiry, lifetime bounded by what is left of the token,

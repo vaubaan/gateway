@@ -33,7 +33,7 @@ export const githubGitRemote = githubGitRemoteOf(githubCatalog.catalog);
 export const githubPlugin = definePlugin({
   id: 'github',
   displayName: 'GitHub',
-  version: '3.2.0',
+  version: '3.3.0',
   description:
     'Repositories, branches, files, pull requests, issues, releases and workflows of the GitHub App installation.',
   summary:

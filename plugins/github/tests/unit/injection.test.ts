@@ -438,6 +438,29 @@ describe('identifier positions — numbers', () => {
     const release = await run('github__delete_release', { ...base, release_id: 9 });
     expect(sentTo(release.fetch).map((r) => r.path)).toEqual([`${R}/releases/9`]);
   });
+
+  test.each([1.5, -1, 0, 1e21, Number.NaN, '1', '1/../2', '..', null])(
+    'run_id and job_id %j are refused by classify and by execute',
+    async (value) => {
+      for (const [tool, key] of [
+        ['github__list_workflow_jobs', 'run_id'],
+        ['github__get_job_logs', 'job_id'],
+      ] as const) {
+        const args = { ...base, [key]: value };
+        expect(classifyGithub(tool, args, [appRepo])).toHaveProperty('denied');
+        const { fetch, failed } = await run(tool, args);
+        expect(failed).toBe(true);
+        expect(fetch.calls).toHaveLength(0);
+      }
+    },
+  );
+
+  test('a positive integer names exactly that run and that job', async () => {
+    const jobs = await run('github__list_workflow_jobs', { ...base, run_id: 42 });
+    expect(sentTo(jobs.fetch).map((r) => r.path)).toEqual([`${R}/actions/runs/42/jobs`]);
+    const logs = await run('github__get_job_logs', { ...base, job_id: 7 });
+    expect(sentTo(logs.fetch).map((r) => r.path)).toEqual([`${R}/actions/jobs/7/logs`]);
+  });
 });
 
 describe('identifier positions — what a legitimate value still reaches', () => {

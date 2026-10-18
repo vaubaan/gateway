@@ -24,8 +24,15 @@ import { branchName, type GithubCall, type MINT_TOOL, type RepoCall } from './ca
 
 export type OctokitLike = Pick<OctokitType, 'rest' | 'request'>;
 
-/** Every call but the credential mint, which `execute.ts` answers itself. */
-export type DispatchedCall = Exclude<GithubCall, { tool: typeof MINT_TOOL }>;
+/**
+ * Every call but the credential mint and the job log, which `execute.ts`
+ * answers itself (the log is a redirect to a download, read bounded :
+ * `job-logs.ts`).
+ */
+export type DispatchedCall = Exclude<
+  GithubCall,
+  { tool: typeof MINT_TOOL } | { tool: 'github__get_job_logs' }
+>;
 
 type Args = Readonly<Record<string, unknown>>;
 
@@ -214,6 +221,15 @@ export async function dispatchGithubTool(
       });
       return data;
     }
+    case 'github__list_workflow_jobs': {
+      const { data } = await octokit.rest.actions.listJobsForWorkflowRun({
+        ...repo,
+        run_id: call.runId,
+        filter: call.filter,
+        per_page: perPageOf(args),
+      });
+      return jobListing(data);
+    }
     case 'github__get_branch_protection': {
       const { data } = await octokit.rest.repos.getBranchProtection({
         ...repo,
@@ -326,4 +342,43 @@ function baseRefOf(pull: unknown): string | undefined {
   if (base === null || typeof base !== 'object' || !('ref' in base)) return undefined;
   const ref: unknown = base.ref;
   return typeof ref === 'string' && ref.length > 0 ? ref : undefined;
+}
+
+/** A step of a job, as `list_workflow_jobs` answers it. */
+interface JobStepSummary {
+  readonly number: unknown;
+  readonly name: unknown;
+  readonly status: unknown;
+  readonly conclusion: unknown;
+}
+
+/**
+ * GitHub's listing of the jobs of a run, cut down to what diagnoses a run :
+ * the job, its outcome, its steps and their outcomes, its page. The rest
+ * (runner labels, check-run URLs, node ids) only costs the agent's context.
+ */
+function jobListing(data: unknown): unknown {
+  const body = (data ?? {}) as { total_count?: unknown; jobs?: unknown };
+  const jobs = Array.isArray(body.jobs) ? (body.jobs as readonly Record<string, unknown>[]) : [];
+  return {
+    total_count: body.total_count,
+    jobs: jobs.map((job) => ({
+      id: job.id,
+      name: job.name,
+      status: job.status,
+      conclusion: job.conclusion,
+      started_at: job.started_at,
+      completed_at: job.completed_at,
+      html_url: job.html_url,
+      run_attempt: job.run_attempt,
+      steps: (Array.isArray(job.steps) ? (job.steps as readonly JobStepSummary[]) : []).map(
+        (step) => ({
+          number: step.number,
+          name: step.name,
+          status: step.status,
+          conclusion: step.conclusion,
+        }),
+      ),
+    })),
+  };
 }

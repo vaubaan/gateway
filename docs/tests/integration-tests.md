@@ -382,10 +382,12 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/github/tests/unit/classify.test.ts`                                                               |        69 |
 | `plugins/github/tests/unit/data-model.test.ts`                                                             |         1 |
 | `plugins/github/tests/unit/execute.test.ts`                                                                |        25 |
+| `plugins/github/tests/unit/git-inspect.test.ts`                                                            |        19 |
 | `plugins/github/tests/unit/git-moves.test.ts`                                                              |        11 |
-| `plugins/github/tests/unit/injection.test.ts`                                                              |       415 |
+| `plugins/github/tests/unit/injection.test.ts`                                                              |       425 |
+| `plugins/github/tests/unit/job-logs.test.ts`                                                               |        22 |
 | `plugins/github/tests/unit/plugin.test.ts`                                                                 |        17 |
-| `plugins/github/tests/unit/risk-catalog.test.ts`                                                           |        71 |
+| `plugins/github/tests/unit/risk-catalog.test.ts`                                                           |        80 |
 | `plugins/github/tests/unit/token-cache.test.ts`                                                            |         5 |
 | `plugins/github/tests/unit/token.test.ts`                                                                  |        11 |
 | `plugins/gmail/tests/unit/classify.test.ts`                                                                |       108 |
@@ -794,7 +796,7 @@ as `UpstreamAuthError`, another status as `UpstreamHttpError`), the catalog
 path resolved with
 `catalogPathNextTo` and present on disk.
 
-**GitHub** (639) — `plugin.test.ts` (17): structural kit (26 tools and the
+**GitHub** (717) — `plugin.test.ts` (17): structural kit (28 tools and the
 git remote's two, the 18 named risks touched), the fallback lint, presets
 `read-only` / `developer` / `release-manager` (catalog v6: `developer` without
 the mint risks, a force-push asking first; `release-manager` pushing tags,
@@ -810,14 +812,21 @@ than the declared one is refused without merging), and `push_files` reads
 multi-slice tools, the `workflow-via-file` slice, retired tools, structural
 denials, and 34 cases of **what it cannot place exactly** (non-canonical
 workflow paths, `refs/…` branch names, malformed identifiers), all refused.
-`risk-catalog` (71): one `[tool, args, risks]` row per call shape — git
+`risk-catalog` (80): one `[tool, args, risks]` row per call shape — git
 fetches and pushes included (every ref, force, deletion, tags, workflow
 files) — evaluated
 through the shipped catalog — the risks each tool touches, exactly.
-`injection.test.ts` (415): the identifier suite — every identifier position
+`injection.test.ts` (425): the identifier suite — every identifier position
 against every hostile value (319), numbers, what a legitimate value still
 reaches, more refusals by both sides, the connection.
-`token-cache` (5), `data-model` (1). No `envOf`: the catalog has no
+`token-cache` (5), `data-model` (1). `job-logs.test.ts` (22): the jobs
+of a workflow run and the log of a job — slices under `read-meta`,
+arguments refused by both sides, the jobs listing cut to its diagnosis
+fields, **the log's redirect followed without the installation token**, the
+log bounded at its beginning or (`tail`) its end with a truncation note, the
+download URL in neither the result nor a failure, a non-https location not
+followed. `git-inspect` (19) and `git-moves` (7): the push inspection and the
+ref moves. No `envOf`: the catalog has no
 env-scoped risk.
 
 **Vercel** (623) — `plugin.test.ts` (49): kit (31 tools; every named risk

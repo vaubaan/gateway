@@ -140,12 +140,17 @@ export const GITHUB_APP_PERMISSIONS: readonly AppPermission[] = [
   {
     name: 'actions',
     label: 'Actions',
-    description: 'Reading the workflows of a repository and their runs.',
+    description: 'Reading the workflows of a repository, their runs, jobs and logs.',
     levels: [
       {
         access: 'read',
         label: 'Read',
-        tools: ['github__list_workflows', 'github__list_workflow_runs'],
+        tools: [
+          'github__list_workflows',
+          'github__list_workflow_runs',
+          'github__list_workflow_jobs',
+          'github__get_job_logs',
+        ],
       },
     ],
   },

@@ -43,6 +43,7 @@ import { installationTokenFor } from './credential.ts';
 import { githubTokenOf, MINT_NEEDS_THE_APP } from './token.ts';
 import { isGitTool } from './git-call.ts';
 import { executeGit } from './git-remote.ts';
+import { readJobLogs } from './job-logs.ts';
 import { dispatchGithubTool, type OctokitLike } from './octokit-dispatch.ts';
 import {
   assertAppPermissions,
@@ -119,6 +120,7 @@ async function executeRead(
     log: octokitLog(ctx.logger),
   });
   try {
+    if (call.tool === 'github__get_job_logs') return await readJobLogs(ctx, token, call);
     return json(await dispatchGithubTool(octokit, call, args));
   } catch (e: unknown) {
     const status = (e as { status?: number }).status;

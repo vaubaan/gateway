@@ -21,8 +21,8 @@
 # creator adds it explicitly when a mission needs unconventional branches.
 
 provider: github
-catalog_version: 7
-catalog_date: 2026-10-16
+catalog_version: 8
+catalog_date: 2026-10-18
 
 risks:
   # ---------------------------------------------------------------
@@ -50,7 +50,7 @@ risks:
       persistence: stateless
 
   - id: github.read-meta
-    label: 'Read PRs, issues, releases, workflows, branch-protection'
+    label: 'Read PRs, issues, releases, workflows, runs and job logs, branch-protection'
     reason: >-
       Repository metadata. Issue/PR bodies are attacker-controlled (OWASP
       LLM01) — handle with care on the agent side. Reading branch
@@ -63,6 +63,8 @@ risks:
       - 'github.repo[**].workflow[**].R'
       - 'github.repo[**].workflow-run[**].R'
       - 'github.repo[**].workflow[**].workflow-run[**].R'
+      - 'github.repo[**].workflow-run[**].job[**].R'
+      - 'github.repo[**].job[**].log[**].R'
       - 'github.repo[**].branch-protection[**].R'
     vector:
       reversibility: reversible

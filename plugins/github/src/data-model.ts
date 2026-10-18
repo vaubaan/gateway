@@ -136,6 +136,22 @@ export const githubDataModel: DataModel = {
             '`cancel_workflow_run`, `rerun_workflow_run`.',
         },
         {
+          name: 'job',
+          parent: 'workflow-run',
+          cardinalities: ['one', 'unbounded'],
+          description:
+            'A job of a workflow run, with its steps and their conclusions. Read-only ' +
+            'via tools (`list_workflow_jobs`, slice `workflow-run[<run>].job.R`).',
+        },
+        {
+          name: 'log',
+          parent: 'job',
+          cardinalities: ['one'],
+          description:
+            'The log of a job (`get_job_logs`, slice `job[<id>].log.R`). Read-only ; ' +
+            'what a step printed, secrets masked by GitHub.',
+        },
+        {
           name: 'branch-protection',
           parent: 'repo',
           cardinalities: ['one', 'bounded'],
