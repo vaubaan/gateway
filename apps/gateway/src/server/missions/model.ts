@@ -74,7 +74,10 @@ export interface DraftConnection {
   readonly provider?: string;
   /** Default: `{ scope: 'all' }`. */
   readonly resources?: DraftResources;
-  /** Preset id of the connection's plugin (`registry.presetsOf`). */
+  /**
+   * Preset id of the connection's plugin (`registry.presetsOf`), or the
+   * built-in `everything-i-hold`, expanded against the selection.
+   */
   readonly preset?: string | null;
   readonly policy?: readonly DraftPolicyEntry[];
 }
@@ -240,6 +243,7 @@ export const PREVIEW_NOTICE_CODES = [
   'resource-without-env',
   'resource-env-not-in-catalog',
   'later-resources-need-env-label',
+  'everything-i-hold-expanded',
 ] as const;
 export type PreviewNoticeCode = (typeof PREVIEW_NOTICE_CODES)[number];
 
@@ -255,6 +259,11 @@ export type PreviewNoticeCode = (typeof PREVIEW_NOTICE_CODES)[number];
  * whole-connection mission (scope `connection`) will reach after issuance:
  * checked against the resources known now, the mission reaches env-scoped
  * permissions on a later one only once it is labelled (`resource_refs` empty).
+ *
+ * `everything-i-hold-expanded` is of another kind: it says what the built-in
+ * preset `everything-i-hold` wrote out on a connection — how many explicit
+ * lines, the most severe, the critical ones running freely and the fallback,
+ * whose ids are its `risk_ids` (ADR preset-everything-i-hold-expands-explicitly).
  */
 export interface PreviewNotice {
   readonly code: PreviewNoticeCode;
@@ -263,7 +272,11 @@ export interface PreviewNotice {
   readonly connection_id?: string;
   /** The selected resources the notice is about. */
   readonly resource_refs: readonly string[];
-  /** The env-scoped ids the draft accepts on this connection, unreachable on those resources. */
+  /**
+   * The env-scoped ids the draft accepts on this connection, unreachable on those
+   * resources; for `everything-i-hold-expanded`, the critical ids that run freely
+   * and the fallback.
+   */
   readonly risk_ids: readonly RiskId[];
 }
 

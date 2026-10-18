@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { everythingIHold } from '@/server/missions/everything-i-hold';
 import { previewDraft } from '@/server/missions/preview';
 import { ACME_HIDDEN, ACME_RESOURCES, ACME_STALE, acmeConnection } from '@/server/missions/testing';
 
@@ -9,6 +10,7 @@ import {
   backToPreset,
   clearAll,
   defaultEntryFor,
+  describeEverything,
   describeSkipped,
   discardsEdits,
   draftOf,
@@ -627,5 +629,63 @@ describe('creation form — how far the mission reaches on an account', () => {
       { connection_id: 'conn-acme', resources: { scope: 'connection' }, preset: null, policy: [] },
     ]);
     expect(loaded.connections['conn-acme']?.resourceScope).toBe('connection');
+  });
+});
+
+describe('creation form — "Everything I hold on this account"', () => {
+  it('is a choice of every account, after the plugin presets, and fills the explicit list', () => {
+    const cs = included('everything-i-hold');
+    const expected = everythingIHold(acme, ACME_RESOURCES).entries;
+    expect(Object.keys(cs.entries)).toEqual(expected.map((e) => e.risk_id));
+    expect(cs.entries['acme.admin']).toEqual({
+      quota: String(expected.find((e) => e.risk_id === 'acme.admin')?.quota),
+      rateMax: '10',
+      rateWindow: '60',
+      gate: 'auto',
+    });
+    // What is sent is the explicit list, with no preset reference; the server accepts it.
+    const preview = previewOf(cs);
+    expect(preview.ok).toBe(true);
+    expect(preview.policy.map((l) => l.risk_id)).toEqual(expected.map((e) => e.risk_id));
+    const state = withConnection(initialFormState(context), cs);
+    expect(draftOf(context, state, NOW).connections[0]?.preset).toBeNull();
+  });
+
+  it('follows the resource selection while untouched', () => {
+    const cs = setResources(acme, included('everything-i-hold'), ['res-scratch']);
+    expect(Object.keys(cs.entries)).toEqual([
+      'acme.read',
+      'acme.admin',
+      'acme.uncategorized-write',
+    ]);
+  });
+
+  it('says how many, the most severe, and names the uncategorized writes, in the words of the interface', () => {
+    const explanation = explainPreset(acme, included(), 'everything-i-hold');
+    expect(explanation).not.toBeNull();
+    if (!explanation) return;
+    expect(presetWidth(explanation)).toBe(6);
+    const sentences = describeEverything(acme, explanation) ?? [];
+    expect(sentences[0]).toContain('Written out as 6 permissions');
+    expect(sentences).toContain('Most severe: Delete things in bulk (high).');
+    expect(sentences).toContain('None of them is critical.');
+    expect(sentences.some((s) => s.includes('“Uncategorized write”'))).toBe(true);
+    for (const sentence of sentences) {
+      expect(sentence).not.toMatch(/\b(risk|quota|budget|connection|authority)\b/i);
+    }
+    // Any other preset has no such paragraph.
+    const developer = explainPreset(acme, included(), 'developer');
+    expect(developer && describeEverything(acme, developer)).toBeNull();
+  });
+
+  it('names the critical permissions that run freely', () => {
+    const risks = acme.risks.map((r) =>
+      r.risk_id === 'acme.admin' ? { ...r, severity: 12, level: 'critical' as const } : r,
+    );
+    const critical = acmeConnection({ risks });
+    const explanation = explainPreset(critical, included(), 'everything-i-hold');
+    expect(explanation && describeEverything(critical, explanation)).toContain(
+      'Critical, and running freely: Change account settings.',
+    );
   });
 });

@@ -966,4 +966,48 @@ describe('missions: issuance context', () => {
     }
     expect(presets).toBeGreaterThanOrEqual(root.registry.size);
   });
+
+  it('issues "Everything I hold" on every registered plugin: the explicit list of the authority, within every ceiling', async () => {
+    const { service } = root.missions;
+    const owner = { kind: 'user', id: seeded.bob.id } as const;
+    for (const provider of root.registry.ids) {
+      expect(
+        root.registry.presetsOf(provider).map((p) => p.id),
+        `${provider} must not ship the built-in id`,
+      ).not.toContain('everything-i-hold');
+      const envs = catalogEnvs(root.registry, provider);
+      const { connection } = await seedConnection(root.store, {
+        provider,
+        owner,
+        displayName: `${provider} (everything)`,
+        resources: [{ ref: 'unlabelled' }, ...envs.map((env) => ({ ref: `res-${env}`, env }))],
+      });
+      const draft = {
+        name: `${provider} wide`,
+        connections: [{ connection_id: connection.id, preset: 'everything-i-hold' }],
+        period: DAILY,
+        expires_at: null,
+      };
+      const preview = await service.preview(seeded.bob, draft);
+      expect(preview.issues, provider).toEqual([]);
+      const issuance = (await service.issuanceContext(seeded.bob)).find(
+        (c) => c.id === connection.id,
+      );
+      // Every non-deprecated id of the owner's authority: every env is labelled here.
+      const expected = (issuance?.risks ?? [])
+        .filter((r) => !r.deprecated && issuance?.authority.includes(r.risk_id))
+        .map((r) => r.risk_id);
+      expect(
+        preview.policy.map((e) => e.risk_id),
+        provider,
+      ).toEqual(expected);
+      const fallback = issuance?.risks.filter((r) => r.fallback).map((r) => r.risk_id) ?? [];
+      const notice = preview.notices.find((n) => n.code === 'everything-i-hold-expanded');
+      for (const id of fallback) expect(notice?.risk_ids, provider).toContain(id);
+      const issued = await service.issue(seeded.bob, draft);
+      expect(issued.ok, provider).toBe(true);
+      if (!issued.ok) continue;
+      expect(JSON.stringify(issued.mission)).not.toContain('everything');
+    }
+  });
 });

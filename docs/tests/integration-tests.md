@@ -112,7 +112,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/app/(app)/missions/[id]/session/event-words.test.ts`                                     |         9 |
 | `apps/gateway/src/app/(app)/missions/message-of.test.ts`                                                   |         2 |
 | `apps/gateway/src/app/(app)/missions/mission-view.test.ts`                                                 |        12 |
-| `apps/gateway/src/app/(app)/missions/new/form-state.test.ts`                                               |        42 |
+| `apps/gateway/src/app/(app)/missions/new/form-state.test.ts`                                               |        46 |
 | `apps/gateway/src/components/auth/principal.test.ts`                                                       |         2 |
 | `apps/gateway/src/components/connections/shape.test.ts`                                                    |         5 |
 | `apps/gateway/src/lib/dates.test.ts`                                                                       |         8 |
@@ -162,9 +162,10 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/management/door.test.ts`                                                          |         4 |
 | `apps/gateway/src/server/management/hard-deny.test.ts`                                                     |        16 |
 | `apps/gateway/src/server/management/output-schemas.test.ts`                                                |        10 |
-| `apps/gateway/src/server/management/tools.test.ts`                                                         |        33 |
+| `apps/gateway/src/server/management/tools.test.ts`                                                         |        35 |
 | `apps/gateway/src/server/missions/bootstrap-kit.test.ts`                                                   |        22 |
 | `apps/gateway/src/server/missions/catalog-view.test.ts`                                                    |        21 |
+| `apps/gateway/src/server/missions/everything-i-hold.test.ts`                                               |        16 |
 | `apps/gateway/src/server/missions/git-view.test.ts`                                                        |         3 |
 | `apps/gateway/src/server/missions/orphan-reason.test.ts`                                                   |         4 |
 | `apps/gateway/src/server/missions/preview.test.ts`                                                         |        50 |
@@ -246,12 +247,12 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/git/git-remote.test.ts`                                                    |        16 |
 | `apps/gateway/tests/integration/instance/instance-name.test.ts`                                            |         7 |
 | `apps/gateway/tests/integration/management/hard-deny.test.ts`                                              |         6 |
-| `apps/gateway/tests/integration/management/management-door.test.ts`                                        |        36 |
+| `apps/gateway/tests/integration/management/management-door.test.ts`                                        |        37 |
 | `apps/gateway/tests/integration/management/output-schemas.test.ts`                                         |         9 |
 | `apps/gateway/tests/integration/missions/gate.test.ts`                                                     |        20 |
 | `apps/gateway/tests/integration/missions/limits.test.ts`                                                   |        21 |
 | `apps/gateway/tests/integration/missions/mission-handlers.test.ts`                                         |         8 |
-| `apps/gateway/tests/integration/missions/mission-lifecycle.test.ts`                                        |        35 |
+| `apps/gateway/tests/integration/missions/mission-lifecycle.test.ts`                                        |        36 |
 | `apps/gateway/tests/integration/missions/team-interleaving.test.ts`                                        |         6 |
 | `apps/gateway/tests/integration/missions/team.test.ts`                                                     |        34 |
 | `apps/gateway/tests/integration/now/now.test.ts`                                                           |        12 |
@@ -317,7 +318,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`                                           |       466 |
 | `apps/gateway/tests/unit/structural/persisted-enumerations.test.ts`                                        |        10 |
 | `apps/gateway/tests/unit/structural/plugin-identifier-tests.test.ts`                                       |        25 |
-| `apps/gateway/tests/unit/structural/shipped-presets.test.ts`                                               |        41 |
+| `apps/gateway/tests/unit/structural/shipped-presets.test.ts`                                               |        71 |
 | `apps/gateway/tests/unit/structural/telemetry-collector-schema.test.ts`                                    |        15 |
 | `apps/gateway/tests/unit/structural/telemetry-report-shape.test.ts`                                        |         3 |
 | `apps/gateway/tests/unit/structural/version-single-source.test.ts`                                         |         4 |
@@ -2366,16 +2367,34 @@ Execution door".
 
 > Covers: spec [`vaubaan-gateway.md`](../spec/vaubaan-gateway.md) §3.1
 > (monotonicity, enumeration, partition per connection, resource selection),
-> §3.2 (mandatory budget, presets per plugin), §4.2 "Missions", §4.4, §7.4,
+> §3.2 (mandatory budget, presets per plugin, the built-in preset "Everything
+> I hold on this account"), §4.2 "Missions", §4.4, §7.4,
 > §7.8, §10 ("authority" structural tests). Handbook [[missions]].
 
-Unit, co-located (210 with the authority suite):
+Unit, co-located (230 with the authority suite):
 
 - **`src/server/authority/authority-service.test.ts`** (20) — see
   [Authority, shares, groups](#scenarios--authority-shares-groups).
   `uncoveredRisks` ("asked minus held") and `explicitRiskIdsOf`, the one
   enumeration of a catalog (`authority/catalog-authority.ts`), are tested
   there.
+- **`src/server/missions/everything-i-hold.test.ts`** (16) — **the built-in
+  preset is the explicit list of the authority** (ADR
+  preset-everything-i-hold-expands-explicitly): an owner gets every
+  non-deprecated id the selected resources reach, the fallback included; a
+  share yields what it covers and nothing more; an env-qualified id only when a
+  selected resource carries its label (own or the connection's default
+  environment) or the plugin derives the environment; **budgets by one rule**
+  (rate at the catalog ceiling, else the largest preset rate, else by severity
+  level; quota the largest preset quota, else by level; gate `auto`), every
+  line accepted by `budgetProblem`; no wildcard, pattern or base id; offered
+  after the plugin presets. **The preview**: `ok` at once, `policy` the
+  explicit list with no preset reference, nothing skipped; the notice
+  `everything-i-hold-expanded` gives the count, the most severe, the critical
+  ids running freely (no gate added) and the fallback by id; a narrower
+  selection yields fewer lines and nothing unresolvable; a share reaching
+  nothing → `no-accepted-risk`; as the budget source of an explicit policy;
+  `unknown-preset` names it among the known.
 - **`src/server/missions/preview.test.ts`** (44) — **monotonicity**: accepted ⊄
   authority → `exceeds-authority` with the uncovered list, the covered part
   still shown; wildcard, sentinel, foreign and out-of-env ids → `unknown-risk`;
@@ -2478,7 +2497,12 @@ included` equals the catalog; where the environment comes from (Vercel: the
   under the wrong algorithm nor under an unknown one; uniqueness; prefix of
   a live token only; the draft schema
   (unknown keys refused, every malformed field named).
-- **`src/app/(app)/missions/new/form-state.test.ts`** (42) — the three
+- **`src/app/(app)/missions/new/form-state.test.ts`** (46) — **"Everything I
+  hold on this account"**: the choice fills the explicit list (limits at the
+  ceiling), the draft sent carries `preset: null` and the server accepts it; it
+  follows the resource selection while untouched; its sentences say how many,
+  the most severe, the critical ones running freely and the uncategorized
+  writes by name, with no protocol word; the three
   resource choices (every resource known now, the whole account, only the ones
   I pick), each explained; the whole account sent as its scope, the others as
   the ticked list; ticking a box is picking; a whole-connection proposal
@@ -2535,7 +2559,11 @@ included` equals the catalog; where the environment comes from (Vercel: the
 Integration, `:memory:` store, the real root with the shipped plugins,
 connections and resources seeded through the repositories (36):
 
-- **`tests/integration/missions/mission-lifecycle.test.ts`** (35) — **a
+- **`tests/integration/missions/mission-lifecycle.test.ts`** (36) — **"Everything
+  I hold" on every registered plugin**: no plugin ships the id; for an owner
+  whose resources carry every environment label, the preview has no issue and
+  its policy is the owner's non-deprecated authority, catalog order; the notice
+  names the fallback; the issued mission stores nothing that names it. **A
   mission issued on the whole connection**: stored `connection` with no id,
   audited with `resource_scope`; after discovery finds a repository, the owner
   hides one and another vanishes, the door, the detail and the kit all read
@@ -4173,7 +4201,11 @@ method of the module's classes and drives the four that leave an entry.
 
 Unit, beside the code (`apps/gateway/src/server/management/`):
 
-- **`tools.test.ts`** (32) — **every act is the delegating user's**: each of the
+- **`tools.test.ts`** (35) — `everything-i-hold` is listed last in a
+  connection's presets (`built_in`, `within_authority`, `risks` on the
+  resources known now), and by `get_catalog` with a connection only, written
+  out entry by entry; preview accepts it as a preset id and its policy is the
+  explicit list. **Every act is the delegating user's**: each of the
   seven methods calls the mission service with `{ id: actor.userId }`;
   `issue` carries `{ delegation: { id, clientId } }`. **A draft beyond the
   authority is refused before anything is issued, with the uncovered list**,
@@ -4246,7 +4278,12 @@ composition root on the `:memory:` store with the shipped plugins and the
 simulated IdP; the agent is the official MCP client holding a delegated token
 obtained through registration, sign-in, consent and code exchange):
 
-- **`management-door.test.ts`** (36) — a mission issued on the whole
+- **`management-door.test.ts`** (37) — **`everything-i-hold` through the
+  door**: a beneficiary sees it in `list_my_connections` with the count of her
+  share; the preview writes it out as her share, with the notice; the issued
+  mission, its kit, the detail and `list_my_missions` hold the explicit lines,
+  the audit never says "everything", and a wider share later does not widen
+  it. A mission issued on the whole
   connection: previewed (`resource_scope: connection`), issued (kit wording,
   stored scope), listed (`resource_scopes`, and per connection with
   `mission_id`); a draft's `all` reads back `selected`.
@@ -4593,10 +4630,11 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
   has no invariant (or the manifest quotes a bullet the spec no longer has),
   a proof file is not one a test runner or CI runs, or the threat-model
   handbook cites an invariant or a test file that does not exist.
-- **`shipped-presets.test.ts`** (4 per shipped plugin, plus 1) — read from
+- **`shipped-presets.test.ts`** (5 per shipped plugin, plus 1) — read from
   the plugins the image ships (`compose/shipped-plugins.ts`): each ships at
   least one preset with at least one entry, every entry is a risk of its own
-  catalog, no preset id or entry says "everything" (no wildcard), each
+  catalog, no preset id or entry says "everything" (no wildcard), no plugin
+  ships the id of the gateway's built-in preset `everything-i-hold`, each
   preset is named once.
 - **`persisted-enumerations.test.ts`** (10) — what the schema itself holds:
   `share_restrictions` and `mission_policy` store one row per risk and their

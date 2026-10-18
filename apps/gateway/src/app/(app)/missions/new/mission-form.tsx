@@ -558,7 +558,11 @@ export function MissionForm({
                 const selected = connection.resources.filter((r) => cs.resourceIds.includes(r.id));
                 const envs = [...new Set(selected.flatMap((r) => (r.env ? [r.env] : [])))];
                 const editorOpen = openEditors.has(connection.id);
-                const notices = preview.notices.filter((n) => n.connection_id === connection.id);
+                // The expansion of "Everything I hold" is said by the preset panel, in its words.
+                const notices = preview.notices.filter(
+                  (n) =>
+                    n.connection_id === connection.id && n.code !== 'everything-i-hold-expanded',
+                );
                 return (
                   <div
                     key={connection.id}
@@ -962,6 +966,8 @@ function noticeHeadline(notice: PreviewNotice, connection: IssuanceConnection): 
       return `The environment label of ${refs} is not one this service knows: permissions tied to an environment are refused there.`;
     case 'later-resources-need-env-label':
       return 'A resource found later gets permissions tied to an environment only once it carries its environment label.';
+    case 'everything-i-hold-expanded':
+      return 'Everything you hold on this account, written out one permission at a time.';
   }
 }
 

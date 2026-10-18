@@ -27,6 +27,7 @@ import { GATES } from '@vaubaan/shared/domain';
 // The file, not the barrel: `catalog-authority.ts` is pure and browser-safe, the barrel is not.
 import { uncoveredRisks } from '../authority/catalog-authority';
 import { isResolvable } from './catalog-view';
+import { EVERYTHING_I_HOLD, expansionDigest, findPreset, presetIdsOf } from './everything-i-hold';
 import type {
   CatalogRisk,
   ConnectionPreview,
@@ -275,13 +276,15 @@ function resolvePreset(
   selected: readonly IssuanceResource[],
   where: Where,
 ): PresetResolution {
-  const preset = draft.preset ? connection.presets.find((p) => p.id === draft.preset) : undefined;
+  // The built-in `everything-i-hold` is computed here, against this selection (ADR
+  // preset-everything-i-hold-expands-explicitly); a plugin's preset is read as shipped.
+  const preset = draft.preset ? findPreset(connection, draft.preset, selected) : undefined;
   const issues: PreviewIssue[] = [];
   if (draft.preset && !preset) {
     issues.push({
       code: 'unknown-preset',
       message: `"${draft.preset}" is not a preset of ${connection.provider_label} (known: ${list(
-        connection.presets.map((p) => p.id),
+        presetIdsOf(connection),
       )}).`,
       ...where,
     });
@@ -566,6 +569,49 @@ export function checkPolicyLines(
   return { passes: buckets.passes, issues: issuesOf(buckets, connection, where) };
 }
 
+/**
+ * What the built-in preset `everything-i-hold` wrote out on this connection,
+ * said before anything is issued: how many lines, the most severe, the critical
+ * ones that run freely, and the fallback by id (ADR
+ * preset-everything-i-hold-expands-explicitly). `risk_ids`: the critical ids
+ * running freely, then the fallback. The lines themselves are `passes`.
+ */
+export function everythingNotice(
+  connection: Pick<IssuanceConnection, 'risks' | 'display_name' | 'provider_label'>,
+  passes: readonly Pick<MissionPolicyEntry, 'risk_id' | 'gate'>[],
+  where: Where,
+): PreviewNotice {
+  const digest = expansionDigest(passes, connection.risks);
+  const name = connection.display_name;
+  const severe = digest.most_severe
+    ? ` Most severe: ${digest.most_severe.risk_id} (${digest.most_severe.level}).`
+    : '';
+  const critical =
+    digest.critical_auto.length > 0
+      ? ` Critical by the catalog's severity, gate auto (no approval asked): ${list(
+          digest.critical_auto.map((r) => r.risk_id),
+        )}.`
+      : ' No critical risk among them.';
+  const fallback =
+    digest.fallback.length > 0
+      ? ` Includes the fallback ${list(
+          digest.fallback.map((r) => r.risk_id),
+        )}: writes no other entry of the ${connection.provider_label} catalog names, which nobody reviewed.`
+      : '';
+  return {
+    code: 'everything-i-hold-expanded',
+    message: `Preset "${EVERYTHING_I_HOLD}" on "${name}" is written out as ${digest.count} explicit ${
+      digest.count === 1 ? 'risk' : 'risks'
+    } (listed in passes): every non-deprecated risk your authority covers that the selected resources can reach, each at the catalog's rate ceiling where one exists, gate auto.${severe}${critical}${fallback} The mission stores this list, not the preset; adjust it like any policy.`,
+    resource_refs: [],
+    risk_ids: [
+      ...digest.critical_auto.map((r) => r.risk_id),
+      ...digest.fallback.map((r) => r.risk_id),
+    ],
+    ...where,
+  };
+}
+
 /** One connection of a draft against the creator's authority on it. */
 export function previewConnection(
   connection: IssuanceConnection,
@@ -617,6 +663,9 @@ export function previewConnection(
     },
     issues,
     notices: [
+      ...(preset.preset?.id === EVERYTHING_I_HOLD
+        ? [everythingNotice(connection, buckets.passes, where)]
+        : []),
       ...envNotices(connection, resources.selected, buckets.passes, where),
       ...(reachesLater ? laterResourcesNotice(connection, buckets.passes, where) : []),
     ],

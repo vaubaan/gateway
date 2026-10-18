@@ -9,6 +9,9 @@
  *   that would yield **nothing** is not offered silently: it is drawn as
  *   unavailable and says why ("needs a selected resource labelled "prod":
  *   none selected").
+ * - "Everything I hold on this account", the built-in preset, comes last: it
+ *   writes out every permission the reader may allow here, and says how many,
+ *   the most severe, the critical ones and the uncategorized writes by name.
  * - "Custom" starts from an empty list.
  * - Under the row: one sentence — what the preset allows and what it asks
  *   first — then the policy as it stands, counted (runs freely, asks first,
@@ -18,11 +21,13 @@
  */
 import { ChoiceChip, ChoiceRow, GateMark } from '@/components/ui';
 import { MISSION_ACTIONS } from '@/lib/vocabulary';
+import { presetIdsOf } from '@/server/missions/everything-i-hold';
 import type { IssuanceConnection } from '@/server/missions/model';
 import { presetReferencePath, providerPath } from '@/server/providers/links';
 
 import styles from '../missions.module.css';
 import {
+  describeEverything,
   describeSkipped,
   explainPreset,
   policyCounts,
@@ -54,8 +59,8 @@ export function PresetPanel({
   onEditor: (open: boolean) => void;
 }) {
   const name = `${connection.provider_label} ${connection.display_name}`;
-  const explanations = connection.presets.flatMap((preset): PresetExplanation[] => {
-    const explanation = explainPreset(connection, state, preset.id);
+  const explanations = presetIdsOf(connection).flatMap((presetId): PresetExplanation[] => {
+    const explanation = explainPreset(connection, state, presetId);
     return explanation ? [explanation] : [];
   });
   const chosen = explanations.find((e) => e.preset.id === state.presetId) ?? null;
@@ -65,6 +70,7 @@ export function PresetPanel({
   const total = counts.free + counts.asks;
   // What the untouched preset could not bring here: said, never dropped silently.
   const skipped = chosen && !adjusted ? describeSkipped(presetSkipped(connection, state)) : null;
+  const everything = chosen ? describeEverything(connection, chosen) : null;
 
   return (
     <div className={styles.accountBody} data-testid={`preset-${connection.provider}`}>
@@ -97,7 +103,16 @@ export function PresetPanel({
         />
       </ChoiceRow>
 
-      {chosen ? (
+      {chosen && everything ? (
+        <div
+          className={styles.presetDescription}
+          data-testid={`preset-detail-${connection.provider}`}
+        >
+          {everything.map((sentence) => (
+            <p key={sentence}>{sentence}</p>
+          ))}
+        </div>
+      ) : chosen ? (
         <p
           className={styles.presetDescription}
           data-testid={`preset-detail-${connection.provider}`}

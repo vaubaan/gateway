@@ -72,7 +72,9 @@ apps/gateway/src/server/missions/
   model.ts               MissionDraft, IssuanceConnection, MissionPreview, PreviewIssue, PreviewNotice… (types)
   catalog-view.ts        enumerateCatalog(), severityOf(), isResolvable(), presetWidth()           (pure)
   preview.ts             previewDraft(), previewConnection(), expandPreset(), budgetProblem(),
-                         envNotices()                                                              (pure)
+                         envNotices(), everythingNotice()                                          (pure)
+  everything-i-hold.ts   everythingIHold(), findPreset(), presetIdsOf(), expansionDigest() — the built-in
+                         preset "Everything I hold on this account", QUOTA_BY_LEVEL, RATE_BY_LEVEL  (pure)
   summary.ts             summarize() — the three lines; period / expiry phrases                    (pure)
   bootstrap-kit.ts       buildBootstrapKit(), REFUSAL_GUIDANCE, MISSION_TOKEN_ENV, AGENT_LABEL_*   (pure)
   draft-schema.ts        missionDraftSchema, parseMissionDraft() — zod shape check of a JSON draft; the schema is
@@ -204,14 +206,17 @@ mission serves calls.
 The policy is **partitioned per connection** in the draft itself. Two modes per
 connection:
 
-| Draft line          | Accepted risks                                                                                                                                                      |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `preset`, no policy | the preset's entries, intersected with the authority and with what the selected resources can resolve; what is left out is reported in `skipped_from_preset`        |
-| `policy` (± preset) | exactly the listed risks; a line that omits `quota` / `rate_limit` / `gate` takes the preset's entry for that risk (or for its base id); otherwise `missing-budget` |
-| neither             | `no-accepted-risk`                                                                                                                                                  |
+| Draft line                    | Accepted risks                                                                                                                                                         |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `preset`, no policy           | the preset's entries, intersected with the authority and with what the selected resources can resolve; what is left out is reported in `skipped_from_preset`           |
+| `preset: "everything-i-hold"` | the built-in preset, computed for this connection and this selection (below, "The built-in preset"): every non-deprecated id held and reachable, the fallback included |
+| `policy` (± preset)           | exactly the listed risks; a line that omits `quota` / `rate_limit` / `gate` takes the preset's entry for that risk (or for its base id); otherwise `missing-budget`    |
+| neither                       | `no-accepted-risk`                                                                                                                                                     |
 
 The creation form always sends the second mode with complete lines and `preset:
 null`: what is persisted is the explicit enumeration, never a preset reference.
+`preset` names a preset of the plugin or the built-in `everything-i-hold`
+(`findPreset`); `unknown-preset` lists both (`presetIdsOf`).
 
 ## The decision — `previewDraft(context, draft)`
 
@@ -357,6 +362,15 @@ one value; nothing in this module resolves the default itself. A mission
 issued on resources that inherit the default follows it: a change of the
 default is a change of their label.
 
+**The expansion of the built-in preset** is said by one more notice,
+`everything-i-hold-expanded` (`everythingNotice`), of another kind than the
+three above: whenever a connection of the draft names `everything-i-hold`, it
+states how many explicit lines it wrote out (the lines are `passes`), the most
+severe, the ids whose catalog severity is `critical` and whose gate is `auto`,
+and the fallback by id; `risk_ids` = those critical ids, then the fallback;
+`resource_refs` is empty. The creation form leaves it out of its notices
+(`mission-form.tsx`): its preset panel says the same in its own words.
+
 **Base ids in presets.** A preset entry may name the _base_ id of an env-scoped
 risk (Stripe's `read-only`: `stripe.read-catalog`, "of the selected mode"). The
 runtime never matches a base id of an env-scoped risk, so `expandPreset` turns
@@ -378,8 +392,9 @@ server-only); a test asserts the two are equal.
 
 Presets are the plugins': `registry.presetsOf(provider)`, shipped in each
 `risk-catalog.yaml` and validated by the SDK loader (at least one per plugin,
-never the fallback). The gateway defines no preset and no budget value of its
-own. The values in force are therefore the catalogs' — at this commit:
+never the fallback). Apart from the built-in preset below, the gateway defines
+no preset and no budget value of its own. The values in force are therefore the
+catalogs' — at this commit:
 
 | Plugin         | Presets (entries)                                                 |
 | -------------- | ----------------------------------------------------------------- |
@@ -406,6 +421,39 @@ page calls them. The integration
 suite previews every preset of every plugin the app depends on for an owner
 whose resources carry every environment label of the catalog, and expects no
 issue and nothing skipped.
+
+### The built-in preset — "Everything I hold on this account"
+
+ADR [preset-everything-i-hold-expands-explicitly](../decisions/preset-everything-i-hold-expands-explicitly.md);
+spec §0 "Preset", §3.2. `everything-i-hold.ts`, pure and browser-safe.
+
+`everythingIHold(connection, selected)` returns an ordinary `Preset` (`id:
+everything-i-hold`, label "Everything I hold on this account") whose entries
+are, in catalog order, every row of `connection.risks` that is in
+`connection.authority`, is not `deprecated`, and `isResolvable` on `selected`
+(an env-qualified id needs a selected resource carrying the label — its own or
+the connection's `default_env`, already applied to `resources[].env` — unless
+the plugin `derives_env`). The fallback is a row like any other and is
+included. Each entry:
+
+| Field        | Rule                                                                                                                                                                                                                                                     |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rate_limit` | `{ max: rate_ceiling_per_minute, window_seconds: 60 }` when the catalog sets a ceiling; else the largest rate (per minute) a preset of the plugin gives the id or its base id; else `RATE_BY_LEVEL` (low 120, medium 60, high 20, critical 5 per minute) |
+| `quota`      | the largest quota a preset of the plugin gives the id or its base id; else `QUOTA_BY_LEVEL` (low 5000, medium 1000, high 200, critical 50), sized for a daily period                                                                                     |
+| `gate`       | `auto`, always — the critical lines are named by the notice and the panel, no gate is added silently                                                                                                                                                     |
+
+`resolvePreset` (`preview.ts`) calls `findPreset(connection, id, selected)`,
+which computes it for the selection being previewed; from there the path is
+the one of every preset (`expandPreset`, `classifyLines` in preset-only mode),
+so every line is checked against the authority, the selection and
+`budgetProblem` like any other. By construction nothing is skipped and every
+rate is within its ceiling. `issue()` recomputes the preview server-side; what
+is stored is `preview.policy`, the explicit lines — the mission row, the token,
+the `mission-issued` entry and the kit never name the preset. A later change of
+the authority or of the catalog does not widen the mission.
+
+`expansionDigest(lines, risks)` is what the notice and the form both read: the
+count, the most severe, the critical lines that run freely, the fallback.
 
 Defaults the form adds: period **daily reload** (`DEFAULT_PERIOD`), expiry
 **never** (`DEFAULT_EXPIRY`), gate `auto` when a line names none. "Never"
@@ -1097,6 +1145,7 @@ between the head and the foot of the rail.
 
 **Presets** (`preset-panel.tsx`). One `ChoiceRow` per account (group "Preset
 for `<service>` `<name>`"): a `ChoiceChip` per preset of the plugin, then
+the built-in **Everything I hold on this account** (`presetIdsOf`), then
 **Custom**.
 
 - A preset says beside its name how many permissions it yields here
@@ -1106,6 +1155,15 @@ for `<service>` `<name>`"): a `ChoiceChip` per preset of the plugin, then
   selected resource labelled "prod": none selected", "outside what you may
   allow". The chosen preset stays a choice whatever it yields; if it yields
   nothing, a line under the counts says why and what to do.
+- Chosen, "Everything I hold on this account" replaces the description and
+  its reference link by the sentences of `describeEverything` (`form-state.ts`,
+  interface words only): how many permissions it writes out and how they are
+  limited, the most severe, the critical ones that run freely (or "None of them
+  is critical."), and "Includes “<fallback label>”: writes that no other
+  permission of this service names, which nobody reviewed." `explainPreset` and
+  `defaultEntryFor` find it through `findPreset`, so the chip, the policy and
+  the server agree; it follows the resource selection while untouched, like any
+  preset, and creating confirms the explicit list as always.
 - "Custom" starts from an empty list (`startEmpty`) and opens the editor.
 - Under the row: the preset's description (one sentence, the plugin's) with a
   link to its entry in the reference (new tab); then the policy **as it stands
@@ -1450,9 +1508,15 @@ and resources are read through the store repositories only
 ## Tests
 
 Unit, beside the code (165): `authority/authority-service.test.ts` (20),
-`missions/preview.test.ts` (44), `catalog-view.test.ts` (21), `summary.test.ts`
+`missions/preview.test.ts` (44), `everything-i-hold.test.ts` (16: bounded by
+the authority, env-qualified ids only when usable, the default environment,
+`derives_env`, deprecated left out, the budget rule and the ceilings, the
+fallback included and named, critical lines named without a gate, the preview's
+explicit policy), `catalog-view.test.ts` (21), `summary.test.ts`
 (8), `bootstrap-kit.test.ts` (16), `orphan-reason.test.ts` (4), `token.test.ts`
-(10, with the draft schema), `app/(app)/missions/new/form-state.test.ts` (40),
+(10, with the draft schema), `app/(app)/missions/new/form-state.test.ts` (46,
+four of them on "Everything I hold": the choice fills the explicit list sent
+with `preset: null`, follows the selection, and its sentences),
 `app/(app)/missions/message-of.test.ts` (2: the sentence a mission page shows
 for a refusal of the mission API).
 
@@ -1469,7 +1533,10 @@ creator reading everything and every table without finding a member's secret;
 the handlers' statuses and guard), `team-interleaving.test.ts` (6: a token insert that
 lost the race — the member removed, removed while rotating, or deactivated, and the
 mission revoked, while the hash was computed; two creations of one name at once; nothing
-happened meanwhile), `mission-lifecycle.test.ts` (33), `mission-handlers.test.ts` (8) and
+happened meanwhile), `mission-lifecycle.test.ts` (36; one issues "Everything I
+hold" on every registered plugin and expects the owner's non-deprecated
+authority, no issue, the fallback in the notice and nothing stored that names
+it), `mission-handlers.test.ts` (8) and
 `gate.test.ts` (20: both directions and what the next call answers, the audit entry and
 the session event, a no-op, `approval` asked on a gate open for the period closing the
 opening with one entry and one event, the same on an expired mission and what the next

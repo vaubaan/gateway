@@ -98,6 +98,11 @@ const connectionsAnswer = z.looseObject({
           risks: z.number(),
           within_authority: z.boolean(),
           outside_authority: riskIds,
+          built_in: z
+            .boolean()
+            .describe(
+              'True for `everything-i-hold`: every risk of the authority the resources can reach, written out as explicit lines at preview; `risks` counts them with every resource known now.',
+            ),
         }),
       ),
     }),
@@ -129,6 +134,14 @@ const catalogAnswer = z.looseObject({
       id: z.string(),
       label: z.string(),
       entries: z.array(policyLine),
+      built_in: z
+        .boolean()
+        .optional()
+        .describe(
+          'Present (true) on `everything-i-hold`, listed only with `connection_id`: its entries are the explicit lines it writes out on that connection.',
+        ),
+      within_authority: z.boolean().optional(),
+      risks: z.number().optional(),
     }),
   ),
 });

@@ -118,6 +118,16 @@ export {
   severityOf,
   type PresetWidth,
 } from './catalog-view';
+export {
+  EVERYTHING_I_HOLD,
+  EVERYTHING_I_HOLD_DESCRIPTION,
+  EVERYTHING_I_HOLD_LABEL,
+  everythingIHold,
+  expansionDigest,
+  findPreset,
+  presetIdsOf,
+  type ExpansionDigest,
+} from './everything-i-hold';
 export { missionDraftSchema, parseMissionDraft, type ParsedDraft } from './draft-schema';
 export { createMissionHandlers, type MissionHandlers } from './handlers';
 export {
@@ -171,6 +181,7 @@ export { PREVIEW_ISSUE_CODES, PREVIEW_NOTICE_CODES, SEVERITY_LEVELS } from './mo
 export { reachedResources, reachesLaterResources } from '../store/mission-reach';
 export {
   budgetProblem,
+  defaultResources,
   expandPreset,
   previewConnection,
   previewDraft,

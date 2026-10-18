@@ -13,7 +13,8 @@
  * reason in `MissionOverview.orphan`. Nothing here reads a stored status.
  *
  * **No mission rule is restated here.** What a preset stands for on a
- * connection is `expandPreset`, whether an env-qualified id can be reached is
+ * connection is `expandPreset`, what the built-in `everything-i-hold` writes
+ * out is `everythingIHold`, whether an env-qualified id can be reached is
  * `isResolvable`, whether an orphaned mission can serve again is
  * `explainOrphan` — the functions the interface and the preview use, so the
  * agent's tools and the web pages cannot answer differently.
@@ -21,6 +22,8 @@
 import type { Gate, Preset, RiskId } from '@vaubaan/shared';
 
 import {
+  defaultResources,
+  everythingIHold,
   expandPreset,
   explainOrphan,
   isResolvable,
@@ -86,6 +89,12 @@ export interface PresetSummaryView {
    * least one environment (the preset is then issued for those).
    */
   readonly outside_authority: readonly RiskId[];
+  /**
+   * True for the gateway's own `everything-i-hold`: every risk of the authority
+   * the connection's resources known now can reach, written out as explicit lines
+   * at preview and issuance (`risks` counts them). False for a plugin's preset.
+   */
+  readonly built_in: boolean;
 }
 
 export interface ConnectionView {
@@ -130,6 +139,30 @@ function presetSummary(preset: Preset, connection: IssuanceConnection): PresetSu
     risks: preset.entries.length,
     within_authority: outside.length === 0,
     outside_authority: outside,
+    built_in: false,
+  };
+}
+
+/**
+ * The built-in preset on this connection, written out over every resource known
+ * now (`defaultResources`, the draft's default `all`): inside the authority by
+ * construction. A narrower selection yields fewer lines; `preview_policy` says
+ * which.
+ */
+function builtInPresetOf(connection: IssuanceConnection): Preset {
+  return everythingIHold(connection, defaultResources(connection));
+}
+
+function builtInSummary(connection: IssuanceConnection): PresetSummaryView {
+  const preset = builtInPresetOf(connection);
+  return {
+    id: preset.id,
+    label: preset.label,
+    description: preset.description,
+    risks: preset.entries.length,
+    within_authority: true,
+    outside_authority: [],
+    built_in: true,
   };
 }
 
@@ -170,7 +203,10 @@ export function connectionView(connection: IssuanceConnection): ConnectionView {
       hidden: r.hidden,
     })),
     env_qualified_risks: envUsability(connection),
-    presets: connection.presets.map((preset) => presetSummary(preset, connection)),
+    presets: [
+      ...connection.presets.map((preset) => presetSummary(preset, connection)),
+      builtInSummary(connection),
+    ],
   };
 }
 
@@ -202,8 +238,21 @@ export interface CatalogView {
   /** The connection the `in_my_authority` flags are about; `null` when none was named. */
   readonly connection_id: string | null;
   readonly risks: readonly CatalogRiskView[];
-  readonly presets: readonly Preset[];
+  /**
+   * The plugin's presets as shipped; with a connection, then the built-in
+   * `everything-i-hold` written out for it (`built_in: true`, `within_authority:
+   * true`, `risks` its count), entry by entry.
+   */
+  readonly presets: readonly CatalogPresetView[];
 }
+
+export type CatalogPresetView =
+  | Preset
+  | (Preset & {
+      readonly built_in: true;
+      readonly within_authority: true;
+      readonly risks: number;
+    });
 
 export function catalogView(
   catalog: ProviderCatalog,
@@ -227,8 +276,13 @@ export function catalogView(
       rate_ceiling_per_minute: risk.rate_ceiling_per_minute,
       ...(held ? { in_my_authority: held.has(risk.risk_id) } : {}),
     })),
-    presets: catalog.presets,
+    presets: connection ? [...catalog.presets, builtInCatalogPreset(connection)] : catalog.presets,
   };
+}
+
+function builtInCatalogPreset(connection: IssuanceConnection): CatalogPresetView {
+  const preset = builtInPresetOf(connection);
+  return { ...preset, built_in: true, within_authority: true, risks: preset.entries.length };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

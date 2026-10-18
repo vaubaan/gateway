@@ -218,6 +218,14 @@ company registered at a provider).
   connection, the creator adjusts, and the persisted policy is always the
   explicit enumeration. A preset never grants anything by itself and is
   bounded by the creator's authority at issuance.
+  Beside the plugin's presets, the gateway offers one **built-in preset**
+  on every connection, **"Everything I hold on this account"**
+  (`everything-i-hold`): it stands for every non-deprecated `RiskId` the
+  creator's authority covers on that connection and the selected resources
+  can reach, the fallback included, and it is **expanded into that explicit
+  list at preview and at issuance**, each line with an explicit budget and
+  gate (§3.2). Like any preset it never reaches the store, the token or the
+  audit: the mission holds the list.
 - **Gate** — the second value of a policy entry: `auto` (the action
   passes within the budget with no intervention) or `approval` (each
   action is authorized but must be **approved by the mission creator**
@@ -502,7 +510,11 @@ Rules:
 - **Enumeration.** No stage expresses "everything". An owner who wants to
   share everything clicks "select all" in the interface, and the share
   records the list resolved at the time of the click. A risk added to
-  the catalog later is not covered (pivot ADR, D3).
+  the catalog later is not covered (pivot ADR, D3). A creator who wants a
+  mission as wide as their authority picks the built-in preset "Everything
+  I hold on this account" (§3.2): the same rule applies — it is resolved to
+  the explicit list at issuance, and a later change of the authority or of
+  the catalog does not widen the mission.
 - **Union of shares.** A user who receives several shares on the same
   connection (directly and through a group) holds the union of the
   restrictions.
@@ -576,6 +588,25 @@ The gate has a default value, `auto`.
   usage "one token per code project" with generous values; the interface
   shows the width of a preset in one line (how many risks, the most
   severe one, the largest quota).
+- **The built-in preset "Everything I hold on this account"**
+  (`everything-i-hold`, ADR preset-everything-i-hold-expands-explicitly),
+  offered on every connection next to the plugin's presets, wherever a
+  preset is chosen (the creation form, the management surface). At preview
+  and at issuance it expands into one explicit line per `RiskId` of the
+  connection's catalog that the creator's authority covers **now**, that is
+  not deprecated, and that the selected resources can reach — an
+  environment-qualified id only when a selected resource carries that
+  label (its own or the connection's default environment) or the plugin
+  derives the environment from the call. The catalog's fallback is
+  included, and named. Each line receives, by one documented rule: the
+  catalog's rate ceiling when the entry sets one (else the largest rate a
+  preset of the plugin gives it, else a value by severity level), a quota
+  that is the largest any preset of the plugin gives it (else a value by
+  severity level), sized for a daily period, and the gate `auto`. The
+  preview states plainly how many lines it yields, the most severe, which
+  lines are critical by the catalog's severity and run freely, and the
+  fallback by its id; no gate is added silently. The creator confirms the
+  explicit list like any other, and adjusts it like any other.
 - **No infinite budget.** A quota is always a number. The absence of an
   expiry is allowed; the absence of a quota is not.
 - **Changing the limits.** The creator may change, per risk already in
@@ -809,7 +840,9 @@ authority:
   budget.
 - **Preview** a policy: submit a draft `RiskId → (budget, gate)` on some
   connections and get back what passes, what exceeds the authority, and
-  what the mission could call. Without issuing anything.
+  what the mission could call. Without issuing anything. A connection of a
+  draft may name a plugin preset or the built-in `everything-i-hold`
+  (§3.2); the preview answers with the explicit lines it expands to.
 - **Issue** a mission: name, connections, policy, period, expiry. The
   recorded creator is the **delegating user**, never the agent. The
   response contains the mission token, revealed once, and the bootstrap
@@ -951,7 +984,10 @@ interpreted as markup.
   default), the whole account including resources found later, or the ones
   I pick, each choice explained in one line — and a **preset**
   — each saying what it yields within what I may allow, and why when it
-  would allow nothing — or the permissions **one by one**, each with its
+  would allow nothing; the last one, **"Everything I hold on this
+  account"**, says how many permissions it writes out, the most severe,
+  which critical ones run freely and that it includes the uncategorized
+  writes — or the permissions **one by one**, each with its
   limits and whether it asks me first, one click from any preset; how often
   the limits reset and when the mission ends; beside the form, a summary of
   what the mission can do, what asks first and what it cannot do. **Creating
@@ -1330,7 +1366,9 @@ only once the owner has confirmed that list.
 ### 7.4 Create a mission
 
 The creator names the mission, picks its accounts and, within each, the
-resources it may touch, picks one preset per account, reads the summary,
+resources it may touch, picks one preset per account (a plugin's, or
+"Everything I hold on this account" for a mission as wide as their
+authority), reads the summary,
 opens the permissions one by one only if something needs adjusting within
 what they may allow, sets how often the limits reset and when the mission
 ends. A mission has no expiry unless its creator gives it one: the form's
