@@ -104,8 +104,9 @@ export const MANAGEMENT_INSTRUCTIONS = [
   'Order of the calls: `list_my_connections` (what the user may delegate) → `get_catalog` (the risks and presets of a provider) → `preview_policy` until it answers `ok: true` → `issue_mission`. The answer of `issue_mission` contains the mission token, shown once, and the bootstrap kit to hand to the executing agent.',
   '',
   'Rules of a policy:',
-  '- Accept explicit RiskIds only, copied from `get_catalog`. No wildcard, no pattern, no "everything".',
+  '- Accept explicit RiskIds only, copied from `get_catalog`. No wildcard, no pattern, no "everything" risk.',
   '- Start from one preset per connection and trim it to the task; add single risks only when the task needs them.',
+  '- Only when the user asks for a mission as wide as their authority on a connection (their own agents, a break-glass mission), use the built-in preset `everything-i-hold`: the preview writes it out as the explicit list of every risk they hold there that the selected resources can reach — the fallback included —, each at the catalog rate ceiling with a generous quota sized for a daily period, gate `auto`. Show the user the notice `everything-i-hold-expanded` (count, most severe, critical risks running freely, the fallback) before you issue.',
   '- Every accepted risk needs a budget: a quota per period and a rate limit. A preset supplies them; otherwise you must.',
   '- A RiskId qualified with an environment, such as `supabase[prod].row-write`, is only usable when a selected resource carries that environment label (`env_qualified_risks` in `list_my_connections`).',
   '- One connection per provider in a mission. Select the resources the task needs, not all of them.',
@@ -122,7 +123,7 @@ export const MANAGEMENT_TOOLS: readonly ManagementToolDefinition[] = [
     kind: 'read',
     description: [
       'Lists the provider connections the user may build a mission from: the ones they own and the ones shared with them, directly or through a group.',
-      'For each connection: `authority.risk_ids` is the exact list of RiskIds a mission may accept on it — nothing outside that list will ever pass —, `resources` are the refs a mission can be limited to, with their environment label (their own, or the connection’s `default_env` the owner chose for unlabelled resources), `env_qualified_risks` says which environment-qualified ids are usable (an id such as `provider[prod].x` needs a selected resource labelled `prod`; unlabelled resources refuse it), and `presets` are ready-made policies, each flagged when it exceeds the user’s authority.',
+      'For each connection: `authority.risk_ids` is the exact list of RiskIds a mission may accept on it — nothing outside that list will ever pass —, `resources` are the refs a mission can be limited to, with their environment label (their own, or the connection’s `default_env` the owner chose for unlabelled resources), `env_qualified_risks` says which environment-qualified ids are usable (an id such as `provider[prod].x` needs a selected resource labelled `prod`; unlabelled resources refuse it), and `presets` are ready-made policies, each flagged when it exceeds the user’s authority; the last one, `everything-i-hold` (`built_in: true`), is the gateway’s own: every risk the user holds there that the resources can reach, written out as explicit lines, `risks` counting them.',
       'Call this first. Use `get_catalog` for the meaning of each RiskId and the content of each preset.',
     ].join(' '),
     inputSchema: z
@@ -145,7 +146,8 @@ export const MANAGEMENT_TOOLS: readonly ManagementToolDefinition[] = [
       'Returns the risk catalog of one provider as explicit RiskIds — label, reason, severity level, environment — and its presets with every entry (RiskId, quota, rate limit, gate).',
       'A policy accepts ids from this list only, written exactly as shown; an id qualified with an environment (`provider[staging].x`) is a different id from the same risk in another environment.',
       'Pass `connection_id` to have each id flagged `in_my_authority` for that connection.',
-      'Pick the narrowest preset that covers the task as a starting point, then remove what the task does not need. The `fallback` id (uncategorized writes) is never part of a preset: accept it only when the user asks.',
+      'With `connection_id`, `presets` ends with the built-in `everything-i-hold` (`built_in: true`) written out for that connection, entry by entry.',
+      'Pick the narrowest preset that covers the task as a starting point, then remove what the task does not need. The `fallback` id (uncategorized writes) is part of no plugin preset: accept it only when the user asks — `everything-i-hold` includes it, because the user asked for everything they hold.',
     ].join(' '),
     inputSchema: z
       .object({
@@ -191,7 +193,7 @@ export const MANAGEMENT_TOOLS: readonly ManagementToolDefinition[] = [
     kind: 'preview',
     description: [
       'Checks a mission draft without issuing anything. Answers `ok`, the `issues` that block it, `uncovered` — the accepted risks outside the user’s authority, per connection —, and `policy`: exactly what the mission could call, with the budget of each risk.',
-      'Rules: explicit RiskIds only; one connection per provider; either `preset` alone (the preset, bounded by the user’s authority) or `policy` with a quota and a rate limit for every risk (a named `preset` then supplies the missing budgets); an environment-qualified id needs a selected resource labelled with that environment; `period` and `expires_at` are mandatory (`expires_at` may be null).',
+      'Rules: explicit RiskIds only; one connection per provider; either `preset` alone (the preset, bounded by the user’s authority) or `policy` with a quota and a rate limit for every risk (a named `preset` then supplies the missing budgets); `preset` may be `everything-i-hold`; an environment-qualified id needs a selected resource labelled with that environment; `period` and `expires_at` are mandatory (`expires_at` may be null).',
       "Resources per connection: `{ scope: 'all' }` (default) — every resource known now, a resource discovered later is not reached; `{ scope: 'connection' }` — the whole connection, resources discovered later included, environment labels checked on the resources known now (notice `later-resources-need-env-label`); `{ scope: 'selected', resource_refs: [...] }` — only those.",
       'Call it until `ok` is true, then pass the same draft to `issue_mission`. A risk listed in `uncovered` cannot be obtained here: remove it.',
     ].join(' '),
@@ -205,7 +207,7 @@ export const MANAGEMENT_TOOLS: readonly ManagementToolDefinition[] = [
     description: [
       'Issues a mission from a draft that `preview_policy` accepts. The creator is the user, not you: the mission appears under their name, marked as issued by this client, and they alone answer the requests it raises (claims for more budget, approvals of gated actions) in the web interface.',
       'The answer contains `token.secret` — the mission token, shown this once and never again — and `bootstrap_kit`: the environment variable, the MCP configuration and the instruction block to give the agent that will execute the mission. The mission token opens the execution door only; it is not accepted here. Do not write it anywhere but where the kit says.',
-      "A draft that exceeds the user’s authority is refused whole, with `uncovered`; nothing is narrowed silently. Issue the narrowest mission that does the task: the mission and its width are visible to the user. `resources: { scope: 'connection' }` gives the whole connection, resources discovered later included; `all` only the resources known now.",
+      "A draft that exceeds the user’s authority is refused whole, with `uncovered`; nothing is narrowed silently. Issue the narrowest mission that does the task: the mission and its width are visible to the user. With the preset `everything-i-hold` the mission stores the explicit list the preview showed, never the preset: a later change of the user’s authority does not widen it. `resources: { scope: 'connection' }` gives the whole connection, resources discovered later included; `all` only the resources known now.",
     ].join(' '),
     inputSchema: missionDraftSchema,
     run: (tools, actor, args) => tools.issueMission(actor, args),

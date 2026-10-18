@@ -14,6 +14,7 @@ import { describe, expect, it } from 'vitest';
 
 import { fullCatalogRiskIds } from '../../../src/server/authority';
 import { SHIPPED_PLUGINS } from '../../../src/server/compose/shipped-plugins';
+import { EVERYTHING_I_HOLD } from '../../../src/server/missions/everything-i-hold';
 
 const WILDCARD = /[*?]|\ball\b/i;
 
@@ -62,6 +63,10 @@ describe('every shipped plugin ships presets made of its own explicit risks', ()
             expect(entry.risk_id, `${preset.id}: ${entry.risk_id}`).not.toMatch(WILDCARD);
           }
         }
+      });
+
+      it('leaves the id of the built-in preset to the gateway', () => {
+        expect(presets.map((preset) => preset.id)).not.toContain(EVERYTHING_I_HOLD);
       });
 
       it('names each preset once', () => {

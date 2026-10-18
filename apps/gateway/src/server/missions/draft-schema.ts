@@ -94,7 +94,7 @@ const connectionSchema = z
       .nullable()
       .optional()
       .describe(
-        'Id of one preset of the connection’s provider. Alone, it is the whole policy of the connection (bounded by the user’s authority). With `policy`, it only supplies the budget of the risks that give none.',
+        'Id of one preset of the connection’s provider, or `everything-i-hold`: every non-deprecated risk the user holds on the connection that the selected resources can reach, the fallback included, written out as explicit lines (catalog rate ceiling, generous quota for a daily period, gate `auto`). Alone, it is the whole policy of the connection (bounded by the user’s authority). With `policy`, it only supplies the budget of the risks that give none.',
       ),
     policy: z
       .array(entrySchema)

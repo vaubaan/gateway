@@ -670,6 +670,55 @@ describe('views', () => {
     ).toEqual(SHARED);
   });
 
+  it('the built-in `everything-i-hold` is listed last, within the authority, counted on the resources known now', () => {
+    const shared = acmeConnection({ basis: 'share', authority: SHARED });
+    const listed = connectionView(shared).presets.at(-1);
+    expect(listed).toMatchObject({
+      id: 'everything-i-hold',
+      label: 'Everything I hold on this account',
+      within_authority: true,
+      outside_authority: [],
+      built_in: true,
+      risks: 2,
+    });
+    expect(connectionView(shared).presets.filter((p) => p.built_in)).toHaveLength(1);
+    // An owner holds the whole catalog: every non-deprecated id, the fallback included.
+    expect(connectionView(acmeConnection()).presets.at(-1)?.risks).toBe(6);
+
+    const catalog = {
+      provider: 'acme',
+      provider_label: 'Acme',
+      experimental: false,
+      derives_env: false,
+      risks: enumerateCatalog(ACME_CATALOG),
+      presets: ACME_CATALOG.presets ?? [],
+    };
+    // Without a connection there is nothing to write out: it is not listed.
+    expect(catalogView(catalog, null).presets.map((p) => p.id)).not.toContain('everything-i-hold');
+    const written = catalogView(catalog, shared).presets.at(-1);
+    expect(written).toMatchObject({ id: 'everything-i-hold', built_in: true, risks: 2 });
+    expect(written?.entries.map((e) => e.risk_id)).toEqual(SHARED);
+  });
+
+  it('preview and issue accept `everything-i-hold` as a preset id: the policy is the explicit list', () => {
+    const draft: MissionDraft = {
+      ...DRAFT,
+      connections: [{ connection_id: 'conn-acme', preset: 'everything-i-hold' }],
+    };
+    const preview = previewDraft(
+      { connections: [acmeConnection({ basis: 'share', authority: SHARED })], now: NOW },
+      draft,
+    );
+    const view = previewView(preview);
+    expect(view.ok).toBe(true);
+    expect(view.policy.map((line) => line.risk_id)).toEqual(SHARED);
+    expect(view.connections[0]?.preset).toEqual({
+      id: 'everything-i-hold',
+      label: 'Everything I hold on this account',
+    });
+    expect(view.notices.map((n) => n.code)).toContain('everything-i-hold-expanded');
+  });
+
   it('a preview carries the uncovered list per connection', () => {
     const preview = previewDraft(
       { connections: [acmeConnection({ basis: 'share', authority: SHARED })], now: NOW },

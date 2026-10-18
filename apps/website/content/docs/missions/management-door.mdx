@@ -22,7 +22,7 @@ The instance is the OAuth authorization server of this door: clients register th
 
 In this order: list the accounts you may delegate, read a service's permissions and presets, preview a policy until it is valid, then issue the mission. The answer carries the mission key, shown once, and the kit for the agent that will do the work.
 
-- It accepts explicit permissions only, copied from the catalog; no wildcard, never "everything".
+- It accepts explicit permissions only, copied from the catalog; no wildcard, never "everything". The preset `everything-i-hold` is the one way to ask for all you hold on an account: the preview writes it out as the explicit list, and that list is what the mission stores.
 - Every accepted permission has a limit per period and a rate.
 - A permission outside your authority is refused, with the list of what is not covered.
 - You are the creator of every mission it issues, and the mission is marked as issued by that app.

@@ -860,12 +860,21 @@ What each answer contains (`views.ts`):
   `outside_authority` — about authority only: an entry naming an env-scoped
   risk is covered when the user holds it in at least one environment, and
   what a given selection of resources leaves out of a preset is the preview's
-  `skipped_from_preset`. Connections of experimental plugins are left out
+  `skipped_from_preset`; each preset carries `built_in` — `false` for the
+  plugin's, `true` for the last one, the gateway's `everything-i-hold`
+  ("Everything I hold on this account", ADR
+  [preset-everything-i-hold-expands-explicitly](../decisions/preset-everything-i-hold-expands-explicitly.md)),
+  always `within_authority`, whose `risks` is the count of explicit lines it
+  writes out with every resource known now (`everythingIHold` over
+  `defaultResources`). Connections of experimental plugins are left out
   unless `include_experimental` (`hidden_experimental` counts them).
 - **`get_catalog`** — `risks` as explicit ids, one per environment for an
   env-scoped entry (`enumerateCatalog`), with label, reason, level,
   `fallback`, `deprecated`, `rate_ceiling_per_minute`; `presets` entry by
-  entry. With `connection_id`, each risk carries `in_my_authority`.
+  entry. With `connection_id`, each risk carries `in_my_authority`, and
+  `presets` ends with `everything-i-hold` written out for that connection
+  (explicit entries, `built_in: true`, `within_authority: true`, `risks`);
+  without one there is nothing to expand and it is not listed.
 - **`list_my_missions`** — the missions the user created **and the ones
   shared with them as a member**, each with `role` (`creator` | `member`) and
   `creator_email` (spec §4.2; handbook [missions](missions.md), "Members and
@@ -886,7 +895,11 @@ What each answer contains (`views.ts`):
 - **`preview_policy`** — the mission preview: `ok`, `issues`, `notices`,
   `uncovered` (per connection, the accepted risks outside the authority),
   `policy`, `connections`, `summary`. A draft that does not pass is an
-  answer, not an error.
+  answer, not an error. A connection may name `preset: "everything-i-hold"`:
+  `passes` and `policy` are then the explicit lines it wrote out, and the
+  notice `everything-i-hold-expanded` gives their count, the most severe, the
+  critical ids running freely and the fallback (`risk_ids`); `issue_mission`
+  stores exactly that list.
 - **`issue_mission`** — `mission` (`mission_id`, `creator_user_id`,
   `issued_via_client_id`), `token` (`secret`, `prefix`, `env_var`,
   `shown_once`), `bootstrap_kit` (`endpoint`, `env`, `mcp_json`,
@@ -901,7 +914,7 @@ The mission token appears in the answer of `issue_mission` and
 outcome code and the ids of user, delegation and client — never arguments or
 answers.
 
-**The views restate no mission rule.** Three answers depend on a rule the
+**The views restate no mission rule.** Four answers depend on a rule the
 mission module owns, and each calls it instead of writing it again, so the
 agent's tools and the web pages cannot disagree:
 
@@ -910,6 +923,7 @@ agent's tools and the web pages cannot disagree:
 | `orphan.can_come_back`                      | `explainOrphan(orphan, []).reversible` (`orphan-reason.ts`)               |
 | `env_qualified_risks.usable_risk_ids` / un… | `isResolvable(risk, connection, resources)` (`catalog-view.ts`)           |
 | `presets[].outside_authority`               | `expandPreset` (`preview.ts`) over the part of the catalog the user holds |
+| `presets[]` `everything-i-hold`             | `everythingIHold` (`everything-i-hold.ts`) over `defaultResources`        |
 
 For the third, the preset is expanded against the risks the user holds, with
 the environment taken as derivable: an entry that expands to nothing held

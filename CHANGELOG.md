@@ -9,6 +9,22 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Added
+
+- **"Everything I hold on this account"**, a preset the instance offers on every account
+  next to the service's own, in the mission form and on the management door
+  (`connections[].preset: "everything-i-hold"` of `preview_policy` / `issue_mission`). It
+  writes out, at preview and at creation, every permission the creator may allow on that
+  account that the selected resources can reach — an environment-qualified one only when
+  a selected resource carries that label, deprecated ones left out, the uncategorized
+  writes included — each with the service's rate ceiling, a daily limit from one
+  documented rule (the largest a preset of the service gives it, else by severity) and
+  "runs freely". The preview says how many permissions, the most severe, the critical
+  ones and the uncategorized writes by name (notice `everything-i-hold-expanded`); the
+  mission stores the explicit list, and a later change of what the creator holds does
+  not widen it. `list_my_connections` lists it with `built_in: true`, and `get_catalog`
+  with a `connection_id` writes it out. ADR `preset-everything-i-hold-expands-explicitly`.
+
 ### Fixed
 
 - **The git remote accepts an annotated tag.** A push of `git tag -a` was

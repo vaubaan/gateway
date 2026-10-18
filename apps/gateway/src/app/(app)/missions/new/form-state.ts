@@ -20,6 +20,11 @@ import type {
   ResolvedDraftConnection,
   SkippedPresetEntry,
 } from '@/server/missions/model';
+import {
+  EVERYTHING_I_HOLD,
+  expansionDigest,
+  findPreset,
+} from '@/server/missions/everything-i-hold';
 import { defaultResources, expandPreset, previewConnection } from '@/server/missions/preview';
 
 /** The inputs of one accepted risk; strings, as typed. An empty string is "no value yet". */
@@ -330,7 +335,8 @@ export function explainPreset(
   state: Pick<ConnectionState, 'resourceIds'> & Partial<Pick<ConnectionState, 'resourceScope'>>,
   presetId: string,
 ): PresetExplanation | null {
-  const preset = connection.presets.find((p) => p.id === presetId);
+  // The built-in "Everything I hold" is written out for this very selection.
+  const preset = findPreset(connection, presetId, selectedResources(connection, state));
   if (!preset) return null;
   const { preview } = previewConnection(connection, {
     connection_id: connection.id,
@@ -375,6 +381,41 @@ export function explainPreset(
     leftOut: groupVariants(leftOut),
     skipped,
   };
+}
+
+/**
+ * What "Everything I hold on this account" writes out here, in the interface's
+ * words (ADR preset-everything-i-hold-expands-explicitly): how many permissions,
+ * the most severe, the critical ones that run freely, and the uncategorized
+ * writes by name. `null` for any other preset.
+ */
+export function describeEverything(
+  connection: Pick<IssuanceConnection, 'risks'>,
+  explanation: PresetExplanation,
+): readonly string[] | null {
+  if (explanation.preset.id !== EVERYTHING_I_HOLD) return null;
+  const lines = [...explanation.auto, ...explanation.approval].map((line) => ({
+    risk_id: line.risk.risk_id,
+    gate: line.gate,
+  }));
+  const digest = expansionDigest(lines, connection.risks);
+  const sentences = [
+    `Written out as ${digest.count} ${digest.count === 1 ? 'permission' : 'permissions'}, one by one: every permission you may allow here that the selected resources can reach. Each runs freely, at the service’s rate ceiling, with a generous daily limit.`,
+  ];
+  if (digest.most_severe) {
+    sentences.push(`Most severe: ${digest.most_severe.label} (${digest.most_severe.level}).`);
+  }
+  sentences.push(
+    digest.critical_auto.length > 0
+      ? `Critical, and running freely: ${digest.critical_auto.map((r) => r.label).join(', ')}.`
+      : 'None of them is critical.',
+  );
+  for (const risk of digest.fallback) {
+    sentences.push(
+      `Includes “${risk.label}”: writes that no other permission of this service names, which nobody reviewed.`,
+    );
+  }
+  return sentences;
 }
 
 /** How many permissions a preset yields here: what its choice says beside its name. */
@@ -546,7 +587,8 @@ export function defaultEntryFor(
   risk: Pick<CatalogRisk, 'risk_id' | 'base_id'>,
   resources: readonly Pick<IssuanceResource, 'env'>[],
 ): EntryState {
-  const chosen = connection.presets.filter((p) => p.id === presetId);
+  const picked = presetId ? findPreset(connection, presetId, resources) : undefined;
+  const chosen = picked ? [picked] : [];
   const others = connection.presets.filter((p) => p.id !== presetId);
   for (const preset of [...chosen, ...others]) {
     const { lines } = expandPreset(preset, connection, resources);

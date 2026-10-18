@@ -107,7 +107,12 @@ describe('management door — tools of a delegated agent', () => {
       expect(gh.authority).toMatchObject({ basis: 'owner', whole_catalog: true });
       expect(gh.authority.risk_ids).toContain(NOT_SHARED);
       expect(gh.resources.map((r) => r.ref).sort()).toEqual(['acme/app', 'acme/infra', 'acme/web']);
-      expect(gh.presets.map((p) => p.id)).toEqual(['read-only', 'developer', 'release-manager']);
+      expect(gh.presets.map((p) => p.id)).toEqual([
+        'read-only',
+        'developer',
+        'release-manager',
+        'everything-i-hold',
+      ]);
       expect(gh.presets.every((p) => p.within_authority)).toBe(true);
 
       const all = await agent.call<ConnectionsAnswer>('list_my_connections', {
@@ -357,6 +362,49 @@ describe('management door — tools of a delegated agent', () => {
   });
 
   describe('issuing', () => {
+    it('`everything-i-hold` is written out as the explicit list the user holds; nothing stored says "everything", and a wider share later does not widen it', async () => {
+      await shareWithBob();
+      const bob = await rig.agentOf(BOB);
+      const listed = await bob.call<ConnectionsAnswer>('list_my_connections', {});
+      const builtIn = listed.data.connections
+        .find((c) => c.connection_id === github)
+        ?.presets.find((p) => p.id === 'everything-i-hold');
+      expect(builtIn).toMatchObject({
+        built_in: true,
+        within_authority: true,
+        risks: SHARED.length,
+      });
+
+      const draft = {
+        name: 'My own agents',
+        connections: [{ connection_id: github, preset: 'everything-i-hold' }],
+        period: { kind: 'recurring', length_seconds: 86_400 },
+        expires_at: null,
+      };
+      const preview = await bob.call<PreviewView>('preview_policy', draft);
+      expect(preview.data.ok).toBe(true);
+      expect(preview.data.policy.map((entry) => entry.risk_id).sort()).toEqual([...SHARED].sort());
+      expect(preview.data.notices.map((n) => n.code)).toContain('everything-i-hold-expanded');
+
+      const issued = await issue(bob, draft);
+      expect(issued.policy).toEqual(preview.data.policy);
+      for (const id of SHARED) expect(issued.bootstrap_kit.agent_instructions).toContain(id);
+      const entries = await rig.adminEntries('mission-issued');
+      expect(JSON.stringify(entries)).not.toContain('everything');
+      const detail = await rig.root.missions.service.get(rig.seeded.bob, issued.mission.mission_id);
+      expect(detail?.policy.map((line) => line.risk_id).sort()).toEqual([...SHARED].sort());
+
+      // Bob's authority grows: the mission does not.
+      await shareWithBob([...SHARED, NOT_SHARED]);
+      const missions = await bob.call<MissionsAnswer>('list_my_missions', {
+        mission_id: issued.mission.mission_id,
+      });
+      expect(missions.data.missions[0]?.policy.map((line) => line.risk_id).sort()).toEqual(
+        [...SHARED].sort(),
+      );
+      await bob.close();
+    });
+
     it('issues within the authority: the user is the creator, the client is recorded, the token is revealed once with the kit', async () => {
       await shareWithBob();
       const agent = await rig.agentOf(BOB);
