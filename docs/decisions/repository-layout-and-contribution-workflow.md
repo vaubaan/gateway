@@ -363,3 +363,115 @@ lives until `2.0.0` is out.
   development build from a release by its version; adds a commit per
   release and a version that names something that may never exist. The
   commit stamp already tells builds apart. Rejected.
+
+## Amendment 2026-10-18 — Release from a private repository
+
+Refines R5, R6, R7 and R8 of the amendment "Release" above and replaces
+its consequence "While the repository is private and not on Enterprise
+Cloud, `publish` fails at the attestation … The first real release waits
+for the repository to be public." Procedure:
+[`docs/workflow/coding-workflow.md`](../workflow/coding-workflow.md#on-a-private-repository).
+
+### Context
+
+The first release (`2.0.0-alpha.1`) is due while the repository is still
+private, on an organization plan that includes neither of two things the
+pipeline relies on. GitHub gives the `ubuntu-24.04-arm` hosted runner to
+public repositories; a private repository gets it with a plan that includes
+it, and a job that asks for it otherwise is queued and never starts — the
+run does not fail, it waits. Artifact attestations (`actions/attest`) exist
+for public repositories on every plan and for private ones on GitHub
+Enterprise Cloud only; there the step fails. The 2026-10-13 amendment knew
+both facts, and chose to let `publish` fail: the image would exist under its
+version tag, without aliases and without a GitHub release, and the first
+real release would wait for the repository to be public. Two things changed
+that choice: the release is wanted now, and with a static two-architecture
+matrix the `image` job of a private repository does not fail at all — it
+hangs on the arm64 runner, so even the dry run never finishes.
+
+The same situation is the ordinary one for anybody who forks the repository
+and keeps the fork private to release their own build. The pipeline is part
+of what they fork; it has to work there, and to say what it could not do.
+
+### Decision
+
+**R14 — The plan decides what the repository can publish, once, and says
+it.** `plan` reads `github.event.repository.private` and
+`scripts/release-lib.mjs` (`publicationScope`) turns it into the matrix of
+architectures and whether an attestation is signed. A public repository
+gets the whole plan of the amendment "Release", unchanged. A private one
+gets `linux/amd64` only and no attestation; everything else — gates, smoke
+tests, image scan, SBOMs, image index, version tag, GitHub release — is the
+same. The decision is written three times where a reader looks: the
+summary of `plan`, the summary of `publish` under the digest it tagged, and
+a paragraph "Built from a private repository" in the release notes, each
+naming the two items left out and why. Nothing is skipped quietly.
+
+**R15 — A smaller plan is never a smaller result by accident.**
+`scripts/release-image-index.sh` is told the planned architectures and
+refuses a set of pushed digests that does not match them exactly, so a
+`push` job that did not run cannot leave a one-architecture image under a
+two-architecture plan. On a public repository a missing or unverifiable
+attestation still fails `publish` and `release` (R7, D8 of
+[[supply-chain-and-ci-security-checks]]); the two attestation steps are
+skipped only on the plan's explicit decision, never on their own failure.
+
+**R16 — `latest` moves on a private repository.** R6 said `latest` never
+names an image without an attestation. On a private repository no image can
+have one, and the rule would mean "no `latest` ever" for a self-hoster's
+fork. The rule's purpose — an attestation step that failed or was skipped
+must not be masked by a moving alias — is kept by R15: the aliases of a
+final release move when the attestation is verified, or when the plan
+decided there is none. They still never move after a failed attestation.
+
+### Consequences
+
+- The `image` and `push` jobs take their matrix from `plan`
+  (`fromJSON`); the static matrix leaves `release.yml`. The runner labels
+  and the Node architecture of each entry live in `ARCHITECTURES` of
+  `scripts/release-lib.mjs`, tested.
+- `release-plan.mjs` gains `--private-repository <true|false>` and five
+  outputs (`matrix`, `architectures`, `platforms`, `attest`, `left_out`);
+  `release-image-index.sh create` gains a fourth argument. The scripts'
+  tests cover the scope and the outputs; the index script still has no
+  automated test.
+- A release published from a private repository has no attestation to
+  verify: the operator pins its digest and relies on the SBOM and on the
+  BuildKit provenance inside the image, and `deploy/README.md` says so. The
+  release notes of such a release carry no verify command.
+- The day the repository becomes public, nothing changes in the files: the
+  next tag publishes both architectures with an attestation. The releases
+  cut before it stay as they are — `amd64` only, unattested — and their
+  notes say so.
+- An `arm64` host cannot run a release cut from a private repository. For
+  a fork, the owner pays for the arm runner, emulates (rejected below for
+  the project, not for a fork), or makes the fork public.
+
+### Rejected alternatives
+
+- **Keep failing at the attestation and wait for the repository to be
+  public** (the 2026-10-13 choice). Blocks the first release on a
+  decision — going public — that has its own calendar, and leaves a fork
+  that stays private with a pipeline that hangs. Rejected.
+- **Emulate `arm64` with QEMU on the amd64 runner when the arm runner is
+  unavailable.** Keeps two architectures everywhere; but an emulated
+  `next build` takes several times longer than the job timeout allows
+  comfortably, and the smoke test would load the native addons on an
+  emulated CPU, which is not what "tested before tagged" means. Rejected;
+  a fork that needs `arm64` can add it.
+- **Sign with `cosign` keyless on a private repository.** Sigstore's public
+  instance signs for any GitHub workflow identity, private repositories
+  included, and `cosign` verifies it. But it writes the repository's
+  identity and the digest to a public transparency log for a repository
+  that is private, needs a second verification path in the documentation,
+  and would be dropped the day `actions/attest` works. Rejected for now.
+- **A repository variable or a workflow input instead of
+  `github.event.repository.private`.** Lets a private repository on a plan
+  that has the arm runner opt back in, at the price of a setting that can be
+  wrong in both directions — a public repository told it is private ships
+  less than it could, silently. The event field cannot be wrong. Rejected;
+  the opt-in can be added the day somebody needs it.
+- **Silently skip: `continue-on-error` on the attestation, `if:` on the
+  arm64 entries.** Fewer lines and no new outputs, but a release page that
+  names an attestation command that fails, and an operator who learns from
+  `docker pull` that there is no `arm64` image. Rejected.

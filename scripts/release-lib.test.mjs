@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
+  ARCHITECTURES,
   RELEASE_BODY_MAX_CHARS,
   ReleaseError,
   assertMovesForward,
@@ -19,7 +20,9 @@ import {
   extractReleaseNotes,
   imageTags,
   parseVersion,
+  platformsText,
   prepareChangelog,
+  publicationScope,
   unreleasedNotes,
   versionOfTag,
 } from './release-lib.mjs';
@@ -92,6 +95,43 @@ describe('imageTags', () => {
       expect(imageTags(parseVersion(text))).toEqual([text]);
     },
   );
+});
+
+describe('publicationScope', () => {
+  it('a public repository gets both architectures, the attestation and nothing left out', () => {
+    const scope = publicationScope({ privateRepository: false });
+    expect(scope.architectures).toBe(ARCHITECTURES);
+    expect(scope.architectures.map((architecture) => architecture.arch)).toEqual([
+      'amd64',
+      'arm64',
+    ]);
+    expect(scope.attestation).toBe(true);
+    expect(scope.leftOut).toEqual([]);
+    expect(platformsText(scope)).toBe('`linux/amd64` and `linux/arm64`');
+  });
+
+  it('a private repository gets amd64 only and no attestation, and is told why', () => {
+    const scope = publicationScope({ privateRepository: true });
+    expect(scope.architectures).toEqual([
+      { arch: 'amd64', runner: 'ubuntu-24.04', node_arch: 'x64' },
+    ]);
+    expect(scope.attestation).toBe(false);
+    expect(scope.leftOut).toHaveLength(2);
+    expect(scope.leftOut[0]).toContain('`linux/arm64`');
+    expect(scope.leftOut[0]).toContain('`ubuntu-24.04-arm`');
+    expect(scope.leftOut[1]).toContain('attestation');
+    expect(scope.leftOut[1]).toContain('Enterprise Cloud');
+    expect(platformsText(scope)).toBe('`linux/amd64`');
+  });
+
+  it('every architecture runs on a runner of its own architecture', () => {
+    expect(ARCHITECTURES.find((architecture) => architecture.arch === 'arm64').runner).toBe(
+      'ubuntu-24.04-arm',
+    );
+    expect(ARCHITECTURES.find((architecture) => architecture.arch === 'amd64').runner).toBe(
+      'ubuntu-24.04',
+    );
+  });
 });
 
 describe('assertReleasableTag', () => {
@@ -360,8 +400,62 @@ describe('the command-line scripts', () => {
     expect(result.code).toBe(0);
     expect(read('notes.md')).toBe(extractReleaseNotes(FIXTURE, '2.1.0'));
     expect(readFileSync(output, 'utf8')).toBe(
-      'version=2.1.0\nprerelease=false\nimage_tags<<RELEASE_PLAN_EOF\n2.1.0\n2.1\nlatest\nRELEASE_PLAN_EOF\n',
+      [
+        'version=2.1.0',
+        'prerelease=false',
+        'image_tags<<RELEASE_PLAN_EOF',
+        '2.1.0',
+        '2.1',
+        'latest',
+        'RELEASE_PLAN_EOF',
+        `matrix=${JSON.stringify(ARCHITECTURES)}`,
+        'architectures=amd64 arm64',
+        'platforms=`linux/amd64` and `linux/arm64`',
+        'attest=true',
+        'left_out<<RELEASE_PLAN_EOF',
+        'RELEASE_PLAN_EOF',
+        '',
+      ].join('\n'),
     );
+    expect(result.stdout).not.toContain('::notice');
+  });
+
+  it('the plan of a private repository ships amd64 only, no attestation, and says what is left out', () => {
+    const output = join(sandbox, 'github-output');
+    writeFileSync(output, '');
+    const result = run(
+      'release-plan.mjs',
+      ['--tag', 'v2.1.0', '--notes-out', 'notes.md', '--private-repository', 'true'],
+      { input: 'v2.1.0\n', env: { GITHUB_OUTPUT: output } },
+    );
+    expect(result.code).toBe(0);
+    const written = readFileSync(output, 'utf8');
+    expect(written).toContain(
+      'matrix=[{"arch":"amd64","runner":"ubuntu-24.04","node_arch":"x64"}]\n',
+    );
+    expect(written).toContain('architectures=amd64\n');
+    expect(written).toContain('platforms=`linux/amd64`\n');
+    expect(written).toContain('attest=false\n');
+    expect(written).toMatch(
+      /left_out<<RELEASE_PLAN_EOF\n- The `linux\/arm64` image.*\n- The build-provenance attestation.*\nRELEASE_PLAN_EOF\n/,
+    );
+    expect(
+      result.stdout.match(/::notice title=Left out on this private repository::/g),
+    ).toHaveLength(2);
+    expect(result.stdout).toContain('architectures: amd64 (private repository)');
+    expect(result.stdout).toContain('attestation:   no (private repository)');
+  });
+
+  it('the plan refuses a repository visibility it does not understand', () => {
+    const result = run('release-plan.mjs', [
+      '--dry-run',
+      '--notes-out',
+      'notes.md',
+      '--private-repository',
+      'maybe',
+    ]);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('--private-repository takes true or false');
   });
 
   it('the plan of a tag fails while the changes are still titled Unreleased', () => {
@@ -385,7 +479,7 @@ describe('the command-line scripts', () => {
     const result = run('release-plan.mjs', ['--dry-run', '--notes-out', 'notes.md']);
     expect(result.code).toBe(0);
     expect(result.stdout).toContain('::warning title=Release notes are a preview::');
-    expect(result.stdout).toContain('image tags:  2.2.0-rc.1\n');
+    expect(result.stdout).toContain('image tags:    2.2.0-rc.1\n');
     expect(read('notes.md')).toBe(`${unreleasedNotes(FIXTURE)}\n`);
   });
 

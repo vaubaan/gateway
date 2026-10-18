@@ -8,10 +8,17 @@ name: release
 #                          linux/arm64 on ghcr.io, SBOM, provenance attestation,
 #                          GitHub release with the CHANGELOG.md section as body.
 #   workflow_dispatch      a dry run of the selected ref: same plan, same gates,
-#                          same image build, smoke test and SBOM on both
-#                          architectures. The three jobs that hold a write
+#                          same image build, smoke test and SBOM on each
+#                          architecture. The three jobs that hold a write
 #                          permission (push, publish, release) are skipped, so
 #                          nothing is pushed, attested, tagged or released.
+#
+# On a private repository (github.event.repository.private) the plan ships
+# linux/amd64 only and signs no attestation: GitHub gives the ubuntu-24.04-arm
+# hosted runner and artifact attestations to public repositories (attestations:
+# or Enterprise Cloud). Everything else is the same, and the run summary and
+# the release notes say what was left out and why (scripts/release-lib.mjs,
+# publicationScope). A public repository gets the whole plan, unchanged.
 #
 # Actions are pinned by commit; the comment gives the version. Bump both together.
 
@@ -38,7 +45,8 @@ env:
 
 jobs:
   # What is about to ship, decided once: version, pre-release or not, image
-  # tags, release notes. Refuses a tag that does not name the version of
+  # tags, release notes, and what this repository can publish (architectures,
+  # attestation). Refuses a tag that does not name the version of
   # package.json, that is not the highest release, whose CHANGELOG.md section is
   # missing or still titled "Unreleased", or whose commit is not on a release
   # branch.
@@ -51,6 +59,14 @@ jobs:
       version: ${{ steps.plan.outputs.version }}
       prerelease: ${{ steps.plan.outputs.prerelease }}
       image_tags: ${{ steps.plan.outputs.image_tags }}
+      # The matrix of `image` and `push`: one entry per architecture this
+      # repository builds (arch, runner, node_arch).
+      matrix: ${{ steps.plan.outputs.matrix }}
+      architectures: ${{ steps.plan.outputs.architectures }}
+      platforms: ${{ steps.plan.outputs.platforms }}
+      # 'false' on a private repository: `publish` signs no attestation.
+      attest: ${{ steps.plan.outputs.attest }}
+      left_out: ${{ steps.plan.outputs.left_out }}
       image: ${{ steps.names.outputs.image }}
       commit: ${{ steps.names.outputs.commit }}
     steps:
@@ -65,11 +81,12 @@ jobs:
         id: plan
         env:
           TAG: ${{ github.ref_name }}
+          PRIVATE: ${{ github.event.repository.private }}
         run: |
           if [ "$PUBLISH" = "true" ]; then
-            git tag --list 'v*' | node scripts/release-plan.mjs --tag "$TAG" --notes-out release-notes.md
+            git tag --list 'v*' | node scripts/release-plan.mjs --tag "$TAG" --notes-out release-notes.md --private-repository "$PRIVATE"
           else
-            node scripts/release-plan.mjs --dry-run --notes-out release-notes.md
+            node scripts/release-plan.mjs --dry-run --notes-out release-notes.md --private-repository "$PRIVATE"
           fi
       - name: Tagged commit is on a release branch
         if: env.PUBLISH == 'true'
@@ -101,12 +118,23 @@ jobs:
           PRERELEASE: ${{ steps.plan.outputs.prerelease }}
           IMAGE_TAGS: ${{ steps.plan.outputs.image_tags }}
           IMAGE: ${{ steps.names.outputs.image }}
+          PLATFORMS: ${{ steps.plan.outputs.platforms }}
+          ATTEST: ${{ steps.plan.outputs.attest }}
+          LEFT_OUT: ${{ steps.plan.outputs.left_out }}
         run: |
           {
             if [ "$PUBLISH" = "true" ]; then echo "## Release ${VERSION}"; else echo "## Dry run of ${VERSION} (nothing is published)"; fi
             echo
             echo "- Pre-release: ${PRERELEASE}"
             echo "- Image: \`${IMAGE}\`, tags: $(echo "$IMAGE_TAGS" | paste -sd' ' -)"
+            echo "- Architectures: ${PLATFORMS}"
+            echo "- Build-provenance attestation: ${ATTEST}"
+            if [ -n "$LEFT_OUT" ]; then
+              echo
+              echo "### Left out on this private repository"
+              echo
+              echo "$LEFT_OUT"
+            fi
             echo
             echo "### Release notes"
             echo
@@ -131,18 +159,14 @@ jobs:
   # emulation), then the container smoke test on it: /healthz answers the
   # version and the commit being released, and argon2 and better-sqlite3 — the
   # two native addons — load on that architecture. Holds no write permission.
+  # The matrix comes from `plan`: both architectures, or amd64 alone on a
+  # private repository.
   image:
     needs: plan
     strategy:
       fail-fast: true
       matrix:
-        include:
-          - arch: amd64
-            runner: ubuntu-24.04
-            node_arch: x64
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-            node_arch: arm64
+        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 40
     permissions:
@@ -209,13 +233,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        include:
-          - arch: amd64
-            runner: ubuntu-24.04
-            node_arch: x64
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-            node_arch: arm64
+        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 40
     permissions:
@@ -291,11 +309,17 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # Assembles the multi-architecture image from the two tested digests under
-  # its version tag, signs a build-provenance attestation for its digest, and
-  # only then moves the aliases of a final release (<major>.<minor>, latest):
-  # `latest` never names an image without an attestation. A version tag never
-  # moves (scripts/release-image-index.sh).
+  # Assembles the multi-architecture image from the tested digests — one per
+  # planned architecture, checked — under its version tag, signs a
+  # build-provenance attestation for its digest, and only then moves the
+  # aliases of a final release (<major>.<minor>, latest): `latest` never names
+  # an image without an attestation. A version tag never moves
+  # (scripts/release-image-index.sh).
+  #
+  # On a private repository the plan has decided there is no attestation to
+  # sign: the two attestation steps are skipped, a step says so in the
+  # summary, and the aliases move on that explicit decision — never on an
+  # attestation step that was merely skipped or failed.
   publish:
     if: github.event_name == 'push' && github.ref_type == 'tag'
     needs: [plan, push]
@@ -338,9 +362,12 @@ jobs:
           tags: type=raw,value=${{ needs.plan.outputs.version }}
       - name: Create the multi-architecture image under its version
         id: index
-        run: scripts/release-image-index.sh create "$IMAGE" "$VERSION" "${RUNNER_TEMP}/digests"
+        env:
+          ARCHITECTURES: ${{ needs.plan.outputs.architectures }}
+        run: scripts/release-image-index.sh create "$IMAGE" "$VERSION" "${RUNNER_TEMP}/digests" "$ARCHITECTURES"
       - name: Build-provenance attestation
         id: attest
+        if: needs.plan.outputs.attest == 'true'
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-name: ${{ needs.plan.outputs.image }}
@@ -353,6 +380,7 @@ jobs:
       # and the GitHub release below need its output.
       - name: Verify the attestation as an operator would
         id: verified
+        if: needs.plan.outputs.attest == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           DIGEST: ${{ steps.index.outputs.digest }}
@@ -368,8 +396,24 @@ jobs:
             --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/release.yml" \
             --source-ref "$TAG"
           echo "attestation=${ATTESTATION_ID}" >>"$GITHUB_OUTPUT"
+      - name: No attestation on a private repository
+        if: needs.plan.outputs.attest == 'false'
+        env:
+          DIGEST: ${{ steps.index.outputs.digest }}
+          LEFT_OUT: ${{ needs.plan.outputs.left_out }}
+        run: |
+          echo "::notice title=No attestation::${IMAGE}@${DIGEST} is published without a build-provenance attestation: this repository is private."
+          {
+            echo "## ${IMAGE}:${VERSION} published without an attestation"
+            echo
+            echo "Digest \`${DIGEST}\`. Left out on this private repository:"
+            echo
+            echo "$LEFT_OUT"
+          } >>"$GITHUB_STEP_SUMMARY"
       - name: Move the aliases of a final release
-        if: needs.plan.outputs.prerelease == 'false' && steps.verified.outputs.attestation != ''
+        if: >-
+          needs.plan.outputs.prerelease == 'false' &&
+          (steps.verified.outputs.attestation != '' || needs.plan.outputs.attest == 'false')
         env:
           DIGEST: ${{ steps.index.outputs.digest }}
           IMAGE_TAGS: ${{ needs.plan.outputs.image_tags }}
@@ -380,8 +424,9 @@ jobs:
           done <<<"$IMAGE_TAGS"
           scripts/release-image-index.sh alias "$IMAGE" "$DIGEST" "${aliases[@]}"
 
-  # The GitHub release: body from CHANGELOG.md, the two SBOMs as assets. Runs
-  # last, so a release page never names an image that is not there.
+  # The GitHub release: body from CHANGELOG.md, one SBOM per architecture as
+  # assets. Runs last, so a release page never names an image that is not
+  # there.
   release:
     if: github.event_name == 'push' && github.ref_type == 'tag'
     needs: [plan, publish]
@@ -390,13 +435,17 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: The image was attested and verified
+      - name: The image was attested and verified, unless this repository cannot attest
         env:
+          ATTEST: ${{ needs.plan.outputs.attest }}
           ATTESTATION: ${{ needs.publish.outputs.attestation }}
         run: |
-          if [ -z "$ATTESTATION" ]; then
+          if [ "$ATTEST" = "true" ] && [ -z "$ATTESTATION" ]; then
             echo "::error title=Release refused::the publish job verified no attestation; no release is created for an image an operator cannot verify."
             exit 1
+          fi
+          if [ "$ATTEST" != "true" ]; then
+            echo "::notice title=No attestation::this repository is private; the release notes say so."
           fi
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -413,6 +462,9 @@ jobs:
           PRERELEASE: ${{ needs.plan.outputs.prerelease }}
           IMAGE: ${{ needs.plan.outputs.image }}
           DIGEST: ${{ needs.publish.outputs.digest }}
+          PLATFORMS: ${{ needs.plan.outputs.platforms }}
+          ATTEST: ${{ needs.plan.outputs.attest }}
+          LEFT_OUT: ${{ needs.plan.outputs.left_out }}
         run: |
           {
             echo
@@ -420,10 +472,18 @@ jobs:
             echo
             echo '```bash'
             echo "docker pull ${IMAGE}:${VERSION}"
-            echo "gh attestation verify oci://${IMAGE}:${VERSION} --repo ${GITHUB_REPOSITORY}"
+            if [ "$ATTEST" = "true" ]; then
+              echo "gh attestation verify oci://${IMAGE}:${VERSION} --repo ${GITHUB_REPOSITORY}"
+            fi
             echo '```'
             echo
-            echo "Digest \`${DIGEST}\`, for \`linux/amd64\` and \`linux/arm64\`. The SBOM of each architecture (SPDX) is attached below."
+            echo "Digest \`${DIGEST}\`, for ${PLATFORMS}. The SBOM of each architecture (SPDX) is attached below."
+            if [ "$ATTEST" != "true" ]; then
+              echo
+              echo "**Built from a private repository.** Two things GitHub reserves for public repositories are missing from this release:"
+              echo
+              echo "$LEFT_OUT"
+            fi
           } >>release-notes.md
           flags=(--latest)
           if [ "$PRERELEASE" = "true" ]; then flags=(--prerelease --latest=false); fi

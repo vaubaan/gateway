@@ -124,7 +124,10 @@ Invalid instance configuration (1 problem):
 
 Every release publishes one image for `linux/amd64` and `linux/arm64` on the
 GitHub Container Registry, under the repository's name
-(`ghcr.io/vaubaan/gateway`). No release exists yet; until the
+(`ghcr.io/vaubaan/gateway`). A release cut while the repository is
+private — this one before it is public, or a fork kept private — is
+`linux/amd64` only and carries no attestation; its release notes say so
+under "Built from a private repository". No release exists yet; until the
 first one, build the image from the sources as the quick start does.
 
 | Tag               | Moves?                            | Use it for                                    |
@@ -159,9 +162,11 @@ gh attestation verify oci://ghcr.io/vaubaan/gateway:2.1.3 \
 A zero exit code means the image is the one that tag built; anything else,
 do not run it. The command needs a recent GitHub CLI (`gh attestation`),
 signed in. Attestations exist for releases published while the repository
-is public, or private on GitHub Enterprise Cloud. The release pipeline runs
-this same verification on the digest right after it signs it, and publishes
-no release when it fails.
+is public, or private on GitHub Enterprise Cloud; a release published from
+any other private repository has none, says so in its notes, and gives no
+verify command — pin its digest and rely on the SBOM below. The release
+pipeline runs this same verification on the digest right after it signs
+it, and publishes no release when it fails.
 
 The expected identity, whatever the tool: the certificate was issued by
 GitHub Actions' OIDC provider to **the `release.yml` workflow of this

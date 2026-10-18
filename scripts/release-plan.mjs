@@ -4,7 +4,7 @@
 // notes. Run by the workflow's first job; runs the same on a laptop.
 //
 //   git tag --list 'v*' | node scripts/release-plan.mjs --tag v2.1.0 --notes-out notes.md
-//   node scripts/release-plan.mjs --dry-run --notes-out notes.md
+//   node scripts/release-plan.mjs --dry-run --notes-out notes.md --private-repository true
 //
 // --tag <tag>   a real release. The tag must name the version of package.json,
 //               be the highest release among the tags read from standard input,
@@ -13,8 +13,14 @@
 // --dry-run     a rehearsal of the current tree. Same checks on the version;
 //               when CHANGELOG.md has no section for it yet, the notes are a
 //               preview of "Unreleased" and a warning says so.
+// --private-repository <true|false>
+//               what the repository can publish (release-lib.mjs,
+//               publicationScope): a private one ships linux/amd64 only and
+//               no attestation, and the plan says what is left out and why.
+//               Default: false (a public repository, the whole plan).
 //
-// Writes `version`, `prerelease` and `image_tags` to $GITHUB_OUTPUT when set.
+// Writes `version`, `prerelease`, `image_tags`, `matrix`, `architectures`,
+// `platforms`, `attest` and `left_out` to $GITHUB_OUTPUT when set.
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,23 +31,35 @@ import {
   extractReleaseNotes,
   imageTags,
   parseVersion,
+  platformsText,
+  publicationScope,
   unreleasedNotes,
 } from './release-lib.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const USAGE = 'usage: release-plan.mjs (--tag <tag> | --dry-run) --notes-out <file>';
+const USAGE =
+  'usage: release-plan.mjs (--tag <tag> | --dry-run) --notes-out <file> [--private-repository <true|false>]';
 
 function parseArguments(argv) {
-  const options = { tag: null, dryRun: false, notesOut: null };
+  const options = { tag: null, dryRun: false, notesOut: null, privateRepository: false };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === '--dry-run') {
       options.dryRun = true;
-    } else if (argument === '--tag' || argument === '--notes-out') {
+    } else if (
+      argument === '--tag' ||
+      argument === '--notes-out' ||
+      argument === '--private-repository'
+    ) {
       const value = argv[index + 1];
       if (!value) throw new ReleaseError(`${argument} needs a value\n${USAGE}`);
       if (argument === '--tag') options.tag = value;
-      else options.notesOut = value;
+      else if (argument === '--notes-out') options.notesOut = value;
+      else if (value === 'true' || value === 'false') options.privateRepository = value === 'true';
+      else
+        throw new ReleaseError(
+          `--private-repository takes true or false, not "${value}"\n${USAGE}`,
+        );
       index += 1;
     } else {
       throw new ReleaseError(`unknown argument ${argument}\n${USAGE}`);
@@ -83,6 +101,8 @@ function main() {
   }
 
   const tags = imageTags(version);
+  const scope = publicationScope({ privateRepository: options.privateRepository });
+  const architectures = scope.architectures.map((architecture) => architecture.arch);
   writeFileSync(options.notesOut, notes);
   if (process.env.GITHUB_OUTPUT) {
     appendFileSync(
@@ -93,16 +113,28 @@ function main() {
         'image_tags<<RELEASE_PLAN_EOF',
         ...tags,
         'RELEASE_PLAN_EOF',
+        `matrix=${JSON.stringify(scope.architectures)}`,
+        `architectures=${architectures.join(' ')}`,
+        `platforms=${platformsText(scope)}`,
+        `attest=${scope.attestation}`,
+        'left_out<<RELEASE_PLAN_EOF',
+        ...scope.leftOut.map((item) => `- ${item}`),
+        'RELEASE_PLAN_EOF',
         '',
       ].join('\n'),
     );
   }
+  for (const item of scope.leftOut) {
+    console.log(`::notice title=Left out on this private repository::${item}`);
+  }
   console.log(
     [
-      `version:     ${version.raw}${options.dryRun ? ' (dry run)' : ''}`,
-      `pre-release: ${version.prerelease !== null ? 'yes' : 'no'}`,
-      `image tags:  ${tags.join(', ')}`,
-      `notes:       ${options.notesOut} (${notes.length} characters)`,
+      `version:       ${version.raw}${options.dryRun ? ' (dry run)' : ''}`,
+      `pre-release:   ${version.prerelease !== null ? 'yes' : 'no'}`,
+      `image tags:    ${tags.join(', ')}`,
+      `architectures: ${architectures.join(', ')}${options.privateRepository ? ' (private repository)' : ''}`,
+      `attestation:   ${scope.attestation ? 'yes' : 'no (private repository)'}`,
+      `notes:         ${options.notesOut} (${notes.length} characters)`,
     ].join('\n'),
   );
 }
