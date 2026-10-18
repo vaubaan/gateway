@@ -70,7 +70,7 @@ apps/gateway/src/
       testing.ts                validEnv(), fakeFiles() for tests
       keys-doc.test.ts          structural test: the key table of this handbook against KEYS
     crypto/
-      master-key-file.ts        the key file: 32 random bytes, base64, 0600, never over an existing file; parents created (0700) at generation
+      master-key-file.ts        the key file: 32 random bytes, base64, 0600, never over an existing file; parents created (0700) at generation and by the setup
     master-key/                 the master key as the instance speaks of it: generated here or not, handed over or not, download (root.masterKey)
     setup/                      setup mode: the state on globalThis, the handler that receives the key of a copy to restore
       aead.ts                   XChaCha20-Poly1305 core, per-connection key, blob format
@@ -879,8 +879,9 @@ has `restore.from` and `restore.sha256`, an empty volume and no key file.
   for the rest of this start); the file at most `MAX_KEY_FILE_BYTES` (4096)
   and `parseMasterKeyText` (`crypto/master-key-file.ts`: 32 bytes, base64 or
   base64url, one line — the loader's rule; else `key-invalid`, `key-missing`
-  for no file). Then `writeMasterKeyFile` (0600, `wx`: a second upload while
-  one is being installed is `key-busy`) and `complete()`: `getRoot` with
+  for no file). Then `writeGeneratedMasterKeyFile` (the missing parent
+  directories created, 0700 — a new host's empty volume; the file 0600, `wx`:
+  a second upload while one is being installed is `key-busy`) and `complete()`: `getRoot` with
   `loadBootConfig({ env: snapshot })` → the normal boot, `restoreAtFirstBoot`
   included (hash, integrity, migrations, **every sealed blob opens with the
   received key**), the store opens, the root serves. A boot that throws

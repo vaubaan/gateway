@@ -196,6 +196,18 @@ describe('setup mode: the setup receives the key for a restore', () => {
     expect(log).not.toContain(backup);
   });
 
+  it('a key file in a directory the empty volume does not have yet: the directory is created (0700)', async () => {
+    const nested = join(dir, 'new', 'keys', 'master.key');
+    env.VAUBAAN_MASTER_KEY_FILE = nested;
+    const { handlers } = await start();
+    const res = await receive(handlers, { token: TOKEN, key: `${KEY}\n` });
+    expect(res.status).toBe(303);
+    expect(currentSetup()).toBeNull();
+    expect(readFileSync(nested, 'utf8')).toBe(`${KEY}\n`);
+    expect(statSync(nested).mode & 0o777).toBe(0o600);
+    expect(statSync(join(dir, 'new', 'keys')).mode & 0o777).toBe(0o700);
+  });
+
   it('a second key while one is being installed is refused as busy', async () => {
     const { handlers } = await start();
     const [first, second] = await Promise.all([

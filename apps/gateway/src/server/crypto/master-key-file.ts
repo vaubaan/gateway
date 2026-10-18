@@ -4,8 +4,8 @@
  * base64, one line, the format `encryption.master_key` reads (and the one
  * `scripts/gen-master-key.mjs` prints). Written exclusively (`wx`: never over an
  * existing file) with mode 0600, in the directory the configuration names —
- * the data volume, where the store lives. The boot's generation creates the
- * missing parent directories first (mode 0700): an empty volume has no
+ * the data volume, where the store lives. The generation and the setup create
+ * the missing parent directories first (mode 0700): an empty volume has no
  * `/data/keys/` yet.
  */
 import { randomBytes } from 'node:crypto';
@@ -50,9 +50,9 @@ export const writeMasterKeyFile: MasterKeyFileWriter = (path, text) => {
 };
 
 /**
- * The boot's generation: creates the missing parent directories (`mkdir -p`,
- * mode 0700 for the ones created, existing ones left as they are), then writes
- * the file as `writeMasterKeyFile` does. A parent that is not a directory, or
+ * The boot's generation and the setup's key reception: creates the missing
+ * parent directories (`mkdir -p`, mode 0700 for the ones created, existing ones
+ * left as they are), then writes the file as `writeMasterKeyFile` does. A parent that is not a directory, or
  * that cannot be created, throws (`ENOTDIR`, `EEXIST`, `EACCES`).
  */
 export const writeGeneratedMasterKeyFile: MasterKeyFileWriter = (path, text) => {

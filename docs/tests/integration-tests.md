@@ -1346,7 +1346,7 @@ enforced limits is pinned to what the code enforces today.
   and `masterKeyFile` names the file (null for a key by value); the flag on a
   key by value, and with `restore.from`, are refused naming
   `encryption.generate_master_key`.
-- **`tests/integration/compose/setup-mode-restore.test.ts`** (7) — **setup
+- **`tests/integration/compose/setup-mode-restore.test.ts`** (8) — **setup
   mode on a real copy** (ADR amendment): with `restore.from`, an empty store
   and no key file, `startInstance` builds no root — the store and the key
   file absent, `getRoot()` rejects (`SetupModeError`), the secrets gone from
@@ -1357,7 +1357,9 @@ enforced limits is pinned to what the code enforces today.
   nothing; **a key that does not open the copy** is refused by the restore
   (`verify`), the key file removed, setup mode kept, the message naming no
   source; **the right key** is written 0600, the copy verified and restored,
-  the root serves with the carried secret, nothing generated; two uploads at
+  the root serves with the carried secret, nothing generated; a key file in a
+  directory the empty volume does not have yet lands there, the directory
+  created 0700; two uploads at
   once: one lands, the other is `key-busy`; a store that holds data with an
   absent key is exit 78, not setup mode; without a bootstrap token the page
   receives nothing (`no-bootstrap-token`).

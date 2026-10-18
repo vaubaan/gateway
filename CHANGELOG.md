@@ -45,7 +45,8 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   the first start refused with `ENOENT` (exit 78). The generation now creates the missing
   parent directories (mode 0700; an existing directory is left as it is) and writes the
   key 0600 as before; a parent that is not a directory or cannot be created is still a
-  configuration error naming the file (exit 78).
+  configuration error naming the file (exit 78). The same holds for the key handed to the
+  setup page to restore a copy on a new host.
 
 - **The git remote accepts an annotated tag.** A push of `git tag -a` was
   rejected with "cannot be reviewed: it has no history in common with …": the
