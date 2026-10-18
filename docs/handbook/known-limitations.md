@@ -72,10 +72,16 @@ change that removes it.
   receive-pack command for a force-push or a delete are read from GitHub's
   documentation, not observed. →
   [git-remote, "Tests"](git-remote.md#tests)
-- **The release pipeline has never run.** `.github/workflows/release.yml` is
-  written and its Node scripts are tested, but no `v2.*` tag exists: no image was
-  published, signed or attested by it. →
-  [coding workflow, "Release"](../workflow/coding-workflow.md#release)
+- **The release pipeline has published nothing yet.** `.github/workflows/release.yml`
+  has run once, as a dry run on `main` on 2026-10-18 (run 39133746971): the plan,
+  the gates and the `linux/amd64` image job — build, container smoke test, Trivy
+  scan, SBOM — all passed, and the three publishing jobs were skipped as a dry run
+  skips them. No `v2.*` tag exists: `push`, `publish` and `release` have never
+  run, so nothing was pushed to the registry, tagged or released by it, and
+  `scripts/release-image-index.sh` has met no real registry since its rehearsal
+  against a local one. On this private repository a release is `linux/amd64`
+  only and unattested, by design. →
+  [coding workflow, "Release"](../workflow/coding-workflow.md#on-a-private-repository)
 - **Telemetry is postponed until after the pilot.** It is off by default
   (`telemetry.enabled: false`) and stays so; the collector is not deployed: the
   built-in collector URL is a placeholder to which nothing is sent even when
