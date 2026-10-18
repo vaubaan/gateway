@@ -80,14 +80,14 @@ export async function startInstance(deps: BootDeps = {}): Promise<BootState> {
     redact: redactor,
     write: rootDeps.logWrite,
   }).child({ component: 'gateway' });
-  // The path of the key file and whether an install token exists: never a value.
+  // The path of the key file and whether a bootstrap token is configured: never a value.
   const keyFilePath = setup.masterKeyFile;
-  const hasInstallToken = setup.config.bootstrapToken !== null;
+  const bootstrapConfigured = setup.config.bootstrapToken !== null;
   logger.warn('starting in setup mode: the master key file is absent and a restore is configured', {
     key_file: keyFilePath,
     store_path: setup.config.store.path,
     public_origin: setup.config.publicUrl.origin,
-    has_install_token: hasInstallToken,
+    bootstrap_configured: bootstrapConfigured,
     remedy: 'open /admin/bootstrap and hand the gateway the key file of the copy',
   });
   publishSetup({
