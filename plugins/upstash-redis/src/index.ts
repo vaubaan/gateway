@@ -60,7 +60,7 @@ export const upstashRedisCatalog = loadCatalogFile(UPSTASH_REDIS_CATALOG_PATH);
 export const upstashRedisPlugin = definePlugin({
   id: 'upstash-redis',
   displayName: 'Upstash Redis',
-  version: '3.0.0',
+  version: '3.1.0',
   description:
     'Serverless Redis plane — databases through the Management API, key-value data through each database REST endpoint.',
   summary:
@@ -70,6 +70,9 @@ export const upstashRedisPlugin = definePlugin({
   docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/upstash-redis.md',
   tools: upstashRedisTools,
   toolTitles: upstashRedisToolTitles,
+  // A database is what an Upstash connection lists : a created one is
+  // discovered at once (ADR discovery-runs-after-a-creating-call).
+  resourceCreatingTools: ['upstash_redis__create_database'],
   dataModel: upstashRedisDataModel,
   catalog: upstashRedisCatalog.catalog,
   credential: upstashRedisCredential,

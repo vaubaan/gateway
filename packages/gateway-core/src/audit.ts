@@ -95,8 +95,13 @@ export type AdminAct =
    *  "the operator's only act on the domain"). `before` / `after` carry the owner. */
   | 'connection-reassigned'
   | 'connection-revoked'
-  /** The owner ran "refresh discovery": the outcome (count or the provider's
-   *  error), never the resource list. Object: the connection. */
+  /** A connection's resources were discovered again: the outcome (count or the
+   *  provider's error), never the resource list. Object: the connection.
+   *  `after.cause` says who ran it: `by-owner` ("Refresh", the actor is the
+   *  owner) or `after-a-call` (the gateway, after a call that created a
+   *  resource; the actor is the human behind the call's key, `after` adds
+   *  `mission_id`, `tool`, `added`, `attempts`). ADR
+   *  discovery-runs-after-a-creating-call. */
   | 'resources-discovered'
   /** The owner edited one resource (name, environment label, hidden flag,
    *  editable settings). Object: the connection; `before` / `after` name the

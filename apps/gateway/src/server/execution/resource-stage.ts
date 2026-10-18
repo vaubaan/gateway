@@ -161,6 +161,7 @@ export function createResourceStage(deps: ResourceStageDeps): ResourceStage {
       refusal: refuse.resourceNotInMission({
         cited_ref: citedRef,
         connection: { id: connection.id, name: connection.display_name },
+        ...(connection.reaches_later_resources === true ? { reaches_later_resources: true } : {}),
         allowed_resources: allowed.map((r) => ({
           ref: r.ref,
           env: r.env ?? null,

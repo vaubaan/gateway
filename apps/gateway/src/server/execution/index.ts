@@ -45,7 +45,8 @@ export interface ExecutionModuleDeps {
   readonly registry: PluginRegistry;
   readonly auth: Pick<AuthModule, 'sessions'>;
   readonly missions: Pick<MissionsModule, 'service'>;
-  readonly connections: Pick<ConnectionsModule, 'credentials'>;
+  /** `discoveryAfterCall`: the connection's discovery after a call that created a resource. */
+  readonly connections: Pick<ConnectionsModule, 'credentials' | 'discoveryAfterCall'>;
   /** Re-checks the creator's authority on every request (handbook authority, "The door"). */
   readonly grounds: Pick<MissionGrounds, 'inspect'>;
   /** The budget's session service (quota, rate windows, gate) — one per process. */
@@ -148,6 +149,7 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
     webSessions: deps.auth.sessions,
     budget: deps.budget,
     pipeline,
+    afterCall: (ctx, call) => deps.connections.discoveryAfterCall.afterCall(ctx, call),
     rateLimiter: deps.rateLimiter,
     logger,
     build: deps.build,

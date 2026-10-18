@@ -223,6 +223,25 @@ export interface DiscoveryRecord {
   readonly count: number;
   /** The provider's (or the plugin's) own message when the discovery failed. */
   readonly error: string | null;
+  /**
+   * Set when the gateway ran this discovery itself, after a call that created a
+   * resource (ADR discovery-runs-after-a-creating-call): the tool and its
+   * mission. `null` for a discovery a person ran (connect, "Refresh").
+   */
+  readonly afterCall: DiscoveryAfterCallCause | null;
+}
+
+/** The successful call a discovery the gateway ran itself follows. */
+export interface DiscoveryAfterCallCause {
+  readonly missionId: string;
+  readonly tool: string;
+}
+
+/** What the gateway's own discovery after a creating call did. */
+export interface AfterCallDiscovery {
+  readonly record: DiscoveryRecord;
+  /** Refs discovery returned that the connection did not list before (or listed as stale). */
+  readonly added: number;
 }
 
 /**
@@ -1076,6 +1095,67 @@ export class ConnectionService {
   async discover(actor: Actor, connectionId: string): Promise<DiscoveryRecord> {
     const connection = await this.requireOwned(actor, connectionId);
     if (connection.status === 'revoked') throw new ConnectError('connection-revoked');
+    const record = await this.rediscover(connection, null);
+    await this.auditDiscovery(actor.user.id, connection, record, null);
+    return record;
+  }
+
+  /**
+   * The gateway's own discovery after a call that created a resource of the
+   * connection (ADR discovery-runs-after-a-creating-call): the same merge as
+   * the owner's "Refresh", run by `DiscoveryAfterCall` off the request path.
+   * Nothing is audited here: the scheduler may look again (a provider that
+   * lists a new resource a moment late) and audits the outcome once, through
+   * `auditDiscoveryAfterCall`. `null` when the connection no longer serves
+   * (gone, revoked, expired): there is nothing to look for with it.
+   */
+  async discoverAfterCall(
+    connectionId: string,
+    cause: DiscoveryAfterCallCause,
+  ): Promise<AfterCallDiscovery | null> {
+    const connection = await this.deps.store.connections.getById(connectionId);
+    if (!connection || connection.status === 'revoked' || connection.status === 'expired') {
+      return null;
+    }
+    const liveRefs = async (): Promise<Set<string>> =>
+      new Set(
+        (await this.deps.store.connections.listResources(connection.id))
+          .filter((r) => r.staleSince === null)
+          .map((r) => r.ref),
+      );
+    const before = await liveRefs();
+    const record = await this.rediscover(connection, cause);
+    if (!record.ok) return { record, added: 0 };
+    let added = 0;
+    for (const ref of await liveRefs()) if (!before.has(ref)) added += 1;
+    return { record, added };
+  }
+
+  /** The `resources-discovered` entry of a discovery the gateway ran after a call. */
+  async auditDiscoveryAfterCall(
+    connectionId: string,
+    cause: DiscoveryAfterCallCause & { readonly userId: string },
+    outcome: AfterCallDiscovery & { readonly attempts: number },
+  ): Promise<void> {
+    const connection = await this.deps.store.connections.getById(connectionId);
+    if (!connection) return;
+    await this.auditDiscovery(cause.userId, connection, outcome.record, {
+      mission_id: cause.missionId,
+      tool: cause.tool,
+      added: outcome.added,
+      attempts: outcome.attempts,
+    });
+  }
+
+  /**
+   * One discovery of a connection that is not revoked, merged into its
+   * resources, its outcome recorded on the connection and returned — never
+   * thrown. On a rejected credential the broker refreshes once.
+   */
+  private async rediscover(
+    connection: ConnectionRecord,
+    afterCall: DiscoveryAfterCallCause | null,
+  ): Promise<DiscoveryRecord> {
     try {
       let resolved = await this.deps.broker.resolve(connection.id);
       let resources: readonly Resource[];
@@ -1095,18 +1175,15 @@ export class ConnectionService {
         }
         resources = await this.discoverWith(resolved.plugin, this.deps.broker.contextOf(resolved));
       }
-      const record = await this.storeDiscovery(connection, resolved.plugin, resources);
-      await this.auditDiscovery(actor, connection, record);
-      return record;
+      return await this.storeDiscovery(connection, resolved.plugin, resources, afterCall);
     } catch (err) {
       this.deps.logger.warn('resource discovery failed', {
         connection_id: connection.id,
         provider: connection.provider,
         failure: providerFailureReason(err),
+        ...(afterCall ? { after_call_of: afterCall.tool, mission_id: afterCall.missionId } : {}),
       });
-      const record = await this.recordDiscovery(connection.id, 0, providerFailureReason(err));
-      await this.auditDiscovery(actor, connection, record);
-      return record;
+      return this.recordDiscovery(connection.id, 0, providerFailureReason(err), afterCall);
     }
   }
 
@@ -1499,6 +1576,7 @@ export class ConnectionService {
     connection: ConnectionRecord,
     plugin: ProviderPlugin,
     resources: readonly Resource[],
+    afterCall: DiscoveryAfterCallCause | null = null,
   ): Promise<DiscoveryRecord> {
     const usable: DiscoveredResource[] = [];
     for (const r of resources) {
@@ -1520,15 +1598,22 @@ export class ConnectionService {
       });
     }
     await this.deps.store.connections.syncDiscoveredResources(connection.id, usable);
-    return this.recordDiscovery(connection.id, usable.length, null);
+    return this.recordDiscovery(connection.id, usable.length, null, afterCall);
   }
 
   private async recordDiscovery(
     connectionId: string,
     count: number,
     error: string | null,
+    afterCall: DiscoveryAfterCallCause | null = null,
   ): Promise<DiscoveryRecord> {
-    const record: DiscoveryRecord = { at: this.nowIso(), ok: error === null, count, error };
+    const record: DiscoveryRecord = {
+      at: this.nowIso(),
+      ok: error === null,
+      count,
+      error,
+      afterCall,
+    };
     const current = await this.deps.store.connections.getById(connectionId);
     if (current) {
       await this.deps.store.connections.setMetadata(connectionId, {
@@ -1630,20 +1715,36 @@ export class ConnectionService {
     });
   }
 
-  /** The owner's "refresh discovery": the outcome, never the resource list. */
+  /**
+   * A discovery after the first: the outcome, never the resource list. `cause`
+   * says who ran it — the owner's "Refresh" (`by-owner`, the actor is the
+   * owner), or the gateway after a creating call (`after-a-call`, the actor is
+   * the human behind the call's key).
+   */
   private async auditDiscovery(
-    actor: Actor,
+    userId: string,
     connection: ConnectionRecord,
     record: DiscoveryRecord,
+    afterCall: {
+      readonly mission_id: string;
+      readonly tool: string;
+      readonly added: number;
+      readonly attempts: number;
+    } | null,
   ): Promise<void> {
     await this.deps.audit.write({
       kind: 'admin',
       ts: this.nowIso(),
-      user_id: actor.user.id,
+      user_id: userId,
       act: 'resources-discovered',
       object: { type: 'connection', id: connection.id },
       before: null,
-      after: { ok: record.ok, count: record.count, error: record.error },
+      after: {
+        ok: record.ok,
+        count: record.count,
+        error: record.error,
+        ...(afterCall ? { cause: 'after-a-call', ...afterCall } : { cause: 'by-owner' }),
+      },
       delegated_client_id: null,
     });
   }
@@ -1796,5 +1897,13 @@ function discoveryOf(value: unknown): DiscoveryRecord | null {
     ok: raw.ok,
     count: typeof raw.count === 'number' ? raw.count : 0,
     error: typeof raw.error === 'string' ? raw.error : null,
+    afterCall: afterCallOf(raw.afterCall),
   };
+}
+
+function afterCallOf(value: unknown): DiscoveryAfterCallCause | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const raw = value as Record<string, unknown>;
+  if (typeof raw.missionId !== 'string' || typeof raw.tool !== 'string') return null;
+  return { missionId: raw.missionId, tool: raw.tool };
 }

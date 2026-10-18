@@ -24,6 +24,19 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   mission stores the explicit list, and a later change of what the creator holds does
   not widen it. `list_my_connections` lists it with `built_in: true`, and `get_catalog`
   with a `connection_id` writes it out. ADR `preset-everything-i-hold-expands-explicitly`.
+- **A resource an agent creates through the gateway is known at once.** After a
+  call that created an app on Fly (`fly__create_app`), a project on Railway
+  (`railway__create-project`), a domain or a segment on Resend, or a database on
+  Upstash Redis succeeds, the gateway looks for the account's resources again
+  right after answering — the same merge as "Refresh" on the account page, so
+  names, labels and hidden flags are kept and the account's default environment
+  applies. A mission given the whole account reaches the new resource from its
+  next call. The account page says when the last check followed such a call
+  ("after a call of `fly__create_app`"), and Activity records it as "refreshed
+  what an account reaches · after a call that created one". The agent is not
+  kept waiting; a burst of creations makes at most two lookups. Plugins declare
+  these tools in `resourceCreatingTools` (plugin SDK); Fly 0.2.0, Railway 4.3.0,
+  Resend 0.4.0, Upstash Redis 3.1.0.
 
 ### Fixed
 

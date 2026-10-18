@@ -16,6 +16,7 @@ import { AppRegistrationService, type ProviderAppsService } from '../provider-ap
 import type { Store } from '../store';
 import { systemClock, type Clock } from '../store/clock';
 import { CredentialBroker } from './credentials';
+import { DiscoveryAfterCall } from './discovery-after-call';
 import { createConnectionHandlers, type ConnectionHandlers } from './handlers';
 import { NoticeStore, PendingConnectStore } from './pending';
 import { ConnectionService } from './service';
@@ -44,6 +45,12 @@ export interface ConnectionsModule {
   /** Creating a company app from the provider's manifest flow (Administration → Company apps). */
   readonly registration: AppRegistrationService;
   readonly handlers: ConnectionHandlers;
+  /**
+   * Runs a connection's discovery after a call that created one of its
+   * resources (ADR discovery-runs-after-a-creating-call): the execution door's
+   * hook, stopped by `root.close()`.
+   */
+  readonly discoveryAfterCall: DiscoveryAfterCall;
 }
 
 export function createConnectionsModule(deps: ConnectionsModuleDeps): ConnectionsModule {
@@ -96,7 +103,12 @@ export function createConnectionsModule(deps: ConnectionsModuleDeps): Connection
     logger,
     clock,
   });
-  return { service, credentials, notices, registration, handlers };
+  const discoveryAfterCall = new DiscoveryAfterCall({
+    registry: deps.registry,
+    service,
+    logger,
+  });
+  return { service, credentials, notices, registration, handlers, discoveryAfterCall };
 }
 
 export {
@@ -106,6 +118,13 @@ export {
   type ResolvedCredential,
 } from './credentials';
 export { CredentialFormatError, parseSecret, serializeSecret } from './credential-codec';
+export {
+  DISCOVERY_AFTER_CALL_RETRY_DELAYS_MS,
+  DiscoveryAfterCall,
+  type AnsweredCall,
+  type DiscoveryAfterCallDeps,
+  type ScheduledCause,
+} from './discovery-after-call';
 export {
   CONNECT_ERROR_CODES,
   CONNECT_ERROR_MESSAGES,
@@ -196,6 +215,8 @@ export {
   type Connected,
   type ConnectionDetail,
   type ConnectionView,
+  type AfterCallDiscovery,
+  type DiscoveryAfterCallCause,
   type DiscoveryRecord,
   type ImportedFrom,
   type ImportPastedInput,

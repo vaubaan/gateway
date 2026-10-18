@@ -54,7 +54,8 @@ apps/gateway/src/server/provider-apps/      host-agnostic, never imports `next`
   registration.ts      AppRegistrationService: the manifest flow (start, pending, complete)
 apps/gateway/src/server/connections/        host-agnostic, never imports `next`
   index.ts             createConnectionsModule(deps) → root.connections; barrel
-  service.ts           ConnectionService: start/complete, discover, updateResource, revoke, transferTargets/transfer, listOwnerless/reassign, views
+  service.ts           ConnectionService: start/complete, discover, discoverAfterCall, updateResource, revoke, transferTargets/transfer, listOwnerless/reassign, views
+  discovery-after-call.ts  DiscoveryAfterCall: the discovery the gateway runs after a call that created a resource
   credentials.ts       CredentialBroker: resolve() / refresh() — the refresh persistence hook
   oauth2.ts            authorization URL, code exchange, refresh_token grant, OAuth2TokenError
   install-verification.ts  verifyInstallation(): binds an app installation to the authorizing user
@@ -759,13 +760,15 @@ single-process only`: rotating refresh tokens are single use, a hosted
 ## Resources
 
 `plugin.discoverResources(ctx)` runs at connect time (see the policy
-table) and on the owner's "Refresh"
-(`ConnectionService.discover` → `POST /accounts/<id>/discover`), with a
-30 s timeout. On `UpstreamAuthError` the broker refreshes once and the
+table), on the owner's "Refresh"
+(`ConnectionService.discover` → `POST /accounts/<id>/discover`) and after a
+call through the execution door that created a resource
+(`ConnectionService.discoverAfterCall`, below), with a
+30 s timeout. The last two share `rediscover`. On `UpstreamAuthError` the broker refreshes once and the
 discovery is retried; a second rejection leaves the connection `expired`
 and the provider's message in the outcome. The owner's refresh is audited
-(`resources-discovered` on the connection: `ok`, `count`, `error`), whether
-it succeeded or not. A failed discovery never throws:
+(`resources-discovered` on the connection: `ok`, `count`, `error`,
+`cause: 'by-owner'`), whether it succeeded or not. A failed discovery never throws:
 it is recorded in `metadata.discovery` and shown; the known resources stay
 as they were. Only a connection that is `revoked` (`connection-revoked`) or
 not the actor's (`not-found`) is refused before the plugin is called. Resources of another provider or without a ref are ignored
@@ -818,6 +821,46 @@ returns every row. Consumers decide: mission issuance leaves hidden and
 stale resources out of "all resources", lets a creator pick a hidden one
 explicitly and refuses a stale one (handbook [missions](missions.md),
 "Hidden and stale resources").
+
+### Discovery after a creating call
+
+ADR [discovery-runs-after-a-creating-call](../decisions/discovery-runs-after-a-creating-call.md).
+A plugin lists in `resourceCreatingTools` the tools whose success creates
+something its discovery returns ([plugin SDK](plugin-sdk.md)): `fly__create_app`,
+`railway__create-project`, `resend__create_domain`, `resend__create_segment`,
+`upstash_redis__create_database`. The execution door hands every allowed call
+it answered to `root.connections.discoveryAfterCall.afterCall(ctx, { tool,
+connectionId, result })` ([execution door](execution-door.md), "After the
+answer"); `DiscoveryAfterCall` (`discovery-after-call.ts`):
+
+- **schedules** a discovery of the call's connection only when the tool is in
+  its plugin's `resourceCreatingTools`, the result is not `isError` (a call the
+  plugin declined) and the connection is the mission's connection of that
+  provider. A refused, rejected or failed call never reaches it.
+- **defers** the start (`setTimeout(…, 0)`): the agent's answer leaves first.
+- **coalesces** per connection: one discovery in flight, at most one queued (the
+  latest cause wins). `// single-process only`, like the broker's refresh lock.
+- **looks again** after `DISCOVERY_AFTER_CALL_RETRY_DELAYS_MS` (2 s, then 10 s)
+  when the discovery failed or added no ref, then gives up.
+- **audits once** per scheduled discovery, on the last attempt's outcome:
+  `resources-discovered` with `after: { ok, count, error, cause: 'after-a-call',
+mission_id, tool, added, attempts }`; the actor is the member holding the
+  call's key, or the mission's creator for a named key.
+- **never throws**: an error is logged (`resource discovery after a creating
+call failed`, with `connection_id`, `tool`, `mission_id`, `error_class` —
+  never the arguments); success logs `resource discovery after a creating call`
+  with `ok`, `added`, `attempts`.
+- **stops** with the root (`root.close()` → `stop()`): the queued discovery is
+  dropped, a retry wait is cut short, the one in flight is awaited.
+
+`ConnectionService.discoverAfterCall(connectionId, cause)` skips a connection
+that is gone, `revoked` or `expired` (`null`), counts the live refs before and
+after, and runs `rediscover` — the same broker refresh, merge and
+`metadata.discovery` record as the owner's "Refresh" — with
+`metadata.discovery.afterCall = { missionId, tool }`. It audits nothing;
+`auditDiscoveryAfterCall` writes the entry. The account page reads the record:
+"Last checked … · after a call of `fly__create_app`", "Found … , after a call
+of …".
 
 ### Default environment of a connection
 
@@ -1152,6 +1195,12 @@ by feature", the section on connecting).
   upgrade** — its app lacks the fields verification needs ("Incomplete:
   client_id, client_secret missing" on `/admin/provider-apps`), or its plugin cannot verify
   installations and nobody accepted that.
+- **A resource an agent created is not listed** — check that its tool is in the
+  plugin's `resourceCreatingTools` (`resource-creating-tools.test.ts` pins the
+  table), then the log lines `resource discovery after a creating call` (`added:
+0` after three attempts: the provider did not list it yet — "Refresh" later)
+  or `… failed` (`error_class`). A resource created outside the gateway is found
+  by "Refresh" only.
 - **"Connected, but looking for what it reaches failed"** — the connection
   exists; the second line of the notice is the provider's status in the
   gateway's words (the provider's own text is shown nowhere). Fix the cause

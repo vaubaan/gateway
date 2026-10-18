@@ -137,8 +137,10 @@ company registered at a provider).
   transfer or revoke.
 - **Resource** — one thing reachable through a connection: a repository,
   a database project, a hosting project, a deployment project. Discovered
-  by the plugin at connection time and refreshed on demand, kept current
-  by the owner, who may label each resource with an **environment**
+  by the plugin at connection time, refreshed on the owner's demand and
+  right after a call through the gateway that created one (the plugin
+  declares which calls create a resource; the refresh never delays the
+  call's answer), kept current by the owner, who may label each resource with an **environment**
   (`prod`, `staging`…). The owner may also give the connection a
   **default environment** — one of the environments of the provider's
   catalog — that every resource of the connection without a label of its
@@ -537,6 +539,10 @@ Rules:
   connection that discovery returns at the time of the call, known at
   issuance or discovered later, except the ones the owner hid and the
   instance's own; a resource discovery no longer returns is not reached.
+  A resource created through the gateway is discovered right after the
+  call that created it, so such a mission reaches it from its next calls;
+  one created elsewhere waits for the owner's refresh (ADR
+  discovery-runs-after-a-creating-call).
   That choice is never a default and never applied to a mission issued
   with another selection; the mission page and the bootstrap kit state it
   ("the whole account, including resources found later") with the
@@ -1209,7 +1215,9 @@ same for any agent, with no value of any mission.
   (where to create it, which permissions to grant, the expiry to choose) —
   how to withdraw the grant at
   the provider when a connection is revoked (or, failing that, where a
-  person removes it by hand), how to discover resources, and ship at
+  person removes it by hand), how to discover resources and which of
+  their tools create one (the gateway discovers again after such a call
+  succeeds), and ship at
   least one **preset** in their catalog. Contribution process:
   [CONTRIBUTING](../../CONTRIBUTING.md) and the plugin kit,
   [plugins/README](../../plugins/README.md).

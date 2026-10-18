@@ -96,6 +96,10 @@ export type MissionConnection = Pick<Connection, 'id' | 'provider' | 'display_na
    *  slug), handed to the plugin's classifier so a slice can name what the
    *  connection is bound to. Absent: none. */
   readonly public_fields?: Readonly<Record<string, string>>;
+  /** The mission was issued on the whole connection: it reaches resources
+   *  discovered later (ADR mission-reaches-the-whole-connection-on-request).
+   *  Said in the `resource-not-in-mission` hint. Absent: false. */
+  readonly reaches_later_resources?: boolean;
 };
 
 /** One resource a mission may touch, hydrated from its selection (spec §0

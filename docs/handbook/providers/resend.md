@@ -66,6 +66,14 @@ plugins/resend/src/
 
 ## Resources, zones and the environment
 
+Resources are the account's sending domains and contact segments.
+`resend__create_domain` and `resend__create_segment` are declared in
+`resourceCreatingTools` (plugin 0.4.0): after either succeeds, the gateway
+discovers the account again, off the request path, so the new domain or
+segment is a resource at once — with empty zone lists, every recipient
+external until the owner fills them (ADR
+[discovery-runs-after-a-creating-call](../../decisions/discovery-runs-after-a-creating-call.md)).
+
 ```mermaid
 flowchart LR
   key["api-key credential<br/>api_key (full access)"] -->|"GET /domains, GET /segments<br/>paged, ≤ 500 per kind"| disc["discoverResources"]

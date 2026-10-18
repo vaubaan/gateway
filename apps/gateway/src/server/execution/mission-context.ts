@@ -53,7 +53,7 @@ import {
   connectionSummaryOf,
 } from '../connections/mapping';
 import type { Store } from '../store';
-import { reachedResources } from '../store/mission-reach';
+import { reachedResources, reachesLaterResources } from '../store/mission-reach';
 import type { ConnectionRecord, ConnectionResourceRecord, MissionRecord } from '../store/types';
 
 export type MissionContextStore = Pick<Store, 'connections' | 'users' | 'groups' | 'sessions'>;
@@ -114,6 +114,7 @@ export async function loadMissionContext(
       hosts_instance: discovered.some((r) =>
         isSelfResource(selfResources, connection.provider, r.ref),
       ),
+      ...(reachesLaterResources(selection) ? { reaches_later_resources: true } : {}),
     });
     const reached = reachedResources(selection, discovered, (r) =>
       isSelfResource(selfResources, connection.provider, r.ref),

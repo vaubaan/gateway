@@ -16,7 +16,7 @@ tracks:
 
 # Upstash Redis provider — plugin and risk model
 
-`@vaubaan/plugin-upstash-redis` (`plugins/upstash-redis`, version 3.0.0),
+`@vaubaan/plugin-upstash-redis` (`plugins/upstash-redis`, version 3.1.0),
 written against the Plugin SDK. Spec: [`vaubaan-gateway.md`](../../spec/vaubaan-gateway.md)
 §5 (plugins), §3.2 (presets); [`gateway-risk-model.md`](../../spec/gateway-risk-model.md)
 §2, §4, §7. ADR: [[plugin-contract-and-credential-spec]]. Contributor guide:
@@ -273,6 +273,10 @@ staging, prod]`) except `create-database`, which is account-rooted (the
   at `MAX_DISCOVERED_DATABASES` = 200 with a logger warning) → one resource
   per database with `metadata: { region, primary_region?, read_regions?,
 endpoint, state, database_type, tls }`; the owner labels `env`.
+  `upstash_redis__create_database` is declared in `resourceCreatingTools`:
+  after it succeeds the gateway runs this discovery again, off the request
+  path, so the new database is a resource at once (ADR
+  [discovery-runs-after-a-creating-call](../../decisions/discovery-runs-after-a-creating-call.md)).
 
 ## 5. Credential (`src/credential.ts`)
 

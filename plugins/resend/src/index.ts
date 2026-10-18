@@ -27,7 +27,7 @@ export const resendCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url))
 export const resendPlugin = definePlugin({
   id: 'resend',
   displayName: 'Resend',
-  version: '0.3.0',
+  version: '0.4.0',
   description:
     'Outbound email : transactional sends classified by recipient zone, segments and contacts, ' +
     'broadcast campaigns, sending domains — one resource per domain and per segment.',
@@ -37,6 +37,9 @@ export const resendPlugin = definePlugin({
   docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/resend.md',
   tools: resendTools,
   toolTitles: resendToolTitles,
+  // Domains and segments are what a Resend connection lists : a created one is
+  // discovered at once (ADR discovery-runs-after-a-creating-call).
+  resourceCreatingTools: ['resend__create_domain', 'resend__create_segment'],
   dataModel: resendDataModel,
   catalog: resendCatalog.catalog,
   credential: {

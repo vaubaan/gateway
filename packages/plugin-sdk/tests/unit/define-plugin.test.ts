@@ -82,6 +82,24 @@ describe('definePlugin', () => {
     ]);
   });
 
+  test('resourceCreatingTools is optional; it names MCP tools of the plugin, once each', () => {
+    const [tool] = acmePlugin.tools;
+    const name = tool!.name;
+    expect(pluginIssues({ ...acmePlugin, resourceCreatingTools: [name] })).toEqual([]);
+    expect(pluginIssues({ ...acmePlugin, resourceCreatingTools: [] })).toEqual([
+      'resourceCreatingTools: expected a non-empty list of tool names when present',
+    ]);
+    expect(
+      pluginIssues({ ...acmePlugin, resourceCreatingTools: ['acme__create_nothing'] }),
+    ).toEqual(["resourceCreatingTools: 'acme__create_nothing' is not a tool of this plugin"]);
+    expect(pluginIssues({ ...acmePlugin, resourceCreatingTools: [name, name] })).toEqual([
+      `resourceCreatingTools: '${name}' is listed twice`,
+    ]);
+    expect(() =>
+      definePlugin({ ...acmePlugin, resourceCreatingTools: ['acme__create_nothing'] }),
+    ).toThrow(PluginDefinitionError);
+  });
+
   test('toolTitles is optional; a title names a declared tool and reads as a headline', () => {
     const [tool] = acmePlugin.tools;
     const name = tool!.name;

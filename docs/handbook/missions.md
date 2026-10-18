@@ -569,8 +569,15 @@ function and say the same thing:
   touch a resource the door refuses with `resource-not-in-mission`.
 
 "Discovered" means the connection's resource rows: a resource a mission
-creates (`fly__create_app`) is reached once discovery returns it — today the
-owner's "refresh" on the account page. The kit says so to the agent.
+creates (`fly__create_app`) is reached once discovery returns it. A call
+through the execution door of a tool its plugin declares in
+`resourceCreatingTools` runs the connection's discovery again right after the
+answer (ADR
+[discovery-runs-after-a-creating-call](../decisions/discovery-runs-after-a-creating-call.md);
+handbook [connections](connections.md), "Discovery after a creating call"), so
+a whole-account mission reaches what it created from its next calls; a
+resource created elsewhere waits for the owner's "Refresh". The kit and the
+`resource-not-in-mission` hint of such a mission say so to the agent.
 
 - **`draftFrom(user, missionId)` / `duplicate(...)`** — the creator's own
   mission as a draft: same connections, the selected resources that still exist
@@ -1429,8 +1436,9 @@ ${VAUBAAN_MISSION_TOKEN}' } } } }`: the variable by reference, never the
    then "Accounts and resources you may touch" (the refs, with their
    env labels; for an account given whole, `KitConnection.reaches_later`:
    "the whole account, including resources discovered later (known now: …)"
-   or "(none known yet)", and that a resource created on the account is
-   reached once the gateway has discovered it), "Permissions and limits" (each id with its label, its limit
+   or "(none known yet)", and that a resource the agent creates through the
+   gateway is reached right after its creation, one created elsewhere once the
+   account's owner refreshes its resources), "Permissions and limits" (each id with its label, its limit
    per period, its rate limit and "runs freely" or "asks the mission creator
    first, each time"; how often the limits reset and when the mission ends),
    then one line per

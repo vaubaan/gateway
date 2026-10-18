@@ -82,6 +82,7 @@ import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 import type { JsonRpcError } from '@vaubaan/shared';
 
 import type { BuildInfo } from '../compose/root';
+import type { AnsweredCall } from '../connections/discovery-after-call';
 import { budgetMissionOf, type SessionService } from '../budget';
 import type { Logger } from '../logging';
 import { maskedToken } from '../missions';
@@ -113,6 +114,13 @@ export interface ExecutionDoorDeps extends MissionAdmissionDeps {
   readonly registry: PluginRegistry;
   readonly budget: Pick<SessionService, 'stateOf'>;
   readonly pipeline: CallPipeline;
+  /**
+   * Told of every allowed call once the door has its answer, before the answer
+   * leaves; must not wait (ADR discovery-runs-after-a-creating-call: a call
+   * that created a resource schedules the connection's discovery). Absent:
+   * nothing follows a call.
+   */
+  readonly afterCall?: (ctx: MissionContext, call: AnsweredCall) => void;
   readonly logger: Logger;
   readonly build: BuildInfo;
   readonly clock?: Clock;
@@ -358,6 +366,7 @@ export class ExecutionDoor {
       });
       switch (outcome.kind) {
         case 'allowed':
+          this.followCall(ctx, name, outcome.audit.connection_id, outcome.result);
           // What the plugin returned (`McpToolResult`), forwarded as is.
           return outcome.result as CallToolResult;
         case 'refused':
@@ -379,6 +388,30 @@ export class ExecutionDoor {
       }
     });
     return server;
+  }
+
+  /**
+   * Hands an allowed call to `afterCall` (a discovery after a creating call).
+   * What follows a call never changes its answer: a hook that throws is logged
+   * — its class, never the arguments — and the answer leaves as it is.
+   */
+  private followCall(
+    ctx: MissionContext,
+    tool: string,
+    connectionId: string | null,
+    result: unknown,
+  ): void {
+    if (!this.deps.afterCall) return;
+    try {
+      this.deps.afterCall(ctx, { tool, connectionId, result });
+    } catch (error) {
+      this.deps.logger.warn('after-call hook failed', {
+        mission_id: ctx.mission.id,
+        tool,
+        connection_id: connectionId,
+        error_class: error instanceof Error ? error.name : typeof error,
+      });
+    }
   }
 
   /**
