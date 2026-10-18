@@ -464,6 +464,7 @@ describe('views', () => {
     expect(owner.authority).toMatchObject({ basis: 'owner', whole_catalog: true });
     expect(owner.env_qualified_risks).toEqual({
       derives_env: false,
+      default_env: null,
       labelled_envs: ['staging', 'prod'],
       unlabelled_resources: ['scratch'],
       usable_risk_ids: ['acme[staging].write', 'acme[prod].write', 'acme[staging].bulk-delete'],

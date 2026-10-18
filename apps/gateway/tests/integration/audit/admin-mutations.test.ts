@@ -238,6 +238,7 @@ async function openRig(): Promise<Rig> {
         fixturePlugin({
           id: 'keyco',
           credential: API_KEY_SPEC,
+          envs: ['staging', 'prod'],
           discoverResources: async () => [
             { provider: 'keyco', ref: 'acct-a', displayName: 'Account A' },
           ],
@@ -481,6 +482,15 @@ const RULES: Readonly<Record<string, Rule>> = {
   'ConnectionService.provider': READ,
   'ConnectionService.listFor': READ,
   'ConnectionService.get': READ,
+  'ConnectionService.defaultEnvChoices': READ,
+  'ConnectionService.setDefaultEnv': {
+    kind: 'mutation',
+    target: connections,
+    prepare: (rig) => rig.connectByKey(),
+    drive: (rig, connection: ConnectionRecord) =>
+      rig.root.connections.service.setDefaultEnv(rig.alice, connection.id, 'staging'),
+    writes: { act: 'connection-default-env-set', object: 'connection', actor: 'alice' },
+  },
   'ConnectionService.callbackUrl': READ,
   'ConnectionService.start': {
     kind: 'mutation',
@@ -1480,6 +1490,7 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'connection-created',
       'connection-created',
       'connection-created',
+      'connection-default-env-set',
       'connection-reassigned',
       'connection-revoked',
       'connection-transferred',

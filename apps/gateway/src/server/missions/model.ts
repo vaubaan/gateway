@@ -156,6 +156,12 @@ export interface IssuanceConnection {
    */
   readonly derives_env: boolean;
   /**
+   * The connection owner's default environment for resources without a label of
+   * their own (ADR connection-default-environment-label); `null` when none. Already
+   * applied to `resources[].env`: nothing reads it to resolve an environment.
+   */
+  readonly default_env: string | null;
+  /**
    * Why the creator holds authority here (spec §3.1): `owner` — theirs, or their
    * group's — or `share`, the union of the shares they receive. `authority` is
    * the exact restriction either way.

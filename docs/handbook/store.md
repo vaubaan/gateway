@@ -67,6 +67,12 @@ apps/gateway/migrations/
   0015_git_pending_refs.sql
                                   table `git_pending_refs`: the temporary refs a git push created at
                                   the provider, and their deadline (schema version 15)
+  0016_permission_requests.sql
+                                  requests: the `permission` kind; tables `permission_refusals`,
+                                  `permission_requests` (schema version 16)
+  0017_connection_default_env.sql
+                                  connections: `default_env`, the owner's label for the resources
+                                  without one of their own (schema version 17)
 apps/gateway/src/server/store/
   index.ts                        openStore() / openMemoryStore(), Store type, re-exports
   db.ts                           openDb() — better-sqlite3 handle, pragmas, MIN_SQLITE_VERSION,
@@ -213,9 +219,9 @@ five-id catalog).
   with no resource…), driver errors (`SqliteError` with `code`) for constraint
   violations the schema catches (`UNIQUE`, `FOREIGN KEY`, `CHECK`).
 
-## Schema (`0001_schema.sql` … `0016_permission_requests.sql`)
+## Schema (`0001_schema.sql` … `0017_connection_default_env.sql`)
 
-Schema version 16. `0001` creates every table and trigger; `0002` only replaces the
+Schema version 17. `0001` creates every table and trigger; `0002` only replaces the
 `audit_risks` delete trigger (see Audit); `0003` adds `web_sessions`; `0004` adds the
 owner-curation columns of `connection_resources` (plain `ADD COLUMN`s); `0005` adds
 `approvals.tool` (`NOT NULL DEFAULT ''`: a row written before it matches no call) and
@@ -262,7 +268,13 @@ leaves, moves its deadline to the request's expiry when the push waits for an ap
 drops the row once the provider confirmed the ref gone, and counts a mission's rows
 (`countFor`) against its ceiling; its sweeper deletes what outlived its deadline and
 postpones (`extend`) what the provider kept (handbook [git-remote](git-remote.md)). Written by `store.pendingRefs`
-(`repositories/pending-refs.ts`).
+(`repositories/pending-refs.ts`). `0016` is described in "Permission requests" below.
+`0017` adds `connections.default_env` (one nullable `ADD COLUMN`, no backfill): the
+environment label the owner chose for the connection's resources that carry none of their
+own. It is never copied into `connection_resources.env`: every resource read of the
+connections repository joins the connection and applies it (`effectiveResourceEnv`,
+`store/resource-env.ts`; `envSource` `connection-default`). Handbook
+[connections](connections.md), "Default environment of a connection".
 
 | Area        | Tables                                                                                                                     | Notes                                                                                                                                                                                                                                                                                                                                                                                                               |
 | ----------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -962,4 +974,5 @@ are copied and recreated as children; foreign-key enforcement remains on.
 the request they produced. `permission_requests` holds the holder, token,
 justification and sorted risk set used for deduplication. Request expiry and
 decision state remain in `requests`. The migration test verifies an upgrade
-from schema 15 with both an encrypted open request and an existing grant.
+from a schema holding every migration but 0016 (the repositories of this build read
+the later columns), with both an encrypted open request and an existing grant.

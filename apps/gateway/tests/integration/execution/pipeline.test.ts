@@ -142,6 +142,29 @@ describe('execution door: the call pipeline', () => {
       expect(refusalOf(prod, 'risk-not-accepted').missing_risks).toEqual(['depot[prod].write']);
     });
 
+    it("reads an unlabelled resource under the connection's default environment, and only while it is set", async () => {
+      const mission = await instance.issue({ policy: [line(READ), line(WRITE_STAGING, 3)] });
+      const { connections } = instance.root.store;
+
+      // `scratch` carries no label: an env-qualified risk is refused on it.
+      const before = await instance.call(mission, 'depot__write_item', { space: 'scratch' });
+      refusalOf(before, 'risk-not-accepted');
+
+      // The owner gives the account a default: the same call matches `depot[staging].write`.
+      await connections.setDefaultEnv(instance.connection.id, 'staging');
+      const after = await instance.call(mission, 'depot__write_item', { space: 'scratch' });
+      expect(after.error).toBeUndefined();
+      expect(await consumed(mission, WRITE_STAGING)).toBe(1);
+      // A resource's own label still wins over the default.
+      const prod = await instance.call(mission, 'depot__write_item', { space: 'app-prod' });
+      expect(refusalOf(prod, 'risk-not-accepted').missing_risks).toEqual(['depot[prod].write']);
+
+      // Cleared: refused again.
+      await connections.setDefaultEnv(instance.connection.id, null);
+      const cleared = await instance.call(mission, 'depot__write_item', { space: 'scratch' });
+      refusalOf(cleared, 'risk-not-accepted');
+    });
+
     it('records the agent label from the header, and prefers the per-call `_meta.agent`', async () => {
       const mission = await instance.issue({ policy: [line(READ)] });
       await instance.call(

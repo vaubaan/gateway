@@ -102,7 +102,7 @@ export function envNotes(
         labelling.unlabelledResources === 1 ? 'resource has' : 'resources have'
       } no environment label: permissions tied to an environment are refused on ${
         labelling.unlabelledResources === 1 ? 'it' : 'them'
-      } until you label ${labelling.unlabelledResources === 1 ? 'it' : 'them'}.`,
+      } until you label ${labelling.unlabelledResources === 1 ? 'it' : 'them'} or give the account a default environment.`,
     );
   }
   return notes;

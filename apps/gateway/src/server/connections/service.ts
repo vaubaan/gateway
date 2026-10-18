@@ -55,7 +55,9 @@ import {
   ProviderAppNotConfigured,
   type ProviderAppsService,
 } from '../provider-apps';
+import { catalogEnvsOf } from '../missions/catalog-view';
 import type { Store } from '../store';
+import { ownResourceEnv } from '../store/resource-env';
 import { toIso, type Clock } from '../store/clock';
 import type {
   ConnectionRecord,
@@ -256,7 +258,13 @@ export interface ConnectionView {
 }
 
 export interface ConnectionDetail extends ConnectionView {
+  /** Each with its effective label: its own, else the connection's `defaultEnv`. */
   readonly resources: readonly ConnectionResourceRecord[];
+  /**
+   * The labels the owner may choose as the default environment for unlabelled
+   * resources (`catalogEnvsOf`); empty when the catalog has no env-scoped risk.
+   */
+  readonly defaultEnvChoices: readonly string[];
 }
 
 export interface StartInput {
@@ -490,7 +498,14 @@ export class ConnectionService {
     return {
       ...(await this.view(connection)),
       resources: await this.deps.store.connections.listResources(connection.id),
+      defaultEnvChoices: this.defaultEnvChoices(connection.provider),
     };
+  }
+
+  /** The environment labels of the provider's catalog: what a default may be. */
+  defaultEnvChoices(providerId: string): string[] {
+    const registered = this.deps.registry.get(providerId);
+    return registered ? catalogEnvsOf(registered.plugin.catalog) : [];
   }
 
   // ── Connect ───────────────────────────────────────────────────────────────
@@ -1112,7 +1127,9 @@ export class ConnectionService {
     if (patch.env !== undefined) {
       const parsed = parseEnvLabel(patch.env);
       if (!parsed.ok) throw new ConnectError('invalid-input', parsed.problem);
-      if (parsed.env !== resource.env) {
+      // Compared with the resource's own label: one inherited from the connection's
+      // default is not the resource's, and naming the same label pins it.
+      if (parsed.env !== ownResourceEnv(resource)) {
         if (resource.envSource === 'plugin') throw new ConnectError('label-read-only');
         env = parsed.env;
       }
@@ -1153,6 +1170,47 @@ export class ConnectionService {
       user_id: actor.user.id,
     });
     return resource;
+  }
+
+  /**
+   * The owner's default environment for the connection's unlabelled resources
+   * (ADR connection-default-environment-label). `raw` is one of the catalog's
+   * environment labels (`defaultEnvChoices`), or blank for none. A resource's own
+   * label, the owner's or the plugin's, always wins over it. Audited
+   * (`connection-default-env-set`) when it changes; an unchanged value writes nothing.
+   */
+  async setDefaultEnv(actor: Actor, connectionId: string, raw: string): Promise<ConnectionRecord> {
+    const connection = await this.requireOwned(actor, connectionId);
+    if (connection.status === 'revoked') throw new ConnectError('connection-revoked');
+    const parsed = parseEnvLabel(raw);
+    if (!parsed.ok) throw new ConnectError('invalid-input', parsed.problem);
+    const choices = this.defaultEnvChoices(connection.provider);
+    if (parsed.env !== null && !choices.includes(parsed.env)) {
+      throw new ConnectError(
+        'invalid-input',
+        choices.length === 0
+          ? 'no permission of this service depends on an environment'
+          : `'${parsed.env}' is not an environment of this service (${choices.join(', ')})`,
+      );
+    }
+    if (parsed.env === connection.defaultEnv) return connection;
+    const updated = await this.deps.store.connections.setDefaultEnv(connection.id, parsed.env);
+    await this.deps.audit.write({
+      kind: 'admin',
+      ts: this.nowIso(),
+      user_id: actor.user.id,
+      act: 'connection-default-env-set',
+      object: { type: 'connection', id: connection.id },
+      before: { default_env: connection.defaultEnv },
+      after: { default_env: updated.defaultEnv },
+      delegated_client_id: null,
+    });
+    this.deps.logger.info('connection default environment set by its owner', {
+      connection_id: connection.id,
+      user_id: actor.user.id,
+      default_env: updated.defaultEnv,
+    });
+    return updated;
   }
 
   // ── Revoke ────────────────────────────────────────────────────────────────
@@ -1655,7 +1713,8 @@ function resourceAuditView(resource: ConnectionResourceRecord): ResourceAuditVie
     resource_id: resource.id,
     ref: resource.ref,
     display_name: resource.displayName,
-    env: resource.env,
+    // The resource's own label, the one edited here; the connection's default is audited apart.
+    env: ownResourceEnv(resource),
     hidden: resource.hidden,
     owner_metadata: resource.ownerMetadata,
   };

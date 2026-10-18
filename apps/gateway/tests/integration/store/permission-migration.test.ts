@@ -10,7 +10,10 @@ it('upgrades existing requests and approvals without losing encrypted arguments 
   const dir = mkdtempSync(join(tmpdir(), 'permission-migration-'));
   const oldDir = mkdtempSync(join(tmpdir(), 'permission-old-schema-'));
   for (const file of readdirSync(DEFAULT_MIGRATIONS_DIR)) {
-    if (/^\d{4}_/.test(file) && Number(file.slice(0, 4)) <= 15)
+    // Every migration but 0016, the one under test: the repositories of this build
+    // read the columns later migrations add (0017 `connections.default_env`), and the
+    // migrator applies a missing version whatever was applied after it.
+    if (/^\d{4}_/.test(file) && Number(file.slice(0, 4)) !== 16)
       copyFileSync(join(DEFAULT_MIGRATIONS_DIR, file), join(oldDir, file));
   }
   const options = {
@@ -70,7 +73,7 @@ it('upgrades existing requests and approvals without losing encrypted arguments 
     const approvalBefore = store.db.prepare('SELECT * FROM approvals').all();
     await store.close();
     store = openStore(options);
-    expect(store.schemaVersion).toBe(16);
+    expect(store.schemaVersion).toBe(17);
     expect(await store.requests.getById(request.id)).toEqual(request);
     expect(await store.requests.getArguments(request.id)).toEqual({
       marker: 'preserved encrypted content',

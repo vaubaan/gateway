@@ -224,6 +224,14 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       resourceId,
     );
   }),
+  'connections.handlers.setDefaultEnv': form('user', 303, (rig, headers) =>
+    rig.root.connections.handlers.setDefaultEnv(
+      post(`/accounts/${rig.seeded.github.connection.id}/default-env`, headers, {
+        default_env: '',
+      }),
+      rig.seeded.github.connection.id,
+    ),
+  ),
   'connections.handlers.transfer': form('user', 303, (rig, headers) =>
     rig.root.connections.handlers.transfer(
       post(`/accounts/${rig.seeded.github.connection.id}/transfer`, headers, {

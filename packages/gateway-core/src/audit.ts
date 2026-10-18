@@ -102,6 +102,10 @@ export type AdminAct =
    *  editable settings). Object: the connection; `before` / `after` name the
    *  resource and carry the edited fields. */
   | 'resource-edited'
+  /** The owner set or cleared the connection's default environment label for its
+   *  unlabelled resources. Object: the connection; `before` / `after` carry
+   *  `default_env` (a label or null). */
+  | 'connection-default-env-set'
   | 'share-created'
   | 'share-revoked'
   | 'mission-issued'

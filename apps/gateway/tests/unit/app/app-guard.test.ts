@@ -57,6 +57,7 @@ const AUTHENTICATING_HANDLERS: readonly string[] = [
   'connections.handlers.discover',
   'connections.handlers.revoke',
   'connections.handlers.updateResource',
+  'connections.handlers.setDefaultEnv',
   // `transfer` (connections) and the share acts (`src/server/shares/handlers.ts`): `guardMutation`
   // first, like the others.
   'connections.handlers.transfer',

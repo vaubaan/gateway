@@ -121,7 +121,7 @@ export const MANAGEMENT_TOOLS: readonly ManagementToolDefinition[] = [
     kind: 'read',
     description: [
       'Lists the provider connections the user may build a mission from: the ones they own and the ones shared with them, directly or through a group.',
-      'For each connection: `authority.risk_ids` is the exact list of RiskIds a mission may accept on it — nothing outside that list will ever pass —, `resources` are the refs a mission can be limited to, with their environment label, `env_qualified_risks` says which environment-qualified ids are usable (an id such as `provider[prod].x` needs a selected resource labelled `prod`; unlabelled resources refuse it), and `presets` are ready-made policies, each flagged when it exceeds the user’s authority.',
+      'For each connection: `authority.risk_ids` is the exact list of RiskIds a mission may accept on it — nothing outside that list will ever pass —, `resources` are the refs a mission can be limited to, with their environment label (their own, or the connection’s `default_env` the owner chose for unlabelled resources), `env_qualified_risks` says which environment-qualified ids are usable (an id such as `provider[prod].x` needs a selected resource labelled `prod`; unlabelled resources refuse it), and `presets` are ready-made policies, each flagged when it exceeds the user’s authority.',
       'Call this first. Use `get_catalog` for the meaning of each RiskId and the content of each preset.',
     ].join(' '),
     inputSchema: z
