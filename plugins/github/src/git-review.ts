@@ -5,6 +5,11 @@
  *
  *   stale        the client's `old` is a claim: the ref is read at GitHub and
  *                a different value refuses the push ("stale info");
+ *   tag          a pushed tag may be an annotated tag object, which has no
+ *                history of its own: it is reviewed through the commit it
+ *                points at (peeled, as `git rev-parse <tag>^{commit}`), under
+ *                the same risk as a lightweight tag — the tag message is no
+ *                security boundary; a tag that names no commit is refused;
  *   base         what the push brings is reviewed from the narrowest of: the
  *                nearest existing branches it was built on (`BaseFinder`,
  *                reasoning there), the default branch, and `old` (an update);
@@ -36,7 +41,7 @@ import {
 
 import { isUnderWorkflowDirectory, repoFullName } from './call.ts';
 import { GITHUB_WEB_BASE } from './credential.ts';
-import { GIT_PUSH_TOOL, pushedRef } from './git-call.ts';
+import { GIT_PUSH_TOOL, pushedRef, type GitRefKind } from './git-call.ts';
 import { gitGrant, targetOf } from './git-credential.ts';
 import { branchHeads } from './git-heads.ts';
 import { workflowPathsOfCommit } from './git-inspect.ts';
@@ -47,6 +52,8 @@ import { gitPushNeeds, missingPermissionSentence } from './permission-check.ts';
 export const COMMITS_REVIEWED_MAX = 100;
 /** Commit reads in flight at once. */
 const COMMIT_READS_IN_PARALLEL = 8;
+/** Annotated tags peeled one inside the other, at most (as `git-inspect.ts`). */
+const TAG_DEPTH_MAX = 4;
 
 type Compared = Extract<Comparison, { ok: true }>;
 
@@ -60,6 +67,45 @@ async function staleRef(rest: GithubRest, update: GitRefUpdate): Promise<string 
   return update.old === null
     ? `${update.ref} already exists at GitHub; fetch first, then push again`
     : `${update.ref} has moved at GitHub since your last fetch (stale info); fetch first, then push again`;
+}
+
+/**
+ * The commit a tag's object id names, annotated tags peeled: the id itself
+ * when GitHub holds a commit under it, else the object the tag points at,
+ * followed `TAG_DEPTH_MAX` times; `null` when the chain ends on something
+ * else (a tree, a blob, an object GitHub does not hold, a chain too deep).
+ * GitHub's compare and commit listing know commits and ref names only, not a
+ * tag object's id.
+ */
+async function peeledCommit(rest: GithubRest, oid: string): Promise<string | null> {
+  let at = oid;
+  for (let depth = 0; depth <= TAG_DEPTH_MAX; depth += 1) {
+    const read = await rest.gitObject(at);
+    if (read === null) return null;
+    if (read.kind === 'commit') return at;
+    at = read.object;
+  }
+  return null;
+}
+
+/**
+ * The commits the review compares for one update: a branch points at commits
+ * (git refuses anything else under `refs/heads/`), a tag may point at an
+ * annotated tag object, peeled. The update itself keeps the object ids git
+ * sent: the ref is moved to the tag object, not to the commit.
+ */
+async function reviewedCommits(
+  rest: GithubRest,
+  refKind: GitRefKind,
+  update: GitRefUpdate & { readonly new: string },
+): Promise<{ readonly old: string | null; readonly new: string } | { readonly reason: string }> {
+  if (refKind === 'branch') return { old: update.old, new: update.new };
+  const head = await peeledCommit(rest, update.new);
+  const old = update.old === null ? null : await peeledCommit(rest, update.old);
+  if (head === null || (update.old !== null && old === null)) {
+    return { reason: `${update.ref} cannot be reviewed: it does not point at a commit` };
+  }
+  return { old, new: head };
 }
 
 /**
@@ -177,13 +223,15 @@ async function compareOne(
   if (stale !== null) return { reason: stale };
   if (update.new === null) return { update, kind: 'delete', compared: [] };
   const label = update.ref;
+  // What is compared: the commits, an annotated tag peeled to the one it names.
+  const commits = await reviewedCommits(rest, pushed.refKind, { ...update, new: update.new });
+  if ('reason' in commits) return commits;
+  const head = commits.new;
   /** The narrowest comparison from the nearest branch heads, or `null` when none was found. */
   const fromNearestBranch = async (exclude: string | null): Promise<Comparison | null> => {
-    const candidates = await bases.nearest(update.new!, exclude);
+    const candidates = await bases.nearest(head, exclude);
     if (candidates.length === 0) return null;
-    return narrowest(
-      await Promise.all(candidates.map((base) => rest.compare(base, update.new!, label))),
-    );
+    return narrowest(await Promise.all(candidates.map((base) => rest.compare(base, head, label))));
   };
 
   /**
@@ -195,10 +243,10 @@ async function compareOne(
    */
   const fromDefaultBranch = async (): Promise<Comparison | null> => {
     const base = await defaultBranch();
-    return base === null ? null : rest.compare(base, update.new!, label);
+    return base === null ? null : rest.compare(base, head, label);
   };
 
-  if (update.old === null) {
+  if (commits.old === null) {
     // A create brings what no branch holds: compared with the nearest branches
     // it was built on and with the default branch, the narrowest kept.
     const candidates = [await fromNearestBranch(null), await fromDefaultBranch()].filter(
@@ -215,7 +263,8 @@ async function compareOne(
   }
 
   // An update: what `old` already had is at GitHub; so is what any branch has.
-  const fromOld = await rest.compare(update.old, update.new, label);
+  const old = commits.old;
+  const fromOld = await rest.compare(old, head, label);
   const { status } = fromOld;
   const fastForward = pushed.refKind === 'branch' && (status === 'ahead' || status === 'identical');
   const kind: GitUpdateKind = fastForward ? 'fast-forward' : 'force';
@@ -223,12 +272,12 @@ async function compareOne(
   // merge of another branch, a rebase onto it) the nearest branch may hold most
   // of what the range lists.
   const broad = !fromOld.ok || fromOld.commits > 1;
-  const others = broad ? [await fromNearestBranch(update.old), await fromDefaultBranch()] : [];
+  const others = broad ? [await fromNearestBranch(old), await fromDefaultBranch()] : [];
   const forward = narrowest([fromOld, ...others.filter((c): c is Comparison => c !== null)]);
   if (!forward.ok) return { reason: forward.reason };
   if (fastForward) return { update, kind, compared: [forward] };
   // A rewrite can also take back what the old history had: both sides count.
-  const backward = await rest.compare(update.new, update.old, label);
+  const backward = await rest.compare(head, old, label);
   if (!backward.ok) return { reason: backward.reason };
   return { update, kind, compared: [forward, backward] };
 }

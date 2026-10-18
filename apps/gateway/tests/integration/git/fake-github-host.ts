@@ -338,10 +338,22 @@ export class FakeGithubHost {
     return null;
   }
 
+  /**
+   * The commit a side of a comparison names, as GitHub resolves it: a ref
+   * name through its tag, a raw object id only when it is a commit's — the
+   * id of an annotated tag object is "Not Found" (observed 2026-10-18).
+   */
+  private async commitOf(repository: string, rev: string): Promise<string | null> {
+    if (/^[0-9a-f]{40}$/.test(rev)) {
+      const type = await this.git(repository, ['cat-file', '-t', rev]).catch(() => null);
+      return type === 'commit' ? rev : null;
+    }
+    return this.refOf(repository, `${rev}^{commit}`);
+  }
+
   private async compare(repository: string, base: string, head: string): Promise<Response> {
-    const commit = async (rev: string) => this.refOf(repository, `${rev}^{commit}`);
-    const b = await commit(base);
-    const h = await commit(head);
+    const b = await this.commitOf(repository, base);
+    const h = await this.commitOf(repository, head);
     if (!b || !h) return json({ message: 'Not Found' }, 404);
     let mergeBase: string;
     try {

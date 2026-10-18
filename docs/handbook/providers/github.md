@@ -255,7 +255,12 @@ review.
   runs the workflows of the pushed tip. A deletion changes nothing.
 - **Review** (`review`, `git-review.ts`). For each ref: `GET git/ref/<ref>`
   must equal the client's `old` (else stale info — a lie about `old` would
-  keep commits out of the review); `GET compare/<base>...<head>` gives the
+  keep commits out of the review); a tag's `new` and `old` are peeled to the
+  commit they name (`peeledCommit`: `GET git/commits/{sha}`, then
+  `git/tags/{sha}`, 4 deep at most) — an annotated tag is a tag object the
+  compare API does not know, reviewed through its commit under the same
+  `tag-write`; a tag naming no commit is refused; the ref itself is moved
+  to the tag object; `GET compare/<base>...<head>` gives the
   status, commit count, the commits and the net files (renames: both names);
   a non-fast-forward is compared both ways. The base is the nearest existing
   branch head in the pushed commit's history (`BaseFinder`: the upload-pack
@@ -544,8 +549,11 @@ policy is stored, not derived from the preset.
   — none; creates against the default branch, an old commit, annotated tags,
   every ref of a push; fail closed: a garbled pack, a thin pack, GitHub
   failing, an `old` GitHub does not hold.
-- `git-moves.test.ts` (7): the ref moves and the review against `mockFetch`
-  (a commit of 300 files read by its trees: unchanged, changed).
+- `git-moves.test.ts` (11): the ref moves and the review against `mockFetch`
+  (a commit of 300 files read by its trees: unchanged, changed; an annotated
+  tag reviewed through its commit, a lightweight tag as the commit, an
+  annotated tag of an unrelated commit refused, a tag naming no commit
+  refused).
 
 The git remote end to end (review, ref moves, permissions, token
 connection) is tested by the host against a git-backed stand-in of GitHub:

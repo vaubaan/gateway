@@ -258,6 +258,54 @@ describe('push', () => {
     expect(await rig.host.refOf(REPOSITORY, 'refs/heads/feature/x')).toBeNull();
   });
 
+  it('an annotated tag is reviewed through the commit it points at, like a lightweight tag', async () => {
+    const repo = await clone(developer);
+    const release = await rig.mission({
+      policy: [
+        line('github.read-code'),
+        line('github.git-push'),
+        line('github.tag-write'),
+        line('github.create-release'),
+      ],
+    });
+    const head = (await rig.git(repo, ['rev-parse', 'HEAD'], null)).stdout.trim();
+    ok(await rig.git(repo, ['tag', '-a', 'v1.0.0', '-m', 'Release 1.0.0', head], null));
+    const tagObject = (await rig.git(repo, ['rev-parse', 'refs/tags/v1.0.0'], null)).stdout.trim();
+    expect(tagObject).not.toBe(head);
+    const annotated = await rig.git(repo, ['push', 'origin', 'v1.0.0'], release.token);
+    expect(annotated.stderr).not.toContain('cannot be reviewed');
+    ok(annotated);
+    // The ref holds the tag object (its message kept), not the commit.
+    expect(await rig.host.refOf(REPOSITORY, 'refs/tags/v1.0.0')).toBe(tagObject);
+    expect(await rig.host.refOf(REPOSITORY, 'refs/tags/v1.0.0^{commit}')).toBe(head);
+
+    ok(await rig.git(repo, ['tag', 'v1.0.1', head], null));
+    ok(await rig.git(repo, ['push', 'origin', 'v1.0.1'], release.token));
+    expect(await rig.host.refOf(REPOSITORY, 'refs/tags/v1.0.1')).toBe(head);
+  });
+
+  it('an annotated tag of a commit no branch reaches is refused: no history in common', async () => {
+    const repo = await clone(developer);
+    const release = await rig.mission({
+      policy: [
+        line('github.read-code'),
+        line('github.git-push'),
+        line('github.tag-write'),
+        line('github.create-release'),
+      ],
+    });
+    // An orphan commit with the same `.github` tree: no workflow change to ask about.
+    ok(await rig.git(repo, ['checkout', '-q', '--orphan', 'elsewhere'], null));
+    const orphan = await commitFile(repo, 'README.md', '# elsewhere\n');
+    ok(await rig.git(repo, ['tag', '-a', 'v2.0.0', '-m', 'Release 2.0.0', orphan], null));
+    const result = await rig.git(repo, ['push', 'origin', 'v2.0.0'], release.token);
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain(
+      'refs/tags/v2.0.0 cannot be reviewed: it has no history in common with',
+    );
+    expect(await rig.host.refOf(REPOSITORY, 'refs/tags/v2.0.0')).toBeNull();
+  });
+
   it('refuses a push the compare API cannot review in full (300 files)', async () => {
     const repo = await clone(developer);
     ok(await rig.git(repo, ['checkout', '-q', '-b', 'feature/huge'], null));
