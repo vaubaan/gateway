@@ -179,6 +179,10 @@ export type AdminAct =
   | 'invitation-added'
   /** An administrator removed an address from the invitation list; `before.email`. */
   | 'invitation-removed'
+  /** An administrator downloaded the master key file (the setup's handover, or
+   *  Administration → Encryption). Object: `instance-config` / `master-key`;
+   *  `after` carries the key version and the page it was asked from. Never the key. */
+  | 'master-key-downloaded'
   | 'config-changed';
 
 export type AdminObjectType =

@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import type { EncryptionConfig } from '../config/types';
+import type { EncryptionKeys } from '../config/types';
 import { BLOB_FORMAT_V1, CryptoError, deriveConnectionKey, NONCE_BYTES, sodiumReady } from './aead';
 import { createEncryptor, type Encryptor } from './encryptor';
 
@@ -10,7 +10,7 @@ const KEY_V2 = new Uint8Array(randomBytes(32));
 const CONN_A = '018f3c6e-0000-7000-8000-000000000001';
 const CONN_B = '018f3c6e-0000-7000-8000-000000000002';
 
-function config(partial: Partial<EncryptionConfig> = {}): EncryptionConfig {
+function config(partial: Partial<EncryptionKeys> = {}): EncryptionKeys {
   return { masterKey: KEY_V1, keyVersion: 1, previousKeys: new Map(), ...partial };
 }
 

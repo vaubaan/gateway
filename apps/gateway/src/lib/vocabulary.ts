@@ -753,6 +753,7 @@ export const ACT_WORDS = {
   'user-sessions-ended': 'signed a person out everywhere',
   'invitation-added': 'invited an address',
   'invitation-removed': 'removed an invitation',
+  'master-key-downloaded': 'downloaded the encryption key',
   'config-changed': 'changed the configuration',
   'permissions-changed': 'changed the permissions of a mission',
   'permission-requested': 'requested missing permissions',
@@ -798,6 +799,10 @@ export const SETTINGS_PAGES = {
   telemetry: {
     title: 'Telemetry',
     lede: 'Anonymous reports that say whether each service’s plugin works; nothing is sent until you turn it on.',
+  },
+  encryption: {
+    title: 'Encryption',
+    lede: 'The key every stored secret is sealed with. Without it, a backup of this gateway cannot be opened.',
   },
   registeredApps: {
     title: 'Registered apps',

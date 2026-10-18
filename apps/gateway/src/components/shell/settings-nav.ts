@@ -19,6 +19,7 @@ export const ADMIN_PAGES = {
   ownerlessAccounts: '/admin/connections',
   telemetry: '/admin/telemetry',
   registeredApps: '/admin/oauth-clients',
+  encryption: '/admin/encryption',
 } as const;
 
 export function settingsNav(administrator: boolean): SubNavGroup[] {
@@ -44,6 +45,7 @@ export function settingsNav(administrator: boolean): SubNavGroup[] {
         { label: 'Accounts without owner', href: ADMIN_PAGES.ownerlessAccounts },
         { label: 'Telemetry', href: ADMIN_PAGES.telemetry },
         { label: 'Registered apps', href: ADMIN_PAGES.registeredApps },
+        { label: 'Encryption', href: ADMIN_PAGES.encryption },
       ],
     });
   }

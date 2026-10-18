@@ -88,6 +88,12 @@
 #   # With compose.yaml the value comes from deploy/config/.env; with Docker or
 #   # Kubernetes secrets write `${file:/run/secrets/vaubaan_master_key}` instead.
 #   master_key: ${VAUBAAN_MASTER_KEY}
+#   # Write the key file at the first start when it does not exist (master_key
+#   # must then be a `${file:...}` reference, or VAUBAAN_MASTER_KEY_FILE): 32
+#   # random bytes, base64, mode 0600; the setup page then hands the key to the
+#   # administrator. Refused once the store holds data, and with restore.from.
+#   # env: VAUBAAN_MASTER_KEY_GENERATE
+#   generate_master_key: false
 #   # Version stamped on new blobs (integer >= 1). Increase it when you rotate the key.
 #   # env: VAUBAAN_MASTER_KEY_VERSION
 #   key_version: 1

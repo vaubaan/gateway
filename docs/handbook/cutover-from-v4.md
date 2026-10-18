@@ -52,8 +52,10 @@ instance uses apps the company owns, never the ones the v4 operator held.
       ([deploy/README](../../deploy/README.md)).
 - [ ] An image built from a tagged commit on which the CI job `e2e` (the
       cutover smoke) is green.
-- [ ] A master key (`npm run gen-master-key`) and a bootstrap token
-      (`openssl rand -hex 24`), kept outside the repository.
+- [ ] A bootstrap token (`openssl rand -hex 24`), kept outside the
+      repository; and either a master key (`npm run gen-master-key`) kept the
+      same way, or `VAUBAAN_MASTER_KEY_FILE` + `VAUBAAN_MASTER_KEY_GENERATE=1`
+      and the key downloaded from the setup page at the first start.
 - [ ] `telemetry.enabled: false` (the default).
 
 ### 1.2 The identity provider

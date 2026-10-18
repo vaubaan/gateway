@@ -10,7 +10,7 @@
  * current key, after which the old key is dropped (ADR
  * master-key-rotation-reseals-every-blob).
  */
-import type { EncryptionConfig } from '../config/types';
+import type { EncryptionKeys } from '../config/types';
 import { CryptoError, deriveConnectionKey, open, seal, sodiumReady, wipe } from './aead';
 
 export interface EncryptedBlob {
@@ -26,7 +26,7 @@ export interface Encryptor {
   decrypt(connectionId: string, sealed: EncryptedBlob): Promise<string>;
 }
 
-export async function createEncryptor(config: EncryptionConfig): Promise<Encryptor> {
+export async function createEncryptor(config: EncryptionKeys): Promise<Encryptor> {
   await sodiumReady();
   const keys = new Map<number, Uint8Array>(config.previousKeys);
   keys.set(config.keyVersion, config.masterKey);

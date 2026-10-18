@@ -22,7 +22,6 @@ import { SessionService } from '../budget';
 import { createConnectionsModule, type ConnectionsModule } from '../connections';
 import {
   buildInfoFromEnv,
-  loadProcessConfig,
   type BuildInfo,
   type InstanceConfig,
   type LoadedConfig,
@@ -37,6 +36,7 @@ import {
 import { createGitModule, type GitModule } from '../git';
 import { createGroupsModule, type GroupsModule } from '../groups';
 import { createInstanceModule, type InstanceModule } from '../instance';
+import { createMasterKeyModule, type MasterKeyModule } from '../master-key';
 import { publishHttps } from '../http/security-headers';
 import { createLogger, createRedactor, type Logger, type LoggerOptions } from '../logging';
 import { ProviderAppsService } from '../provider-apps';
@@ -51,6 +51,7 @@ import type { Store } from '../store';
 import type { CacheClient, RateLimiter, SessionStore } from './ports';
 import { checkProviderApps, checkSelfResources, RegistryCatalogIndex } from './registry';
 import { wireManagementDoor, type ManagementDoorModule } from './management';
+import { loadBootConfig } from './boot-config';
 import { buildShippedRegistry } from './shipped-plugins';
 import { openEmbeddedStore, type StoreContext } from './store';
 
@@ -95,6 +96,8 @@ export interface GatewayRoot {
   readonly telemetry: TelemetryModule;
   /** How the interface names this instance: the configuration's name, else the administrator's. */
   readonly instance: InstanceModule;
+  /** The master key: generated here or not, handed over or not, downloadable by an operator. */
+  readonly masterKey: MasterKeyModule;
   /** Authorization server of the management door: clients, consent, delegated tokens. */
   readonly oauth: OAuthAsModule;
   /** Administration → Users: the operator's deactivation and reactivation of a user. */
@@ -135,7 +138,7 @@ export interface RootDeps {
 }
 
 export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
-  const { config, configFile } = (deps.loadConfig ?? loadProcessConfig)();
+  const { config, configFile, masterKeyGenerated } = (deps.loadConfig ?? loadBootConfig)();
   const logger = createLogger({
     level: config.log.level,
     redact: createRedactor(secretValues(config)),
@@ -143,6 +146,14 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
   }).child({ component: 'gateway' });
   const build = deps.build ?? buildInfoFromEnv();
   logConfigurationSummary(logger, config, configFile);
+  if (masterKeyGenerated) {
+    // The path of the file, never its content.
+    const keyFilePath = config.encryption.masterKeyFile;
+    logger.info('master key generated at the first start: the setup hands it over', {
+      path: keyFilePath,
+      key_version: config.encryption.keyVersion,
+    });
+  }
   // The proxy sends HSTS when the public URL is https (`server/http/security-headers.ts`).
   publishHttps(config.publicUrl.protocol === 'https:');
 
@@ -167,7 +178,11 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
   const opened: Closer[] = [() => store.close()];
   try {
     await checkSealedKeys(store, config, logger);
-    const modules = await wireModules({ config, logger, registry, store, build }, deps, opened);
+    const modules = await wireModules(
+      { config, logger, registry, store, build, masterKeyGenerated },
+      deps,
+      opened,
+    );
     const root: GatewayRoot = {
       config,
       configFile,
@@ -301,6 +316,8 @@ interface RootBase {
   readonly registry: PluginRegistry;
   readonly store: Store;
   readonly build: BuildInfo;
+  /** The boot wrote the master key file at this start (`boot-config.ts`). */
+  readonly masterKeyGenerated: boolean;
 }
 
 type RootModules = Pick<
@@ -322,6 +339,7 @@ type RootModules = Pick<
   | 'git'
   | 'telemetry'
   | 'instance'
+  | 'masterKey'
   | 'oauth'
   | 'users'
   | 'management'
@@ -333,7 +351,7 @@ type RootModules = Pick<
  * completes (`close()`) or a later step throws.
  */
 async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Promise<RootModules> {
-  const { config, logger, registry, store, build } = base;
+  const { config, logger, registry, store, build, masterKeyGenerated } = base;
 
   // Web sessions live in the embedded store (`store.webSessions`, table
   // `web_sessions`) so they survive a restart and are revocable; a hosted
@@ -462,6 +480,15 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     authenticator: auth.authenticator,
     logger,
   });
+  const masterKey = createMasterKeyModule({
+    config,
+    store,
+    authenticator: auth.authenticator,
+    sessions: auth.sessions,
+    logger,
+  });
+  // Remembered in the store, so the setup hands the key over once, across restarts.
+  if (masterKeyGenerated) await masterKey.service.recordGenerated();
   // The authorization server comes before the doors: the execution door refuses
   // a delegated token by kind, the management door admits nothing else.
   const oauth = createOAuthAsModule({
@@ -549,6 +576,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     git,
     telemetry,
     instance,
+    masterKey,
     oauth,
     users,
     management,

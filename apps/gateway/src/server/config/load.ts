@@ -4,6 +4,14 @@
  * Precedence (ADR docker-image-and-config-format): the mounted YAML file wins
  * over environment variables, key by key. Validation collects every problem
  * and throws one `ConfigError` naming each YAML path and its variable(s).
+ *
+ * One absence is not a problem for the boot: the master key *file* that the
+ * configuration names does not exist yet, and the configuration says what to do
+ * about it (`encryption.generate_master_key`, or a configured restore).
+ * `loadInstanceConfigOrSetup()` reports that as an outcome with everything else
+ * validated (ADR master-key-generated-and-handed-over-by-the-instance); every
+ * other caller — the operator commands — gets the error through
+ * `loadInstanceConfig()`.
  */
 import { isTelemetryLevel, TELEMETRY_LEVELS, type TelemetryLevel } from '@vaubaan/telemetry';
 
@@ -25,7 +33,14 @@ import {
   type SignInProvider,
 } from './sign-in';
 import { ConfigError, IssueList } from './errors';
-import { type EnvSource, type FileReader, defaultFileReader } from './secret-refs';
+import {
+  type AbsentSecretFile,
+  type EnvSource,
+  type FileReader,
+  type SourceTrace,
+  defaultFileReader,
+  newSourceTrace,
+} from './secret-refs';
 import { parseRestoreSource, parseSha256 } from './restore-source';
 import { readSelfResources } from './self-resources';
 import {
@@ -42,8 +57,10 @@ import {
   SIGN_IN_ENV_PREFIX,
 } from './sources';
 import {
+  type AbsentMasterKeyReason,
   type AdminRule,
   type RestoreConfig,
+  type SetupConfig,
   CLIENT_REGISTRATION_POLICIES,
   type ClientRegistrationPolicy,
   type EncryptionConfig,
@@ -99,23 +116,137 @@ export interface LoadedConfig {
    * configuration: what `scrubSecretEnv` deletes once the configuration is loaded.
    */
   readonly secretEnvNames: readonly string[];
+  /** The boot generated the master key file at this start (`compose/boot-config.ts`). */
+  readonly masterKeyGenerated: boolean;
 }
 
-export function loadInstanceConfig(options: LoadOptions = {}): LoadedConfig {
+/**
+ * The configuration without its master key: the file named for it does not exist,
+ * and the configuration says what the boot does about it (`reason`). Everything
+ * else has been validated as usual.
+ */
+export interface SetupOutcome {
+  readonly kind: 'setup';
+  readonly config: SetupConfig;
+  /** The absent file, as the configuration names it. */
+  readonly masterKeyFile: string;
+  readonly reason: AbsentMasterKeyReason;
+  readonly configFile: string | null;
+  readonly secretEnvNames: readonly string[];
+  /** The problem as `loadInstanceConfig()` would report it. */
+  readonly issue: AbsentSecretFile;
+}
+
+export type ConfigLoadOutcome =
+  | { readonly kind: 'ready'; readonly loaded: LoadedConfig }
+  | SetupOutcome;
+
+const MASTER_KEY_PATH = 'encryption.master_key';
+const GENERATE_PATH = 'encryption.generate_master_key';
+
+/** What the two sources said about the master key, beside its value. */
+interface MasterKeySource {
+  /** The file the key is read from, when it is read from one: the winning source's. */
+  readonly file: string | null;
+  /** The absent key file the boot may tolerate, with the reason the configuration gives. */
+  readonly absent: {
+    readonly file: AbsentSecretFile;
+    readonly reason: AbsentMasterKeyReason;
+  } | null;
+}
+
+/**
+ * Loads the configuration; an absent master key file is an outcome rather than an
+ * error when the configuration says what to do about it. Any other problem, the
+ * absent file included otherwise, is a `ConfigError` as with `loadInstanceConfig()`.
+ */
+export function loadInstanceConfigOrSetup(options: LoadOptions = {}): ConfigLoadOutcome {
   const env = options.env ?? process.env;
   const readFile = options.readFile ?? defaultFileReader;
   const issues = new IssueList();
+  const envTrace = newSourceTrace();
+  const fileTrace = newSourceTrace();
 
-  const fromEnv = readEnvSource(env, issues, readFile);
-  const fromFile = readFileSource(env, issues, readFile);
+  const fromEnv = readEnvSource(env, issues, readFile, envTrace);
+  const fromFile = readFileSource(env, issues, readFile, fileTrace);
   const raw = fromFile ? mergeTrees(fromEnv, fromFile.tree) : fromEnv;
-  const config = validate(raw, issues, env);
+  const masterKey = masterKeySource(raw, fromFile?.tree ?? null, envTrace, fileTrace, issues);
+  const config = validate(raw, issues, env, masterKey);
   issues.throwIfAny();
   if (!config) throw new ConfigError(issues.items); // unreachable: validate() reports every failure
   const secretEnvNames = [
     ...new Set([...secretEnvVariables(env), ...(fromFile?.secretVariables ?? [])]),
   ].sort();
-  return { config, configFile: fromFile?.path ?? null, secretEnvNames };
+  const configFile = fromFile?.path ?? null;
+  if (masterKey.absent) {
+    const { encryption: _absent, ...rest } = config;
+    return {
+      kind: 'setup',
+      config: rest,
+      masterKeyFile: masterKey.absent.file.filePath,
+      reason: masterKey.absent.reason,
+      configFile,
+      secretEnvNames,
+      issue: masterKey.absent.file,
+    };
+  }
+  return {
+    kind: 'ready',
+    loaded: { config, configFile, secretEnvNames, masterKeyGenerated: false },
+  };
+}
+
+export function loadInstanceConfig(options: LoadOptions = {}): LoadedConfig {
+  const outcome = loadInstanceConfigOrSetup(options);
+  if (outcome.kind === 'ready') return outcome.loaded;
+  const hint =
+    outcome.reason === 'generate'
+      ? ' (the gateway writes it at its first start; start the gateway first)'
+      : ' (a restore needs the key the copy was sealed with; put the file back)';
+  throw new ConfigError([
+    { path: MASTER_KEY_PATH, env: outcome.issue.env, message: outcome.issue.message + hint },
+  ]);
+}
+
+/**
+ * Where the master key comes from, by the precedence of the sources: the YAML file
+ * when it sets the key, else the environment. An absent key file of the winning
+ * source is tolerated when the raw configuration enables generation or names a
+ * restore source; every other absent secret file is reported as the problem it is.
+ */
+function masterKeySource(
+  raw: RawTree,
+  fileTree: RawTree | null,
+  envTrace: SourceTrace,
+  fileTrace: SourceTrace,
+  issues: IssueList,
+): MasterKeySource {
+  const fileWins = fileTree !== null && getPath(fileTree, MASTER_KEY_PATH) !== undefined;
+  const winner = fileWins ? fileTrace : envTrace;
+  const reason = absenceReason(raw);
+  let absent: MasterKeySource['absent'] = null;
+  for (const trace of [envTrace, fileTrace]) {
+    for (const file of trace.absentFiles) {
+      if (
+        file.keyPath === MASTER_KEY_PATH &&
+        trace === winner &&
+        reason !== null &&
+        absent === null
+      ) {
+        absent = { file, reason };
+        continue;
+      }
+      issues.add(file.keyPath, file.message, file.env);
+    }
+  }
+  return { file: winner.secretFiles.get(MASTER_KEY_PATH) ?? absent?.file.filePath ?? null, absent };
+}
+
+function absenceReason(raw: RawTree): AbsentMasterKeyReason | null {
+  if (getPath(raw, GENERATE_PATH) === true) return 'generate';
+  const from = getPath(raw, 'restore.from');
+  if (typeof from === 'string' && from.trim() !== '') return 'restore';
+  return null;
 }
 
 /**
@@ -260,7 +391,12 @@ class Reader {
   }
 }
 
-function validate(raw: RawTree, issues: IssueList, env: EnvSource): InstanceConfig | null {
+function validate(
+  raw: RawTree,
+  issues: IssueList,
+  env: EnvSource,
+  masterKey: MasterKeySource,
+): InstanceConfig | null {
   const r = new Reader(raw, issues);
   const before = issues.items.length;
 
@@ -273,7 +409,7 @@ function validate(raw: RawTree, issues: IssueList, env: EnvSource): InstanceConf
   const clientIpHeader = readClientIpHeader(r, trustedProxies);
   const storePath = r.string('store.path', { required: isKeyRequired(keySpec('store.path')) });
   const restore = readRestore(r);
-  const encryption = readEncryption(r);
+  const encryption = readEncryption(r, masterKey, restore.from !== null);
   const idp = readIdp(r);
   const signIn = readSignIn(r);
   const signInProviders = checkSignInProviders(r, idp, signIn);
@@ -302,6 +438,8 @@ function validate(raw: RawTree, issues: IssueList, env: EnvSource): InstanceConf
 
   if (issues.items.length > before) return null;
   if (!publicUrl || !storePath || !encryption || !admin || !collectorUrl) return null;
+  // An absent key file the boot tolerates: the block is complete but for the key
+  // itself, which the caller takes out again (`SetupOutcome`).
 
   return {
     publicUrl,
@@ -561,11 +699,37 @@ function readLogLevel(r: Reader): LogLevel {
   return DEFAULT_LOG_LEVEL;
 }
 
-function readEncryption(r: Reader): EncryptionConfig | null {
-  const path = 'encryption.master_key';
-  const encoded = r.string(path, { required: isKeyRequired(keySpec(path)) });
+/**
+ * `encryption.*`. With `generate_master_key` the key must be a file (there is nothing
+ * to write otherwise) and no restore may be configured (the copy needs *its* key, not
+ * a new one). An absent key file the loader tolerates leaves `masterKey` empty: the
+ * caller never hands that block to an encryptor (`loadInstanceConfigOrSetup`).
+ */
+function readEncryption(
+  r: Reader,
+  source: MasterKeySource,
+  restoreConfigured: boolean,
+): EncryptionConfig | null {
+  const path = MASTER_KEY_PATH;
+  const generateMasterKey = r.bool(keySpec(GENERATE_PATH));
+  const absent = source.absent !== null;
+  const encoded = absent ? undefined : r.string(path, { required: isKeyRequired(keySpec(path)) });
   const masterKey = encoded === undefined ? undefined : decodeKey(encoded, path, r.issues);
   const keyVersion = r.int(keySpec('encryption.key_version'));
+  if (generateMasterKey && restoreConfigured) {
+    r.issues.add(
+      GENERATE_PATH,
+      'cannot be set with restore.from: a restored copy opens with the key it was sealed with, not a new one',
+      envNamesFor(GENERATE_PATH),
+    );
+  }
+  if (generateMasterKey && source.file === null && encoded !== undefined) {
+    r.issues.add(
+      GENERATE_PATH,
+      `applies to a key read from a file: name the file (${envNamesFor(path)[1] ?? ''} or \${file:…}) or unset this key`,
+      envNamesFor(GENERATE_PATH),
+    );
+  }
 
   const previousKeys = new Map<number, Uint8Array>();
   const previous = r.tree('encryption.previous_keys');
@@ -597,8 +761,18 @@ function readEncryption(r: Reader): EncryptionConfig | null {
       if (key) previousKeys.set(version, key);
     }
   }
+  if (absent) {
+    // Taken out again by the caller: a placeholder so the rest of the block is checked.
+    return {
+      masterKey: new Uint8Array(0),
+      keyVersion,
+      previousKeys,
+      masterKeyFile: source.file,
+      generateMasterKey,
+    };
+  }
   if (!masterKey) return null;
-  return { masterKey, keyVersion, previousKeys };
+  return { masterKey, keyVersion, previousKeys, masterKeyFile: source.file, generateMasterKey };
 }
 
 function decodeKey(encoded: string, path: string, issues: IssueList): Uint8Array | undefined {

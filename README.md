@@ -74,24 +74,27 @@ tour: [demo mode](docs/handbook/demo-mode.md).
 ### Install an instance
 
 Needs Docker with Compose v2, a DNS name pointing at the host, and ports 80
-and 443 reachable (the bundled proxy obtains the TLS certificate), plus
-Node.js on the host for the key-generation script. You also need a client at
-a sign-in provider: OpenID Connect at your identity provider, or a GitHub
-OAuth App. On Railway, follow [deploy/railway.md](deploy/railway.md).
+and 443 reachable (the bundled proxy obtains the TLS certificate). You also
+need a client at a sign-in provider: OpenID Connect at your identity
+provider, or a GitHub OAuth App. On Railway, follow
+[deploy/railway.md](deploy/railway.md).
 
 ```bash
 cp deploy/config/.env.example deploy/config/.env
 cp deploy/config/gateway.example.yaml deploy/config/gateway.yaml
-npm run gen-master-key     # prints the value for VAUBAAN_MASTER_KEY
 openssl rand -hex 24       # prints a value for VAUBAAN_BOOTSTRAP_TOKEN
 docker compose --env-file deploy/config/.env -f deploy/compose.yaml up -d --build
 ```
 
 Before the last command, edit `deploy/config/.env`: `GATEWAY_DOMAIN`,
-`VAUBAAN_PUBLIC_URL` (https, same host), `VAUBAAN_ADMIN_EMAILS`, and the two
-secrets above. Anything missing stops the container with a message naming
-the key. Then open `https://<your domain>/login`, follow the bootstrap link,
-and add your sign-in provider.
+`VAUBAAN_PUBLIC_URL` (https, same host), `VAUBAAN_ADMIN_EMAILS`, and the
+bootstrap token above. Anything missing stops the container with a message
+naming the key. The encryption key is generated on the data volume at the
+first start (`VAUBAAN_MASTER_KEY_GENERATE=1` in the example `.env`; to provide
+your own instead, `npm run gen-master-key` into `VAUBAAN_MASTER_KEY`). Then
+open `https://<your domain>/login`, follow the bootstrap link, download the
+encryption key the setup hands you and keep it outside the host — a backup
+cannot be opened without it —, and add your sign-in provider.
 
 - Every step, running the image without Compose, operations, upgrades,
   and, once a release exists, pulling a published image by tag and

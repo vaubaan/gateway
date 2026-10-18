@@ -2,7 +2,7 @@
 title: Authentication — sign-in providers (OIDC, GitHub), admission, web session, bootstrap token, admin rule
 status: current
 date: 2026-10-13
-last_synced: 2026-10-16
+last_synced: 2026-10-17
 tracks:
   - apps/gateway/src/server/auth/
   - apps/gateway/src/server/users/
@@ -14,6 +14,8 @@ tracks:
   - apps/gateway/src/app/logout/route.ts
   - apps/gateway/src/app/api/auth/
   - apps/gateway/src/app/api/admin/identity-provider/route.ts
+  - apps/gateway/src/app/api/admin/master-key/
+  - apps/gateway/src/app/admin/(guarded)/encryption/page.tsx
   - apps/gateway/src/app/api/admin/sign-in-providers/
   - apps/gateway/src/server/config/sign-in.ts
   - apps/gateway/src/server/store/repositories/invitations.ts
@@ -867,6 +869,21 @@ millisecond of a deactivation is refused.
   when they need someone — accounts without owner
   (`connections.service.listOwnerless()`) and apps waiting for approval
   (`oauth.clients.list()`). The heading says "n of m done" (`stepsDone`).
+  When this instance generated its master key (`root.masterKey.service.state()`,
+  handbook [configuration](configuration.md), "Master key generated at the
+  first start"), the checklist starts with **Your encryption key**, before
+  Sign-in: done once an administrator confirmed keeping a copy, otherwise the
+  one action of the page, and every other step shows "after the key" instead
+  of its button. The section **Download your encryption key**
+  (`#encryption-key`, `master-key-handover`) then holds the handover: what the
+  key is for and where it lives, "Download the key" (`POST
+/api/admin/master-key/download`, `from=setup`) for a session opened less
+  than ten minutes ago — otherwise "Sign in again first" with the sign-out
+  form —, and the box "I kept it in a safe place — without it a backup of
+  this gateway cannot be opened" with "Continue" (`POST
+/api/admin/master-key/handed-over`); the box is `required`, and the handler
+  refuses an unticked one (`?key-problem=not-confirmed`). An instance whose
+  key the operator provided shows neither the step nor the section.
   Under it, **Administrators**: the rule in words with the emails it lists
   (`config.admin`), who it resolves to today (`isOperator` applied to
   `UserAdminService.list()`), what an administrator can and cannot do, and
@@ -886,8 +903,20 @@ millisecond of a deactivation is refused.
   (`/admin/provider-apps`, handbook [connections](connections.md)), People
   (`/admin/users`, below), Teams and Accounts without owner (`/admin/groups`,
   `/admin/connections`, handbook [authority](authority.md)), Telemetry
-  (`/admin/telemetry`, handbook [telemetry](telemetry.md)) and Registered apps
-  (`/admin/oauth-clients`, handbook [management-door](management-door.md)).
+  (`/admin/telemetry`, handbook [telemetry](telemetry.md)), Registered apps
+  (`/admin/oauth-clients`, handbook [management-door](management-door.md)) and
+  Encryption (`/admin/encryption`, below).
+- **`/admin/encryption`** — **Encryption**: the key's version, the file it
+  is read from (or "the configuration, by value"), whether this gateway
+  generated it and when it was handed over (`master-key-state`); then
+  **Download the key** (`master-key-download`): for a session opened less
+  than ten minutes ago, the box "I understand that this file opens every
+  secret of this gateway…" and the button (`POST
+/api/admin/master-key/download`, `from=settings`); otherwise "Sign in again
+  first" (`master-key-sign-in-again`) with the sign-out form. A refusal comes
+  back as `?key-problem=sign-in-again|not-confirmed` (`master-key-problem`).
+  The key appears nowhere on the page. Every download is an audit entry
+  (`master-key-downloaded`), visible to every operator in the activity.
   A signed-in person who does not match the rule reads "You do not administer
   this gateway", with no navigation and the build footer.
 - **`/admin/identity-provider`** — **Sign-in**: the providers in a

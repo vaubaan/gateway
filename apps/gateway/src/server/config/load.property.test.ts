@@ -15,7 +15,7 @@ import { propertyRuns } from '@vaubaan/plugin-sdk/testing';
 
 import { parseDuration } from './duration';
 import { ConfigError } from './errors';
-import { loadInstanceConfig } from './load';
+import { loadInstanceConfig, loadInstanceConfigOrSetup } from './load';
 import { fakeFiles, validEnv } from './testing';
 
 const FILE = '/config/gateway.yaml';
@@ -118,6 +118,9 @@ describe('configuration loader — properties', () => {
       'VAUBAAN_SIGN_IN_X_KIND',
       'VAUBAAN_PROVIDER_GITHUB_APP_ID',
       'VAUBAAN_MASTER_KEY_FILE',
+      'VAUBAAN_MASTER_KEY_GENERATE',
+      'VAUBAAN_RESTORE_FROM',
+      'VAUBAAN_RESTORE_SHA256',
       'VAUBAAN_SIGN_IN___PROTO___KIND',
       'VAUBAAN_PROVIDER___PROTO___APP_ID',
       'VAUBAAN_SIGN_IN_CONSTRUCTOR_CLIENT_ID',
@@ -128,6 +131,54 @@ describe('configuration loader — properties', () => {
         (overrides) => {
           try {
             loadInstanceConfig({ env: validEnv(overrides), readFile: fakeFiles({}) });
+          } catch (err) {
+            expect(err, String(err)).toBeInstanceOf(ConfigError);
+          }
+        },
+      ),
+      propertyRuns(),
+    );
+  });
+
+  it('an absent master key file ends in a configuration, a setup outcome or a ConfigError', () => {
+    const name = fc.constantFrom(
+      'VAUBAAN_MASTER_KEY',
+      'VAUBAAN_MASTER_KEY_FILE',
+      'VAUBAAN_MASTER_KEY_GENERATE',
+      'VAUBAAN_RESTORE_FROM',
+      'VAUBAAN_RESTORE_SHA256',
+      'VAUBAAN_BOOTSTRAP_TOKEN_FILE',
+    );
+    const value = fc.oneof(
+      fc.string({ maxLength: 40 }),
+      fc.constantFrom('1', 'true', 'off', '/data/master.key', '/absent/file', 'a'.repeat(64)),
+    );
+    fc.assert(
+      fc.property(
+        fc.dictionary(name, value, { maxKeys: 5 }),
+        fc.boolean(),
+        (overrides, keyByValue) => {
+          const env = validEnv({
+            ...(keyByValue ? {} : { VAUBAAN_MASTER_KEY: undefined }),
+            ...overrides,
+          });
+          try {
+            const outcome = loadInstanceConfigOrSetup({
+              env,
+              readFile: fakeFiles({ '/data/master.key': `${'B'.repeat(43)}=` }),
+            });
+            if (outcome.kind === 'setup') {
+              // Only the master key's file, only when the configuration says what to do.
+              expect(outcome.masterKeyFile).toBe('/absent/file');
+              expect(env.VAUBAAN_MASTER_KEY).toBeUndefined();
+              expect(
+                env.VAUBAAN_MASTER_KEY_GENERATE !== undefined ||
+                  env.VAUBAAN_RESTORE_FROM !== undefined,
+              ).toBe(true);
+              expect('encryption' in outcome.config).toBe(false);
+            } else {
+              expect(outcome.loaded.config.encryption.masterKey).toHaveLength(32);
+            }
           } catch (err) {
             expect(err, String(err)).toBeInstanceOf(ConfigError);
           }

@@ -104,7 +104,35 @@ export interface EncryptionConfig {
   readonly keyVersion: number;
   /** Older master keys still accepted for decryption, by version. */
   readonly previousKeys: ReadonlyMap<number, Uint8Array>;
+  /**
+   * The file the master key is read from (`VAUBAAN_MASTER_KEY_FILE`, or `${file:…}`
+   * as the whole value of `encryption.master_key`); `null` when the key is given by
+   * value. The path is not a secret; the content is.
+   */
+  readonly masterKeyFile: string | null;
+  /**
+   * `encryption.generate_master_key`: the instance writes the key file at its first
+   * start when it is absent (ADR master-key-generated-and-handed-over-by-the-instance).
+   */
+  readonly generateMasterKey: boolean;
 }
+
+/** What an encryptor is built from: the keys of the block, without its provenance. */
+export type EncryptionKeys = Pick<EncryptionConfig, 'masterKey' | 'keyVersion' | 'previousKeys'>;
+
+/**
+ * Why the master key file named by the configuration may be absent at a start:
+ * the instance is to generate it (`encryption.generate_master_key`), or a restore
+ * is configured (`restore.from`) and the setup receives the key of the copy.
+ */
+export type AbsentMasterKeyReason = 'generate' | 'restore';
+
+/**
+ * Everything the configuration says but the encryption block: what a start
+ * without the master key can rely on (where the store is, the public URL, the
+ * bootstrap token, the log level) before the key exists.
+ */
+export type SetupConfig = Omit<InstanceConfig, 'encryption'>;
 
 export interface TelemetryConfig {
   /** The value of `telemetry.enabled`, `false` when the configuration does not set it. */
