@@ -547,6 +547,38 @@ const RULES: Readonly<Record<string, Rule>> = {
       rig.root.connections.service.discover(rig.alice, connection.id),
     writes: { act: 'resources-discovered', object: 'connection', actor: 'alice' },
   },
+  // The gateway's own discovery after a call that created a resource (ADR
+  // discovery-runs-after-a-creating-call): one entry per scheduled discovery,
+  // written once its attempts are over; the actor is the human behind the key.
+  'ConnectionService.auditDiscoveryAfterCall': {
+    kind: 'mutation',
+    target: connections,
+    prepare: (rig) => rig.connectByKey(),
+    drive: async (rig, connection: ConnectionRecord) => {
+      const cause = { missionId: 'mis_after_call', tool: 'keyco__create_thing' };
+      const outcome = await rig.root.connections.service.discoverAfterCall(connection.id, cause);
+      if (!outcome) throw new Error('expected the connection to serve');
+      return rig.root.connections.service.auditDiscoveryAfterCall(
+        connection.id,
+        { ...cause, userId: rig.alice.user.id },
+        { ...outcome, attempts: 1 },
+      );
+    },
+    writes: { act: 'resources-discovered', object: 'connection', actor: 'alice' },
+  },
+  'ConnectionService.discoverAfterCall': exempt(
+    'one attempt of the discovery DiscoveryAfterCall runs after a creating call; the scheduler audits its outcome once, through ConnectionService.auditDiscoveryAfterCall (resources-discovered, cause after-a-call)',
+  ),
+  'DiscoveryAfterCall.afterCall': exempt(
+    'the execution door hook: it only schedules; the discovery it schedules is audited through ConnectionService.auditDiscoveryAfterCall',
+  ),
+  'DiscoveryAfterCall.schedule': exempt(
+    'queues a discovery for later; the discovery, once run, is audited through ConnectionService.auditDiscoveryAfterCall',
+  ),
+  'DiscoveryAfterCall.idle': READ,
+  'DiscoveryAfterCall.stop': exempt(
+    'the shutdown of the process (root.close): it schedules nothing more and waits for the discovery in flight, which audits itself',
+  ),
   'ConnectionService.updateResource': {
     kind: 'mutation',
     target: connections,
@@ -1528,6 +1560,7 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'permissions-changed',
       'request-refused',
       'resource-edited',
+      'resources-discovered',
       'resources-discovered',
       'share-created',
       'share-revoked',

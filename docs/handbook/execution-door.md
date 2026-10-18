@@ -28,6 +28,7 @@ tracks:
   - packages/plugin-sdk/src/streaming.ts
   - deploy/caddy/Caddyfile
   - plugins/github/src/token-cache.ts
+  - apps/gateway/src/server/connections/discovery-after-call.ts
   - plugins/github/tests/unit/token-cache.test.ts
 ---
 
@@ -351,7 +352,12 @@ isSelf)` (`store/mission-reach.ts`, the function the mission page and the
   longer returns. The same array is what a plugin's `execute` receives as
   `ctx.resources`: a "list" tool that filters its answer to the mission
   (`fly__list_apps`, `cloudflare_dns__list_zones`) sees exactly what the
-  resource stage allows.
+  resource stage allows. Each such `MissionConnection` carries
+  `reaches_later_resources: true`, which the `resource-not-in-mission` hint
+  reads ("This mission reaches the whole account except the resources its
+  owner hid or that are no longer found: … A resource created through the
+  gateway is reached right after its creation; one created elsewhere once the
+  account's owner refreshes its resources.").
 - `policy` — `mission.policy` through `policyEntryOf` (budget).
 - `session` — `sessions.getByMission`, or `null` before the first call.
 
@@ -608,6 +614,22 @@ One log line per call (`tools/call`, component `execution-door`): mission id,
 token prefix, token kind, holder label (the member's email or the token's
 name), tool, outcome, refusal code, `arguments_hash`, agent label. Never an
 argument, never the bearer.
+
+### After the answer: discovery after a creating call
+
+ADR [discovery-runs-after-a-creating-call](../decisions/discovery-runs-after-a-creating-call.md).
+On an `allowed` outcome, the door calls `afterCall(ctx, { tool, connectionId:
+audit.connection_id, result })` (`ExecutionDoorDeps.afterCall`, wired by
+`createExecutionModule` to `connections.discoveryAfterCall.afterCall`) before
+returning the result (`followCall` in `door.ts`). The hook only schedules and
+returns: when the tool is in its plugin's `resourceCreatingTools` and the
+result is not `isError`, the connection's discovery runs on a later turn of
+the event loop, coalesced and bounded (handbook [connections](connections.md),
+"Discovery after a creating call"). A hook that throws is logged
+(`after-call hook failed`, its class only) and the answer leaves unchanged.
+`refused`, `rejected` and `failed` outcomes, the permission tool and the git
+remote never reach it. On a whole-account mission the next call's context
+(`loadMissionContext`, read per request) then holds the new resource.
 
 ### Audit entry
 
@@ -968,6 +990,8 @@ const execution = createExecutionModule({
   delegations: deps.delegatedTokens ?? oauth.verifier, // delegated tokens are refused by kind
   telemetry: telemetry.sink, // community telemetry; inert unless the operator opted in
 });
+// A discovery scheduled after a creating call finishes before the store closes.
+opened.push(() => connections.discoveryAfterCall.stop());
 ```
 
 `root.budget` and `root.execution` are public members of `GatewayRoot`. The
@@ -1148,6 +1172,15 @@ plugin streams), and a run behind a proxy other than Caddy.
   token verifier (nothing remembered: the standing is asked again on every
   call; no throttle for a token stored as a digest; the argon2id check of a
   legacy token throttled per prefix and address), upstream credential cache.
+- `tests/integration/execution/discovery-after-call.test.ts` (8) — a
+  successful `depot__create_space` schedules one discovery (merged, audited
+  `after-a-call` with the member as actor, `metadata.discovery.afterCall`); a
+  whole-account mission reaches the new space on its next call; the
+  `resource-not-in-mission` hint of a whole-account mission; a refused, failed
+  or declined (`isError`) creating call and a non-creating tool schedule
+  nothing; a burst coalesces into two discoveries; the answer leaves before the
+  discovery starts. The scheduler alone:
+  `src/server/connections/discovery-after-call.test.ts` (11).
 - `tests/integration/execution/team-door.test.ts` (11) — over HTTP: two
   members and a named token share one counter and are attributed separately in
   the audit, the session and the search; the holder is the token's whatever

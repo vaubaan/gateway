@@ -17,6 +17,7 @@ import {
   type ExecuteContext,
   type McpToolResult,
   type ProviderPlugin,
+  type Resource,
 } from '@vaubaan/plugin-sdk';
 import { parseSlice } from '@vaubaan/policy-engine';
 import type { MissionPolicyEntry } from '@vaubaan/shared';
@@ -58,6 +59,10 @@ export interface DepotPlugin {
   readonly calls: { tool: string; args: Readonly<Record<string, unknown>>; ctx: ExecuteContext }[];
   /** Replace what `execute` does; `null` restores the echo. */
   script(execute: DepotExecute | null): void;
+  /** Replace what `discoverResources` returns (default: nothing); `null` restores it. */
+  scriptDiscovery(discover: (() => Promise<readonly Resource[]>) | null): void;
+  /** How many times `discoverResources` ran. */
+  readonly discoveries: () => number;
   /** Replace what the plugin's `refresh` hook does (default: rejects — an api key cannot refresh). */
   scriptRefresh(refresh: (() => Promise<CredentialSecret>) | null): void;
   /**
@@ -71,13 +76,17 @@ export interface DepotPlugin {
 
 /**
  * Tools: `depot__read_item {space?, item?}`, `depot__write_item {space?}`,
- * `depot__purge {space?}`, `depot__whoami {}`. A space is a resource ref; it
- * defaults to the mission's single resource and must be one of them.
+ * `depot__purge {space?}`, `depot__whoami {}`, `depot__create_space {space}`.
+ * A space is a resource ref; it defaults to the mission's single resource and
+ * must be one of them — except for `create_space`, an account-level write that
+ * creates one (declared in `resourceCreatingTools`).
  */
 export function depotPlugin(): DepotPlugin {
   const calls: DepotPlugin['calls'] = [];
   let scripted: DepotExecute | null = null;
   let scriptedRefresh: (() => Promise<CredentialSecret>) | null = null;
+  let scriptedDiscovery: (() => Promise<readonly Resource[]>) | null = null;
+  let discoveries = 0;
   let classifierFault: Parameters<DepotPlugin['breakClassifier']>[0] = null;
 
   const tool = (name: string, description: string) => ({
@@ -99,7 +108,9 @@ export function depotPlugin(): DepotPlugin {
       tool('write_item', 'Write an item of a space.'),
       tool('purge', 'Delete every item of a space.'),
       tool('whoami', 'The account behind the connection.'),
+      tool('create_space', 'Create a space.'),
     ],
+    resourceCreatingTools: [`${DEPOT}__create_space`],
     dataModel: {
       provider: DEPOT,
       planes: [
@@ -185,6 +196,10 @@ export function depotPlugin(): DepotPlugin {
       if (classifierFault) throw classifierFault(name, args);
       if (name === `${DEPOT}__whoami`)
         return { slices: [parseSlice(`${DEPOT}.account.profile.R`)] };
+      // No risk of its own: the catalog's fallback write covers it (the shares
+      // tests pin the catalog's explicit ids).
+      if (name === `${DEPOT}__create_space`)
+        return { slices: [parseSlice(`${DEPOT}.account.spaces.W`)] };
       const refs = resources.filter((r) => r.provider === DEPOT).map((r) => r.ref);
       const space =
         typeof args.space === 'string' ? args.space : refs.length === 1 ? refs[0] : undefined;
@@ -208,7 +223,8 @@ export function depotPlugin(): DepotPlugin {
       return { content: [{ type: 'text', text: JSON.stringify({ tool: name, args }) }] };
     },
     async discoverResources() {
-      return [];
+      discoveries += 1;
+      return scriptedDiscovery ? scriptedDiscovery() : [];
     },
     async refresh() {
       if (scriptedRefresh) return scriptedRefresh();
@@ -222,6 +238,10 @@ export function depotPlugin(): DepotPlugin {
     script: (execute) => {
       scripted = execute;
     },
+    scriptDiscovery: (discover) => {
+      scriptedDiscovery = discover;
+    },
+    discoveries: () => discoveries,
     scriptRefresh: (refresh) => {
       scriptedRefresh = refresh;
     },

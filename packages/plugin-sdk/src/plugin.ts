@@ -196,6 +196,20 @@ export interface ProviderPlugin {
   readonly unboundTools?: Readonly<Record<string, string>>;
 
   /**
+   * The tools whose success creates a resource of the connection : something
+   * `discoverResources` returns as a new ref afterwards (`fly__create_app`
+   * creates an app, and an app is what a Fly connection lists). After such a
+   * call succeeds through the execution door, the host runs the connection's
+   * discovery again, off the request path, so the new resource is known — and
+   * reached by a mission issued on the whole connection — at once (ADR
+   * discovery-runs-after-a-creating-call). Each name is an MCP tool of the
+   * plugin (`definePlugin`). A tool that creates something inside a resource
+   * (a DNS record in a zone, a machine in an app) is not one. Absent : no call
+   * of this plugin triggers a discovery.
+   */
+  readonly resourceCreatingTools?: readonly string[];
+
+  /**
    * The instance as this provider's git remote (spec vaubaan-gateway §4.1 ter) :
    * `git clone` / `git push` against `https://<instance>/git/<repository>.git`
    * with the mission key as the password, decided and audited like a tool
@@ -255,9 +269,10 @@ export interface ProviderPlugin {
 
   /**
    * List the resources reachable through a freshly connected credential
-   * (repositories, projects, zones…). Called at connection time and on the
-   * owner's "refresh resources". Returned refs are the ones `classify` will
-   * see in `resources`.
+   * (repositories, projects, zones…). Called at connection time, on the
+   * owner's "refresh resources", and after a call of one of
+   * `resourceCreatingTools` succeeded. Returned refs are the ones `classify`
+   * will see in `resources`.
    */
   discoverResources(ctx: ConnectionContext): Promise<readonly Resource[]>;
 

@@ -170,7 +170,7 @@ function wholeAccount(c: KitConnection): string {
     c.resources.length === 0
       ? 'none known yet'
       : `known now: ${c.resources.map(resourceLine).join(', ')}`;
-  return `the whole account, including resources discovered later (${known}). A resource created or added on the account is reached once the gateway has discovered it (the account's resources are refreshed); until then a call that cites it is refused with \`resource-not-in-mission\`.`;
+  return `the whole account, including resources discovered later (${known}). A resource you create through the gateway is reached right after its creation; one created elsewhere once the account's owner refreshes its resources — until then a call that cites it is refused with \`resource-not-in-mission\`.`;
 }
 
 function policyLine(entry: KitPolicyLine, period: DraftPeriod): string {

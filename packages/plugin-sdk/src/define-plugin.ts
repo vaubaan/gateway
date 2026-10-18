@@ -62,6 +62,7 @@ export function pluginIssues(plugin: ProviderPlugin): string[] {
     ...credentialSpecIssues(plugin),
     ...hookIssues(plugin),
     ...tokenHandoutIssues(plugin),
+    ...resourceCreatingToolIssues(plugin),
     ...gitRemoteIssues(plugin),
     ...toolReasonIssues(plugin.unboundTools, declaredToolNames(plugin), 'unboundTools'),
   ];
@@ -287,6 +288,31 @@ function toolIssues(plugin: ProviderPlugin): string[] {
     if (!isRecord(tool.inputSchema) || tool.inputSchema.type !== 'object')
       issues.push(`tools[${i}].inputSchema.type must be 'object'`);
   });
+  return issues;
+}
+
+/**
+ * `resourceCreatingTools` names MCP tools of the plugin, once each : the host
+ * runs discovery after a successful call of one of them, so a name that is not
+ * a tool would silently trigger nothing.
+ */
+function resourceCreatingToolIssues(plugin: ProviderPlugin): string[] {
+  const declared: unknown = plugin.resourceCreatingTools;
+  if (declared === undefined) return [];
+  if (!isList(declared) || declared.length === 0) {
+    return ['resourceCreatingTools: expected a non-empty list of tool names when present'];
+  }
+  const mcp = new Set(isList(plugin.tools) ? plugin.tools.map((t) => t?.name) : []);
+  const issues: string[] = [];
+  const seen = new Set<unknown>();
+  for (const tool of declared) {
+    if (typeof tool !== 'string' || !mcp.has(tool)) {
+      issues.push(`resourceCreatingTools: '${String(tool)}' is not a tool of this plugin`);
+    } else if (seen.has(tool)) {
+      issues.push(`resourceCreatingTools: '${tool}' is listed twice`);
+    }
+    seen.add(tool);
+  }
   return issues;
 }
 

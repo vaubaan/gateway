@@ -41,7 +41,7 @@ export const railwayCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url)
 export const railwayPlugin = definePlugin({
   id: 'railway',
   displayName: 'Railway',
-  version: '4.2.0',
+  version: '4.3.0',
   description:
     'Deploy, redeploy, read logs and manage variables of Railway projects through the official Railway MCP server and GraphQL API.',
   summary:
@@ -51,6 +51,9 @@ export const railwayPlugin = definePlugin({
   docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/railway.md',
   tools: railwayTools,
   toolTitles: railwayToolTitles,
+  // A project is what a Railway connection lists : a created project is
+  // discovered at once (ADR discovery-runs-after-a-creating-call).
+  resourceCreatingTools: ['railway__create-project'],
   dataModel: railwayDataModel,
   catalog: railwayCatalog.catalog,
   credential: railwayCredentialSpec,

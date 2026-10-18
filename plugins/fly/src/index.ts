@@ -23,7 +23,7 @@ export const flyCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 export const flyPlugin = definePlugin({
   id: PROVIDER_ID,
   displayName: 'Fly.io',
-  version: '0.1.0',
+  version: '0.2.0',
   description:
     'Apps on Fly.io: machines, images, volumes and snapshots, secrets, IP addresses and ' +
     'certificates — one resource per app.',
@@ -35,6 +35,9 @@ export const flyPlugin = definePlugin({
   tools: flyTools,
   toolTitles: flyToolTitles,
   secretArguments: { [TOOL.setSecrets]: ['values'] },
+  // An app is what a Fly connection lists : a created app is discovered at once
+  // (ADR discovery-runs-after-a-creating-call).
+  resourceCreatingTools: [TOOL.createApp],
   dataModel: flyDataModel,
   catalog: flyCatalog.catalog,
   credential: flyCredential,

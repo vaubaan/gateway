@@ -297,6 +297,7 @@ describe('execution door over HTTP: real GitHub plugin, mocked upstream', () => 
         ),
       ).toBe(true);
       expect((await list(depotOnly)).sort()).toEqual([
+        'depot__create_space',
         'depot__purge',
         'depot__read_item',
         'depot__whoami',
@@ -328,7 +329,7 @@ describe('execution door over HTTP: real GitHub plugin, mocked upstream', () => 
       // The whole surface of the instance, with what this mission can call flagged.
       expect(tools.some((t) => t.provider === 'github' && !t.callable)).toBe(true);
       expect(tools.filter((t) => t.callable).map((t) => t.provider)).toEqual([
-        ...Array<string>(4).fill('depot'),
+        ...Array<string>(5).fill('depot'),
         'vaubaan',
       ]);
       expect([...catalog.callable_tools].sort()).toEqual(

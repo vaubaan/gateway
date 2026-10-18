@@ -540,6 +540,8 @@ export const ACCOUNT_WORDS = {
   missions: 'Missions',
   lastChecked: 'Last checked',
   neverChecked: 'never checked',
+  /** After the time of a check the gateway ran itself: "after a call of fly__create_app". */
+  afterCallOf: 'after a call of',
   checkFailed: 'Check failed',
   mayAllow: 'May allow',
   youMayAllow: 'You may allow',
@@ -676,6 +678,8 @@ export const ACTIVITY_WORDS = {
   notAttributed: 'not attributed',
   afterYes: 'after a yes',
   machineKey: 'machine key',
+  /** Beside "refreshed what an account reaches" when the gateway ran it after a call. */
+  afterCreatingCall: 'after a call that created one',
   argumentsNeverStored: 'never stored',
   fingerprintHidden:
     'never stored · their fingerprint is shown to the creator of the mission and to the owners of the account only',

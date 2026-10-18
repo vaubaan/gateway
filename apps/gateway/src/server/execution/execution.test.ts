@@ -188,7 +188,7 @@ describe('tool discovery', () => {
     }) as unknown as MissionContext;
 
   it('needs both a connection and an accepted risk of the provider', () => {
-    expect(callableTools(context(['depot'], ['depot.read']), registry)).toHaveLength(4);
+    expect(callableTools(context(['depot'], ['depot.read']), registry)).toHaveLength(5);
     expect(callableTools(context(['depot'], ['other.read-things']), registry)).toEqual([]);
     expect(callableTools(context([], ['depot.read']), registry)).toEqual([]);
     expect([

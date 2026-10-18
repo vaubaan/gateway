@@ -538,6 +538,8 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     delegations: deps.delegatedTokens ?? oauth.verifier,
     telemetry: telemetry.sink,
   });
+  // A discovery the door scheduled after a creating call finishes before the store closes.
+  opened.push(() => connections.discoveryAfterCall.stop());
   // The git remote shares the execution door's admission, stages and audit.
   const git = createGitModule({
     config,

@@ -189,6 +189,24 @@ describe('refusal fields', () => {
     expect(r.hint).toContain('no resource');
   });
 
+  test('resource-not-in-mission: a whole-account mission says when a new resource is reached', () => {
+    const r = refuse.resourceNotInMission({
+      cited_ref: 'new-app',
+      connection: { id: 'con_1', name: 'Fly (acme)' },
+      allowed_resources: [{ ref: 'web', env: null, display_name: null }],
+      reaches_later_resources: true,
+    });
+    expect(r.code).toBe('resource-not-in-mission');
+    expect(r.cited_ref).toBe('new-app');
+    expect(r.hint).toContain(
+      'This mission reaches the whole account except the resources its owner hid or that are no longer found: web today.',
+    );
+    expect(r.hint).toContain(
+      'A resource created through the gateway is reached right after its creation',
+    );
+    expect(r.hint).not.toContain('ask the mission creator to add the resource');
+  });
+
   test('rate-limited: risk, limit, retry delay', () => {
     const r = SAMPLES['rate-limited']();
     if (r.code !== 'rate-limited') throw new Error('wrong code');

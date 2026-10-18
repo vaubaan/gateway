@@ -17,7 +17,7 @@ The Railway plugin on the v5 Plugin SDK (feature P1.2d). It rewraps the
 official Railway MCP server (`mcp.railway.com`) and adds four GraphQL
 variable tools, authenticates through the company's Railway Auth app
 (OAuth2 + PKCE, refresh on the hot path), discovers projects as resources
-and ships three presets. Plugin version 4.2.0. ADRs:
+and ships three presets. Plugin version 4.3.0. ADRs:
 [[railway-rewrap-remote-mcp]] (why rewrap, audience binding, refresh),
 [[plugin-contract-and-credential-spec]] (the contract) and
 [`plugin-arguments-closed-surface-and-typed-refusals`](../../decisions/plugin-arguments-closed-surface-and-typed-refusals.md)
@@ -65,7 +65,12 @@ written, empty included. The owner labels each project with a Vaubaan
 environment (`prod`, `staging`, `preview`, `dev`); Railway's own environment
 names stay in `metadata` for display, and the environment and service ids
 are what the classifier checks `environmentId` and `serviceId` against
-(below).
+(below). `railway__create-project` is declared in `resourceCreatingTools`:
+after it succeeds the gateway discovers the account's projects again, off the
+request path, so the new project is a resource at once (ADR
+[discovery-runs-after-a-creating-call](../../decisions/discovery-runs-after-a-creating-call.md)). `railway__railway-agent` may
+create a project from a free-text request; it is not declared, so such a
+project waits for the owner's "Refresh".
 
 ### An unlabelled project cannot run env-scoped operations
 

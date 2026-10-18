@@ -96,7 +96,9 @@ describe('buildBootstrapKit', () => {
     expect(whole).toContain(
       '- Fly.io "empty-org" — the whole account, including resources discovered later (none known yet).',
     );
-    expect(whole).toContain('is reached once the gateway has discovered it');
+    expect(whole).toContain(
+      'A resource you create through the gateway is reached right after its creation',
+    );
     expect(whole).not.toContain('tools of the account itself only');
   });
 

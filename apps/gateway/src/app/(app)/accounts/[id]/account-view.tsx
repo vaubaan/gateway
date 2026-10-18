@@ -851,6 +851,10 @@ export function AccountView({
                       detail.discovery.ok
                         ? `${count(detail.discovery.count, TERMS.resource)} found`
                         : `failed: ${detail.discovery.error ?? 'no reason given'}`
+                    }${
+                      detail.discovery.afterCall
+                        ? ` · ${ACCOUNT_WORDS.afterCallOf} ${detail.discovery.afterCall.tool}`
+                        : ''
                     }`
                   : ACCOUNT_WORDS.neverChecked,
               },
@@ -951,7 +955,11 @@ export function AccountView({
             <>
               <span>
                 {detail.discovery
-                  ? `Found ${agoWords(detail.discovery.at, now)}.`
+                  ? `Found ${agoWords(detail.discovery.at, now)}${
+                      detail.discovery.afterCall
+                        ? `, ${ACCOUNT_WORDS.afterCallOf} ${detail.discovery.afterCall.tool}`
+                        : ''
+                    }.`
                   : 'Nothing was looked for yet.'}
               </span>
               <form method="post" action={`${base}/discover`} className={styles.inlineForm}>

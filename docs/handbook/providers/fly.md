@@ -2,7 +2,7 @@
 title: Fly.io provider plugin
 status: current
 date: 2026-10-16
-last_synced: 2026-10-16
+last_synced: 2026-10-18
 tracks:
   - plugins/fly/src/
   - plugins/fly/tests/unit/
@@ -13,7 +13,7 @@ tracks:
 
 # Fly.io provider plugin
 
-`@vaubaan/plugin-fly` 0.1.0, tool prefix `fly__`, provider id `fly`. One
+`@vaubaan/plugin-fly` 0.2.0, tool prefix `fly__`, provider id `fly`. One
 plugin on Fly's **Machines REST API** (`https://api.machines.dev/v1`) and
 the logs endpoint `fly logs` uses (`https://api.fly.io/api/v1/apps/{app}/logs`).
 Modelled with [`provider-modeler`](../../skills/provider-modeler.md); the
@@ -289,11 +289,16 @@ resources).
 
 ### 5.4 Creation names no resource — two steps **(PO, Q1)**
 
-`create_app` is `org[O].app.W`, not env-scoped. The new app is not part of
-the mission: the agent creates it; a person refreshes the account's
-resources, labels the app and adds it to the mission (or issues another);
-then the configuration runs. A one-shot provisioner needs a core change —
-see "Open questions".
+`create_app` is `org[O].app.W`, not env-scoped. The plugin declares it in
+`resourceCreatingTools`: once it succeeds, the gateway runs the account's
+discovery again, off the request path (ADR
+[discovery-runs-after-a-creating-call](../../decisions/discovery-runs-after-a-creating-call.md)), so the new app is a resource
+of the connection from the agent's next calls — `fly__list_apps` returns it,
+and it carries the account's default environment if the owner set one. A
+mission issued on the whole account reaches it at once; a mission with an
+explicit list still needs its creator to add it (or a new mission). Without
+a default environment, a person labels the app before the env-scoped
+configuration runs.
 
 ### 5.5 The image guard **(PO, Q4)**
 
@@ -398,7 +403,9 @@ to apps; malformed prefixes are refused first. Expiry is not exposed
 `GET /v1/apps?org_slug=<org>&limit=500[&cursor]`, up to `MAX_DISCOVERED_APPS`
 (2000). Each app passes a type guard and `appName`; an app of another
 organization fails discovery. Resource: `ref` = name, `displayName` = name,
-`metadata` = `app_id`, `org_slug`, `network`, `image_prefixes`.
+`metadata` = `app_id`, `org_slug`, `network`, `image_prefixes`. Runs at
+connect, on the owner's "Refresh" and after a successful `fly__create_app`
+(`resourceCreatingTools`, §5.4).
 
 ### 6.3 Execution
 
@@ -427,9 +434,10 @@ One grammar per kind in `src/identifiers.ts`, used by `readFlyCall` (so by
 
 ### 6.4 Tests
 
-`npx vitest run plugins/fly` — 74: `plugin.test.ts` (7: the kit, coverage of
+`npx vitest run plugins/fly` — 75: `plugin.test.ts` (8: the kit, coverage of
 all 42 tools with no fallback hit and no risk untouched,
-`assertIdentifiersRefused`, identity, version), `classify.test.ts` (29:
+`assertIdentifiersRefused`, `resourceCreatingTools` = `create_app` only,
+identity, version), `classify.test.ts` (29:
 every branch and refusal, the image guard, hostile identifiers through
 `classify` and `execute`), `execute.test.ts` (32: requests, the guards,
 lease, redaction, discovery, the token check), `risk-catalog.test.ts` (6:
@@ -440,11 +448,13 @@ gates, preset contents, data model). Host side:
 
 ## Open questions
 
-1. **A created resource joins the mission (future spec change, PO Q1 (b)).**
-   A resource created by a mission would join it, with an environment the
-   creation declares and the mission must hold (`fly[prod].machine-create`…),
-   recorded in the audit. A change to `gateway-risk-model` §5/§6 and the
-   connections handbook, needed before self-service sign-up.
+1. **A created resource joins the mission (PO Q1 (b)) — answered another
+   way.** A whole-account mission (ADR
+   mission-reaches-the-whole-connection-on-request) reaches the app as soon as
+   the discovery that follows `create_app` returns it (ADR
+   discovery-runs-after-a-creating-call); the connection's default
+   environment labels it. Still open: an environment declared by the creation
+   itself, for an account that mixes environments.
 2. **Per-call attenuation (PO Q2, later).** `execute` could attenuate the
    stored token to the mission's app ids (`Apps` caveat) before each call,
    making the restriction hold at Fly's side. Needs a macaroon

@@ -172,6 +172,25 @@ export const INVARIANTS: readonly Invariant[] = [
     ],
   },
   {
+    id: 'resource-creating-tools-declared',
+    statement:
+      'The tools after whose success the gateway runs a discovery are declared by their plugin, are MCP tools of it, and are exactly the reviewed table: nothing is inferred from a tool name.',
+    source: 'ADR discovery-runs-after-a-creating-call; spec §0 "Resource"',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/resource-creating-tools.test.ts`,
+        tests: [
+          'declares exactly its creating tools, each one of its MCP tools',
+          'every plugin named in the table is shipped',
+        ],
+      },
+      {
+        file: 'packages/plugin-sdk/tests/unit/define-plugin.test.ts',
+        tests: ['resourceCreatingTools is optional; it names MCP tools of the plugin, once each'],
+      },
+    ],
+  },
+  {
     id: 'presets-within-own-catalog',
     statement:
       'Every shipped plugin ships at least one preset, and every preset entry names a risk of its own catalog, never a wildcard.',

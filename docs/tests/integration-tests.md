@@ -139,6 +139,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/config/sign-in.test.ts`                                                           |        15 |
 | `apps/gateway/src/server/connections/codec-and-keypair.test.ts`                                            |        12 |
 | `apps/gateway/src/server/connections/credentials.test.ts`                                                  |        15 |
+| `apps/gateway/src/server/connections/discovery-after-call.test.ts`                                         |        11 |
 | `apps/gateway/src/server/connections/input.test.ts`                                                        |        25 |
 | `apps/gateway/src/server/connections/install-verification.test.ts`                                         |         5 |
 | `apps/gateway/src/server/connections/mapping.test.ts`                                                      |         3 |
@@ -206,7 +207,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/telemetry/settings.test.ts`                                                       |         7 |
 | `apps/gateway/src/server/telemetry/stats.test.ts`                                                          |        11 |
 | `apps/gateway/src/server/telemetry/usage.test.ts`                                                          |         6 |
-| `apps/gateway/tests/integration/audit/admin-mutations.test.ts`                                             |        67 |
+| `apps/gateway/tests/integration/audit/admin-mutations.test.ts`                                             |        68 |
 | `apps/gateway/tests/integration/audit/audit-query.test.ts`                                                 |        35 |
 | `apps/gateway/tests/integration/audit/events-agent-label.test.ts`                                          |         3 |
 | `apps/gateway/tests/integration/audit/mission-session.test.ts`                                             |        21 |
@@ -237,6 +238,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/execution/agent-label.test.ts`                                             |         6 |
 | `apps/gateway/tests/integration/execution/approval-door.test.ts`                                           |         8 |
 | `apps/gateway/tests/integration/execution/counters-vs-audit.test.ts`                                       |         4 |
+| `apps/gateway/tests/integration/execution/discovery-after-call.test.ts`                                    |         8 |
 | `apps/gateway/tests/integration/execution/door-http.test.ts`                                               |        23 |
 | `apps/gateway/tests/integration/execution/pipeline.test.ts`                                                |        26 |
 | `apps/gateway/tests/integration/execution/streaming.test.ts`                                               |        13 |
@@ -318,6 +320,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`                                           |       466 |
 | `apps/gateway/tests/unit/structural/persisted-enumerations.test.ts`                                        |        10 |
 | `apps/gateway/tests/unit/structural/plugin-identifier-tests.test.ts`                                       |        25 |
+| `apps/gateway/tests/unit/structural/resource-creating-tools.test.ts`                                       |        15 |
 | `apps/gateway/tests/unit/structural/shipped-presets.test.ts`                                               |        71 |
 | `apps/gateway/tests/unit/structural/telemetry-collector-schema.test.ts`                                    |        15 |
 | `apps/gateway/tests/unit/structural/telemetry-report-shape.test.ts`                                        |         3 |
@@ -331,7 +334,7 @@ this table says where each requirement lives, and what is not written yet.
 | `packages/gateway-core/tests/unit/audit.test.ts`                                                           |         2 |
 | `packages/gateway-core/tests/unit/authenticate.test.ts`                                                    |        11 |
 | `packages/gateway-core/tests/unit/cache.test.ts`                                                           |         7 |
-| `packages/gateway-core/tests/unit/errors.test.ts`                                                          |        31 |
+| `packages/gateway-core/tests/unit/errors.test.ts`                                                          |        32 |
 | `packages/gateway-core/tests/unit/fingerprint.test.ts`                                                     |        12 |
 | `packages/gateway-core/tests/unit/pipeline.test.ts`                                                        |        38 |
 | `packages/gateway-core/tests/unit/risk-gateway.test.ts`                                                    |         9 |
@@ -341,7 +344,7 @@ this table says where each requirement lives, and what is not written yet.
 | `packages/plugin-sdk/tests/unit/arguments.test.ts`                                                         |        10 |
 | `packages/plugin-sdk/tests/unit/catalog-loader.test.ts`                                                    |        31 |
 | `packages/plugin-sdk/tests/unit/catalog-path.test.ts`                                                      |         4 |
-| `packages/plugin-sdk/tests/unit/define-plugin.test.ts`                                                     |        33 |
+| `packages/plugin-sdk/tests/unit/define-plugin.test.ts`                                                     |        35 |
 | `packages/plugin-sdk/tests/unit/env-of.test.ts`                                                            |         8 |
 | `packages/plugin-sdk/tests/unit/git-wire.property.test.ts`                                                 |         4 |
 | `packages/plugin-sdk/tests/unit/git-wire.test.ts`                                                          |        32 |
@@ -608,7 +611,7 @@ npx vitest run packages/policy-engine     # one package
   `toolDeclarations`, `labels` (with `experimental`, and `summary` when the plugin has one), `idEnum` (non-empty tuple, throws when
   empty), `catalogOf` indexed, `presetsOf`; conflicts: same id twice, tool
   outside the plugin prefix, ill-formed plugin reported with its id.
-- **`define-plugin.test.ts`** (33) — fixture well-formed and frozen; `summary` optional, a non-empty paragraph of at most 600 characters when present; **`toolTitles` optional — a title names a declared tool and reads as a headline** (one line, at most 60 characters, a capital first, no final period; an object, never a list); a `tokenHandouts` entry names a declared tool and risks of the catalog; **a preset that leaves a token-handing risk on `auto` is refused unless the plugin declares that risk read-only** (`readOnlyRiskIds`, a list of the handout's own risks; undeclared means write; refused where it is on `auto`, per preset and environment); every issue
+- **`define-plugin.test.ts`** (35) — fixture well-formed and frozen; **`resourceCreatingTools` optional — a non-empty list of MCP tools of the plugin, once each** (an unknown name or a duplicate is an issue and `definePlugin` throws; ADR discovery-runs-after-a-creating-call); `summary` optional, a non-empty paragraph of at most 600 characters when present; **`toolTitles` optional — a title names a declared tool and reads as a headline** (one line, at most 60 characters, a capital first, no final period; an object, never a list); a `tokenHandouts` entry names a declared tool and risks of the catalog; **a preset that leaves a token-handing risk on `auto` is refused unless the plugin declares that risk read-only** (`readOnlyRiskIds`, a list of the handout's own risks; undeclared means write; refused where it is on `auto`, per preset and environment); every issue
   collected (id grammar, semver, tool prefix and duplicates, data-model
   and catalog provider mismatch); catalog rules through the definition;
   data-model referential integrity; credential spec rules per kind
@@ -1188,7 +1191,7 @@ enforced limits is pinned to what the code enforces today.
   The decision is
   unchanged since v4; its inputs are the v5 `Resource[]` and the plugin's
   `classify`.
-- **`errors.test.ts`** (31) — the eight refusal codes: exactly eight in
+- **`errors.test.ts`** (32) — the eight refusal codes: exactly eight in
   `REFUSAL_CODES`, one builder sample per code, every field of every code,
   `hint` non-empty and serializable, `isRefusal` guard, JSON-RPC mapping
   (`-32603`, refusal in `data`, code in the message); `mission-inactive` for
@@ -2681,6 +2684,37 @@ connections and resources seeded through the repositories (36):
     and in no answer to the creator's own mutations;
   - **handlers**: each refusal with its status and a sentence; no session,
     another origin.
+- **`tests/integration/execution/discovery-after-call.test.ts`** (8) — ADR
+  [[discovery-runs-after-a-creating-call]], through the door with the `depot`
+  fixture (`depot__create_space` in `resourceCreatingTools`): **a successful
+  creating call schedules one discovery** — the new space merged into the
+  connection, one `resources-discovered` entry with `cause: 'after-a-call'`,
+  the mission, the tool, `added: 1`, `attempts: 1` and the member as actor,
+  `metadata.discovery.afterCall` for the account page; **a whole-account
+  mission reaches the new resource on its next call** (before: refused, nothing
+  executed; after: executed, `ctx.resources` holds it); a resource a
+  whole-account mission does not reach (hidden) is `resource-not-in-mission`
+  with the hint saying a created resource is reached right after its creation;
+  **a refused creating call (risk not accepted), one that failed upstream, one
+  the plugin declined (`isError`) and a non-creating tool schedule nothing**;
+  **a burst of three creations coalesces into two discoveries** (one in flight,
+  one queued); **the answer leaves before the discovery starts**.
+- **`src/server/connections/discovery-after-call.test.ts`** (11) — the
+  scheduler alone: the member (or, for a named key, the creator) is the actor;
+  declined result, another tool, an unknown tool, no connection or another
+  connection schedule nothing; nothing starts before the caller returns; a
+  burst keeps one in flight and the latest queued cause; a failure or no new
+  ref is looked at again once per delay, then given up, audited once on the
+  last outcome; a connection that no longer serves ends it unaudited; an error
+  is logged with the connection, the tool and the mission and its class only
+  (never the message), and the next one still runs; `stop()` drops the queued
+  one, schedules nothing more, waits for the one in flight and cuts a retry
+  wait short.
+- **`tests/unit/structural/resource-creating-tools.test.ts`** (15) — every
+  shipped plugin declares exactly its resource-creating tools (Fly
+  `create_app`, Railway `create-project`, Resend `create_domain` /
+  `create_segment`, Upstash Redis `create_database`, nothing elsewhere), each
+  one of its MCP tools.
 - **`tests/integration/execution/team-door.test.ts`** (11) — over HTTP at the
   door: **two members and a named token share one counter and are attributed
   separately** (five calls by three holders spend the five credits, the sixth

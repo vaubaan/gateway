@@ -192,7 +192,22 @@ function Who({ entry }: { entry: AuditEntryView }) {
 
 function Action({ entry }: { entry: AuditEntryView }) {
   if (entry.kind === 'call') return <Mono>{entry.tool}</Mono>;
+  if (entry.act === 'resources-discovered' && causeOf(entry.after) === 'after-a-call') {
+    return (
+      <span>
+        {ACT_WORDS[entry.act]}
+        <span className={styles.quiet}> · {ACTIVITY_WORDS.afterCreatingCall}</span>
+      </span>
+    );
+  }
   return <span>{ACT_WORDS[entry.act]}</span>;
+}
+
+/** `after.cause` of a `resources-discovered` entry: `by-owner` or `after-a-call`. */
+function causeOf(after: unknown): unknown {
+  return typeof after === 'object' && after !== null
+    ? (after as { cause?: unknown }).cause
+    : undefined;
 }
 
 function On({ entry }: { entry: AuditEntryView }) {
