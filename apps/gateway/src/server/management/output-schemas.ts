@@ -73,6 +73,12 @@ const connectionsAnswer = z.looseObject({
       ),
       env_qualified_risks: z.looseObject({
         derives_env: z.boolean(),
+        default_env: z
+          .string()
+          .nullable()
+          .describe(
+            "The owner's label for the connection's resources without one of their own; already in `env`.",
+          ),
         labelled_envs: z.array(z.string()),
         unlabelled_resources: z.array(z.string()),
         usable_risk_ids: riskIds,

@@ -1063,6 +1063,7 @@ describe('resources — discovery merge and owner edits', () => {
         fixturePlugin({
           id: 'keyco',
           credential: API_KEY_SPEC,
+          envs: ['staging', 'prod'],
           discoverResources: async () => {
             state.calls += 1;
             if (state.failWith) throw state.failWith;
@@ -1194,6 +1195,84 @@ describe('resources — discovery merge and owner edits', () => {
       envSource: 'plugin',
       displayName: 'Live account',
     });
+  });
+
+  it('sets a default environment among the catalog labels, audited, that unlabelled resources carry', async () => {
+    const { h, state } = harness();
+    const alice = await h.actor('alice@example.com');
+    const bob = await h.actor('bob@example.com');
+    state.resources = [
+      resource('keyco', 'acct:live', { env: 'live' }),
+      resource('keyco', 'app-a'),
+      resource('keyco', 'app-b'),
+    ];
+    const { connection } = connectedOf(await h.service.start(alice, 'keyco', { fields }));
+    expect((await h.service.get(alice, connection.id)).defaultEnvChoices).toEqual([
+      'staging',
+      'prod',
+    ]);
+
+    // Only a label the catalog knows; only by the owner.
+    await expectConnectError(
+      h.service.setDefaultEnv(alice, connection.id, 'preview'),
+      'invalid-input',
+    );
+    await expectConnectError(
+      h.service.setDefaultEnv(alice, connection.id, 'Not!'),
+      'invalid-input',
+    );
+    await expectConnectError(h.service.setDefaultEnv(bob, connection.id, 'staging'), 'not-found');
+
+    const updated = await h.service.setDefaultEnv(alice, connection.id, ' Staging ');
+    expect(updated.defaultEnv).toBe('staging');
+    const detail = await h.service.get(alice, connection.id);
+    expect(detail.resources.map((r) => [r.ref, r.env, r.envSource])).toEqual([
+      ['acct:live', 'live', 'plugin'], // a plugin label is never overridden
+      ['app-a', 'staging', 'connection-default'],
+      ['app-b', 'staging', 'connection-default'],
+    ]);
+    const entries = h.audit.admin.filter((e) => e.act === 'connection-default-env-set');
+    expect(entries).toEqual([
+      expect.objectContaining({
+        user_id: alice.user.id,
+        object: { type: 'connection', id: connection.id },
+        before: { default_env: null },
+        after: { default_env: 'staging' },
+      }),
+    ]);
+    // The same value again writes nothing.
+    await h.service.setDefaultEnv(alice, connection.id, 'staging');
+    expect(h.audit.admin.filter((e) => e.act === 'connection-default-env-set')).toHaveLength(1);
+
+    // The owner pins the default's label on one resource: it becomes the resource's own,
+    // and it stays when the default changes.
+    const a = detail.resources[1]!;
+    await h.service.updateResource(alice, connection.id, a.id, { env: 'staging' });
+    expect(await h.store.connections.getResource(a.id)).toMatchObject({
+      env: 'staging',
+      envSource: 'owner',
+    });
+    expect(h.audit.admin.at(-1)).toMatchObject({
+      act: 'resource-edited',
+      before: { env: null },
+      after: { env: 'staging' },
+    });
+    await h.service.setDefaultEnv(alice, connection.id, 'prod');
+    const rows = await h.store.connections.listResources(connection.id);
+    expect(rows.map((r) => [r.ref, r.env, r.envSource])).toEqual([
+      ['acct:live', 'live', 'plugin'],
+      ['app-a', 'staging', 'owner'],
+      ['app-b', 'prod', 'connection-default'],
+    ]);
+
+    // Blank clears it; a revoked connection takes no default.
+    await h.service.setDefaultEnv(alice, connection.id, '');
+    expect((await h.store.connections.getResource(rows[2]!.id))?.env).toBeNull();
+    await h.service.revoke(alice, connection.id);
+    await expectConnectError(
+      h.service.setDefaultEnv(alice, connection.id, 'staging'),
+      'connection-revoked',
+    );
   });
 
   it('validates owner edits before writing any of them', async () => {

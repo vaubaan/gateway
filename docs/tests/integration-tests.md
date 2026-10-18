@@ -145,7 +145,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/connections/oauth2.test.ts`                                                       |        28 |
 | `apps/gateway/src/server/connections/pending.test.ts`                                                      |         7 |
 | `apps/gateway/src/server/connections/provider-revocation.test.ts`                                          |        16 |
-| `apps/gateway/src/server/connections/service.test.ts`                                                      |        33 |
+| `apps/gateway/src/server/connections/service.test.ts`                                                      |        34 |
 | `apps/gateway/src/server/connections/shipped-providers.test.ts`                                            |         9 |
 | `apps/gateway/src/server/connections/token-connections.test.ts`                                            |         8 |
 | `apps/gateway/src/server/crypto/aead.test.ts`                                                              |        12 |
@@ -199,11 +199,12 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/shares/restriction.test.ts`                                                       |         8 |
 | `apps/gateway/src/server/shares/service.test.ts`                                                           |        24 |
 | `apps/gateway/src/server/store/membership.test.ts`                                                         |        12 |
+| `apps/gateway/src/server/store/resource-env.test.ts`                                                       |         5 |
 | `apps/gateway/src/server/telemetry/outcome.test.ts`                                                        |        30 |
 | `apps/gateway/src/server/telemetry/settings.test.ts`                                                       |         7 |
 | `apps/gateway/src/server/telemetry/stats.test.ts`                                                          |        11 |
 | `apps/gateway/src/server/telemetry/usage.test.ts`                                                          |         6 |
-| `apps/gateway/tests/integration/audit/admin-mutations.test.ts`                                             |        65 |
+| `apps/gateway/tests/integration/audit/admin-mutations.test.ts`                                             |        67 |
 | `apps/gateway/tests/integration/audit/audit-query.test.ts`                                                 |        35 |
 | `apps/gateway/tests/integration/audit/events-agent-label.test.ts`                                          |         3 |
 | `apps/gateway/tests/integration/audit/mission-session.test.ts`                                             |        21 |
@@ -235,7 +236,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/execution/approval-door.test.ts`                                           |         8 |
 | `apps/gateway/tests/integration/execution/counters-vs-audit.test.ts`                                       |         4 |
 | `apps/gateway/tests/integration/execution/door-http.test.ts`                                               |        23 |
-| `apps/gateway/tests/integration/execution/pipeline.test.ts`                                                |        24 |
+| `apps/gateway/tests/integration/execution/pipeline.test.ts`                                                |        25 |
 | `apps/gateway/tests/integration/execution/streaming.test.ts`                                               |        13 |
 | `apps/gateway/tests/integration/execution/team-door.test.ts`                                               |        11 |
 | `apps/gateway/tests/integration/git/git-remote-limits.test.ts`                                             |        10 |
@@ -244,12 +245,12 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/git/git-remote.test.ts`                                                    |        14 |
 | `apps/gateway/tests/integration/instance/instance-name.test.ts`                                            |         7 |
 | `apps/gateway/tests/integration/management/hard-deny.test.ts`                                              |         6 |
-| `apps/gateway/tests/integration/management/management-door.test.ts`                                        |        34 |
+| `apps/gateway/tests/integration/management/management-door.test.ts`                                        |        35 |
 | `apps/gateway/tests/integration/management/output-schemas.test.ts`                                         |         9 |
 | `apps/gateway/tests/integration/missions/gate.test.ts`                                                     |        20 |
 | `apps/gateway/tests/integration/missions/limits.test.ts`                                                   |        21 |
 | `apps/gateway/tests/integration/missions/mission-handlers.test.ts`                                         |         8 |
-| `apps/gateway/tests/integration/missions/mission-lifecycle.test.ts`                                        |        33 |
+| `apps/gateway/tests/integration/missions/mission-lifecycle.test.ts`                                        |        34 |
 | `apps/gateway/tests/integration/missions/team-interleaving.test.ts`                                        |         6 |
 | `apps/gateway/tests/integration/missions/team.test.ts`                                                     |        34 |
 | `apps/gateway/tests/integration/now/now.test.ts`                                                           |        12 |
@@ -267,7 +268,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/store/audit-guarded-append.test.ts`                                        |        10 |
 | `apps/gateway/tests/integration/store/audit.test.ts`                                                       |        15 |
 | `apps/gateway/tests/integration/store/config.test.ts`                                                      |         7 |
-| `apps/gateway/tests/integration/store/connections-shares.test.ts`                                          |        13 |
+| `apps/gateway/tests/integration/store/connections-shares.test.ts`                                          |        14 |
 | `apps/gateway/tests/integration/store/corrupt-rows.test.ts`                                                |        14 |
 | `apps/gateway/tests/integration/store/delegations.test.ts`                                                 |        20 |
 | `apps/gateway/tests/integration/store/identities.test.ts`                                                  |        11 |
@@ -292,7 +293,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/app/now-and-waiting.test.tsx`                                                     |        30 |
 | `apps/gateway/tests/unit/app/shell-and-vocabulary.test.ts`                                                 |        23 |
 | `apps/gateway/tests/unit/components/success-tone.test.ts`                                                  |         2 |
-| `apps/gateway/tests/unit/server/auth/mutation-guard.test.ts`                                               |       378 |
+| `apps/gateway/tests/unit/server/auth/mutation-guard.test.ts`                                               |       414 |
 | `apps/gateway/tests/unit/server/budget/decide.test.ts`                                                     |        20 |
 | `apps/gateway/tests/unit/server/budget/gates.test.ts`                                                      |         9 |
 | `apps/gateway/tests/unit/server/budget/live-policy.test.ts`                                                |         3 |
@@ -1884,7 +1885,7 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   included, and only once — a later issuer finds nothing to take; a
   returning user finds their own account; an account that would collide
   with one already bound to that issuer is left unbound.
-- **`integration/store/connections-shares.test.ts`** (13) — connection
+- **`integration/store/connections-shares.test.ts`** (14) — connection
   credential sealed with the connection id as associated data and
   unreadable under another id; ciphertext never on the record; group
   ownership, transfer, `unowned`, revocation; reconnection reactivates;
@@ -2111,7 +2112,7 @@ Unit, co-located under `apps/gateway/src/server/connections/` and
   secret; an error body under HTTP 200; 5xx / network / missing
   `access_token` are not rejections; refresh rotates the refresh token,
   keeps it when none is returned, is a rejection without one.
-- **`service.test.ts`** (33) — the connect driver per credential kind:
+- **`service.test.ts`** (34) — the connect driver per credential kind:
   - `oauth2`: redirect URI on `public_url`, the verifier of the exchange
     matches the challenge of the redirect, the credential is stored and
     the plugin discovers with the fresh token and without the client
@@ -2162,7 +2163,15 @@ Unit, co-located under `apps/gateway/src/server/connections/` and
     it returns; a plugin-set environment is read-only and follows the
     plugin, an invalid plugin label is dropped; edits are validated
     before any write; a failed refresh changes nothing; a rejected
-    credential that cannot be refreshed expires the connection.
+    credential that cannot be refreshed expires the connection;
+  - **the default environment of a connection** (ADR
+    [[connection-default-environment-label]]): only a label of the catalog,
+    only by an owner (another user reads `not-found`), never on a revoked
+    connection; one `connection-default-env-set` entry per change and none
+    for the same value; unlabelled resources carry it
+    (`envSource: connection-default`) while a plugin label is kept; naming
+    the default's label on one resource pins it as the resource's own and
+    it survives a change of the default; blank clears it.
 - **`credentials.test.ts`** (15) — `resolve` hands the decrypted secret
   and an app config without the client secret; a token inside the 60 s
   skew is refreshed, the rotated refresh token is persisted (sealed again)
@@ -2230,10 +2239,14 @@ Unit, co-located under `apps/gateway/src/server/connections/` and
 
 Integration:
 
-- **`tests/integration/store/connections-shares.test.ts`** (two of its 13
+- **`tests/integration/store/connections-shares.test.ts`** (three of its 14
   cases) —
   `syncDiscoveredResources` at the repository (merge rule, stale, plugin
-  label that stops being set, name handed back to discovery) and the
+  label that stops being set, name handed back to discovery), **the
+  connection's default environment read on every resource — `listResources`,
+  `getResource`, the answer of a discovery, a ref found later — and never
+  written on the resource row, own and plugin labels winning, cleared back to
+  unlabelled**, and the
   conditional transitions `refreshCredential` / `markExpired` /
   `reconnect` / `revoke` (a revoked connection is never brought back).
 - **`tests/integration/connections/repository-status.test.ts`** (6) —
@@ -2477,7 +2490,7 @@ included` equals the catalog; where the environment comes from (Vercel: the
 Integration, `:memory:` store, the real root with the shipped plugins,
 connections and resources seeded through the repositories (36):
 
-- **`tests/integration/missions/mission-lifecycle.test.ts`** (33) — **issue →
+- **`tests/integration/missions/mission-lifecycle.test.ts`** (34) — **issue →
   the token verifies → rotate → the old token is `retired/rotated` → revoke →
   `retired/revoked` and gateway-core's `checkMissionActive` answers
   `mission-inactive`**; malformed bearer, unknown prefix and wrong secret answer
@@ -2503,7 +2516,9 @@ connections and resources seeded through the repositories (36):
   hidden resource for a mission issued on "all" when every resource is
   hidden; a resource turned stale dropped from both; the creator is told
   when a selected resource carries no environment label on an env-scoped
-  catalog.
+  catalog; **unlabelled resources read under the connection's default
+  environment at issuance** (the notice gone, the staging preset issued on
+  them).
 - **`tests/integration/missions/mission-handlers.test.ts`** (8) — 201 with the
   secret once, the kit and `no-store`; cross-origin refused on all four routes
   before the session is read; 401 without a session, 403 for the bootstrap
@@ -2682,13 +2697,16 @@ calls sent as JSON-RPC to `root.execution.handlers.mcp`.
   —, a non-token bearer costs nothing); upstream
   credential cache (scoped per connection, dropped on demand, unreachable
   after the connection row changed, lifetime capped).
-- **`integration/execution/pipeline.test.ts`** (24)
+- **`integration/execution/pipeline.test.ts`** (25)
   - _allowed call_: forwarded to the plugin, the touched risk decremented,
     one audit entry with connection, resource ref, canonical
     `arguments_hash`, `remaining_budget`; the decrypted credential reaches
     the plugin and never the response; an env-qualified risk matches through
     the label of the resource touched, and the same tool on another resource
-    is `risk-not-accepted`; the agent label from the header and from
+    is `risk-not-accepted`; **an unlabelled resource is refused an
+    env-qualified risk until its connection has a default environment, then
+    matches it, while a labelled resource keeps its own label, and is refused
+    again once the default is cleared**; the agent label from the header and from
     `_meta.agent`, both spending one budget.
   - _every refusal code with its fields and a hint_: `risk-not-accepted`
     (`missing_risks`, `executed_slices`; nothing counted, no session born),
@@ -4158,13 +4176,15 @@ composition root on the `:memory:` store with the shipped plugins and the
 simulated IdP; the agent is the official MCP client holding a delegated token
 obtained through registration, sign-in, consent and code exchange):
 
-- **`management-door.test.ts`** (34)
+- **`management-door.test.ts`** (35)
   - The door lists exactly the seven tools, each with a description and a
     strict input schema; the server instructions carry the rules.
   - **Reading**: an owner sees their connections with the whole catalog,
     resources and presets, experimental plugins hidden unless asked; which
     env-qualified risks are usable on a labelled connection, an unlabelled
-    one and a provider that derives the environment; **a beneficiary sees the
+    one and a provider that derives the environment; the connection's
+    `default_env`, a resource that inherits it labelled and counted in
+    `labelled_envs`, its environment's risks usable; **a beneficiary sees the
     shared connection with the exact restriction, and nothing else of the
     owner**; someone who holds nothing sees nothing; `get_catalog` with and
     without a connection, refused for an unknown provider or a connection

@@ -99,7 +99,7 @@ describe('the restriction of a share, as the dialog shows it', () => {
     it('counts the unlabelled resources the shared env-qualified risks will be refused on', () => {
       const [one] = envNotes(RISKS, prodWrite, { ...LABELLED, unlabelledResources: 1 });
       expect(one).toBe(
-        '1 resource has no environment label: permissions tied to an environment are refused on it until you label it.',
+        '1 resource has no environment label: permissions tied to an environment are refused on it until you label it or give the account a default environment.',
       );
       const both = envNotes(RISKS, new Set(['depot[prod].write', 'depot[staging].write']), {
         derivesEnv: false,

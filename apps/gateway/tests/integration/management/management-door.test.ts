@@ -147,6 +147,49 @@ describe('management door — tools of a delegated agent', () => {
       await agent.close();
     });
 
+    it("says the connection's default environment and counts the resources that carry it as labelled", async () => {
+      await rig.root.store.connections.syncDiscoveredResources(supabase, [
+        { ref: 'stgprojectref', displayName: 'Staging' },
+        { ref: 'prdprojectref', displayName: 'Production' },
+        { ref: 'newprojectref', displayName: 'Created since' },
+      ]);
+      const agent = await rig.agentOf(ADA);
+      const sbOf = async () =>
+        (await agent.call<ConnectionsAnswer>('list_my_connections')).data.connections.find(
+          (c) => c.connection_id === supabase,
+        )!;
+      const before = await sbOf();
+      expect(before.env_qualified_risks).toMatchObject({
+        default_env: null,
+        unlabelled_resources: ['newprojectref'],
+      });
+      expect(before.env_qualified_risks.unusable_risk_ids).toContain(
+        'supabase[preview].row-write-one',
+      );
+
+      await rig.root.store.connections.setDefaultEnv(supabase, 'preview');
+      const after = await sbOf();
+      expect(after.env_qualified_risks).toMatchObject({
+        default_env: 'preview',
+        unlabelled_resources: [],
+      });
+      expect([...after.env_qualified_risks.labelled_envs].sort()).toEqual([
+        'preview',
+        'prod',
+        'staging',
+      ]);
+      expect(after.env_qualified_risks.usable_risk_ids).toContain(
+        'supabase[preview].row-write-one',
+      );
+      expect(after.resources).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ ref: 'newprojectref', env: 'preview' }),
+          expect.objectContaining({ ref: 'prdprojectref', env: 'prod' }),
+        ]),
+      );
+      await agent.close();
+    });
+
     it('a beneficiary sees the shared connection with the exact restriction, and nothing else of the owner', async () => {
       await shareWithBob();
       const agent = await rig.agentOf(BOB);

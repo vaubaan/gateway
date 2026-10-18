@@ -548,6 +548,8 @@ export const ACCOUNT_WORDS = {
   who: 'Who',
   since: 'Since',
   environment: 'Environment',
+  defaultEnvironment: 'Default environment for unlabelled resources',
+  fromDefault: "from the account's default",
   hidden: 'hidden from new missions',
   gone: 'no longer found',
   /** A resource of `InstanceConfig.selfResources` (SEC 2026-10-15 H1). */
@@ -722,6 +724,7 @@ export const ACT_WORDS = {
   'connection-revoked': 'disconnected an account',
   'resources-discovered': 'refreshed what an account reaches',
   'resource-edited': 'edited a resource',
+  'connection-default-env-set': 'changed the default environment of an account',
   'share-created': 'gave access',
   'share-revoked': 'removed an access',
   'mission-issued': 'created a mission',

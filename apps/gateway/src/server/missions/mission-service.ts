@@ -554,6 +554,7 @@ export class MissionService {
       provider_label: plugin.displayName,
       experimental: plugin.experimental === true,
       derives_env: typeof plugin.envOf === 'function',
+      default_env: connection.defaultEnv,
       basis: authority.basis,
       resources: resources.map((r) => toIssuanceResource(r, this.isSelf(connection.provider, r))),
       risks: this.risksOf(connection.provider),

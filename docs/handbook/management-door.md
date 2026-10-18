@@ -831,8 +831,13 @@ What each answer contains (`views.ts`):
   its `status`; `authority.basis` (`owner` | `share`) and `authority.risk_ids`, **the exact
   restriction** (`IssuanceConnection.authority`: the whole catalog for an
   owner — `authority.whole_catalog` — the union of the shares otherwise); `resources` (ref, display name,
-  `env` label, `hidden`; stale ones are left out); `env_qualified_risks` —
-  `derives_env`, `labelled_envs`, `unlabelled_resources`, and the
+  `env` label — its own, else the connection's default —, `hidden`; stale
+  ones are left out); `env_qualified_risks` — `derives_env`, `default_env`
+  (the label the owner gave the connection's unlabelled resources, `null`
+  when none; already applied to `resources[].env`, so a resource that
+  inherits it counts in `labelled_envs` and not in `unlabelled_resources`;
+  ADR [connection-default-environment-label](../decisions/connection-default-environment-label.md)),
+  `labelled_envs`, `unlabelled_resources`, and the
   env-qualified ids of the authority split into `usable_risk_ids` and
   `unusable_risk_ids` (no resource carries their environment: a draft naming
   one is refused `unresolvable-env`); `presets` with `within_authority` and
@@ -1290,7 +1295,9 @@ tool table.
 Integration (`tests/integration/management/`, the real root, the simulated
 IdP, the official MCP client with a token obtained through the real flow):
 `management-door.test.ts` — the seven tools listed; an owner's and a
-beneficiary's authority; catalog; preview within and beyond; **issue within
+beneficiary's authority; the connection's default environment in
+`env_qualified_risks` (`default_env`, the inheriting resource labelled, its
+environment usable); catalog; preview within and beyond; **issue within
 the authority → creator, `issued_via`, token once, kit, audit naming user and
 client, the token on `/mcp`**; **refusal beyond with the uncovered list**; a
 share narrowed after consent; rotate, revoke, an orphaned mission (not

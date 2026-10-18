@@ -215,7 +215,7 @@ null`: what is persisted is the explicit enumeration, never a preset reference.
 Pure; `context` is `{ connections: IssuanceConnection[], now }` where each
 `IssuanceConnection` carries the connection's resources, the catalog as explicit
 rows (`CatalogRisk`), the creator's `authority` and its `basis` (`owner` or
-`share`), the plugin's presets, `experimental` and `derives_env`. It never throws on a refusable draft: every
+`share`), the plugin's presets, `experimental`, `derives_env` and `default_env`. It never throws on a refusable draft: every
 reason is a `PreviewIssue { code, message, connection_index?, connection_id?,
 risk_ids?, resource_refs? }`, so everything is fixed in one pass.
 
@@ -287,17 +287,18 @@ mission reaches the account-scoped risks only. (The same refusal meets a call
 that names resources of different environments: none can be chosen for it —
 ADR [decision-stages-fail-closed-and-audited](../decisions/decision-stages-fail-closed-and-audited.md), D2.)
 
-| Code                          | When                                                                                                             |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `resource-without-env`        | a selected resource has no environment label, on a connection whose catalog has env-scoped risks                 |
-| `resource-env-not-in-catalog` | a selected resource is labelled with an environment (`dev`, a typo) that no risk of the catalog is acceptable in |
+| Code                          | When                                                                                                                                             |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `resource-without-env`        | a selected resource has no environment label — neither its own nor the connection's default — on a connection whose catalog has env-scoped risks |
+| `resource-env-not-in-catalog` | a selected resource is labelled with an environment (`dev`, a typo) that no risk of the catalog is acceptable in                                 |
 
 `resource_refs` carries the refs of the resources, `risk_ids` the env-scoped
 ids the draft accepts on that connection (unreachable there). The message
 names each resource as the pages do, by its **display name** (its ref when it
 has none) — the ref, a UUID at some providers, is for whoever reads the notice
 as data — then the labels the catalog knows and the remedy: label the resource
-on the connection's page, or leave it out. Nothing is emitted when the plugin derives the
+on the connection's page (for `resource-without-env`, or give the connection a
+default environment for its unlabelled resources), or leave it out. Nothing is emitted when the plugin derives the
 environment from the call (`derives_env`, today Vercel) or when the catalog has
 no env-scoped risk. This is separate from `unresolvable-env`, which refuses an
 env-qualified entry that _no_ selected resource can resolve: a notice is about a
@@ -338,7 +339,17 @@ lifting it needs the connection in the key of the policy and of the counters.
 account-scoped id always resolves; an env-qualified id resolves when a selected
 resource carries that label, or when the plugin derives the environment from the
 call itself (`ProviderPlugin.envOf`, today Vercel: `derives_env: true`), in
-which case resource labels are irrelevant.
+which case resource labels are irrelevant. A resource's label is its
+**effective** one: its own (owner or plugin), else the connection's default
+environment (`default_env`, ADR
+[connection-default-environment-label](../decisions/connection-default-environment-label.md)).
+The repository applies it when it reads resources (handbook
+[connections](connections.md), "Default environment of a connection"), so the
+issuance context, the notices below, the execution door's
+`envResolverFor` (fed by `loadMissionContext`) and `list_my_connections` read
+one value; nothing in this module resolves the default itself. A mission
+issued on resources that inherit the default follows it: a change of the
+default is a change of their label.
 
 **Base ids in presets.** A preset entry may name the _base_ id of an env-scoped
 risk (Stripe's `read-only`: `stripe.read-catalog`, "of the selected mode"). The
@@ -1450,7 +1461,8 @@ specs share are in `tests/e2e/v5/mission-pages.ts`.
 - **Calls are refused `risk-not-accepted` on one resource only** — read the
   preview's `notices`: the resource has no environment label, or a label the
   catalog does not know; env-scoped risks can never be touched on it. Label it
-  on the account's page. The line of the notice on the creation screen
+  on the account's page, or give the account a default environment for its
+  unlabelled resources. The line of the notice on the creation screen
   (`noticeHeadline` in `mission-form.tsx`) and the notice's own message name
   the resource as its owner named it; its ref is in `resource_refs` and on
   the account's page.

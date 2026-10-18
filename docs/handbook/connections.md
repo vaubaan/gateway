@@ -2,13 +2,15 @@
 title: Connections — connect flows, resources, credential refresh, provider apps
 status: current
 date: 2026-10-13
-last_synced: 2026-10-15
+last_synced: 2026-10-18
 tracks:
   - apps/gateway/src/server/connections/
   - apps/gateway/src/server/provider-apps/
   - apps/gateway/src/server/compose/shipped-plugins.ts
   - apps/gateway/src/server/store/repositories/connections.ts
   - apps/gateway/migrations/0004_connection_resource_curation.sql
+  - apps/gateway/migrations/0017_connection_default_env.sql
+  - apps/gateway/src/server/store/resource-env.ts
   - apps/gateway/src/app/(app)/accounts/
   - apps/gateway/src/app/(app)/connections/callback/
   - apps/gateway/src/app/(app)/layout.tsx
@@ -817,6 +819,43 @@ stale resources out of "all resources", lets a creator pick a hidden one
 explicitly and refuses a stale one (handbook [missions](missions.md),
 "Hidden and stale resources").
 
+### Default environment of a connection
+
+ADR [connection-default-environment-label](../decisions/connection-default-environment-label.md).
+`connections.default_env` (migration `0017`, `ConnectionRecord.defaultEnv`)
+is a label the owner chose for every resource of the connection that has
+none of its own — for an account whose resources appear continuously (a Fly
+organization, a Railway workspace) and are all one environment.
+
+- **One place resolves it.** Every resource read of the repository
+  (`listResources`, `getResource`, the answer of `syncDiscoveredResources`)
+  joins the connection (`RESOURCE_READ`) and maps the row through
+  `effectiveResourceEnv` (`store/resource-env.ts`): the resource's own label
+  (owner or plugin) wins; else the default, with
+  `envSource: 'connection-default'`; else `null` (`envSource` `owner`).
+  `ConnectionResourceRecord.env` is therefore the **effective** label, and
+  every reader — issuance and its notices, the execution door's resolver,
+  `list_my_connections`, the account pages, the share notes — reads it.
+  `connection_resources.env` keeps the resource's own label: the default is
+  never written there (`RESOURCE_ENV_SOURCES` lists the stored values only;
+  `ResourceEnvSource` adds `connection-default`), so clearing the default
+  hands every inheriting resource back its unlabelled state, and a new ref
+  found by discovery inherits it at once.
+- **The owner's act.** `ConnectionService.setDefaultEnv(actor, id, raw)` →
+  `POST /accounts/<id>/default-env` (`handlers.setDefaultEnv`, a user
+  mutation behind `guardMutation` like the other owner edits). `raw` goes
+  through `parseEnvLabel`; blank is "none". A label must be one of
+  `defaultEnvChoices(provider)` = `catalogEnvsOf(plugin.catalog)` (the
+  environments of the catalog's env-scoped risks, `missions/catalog-view.ts`),
+  else `invalid-input`; a revoked connection → `connection-revoked`; not the
+  actor's → `not-found`. A change writes one `connection-default-env-set`
+  entry on the connection, `before` / `after` `{ default_env }`; an
+  unchanged value writes nothing.
+- **Owner edits of a resource** compare with its own label
+  (`ownResourceEnv`), not the effective one: naming the default's label on
+  a resource that inherits it pins it as the resource's own, and the
+  `resource-edited` entry carries the own label (`env`).
+
 ## Pages
 
 The pages say **account** for a connection, **service** for a provider,
@@ -922,9 +961,15 @@ patterns are in `lib/vocabulary.ts` (`ACCOUNT_PAGES`, `ACCOUNT_ACTIONS`,
   - **Resources**: the ref in mono, its name when it differs, "hidden from
     new missions", "no longer found since …"; the environment label where
     the service has environments (`EnvTag`, dashed "no label" when one is
-    missing); how many running missions name it. "Edit" opens the form of
+    missing, "from the account's default" beside a label the resource
+    inherits); how many running missions name it. Above the table, when the
+    catalog knows environments and the account is not disconnected,
+    "Default environment for unlabelled resources" (`DefaultEnvForm`: none
+    or one of `defaultEnvChoices`) posts to `POST /accounts/<id>/default-env`.
+    "Edit" opens the form of
     one resource under its row (`?resource=<id>`: name, environment unless
-    the plugin sets it, hidden, the plugin's editable lists) which posts to
+    the plugin sets it — the resource's own label, empty when it inherits
+    the default —, hidden, the plugin's editable lists) which posts to
     `POST /accounts/<id>/resources/<resourceId>`. "Refresh" posts to
     `…/discover`. Ten rows, then "All N".
   - **Missions using this account** (`MissionService.onConnection`): each
@@ -974,7 +1019,7 @@ Unit, co-located (`src/server/connections/*.test.ts`,
 - `oauth2.test.ts` (28) — authorization URL, RFC 7636 vector, the three
   client authentication methods, resource indicator, error mapping,
   rotation, a PKCE exchange without a verifier refused before any request.
-- `service.test.ts` (33) — the driver per credential kind against mocked
+- `service.test.ts` (34) — the driver per credential kind against mocked
   provider endpoints: state replay, foreign user, crossed provider,
   foreign return URL, denial, failed exchange, rate limit, the
   installation binding (id in the user's list on a second page accepted
@@ -985,7 +1030,9 @@ Unit, co-located (`src/server/connections/*.test.ts`,
   withdrawn mid-flow), app-install
   rejection, api-key rejection storing nothing, ssh key pair, ownership
   (user and group), reconnect (an `unowned` connection refused), revoke, the resource merge (owner label,
-  name, hidden, list settings kept; stale; plugin-set label read-only),
+  name, hidden, list settings kept; stale; plugin-set label read-only), the
+  default environment (catalog labels only, owner only, audited once, plugin
+  label kept, pinning the default's label, cleared, refused when revoked),
   failed discovery, expiry on a rejected credential.
 - `credentials.test.ts` (15) — resolve, skew refresh with rotation and
   persistence, an `unowned` connection served, refreshed and kept `unowned`
@@ -1018,7 +1065,8 @@ Unit, co-located (`src/server/connections/*.test.ts`,
   are the services with two ways, and that every shipped token way has a
   label, a link, a guide, a check and a manual revocation sentence.
 
-Integration: `tests/integration/store/connections-shares.test.ts` (+2: the
+Integration: `tests/integration/store/connections-shares.test.ts` (+3: the
+default environment read on every resource and never stored, the
 merge rule and the credential state transitions at the repository) and
 `tests/integration/connections/connect-flow.test.ts` (6) over `buildRoot`
 with the `:memory:` store and the **real** encryptor: operator registers

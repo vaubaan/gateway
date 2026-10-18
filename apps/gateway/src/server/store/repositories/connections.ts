@@ -13,6 +13,7 @@ import type {
   ProviderGrantOutcome,
 } from '../types.ts';
 import { PROVIDER_GRANT_OUTCOMES, RESOURCE_ENV_SOURCES } from '../types.ts';
+import { effectiveResourceEnv } from '../resource-env.ts';
 import {
   nowIso,
   parseEnum,
@@ -86,6 +87,12 @@ export interface ConnectionsRepo {
    */
   listOwnerless(): Promise<ConnectionRecord[]>;
   setMetadata(id: string, metadata: Record<string, unknown> | null): Promise<ConnectionRecord>;
+  /**
+   * The owner's default environment label for the connection's unlabelled resources;
+   * `null` removes it. The caller validates the label against the catalog.
+   */
+  setDefaultEnv(id: string, env: string | null): Promise<ConnectionRecord>;
+  /** Every resource, each with its effective label (`effectiveResourceEnv`). */
   listResources(connectionId: string): Promise<ConnectionResourceRecord[]>;
   getResource(id: string): Promise<ConnectionResourceRecord | null>;
   setResourceEnv(resourceId: string, env: string | null): Promise<ConnectionResourceRecord>;
@@ -162,6 +169,12 @@ interface ConnectionRow {
   updated_at: string;
   revoked_at: string | null;
   provider_grant: string | null;
+  default_env: string | null;
+}
+
+/** A resource read with its connection's default label (`RESOURCE_READ`). */
+interface ResourceReadRow extends ResourceRow {
+  default_env: string | null;
 }
 
 interface ResourceRow {
@@ -181,9 +194,17 @@ interface ResourceRow {
 
 const COLUMNS = `id, provider, owner_kind, owner_user_id, owner_group_id, display_name, status,
   key_version, credential_expires_at, metadata_json, created_at, updated_at, revoked_at,
-  provider_grant`;
+  provider_grant, default_env`;
 const RESOURCE_COLUMNS = `id, connection_id, ref, env, display_name, discovered_at, metadata_json,
   owner_metadata_json, env_source, display_name_edited, hidden, stale_since`;
+/**
+ * Every read that becomes a `ConnectionResourceRecord` goes through this join, so the
+ * effective label (own label, else the connection's default) is computed in one place.
+ */
+const RESOURCE_READ = `SELECT r.id, r.connection_id, r.ref, r.env, r.display_name, r.discovered_at,
+  r.metadata_json, r.owner_metadata_json, r.env_source, r.display_name_edited, r.hidden,
+  r.stale_since, c.default_env
+  FROM connection_resources r JOIN connections c ON c.id = r.connection_id`;
 
 /** Every status of the schema's `CHECK`; a status added to the union fails to compile here. */
 const CONNECTION_STATUSES = Object.keys({
@@ -218,23 +239,31 @@ function toRecord(row: ConnectionRow): ConnectionRecord {
       row.provider_grant === null
         ? null
         : parseEnum(PROVIDER_GRANT_OUTCOMES, row.provider_grant, 'connections.provider_grant'),
+    defaultEnv: row.default_env,
   };
 }
 
-function resourceToRecord(row: ResourceRow): ConnectionResourceRecord {
+function resourceToRecord(row: ResourceReadRow): ConnectionResourceRecord {
   const discovered = parseJsonObject(row.metadata_json, 'connection_resources.metadata_json');
   const ownerMetadata = parseJsonObject(
     row.owner_metadata_json,
     'connection_resources.owner_metadata_json',
   );
+  const { env, envSource } = effectiveResourceEnv(
+    {
+      env: row.env,
+      envSource: parseEnum(RESOURCE_ENV_SOURCES, row.env_source, 'connection_resources.env_source'),
+    },
+    row.default_env,
+  );
   return {
     id: row.id,
     connectionId: row.connection_id,
     ref: row.ref,
-    env: row.env,
+    env,
     displayName: row.display_name,
     discoveredAt: row.discovered_at,
-    envSource: parseEnum(RESOURCE_ENV_SOURCES, row.env_source, 'connection_resources.env_source'),
+    envSource,
     metadata: discovered || ownerMetadata ? { ...discovered, ...ownerMetadata } : null,
     ownerMetadata,
     displayNameEdited: row.display_name_edited === 1,
@@ -279,11 +308,12 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
   const setMetadataStmt = db.prepare<[string | null, string, string]>(
     'UPDATE connections SET metadata_json = ?, updated_at = ? WHERE id = ?',
   );
-  const resourcesOf = db.prepare<[string], ResourceRow>(
-    `SELECT ${RESOURCE_COLUMNS} FROM connection_resources WHERE connection_id = ? ORDER BY ref`,
+  const resourcesOf = db.prepare<[string], ResourceReadRow>(
+    `${RESOURCE_READ} WHERE r.connection_id = ? ORDER BY r.ref`,
   );
-  const resourceById = db.prepare<[string], ResourceRow>(
-    `SELECT ${RESOURCE_COLUMNS} FROM connection_resources WHERE id = ?`,
+  const resourceById = db.prepare<[string], ResourceReadRow>(`${RESOURCE_READ} WHERE r.id = ?`);
+  const setDefaultEnvStmt = db.prepare<[string | null, string, string]>(
+    'UPDATE connections SET default_env = ?, updated_at = ? WHERE id = ?',
   );
   const setEnv = db.prepare<[string | null, string]>(
     "UPDATE connection_resources SET env = ?, env_source = 'owner' WHERE id = ?",
@@ -455,6 +485,11 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
     },
     async setMetadata(id, metadata) {
       const result = setMetadataStmt.run(toJson(metadata), nowIso(ctx), id);
+      if (result.changes === 0) throw new NotFoundError('connection', id);
+      return requireConnection(id);
+    },
+    async setDefaultEnv(id, env) {
+      const result = setDefaultEnvStmt.run(env, nowIso(ctx), id);
       if (result.changes === 0) throw new NotFoundError('connection', id);
       return requireConnection(id);
     },

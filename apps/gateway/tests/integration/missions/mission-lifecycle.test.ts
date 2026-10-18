@@ -810,6 +810,55 @@ describe('missions: issuance context', () => {
     expect(vercel.notices).toEqual([]);
   });
 
+  it("reads unlabelled resources under the connection's default environment at issuance", async () => {
+    const { service } = root.missions;
+    const owner = { kind: 'user', id: seeded.bob.id } as const;
+    const { connection } = await seedConnection(root.store, {
+      provider: 'supabase',
+      owner,
+      displayName: 'supabase staging org (bob)',
+      resources: [
+        { ref: 'created-yesterday' },
+        { ref: 'created-today' },
+        { ref: 'p', env: 'prod' },
+      ],
+    });
+    const draft = {
+      name: 'On new projects',
+      connections: [
+        {
+          connection_id: connection.id,
+          resources: {
+            scope: 'selected' as const,
+            resource_refs: ['created-yesterday', 'created-today'],
+          },
+          preset: 'staging-developer',
+        },
+      ],
+      period: DAILY,
+      expires_at: null,
+    };
+    const unlabelled = await service.preview(seeded.bob, draft);
+    expect(unlabelled.notices.map((n) => n.code)).toEqual(['resource-without-env']);
+    expect(unlabelled.notices[0]?.message).toContain('default environment');
+
+    await root.store.connections.setDefaultEnv(connection.id, 'staging');
+    const context = await service.issuanceContext(seeded.bob);
+    const issuance = context.find((c) => c.id === connection.id);
+    expect(issuance?.default_env).toBe('staging');
+    expect(issuance?.resources.map((r) => [r.ref, r.env])).toEqual([
+      ['created-today', 'staging'],
+      ['created-yesterday', 'staging'],
+      ['p', 'prod'],
+    ]);
+    const preview = await service.preview(seeded.bob, draft);
+    expect(preview.ok).toBe(true);
+    expect(preview.notices).toEqual([]);
+    expect(preview.issues).toEqual([]);
+    const issued = await service.issue(seeded.bob, draft);
+    expect(issued.ok).toBe(true);
+  });
+
   it('issues every preset of every registered plugin cleanly for an owner with labelled resources', async () => {
     const { service } = root.missions;
     const owner = { kind: 'user', id: seeded.bob.id } as const;

@@ -40,7 +40,10 @@ import type { ProviderCatalog } from './ports';
 export interface ResourceView {
   readonly ref: string;
   readonly display_name: string;
-  /** The environment label the owner gave it; `null` when unlabelled. */
+  /**
+   * Its environment label: its own (the owner's or the plugin's), else the
+   * connection's `default_env`; `null` when it has neither.
+   */
   readonly env: string | null;
   /** Hidden by the owner: left out of `{ scope: 'all' }`, still selectable by ref. */
   readonly hidden: boolean;
@@ -49,6 +52,11 @@ export interface ResourceView {
 export interface EnvUsabilityView {
   /** The provider reads the environment from the call itself: no label is needed. */
   readonly derives_env: boolean;
+  /**
+   * The label the connection's owner gave every resource without one of its own;
+   * `null` when none. Already counted in `labelled_envs` and the resources' `env`.
+   */
+  readonly default_env: string | null;
   /** Environments at least one resource of the connection is labelled with. */
   readonly labelled_envs: readonly string[];
   /** Resources with no label: an env-qualified risk is refused on them at call time. */
@@ -133,6 +141,7 @@ function envUsability(connection: IssuanceConnection): EnvUsabilityView {
     isResolvable(risk, connection, resources);
   return {
     derives_env: connection.derives_env,
+    default_env: connection.default_env,
     labelled_envs: labelled,
     unlabelled_resources: resources.filter((r) => r.env === null).map((r) => r.ref),
     usable_risk_ids: envQualified.filter(reachable).map((r) => r.risk_id),

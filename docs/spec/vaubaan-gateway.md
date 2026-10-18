@@ -139,14 +139,21 @@ company registered at a provider).
   a database project, a hosting project, a deployment project. Discovered
   by the plugin at connection time and refreshed on demand, kept current
   by the owner, who may label each resource with an **environment**
-  (`prod`, `staging`…). The resource ref is what the agent cites in its
+  (`prod`, `staging`…). The owner may also give the connection a
+  **default environment** — one of the environments of the provider's
+  catalog — that every resource of the connection without a label of its
+  own carries, including resources discovered later; a resource's own
+  label, set by the owner or by the plugin, always wins over it. Setting
+  or clearing it is an explicit, audited act of an owner. The resource ref is what the agent cites in its
   arguments and what the gateway checks. Environment-qualified `RiskId`s
   (`supabase[prod].bulk-row-write`) resolve against the environment label
   of the resource a call touches; for providers where the environment
   lives in the arguments (the target environment of a deployment), the plugin derives it. A call
   that touches an environment-scoped risk on a resource carrying no
-  label, or a label outside the environments the risk accepts, is
-  refused: an unlabelled resource is never treated as a safe default.
+  label — neither its own nor its connection's default —, or a label
+  outside the environments the risk accepts, is refused: an unlabelled
+  resource is never treated as a safe default. A default the owner chose
+  for the connection is a label, not a guess, and applies as one.
 - **Share** — the act by which the owner of a connection grants a target
   (user or group) a **restriction** on that connection. A share is the
   triple `(connection, target, restriction)`.

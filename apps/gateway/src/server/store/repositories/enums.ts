@@ -76,6 +76,7 @@ export const ADMIN_ACTS = membersOf<AdminAct>({
   'connection-revoked': true,
   'resources-discovered': true,
   'resource-edited': true,
+  'connection-default-env-set': true,
   'share-created': true,
   'share-revoked': true,
   'mission-issued': true,

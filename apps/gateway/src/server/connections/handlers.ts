@@ -10,6 +10,8 @@
  *   POST /connections/<id>/transfer                  transfer ownership to a group of the owner
  *   POST /admin/connections/<id>/reassign            give an ownerless connection an owner (operator)
  *   POST /connections/<id>/resources/<resourceId>    owner edits on a resource
+ *   POST /connections/<id>/default-env               the owner's default environment label
+ *                                                    for the unlabelled resources
  *   POST /admin/provider-apps/<provider>             save / clear the company app, accept or
  *                                                    refuse unverified installations (operator)
  *   POST /admin/provider-apps/<provider>/create      start creating the company app from the
@@ -128,6 +130,7 @@ export interface ConnectionHandlers {
   transfer(request: Request, connectionId: string): Promise<Response>;
   reassign(request: Request, connectionId: string): Promise<Response>;
   updateResource(request: Request, connectionId: string, resourceId: string): Promise<Response>;
+  setDefaultEnv(request: Request, connectionId: string): Promise<Response>;
   saveProviderApp(request: Request, providerId: string): Promise<Response>;
   startAppRegistration(request: Request, providerId: string): Promise<Response>;
   completeAppRegistration(request: Request, providerId: string): Promise<Response>;
@@ -495,6 +498,38 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
           who.principal,
           missing ? CONNECTIONS_PATH : connectionPath(connectionId),
           failureNotice(err, 'Resource not saved'),
+        );
+      }
+    },
+
+    async setDefaultEnv(request, connectionId) {
+      const who = await userOf(request);
+      if ('response' in who) return who.response;
+      const form = await readForm(request);
+      if (!form) return notAFormResponse();
+      try {
+        const updated = await deps.connections.setDefaultEnv(
+          who.actor,
+          connectionId,
+          form.has('default_env') ? stringField(form, 'default_env') : '',
+        );
+        return await redirectWithNotice(who.principal, connectionPath(connectionId), {
+          tone: 'success',
+          title: updated.defaultEnv
+            ? `Unlabelled resources are ${updated.defaultEnv}`
+            : 'No default environment',
+          lines: [
+            updated.defaultEnv
+              ? `Every resource of this account without a label of its own now carries ${updated.defaultEnv}, including the ones found later. A resource's own label still wins.`
+              : 'A resource without a label of its own carries no environment: permissions tied to an environment are refused on it.',
+          ],
+        });
+      } catch (err) {
+        const missing = err instanceof ConnectError && err.code === 'not-found';
+        return redirectWithNotice(
+          who.principal,
+          missing ? CONNECTIONS_PATH : connectionPath(connectionId),
+          failureNotice(err, 'Default environment not saved'),
         );
       }
     },

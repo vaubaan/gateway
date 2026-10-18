@@ -42,6 +42,7 @@ import {
   Row,
   Rows,
   Section,
+  Select,
   ServiceMark,
   StatusMark,
   Tag,
@@ -95,6 +96,7 @@ import {
   type ShareContext,
 } from '@/server/shares';
 import type { ConnectionResourceRecord, GroupRecord } from '@/server/store';
+import { ownResourceEnv } from '@/server/store/resource-env';
 import type { ValidationStatus } from '@/server/telemetry';
 
 import { RemoveAccess, TransferOwnership } from './account-actions';
@@ -278,12 +280,16 @@ function ResourceEditor({
           shape="lower-case letters, digits and dashes"
           optional
           htmlFor={`${formId}-env`}
-          hint="A permission tied to an environment is refused on a resource without this label."
+          hint={
+            resource.envSource === 'connection-default'
+              ? `Empty: the resource carries the account's default, ${resource.env ?? ''}. A label set here wins over it.`
+              : 'A permission tied to an environment is refused on a resource without this label.'
+          }
         >
           <Input
             id={`${formId}-env`}
             name="env"
-            defaultValue={resource.env ?? ''}
+            defaultValue={ownResourceEnv(resource) ?? ''}
             placeholder="prod, staging…"
             pattern={ENV_LABEL_HTML_PATTERN}
             mono
@@ -322,6 +328,58 @@ function ResourceEditor({
         </ButtonLink>
       </div>
     </form>
+  );
+}
+
+/**
+ * The owner's default environment for the resources without a label of their own
+ * (ADR connection-default-environment-label): one of the labels the service's
+ * permissions know, or none.
+ */
+function DefaultEnvForm({
+  action,
+  current,
+  choices,
+}: {
+  action: string;
+  current: string | null;
+  choices: readonly string[];
+}) {
+  const id = 'account-default-env';
+  return (
+    <form method="post" action={action} className={styles.editor} data-testid="default-env-form">
+      <Field
+        label={ACCOUNT_WORDS.defaultEnvironment}
+        htmlFor={id}
+        hint="Applies to every resource without a label of its own, including the ones found later. A resource's own label always wins; none keeps them unlabelled, and permissions tied to an environment are refused on them."
+      >
+        <Select id={id} name="default_env" defaultValue={current ?? ''}>
+          <option value="">none</option>
+          {choices.map((env) => (
+            <option key={env} value={env}>
+              {env}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <div className={styles.editorActions}>
+        <Button type="submit" size="sm">
+          {ACCOUNT_ACTIONS.save}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+/** A resource's environment, and where it comes from when it is the account's default. */
+function ResourceEnv({ resource }: { resource: ConnectionResourceRecord }) {
+  return (
+    <span>
+      <EnvTag env={resource.env} />
+      {resource.envSource === 'connection-default' && (
+        <span className={shared.factNote}> {ACCOUNT_WORDS.fromDefault}</span>
+      )}
+    </span>
   );
 }
 
@@ -550,7 +608,7 @@ export function AccountView({
             id: 'environment',
             header: ACCOUNT_WORDS.environment,
             nowrap: true,
-            cell: (resource: ConnectionResourceRecord) => <EnvTag env={resource.env} />,
+            cell: (resource: ConnectionResourceRecord) => <ResourceEnv resource={resource} />,
           } satisfies Column<ConnectionResourceRecord>,
         ]
       : []),
@@ -899,6 +957,13 @@ export function AccountView({
         }
         testId="account-resources"
       >
+        {!revoked && detail.defaultEnvChoices.length > 0 && (
+          <DefaultEnvForm
+            action={`${base}/default-env`}
+            current={connection.defaultEnv}
+            choices={detail.defaultEnvChoices}
+          />
+        )}
         {resources.length === 0 ? (
           <Hint>
             Nothing found yet.

@@ -475,6 +475,7 @@ export function envNotices(
     accepted.length > 0 ? ` — including ${list(accepted)}` : ''
   }.`;
   const remedy = `Label the resource on the connection's page (${list(envs)}) or leave it out.`;
+  const unlabelledRemedy = `Label the resource on the connection's page (${list(envs)}), give the connection a default environment for its unlabelled resources, or leave it out.`;
 
   const notices: PreviewNotice[] = [];
   const called = (r: (typeof selected)[number]): string => r.display_name || r.ref;
@@ -482,7 +483,7 @@ export function envNotices(
   if (unlabelled.length > 0) {
     notices.push({
       code: 'resource-without-env',
-      message: `No environment label on ${list(unlabelled.map(called))} ("${name}"). ${consequence} ${remedy}`,
+      message: `No environment label on ${list(unlabelled.map(called))} ("${name}"). ${consequence} ${unlabelledRemedy}`,
       resource_refs: unlabelled.map((r) => r.ref),
       risk_ids: accepted,
       ...where,

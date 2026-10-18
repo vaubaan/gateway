@@ -177,6 +177,7 @@ export {
 export { SqliteAuditWriter } from './audit-writer.ts';
 export type { AuditAppender, AuditEntry, AuditWriter } from './audit-writer.ts';
 export * from './types.ts';
+export { effectiveResourceEnv, ownResourceEnv, type EffectiveEnv } from './resource-env.ts';
 export type { UpsertUserInput, UsersRepo } from './repositories/users.ts';
 export type { GroupsRepo } from './repositories/groups.ts';
 export type { InvitationRecord, InvitationsRepo } from './repositories/invitations.ts';

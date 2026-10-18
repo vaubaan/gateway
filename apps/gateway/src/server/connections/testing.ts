@@ -120,6 +120,11 @@ export interface FixturePluginOptions {
   readonly refresh?: (ctx: ConnectionContext) => Promise<CredentialSecret>;
   readonly revoke?: (ctx: ConnectionContext) => Promise<void>;
   readonly manualRevocation?: string;
+  /**
+   * Adds an env-scoped risk (`<id>.write-things`, acceptable in these environments):
+   * a catalog that knows environment labels.
+   */
+  readonly envs?: readonly string[];
 }
 
 /** A valid plugin whose id is a slug without dashes (so the tool prefix is `<id>__`). */
@@ -179,6 +184,18 @@ export function fixturePlugin(options: FixturePluginOptions): ProviderPlugin {
           matches: `${id}.space[**].thing[**].R`,
           vector,
         },
+        ...(options.envs && options.envs.length > 0
+          ? [
+              {
+                id: `${id}.write-things`,
+                label: 'Write things',
+                reason: 'A write changes the thing in one environment.',
+                matches: `${id}.space[**].thing[**].W`,
+                acceptable_in_envs: [...options.envs],
+                vector,
+              },
+            ]
+          : []),
         {
           id: `${id}.uncategorized-write`,
           label: 'Uncategorized write',

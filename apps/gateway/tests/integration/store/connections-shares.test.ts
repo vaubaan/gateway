@@ -180,6 +180,74 @@ describe('connections repository', () => {
     await expect(store.connections.setResourceEnv('missing', null)).rejects.toThrow(/not found/);
   });
 
+  it('reads every unlabelled resource under the connection default, never stores it, and lets own labels win', async () => {
+    const c = await store.connections.create({
+      provider: 'stripe',
+      owner: { kind: 'user', id: owner },
+      displayName: 'x',
+      credential: null,
+    });
+    expect(c.defaultEnv).toBeNull();
+    await store.connections.syncDiscoveredResources(c.id, [
+      { ref: 'acct:live', displayName: 'Live', env: 'live' },
+      { ref: 'app-a', displayName: 'A' },
+      { ref: 'app-b', displayName: 'B' },
+    ]);
+    const [, a] = await store.connections.listResources(c.id);
+    await store.connections.setResourceEnv(a!.id, 'prod');
+
+    const updated = await store.connections.setDefaultEnv(c.id, 'staging');
+    expect(updated.defaultEnv).toBe('staging');
+    expect((await store.connections.getById(c.id))?.defaultEnv).toBe('staging');
+    const read = await store.connections.listResources(c.id);
+    expect(read.map((r) => [r.ref, r.env, r.envSource])).toEqual([
+      ['acct:live', 'live', 'plugin'],
+      ['app-a', 'prod', 'owner'],
+      ['app-b', 'staging', 'connection-default'],
+    ]);
+    // `getResource` and the answer of a discovery read the same way; a new ref inherits it.
+    const b = read[2]!;
+    expect(await store.connections.getResource(b.id)).toMatchObject({
+      env: 'staging',
+      envSource: 'connection-default',
+    });
+    const synced = await store.connections.syncDiscoveredResources(c.id, [
+      { ref: 'acct:live', displayName: 'Live', env: 'live' },
+      { ref: 'app-a', displayName: 'A' },
+      { ref: 'app-b', displayName: 'B' },
+      { ref: 'app-c', displayName: 'C, created since' },
+    ]);
+    expect(synced.find((r) => r.ref === 'app-c')).toMatchObject({
+      env: 'staging',
+      envSource: 'connection-default',
+    });
+    // The default is never written on the resource: the stored label stays the resource's own.
+    const stored = store.db
+      .prepare<
+        [string],
+        { ref: string; env: string | null }
+      >('SELECT ref, env FROM connection_resources WHERE connection_id = ? ORDER BY ref')
+      .all(c.id);
+    expect(stored).toEqual([
+      { ref: 'acct:live', env: 'live' },
+      { ref: 'app-a', env: 'prod' },
+      { ref: 'app-b', env: null },
+      { ref: 'app-c', env: null },
+    ]);
+
+    // Cleared: every inheriting resource is unlabelled again.
+    await store.connections.setDefaultEnv(c.id, null);
+    expect(
+      (await store.connections.listResources(c.id)).map((r) => [r.ref, r.env, r.envSource]),
+    ).toEqual([
+      ['acct:live', 'live', 'plugin'],
+      ['app-a', 'prod', 'owner'],
+      ['app-b', null, 'owner'],
+      ['app-c', null, 'owner'],
+    ]);
+    await expect(store.connections.setDefaultEnv('missing', 'prod')).rejects.toThrow(/not found/);
+  });
+
   it('merges a discovery without touching owner edits, and never deletes', async () => {
     const c = await store.connections.create({
       provider: 'resend',

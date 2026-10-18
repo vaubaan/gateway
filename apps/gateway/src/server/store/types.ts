@@ -113,16 +113,31 @@ export interface ConnectionRecord {
    * gateway asked providers anything (nothing is known: remove it by hand).
    */
   readonly providerGrant: ProviderGrantOutcome | null;
+  /**
+   * The environment label its owner chose for the resources that carry none of
+   * their own (migration 0017); `null` when none was chosen. Resources read
+   * through the repository already carry it (`envSource: 'connection-default'`).
+   */
+  readonly defaultEnv: string | null;
 }
 
 export interface ConnectionResourceRecord {
   readonly id: string;
   readonly connectionId: string;
   readonly ref: string;
+  /**
+   * The effective environment label: the resource's own, else its connection's
+   * `defaultEnv`, else `null` (`effectiveResourceEnv`). Every reader of
+   * environments reads this one.
+   */
   readonly env: string | null;
   readonly displayName: string;
   readonly discoveredAt: Iso;
-  /** Who set `env`: the plugin at discovery (read-only for the owner) or the owner. */
+  /**
+   * Who set `env`: the plugin at discovery (read-only for the owner), the owner, or
+   * the connection's default (`connection-default`: the resource has no label of its
+   * own). An unlabelled resource on a connection without a default reads `owner`.
+   */
   readonly envSource: ResourceEnvSource;
   /** Effective metadata: the provider facts of the last discovery overlaid by the owner's edits. */
   readonly metadata: Record<string, unknown> | null;
@@ -136,8 +151,11 @@ export interface ConnectionResourceRecord {
   readonly staleSince: Iso | null;
 }
 
+/** The values `connection_resources.env_source` stores (migration 0004's `CHECK`). */
 export const RESOURCE_ENV_SOURCES = ['owner', 'plugin'] as const;
-export type ResourceEnvSource = (typeof RESOURCE_ENV_SOURCES)[number];
+export type StoredResourceEnvSource = (typeof RESOURCE_ENV_SOURCES)[number];
+/** Where a resource's effective label comes from; the default is never stored on the resource. */
+export type ResourceEnvSource = StoredResourceEnvSource | 'connection-default';
 
 export interface DiscoveredResource {
   readonly ref: string;

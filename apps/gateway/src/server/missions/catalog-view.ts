@@ -115,6 +115,18 @@ export function enumerateCatalog(catalog: RiskCatalog): CatalogRisk[] {
 }
 
 /**
+ * The environment labels the catalog knows: the environments its env-scoped
+ * risks are acceptable in, in catalog order. What a connection's owner may
+ * choose as its default environment (ADR connection-default-environment-label);
+ * empty for a catalog without env-scoped risks.
+ */
+export function catalogEnvsOf(catalog: RiskCatalog): string[] {
+  return [
+    ...new Set(enumerateCatalog(catalog).flatMap((risk) => (risk.env === null ? [] : [risk.env]))),
+  ];
+}
+
+/**
  * Can this id ever be touched with these resources? An account-scoped id
  * always can. An env-qualified id can when the plugin derives the
  * environment from the call itself, or when at least one selected resource

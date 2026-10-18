@@ -209,6 +209,17 @@ names, and the notes about them do too.
 
 ### Added
 
+- **An account carries a default environment for its unlabelled resources.** On the
+  account's page, "Default environment for unlabelled resources" (none, or one of the
+  environments the service's permissions know: `staging`, `preview`, `prod`…) gives
+  every resource without a label of its own that environment, including the ones found
+  later — a Fly organization or a Railway workspace no longer needs each new app labelled
+  by hand before a mission can act on it. A resource's own label, the owner's or the
+  service's (Stripe `test` / `live`), always wins; "none" keeps the earlier behaviour.
+  Mission issuance, the execution door and `list_my_connections` (new
+  `env_qualified_risks.default_env`) all read the same effective label. Owner only,
+  recorded in the activity (`connection-default-env-set`); migration `0017` adds
+  `connections.default_env`. ADR `connection-default-environment-label`.
 - Creators can add or remove mission permissions without replacing keys or
   resetting usage. Agents can explicitly request missing permissions after a
   refusal; the creator reviews and grants the edit or refuses it in Waiting for
