@@ -65,7 +65,8 @@ describe('SignInProvidersService', () => {
     expect(views).toHaveLength(1);
     expect(JSON.stringify(views)).not.toContain('github-secret');
     expect(views[0]).not.toHaveProperty('clientSecret');
-    expect((await s.resolve('github'))?.provider.clientSecret).toBe('github-secret');
+    const resolved = (await s.resolve('github'))?.provider;
+    expect(resolved?.kind === 'github' ? resolved.clientSecret : null).toBe('github-secret');
     const row = t.store.db
       .prepare<[string], { value: string | null; secret_blob: Buffer | null }>(
         'SELECT value, secret_blob FROM instance_config WHERE key = ?',

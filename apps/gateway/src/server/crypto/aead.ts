@@ -14,7 +14,7 @@
  * Every function here is synchronous and requires `await sodiumReady()`
  * once per process; `createEncryptor()` does that for its callers.
  */
-import sodium from 'libsodium-wrappers';
+import sodium from 'libsodium-wrappers-sumo';
 
 export const KEY_BYTES = 32;
 export const NONCE_BYTES = 24;

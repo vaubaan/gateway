@@ -211,3 +211,68 @@ export function SignInProviderForm({
     </form>
   );
 }
+
+/**
+ * The form of a local-accounts provider (ADR local-accounts-sign-in-provider):
+ * an id and a name, nothing to register anywhere. The accounts themselves are
+ * created from People (invitations) and from the setup.
+ */
+export function LocalSignInProviderForm({
+  mode,
+  id,
+  name,
+  cancelHref,
+}: {
+  mode: 'create' | 'update';
+  id: string;
+  name: string;
+  cancelHref: string;
+}) {
+  const prefix = `sign-in-local-${mode}`;
+  return (
+    <form method="post" action="/api/admin/sign-in-providers" className={styles.form}>
+      <input type="hidden" name="mode" value={mode} />
+      <input type="hidden" name="kind" value="local" />
+      {mode === 'update' && <input type="hidden" name="provider_id" value={id} />}
+      {mode === 'create' && (
+        <Field
+          label="Id"
+          shape="lower-case letters, digits and hyphens"
+          htmlFor={`${prefix}-id`}
+          hint="It cannot change later. It also names the provider in the admin rule (id:group)."
+        >
+          <Input
+            id={`${prefix}-id`}
+            name="provider_id"
+            required
+            pattern="[a-z][a-z0-9-]{0,31}"
+            defaultValue={id}
+            autoComplete="off"
+            mono
+          />
+        </Field>
+      )}
+      <Field
+        label="Name on the sign-in page"
+        htmlFor={`${prefix}-name`}
+        optional
+        hint="People sign in with their email address and password, then a code from their authenticator app; nothing to register at any service."
+      >
+        <Input
+          id={`${prefix}-name`}
+          name="name"
+          defaultValue={name}
+          placeholder="Email and password"
+        />
+      </Field>
+      <div className={styles.formActions}>
+        <Button type="submit" variant="primary">
+          {mode === 'create' ? SETTINGS_ACTIONS.addProvider : SETTINGS_ACTIONS.save}
+        </Button>
+        <ButtonLink href={cancelHref} variant="ghost">
+          {ACTIONS.cancel}
+        </ButtonLink>
+      </div>
+    </form>
+  );
+}

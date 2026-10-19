@@ -23,8 +23,10 @@ import {
   admissionProblem,
   adminGroupProblem,
   GITHUB_DOT_COM,
+  DEFAULT_LOCAL_PROVIDER_NAME,
   isSignInKind,
   isSignInProviderId,
+  localProviderOf,
   issuerKey,
   LEGACY_PROVIDER_ID,
   legacyProviderOf,
@@ -857,6 +859,31 @@ function readSignInProvider(r: Reader, id: string, base: string): SignInProvider
       envNamesFor(`${base}.kind`),
     );
   }
+  if (kind === 'local') {
+    // Local accounts: an id and a name. Nothing to register anywhere, nothing to admit by.
+    for (const field of [
+      'issuer',
+      'client_id',
+      'client_secret',
+      'claims',
+      'allowed_email_domains',
+      'invitation_only',
+      'require_verified_email',
+    ]) {
+      if (r.has(`${base}.${field}`)) {
+        r.issues.add(
+          `${base}.${field}`,
+          `a local provider keeps the accounts itself: it has no ${field.replace(/_/g, ' ')} (it admits invited addresses and the admin rule's only)`,
+          envNamesFor(`${base}.${field}`),
+        );
+      }
+    }
+    const name =
+      r.string(`${base}.name`, { fallback: DEFAULT_LOCAL_PROVIDER_NAME }) ??
+      DEFAULT_LOCAL_PROVIDER_NAME;
+    if (r.issues.items.length > before) return null;
+    return localProviderOf(id, name);
+  }
   const clientId = r.string(`${base}.client_id`, { required: true });
   const clientSecret = r.string(`${base}.client_secret`, { required: true });
   const allowedEmailDomains = normalizeDomainsAt(r, `${base}.allowed_email_domains`);
@@ -941,6 +968,13 @@ function checkSignInProviders(
 ): SignInProvider[] {
   const all = [...(idp ? [legacyProviderOf(idp)] : []), ...signIn];
   const issuers = new Map<string, string>();
+  const locals = all.filter((p) => p.kind === 'local');
+  if (locals.length > 1) {
+    r.issues.add(
+      `sign_in.${locals[1]?.id ?? ''}.kind`,
+      `providers '${locals.map((p) => p.id).join("', '")}' are all local accounts: one local provider per instance`,
+    );
+  }
   for (const provider of all) {
     const path = provider.id === LEGACY_PROVIDER_ID && idp ? 'idp' : `sign_in.${provider.id}`;
     if (

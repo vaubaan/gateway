@@ -289,7 +289,9 @@ export interface InstanceConfig {
 export function secretValues(config: InstanceConfig | SetupConfig): string[] {
   const out: string[] = [];
   if (config.idp) out.push(config.idp.clientSecret);
-  for (const provider of config.signIn) out.push(provider.clientSecret);
+  for (const provider of config.signIn) {
+    if (provider.kind !== 'local') out.push(provider.clientSecret);
+  }
   if (config.bootstrapToken) out.push(config.bootstrapToken);
   // A presigned URL is the credential itself; a file path is harmless but treated alike.
   const from = config.restore.from;

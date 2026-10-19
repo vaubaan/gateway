@@ -14,7 +14,7 @@
  */
 import type { IdpClaimMapping } from './types';
 
-export const SIGN_IN_KINDS = ['oidc', 'github'] as const;
+export const SIGN_IN_KINDS = ['oidc', 'github', 'local'] as const;
 export type SignInKind = (typeof SIGN_IN_KINDS)[number];
 
 export function isSignInKind(raw: string): raw is SignInKind {
@@ -74,7 +74,45 @@ export interface GithubSignInProvider extends SignInProviderBase {
   readonly issuer: URL;
 }
 
-export type SignInProvider = OidcSignInProvider | GithubSignInProvider;
+/**
+ * Local accounts (spec §0 "Local account"; ADR local-accounts-sign-in-provider):
+ * an e-mail and a password kept by the instance itself, with a second factor. No
+ * client, no secret, no issuer to register at: the provider is an id and a name.
+ * Always "invited only" — an account exists only for an invited address or one the
+ * admin rule names — and never open.
+ */
+export interface LocalSignInProvider {
+  readonly kind: 'local';
+  readonly id: string;
+  /** The heading of the sign-in form: "Sign in with <name>" (default "your email"). */
+  readonly name: string;
+  /** `urn:vaubaan:local:<id>` (`localIssuer`): a person is (issuer, subject) as everywhere. */
+  readonly issuer: URL;
+  readonly allowedEmailDomains: readonly string[];
+  readonly invitationOnly: true;
+}
+
+export type SignInProvider = OidcSignInProvider | GithubSignInProvider | LocalSignInProvider;
+
+/** The issuer every user of a local provider is recorded under; not a URL anyone serves. */
+export const LOCAL_ISSUER_PREFIX = 'urn:vaubaan:local:';
+export const DEFAULT_LOCAL_PROVIDER_ID = 'local';
+export const DEFAULT_LOCAL_PROVIDER_NAME = 'Email and password';
+
+export function localIssuer(id: string): URL {
+  return new URL(`${LOCAL_ISSUER_PREFIX}${id}`);
+}
+
+export function localProviderOf(id: string, name: string): LocalSignInProvider {
+  return {
+    kind: 'local',
+    id,
+    name,
+    issuer: localIssuer(id),
+    allowedEmailDomains: [],
+    invitationOnly: true,
+  };
+}
 
 /** Where a provider comes from: the mounted configuration (read-only) or Settings → Sign-in. */
 export type SignInProviderSource = 'file' | 'store';
@@ -120,6 +158,7 @@ const OPEN_ISSUERS: readonly string[] = [
  */
 export function isOpenProvider(provider: Pick<SignInProvider, 'kind' | 'issuer'>): boolean {
   if (provider.kind === 'github') return true;
+  if (provider.kind === 'local') return false;
   return OPEN_ISSUERS.includes(issuerKey(provider.issuer));
 }
 

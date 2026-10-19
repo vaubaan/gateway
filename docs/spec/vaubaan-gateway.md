@@ -81,9 +81,19 @@ company registered at a provider).
   the company's directory through OpenID Connect (Entra ID, Google
   Workspace, Okta, Keycloak), or a public service where private persons
   hold their own accounts (a personal Google or Microsoft account through
-  OpenID Connect, GitHub through its OAuth sign-in). An instance may offer
-  **several sign-in providers at once**; each has an id, a name, and its
-  own admission rule. The instance stores no password.
+  OpenID Connect, GitHub through its OAuth sign-in), or the instance's own
+  **local accounts**. An instance may offer **several sign-in providers at
+  once**; each has an id, a name, and its own admission rule. The instance
+  stores no password but its local accounts'.
+- **Local account** — an email address and a password kept by the instance
+  itself, with a second factor (a one-time code from an authenticator app,
+  and recovery codes shown once), for a company without a directory of its
+  own. Local accounts are a sign-in provider of their own kind (`local`, at
+  most one per instance), always "invited only": an account exists only for
+  an invited address or one the admin rule names, and is created by the
+  person through a single-use link, or by the setup for the first
+  administrator. An administrator must have a second factor; other people
+  may.
 - **Open provider** — a sign-in provider at which anyone in the world can
   hold an account (GitHub, Google accounts outside a Workspace, Microsoft
   personal accounts). It never admits by itself: it needs allowed email
@@ -310,12 +320,14 @@ coding agents. v4 was a SaaS; v5 is a product you install.
 - **No multi-tenancy.** One instance serves one company. Two companies,
   two instances. There is no org, no project, no isolation between
   tenants inside an instance.
-- **No local human authentication.** No password, no magic link, no
-  proprietary SSO. The instance delegates everything to its sign-in
-  providers (OpenID Connect, and GitHub's OAuth sign-in). An invitation
-  is an entry of an allow-list, not a credential: it sends nothing and
-  signs nobody in. The only local secret is the operator's bootstrap
-  token, used to configure sign-in and then useless.
+- **No identity beyond the instance's own.** No magic-link sign-in, no
+  proprietary SSO, no federation: a person signs in through the company's
+  directory (OpenID Connect), GitHub, or the instance's local accounts
+  (an email, a password and a second factor, kept here). An invitation is
+  an entry of an allow-list, not a credential: it signs nobody in; with
+  local accounts it also carries the link through which the invited person
+  creates theirs. The operator's bootstrap token sets sign-in up and is then
+  useless.
 - **No account linking.** Two identities of one person stay two users.
 - **No high availability.** An instance is a single process with an
   embedded store. Cache, rate limit and budget counters are local to the
@@ -1063,14 +1075,19 @@ interpreted as markup.
   that stands for them is shown only to who answers for the call — the
   creator of its mission, an owner of its account — never to a teammate or
   to an administrator as such.
-- **Settings** — for everyone: the theme, and **Connected apps**, the agents
-  I allowed to prepare missions in my name: until when each consent runs,
-  the missions each prepared, and its disconnection, asked first. For an
+- **Settings** — for everyone: the theme; for a local account, its
+  **second factor** (enrol one from a QR code and confirm it with a code,
+  the recovery codes shown once, replace it after a fresh sign-in); and
+  **Connected apps**, the agents I allowed to prepare missions in my name:
+  until when each consent runs, the missions each prepared, and its
+  disconnection, asked first. For an
   administrator, **Administration**: a setup checklist of what the instance
   still needs; **sign-in** — the list of sign-in providers, each with its
-  kind, its admission rule and the address to register at it; an
-  administrator adds, edits, tests and removes one, its secret never shown
-  back, and a provider set by the configuration file is shown read-only;
+  kind (OpenID Connect, GitHub, local accounts), its admission rule and
+  the address to register at it; an administrator adds, edits, tests and
+  removes one, its secret never shown back, and a provider set by the
+  configuration file is shown read-only; local accounts are added in one
+  step and need no registration anywhere;
   removing one says how many people signed in through it: they can no
   longer sign in and their sessions end, and their missions and connected
   apps keep the rules of a deactivation (they stop only when the
@@ -1089,7 +1106,11 @@ interpreted as markup.
   **people** — everyone who signed in, with the provider
   they signed in through (deactivate, reactivate), and the
   **invitations** (invite an address, remove one; removing it is asked
-  first and stops the next sign-ins, not an open session); the page says
+  first and stops the next sign-ins, not an open session; with local
+  accounts, inviting sends the person the link that creates their account,
+  or shows it to copy when the instance sends no mail, and the page can
+  send it again, send a password reset, and reset a person's second
+  factor — each asked first and audited); the page says
   that one person signing in through two providers is two people; teams (the
   local ones are kept here); accounts without owner (name a new owner — the
   administrator's only act on an account); registered apps (the OAuth
@@ -1120,13 +1141,19 @@ a mounted file, never committing anything:
 - the instance's **public URL** (used for provider callbacks, request
   URLs, the bootstrap kit);
 - the **sign-in providers**: zero, one or several, each with an id, a
-  name, a kind (OpenID Connect or GitHub), its issuer (or GitHub's base
-  URL), client identifier, client secret, claim mapping (subject, email,
-  groups) for OpenID Connect, its allowed email domains and whether it
-  admits invited addresses only. The single-provider keys of earlier
-  versions keep working as one provider. An open provider with neither
-  allowed domains nor "invited only" is refused at startup and in the
-  interface, with the reason;
+  name, a kind (OpenID Connect, GitHub, or local accounts), its issuer (or
+  GitHub's base URL), client identifier, client secret, claim mapping
+  (subject, email, groups) for OpenID Connect, its allowed email domains
+  and whether it admits invited addresses only; local accounts take an id
+  and a name only, and are "invited only" by nature. The single-provider
+  keys of earlier versions keep working as one provider. An open provider
+  with neither allowed domains nor "invited only" is refused at startup and
+  in the interface, with the reason;
+- optionally, **mail delivery**: an SMTP relay (host, port, user,
+  password, sender address, TLS) through which the instance sends its own
+  mail — the links that create a local account or reset its password.
+  Without it, local accounts still work: the links are shown to the
+  administrator to hand over;
 - per provider in use, the **app registered by the company** at that
   provider: identifier and secret, or private key for app-install
   providers. Each instance registers its own apps — entered here or on
@@ -1266,7 +1293,16 @@ same for any agent, with no value of any mission.
   or, for a tenant provider without allowed domains, any user of the
   tenant. An unverified email never admits and never makes an
   administrator; a tenant provider may be configured to require the
-  provider's verified-email signal too. Web sessions are short (an
+  provider's verified-email signal too. **Local accounts** hold their
+  password hashed with a memory-hard function (argon2id); a wrong password
+  is answered like an unknown address, the sign-in form is rate-limited and
+  an account is locked for a while after repeated failures; the second
+  factor is a time-based one-time code never accepted twice, or a
+  recovery code used once; the links that create an account or reset a
+  password are single-use, expire in minutes and are known to the store
+  by their digest only; password hashes, second-factor secrets and
+  recovery codes are sealed under the master key, and none of them reaches
+  a log, the audit or the telemetry. Web sessions are short (an
   absolute lifetime and an idle timeout) and bound to the instance's
   origin; a person, or an administrator for them, can end every session
   of that person at once. Every mutation requires a valid session and an
@@ -1336,7 +1372,10 @@ the interface with the bootstrap token, downloads the encryption key when
 the instance generated it and confirms having kept it, adds a sign-in provider (or
 declares it in the configuration), signs in through it — which revokes
 the bootstrap token when they match the admin rule —, and invites the
-addresses an open provider should admit. They then register one app per
+addresses an open provider should admit. With local accounts, the setup
+creates the first administrator instead — the account of an address of the
+admin rule, with its password, its second factor and its recovery codes —
+and that account's first sign-in revokes the token. They then register one app per
 provider in use — in one step from Administration → Company apps where
 the provider offers it (GitHub), otherwise at the provider, entering its
 secrets by hand.
@@ -1565,6 +1604,12 @@ automated suite. Trust comes from usage.
   - credential separation (§6): a mission token on the management
     surface, a delegated token on the execution surface, either on a
     request, are refused unambiguously;
+  - local accounts (§6): the password hash is argon2id and verifies the
+    password only; the lockout counts wrong passwords per account across
+    restarts; a one-time code is accepted once, within one step of drift;
+    a recovery code once; a link once and before its expiry; an unknown
+    address and a wrong password get the same answer; no secret in a log,
+    an audit entry or a telemetry report;
   - creating a company app from the interface (§6): the request built
     per permission choice, the `state` single-use, expiring and bound to
     the session, every failure of the exchange, the refusals when the
@@ -1601,7 +1646,9 @@ automated suite. Trust comes from usage.
 ### 11.1 Settled decisions
 
 - One instance, one company, one trust domain.
-- Human identity through OpenID Connect, and GitHub's OAuth sign-in.
+- Human identity through OpenID Connect, GitHub's OAuth sign-in, or the
+  instance's own local accounts with a second factor (ADR
+  [local-accounts-sign-in-provider](../decisions/local-accounts-sign-in-provider.md)).
 - Restriction and `accepted_risks` always enumerated.
 - Budget per `RiskId`, mandatory quota, optional expiry.
 - Recurrence by quota reload at a fixed period, continuous session.
@@ -1733,5 +1780,6 @@ overturn. A question an ADR settled is in §11.1.
 
 _Date: 2026-10-12; §0 "Words", §4.2, §4.4 and §7 aligned with the redesigned
 interface on 2026-10-14; several sign-in providers, invitations and the
-admin rule across providers on 2026-10-14. Author: rpelissier + Claude (drafting). Status:
+admin rule across providers on 2026-10-14; local accounts, the second factor
+and mail delivery on 2026-10-19. Author: rpelissier + Claude (drafting). Status:
 draft v5 for review._

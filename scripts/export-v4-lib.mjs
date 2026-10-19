@@ -9,7 +9,7 @@
 
 import { createHash } from 'node:crypto';
 
-import sodium from 'libsodium-wrappers';
+import sodium from 'libsodium-wrappers-sumo';
 
 export const BUNDLE_FORMAT = 'vaubaan-v4-export';
 export const BUNDLE_VERSION = 1;
