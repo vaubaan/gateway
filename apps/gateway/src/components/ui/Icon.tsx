@@ -55,10 +55,14 @@ const PATHS: Readonly<Record<IconName, React.ReactNode>> = {
   ),
   activity: <path d="M3 12h4l3-8 4 16 3-8h4" />,
   reference: <path d="M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v16l-4-2-4 2-4-2-4 2z" />,
+  // A gear: eight teeth around a hub (the rayed circle it replaced read as a sun).
   settings: (
     <>
       <circle cx="12" cy="12" r="3" />
-      <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1" />
+      <path
+        strokeLinejoin="round"
+        d="M19.3 10.0 L21.9 10.4 L21.9 13.6 L19.3 14.0 L18.6 15.8 L20.1 17.9 L17.9 20.1 L15.8 18.6 L14.0 19.3 L13.6 21.9 L10.4 21.9 L10.0 19.3 L8.2 18.6 L6.1 20.1 L3.9 17.9 L5.4 15.8 L4.7 14.0 L2.1 13.6 L2.1 10.4 L4.7 10.0 L5.4 8.2 L3.9 6.1 L6.1 3.9 L8.2 5.4 L10.0 4.7 L10.4 2.1 L13.6 2.1 L14.0 4.7 L15.8 5.4 L17.9 3.9 L20.1 6.1 L18.6 8.2z"
+      />
     </>
   ),
   search: (
