@@ -359,8 +359,20 @@ A request still in flight when a test ends is ignored by the router.
 
 ### Scenarios still to write
 
-Each is added to this file, with its spec, by the feature that makes it
-possible (spec §4, §5, §7):
+- **Local accounts in a browser** (ADR
+  [[local-accounts-sign-in-provider]]): the administrator adds local accounts
+  from Settings → Sign-in, invites an address from People and copies the link
+  (the ephemeral instance sends no mail), the invited person creates their
+  account and lands on the home, signs out and back in with the password; an
+  address of the admin rule signs in, is taken to `/login/second-factor`,
+  scans nothing (the spec reads the secret from the page and computes the
+  code), confirms, reads the recovery codes once on Settings → Security, then
+  signs in again with a code; "Forgot your password" says the instance sends
+  no mail. Not written yet: the flows are covered end to end by
+  `tests/integration/auth/local-accounts.test.ts` over the handlers, without
+  a browser.
+  Each is added to this file, with its spec, by the feature that makes it
+  possible (spec §4, §5, §7):
 
 1. **Bootstrap and first sign-in in a browser** — the bootstrap token,
    Settings → Sign-in, the first administrator sign-in. Today: integration

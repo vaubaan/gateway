@@ -2,7 +2,7 @@
 title: Instance configuration, crypto and composition root
 status: current
 date: 2026-10-13
-last_synced: 2026-10-17
+last_synced: 2026-10-19
 tracks:
   - apps/gateway/src/server/config/
   - apps/gateway/src/server/instance/
@@ -21,6 +21,7 @@ tracks:
   - scripts/build-commands.mjs
   - apps/gateway/src/server/logging/
   - apps/gateway/src/server/compose/
+  - apps/gateway/src/server/mail/
   - apps/gateway/src/server/http/
   - apps/gateway/tests/integration/compose/
   - apps/gateway/src/instrumentation.ts
@@ -506,6 +507,17 @@ Invalid instance configuration (2 problems):
   - encryption.master_key: missing required key (env: VAUBAAN_MASTER_KEY or VAUBAAN_MASTER_KEY_FILE)
   - public_url: must use https (got http) (env: VAUBAAN_PUBLIC_URL)
 ```
+
+### Mail delivery
+
+`mail.*` is optional as a block: `readMail` (`load.ts`) returns `null` when none
+of its keys is set, and refuses by name a host without a sender (or the
+reverse) and a user without a password (or the reverse). `mail.smtp_password`
+is a secret (redacted from the log, `_FILE` sibling). The composition root
+builds `createLinkMailer` (`server/mail/`) from the block and hands it to the
+authentication and users modules (`RootDeps.mailer` injects a fake in tests);
+`root.auth.sendsMail` tells the pages whether a link is mailed or handed over
+(handbook [authentication](authentication.md), "Local accounts").
 
 ### Self resources
 
