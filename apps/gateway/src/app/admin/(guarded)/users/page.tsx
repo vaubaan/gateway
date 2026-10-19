@@ -65,6 +65,12 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
     root.auth.providers.views(),
     root.auth.providers.adminRule(),
   ]);
+  const local = providers.find((p) => p.kind === 'local') ?? null;
+  const sendsMail = root.auth.sendsMail;
+  const isLocal = (view: UserView): boolean =>
+    local !== null &&
+    view.user.issuer !== null &&
+    issuerKey(view.user.issuer) === issuerKey(local.issuer);
   const providerOf = (view: UserView): string => {
     const key = view.user.issuer === null ? null : issuerKey(view.user.issuer);
     return providers.find((p) => issuerKey(p.issuer) === key)?.name ?? 'a removed provider';
@@ -190,6 +196,39 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
               if (view.user.id === self) return null;
               return (
                 <>
+                  {isLocal(view) && (
+                    <form method="post" action={`${USERS_PAGE}/local-link`}>
+                      <input type="hidden" name="kind" value="reset" />
+                      <input type="hidden" name="email" value={view.user.email} />
+                      <Button
+                        type="submit"
+                        size="sm"
+                        variant="ghost"
+                        aria-label={`Reset the password of ${view.user.email}`}
+                        title={
+                          sendsMail
+                            ? 'Sends them a link to choose a new password; it works once, for fifteen minutes.'
+                            : 'Gives you a link to hand them to choose a new password; it works once, for fifteen minutes.'
+                        }
+                        data-testid={`reset-password-${view.user.id}`}
+                      >
+                        Password reset
+                      </Button>
+                    </form>
+                  )}
+                  {isLocal(view) && (
+                    <ConfirmSubmit
+                      action={`${base}/reset-second-factor`}
+                      label="Reset second factor"
+                      ariaLabel={`Reset the second factor of ${view.user.email}`}
+                      variant="ghost"
+                      tone="danger"
+                      title={`Reset the second factor of ${nameOf(view)}?`}
+                      consequence="Their authenticator app and recovery codes stop working. Their next sign-in takes the password alone, or sets a new second factor up if they administer this gateway. Do it only for a person you have identified yourself."
+                      confirmLabel="Reset"
+                      testId={`reset-second-factor-${view.user.id}`}
+                    />
+                  )}
                   <form method="post" action={`${base}/end-sessions`}>
                     <Button
                       type="submit"
@@ -238,7 +277,13 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
 
       <Section
         title="Invitations"
-        note="Addresses allowed to sign in through any provider that verified them. Nothing is sent."
+        note={
+          local
+            ? sendsMail
+              ? 'Addresses allowed to sign in. With local accounts, inviting sends the person a link to create theirs.'
+              : 'Addresses allowed to sign in. With local accounts, inviting gives you a link to hand to the person; this gateway sends no mail.'
+            : 'Addresses allowed to sign in through any provider that verified them. Nothing is sent.'
+        }
         testId="invitations"
       >
         <form method="post" action={`${USERS_PAGE}/invitations`} className={styles.lineForm}>
@@ -266,24 +311,35 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
             rows={invitations}
             rowKey={(invitation) => invitation.email}
             actions={(invitation) => (
-              <ConfirmSubmit
-                action={`${USERS_PAGE}/invitations/remove`}
-                fields={{ email: invitation.email }}
-                label={SETTINGS_ACTIONS.remove}
-                ariaLabel={`Remove the invitation of ${invitation.email}`}
-                variant="danger"
-                tone="danger"
-                title={`Remove the invitation of ${invitation.email}?`}
-                consequence={
-                  <>
-                    Their next sign-in is refused unless an allowed domain of the provider admits
-                    them. A session already open runs to its end, at most 8 hours; their account,
-                    missions and keys stay. To stop them at once, deactivate them above.
-                  </>
-                }
-                confirmLabel={SETTINGS_ACTIONS.remove}
-                testId={`remove-invitation-${invitation.email}`}
-              />
+              <>
+                {local && !invitation.signedIn && (
+                  <form method="post" action={`${USERS_PAGE}/local-link`} className={styles.inline}>
+                    <input type="hidden" name="kind" value="invite" />
+                    <input type="hidden" name="email" value={invitation.email} />
+                    <Button type="submit" size="sm" variant="ghost">
+                      {sendsMail ? 'Send the account link again' : 'Account link'}
+                    </Button>
+                  </form>
+                )}
+                <ConfirmSubmit
+                  action={`${USERS_PAGE}/invitations/remove`}
+                  fields={{ email: invitation.email }}
+                  label={SETTINGS_ACTIONS.remove}
+                  ariaLabel={`Remove the invitation of ${invitation.email}`}
+                  variant="danger"
+                  tone="danger"
+                  title={`Remove the invitation of ${invitation.email}?`}
+                  consequence={
+                    <>
+                      Their next sign-in is refused unless an allowed domain of the provider admits
+                      them. A session already open runs to its end, at most 8 hours; their account,
+                      missions and keys stay. To stop them at once, deactivate them above.
+                    </>
+                  }
+                  confirmLabel={SETTINGS_ACTIONS.remove}
+                  testId={`remove-invitation-${invitation.email}`}
+                />
+              </>
             )}
             testId="invitation-list"
           />

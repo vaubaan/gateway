@@ -24,8 +24,9 @@ that. Expect breaking changes until a `v2.0.0` tag exists. This code base is
 called **v5** in its design documents and is released as **v2**; it
 replaces an earlier hosted product and shares no data with it.
 
-What exists today: sign-in through your identity provider, GitHub, or both at
-once, with invitations for people outside your directory; accounts at your
+What exists today: sign-in through your identity provider, GitHub, or the
+gateway's own local accounts (an email, a password and a second factor, for a
+team without a directory), with invitations for people outside your directory; accounts at your
 cloud services with their resources, and access given to a teammate or a
 team; missions with limits per permission and "ask me first" where you want
 it, worked on alone or as a team, each person with their own key; both MCP
@@ -80,8 +81,9 @@ tour: [demo mode](docs/handbook/demo-mode.md).
 
 Needs Docker with Compose v2, a DNS name pointing at the host, and ports 80
 and 443 reachable (the bundled proxy obtains the TLS certificate). You also
-need a client at a sign-in provider: OpenID Connect at your identity
-provider, or a GitHub OAuth App. On Railway, follow
+need either a client at a sign-in provider — OpenID Connect at your identity
+provider, or a GitHub OAuth App — or nothing at all with local accounts (add
+them from the setup, invite people by mail or by a link). On Railway, follow
 [deploy/railway.md](deploy/railway.md).
 
 ```bash

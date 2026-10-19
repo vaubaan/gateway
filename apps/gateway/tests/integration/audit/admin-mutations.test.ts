@@ -38,7 +38,10 @@ import {
   stateOf,
   UNVERIFIED_APP_INSTALL_SPEC,
 } from '../../../src/server/connections/testing';
+import type { IssuedLink } from '../../../src/server/auth';
+import { base32Decode, totpCode, totpStepOf } from '../../../src/server/crypto/totp';
 import { silentLogger } from '../../../src/server/logging';
+import type { LocalAccountRecord } from '../../../src/server/store';
 import type { ManagementActor } from '../../../src/server/management';
 import type { TokenResponse } from '../../../src/server/oauth-as';
 import { pkcePair } from '../../../src/server/oauth-as/testing';
@@ -454,6 +457,37 @@ const OAUTH_PROTOCOL =
   'performed by an OAuth client at a protocol endpoint, with no human actor: registering a client or exchanging a code grants nothing a user did not already consent to (`delegation-granted`); a replayed code or refresh token revokes the delegation and writes `delegation-revoked` (src/server/oauth-as/token-service.test.ts)';
 
 const connections = (root: GatewayRoot) => root.connections.service;
+const accounts = (root: GatewayRoot) => root.auth.accounts;
+const LOCAL_OBJECT = 'local-account:local';
+const LOCAL_PASSWORD = 'a sentence long enough';
+
+/** A provider of kind `local`, added as Settings would. */
+async function localProvider(rig: Rig): Promise<void> {
+  await rig.root.auth.providers.save(
+    {
+      id: 'local',
+      kind: 'local',
+      name: '',
+      issuer: '',
+      clientId: '',
+      clientSecret: null,
+      allowedEmailDomains: [],
+      invitationOnly: true,
+    },
+    'create',
+  );
+}
+
+/** The provider and one account, created by the operator. */
+async function localAccount(rig: Rig): Promise<LocalAccountRecord> {
+  await localProvider(rig);
+  return rig.root.auth.accounts.createAccount({
+    providerId: 'local',
+    email: 'local@example.com',
+    password: LOCAL_PASSWORD,
+    actor: rig.operator.id,
+  });
+}
 const missions = (root: GatewayRoot) => root.missions.service;
 const providerApps = (root: GatewayRoot) => root.providerApps;
 const managementTools = (root: GatewayRoot) => root.management.tools;
@@ -1262,6 +1296,172 @@ const RULES: Readonly<Record<string, Rule>> = {
   },
   'Authenticator.authenticate': exempt(SESSION_STATE),
   'Authenticator.authorizeAdmin': exempt(SESSION_STATE),
+  // Local accounts (ADR local-accounts-sign-in-provider): the service audits what an
+  // administrator or a link does; a person's own sign-in (the password, the second
+  // factor) writes counters and spends codes but is no administrative act.
+  'LocalAccountsService.linkUrl': READ,
+  'LocalAccountsService.inspectLink': READ,
+  'LocalAccountsService.accountOf': READ,
+  'LocalAccountsService.accountById': READ,
+  'LocalAccountsService.list': READ,
+  'LocalAccountsService.pendingLinks': READ,
+  'LocalAccountsService.hasSecondFactor': READ,
+  'LocalAccountsService.beginTotpEnrolment': READ,
+  'LocalAccountsService.recoveryCodesLeft': READ,
+  'LocalAccountsService.checkPassword': exempt(
+    'the person’s own sign-in: counts a wrong password towards the lockout and clears the count on a right one; refusals are logged, not audited (spec §8 names a human actor)',
+  ),
+  'LocalAccountsService.checkSecondFactor': exempt(
+    'the person’s own sign-in: advances the accepted time step or spends a recovery code; a sign-in by recovery code is logged',
+  ),
+  'LocalAccountsService.createLink': {
+    kind: 'mutation',
+    target: accounts,
+    prepare: localAccount,
+    drive: (rig, prepared: never) =>
+      rig.root.auth.accounts.createLink({
+        kind: 'reset',
+        providerId: 'local',
+        email: (prepared as LocalAccountRecord).email,
+        createdBy: rig.operator.id,
+      }),
+    writes: {
+      act: 'local-link-created',
+      object: 'instance-config',
+      objectId: LOCAL_OBJECT,
+      actor: 'operator',
+    },
+  },
+  'LocalAccountsService.createAccount': {
+    kind: 'mutation',
+    target: accounts,
+    prepare: localProvider,
+    drive: (rig) =>
+      rig.root.auth.accounts.createAccount({
+        providerId: 'local',
+        email: 'fresh@example.com',
+        password: LOCAL_PASSWORD,
+        actor: rig.operator.id,
+      }),
+    writes: {
+      act: 'local-account-created',
+      object: 'instance-config',
+      objectId: LOCAL_OBJECT,
+      actor: 'operator',
+    },
+  },
+  'LocalAccountsService.createAccountFromLink': {
+    kind: 'mutation',
+    target: accounts,
+    prepare: async (rig) => {
+      await localProvider(rig);
+      return rig.root.auth.accounts.createLink({
+        kind: 'invite',
+        providerId: 'local',
+        email: 'invited@example.com',
+        createdBy: rig.operator.id,
+      });
+    },
+    drive: (rig, prepared: never) =>
+      rig.root.auth.accounts.createAccountFromLink((prepared as IssuedLink).token, LOCAL_PASSWORD),
+    writes: {
+      act: 'local-account-created',
+      object: 'instance-config',
+      objectId: LOCAL_OBJECT,
+      actor: 'operator',
+    },
+  },
+  'LocalAccountsService.resetPasswordFromLink': {
+    kind: 'mutation',
+    target: accounts,
+    prepare: async (rig) => {
+      const account = await localAccount(rig);
+      return rig.root.auth.accounts.createLink({
+        kind: 'reset',
+        providerId: 'local',
+        email: account.email,
+        createdBy: rig.operator.id,
+      });
+    },
+    drive: (rig, prepared: never) =>
+      rig.root.auth.accounts.resetPasswordFromLink(
+        (prepared as IssuedLink).token,
+        'another sentence long enough',
+      ),
+    writes: {
+      act: 'local-password-changed',
+      object: 'instance-config',
+      objectId: LOCAL_OBJECT,
+      actor: 'operator',
+    },
+  },
+  'LocalAccountsService.changePassword': {
+    kind: 'mutation',
+    target: accounts,
+    prepare: localAccount,
+    drive: (rig, prepared: never) =>
+      rig.root.auth.accounts.changePassword(
+        (prepared as LocalAccountRecord).id,
+        'another sentence long enough',
+        rig.operator.id,
+      ),
+    writes: {
+      act: 'local-password-changed',
+      object: 'instance-config',
+      objectId: LOCAL_OBJECT,
+      actor: 'operator',
+    },
+  },
+  'LocalAccountsService.confirmTotpEnrolment': {
+    kind: 'mutation',
+    target: accounts,
+    prepare: localAccount,
+    drive: async (rig, prepared: never) => {
+      const account = prepared as LocalAccountRecord;
+      const { secret } = rig.root.auth.accounts.beginTotpEnrolment('Test', account.email);
+      const bytes = base32Decode(secret);
+      const code = bytes ? totpCode(bytes, totpStepOf(Date.now())) : '';
+      return rig.root.auth.accounts.confirmTotpEnrolment(account.id, secret, code, rig.operator.id);
+    },
+    writes: {
+      act: 'local-second-factor-changed',
+      object: 'instance-config',
+      objectId: LOCAL_OBJECT,
+      actor: 'operator',
+    },
+  },
+  'LocalAccountsService.resetSecondFactor': {
+    kind: 'mutation',
+    target: accounts,
+    prepare: localAccount,
+    drive: (rig, prepared: never) =>
+      rig.root.auth.accounts.resetSecondFactor(
+        (prepared as LocalAccountRecord).id,
+        rig.operator.id,
+      ),
+    writes: {
+      act: 'local-second-factor-changed',
+      object: 'instance-config',
+      objectId: LOCAL_OBJECT,
+      actor: 'operator',
+    },
+  },
+  'LocalAccountsService.remove': {
+    kind: 'mutation',
+    target: accounts,
+    prepare: localAccount,
+    drive: (rig, prepared: never) =>
+      rig.root.auth.accounts.remove((prepared as LocalAccountRecord).id, rig.operator.id),
+    writes: {
+      act: 'local-account-removed',
+      object: 'instance-config',
+      objectId: LOCAL_OBJECT,
+      actor: 'operator',
+    },
+  },
+  'SessionService.createLocalStep': exempt(SESSION_STATE),
+  'SessionService.peekLocalStep': exempt(SESSION_STATE),
+  'SessionService.takeLocalStep': exempt(SESSION_STATE),
   'SessionService.create': exempt(SESSION_STATE),
   'SessionService.read': READ,
   'SessionService.destroyById': exempt(SESSION_STATE),
@@ -1272,6 +1472,7 @@ const RULES: Readonly<Record<string, Rule>> = {
 
   // ── users (the caller authorizes: operator only) ──────────────────────────
   'UserAdminService.list': READ,
+  'UserAdminService.get': READ,
   'UserAdminService.deactivate': {
     kind: 'mutation',
     target: (root) => root.users.service,
@@ -1537,6 +1738,14 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'invitation-added',
       'invitation-removed',
       'limits-changed',
+      'local-account-created',
+      'local-account-created',
+      'local-account-removed',
+      'local-link-created',
+      'local-password-changed',
+      'local-password-changed',
+      'local-second-factor-changed',
+      'local-second-factor-changed',
       'mission-issued',
       'mission-issued',
       'mission-issued',

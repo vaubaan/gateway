@@ -212,7 +212,8 @@ describe('sign-in providers in the configuration', () => {
       }),
       readFile: fakeFiles({ '/run/secrets/g': 'from-file\n' }),
     });
-    expect(config.signIn[0]?.clientSecret).toBe('from-file');
+    const first = config.signIn[0];
+    expect(first?.kind === 'github' ? first.clientSecret : null).toBe('from-file');
   });
 });
 

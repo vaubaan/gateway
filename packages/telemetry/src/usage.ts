@@ -129,7 +129,7 @@ export type DeploymentKind = (typeof DEPLOYMENT_KINDS)[number];
 export const ARCHES = ['x64', 'arm64', 'other'] as const;
 export type Arch = (typeof ARCHES)[number];
 
-export const SIGN_IN_KINDS = ['oidc', 'github'] as const;
+export const SIGN_IN_KINDS = ['oidc', 'github', 'local'] as const;
 export type SignInKind = (typeof SIGN_IN_KINDS)[number];
 
 /** Counts never travel exact. */

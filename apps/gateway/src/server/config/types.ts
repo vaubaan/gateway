@@ -134,6 +134,30 @@ export type AbsentMasterKeyReason = 'generate' | 'restore';
  */
 export type SetupConfig = Omit<InstanceConfig, 'encryption'>;
 
+/** How the SMTP relay is reached: STARTTLS on a submission port, TLS from the first byte, or clear text (a local relay). */
+export const MAIL_TLS_MODES = ['starttls', 'implicit', 'none'] as const;
+export type MailTlsMode = (typeof MAIL_TLS_MODES)[number];
+
+export function isMailTlsMode(raw: string): raw is MailTlsMode {
+  return (MAIL_TLS_MODES as readonly string[]).includes(raw);
+}
+
+/**
+ * Mail delivery (`mail.*`; ADR local-accounts-sign-in-provider, D6): the relay the
+ * instance sends its own mail through — the links of the local accounts. `null` when
+ * the configuration sets no relay: the links are then handed over by an administrator.
+ */
+export interface MailConfig {
+  readonly smtpHost: string;
+  readonly smtpPort: number;
+  /** `null`: the relay takes mail without authentication (a local relay). */
+  readonly smtpUser: string | null;
+  readonly smtpPassword: string | null;
+  /** The sender, as `Name <address>` or a bare address. */
+  readonly from: string;
+  readonly tls: MailTlsMode;
+}
+
 export interface TelemetryConfig {
   /** The value of `telemetry.enabled`, `false` when the configuration does not set it. */
   readonly enabled: boolean;
@@ -267,6 +291,8 @@ export interface InstanceConfig {
   readonly providers: ReadonlyMap<string, ProviderAppConfig>;
   readonly bootstrapToken: string | null;
   readonly telemetry: TelemetryConfig;
+  /** Mail delivery, or `null` when no relay is configured. */
+  readonly mail: MailConfig | null;
   readonly retentionDays: number;
   readonly requests: { readonly expirySeconds: number };
   readonly approvals: { readonly expirySeconds: number };
@@ -289,8 +315,11 @@ export interface InstanceConfig {
 export function secretValues(config: InstanceConfig | SetupConfig): string[] {
   const out: string[] = [];
   if (config.idp) out.push(config.idp.clientSecret);
-  for (const provider of config.signIn) out.push(provider.clientSecret);
+  for (const provider of config.signIn) {
+    if (provider.kind !== 'local') out.push(provider.clientSecret);
+  }
   if (config.bootstrapToken) out.push(config.bootstrapToken);
+  if ('mail' in config && config.mail?.smtpPassword) out.push(config.mail.smtpPassword);
   // A presigned URL is the credential itself; a file path is harmless but treated alike.
   const from = config.restore.from;
   if (from) out.push(from.kind === 'url' ? from.url.href : from.path);

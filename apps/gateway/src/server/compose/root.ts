@@ -16,7 +16,8 @@ import { MemoryCacheClient } from '@vaubaan/gateway-core';
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import { createAuditModule, type AuditModule } from '../audit';
-import { createAuthModule, type AuthModule, type OidcOptions } from '../auth';
+import { createAuthModule, type AuthModule, type LinkMailer, type OidcOptions } from '../auth';
+import { createLinkMailer } from '../mail';
 import { createAuthorityModule, derivedMissionReads, type AuthorityModule } from '../authority';
 import { SessionService } from '../budget';
 import { createConnectionsModule, type ConnectionsModule } from '../connections';
@@ -48,6 +49,7 @@ import { createSharesModule, type SharesModule } from '../shares';
 import { createUsersModule, type UsersModule } from '../users';
 import { createTelemetryModule, type TelemetryModule } from '../telemetry';
 import type { Store } from '../store';
+import type { Clock } from '../store/clock';
 import type { CacheClient, RateLimiter, SessionStore } from './ports';
 import { checkProviderApps, checkSelfResources, RegistryCatalogIndex } from './registry';
 import { wireManagementDoor, type ManagementDoorModule } from './management';
@@ -120,6 +122,10 @@ export type { BuildInfo };
 export interface RootDeps {
   readonly loadConfig?: () => LoadedConfig;
   readonly openStore?: (ctx: StoreContext) => Promise<Store>;
+  /** Tests: the clock of the authentication module (link expiry, lockouts); the system clock otherwise. */
+  readonly clock?: Clock;
+  /** Sends the mails of the local accounts' links; built from `mail.*` by the boot (wave C). */
+  readonly mailer?: LinkMailer;
   readonly buildRegistry?: (config: InstanceConfig, logger: Logger) => Promise<PluginRegistry>;
   readonly rateLimiter?: RateLimiter;
   readonly cache?: CacheClient;
@@ -366,7 +372,18 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
   // surface limits (`mcp:mission:<id>`, `connect:<user>`, `auth:*`), on disjoint keys.
   const windows = new SlidingWindowRateLimiter();
   const rateLimiter = deps.rateLimiter ?? windows;
+  const mailer =
+    deps.mailer ??
+    (config.mail
+      ? createLinkMailer({
+          config: config.mail,
+          logger,
+          instanceLabel: config.instanceName ?? config.publicUrl.host,
+        })
+      : undefined);
   const auth = createAuthModule({
+    clock: deps.clock,
+    mailer,
     config,
     store,
     sessions,
@@ -520,6 +537,9 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     connections,
     authenticator: auth.authenticator,
     sessions: auth.sessions,
+    accounts: auth.accounts,
+    providers: auth.providers,
+    mailer,
     logger,
   });
   const execution = createExecutionModule({

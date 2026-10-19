@@ -305,6 +305,26 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       post('/admin/users/invitations', headers, { email: 'guest@example.org' }),
     ),
   ),
+  'users.handlers.createFirstAdministrator': form('operator', 303, (rig, headers) =>
+    rig.root.users.handlers.createFirstAdministrator(
+      post('/admin/users/first-administrator', headers, {
+        email: 'ops@example.com',
+        password: 'a sentence long enough',
+        password_again: 'a sentence long enough',
+      }),
+    ),
+  ),
+  'users.handlers.resetSecondFactor': form('operator', 303, (rig, headers) =>
+    rig.root.users.handlers.resetSecondFactor(
+      post('/admin/users/none/reset-second-factor', headers, {}),
+      'none',
+    ),
+  ),
+  'users.handlers.accountLink': form('operator', 303, (rig, headers) =>
+    rig.root.users.handlers.accountLink(
+      post('/admin/users/local-link', headers, { kind: 'invite', email: 'guest@example.org' }),
+    ),
+  ),
   'users.handlers.removeInvitation': form('operator', 303, (rig, headers) =>
     rig.root.users.handlers.removeInvitation(
       post('/admin/users/invitations/remove', headers, { email: 'nobody@example.org' }),
@@ -389,6 +409,75 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
   'auth.handlers.bootstrapLogin': form('origin-only', 303, (rig, headers) =>
     rig.root.auth.handlers.bootstrapLogin(
       post('/api/auth/bootstrap', headers, { token: TEST_BOOTSTRAP_TOKEN }),
+    ),
+  ),
+  // The forms of the local accounts (ADR local-accounts-sign-in-provider): no session
+  // to ride, an origin check and a window each; a refusal is a redirect with a code.
+  'auth.handlers.passwordLogin': form('origin-only', 303, (rig, headers) =>
+    rig.root.auth.handlers.passwordLogin(
+      post('/auth/local/local', headers, { email: 'ada@example.com', password: 'x' }),
+      'local',
+    ),
+  ),
+  'auth.handlers.createAccount': form('origin-only', 303, (rig, headers) =>
+    rig.root.auth.handlers.createAccount(
+      post('/api/account/create', headers, {
+        token: 'not-a-link',
+        password: 'a sentence long enough',
+        password_again: 'a sentence long enough',
+      }),
+    ),
+  ),
+  'auth.handlers.resetPassword': form('origin-only', 303, (rig, headers) =>
+    rig.root.auth.handlers.resetPassword(
+      post('/api/account/reset', headers, {
+        token: 'not-a-link',
+        password: 'a sentence long enough',
+        password_again: 'a sentence long enough',
+      }),
+    ),
+  ),
+  'auth.handlers.forgotPassword': form('origin-only', 303, (rig, headers) =>
+    rig.root.auth.handlers.forgotPassword(
+      post('/api/account/forgot', headers, { email: 'ada@example.com' }),
+    ),
+  ),
+  'auth.handlers.secondFactorLogin': form('origin-only', 303, (rig, headers) =>
+    rig.root.auth.handlers.secondFactorLogin(
+      post('/auth/local/local/code', headers, { code: '000000' }),
+      'local',
+    ),
+  ),
+  'auth.handlers.enrolAtSignIn': form('origin-only', 303, (rig, headers) =>
+    rig.root.auth.handlers.enrolAtSignIn(
+      post('/auth/local/local/enrol', headers, { code: '000000' }),
+      'local',
+    ),
+  ),
+  // Settings → Security: a signed-in user's own password and second factor. The rig's
+  // users signed in through the directory, so each answers "not a local account" (303).
+  'auth.handlers.beginSecondFactor': form('user', 303, (rig, headers) =>
+    rig.root.auth.handlers.beginSecondFactor(
+      post('/settings/security/second-factor/begin', headers, {}),
+    ),
+  ),
+  'auth.handlers.confirmSecondFactor': form('user', 303, (rig, headers) =>
+    rig.root.auth.handlers.confirmSecondFactor(
+      post('/settings/security/second-factor/confirm', headers, { code: '000000' }),
+    ),
+  ),
+  'auth.handlers.removeSecondFactor': form('user', 303, (rig, headers) =>
+    rig.root.auth.handlers.removeSecondFactor(
+      post('/settings/security/second-factor/remove', headers, {}),
+    ),
+  ),
+  'auth.handlers.changePassword': form('user', 303, (rig, headers) =>
+    rig.root.auth.handlers.changePassword(
+      post('/settings/security/password', headers, {
+        current_password: 'x',
+        password: 'a sentence long enough',
+        password_again: 'a sentence long enough',
+      }),
     ),
   ),
 };

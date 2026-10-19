@@ -44,7 +44,7 @@ function first(value: string | string[] | undefined): string | null {
   return Array.isArray(value) ? (value[0] ?? null) : (value ?? null);
 }
 
-const KIND_WORDS = { oidc: 'OpenID Connect', github: 'GitHub' } as const;
+const KIND_WORDS = { oidc: 'OpenID Connect', github: 'GitHub', local: 'Local accounts' } as const;
 
 /** Who a provider admits, in words. */
 function admits(provider: SignInProviderView): string {
@@ -87,7 +87,9 @@ export default async function SignInSettingsPage({ searchParams }: Props) {
           <span>
             <span className={styles.name}>{provider.name}</span> <Mono>{provider.id}</Mono>
           </span>
-          <span className={styles.sub}>{issuerKey(provider.issuer)}</span>
+          <span className={styles.sub}>
+            {provider.kind === 'local' ? 'kept by this gateway' : issuerKey(provider.issuer)}
+          </span>
         </span>
       ),
     },
@@ -121,11 +123,22 @@ export default async function SignInSettingsPage({ searchParams }: Props) {
             {SETTINGS_ACTIONS.addSignInProvider}
           </ButtonLink>
         }
-        secondary={[
-          <ButtonLink key="github" href={`${NEW_SIGN_IN_PROVIDER_PAGE}?kind=github`}>
-            Add GitHub
-          </ButtonLink>,
-        ]}
+        secondary={
+          rows.some(({ provider }) => provider.kind === 'local')
+            ? [
+                <ButtonLink key="github" href={`${NEW_SIGN_IN_PROVIDER_PAGE}?kind=github`}>
+                  Add GitHub
+                </ButtonLink>,
+              ]
+            : [
+                <ButtonLink key="github" href={`${NEW_SIGN_IN_PROVIDER_PAGE}?kind=github`}>
+                  Add GitHub
+                </ButtonLink>,
+                <ButtonLink key="local" href={`${NEW_SIGN_IN_PROVIDER_PAGE}?kind=local`}>
+                  Add local accounts
+                </ButtonLink>,
+              ]
+        }
       />
 
       {(saved || removed || problems.length > 0 || (tested && principal.kind === 'user')) && (
@@ -196,7 +209,8 @@ export default async function SignInSettingsPage({ searchParams }: Props) {
             testId="no-sign-in-provider"
           >
             Your company’s directory through OpenID Connect (Entra ID, Google Workspace, Okta,
-            Keycloak), or GitHub for people who sign in with their own account.
+            Keycloak), GitHub for people who sign in with their own account, or local accounts kept
+            by this gateway — an email, a password and a second factor — when there is no directory.
           </EmptyState>
         ) : (
           <DataTable

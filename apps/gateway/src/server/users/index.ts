@@ -5,7 +5,10 @@
  * docs/handbook/authentication.md, "Deactivating a user".
  */
 import type { Authenticator } from '../auth/authenticator';
+import type { LocalAccountsService } from '../auth/local-accounts';
+import type { LinkMailer } from '../auth/local-handlers';
 import type { SessionService } from '../auth/session-service';
+import type { SignInProvidersService } from '../auth/sign-in-providers';
 import type { MembershipSettler } from '../authority';
 import type { InstanceConfig } from '../config/types';
 import type { ConnectionsModule } from '../connections';
@@ -19,7 +22,7 @@ import { InvitationService } from './invitations';
 import { UserAdminService } from './service';
 
 export interface UsersModuleDeps {
-  readonly config: Pick<InstanceConfig, 'publicUrl'>;
+  readonly config: Pick<InstanceConfig, 'publicUrl' | 'admin'>;
   readonly store: Store;
   readonly membership: Pick<MembershipSettler, 'watch'>;
   readonly delegations: Pick<DelegationService, 'revokeAllOf'>;
@@ -28,6 +31,11 @@ export interface UsersModuleDeps {
   readonly authenticator: Authenticator;
   /** The web sessions: "sign out everywhere" clears the cookie of the browser it comes from. */
   readonly sessions: Pick<SessionService, 'destroy'>;
+  /** The local accounts and their links: an invitation also creates the account's link. */
+  readonly accounts: LocalAccountsService;
+  readonly providers: Pick<SignInProvidersService, 'views'>;
+  /** Sends the mails of the links; absent when the instance sends no mail. */
+  readonly mailer?: LinkMailer;
   readonly logger: Logger;
   readonly clock?: Clock;
 }
@@ -62,6 +70,10 @@ export function createUsersModule(deps: UsersModuleDeps): UsersModule {
     sessions: deps.sessions,
     users: service,
     invitations,
+    accounts: deps.accounts,
+    providers: deps.providers,
+    adminEmails: deps.config.admin.emails,
+    mailer: deps.mailer,
     notices: deps.connections.notices,
     logger,
   });
@@ -74,7 +86,13 @@ export {
   UserAdminError,
   type UserAdminErrorCode,
 } from './errors';
-export { createUserAdminHandlers, USERS_PAGE, type UserAdminHandlers } from './handlers';
+export {
+  ADMIN_SETUP_PAGE,
+  createUserAdminHandlers,
+  FIRST_ADMINISTRATOR_PAGE,
+  USERS_PAGE,
+  type UserAdminHandlers,
+} from './handlers';
 export {
   INVITATIONS_OBJECT_ID,
   InvitationService,

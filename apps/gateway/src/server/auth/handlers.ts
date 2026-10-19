@@ -20,7 +20,6 @@
 import type { AuditWriter } from '@vaubaan/gateway-core';
 
 import type { RateLimiter } from '../compose/ports';
-import { UNKNOWN_CLIENT } from '../http/client-ip';
 import { LEGACY_PROVIDER_ID } from '../config/sign-in';
 import { resolveReturnTo } from '../http/return-to';
 import type { Logger } from '../logging';
@@ -37,6 +36,7 @@ import { completeLogin, type LoginDeps } from './login';
 import { forbiddenOriginResponse, isSameOrigin } from './origin';
 import type { SessionService } from './session-service';
 import type { SignInFlows } from './sign-in-flows';
+import { createThrottle } from './throttle';
 import {
   signInAuditObjectId,
   signInProviderAuditView,
@@ -77,6 +77,12 @@ export const AUTH_LIMITS = {
   callbackPerAddress: { limit: 30, windowMs: MINUTE_MS },
   callbackPerInstance: { limit: 2000, windowMs: MINUTE_MS },
   bootstrapPerInstance: { limit: 10, windowMs: 10 * MINUTE_MS },
+  /** The password form of the local accounts, and the forms that take a link. */
+  passwordPerAddress: { limit: 10, windowMs: MINUTE_MS },
+  passwordPerInstance: { limit: 300, windowMs: MINUTE_MS },
+  /** "Forgot your password": each answer may send a mail. */
+  forgotPerAddress: { limit: 3, windowMs: 10 * MINUTE_MS },
+  forgotPerInstance: { limit: 30, windowMs: 10 * MINUTE_MS },
 } as const;
 const SEE_OTHER = 303;
 const BAD_REQUEST = 400;
@@ -153,37 +159,11 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
     }
   }
 
-  /**
-   * Takes one slot of each window that applies: the per-address one only when the
-   * address is known (an unknown address would be one window for everybody, which the
-   * instance-wide window already is). `true` when every window had room.
-   */
-  async function admitted(
-    request: Request,
-    scope: string,
-    perAddress: { readonly limit: number; readonly windowMs: number } | null,
-    perInstance: { readonly limit: number; readonly windowMs: number },
-  ): Promise<boolean> {
-    const address = deps.clientIp(request.headers);
-    if (perAddress && address !== UNKNOWN_CLIENT) {
-      const taken = await deps.rateLimiter.take(
-        `auth:${scope}:ip:${address}`,
-        perAddress.limit,
-        perAddress.windowMs,
-      );
-      if (!taken.allowed) {
-        logger.warn('sign-in throttled', { scope, window: 'address' });
-        return false;
-      }
-    }
-    const taken = await deps.rateLimiter.take(
-      `auth:${scope}:instance`,
-      perInstance.limit,
-      perInstance.windowMs,
-    );
-    if (!taken.allowed) logger.warn('sign-in throttled', { scope, window: 'instance' });
-    return taken.allowed;
-  }
+  const admitted = createThrottle({
+    rateLimiter: deps.rateLimiter,
+    clientIp: deps.clientIp,
+    logger,
+  });
 
   return {
     async loginStart(request, providerId) {

@@ -222,9 +222,9 @@ five-id catalog).
   with no resource…), driver errors (`SqliteError` with `code`) for constraint
   violations the schema catches (`UNIQUE`, `FOREIGN KEY`, `CHECK`).
 
-## Schema (`0001_schema.sql` … `0018_mission_reaches_the_whole_connection.sql`)
+## Schema (`0001_schema.sql` … `0019_local_accounts.sql`)
 
-Schema version 17. `0001` creates every table and trigger; `0002` only replaces the
+Schema version 19. `0001` creates every table and trigger; `0002` only replaces the
 `audit_risks` delete trigger (see Audit); `0003` adds `web_sessions`; `0004` adds the
 owner-curation columns of `connection_resources` (plain `ADD COLUMN`s); `0005` adds
 `approvals.tool` (`NOT NULL DEFAULT ''`: a row written before it matches no call) and
@@ -998,3 +998,31 @@ resource row and refuses ids under it (`InvariantError`), as it refuses an empty
 [missions](missions.md)). `tests/integration/store/whole-connection-migration.test.ts`
 upgrades a schema-17 database holding a `selected` and an `all` selection and
 checks the rows, the foreign keys and the new value.
+
+## Local accounts (migration 0019)
+
+`0019_local_accounts.sql` adds the three tables of a sign-in provider of kind
+`local` (ADR
+[local-accounts-sign-in-provider](../decisions/local-accounts-sign-in-provider.md);
+handbook [authentication](authentication.md), "Local accounts"):
+`local_accounts` (the provider, the lower-cased address — unique per provider
+—, the second factor's state: `totp_confirmed_at`, `totp_last_step` so that a
+code is never accepted twice, and the lockout counters `failed_attempts`,
+`first_failure_at`, `locked_until`, counted in the store so that a restart
+resets nothing), `local_secrets` (one row per `(account_id, kind)` with `kind`
+in `password`, `totp`, `recovery`; `id` is `<account id>:<kind>` and the
+associated data of `blob`; `key_version` as in every sealed table — the table
+is an entry of `SEALED_COLUMNS`, so the `reseal` command, `backup` and
+`restore` treat it like the others) and `local_links` (`kind` in `invite`,
+`reset`; the address; `token_sha256`, unique — the store never holds a token;
+`created_by` a user id, `bootstrap` or `self`; `expires_at`, `used_at`).
+Foreign keys are not enforced by the store, so `LocalAccountsRepo.remove`
+deletes an account's secrets explicitly. The repository
+(`repositories/local-accounts.ts`) exposes the accounts, the secrets
+(`readSecret` / `writeSecret` / `deleteSecret` open and seal through the
+`Encryptor`), the counters (`recordFailure`, `clearFailures`,
+`advanceTotpStep`, `setTotp`) and the links (`createLink` retires the unused
+ones of the same kind for the address, `useLink` succeeds once,
+`pendingLinks`). Tests: `sealed-blobs.test.ts` seeds a secret and checks it is
+resealed with the rest; `tests/integration/auth/local-accounts.test.ts` drives
+the tables through the service.

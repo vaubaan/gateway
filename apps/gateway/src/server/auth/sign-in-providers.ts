@@ -34,6 +34,9 @@ import {
   type SignInKind,
   type SignInProvider,
   type SignInProviderSource,
+  DEFAULT_LOCAL_PROVIDER_NAME,
+  localProviderOf,
+  type LocalSignInProvider,
 } from '../config/sign-in';
 import type { AdminRule, IdpClaimMapping, InstanceConfig } from '../config/types';
 import type { ConfigRepo, ConfigWrite } from '../store/repositories/config';
@@ -43,7 +46,9 @@ import { DEFAULT_CLAIM_MAPPING, IDP_CONFIG_KEYS, type IdpSettingsService } from 
 
 /** A provider without its secret (the union kept: `kind` still tells the two apart). */
 export type SignInProviderWithoutSecret =
-  Omit<OidcSignInProvider, 'clientSecret'> | Omit<GithubSignInProvider, 'clientSecret'>;
+  | Omit<OidcSignInProvider, 'clientSecret'>
+  | Omit<GithubSignInProvider, 'clientSecret'>
+  | LocalSignInProvider;
 
 /** A provider as the pages and the authenticator see it: never its secret. */
 export type SignInProviderView = SignInProviderWithoutSecret & {
@@ -90,7 +95,7 @@ function secretKey(id: string): string {
   return `${KEY_PREFIX}${id}${SECRET_SUFFIX}`;
 }
 
-/** The JSON of `sign_in.<id>`: everything but the secret. */
+/** The JSON of `sign_in.<id>`: everything but the secret (a local provider: its name). */
 interface StoredSettings {
   readonly kind: SignInKind;
   readonly name: string;
@@ -116,6 +121,18 @@ function parseStored(raw: string): StoredSettings | null {
   if (!isRecord(value)) return null;
   const { kind, name, issuer, client_id, allowed_email_domains, invitation_only, created_at } =
     value;
+  if (kind === 'local') {
+    if (typeof name !== 'string' || typeof created_at !== 'string') return null;
+    return {
+      kind,
+      name,
+      issuer: '',
+      client_id: '',
+      allowed_email_domains: [],
+      invitation_only: true,
+      created_at,
+    };
+  }
   if (
     typeof kind !== 'string' ||
     !isSignInKind(kind) ||
@@ -150,6 +167,7 @@ function parseStored(raw: string): StoredSettings | null {
 }
 
 function toProvider(id: string, s: StoredSettings, clientSecret: string): SignInProvider | null {
+  if (s.kind === 'local') return localProviderOf(id, s.name);
   let issuer: URL;
   try {
     issuer = new URL(s.issuer);
@@ -171,6 +189,7 @@ function toProvider(id: string, s: StoredSettings, clientSecret: string): SignIn
 }
 
 function viewOf(provider: SignInProvider, source: SignInProviderSource): SignInProviderView {
+  if (provider.kind === 'local') return { ...provider, source };
   const { clientSecret: _secret, ...rest } = provider;
   return { ...rest, source };
 }
@@ -184,7 +203,7 @@ export function signInProviderAuditView(
     kind: provider.kind,
     name: provider.name,
     issuer: provider.issuer.href,
-    client_id: provider.clientId,
+    ...(provider.kind === 'local' ? {} : { client_id: provider.clientId }),
     ...(provider.kind === 'oidc' ? { claims: provider.claims } : {}),
     allowed_email_domains: provider.allowedEmailDomains,
     invitation_only: provider.invitationOnly,
@@ -290,6 +309,37 @@ export class SignInProvidersService {
     if (id === LEGACY_PROVIDER_ID && kind !== 'oidc') {
       problems.push(`the id '${LEGACY_PROVIDER_ID}' is kept for an OpenID Connect provider`);
     }
+    const others = (await this.views()).filter((p) => p.id !== id);
+    if (kind === 'local') {
+      // Nothing to register anywhere: an id and a name. One per instance.
+      const twin = others.find((p) => p.kind === 'local');
+      if (twin) {
+        problems.push(
+          `provider '${twin.id}' already keeps this gateway's local accounts: one local provider per instance`,
+        );
+      }
+      const ruleProblem = this.adminRuleChange(
+        others.map((p) => p.id),
+        [...others.map((p) => p.id), id],
+      );
+      if (ruleProblem) problems.push(ruleProblem);
+      if (problems.length > 0) throw new IdpSettingsError(problems);
+      const saved = localProviderOf(id, input.name.trim() || DEFAULT_LOCAL_PROVIDER_NAME);
+      const stored: StoredSettings = {
+        kind: 'local',
+        name: saved.name,
+        issuer: '',
+        client_id: '',
+        allowed_email_domains: [],
+        invitation_only: true,
+        created_at: (await this.createdAt(id)) ?? this.clock.now().toISOString(),
+      };
+      await this.store.apply([
+        { kind: 'value', key: settingsKey(id), value: JSON.stringify(stored) },
+        { kind: 'delete', key: secretKey(id) },
+      ]);
+      return { saved, before };
+    }
     const issuer = this.parseIssuer(kind, input.issuer, problems);
     const clientId = input.clientId.trim();
     if (clientId.length === 0) problems.push('client id is required');
@@ -297,7 +347,8 @@ export class SignInProvidersService {
     const issuerChanged =
       before !== null && issuer !== null && issuerKey(before.issuer) !== issuerKey(issuer);
     // A blank field keeps the stored secret — for the provider it was given for.
-    const clientSecret = given ?? (issuerChanged ? null : (before?.clientSecret ?? null));
+    const kept = before && before.kind !== 'local' ? before.clientSecret : null;
+    const clientSecret = given ?? (issuerChanged ? null : kept);
     if (!clientSecret) {
       problems.push(
         issuerChanged
@@ -308,7 +359,6 @@ export class SignInProvidersService {
     const claims = kind === 'oidc' ? normalizeClaims(input.claims, problems) : undefined;
     const allowedEmailDomains = normalizeEmailDomains(input.allowedEmailDomains, problems);
     const name = input.name.trim() || (kind === 'github' ? 'GitHub' : (issuer?.hostname ?? id));
-    const others = (await this.views()).filter((p) => p.id !== id);
     if (issuer) {
       const admission = admissionProblem({
         id,
@@ -483,7 +533,9 @@ export class SignInProvidersService {
       const raw = await this.store.get(key);
       const settings = raw ? parseStored(raw) : null;
       if (!settings) continue;
-      const secret = withSecrets ? await this.store.getSecret(secretKey(id)) : '';
+      // A local provider has no secret to read.
+      const secret =
+        withSecrets && settings.kind !== 'local' ? await this.store.getSecret(secretKey(id)) : '';
       if (secret === null) continue;
       const provider = toProvider(id, settings, secret);
       if (provider) out.push({ provider, createdAt: settings.created_at });

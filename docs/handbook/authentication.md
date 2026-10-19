@@ -1,11 +1,25 @@
 ---
-title: Authentication — sign-in providers (OIDC, GitHub), admission, web session, bootstrap token, admin rule
+title: Authentication — sign-in providers (OIDC, GitHub, local accounts), admission, web session, bootstrap token, admin rule
 status: current
 date: 2026-10-13
-last_synced: 2026-10-17
+last_synced: 2026-10-19
 tracks:
   - apps/gateway/src/server/auth/
   - apps/gateway/src/server/users/
+  - apps/gateway/src/server/mail/
+  - apps/gateway/src/server/crypto/password.ts
+  - apps/gateway/src/server/crypto/totp.ts
+  - apps/gateway/src/server/store/repositories/local-accounts.ts
+  - apps/gateway/migrations/0019_local_accounts.sql
+  - apps/gateway/src/app/(public)/account/
+  - apps/gateway/src/app/(public)/login/
+  - apps/gateway/src/app/(app)/settings/security/
+  - apps/gateway/src/app/api/account/
+  - apps/gateway/src/app/admin/(guarded)/first-administrator/page.tsx
+  - apps/gateway/src/app/admin/(guarded)/users/
+  - apps/gateway/src/components/auth/PasswordForm.tsx
+  - apps/gateway/src/components/auth/SecondFactorForms.tsx
+  - apps/gateway/tests/integration/auth/local-accounts.test.ts
   - apps/gateway/src/server/store/repositories/web-sessions.ts
   - apps/gateway/src/server/store/repositories/users.ts
   - apps/gateway/src/server/oauth-as/delegations.ts
@@ -73,6 +87,13 @@ apps/gateway/src/server/auth/            host-agnostic, never imports `next`
   cookies.ts          __Host-vbn_session / __Host-vbn_login: HttpOnly, Secure, SameSite=Lax, Path=/
   origin.ts           isSameOrigin(headers, publicUrl) for every mutation
   guard.ts            guardMutation() / guardSession(): origin → session → role, for every handler; refusalResponse()
+  throttle.ts         createThrottle(): the per-address and per-instance windows of the anonymous endpoints
+  local-accounts.ts   LocalAccountsService: the accounts of a `local` provider — password (argon2id), lockout, links, second factor, recovery codes
+  local-handlers.ts   the forms of the local accounts: password, second factor, enrolment, create, reset, forgot; Settings → Security
+apps/gateway/src/server/mail/index.ts    createLinkMailer(): the two mails (invitation, reset) through the SMTP relay of `mail.*` (nodemailer)
+apps/gateway/src/server/crypto/password.ts  hashPassword() / verifyPassword() (libsodium crypto_pwhash_str, argon2id), passwordProblem(), decoyHash()
+apps/gateway/src/server/crypto/totp.ts      RFC 6238 over node:crypto: totpCode(), verifyTotp(), otpauthUrl(), base32, recovery codes
+apps/gateway/src/server/store/repositories/local-accounts.ts  local_accounts, local_secrets (sealed), local_links (migration 0019)
   login.ts            completeLogin(): unbound accounts bound to the issuer, deactivated user refused, users upsert, IdP group sync, bootstrap revocation; currentAuthority()
   authenticator.ts    Authenticator.authenticate(headers) → Principal; authorizeAdmin(); auditActorId()
   handlers.ts         Request → Response handlers of the sign-in endpoints and of Settings → Sign-in; adminSignInPage()
@@ -96,7 +117,18 @@ apps/gateway/src/lib/auth/session.ts     Next glue: currentPrincipal(), requireP
 apps/gateway/src/app/
   (app)/page.tsx                         /  — the home ("Now"); a visitor with no session is sent to /login
   (public)/layout.tsx                    centred container of the pages reachable without a session
-  (public)/login/page.tsx                /login — one link per provider, the bootstrap link, account view, error codes
+  (public)/login/page.tsx                /login — the password form of the local accounts, one link per other provider, the bootstrap link, account view, error codes
+  (public)/login/code/page.tsx           /login/code — the second factor of a local sign-in (a code, or a recovery code)
+  (public)/login/second-factor/page.tsx  /login/second-factor — an administrator enrols a second factor during the sign-in
+  (public)/account/create/page.tsx       /account/create?token= — the invited person creates their local account
+  (public)/account/reset/page.tsx        /account/reset?token= — a new password on a reset link
+  (public)/account/forgot/page.tsx       /account/forgot — "Forgot your password", one answer for every address
+  auth/local/[provider]/route.ts         POST /auth/local/<id>          (email, password, return_to)
+  auth/local/[provider]/code/route.ts    POST /auth/local/<id>/code     (code)
+  auth/local/[provider]/enrol/route.ts   POST /auth/local/<id>/enrol    (code)
+  api/account/{create,reset,forgot}/route.ts   POST /api/account/create (token, password, password_again), …/reset, …/forgot (email)
+  (app)/settings/security/page.tsx       /settings/security — a local account's password and second factor
+  (app)/settings/security/**/route.ts    POST …/second-factor/begin, …/second-factor/confirm (code), …/second-factor/remove, …/password
   auth/login/route.ts                    GET  /auth/login?return_to=          (the one provider, or /login to choose)
   auth/login/[provider]/route.ts         GET  /auth/login/<id>?return_to=
   auth/callback/route.ts                 GET  /auth/callback                   (the provider idp)
@@ -117,7 +149,12 @@ apps/gateway/src/app/
   admin/(guarded)/users/[id]/reactivate/route.ts   POST /admin/users/<id>/reactivate
   admin/(guarded)/users/invitations/route.ts        POST /admin/users/invitations           (field email)
   admin/(guarded)/users/invitations/remove/route.ts POST /admin/users/invitations/remove    (field email)
-apps/gateway/src/components/auth/        AuthPage.tsx (AuthPage, AuthHeading: the frame of a page outside the shell), principal.ts (isOperatorPrincipal), NeedsUser.tsx, auth.module.css
+  admin/(guarded)/users/local-link/route.ts         POST /admin/users/local-link            (kind invite|reset, email)
+  admin/(guarded)/users/[id]/reset-second-factor/route.ts   POST /admin/users/<id>/reset-second-factor
+  admin/(guarded)/users/first-administrator/route.ts        POST /admin/users/first-administrator   (email, password, password_again)
+  admin/(guarded)/first-administrator/page.tsx      /admin/first-administrator — the setup creates the first administrator's local account
+apps/gateway/src/components/auth/        AuthPage.tsx (AuthPage, AuthHeading: the frame of a page outside the shell), principal.ts (isOperatorPrincipal), NeedsUser.tsx, auth.module.css,
+                                         PasswordForm.tsx (the password sign-in, "choose a password"), SecondFactorForms.tsx (the code form, the QR code, the enrolment)
 ```
 
 The route handlers are one-line adapters over `root.auth.handlers` (and
@@ -831,6 +868,140 @@ user.sessionsEndedAt` (`endedByDeactivation`, `authenticator.ts`; both are
 ISO-8601 UTC instants of the same clock): a session opened in the very
 millisecond of a deactivation is refused.
 
+## Local accounts
+
+A sign-in provider of kind `local` (ADR
+[local-accounts-sign-in-provider](../decisions/local-accounts-sign-in-provider.md);
+spec §0 "Local account", §6) keeps its accounts in the instance: an e-mail, a
+password, a second factor. One per instance (`sign_in.<id>.kind: local` with a
+`name`, nothing else — any other field is refused by name —, or "Add local
+accounts" in Settings → Sign-in; default id `local`). Its issuer is
+`urn:vaubaan:local:<id>` (`localIssuer`), its users (issuer, subject) like
+everyone's, the subject being the account id. It is never open and always
+"invited only" (`localProviderOf`): `admit()` runs unchanged on every sign-in
+(the address must be invited, or named by the admin rule), and `completeLogin()`
+after it (the `users` row at the first sign-in, the deactivation check).
+
+**The store** (migration `0019`, `store/repositories/local-accounts.ts`):
+`local_accounts` (provider, lower-cased address — unique per provider —, the
+second factor's state, the lockout counters), `local_secrets` (one sealed blob
+per `(account, kind)`: `password` the argon2id string, `totp` the base32 seed,
+`recovery` the JSON list of the unused codes' SHA-256; row id
+`<account id>:<kind>`, which is the blob's associated data; the table is in
+`SEALED_COLUMNS`, so a key rotation reseals it), `local_links` (`invite` or
+`reset`, the address, the token's SHA-256, who made it — a user id,
+`bootstrap`, or `self` for a reset asked from the sign-in page —, its expiry
+and its use).
+
+**Passwords** (`crypto/password.ts`): libsodium's `crypto_pwhash_str`
+(argon2id, interactive limits: 64 MiB, 2 passes; the string carries its
+parameters, so the limits can change without a migration), at least 12
+characters and at most 256 bytes, no composition rule. `checkPassword` answers
+one of `unknown` / `wrong` / `locked` to the service and the handler says
+`password-refused` for all three; an unknown address verifies against a decoy
+hash so that the three cost the same. **Lockout** (`LOCAL_LOCKOUT`): ten wrong
+passwords within fifteen minutes lock the account for fifteen minutes, counted
+in `local_accounts` (`recordFailure`: the window restarts when it has passed; a
+right password clears the count). The forms take `AUTH_LIMITS.passwordPer*`
+(10 per address per minute, 300 per instance) and `forgotPer*` (3 per address
+per ten minutes).
+
+**Links** (`createLink`, `inspectLink`): a 32-byte random token in the URL
+(`/account/create?token=` or `/account/reset?token=`, `LINK_TOKEN_PARAM`), its
+SHA-256 in the store, fifteen minutes (`LOCAL_LINK_TTL_MS`), single use
+(`useLink` succeeds once); a new link retires the unused ones of the same kind
+for the address. An invitation link creates the account on use
+(`createAccountFromLink`: the password checked, the link spent, the hash
+written); a reset link sets the password (`resetPasswordFromLink`; open
+sessions stay). Who makes them: **People** — inviting an address when a local
+provider exists also makes its link (`users.handlers.invite`); "Account link"
+makes one again for an invitation nobody used, "Password reset" for a person
+who signed in through local accounts (`users.handlers.accountLink`, field
+`kind`); **the person** — "Forgot your password?" (`/account/forgot`,
+`forgotPassword`) makes a reset link for an existing account **only when the
+instance sends mail**, and answers `?sent=1` whatever the address. With a
+mailer the link is sent and the notice says so; without one the notice shows
+the link once, for the administrator to hand over. The forgot page says
+beforehand which case applies (`root.auth.sendsMail`).
+
+**Mail** (`server/mail/index.ts`): `createLinkMailer` over nodemailer with the
+`mail.*` block of the configuration (handbook [configuration](configuration.md),
+"Configuration keys": host, port, user and password together or neither,
+sender, `tls` = `starttls` | `implicit` | `none`), built by the composition
+root when the block is set (`RootDeps.mailer` injects a fake in tests). Two
+plain-text mails (`linkMail`), the link and its expiry in the body. A failed
+send is logged as `mail failed` without the address or the link, and the
+handler that asked decides what to say (the forgot form says nothing either
+way; People shows the failure). The gateway sends nothing else.
+
+**The second factor** (`crypto/totp.ts`, `LocalAccountsService`): TOTP, RFC
+6238 — HMAC-SHA-1, six digits, thirty-second steps, one step of drift each way
+(`verifyTotp`, the RFC's vectors in `totp.test.ts`); the secret is 20 random
+bytes in base32, shown as a QR code (`uqr`'s SVG as a data URL, white ground
+in both themes) and as text, in an `otpauth://totp/` URL whose issuer is the
+instance's name. Enrolment is two halves: `beginTotpEnrolment` returns a
+secret the caller keeps in a pending step (nothing stored yet: the current
+factor stays in force), `confirmTotpEnrolment` takes the first code, seals the
+seed and eight fresh **recovery codes** (`k7m2p-x4q9z`, compared without
+case, spaces or hyphens, kept as SHA-256), and returns the codes once.
+`checkSecondFactor` accepts a code of the app — never twice:
+`advanceTotpStep` accepts a time step only later than the last one accepted
+— or a recovery code, spent on use. `resetSecondFactor` (the person after a
+fresh sign-in, or an administrator from People, "Reset second factor") deletes
+both secrets.
+
+**The sign-in** (`local-handlers.ts`): `POST /auth/local/<id>` (email,
+password, `return_to`) → `checkPassword` → `continueSignIn`: an account with a
+second factor gets a `PendingLocalStep` of step `second-factor`
+(`SessionService.createLocalStep`: the pending-login cookie, ten minutes) and
+`/login/code`; a person **named by `admin.emails`** who has none gets a step
+`enrol` carrying a fresh secret and `/login/second-factor` (an administrator
+cannot finish a sign-in without a factor); anyone else gets the session at
+once. `POST …/code` takes the step (`takeLocalStep`, single use), checks the
+code or recovery code, opens the session; a refused code recreates the step
+and answers `?error=second-factor-refused`; a stale cookie is
+`login-expired`. `POST …/enrol` confirms the enrolment, opens the session and
+lands on `/settings/security?notice=` where the recovery codes are shown once
+(a `NoticeStore` entry keyed by the new session). A local account's identity
+carries `emailVerified: true` (the link proved the mailbox, or the admin rule
+named the address) and no group: the admin rule's group never names a local
+account, only `admin.emails` does.
+
+**Settings → Security** (`/settings/security`, a user's own page; the row
+"Security" of Settings): for a local account, the second factor (set up or
+replace — `beginSecondFactor` puts the secret in a step and comes back with
+`?enrol=1`, `confirmSecondFactor` takes the code; remove — `removeSecondFactor`,
+only within ten minutes of signing in (`FRESH_SIGN_IN_FOR_FACTOR_MS`) and never
+for an address of `admin.emails`) and the password (`changePassword`: the
+current one, checked through the same lockout, and the new one twice). A
+person who signed in through another provider reads that the provider keeps
+both. The four are `guardMutation(…, 'user')` mutations.
+
+**The setup** (`/admin/first-administrator`, the checklist step "The first
+administrator's account" on `/admin` while a local provider exists and the
+bootstrap token is active): the bootstrap operator (or an administrator)
+creates the account of an address of `admin.emails` with its password
+(`users.handlers.createFirstAdministrator`: an address outside the rule is
+refused); that account's first sign-in enrols the second factor, shows the
+recovery codes and — being an operator's — revokes the bootstrap token as
+`completeLogin` does for every first operator sign-in. A rule made of a group
+alone cannot name a local account: the step says so.
+
+**Audit** (object `instance-config` / `local-account:<provider>`):
+`local-link-created` (kind, address, expiry — never the link),
+`local-account-created`, `local-password-changed`, `local-second-factor-changed`
+(`after.change`: `enrolled` or `reset`, `after.by`: `self` or the actor),
+`local-account-removed`. Logs name a provider, a kind, a cause (`unknown`,
+`wrong`, `locked`), never an address, a password, a code or a link. The
+telemetry profile counts the kind `local` with the others (`sign_in_kinds`).
+
+**What stays the operator's to keep.** A lone administrator who loses their
+password, their authenticator and their recovery codes is locked out: the
+instance cannot open an account for anyone. A second administrator, or an
+address of `admin.emails` that has not created its account yet (the setup
+page creates it while the bootstrap token is active), is the way back; so is a
+reset link made by another administrator from People.
+
 ## Pages
 
 - **`/login`** (where `/` sends a visitor with no session; a signed-in one
@@ -981,6 +1152,26 @@ The pages of the administration are built from the design system
 sign-in and bootstrap pages keep `components/auth/auth.module.css`.
 
 ## Tests
+
+Local accounts: `crypto/password.test.ts` (argon2id string, salt, the length
+policy, the decoy), `crypto/totp.test.ts` (the RFC 6238 vectors, drift, base32,
+the otpauth URL, recovery codes), `mail/index.test.ts` (the two mails, the
+transport, a failure that names neither address nor link),
+`tests/integration/auth/local-accounts.test.ts` (the provider listed under its
+urn issuer; the link creates the account and is spent; expiry and retirement
+of links; the password policy and mismatch; one answer for a wrong password, an
+unknown address and a locked account, the lock and its release; admission by
+invitation and the deactivation refusal; the reset link once; "forgot" the same
+for every address and no link without mail; origin and the per-address window;
+the administrator's enrolment before the first session and the codes shown
+once; a code accepted once, a replay refused, a recovery code once; the
+administrator's reset; Settings → Security enrolment, removal after a fresh
+sign-in, the password change; the setup's first administrator and the
+bootstrap revocation; with a mailer, the invitation and the reset by mail).
+Structural: `mutation-guard.test.ts` classifies every new handler,
+`app-guard.test.ts` the Security routes, `admin-guard.test.ts` the setup page,
+`no-arguments-in-logs.test.ts` the log fields, `sealed-blobs.test.ts` the
+resealing of `local_secrets`, `keys-doc.test.ts` the `mail.*` rows.
 
 Unit, co-located under `src/server/auth/*.test.ts` (73): the guard (each
 foreign-origin form refused before the session is read, same-origin Referer

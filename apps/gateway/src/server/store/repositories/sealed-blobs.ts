@@ -25,6 +25,7 @@ import type { Encryptor } from '../encryptor.ts';
 import { secretAd } from './config.ts';
 import type { RepoContext } from './context.ts';
 import { requestAd } from './requests.ts';
+import { localSecretAd } from './local-accounts.ts';
 
 export const SEALED_COLUMNS = [
   {
@@ -44,6 +45,12 @@ export const SEALED_COLUMNS = [
     idColumn: 'id',
     blobColumn: 'args_blob',
     associatedData: requestAd,
+  },
+  {
+    table: 'local_secrets',
+    idColumn: 'id',
+    blobColumn: 'blob',
+    associatedData: localSecretAd,
   },
 ] as const;
 

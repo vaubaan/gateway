@@ -2,7 +2,7 @@
 title: Integration tests
 status: current
 date: 2026-10-13
-last_synced: 2026-10-18
+last_synced: 2026-10-19
 tracks:
   - vitest.config.ts
   - scripts/release-lib.test.mjs
@@ -1512,6 +1512,27 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
 > [[operator-deactivates-a-user]]. Co-located under
 > `apps/gateway/src/` unless a path says otherwise.
 
+- **`tests/integration/auth/local-accounts.test.ts`** (17) — local accounts
+  (ADR [[local-accounts-sign-in-provider]]): the provider listed under its urn
+  issuer; an invited address creates its account on the link, which is spent,
+  and is signed in; a link expires after fifteen minutes and a newer one
+  retires the older; a short password and two different passwords refused on
+  the same link; the password signs in, a wrong one, an unknown address and a
+  locked account get one answer, the lock and its release; an invitation
+  removed refuses the next sign-in; a deactivated person refused; a reset link
+  once, the old password refused; "forgot" the same for every address and no
+  link without mail; origin check and the per-address window; the second
+  factor — an administrator enrols before the first session and the recovery
+  codes are shown once, a code accepted once and a replay refused, a recovery
+  code once, an administrator's reset, Settings → Security enrolment and
+  removal after a fresh sign-in, the password change; the setup — the
+  bootstrap operator creates the first administrator, their first sign-in
+  enrols the factor and retires the token; with a mailer, the invitation and
+  the forgotten password send their links.
+- **`server/crypto/password.test.ts`** (4), **`server/crypto/totp.test.ts`**
+  (5), **`server/mail/index.test.ts`** (2) — argon2id and the length policy;
+  the RFC 6238 vectors, drift, base32, the otpauth URL, recovery codes; the
+  two mails and a failure that names neither address nor link.
 - **`server/auth/claims.test.ts`** (22) — groups claim as array (trimmed,
   de-duplicated, non-strings dropped), as space/comma/semicolon delimited
   string, absent or of another type; default and custom (Entra-style)

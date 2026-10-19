@@ -13,6 +13,8 @@ import { systemClock, type Clock } from '../store/clock';
 import { Authenticator } from './authenticator';
 import { BootstrapService } from './bootstrap';
 import { createAuthHandlers, type AuthHandlers } from './handlers';
+import { LocalAccountsService } from './local-accounts';
+import { createLocalAuthHandlers, type LinkMailer, type LocalAuthHandlers } from './local-handlers';
 import { IdpSettingsService } from './idp-settings';
 import { createSignInFlows, type SignInFlows } from './sign-in-flows';
 import { SignInProvidersService } from './sign-in-providers';
@@ -46,6 +48,8 @@ export interface AuthModuleDeps {
   readonly membershipsChanging?: LoginDeps['membershipsChanging'];
   /** The limits of the sign-in start, the callbacks and the bootstrap endpoint. */
   readonly rateLimiter: RateLimiter;
+  /** Sends the mails of the local accounts' links; absent when the instance sends no mail. */
+  readonly mailer?: LinkMailer;
 }
 
 export interface AuthModule {
@@ -58,7 +62,12 @@ export interface AuthModule {
   readonly bootstrap: BootstrapService;
   readonly relyingParties: RelyingPartyFactory;
   readonly authenticator: Authenticator;
-  readonly handlers: AuthHandlers;
+  /** The sign-in endpoints, the forms of the local accounts (`LocalAuthHandlers`) included. */
+  readonly handlers: AuthHandlers & LocalAuthHandlers;
+  /** The accounts of a sign-in provider of kind `local`, and their links. */
+  readonly accounts: LocalAccountsService;
+  /** Whether the instance sends the mails of the links (a mailer was configured). */
+  readonly sendsMail: boolean;
 }
 
 export function createAuthModule(deps: AuthModuleDeps): AuthModule {
@@ -94,6 +103,37 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
     bootstrap,
     providers,
   );
+  const clientIp = clientIpResolver(deps.config.trustedProxies, deps.config.clientIpHeader);
+  const accounts = new LocalAccountsService({
+    store: deps.store,
+    audit: deps.store.auditWriter,
+    clock,
+    logger: logger.child({ component: 'local-accounts' }),
+    publicUrl: deps.config.publicUrl,
+  });
+  const localHandlers = createLocalAuthHandlers({
+    publicUrl: deps.config.publicUrl,
+    instanceLabel: deps.config.instanceName ?? deps.config.publicUrl.host,
+    sessions,
+    sessionStore: deps.sessions,
+    authenticator,
+    providers,
+    accounts,
+    login: {
+      store: deps.store,
+      bootstrap,
+      logger,
+      clock,
+      membershipsChanging: deps.membershipsChanging,
+    },
+    store: deps.store,
+    adminEmails: deps.config.admin.emails,
+    logger,
+    clock,
+    rateLimiter: deps.rateLimiter,
+    clientIp,
+    mailer: deps.mailer,
+  });
   const handlers = createAuthHandlers({
     publicUrl: deps.config.publicUrl,
     sessions,
@@ -114,9 +154,20 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
     logger,
     clock,
     rateLimiter: deps.rateLimiter,
-    clientIp: clientIpResolver(deps.config.trustedProxies, deps.config.clientIpHeader),
+    clientIp,
   });
-  return { sessions, idp, providers, flows, bootstrap, relyingParties, authenticator, handlers };
+  return {
+    sessions,
+    idp,
+    providers,
+    flows,
+    bootstrap,
+    relyingParties,
+    authenticator,
+    handlers: { ...handlers, ...localHandlers },
+    accounts,
+    sendsMail: deps.mailer !== undefined,
+  };
 }
 
 export {
@@ -237,3 +288,37 @@ export {
   type PendingLogin,
   type WebSessionRecord,
 } from './session-service';
+export {
+  CREATE_ACCOUNT_PAGE,
+  FORGOT_PASSWORD_PAGE,
+  LINK_TOKEN_PARAM,
+  LOCAL_LINK_TTL_MS,
+  LOCAL_LOCKOUT,
+  LocalAccountsService,
+  localAccountsObjectId,
+  normalizeLocalEmail,
+  RESET_PASSWORD_PAGE,
+  type IssuedLink,
+  type PasswordCheck,
+} from './local-accounts';
+export {
+  ACCOUNT_ERROR_PARAM,
+  createLocalAuthHandlers,
+  ENROL_PAGE,
+  ENROL_PARAM,
+  FORGOT_SENT_PARAM,
+  FRESH_SIGN_IN_FOR_FACTOR_MS,
+  localAccountIdOf,
+  localIdentity,
+  RESET_DONE_PARAM,
+  SECOND_FACTOR_PAGE,
+  SECURITY_PAGE,
+  type LinkMailer,
+  type LocalAuthHandlers,
+} from './local-handlers';
+export {
+  LOCAL_ACCOUNT_ERROR_CODES,
+  LOCAL_ACCOUNT_ERROR_MESSAGES,
+  LocalAccountError,
+  type LocalAccountErrorCode,
+} from './errors';

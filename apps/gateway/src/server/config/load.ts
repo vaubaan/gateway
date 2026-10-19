@@ -23,8 +23,10 @@ import {
   admissionProblem,
   adminGroupProblem,
   GITHUB_DOT_COM,
+  DEFAULT_LOCAL_PROVIDER_NAME,
   isSignInKind,
   isSignInProviderId,
+  localProviderOf,
   issuerKey,
   LEGACY_PROVIDER_ID,
   legacyProviderOf,
@@ -75,6 +77,9 @@ import {
   isClientRegistrationPolicy,
   isLogLevel,
   isProviderAppField,
+  isMailTlsMode,
+  MAIL_TLS_MODES,
+  type MailConfig,
 } from './types';
 
 /** `git.max_pack_mb` is in mebibytes. */
@@ -416,6 +421,7 @@ function validate(
   const providers = readProviders(r);
   const bootstrapToken = readBootstrapToken(r, signInProviders.length > 0);
 
+  const mail = readMail(r);
   const telemetryEnabled = r.bool(keySpec('telemetry.enabled'));
   // A null or mistyped value is not a decision: only a boolean pins the toggle.
   const telemetrySetByConfig = typeof getPath(raw, 'telemetry.enabled') === 'boolean';
@@ -460,6 +466,7 @@ function validate(
       level: telemetryLevel,
       collectorUrl,
     },
+    mail,
     retentionDays,
     requests: { expirySeconds: requestExpiry },
     approvals: { expirySeconds: approvalExpiry },
@@ -677,6 +684,62 @@ function readClientRegistrationPolicy(r: Reader): ClientRegistrationPolicy {
   return fallback;
 }
 
+/**
+ * `mail.*`: the whole block or none of it. A host without a sender (or the reverse)
+ * is an incomplete relay and refused by name; a user without a password likewise.
+ */
+function readMail(r: Reader): MailConfig | null {
+  const host = r.string('mail.smtp_host')?.trim() || undefined;
+  const from = r.string('mail.from')?.trim() || undefined;
+  const user = r.string('mail.smtp_user')?.trim() || undefined;
+  const password = r.string('mail.smtp_password') || undefined;
+  const anySet =
+    host !== undefined || from !== undefined || user !== undefined || password !== undefined;
+  if (!anySet) return null;
+  if (!host)
+    r.issues.add(
+      'mail.smtp_host',
+      'required with the other mail.* keys',
+      envNamesFor('mail.smtp_host'),
+    );
+  if (!from)
+    r.issues.add(
+      'mail.from',
+      'required with the other mail.* keys: the sender address',
+      envNamesFor('mail.from'),
+    );
+  if ((user === undefined) !== (password === undefined)) {
+    r.issues.add(
+      'mail.smtp_user',
+      'set the user and the password together, or neither (a relay that takes mail without authentication)',
+      [...envNamesFor('mail.smtp_user'), ...envNamesFor('mail.smtp_password')],
+    );
+  }
+  if (from && !/^[^<>@\s]+@[^<>@\s]+$/.test(from) && !/^.+<[^<>@\s]+@[^<>@\s]+>$/.test(from)) {
+    r.issues.add('mail.from', 'expected an address, or "Name <address>"', envNamesFor('mail.from'));
+  }
+  const port = r.int(keySpec('mail.smtp_port'));
+  const tlsSpec = keySpec('mail.tls');
+  const tls =
+    r.string('mail.tls', { fallback: String(tlsSpec.default) }) ?? String(tlsSpec.default);
+  if (!isMailTlsMode(tls)) {
+    r.issues.add(
+      'mail.tls',
+      `expected one of ${MAIL_TLS_MODES.join(', ')}, got "${tls}"`,
+      envNamesFor('mail.tls'),
+    );
+  }
+  if (!host || !from || !isMailTlsMode(tls)) return null;
+  return {
+    smtpHost: host,
+    smtpPort: port,
+    smtpUser: user ?? null,
+    smtpPassword: password ?? null,
+    from,
+    tls,
+  };
+}
+
 function readTelemetryLevel(r: Reader): TelemetryLevel {
   const fallback: TelemetryLevel = 'usage-stats';
   const level = r.string('telemetry.level', { fallback }) ?? fallback;
@@ -857,6 +920,31 @@ function readSignInProvider(r: Reader, id: string, base: string): SignInProvider
       envNamesFor(`${base}.kind`),
     );
   }
+  if (kind === 'local') {
+    // Local accounts: an id and a name. Nothing to register anywhere, nothing to admit by.
+    for (const field of [
+      'issuer',
+      'client_id',
+      'client_secret',
+      'claims',
+      'allowed_email_domains',
+      'invitation_only',
+      'require_verified_email',
+    ]) {
+      if (r.has(`${base}.${field}`)) {
+        r.issues.add(
+          `${base}.${field}`,
+          `a local provider keeps the accounts itself: it has no ${field.replace(/_/g, ' ')} (it admits invited addresses and the admin rule's only)`,
+          envNamesFor(`${base}.${field}`),
+        );
+      }
+    }
+    const name =
+      r.string(`${base}.name`, { fallback: DEFAULT_LOCAL_PROVIDER_NAME }) ??
+      DEFAULT_LOCAL_PROVIDER_NAME;
+    if (r.issues.items.length > before) return null;
+    return localProviderOf(id, name);
+  }
   const clientId = r.string(`${base}.client_id`, { required: true });
   const clientSecret = r.string(`${base}.client_secret`, { required: true });
   const allowedEmailDomains = normalizeDomainsAt(r, `${base}.allowed_email_domains`);
@@ -941,6 +1029,13 @@ function checkSignInProviders(
 ): SignInProvider[] {
   const all = [...(idp ? [legacyProviderOf(idp)] : []), ...signIn];
   const issuers = new Map<string, string>();
+  const locals = all.filter((p) => p.kind === 'local');
+  if (locals.length > 1) {
+    r.issues.add(
+      `sign_in.${locals[1]?.id ?? ''}.kind`,
+      `providers '${locals.map((p) => p.id).join("', '")}' are all local accounts: one local provider per instance`,
+    );
+  }
   for (const provider of all) {
     const path = provider.id === LEGACY_PROVIDER_ID && idp ? 'idp' : `sign_in.${provider.id}`;
     if (

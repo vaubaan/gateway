@@ -22,7 +22,7 @@ import { createSshPlugin, type ExecResult } from '@vaubaan/plugin-ssh';
 import stripePlugin from '@vaubaan/plugin-stripe';
 import supabasePlugin from '@vaubaan/plugin-supabase';
 import vercelPlugin from '@vaubaan/plugin-vercel';
-import sodium from 'libsodium-wrappers';
+import sodium from 'libsodium-wrappers-sumo';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { RegistryCatalogIndex } from '../../../src/server/compose/registry';

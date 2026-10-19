@@ -131,6 +131,7 @@ describe('the Administration surface authorizes in every page and route', () => 
       [
         'connections/page.tsx',
         'encryption/page.tsx',
+        'first-administrator/page.tsx',
         'groups/page.tsx',
         'identity-provider/page.tsx',
         'identity-provider/new/page.tsx',

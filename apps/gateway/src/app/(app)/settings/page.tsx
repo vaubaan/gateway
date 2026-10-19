@@ -17,6 +17,7 @@ import { Button, ButtonLink, PageHeader, Row, Rows, Section } from '@/components
 import { requirePrincipal } from '@/lib/auth/session';
 import { currentTheme } from '@/lib/theme-server';
 import { ACTIONS, PAGES, ROUTES, SECTIONS, THEME_WORDS } from '@/lib/vocabulary';
+import { SECURITY_PAGE } from '@/server/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,6 +37,18 @@ export default async function SettingsPage() {
             end={<ThemeChoiceControl initial={theme} />}
             testId="settings-theme"
           />
+          {principal.kind === 'user' && (
+            <Row
+              title="Security"
+              description="Your password and your second factor, when this gateway keeps your account."
+              end={
+                <ButtonLink href={SECURITY_PAGE} size="sm">
+                  Open
+                </ButtonLink>
+              }
+              testId="settings-security"
+            />
+          )}
           <Row
             title={SECTIONS.connectedApps}
             description="The apps you allowed to prepare missions in your name. They can never execute a call or answer for you."

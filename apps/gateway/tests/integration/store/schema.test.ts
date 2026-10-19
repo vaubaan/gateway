@@ -31,6 +31,9 @@ const EXPECTED_TABLES = [
   'groups',
   'instance_config',
   'invitations',
+  'local_accounts',
+  'local_links',
+  'local_secrets',
   'mission_connections',
   'mission_members',
   'mission_policy',
@@ -92,7 +95,7 @@ describe('store schema v1', () => {
   it('creates every table of the plan on an in-memory database', () => {
     const { store } = openTestStore();
     opened.push(store);
-    expect(store.schemaVersion).toBe(18);
+    expect(store.schemaVersion).toBe(19);
     expect(tableNames(store)).toEqual(EXPECTED_TABLES);
   });
 
@@ -131,10 +134,10 @@ describe('store schema v1', () => {
     opened.splice(opened.indexOf(first), 1);
 
     const second = fileStore(path);
-    expect(second.schemaVersion).toBe(18);
+    expect(second.schemaVersion).toBe(19);
     expect(
       second.db.prepare<[], { n: number }>('SELECT COUNT(*) AS n FROM schema_migrations').get()?.n,
-    ).toBe(18);
+    ).toBe(19);
   });
 
   it('serializes two writers on the same file with BEGIN IMMEDIATE', async () => {

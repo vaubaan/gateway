@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import type { SignInProvider } from '../config/sign-in';
+import type { OidcSignInProvider, SignInProvider } from '../config/sign-in';
 import { admit } from './admission';
 import { LoginError } from './errors';
 
-function oidc(issuer: string, rest: Partial<SignInProvider> = {}): SignInProvider {
+function oidc(issuer: string, rest: Partial<OidcSignInProvider> = {}): SignInProvider {
   return {
     kind: 'oidc',
     id: 'p',

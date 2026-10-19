@@ -6,7 +6,11 @@
  */
 import { notFound } from 'next/navigation';
 
-import { admissionOf, SignInProviderForm } from '@/components/settings/SignInProviderForm';
+import {
+  admissionOf,
+  LocalSignInProviderForm,
+  SignInProviderForm,
+} from '@/components/settings/SignInProviderForm';
 import styles from '@/components/settings/settings.module.css';
 import { Callout, PageHeader, Section } from '@/components/ui';
 import { requireOperator } from '@/lib/auth/session';
@@ -33,7 +37,7 @@ export default async function SignInProviderPage({ params, searchParams }: Props
     <>
       <PageHeader
         title={provider.name}
-        lede={`${github ? 'GitHub' : 'OpenID Connect'} provider ${provider.id}. Saving applies to the next sign-ins.`}
+        lede={`${provider.kind === 'local' ? 'Local accounts' : github ? 'GitHub' : 'OpenID Connect'} provider ${provider.id}. Saving applies to the next sign-ins.`}
         crumbs={[{ label: SETTINGS_PAGES.signIn.title, href: IDP_PAGE }]}
         width="narrow"
       />
@@ -49,22 +53,32 @@ export default async function SignInProviderPage({ params, searchParams }: Props
             </Callout>
           </div>
         )}
-        <SignInProviderForm
-          mode="update"
-          values={{
-            kind: provider.kind,
-            id: provider.id,
-            name: provider.name,
-            issuer: github && provider.issuer.hostname === 'github.com' ? '' : provider.issuer.href,
-            clientId: provider.clientId,
-            claims: provider.kind === 'oidc' ? provider.claims : DEFAULT_CLAIM_MAPPING,
-            domains: provider.allowedEmailDomains.join(' '),
-            admission: admissionOf(provider),
-          }}
-          hasSecret
-          callbackUrl={root.auth.flows.callbackUrl(provider.id).href}
-          cancelHref={IDP_PAGE}
-        />
+        {provider.kind === 'local' ? (
+          <LocalSignInProviderForm
+            mode="update"
+            id={provider.id}
+            name={provider.name}
+            cancelHref={IDP_PAGE}
+          />
+        ) : (
+          <SignInProviderForm
+            mode="update"
+            values={{
+              kind: provider.kind,
+              id: provider.id,
+              name: provider.name,
+              issuer:
+                github && provider.issuer.hostname === 'github.com' ? '' : provider.issuer.href,
+              clientId: provider.clientId,
+              claims: provider.kind === 'oidc' ? provider.claims : DEFAULT_CLAIM_MAPPING,
+              domains: provider.allowedEmailDomains.join(' '),
+              admission: admissionOf(provider),
+            }}
+            hasSecret
+            callbackUrl={root.auth.flows.callbackUrl(provider.id).href}
+            cancelHref={IDP_PAGE}
+          />
+        )}
       </Section>
     </>
   );
