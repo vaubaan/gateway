@@ -37,7 +37,9 @@ import {
   type CheckState,
 } from '@/components/ui';
 import { ADMIN_PAGES } from '@/components/shell/settings-nav';
+import { NoticeBanner } from '@/components/connections/parts';
 import { requireOperator } from '@/lib/auth/session';
+import { takeNotice } from '@/lib/connections/session';
 import {
   CONFIG_WORDS,
   count,
@@ -152,8 +154,10 @@ function ruleWords(admin: InstanceConfig['admin']): React.ReactNode {
 }
 
 export default async function SetupPage({ searchParams }: Props) {
-  const { root } = await requireOperator();
+  const { root, principal } = await requireOperator();
   const params = await searchParams;
+  // What the act the administrator just made did (the first administrator's account, for one).
+  const notice = await takeNotice(root, principal.sessionId, params);
   const nameProblem = isNameProblem(params[NAME_PROBLEM_PARAM]) ? params[NAME_PROBLEM_PARAM] : null;
   const keyProblem = isKeyProblem(params[KEY_PROBLEM_PARAM]) ? params[KEY_PROBLEM_PARAM] : null;
   const [providers, rule, bootstrap, apps, ownerless, clients, telemetry, users, identity, key] =
@@ -357,6 +361,7 @@ export default async function SetupPage({ searchParams }: Props) {
   return (
     <>
       <PageHeader title={SETTINGS_PAGES.setup.title} lede={SETTINGS_PAGES.setup.lede} />
+      <NoticeBanner notice={notice} />
 
       <Section
         title="What a fresh install needs"

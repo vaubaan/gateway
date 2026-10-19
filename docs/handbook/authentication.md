@@ -1171,7 +1171,8 @@ bootstrap revocation; with a mailer, the invitation and the reset by mail).
 Structural: `mutation-guard.test.ts` classifies every new handler,
 `app-guard.test.ts` the Security routes, `admin-guard.test.ts` the setup page,
 `no-arguments-in-logs.test.ts` the log fields, `sealed-blobs.test.ts` the
-resealing of `local_secrets`, `keys-doc.test.ts` the `mail.*` rows.
+resealing of `local_secrets`, `keys-doc.test.ts` the `mail.*` rows. Browser: `tests/e2e/v5/local-accounts.spec.ts`
+(handbook [e2e-tests](../tests/e2e-tests.md)).
 
 Unit, co-located under `src/server/auth/*.test.ts` (73): the guard (each
 foreign-origin form refused before the session is read, same-origin Referer

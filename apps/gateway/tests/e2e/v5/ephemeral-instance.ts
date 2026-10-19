@@ -612,6 +612,40 @@ async function main(): Promise<void> {
         sendJson(res, 200, { ok: true });
         return;
       }
+      if (url.pathname === `${CONTROL_PREFIX}/local/setup` && req.method === 'POST') {
+        // The local-accounts spec's second scenario starts with the provider in place.
+        if (!(await root.auth.providers.view('local'))) {
+          await root.auth.providers.save(
+            {
+              id: 'local',
+              kind: 'local',
+              name: '',
+              issuer: '',
+              clientId: '',
+              clientSecret: null,
+              allowedEmailDomains: [],
+              invitationOnly: true,
+            },
+            'create',
+          );
+        }
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+      if (url.pathname === `${CONTROL_PREFIX}/local/cleanup` && req.method === 'POST') {
+        // What the local-accounts spec leaves behind: the provider, its accounts and
+        // their people (keyed by the provider's urn issuer), the invitations.
+        for (const account of await root.store.localAccounts.list('local')) {
+          await root.store.localAccounts.remove(account.id);
+        }
+        root.store.db.prepare("DELETE FROM users WHERE issuer = 'urn:vaubaan:local:local'").run();
+        if (await root.auth.providers.view('local')) await root.auth.providers.remove('local');
+        for (const invitation of await root.store.invitations.list()) {
+          await root.store.invitations.remove(invitation.email);
+        }
+        sendJson(res, 200, { ok: true });
+        return;
+      }
       if (url.pathname === `${CONTROL_PREFIX}/github/cleanup` && req.method === 'POST') {
         // What the sign-in spec leaves behind when it fails half-way.
         if (await root.auth.providers.view('github')) await root.auth.providers.remove('github');
