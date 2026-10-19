@@ -5,7 +5,7 @@ description: Point Claude Code, Cursor or another MCP client at the execution do
 
 An agent reaches its mission through the instance's execution door, `https://your-domain/mcp`, over MCP's HTTP transport, with the mission key as a bearer token; any MCP client that can send an `Authorization` header works the same way.
 
-**Never run with Claude Code as the agent yet.** The project's suites drive both doors with the official MCP client; no person has yet pointed Claude Code at a running instance ([known limitations](/docs/known-limitations)). The configurations below follow each client's documentation.
+Claude Code is the client the project's own development goes through, on a running instance, since 2026-10-18; the other configurations below follow each client's documentation and have not been run against an instance ([known limitations](/docs/known-limitations)).
 
 Keep the key in an environment variable, `VAUBAAN_MISSION_TOKEN`, set where the client runs; the configuration only refers to it.
 

@@ -2,7 +2,7 @@
 title: Cutover from the v4 SaaS — what to prepare, the checklist, the live checks
 status: current
 date: 2026-10-13
-last_synced: 2026-10-15
+last_synced: 2026-10-19
 tracks:
   - deploy/compose.yaml
   - deploy/config/
@@ -310,7 +310,9 @@ mission if it should stop answering.
 ## 4. The live checks
 
 Four things could not be verified offline during the build. Each is a
-question with a yes / no answer; write the answer next to it.
+question with a yes / no answer; write the answer next to it. Two of them
+(L1, L4) were answered by the instance that serves this project's own
+development; the answers are recorded below.
 
 ### L1 — Does GitHub send `state` back on the install callback? (at A4)
 
@@ -326,7 +328,9 @@ GitHub returning the `state` the gateway put on the installation URL when
   URL from the address bar (it holds no secret that outlives a minute) and
   stop: the connect flow needs a host-initiated authorize redirect before
   GitHub can be connected at all.
-- [ ] Answer: \_\_\_\_
+- [x] Answer: **yes.** The App was connected this way on the instance that
+      serves this project's development (its connection is active and its pull
+      requests are opened by the App); `state` came back.
 
 ### L2 — Connecting an App that is already installed (at A4)
 
@@ -365,9 +369,9 @@ it was never confirmed against the live API.
 
 ### L4 — Claude Code itself (at A8)
 
-**No one has connected Claude Code to a v5 instance.** The execution door was
-verified with `curl`, with the official MCP client in both protocol eras, and
-by the automated smoke — never with the client the cutover is for.
+The execution door was verified with `curl`, with the official MCP client in
+both protocol eras, and by the automated smoke, before the client the cutover
+is for was pointed at an instance.
 
 - Do: in a repointed project, start Claude Code, check the `vaubaan` server is
   connected and lists the mission's tools, call one read tool, then ask for
@@ -385,7 +389,13 @@ by the automated smoke — never with the client the cutover is for.
   the same holder replaced it, or it was revoked; export the current one. A 403 on every request means the client
   sends an `Origin` header; the door answers no CORS. Then read
   [execution-door](execution-door.md), "How to debug".
-- [ ] Answer: \_\_\_\_ Claude Code version: \_\_\_\_
+- [x] Answer: **yes.** Claude Code 2.1.303, pointed at both doors of the
+      instance that serves this project's development since 2026-10-18 (a
+      `.mcp.json` naming `/mcp` and `/mcp/manage`, the key in an environment
+      variable): the mission's tools are listed, reads and writes return the
+      provider's answer, and a refusal reaches the model as a structured error
+      with its `code` and `hint`, which it reports (a defect of the GitHub
+      plugin, #58, was found that way).
 
 ## 5. Reading a refusal
 

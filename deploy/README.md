@@ -127,8 +127,9 @@ GitHub Container Registry, under the repository's name
 (`ghcr.io/vaubaan/gateway`). A release cut while the repository is
 private — this one before it is public, or a fork kept private — is
 `linux/amd64` only and carries no attestation; its release notes say so
-under "Built from a private repository". No release exists yet; until the
-first one, build the image from the sources as the quick start does.
+under "Built from a private repository". The first release, `2.0.0-alpha.1`
+(2026-10-18), is such a one: `linux/amd64` only, no attestation. The quick
+start still builds the image from the sources.
 
 | Tag               | Moves?                            | Use it for                                    |
 | ----------------- | --------------------------------- | --------------------------------------------- |

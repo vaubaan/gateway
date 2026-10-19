@@ -12,11 +12,16 @@ refused.
 
 ## Status
 
-**Pre-release.** No version of this code base is tagged, no image is published, and the
-software has not yet been run in production; the first real deployment is
-still to be done ([cutover handbook](docs/handbook/cutover-from-v4.md)).
-Expect breaking changes until a `v2.0.0` tag exists. This code base is
-called **v5** in its design documents and will be released as **v2**; it
+**Pre-release.** The first tagged version is `2.0.0-alpha.1` (2026-10-18):
+one `linux/amd64` image on the GitHub Container Registry, built while this
+repository was private. Three instances have run this code base since
+mid-October 2026, for the people who build it and two companies that tried
+the earlier product, and the project's own development goes through one of
+them (its agents hold mission keys, not tokens). No one outside has
+installed it yet; the
+[cutover handbook](docs/handbook/cutover-from-v4.md) is the checklist for
+that. Expect breaking changes until a `v2.0.0` tag exists. This code base is
+called **v5** in its design documents and is released as **v2**; it
 replaces an earlier hosted product and shares no data with it.
 
 What exists today: sign-in through your identity provider, GitHub, or both at
@@ -27,8 +32,8 @@ it, worked on alone or as a team, each person with their own key; both MCP
 doors; "Waiting for you", where a mission's creator answers what an agent
 asks; the activity record; a per-service reference of every permission and
 preset; a plugin per service (named in the diagram below); a Docker image
-built from source, a release pipeline that has not yet produced a release,
-and a demo that runs on a laptop.
+built from source and published by the release pipeline, and a demo that
+runs on a laptop.
 
 What has not been done or is not there, one line each:
 [known limitations](docs/handbook/known-limitations.md).
@@ -97,8 +102,8 @@ encryption key the setup hands you and keep it outside the host — a backup
 cannot be opened without it —, and add your sign-in provider.
 
 - Every step, running the image without Compose, operations, upgrades,
-  and, once a release exists, pulling a published image by tag and
-  verifying its provenance: [`deploy/README.md`](deploy/README.md).
+  pulling a published image by tag and verifying its provenance:
+  [`deploy/README.md`](deploy/README.md).
 - Which version runs: the footer of every page and `GET /healthz` show the
   version and the commit.
 - Every configuration key:
