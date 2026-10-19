@@ -31,7 +31,11 @@ function entra(rest: Partial<OidcSignInProvider> = {}): OidcSignInProvider {
   };
 }
 
-const admins = { isInvited: async () => false, adminEmails: ['boss@acme.example'] };
+const admins = {
+  isInvited: async () => false,
+  adminEmails: ['boss@acme.example'],
+  adminGroup: null,
+};
 
 async function codeOf(run: Promise<unknown>): Promise<string | null> {
   try {
@@ -55,13 +59,23 @@ describe('a verified email for a company directory', () => {
   });
 
   it('without the option, a directory admits the admin email on its word (unchanged)', async () => {
-    const identity = { email: 'boss@acme.example', emailVerified: null, subject: 'x' } as const;
+    const identity = {
+      email: 'boss@acme.example',
+      emailVerified: null,
+      subject: 'x',
+      groups: [],
+    } as const;
     expect(await admit(identity, entra(), admins)).toBe('admin-email');
   });
 
   it('with the option, an unverified admin email is refused; a verified one is admitted', async () => {
     const provider = entra({ requireVerifiedEmail: true });
-    const unverified = { email: 'boss@acme.example', emailVerified: null, subject: 'x' } as const;
+    const unverified = {
+      email: 'boss@acme.example',
+      emailVerified: null,
+      subject: 'x',
+      groups: [],
+    } as const;
     expect(await codeOf(admit(unverified, provider, admins))).toBe('email-not-verified');
     const verified = { ...unverified, emailVerified: true } as const;
     expect(await admit(verified, provider, admins)).toBe('admin-email');

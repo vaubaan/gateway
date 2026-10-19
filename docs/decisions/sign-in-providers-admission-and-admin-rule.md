@@ -113,6 +113,32 @@ happens to the people of a provider that is removed.
 - `bindUnboundTo` (migration 0011) runs only for a sign-in of the provider
   `idp`: accounts from before 0011 belong to it.
 
+## Amendment (2026-10-19) — the members of the admin group are admitted
+
+**Context.** An instance whose provider is "invitation only" and whose admin
+rule was moved from `admin.emails` to `admin.group` (the Entra ID advice of
+A29) locked its administrator out: D4 admitted on `admin.emails` because "the
+configuration names that person", but a person named through the group was
+not admitted, and nobody was left to invite them. The group membership is in
+the sign-in already: the groups claim of the directory, or the team GitHub
+answered for, both read before admission.
+
+**What changes.** D4 gains a fourth way in: a sign-in is also admitted when
+the admin rule's group names the provider the person signs in through and the
+provider claims them a member of it (`admin-group`). The configuration names
+that group as it names the emails. Everything else of D4 holds: an open
+provider must still say the email is verified, nothing is written on a
+refusal, and the membership read at admission is the one the admin rule is
+evaluated on afterwards (D6: a group of provider A never satisfies a rule
+written for provider B, so a directory claim named like the GitHub team does
+not admit either).
+
+**Consequences.** An instance can run on `admin.group` alone with an
+invitation-only provider; the first administrator needs no invitation. A29 in
+the threat model covers the group too. Not changed: a group member is not an
+invitee; removing them from the group refuses their next sign-in that nothing
+else admits, as removing an invitation does (D5).
+
 ## Rejected alternatives
 
 - **Linking identities by verified email.** It would let the weakest provider

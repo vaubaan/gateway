@@ -64,7 +64,7 @@ apps/gateway/src/server/auth/            host-agnostic, never imports `next`
   github.ts           GithubSignIn: GitHub's OAuth web flow (state, PKCE), /user, /user/emails, the admin rule's team
   sign-in-flows.ts    createSignInFlows(): one SignInFlow per provider, whatever its kind; the iss of a token must be the provider's
   sign-in-providers.ts SignInProvidersService: the providers of the file and of Settings; views() (no secret), resolve(id), save, remove, adminRule()
-  admission.ts        admit(): verified email; domains, invitation, admin email, or everyone of a directory
+  admission.ts        admit(): verified email; domains, invitation, admin email or group, or everyone of a directory
   claims.ts           mapClaims(), parseGroupsClaim(), groupsMovedOutOfToken(), assertEmailDomainAllowed()
   admin-rule.ts       resolveAdminRule(), isOperator(), describeAdminRule()
   idp-settings.ts     IdpSettingsService: the provider `idp` saved from the interface, secret sealed in instance_config
@@ -274,7 +274,7 @@ Enterprise Server base URL), `clientId`, `clientSecret`, `claims` (OIDC),
 
 ## Admission
 
-`admit(identity, provider, { isInvited, adminEmails })` (`admission.ts`) runs
+`admit(identity, provider, { isInvited, adminEmails, adminGroup })` (`admission.ts`) runs
 after the provider vouched for the identity and before anything is written: a
 refusal creates no user, syncs no group and revokes no bootstrap token.
 
@@ -291,9 +291,13 @@ refusal creates no user, syncs no group and revokes no bootstrap token.
    it signs in (`everyone-of-the-directory`; never an open provider: the
    loader and `save` refuse such a provider).
 3. Otherwise: the email's domain in `allowedEmailDomains` (`domain`), the
-   address on the invitation list (`invitation`), or in `admin.emails`
-   (`admin-email`). Refused: `not-invited` when the provider has no domain
-   (invited only), `email-domain-not-allowed` otherwise.
+   address on the invitation list (`invitation`), in `admin.emails`
+   (`admin-email`), or the admin rule's group is this provider's and the
+   provider claimed the person a member — a groups-claim value, or the
+   GitHub team it answered for (`admin-group`; the same membership
+   `isOperator` reads after the sync, so a group of another provider does not
+   admit). Refused: `not-invited` when the provider has no domain (invited
+   only), `email-domain-not-allowed` otherwise.
 
 The reason is logged (`sign-in admitted`, with the provider). **Identities
 never merge by email**: an email never selects an account; the same address

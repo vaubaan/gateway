@@ -268,6 +268,7 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
         const admission = await admit(identity, provider, {
           isInvited: async (email) => (await deps.store.invitations.get(email)) !== null,
           adminEmails: deps.adminEmails,
+          adminGroup: rule.group,
         });
         const outcome = await completeLogin(deps.login, identity, {
           providerId: provider.id,
