@@ -35,6 +35,7 @@ import {
   PROVIDER_APP_FIELDS,
   isProviderAppField,
   type ProviderAppField,
+  MAIL_TLS_MODES,
 } from './types';
 
 export type RawTree = Record<string, unknown>;
@@ -196,6 +197,29 @@ const KEY_TABLE = [
     kind: 'secret',
     required: 'without-idp',
     minLength: 32,
+  },
+  // Mail delivery (ADR local-accounts-sign-in-provider, D6): the relay through which the
+  // instance sends its own mail — the links of the local accounts. Optional as a block:
+  // set the host and the sender, or neither.
+  { path: 'mail.smtp_host', env: 'VAUBAAN_MAIL_SMTP_HOST', kind: 'string' },
+  {
+    path: 'mail.smtp_port',
+    env: 'VAUBAAN_MAIL_SMTP_PORT',
+    kind: 'int',
+    default: 587,
+    min: 1,
+    max: 65_535,
+  },
+  { path: 'mail.smtp_user', env: 'VAUBAAN_MAIL_SMTP_USER', kind: 'string' },
+  { path: 'mail.smtp_password', env: 'VAUBAAN_MAIL_SMTP_PASSWORD', kind: 'secret' },
+  { path: 'mail.from', env: 'VAUBAAN_MAIL_FROM', kind: 'string' },
+  {
+    path: 'mail.tls',
+    env: 'VAUBAAN_MAIL_TLS',
+    kind: 'string',
+    format: 'enum',
+    default: 'starttls',
+    oneOf: MAIL_TLS_MODES,
   },
   { path: 'telemetry.enabled', env: 'VAUBAAN_TELEMETRY_ENABLED', kind: 'bool', default: false },
   {

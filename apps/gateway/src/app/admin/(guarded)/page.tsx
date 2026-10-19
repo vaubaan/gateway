@@ -75,6 +75,8 @@ import {
 } from '@/server/master-key';
 import { requiresApp } from '@/server/provider-apps';
 
+import { FIRST_ADMINISTRATOR_PAGE } from '@/server/users';
+
 export const dynamic = 'force-dynamic';
 
 interface Props {
@@ -186,6 +188,17 @@ export default async function SetupPage({ searchParams }: Props) {
       isOperator({ email: view.user.email, groups: view.groupRecords }, rule),
   );
   const host = root.config.publicUrl.host;
+  // Local accounts: the setup creates the first administrator's account for an address of
+  // the admin rule (ADR local-accounts-sign-in-provider, D7); its first sign-in does the rest.
+  const local = providers.find((provider) => provider.kind === 'local') ?? null;
+  let firstAdministrator: 'done' | 'todo' | null = null;
+  if (local && bootstrap.status === 'active') {
+    let created = false;
+    for (const email of root.config.admin.emails) {
+      if (await root.auth.accounts.accountOf(local.id, email)) created = true;
+    }
+    firstAdministrator = created ? 'done' : 'todo';
+  }
 
   const steps: Step[] = [
     ...(key.generatedAt !== null
@@ -269,6 +282,26 @@ export default async function SetupPage({ searchParams }: Props) {
           }
         : undefined,
     },
+    ...(firstAdministrator !== null
+      ? [
+          {
+            key: 'first-administrator',
+            counted: true,
+            state: firstAdministrator as CheckState,
+            title: 'The first administrator’s account',
+            description:
+              firstAdministrator === 'done'
+                ? 'Created. Its first sign-in sets the second factor up and retires the bootstrap token.'
+                : root.config.admin.emails.length > 0
+                  ? 'Local accounts are set up: create the account of an address the admin rule names, then sign in with it.'
+                  : 'The admin rule names no email: a local account cannot be an administrator until admin.emails lists one.',
+            action:
+              firstAdministrator === 'todo' && root.config.admin.emails.length > 0
+                ? { label: 'Create the account', href: FIRST_ADMINISTRATOR_PAGE }
+                : undefined,
+          },
+        ]
+      : []),
     {
       key: 'administrators',
       counted: true,

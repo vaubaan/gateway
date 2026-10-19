@@ -305,6 +305,15 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       post('/admin/users/invitations', headers, { email: 'guest@example.org' }),
     ),
   ),
+  'users.handlers.createFirstAdministrator': form('operator', 303, (rig, headers) =>
+    rig.root.users.handlers.createFirstAdministrator(
+      post('/admin/users/first-administrator', headers, {
+        email: 'ops@example.com',
+        password: 'a sentence long enough',
+        password_again: 'a sentence long enough',
+      }),
+    ),
+  ),
   'users.handlers.resetSecondFactor': form('operator', 303, (rig, headers) =>
     rig.root.users.handlers.resetSecondFactor(
       post('/admin/users/none/reset-second-factor', headers, {}),

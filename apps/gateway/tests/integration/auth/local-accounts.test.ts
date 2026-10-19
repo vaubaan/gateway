@@ -513,4 +513,95 @@ describe('local accounts: invitation link, password sign-in, lockout, reset', ()
       expect((await signIn(ADA, 'a brand new sentence')).headers.get('location')).toBe('/');
     });
   });
+
+  describe('the setup and the mail', () => {
+    const OPS = 'ops@example.com';
+
+    it('the bootstrap operator creates the first administrator; their first sign-in enrols the factor and retires the token', async () => {
+      const bootstrap = await root.auth.sessions.create({ kind: 'bootstrap' });
+      const created = await root.users.handlers.createFirstAdministrator(
+        formWith(`${SESSION_COOKIE}=${bootstrap.id}`, {
+          email: OPS,
+          password: 'the operator sentence',
+          password_again: 'the operator sentence',
+        }),
+      );
+      expect(created.headers.get('location') ?? '').toMatch(/^\/admin\?notice=/);
+      expect(await root.auth.accounts.accountOf('local', OPS)).not.toBeNull();
+      // Not an address of the rule: refused, with a notice, nothing created.
+      const refused = await root.users.handlers.createFirstAdministrator(
+        formWith(`${SESSION_COOKIE}=${bootstrap.id}`, {
+          email: 'mallory@example.com',
+          password: 'the operator sentence',
+          password_again: 'the operator sentence',
+        }),
+      );
+      expect(refused.headers.get('location') ?? '').toMatch(/^\/admin\?notice=/);
+      expect(await root.auth.accounts.accountOf('local', 'mallory@example.com')).toBeNull();
+      expect((await root.auth.bootstrap.state()).status).toBe('active');
+      // The first sign-in: password, then the enrolment, then the session — and the token is revoked.
+      const first = await signIn(OPS, 'the operator sentence');
+      expect(first.headers.get('location')).toBe('/login/second-factor');
+      const cookie = cookieOf(first, LOGIN_COOKIE);
+      const step = await root.auth.sessions.peekLocalStep(new Headers({ cookie: cookie ?? '' }));
+      const bytes = base32Decode(step?.totpSecret ?? '');
+      const code = bytes ? totpCode(bytes, totpStepOf(clock.now().getTime())) : '';
+      const done = await root.auth.handlers.enrolAtSignIn(formWith(cookie, { code }), 'local');
+      expect(sessionCookieOf(done)).not.toBeNull();
+      expect((await root.auth.bootstrap.state()).status).toBe('revoked');
+    });
+
+    it('with a mailer, an invitation and a forgotten password send their links, which the mail alone carries', async () => {
+      const sent: { kind: string; to: string; url: URL }[] = [];
+      await root.close();
+      root = await buildRoot({
+        loadConfig: () =>
+          loadInstanceConfig({
+            env: validEnv({ VAUBAAN_PUBLIC_URL: PUBLIC_URL, VAUBAAN_ADMIN_EMAILS: OPS }),
+          }),
+        logWrite: () => undefined,
+        clock,
+        openStore: async ({ encryptor, catalog }) => openMemoryStore({ encryptor, catalog, clock }),
+        mailer: {
+          async sendLink(input) {
+            sent.push({ kind: input.kind, to: input.to, url: input.url });
+          },
+        },
+      });
+      await root.auth.providers.save(
+        {
+          id: 'local',
+          kind: 'local',
+          name: '',
+          issuer: '',
+          clientId: '',
+          clientSecret: null,
+          allowedEmailDomains: [],
+          invitationOnly: true,
+        },
+        'create',
+      );
+      expect(root.auth.sendsMail).toBe(true);
+      const bootstrap = await root.auth.sessions.create({ kind: 'bootstrap' });
+      const invited = await root.users.handlers.invite(
+        formWith(`${SESSION_COOKIE}=${bootstrap.id}`, { email: ADA }),
+      );
+      expect(invited.status).toBe(303);
+      expect(sent).toHaveLength(1);
+      expect(sent[0]).toMatchObject({ kind: 'invite', to: ADA });
+      const token = sent[0]?.url.searchParams.get('token') ?? '';
+      expect(await root.auth.accounts.inspectLink(token)).toMatchObject({
+        kind: 'invite',
+        email: ADA,
+      });
+      const created = await root.auth.handlers.createAccount(
+        form({ token, password: PASSWORD, password_again: PASSWORD }),
+      );
+      expect(created.headers.get('location')).toBe('/');
+      await root.auth.handlers.forgotPassword(form({ email: ADA }));
+      await root.auth.handlers.forgotPassword(form({ email: 'nobody@example.com' }));
+      expect(sent.map((m) => m.kind)).toEqual(['invite', 'reset']);
+      expect(sent[1]?.url.pathname).toBe('/account/reset');
+    });
+  });
 });

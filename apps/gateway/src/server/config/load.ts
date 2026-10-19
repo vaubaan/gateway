@@ -77,6 +77,9 @@ import {
   isClientRegistrationPolicy,
   isLogLevel,
   isProviderAppField,
+  isMailTlsMode,
+  MAIL_TLS_MODES,
+  type MailConfig,
 } from './types';
 
 /** `git.max_pack_mb` is in mebibytes. */
@@ -418,6 +421,7 @@ function validate(
   const providers = readProviders(r);
   const bootstrapToken = readBootstrapToken(r, signInProviders.length > 0);
 
+  const mail = readMail(r);
   const telemetryEnabled = r.bool(keySpec('telemetry.enabled'));
   // A null or mistyped value is not a decision: only a boolean pins the toggle.
   const telemetrySetByConfig = typeof getPath(raw, 'telemetry.enabled') === 'boolean';
@@ -462,6 +466,7 @@ function validate(
       level: telemetryLevel,
       collectorUrl,
     },
+    mail,
     retentionDays,
     requests: { expirySeconds: requestExpiry },
     approvals: { expirySeconds: approvalExpiry },
@@ -677,6 +682,62 @@ function readClientRegistrationPolicy(r: Reader): ClientRegistrationPolicy {
     envNamesFor(path),
   );
   return fallback;
+}
+
+/**
+ * `mail.*`: the whole block or none of it. A host without a sender (or the reverse)
+ * is an incomplete relay and refused by name; a user without a password likewise.
+ */
+function readMail(r: Reader): MailConfig | null {
+  const host = r.string('mail.smtp_host')?.trim() || undefined;
+  const from = r.string('mail.from')?.trim() || undefined;
+  const user = r.string('mail.smtp_user')?.trim() || undefined;
+  const password = r.string('mail.smtp_password') || undefined;
+  const anySet =
+    host !== undefined || from !== undefined || user !== undefined || password !== undefined;
+  if (!anySet) return null;
+  if (!host)
+    r.issues.add(
+      'mail.smtp_host',
+      'required with the other mail.* keys',
+      envNamesFor('mail.smtp_host'),
+    );
+  if (!from)
+    r.issues.add(
+      'mail.from',
+      'required with the other mail.* keys: the sender address',
+      envNamesFor('mail.from'),
+    );
+  if ((user === undefined) !== (password === undefined)) {
+    r.issues.add(
+      'mail.smtp_user',
+      'set the user and the password together, or neither (a relay that takes mail without authentication)',
+      [...envNamesFor('mail.smtp_user'), ...envNamesFor('mail.smtp_password')],
+    );
+  }
+  if (from && !/^[^<>@\s]+@[^<>@\s]+$/.test(from) && !/^.+<[^<>@\s]+@[^<>@\s]+>$/.test(from)) {
+    r.issues.add('mail.from', 'expected an address, or "Name <address>"', envNamesFor('mail.from'));
+  }
+  const port = r.int(keySpec('mail.smtp_port'));
+  const tlsSpec = keySpec('mail.tls');
+  const tls =
+    r.string('mail.tls', { fallback: String(tlsSpec.default) }) ?? String(tlsSpec.default);
+  if (!isMailTlsMode(tls)) {
+    r.issues.add(
+      'mail.tls',
+      `expected one of ${MAIL_TLS_MODES.join(', ')}, got "${tls}"`,
+      envNamesFor('mail.tls'),
+    );
+  }
+  if (!host || !from || !isMailTlsMode(tls)) return null;
+  return {
+    smtpHost: host,
+    smtpPort: port,
+    smtpUser: user ?? null,
+    smtpPassword: password ?? null,
+    from,
+    tls,
+  };
 }
 
 function readTelemetryLevel(r: Reader): TelemetryLevel {

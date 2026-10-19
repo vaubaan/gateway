@@ -17,6 +17,7 @@ import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import { createAuditModule, type AuditModule } from '../audit';
 import { createAuthModule, type AuthModule, type LinkMailer, type OidcOptions } from '../auth';
+import { createLinkMailer } from '../mail';
 import { createAuthorityModule, derivedMissionReads, type AuthorityModule } from '../authority';
 import { SessionService } from '../budget';
 import { createConnectionsModule, type ConnectionsModule } from '../connections';
@@ -371,8 +372,18 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
   // surface limits (`mcp:mission:<id>`, `connect:<user>`, `auth:*`), on disjoint keys.
   const windows = new SlidingWindowRateLimiter();
   const rateLimiter = deps.rateLimiter ?? windows;
+  const mailer =
+    deps.mailer ??
+    (config.mail
+      ? createLinkMailer({
+          config: config.mail,
+          logger,
+          instanceLabel: config.instanceName ?? config.publicUrl.host,
+        })
+      : undefined);
   const auth = createAuthModule({
     clock: deps.clock,
+    mailer,
     config,
     store,
     sessions,
@@ -528,7 +539,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     sessions: auth.sessions,
     accounts: auth.accounts,
     providers: auth.providers,
-    mailer: deps.mailer,
+    mailer,
     logger,
   });
   const execution = createExecutionModule({

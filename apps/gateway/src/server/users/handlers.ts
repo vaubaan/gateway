@@ -36,6 +36,10 @@ import type { InvitationService } from './invitations';
 import type { UserAdminActor, UserAdminService } from './service';
 
 export const USERS_PAGE = '/admin/users';
+/** The setup checklist, where the first administrator's creation lands. */
+export const ADMIN_SETUP_PAGE = '/admin';
+/** The page that creates the first administrator's local account. */
+export const FIRST_ADMINISTRATOR_PAGE = '/admin/first-administrator';
 
 export interface UserAdminHandlerDeps {
   readonly publicUrl: URL;
@@ -46,6 +50,8 @@ export interface UserAdminHandlerDeps {
   readonly invitations: InvitationService;
   readonly accounts: LocalAccountsService;
   readonly providers: Pick<SignInProvidersService, 'views'>;
+  /** The admin rule's emails, lower-cased: who the setup may create the first account for. */
+  readonly adminEmails: readonly string[];
   readonly mailer?: LinkMailer;
   readonly notices: NoticeStore;
   readonly logger: Logger;
@@ -67,6 +73,12 @@ export interface UserAdminHandlers {
   accountLink(request: Request): Promise<Response>;
   /** An administrator resets a person's second factor: their next sign-in takes the password alone (or enrols one, for an administrator). */
   resetSecondFactor(request: Request, userId: string): Promise<Response>;
+  /**
+   * The setup creates the first administrator's local account (fields `email`, one of
+   * `admin.emails`; `password`, `password_again`); their first sign-in enrols the second
+   * factor and revokes the bootstrap token (ADR local-accounts-sign-in-provider, D7).
+   */
+  createFirstAdministrator(request: Request): Promise<Response>;
 }
 
 const plural = (count: number, one: string, many: string): string => (count === 1 ? one : many);
@@ -200,6 +212,46 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
           ],
         };
       });
+    },
+
+    async createFirstAdministrator(request) {
+      const principal = await operatorOf(request);
+      if (principal instanceof Response) return principal;
+      const form = await readForm(request);
+      if (!form) return notAFormResponse();
+      const field = (name: string): string => {
+        const value = form.get(name);
+        return typeof value === 'string' ? value : '';
+      };
+      const email = field('email').trim().toLowerCase();
+      let notice: Notice;
+      try {
+        const local = await localProvider();
+        if (!local) throw new LocalAccountError('no-local-provider');
+        if (!deps.adminEmails.includes(email)) throw new LocalAccountError('not-admitted');
+        if (field('password') !== field('password_again')) {
+          throw new LocalAccountError(
+            'password-weak',
+            'The two passwords differ. Type the same one twice.',
+          );
+        }
+        const account = await deps.accounts.createAccount({
+          providerId: local.id,
+          email,
+          password: field('password'),
+          actor: auditActorId(principal),
+        });
+        notice = {
+          tone: 'success',
+          title: `Account of ${account.email} created`,
+          lines: [
+            'Sign in with it now: the first sign-in sets the second factor up, shows the recovery codes, and retires the bootstrap token.',
+          ],
+        };
+      } catch (err) {
+        notice = failure(err, 'Account not created');
+      }
+      return redirectWithNotice(principal.sessionId, ADMIN_SETUP_PAGE, notice);
     },
 
     async accountLink(request) {

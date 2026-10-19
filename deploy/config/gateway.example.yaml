@@ -222,6 +222,24 @@
 # (or `${file:/run/secrets/vaubaan_bootstrap_token}` with a secrets mount)
 # bootstrap_token: ${VAUBAAN_BOOTSTRAP_TOKEN}
 
+# Mail delivery (spec §4.3): the SMTP relay this gateway sends its own mail
+# through — the links that create a local account or reset its password. Leave
+# the block out to send nothing: an administrator then hands the links over
+# from People. Set `smtp_host` and `from` together; `smtp_user` and
+# `smtp_password` together or not at all.
+# mail:
+#   # env: VAUBAAN_MAIL_SMTP_HOST
+#   smtp_host: smtp.example.net
+#   # env: VAUBAAN_MAIL_SMTP_PORT (default 587)
+#   smtp_port: 587
+#   # env: VAUBAAN_MAIL_SMTP_USER, VAUBAAN_MAIL_SMTP_PASSWORD (or _FILE)
+#   smtp_user: relay-user
+#   smtp_password: ${file:/run/secrets/smtp_password}
+#   # env: VAUBAAN_MAIL_FROM — an address, or `Name <address>`
+#   from: Acme gateway <noreply@example.net>
+#   # env: VAUBAAN_MAIL_TLS — starttls (default, port 587), implicit (port 465), none (a local relay)
+#   tls: starttls
+
 # Community telemetry (spec §9): anonymous reports, every field from a closed
 # vocabulary or a bucket (shown on Administration → Telemetry). Off by default.
 # telemetry:

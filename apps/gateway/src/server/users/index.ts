@@ -22,7 +22,7 @@ import { InvitationService } from './invitations';
 import { UserAdminService } from './service';
 
 export interface UsersModuleDeps {
-  readonly config: Pick<InstanceConfig, 'publicUrl'>;
+  readonly config: Pick<InstanceConfig, 'publicUrl' | 'admin'>;
   readonly store: Store;
   readonly membership: Pick<MembershipSettler, 'watch'>;
   readonly delegations: Pick<DelegationService, 'revokeAllOf'>;
@@ -72,6 +72,7 @@ export function createUsersModule(deps: UsersModuleDeps): UsersModule {
     invitations,
     accounts: deps.accounts,
     providers: deps.providers,
+    adminEmails: deps.config.admin.emails,
     mailer: deps.mailer,
     notices: deps.connections.notices,
     logger,
@@ -85,7 +86,13 @@ export {
   UserAdminError,
   type UserAdminErrorCode,
 } from './errors';
-export { createUserAdminHandlers, USERS_PAGE, type UserAdminHandlers } from './handlers';
+export {
+  ADMIN_SETUP_PAGE,
+  createUserAdminHandlers,
+  FIRST_ADMINISTRATOR_PAGE,
+  USERS_PAGE,
+  type UserAdminHandlers,
+} from './handlers';
 export {
   INVITATIONS_OBJECT_ID,
   InvitationService,
