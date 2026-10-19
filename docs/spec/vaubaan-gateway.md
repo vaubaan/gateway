@@ -91,7 +91,8 @@ company registered at a provider).
   Workspace restricted to its domain, the company's Okta or Keycloak) may
   admit everyone its directory authenticates.
 - **Invitation** — an email address an administrator allowed to sign in,
-  instance-wide, through any provider that verified it.
+  instance-wide, through any provider that verified it. The people the
+  admin rule names, by email or by group, need none.
 
 **Identities**
 
@@ -1260,7 +1261,8 @@ same for any agent, with no value of any mission.
   is bound to the provider that started it: a response for provider A
   never completes an attempt started for provider B. A sign-in is
   admitted only on an email the provider verified, matching that
-  provider's allowed domains, the invitation list or the admin emails —
+  provider's allowed domains, the invitation list or the admin rule (its
+  emails, or its group when the provider claims the person a member) —
   or, for a tenant provider without allowed domains, any user of the
   tenant. An unverified email never admits and never makes an
   administrator; a tenant provider may be configured to require the
@@ -1656,8 +1658,9 @@ automated suite. Trust comes from usage.
   instance configuration.
 - Several sign-in providers per instance, OpenID Connect and GitHub;
   identities never merge by email; admission by allowed domains, an
-  instance-wide invitation list and the admin emails, an open provider
-  always needing one of them; the admin rule's group names its provider;
+  instance-wide invitation list and the admin rule (emails and group), an
+  open provider always needing one of them; the admin rule's group names
+  its provider;
   the instance sets its own security headers (ADRs
   [sign-in-providers-admission-and-admin-rule](../decisions/sign-in-providers-admission-and-admin-rule.md),
   [github-sign-in](../decisions/github-sign-in.md),

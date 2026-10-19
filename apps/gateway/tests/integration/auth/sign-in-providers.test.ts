@@ -287,6 +287,27 @@ describe('several sign-in providers: OpenID Connect and GitHub on one instance',
     expect(ops).toMatchObject({ isOperator: true });
   });
 
+  it('a member of the admin team is admitted on the invitation-only provider, and is an operator', async () => {
+    github.nextUser = {
+      id: 5005,
+      login: 'hal',
+      name: 'Hal',
+      emails: [{ email: 'hal@contractor.example', primary: true, verified: true }],
+      teams: [ADMIN_TEAM],
+    };
+    const b = fresh();
+    expect((await signIn(b, 'github')).headers.get('location')).toBe('/');
+    const hal = await root.auth.authenticator.authenticate(
+      new Headers({ cookie: cookieHeader(b) }),
+    );
+    expect(hal).toMatchObject({ kind: 'user', isOperator: true });
+    // Not an invitee: out of the team, the next sign-in is refused like anyone's.
+    github.nextUser = { ...github.nextUser, teams: [] };
+    expect((await signIn(fresh(), 'github')).headers.get('location')).toBe(
+      '/login?error=not-invited',
+    );
+  });
+
   it('removing an invitation refuses the next sign-in and leaves an open session', async () => {
     await root.users.invitations.invite('bootstrap', 'ada@example.com');
     github.nextUser = ADA_GITHUB;

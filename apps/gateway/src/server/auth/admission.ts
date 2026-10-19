@@ -12,7 +12,9 @@
  *      account there and claim any address; so must a company directory set
  *      with `require_verified_email` (Entra ID: `xms_edov`);
  *   2. and is in a domain the provider allows, or is invited, or is one of the
- *      admin emails (the configuration names those people);
+ *      admin emails, or the admin rule's group is this provider's and the
+ *      provider claimed the person a member of it (the configuration names
+ *      those people; amendment of 2026-10-19 of the ADR);
  *   3. or the provider is a company directory with no allowed domain and not
  *      "invited only": everyone the directory authenticates.
  *
@@ -24,7 +26,12 @@
  *
  * Pure: the invitation lookup is passed in.
  */
-import { admitsEveryone, isOpenProvider, type SignInProvider } from '../config/sign-in';
+import {
+  admitsEveryone,
+  isOpenProvider,
+  type AdminGroup,
+  type SignInProvider,
+} from '../config/sign-in';
 import type { IdentityClaims } from './claims';
 import { LoginError } from './errors';
 
@@ -33,13 +40,29 @@ export interface AdmissionContext {
   readonly isInvited: (email: string) => Promise<boolean>;
   /** The admin rule's emails, lower-cased. */
   readonly adminEmails: readonly string[];
+  /** The admin rule's group, resolved to its provider; `null` when the rule has none. */
+  readonly adminGroup: AdminGroup | null;
 }
 
-export type AdmissionReason = 'everyone-of-the-directory' | 'domain' | 'invitation' | 'admin-email';
+export type AdmissionReason =
+  'everyone-of-the-directory' | 'domain' | 'invitation' | 'admin-email' | 'admin-group';
 
 /** A company directory whose configuration asks for a verified email (`require_verified_email`). */
 function requiresVerifiedEmail(provider: SignInProvider): boolean {
   return provider.kind === 'oidc' && provider.requireVerifiedEmail === true;
+}
+
+/**
+ * The provider claimed the person a member of the admin rule's group — the
+ * membership `isOperator` reads after the sync, so a group of another provider
+ * named like it does not count.
+ */
+function isAdminGroupMember(
+  groups: readonly string[],
+  provider: SignInProvider,
+  group: AdminGroup | null,
+): boolean {
+  return group !== null && group.provider === provider.id && groups.includes(group.name);
 }
 
 function domainOf(email: string): string {
@@ -49,7 +72,7 @@ function domainOf(email: string): string {
 
 /** Why the sign-in is admitted; throws the `LoginError` of the refusal otherwise. */
 export async function admit(
-  identity: Pick<IdentityClaims, 'email' | 'emailVerified' | 'subject'>,
+  identity: Pick<IdentityClaims, 'email' | 'emailVerified' | 'subject' | 'groups'>,
   provider: SignInProvider,
   context: AdmissionContext,
 ): Promise<AdmissionReason> {
@@ -70,6 +93,7 @@ export async function admit(
   if (provider.allowedEmailDomains.includes(domainOf(email))) return 'domain';
   if (await context.isInvited(email)) return 'invitation';
   if (context.adminEmails.includes(email)) return 'admin-email';
+  if (isAdminGroupMember(identity.groups, provider, context.adminGroup)) return 'admin-group';
   if (provider.allowedEmailDomains.length === 0) {
     throw new LoginError(
       'not-invited',
