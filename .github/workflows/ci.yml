@@ -32,13 +32,17 @@ permissions:
 jobs:
   # What this run has to check (scripts/ci-scope.sh): `code=false` when a push
   # or a pull request changes documentation only (docs/**, *.md). Then the
-  # `docs` job runs instead of check, lint, test, e2e and docker. A schedule,
-  # a manual run, a release (workflow_call) or a new branch checks everything.
+  # `docs` job runs instead of check, lint, test, e2e and docker. `surface=true`
+  # when a change can alter what the browser shows (the application's pages,
+  # components and styles, the browser tests, a plugin): a pull request runs
+  # `e2e` only then. A schedule, a manual run, a release (workflow_call) or a
+  # new branch checks everything.
   scope:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     outputs:
       code: ${{ steps.scope.outputs.code }}
+      surface: ${{ steps.scope.outputs.surface }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -221,10 +225,12 @@ jobs:
   # network beyond the browser download. Includes the cutover smoke
   # (docs/tests/e2e-tests.md).
   #
-  # Not on a pull request: the production build and fifteen browser scenarios
-  # in series take about four minutes, longer than everything else of the run.
-  # They run on every push to `main` or `v5` and in the release gates
-  # (workflow_call), which a release cannot pass without them.
+  # On a pull request only when the change can alter what the browser shows
+  # (`scope`: surface=true): the production build and the browser scenarios in
+  # series take about four minutes, longer than everything else of the run,
+  # and a change confined to the server cannot fail them. They run on every
+  # push to `main` or `v5` and in the release gates (workflow_call), which a
+  # release cannot pass without them.
   #
   # The browser is cached by Playwright version. Its system libraries are not
   # installed: the runner image ships Google Chrome, and with it everything
@@ -232,8 +238,8 @@ jobs:
   e2e:
     needs: scope
     if: >-
-      github.event_name != 'schedule' && github.event_name != 'pull_request' &&
-      needs.scope.outputs.code == 'true'
+      github.event_name != 'schedule' && needs.scope.outputs.code == 'true' &&
+      (github.event_name != 'pull_request' || needs.scope.outputs.surface == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
