@@ -2,7 +2,7 @@
 title: Coding workflow
 status: current
 date: 2026-05-22
-last_synced: 2026-10-18
+last_synced: 2026-10-19
 tracks:
   - .github/
   - .semgrep/
@@ -159,7 +159,7 @@ commit cannot.
 
 ```yaml
 jobs:
-  scope: # scripts/ci-scope.sh: code=false when only docs/** or *.md changed
+  scope: # scripts/ci-scope.sh: code=false when only docs/** or *.md changed; surface=true when a page, a component, a style, a browser test or a plugin changed
   check: # if code
     - npm audit signatures # registry signatures and provenance of what is installed
     - npm run type-check # every workspace in parallel, tsc incremental (build info cached)
@@ -183,7 +183,7 @@ jobs:
   sast: # timeout 10 min
     - checkout semgrep/semgrep-rules at a pinned commit
     - docker run --network none semgrep/semgrep@sha256:… scripts/sast.sh
-  e2e: # if code, not on a pull request (push to main/v5, release gates); timeout 20 min
+  e2e: # if code, and on a pull request only if surface (push to main/v5, release gates: always); timeout 20 min
     - npx playwright install chromium # browser cached by version; the runner has Chrome's libraries
     - npm run test:e2e:v5 # next build (no tsc pass), then Playwright on the ephemeral instance
     - npx vitest run … standalone-* demo/ # the suites that need the build (skipped in `test`)
@@ -207,11 +207,19 @@ build type-checks as before.
 
 **What a pull request waits for.** `check`, `lint`, `test` and the
 security jobs: about two minutes. The browser tests (`e2e`, a production
-build and fifteen scenarios in series, about four minutes) run after the
-merge, on the push to `main`, and in the release gates; the image (`docker`,
-about five minutes) is built by the release pipeline for each architecture,
-and weekly by this workflow for the vulnerability scan. A browser
-regression is therefore seen on `main`, never in a release.
+build and the scenarios in series, about four minutes) run on a pull request
+only when `scope` finds a change that can alter what the browser shows
+(`surface=true`: `apps/gateway/src/app/**`, `src/components/**`,
+`src/styles/**`, `apps/gateway/tests/e2e/**`, or any `plugins/**` file, since
+the reference and the mission form are drawn from the plugins' catalogs,
+presets and tools). A change confined to the server, the packages or the
+scripts does not wait for them. They run on every push to `main`, whatever
+changed, and in the release gates. The image (`docker`, about five minutes)
+is built by the release pipeline for each architecture, and weekly by this
+workflow for the vulnerability scan. A browser regression in a server-only
+change is therefore seen on `main`, never in a release; one in a page or a
+plugin is seen on the pull request (on 2026-10-18 two plugin and form
+changes merged green and left `main` red for a day, which is why).
 
 **Documentation only.** A push or pull request that changes only `docs/**`
 or Markdown files runs `scope`, `docs` and the security jobs (`audit`,

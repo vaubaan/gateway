@@ -13,6 +13,7 @@
  * reference.
  */
 import { expect, test, type Page } from '@playwright/test';
+import { githubPlugin } from '@vaubaan/plugin-github';
 
 import { checkToken, routeToInstance, signInAs } from './browser';
 import { E2E_USER } from './instance';
@@ -37,6 +38,18 @@ import {
  * footer included (spec §4.2 asks for "about two viewports").
  */
 const COMPACT_SCREENS = 2;
+
+/**
+ * What the pages show of the GitHub plugin is read from the plugin itself, so a
+ * permission, a preset or a tool added to it does not leave this file behind.
+ */
+const GITHUB = {
+  permissions: githubPlugin.catalog.risks.length,
+  presets: githubPlugin.catalog.presets?.length ?? 0,
+  tools: githubPlugin.tools.length,
+};
+/** The preset chips of an account: its presets, "Everything I hold" and "Custom". */
+const GITHUB_PRESET_CHOICES = GITHUB.presets + 2;
 
 /** Keeps a screenshot of a step when `E2E_V5_SCREENSHOT_DIR` names a folder (design review). */
 async function snap(page: Page, name: string): Promise<void> {
@@ -117,15 +130,16 @@ test('create a three-account mission on one page, then replace its key and stop 
   const digest = page.getByTestId('preset-digest-github');
   await expect(digest).toContainText('8 run freely');
   await expect(digest).toContainText('2 ask you first');
-  // Nineteen ids on GitHub (catalog v6): ten chosen, eight left out, and the fallback,
+  // Nineteen ids on GitHub today: ten chosen, eight left out, and the fallback,
   // which no preset holds and nobody counts as something a preset "left out".
   await expect(digest).toContainText('8 not included');
   await expect(
     page.getByTestId('preset-detail-github').getByRole('link', { name: /In the reference/ }),
   ).toHaveAttribute('href', '/reference/github#preset-developer');
-  // The choice itself carries the width of each preset; "Custom" is one of the choices.
+  // The choice itself carries the width of each preset; "Everything I hold" and "Custom"
+  // are two of the choices.
   const githubChoices = page.getByRole('group', { name: 'Preset for GitHub acme-org' });
-  await expect(githubChoices.getByRole('radio')).toHaveCount(4);
+  await expect(githubChoices.getByRole('radio')).toHaveCount(GITHUB_PRESET_CHOICES);
   await expect(githubChoices.locator('[data-choice="developer"]')).toHaveText(/Developer\s*10/);
   await expect(presetChoice(page, 'GitHub acme-org', 'Custom')).not.toBeChecked();
 
@@ -505,9 +519,11 @@ test('the reference explains each service: permissions against presets, tools, m
     .click();
   await expect(page.getByRole('heading', { name: 'Reference', level: 1 })).toBeVisible();
   // One line per shipped plugin, from the registry; the experimental one says so.
-  await expect(page.getByTestId('provider-github')).toContainText('19 permissions');
-  await expect(page.getByTestId('provider-github')).toContainText('3 presets');
-  await expect(page.getByTestId('provider-github')).toContainText('26 tools');
+  await expect(page.getByTestId('provider-github')).toContainText(
+    `${GITHUB.permissions} permissions`,
+  );
+  await expect(page.getByTestId('provider-github')).toContainText(`${GITHUB.presets} presets`);
+  await expect(page.getByTestId('provider-github')).toContainText(`${GITHUB.tools} tools`);
   await expect(page.getByTestId('provider-gmail')).toContainText('experimental');
   // The services are a local navigation beside the content.
   const services = page.getByRole('navigation', { name: 'Services' });
@@ -693,7 +709,7 @@ test('the reference explains each service: permissions against presets, tools, m
     'asks first',
   );
   // The earlier sections still lead somewhere: `#risks` and `#presets` open Permissions.
-  // Nineteen permissions (catalog v6 added the four of git), folded, read in about two screens.
+  // Nineteen permissions today, folded, read in about two screens.
   await page.goto('/reference/github#risks');
   await expect(page.getByRole('tab', { name: /Permissions/ })).toHaveAttribute(
     'aria-selected',
