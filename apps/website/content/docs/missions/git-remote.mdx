@@ -23,6 +23,6 @@ The kit of a mission that holds repositories carries the commands for your insta
 
 - A push larger than GitHub's compare API lists (300 files, 250 commits per ref), or bringing more than 100 commits, is refused, to be split.
 - `git.max_pack_mb` (200 MiB by default) caps a push and `git.request_timeout` (10 minutes) caps one git request. The reverse proxy must not cap or buffer request bodies under `/git/`.
-- The git remote has never pushed to github.com itself: its tests run the real `git` client against a stand-in for GitHub ([known limitations](/docs/known-limitations)).
+- The git remote has relayed fetches, new branches, a tag, a branch delete and refusals to github.com; a fast-forward of an existing branch and a force-push have not been seen live. Its tests run the real `git` client against a stand-in for GitHub ([known limitations](/docs/known-limitations)).
 
 More: the [git remote handbook](https://github.com/vaubaan/gateway/blob/main/docs/handbook/git-remote.md).

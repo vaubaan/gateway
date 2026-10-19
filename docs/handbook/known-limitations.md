@@ -2,7 +2,7 @@
 title: Known limitations — what has not been done, and what is not there
 status: current
 date: 2026-10-13
-last_synced: 2026-10-14
+last_synced: 2026-10-19
 tracks:
   - apps/gateway/src/server/execution/tools.ts
   - apps/gateway/src/server/execution/scope-caps.ts
@@ -36,23 +36,29 @@ change that removes it.
 
 ## Never run for real
 
-- **Never run with Claude Code as the agent.** No person and no agent has
-  pointed Claude Code at a running instance; the automated suites drive both
-  doors with the official MCP client instead. →
-  [cutover-from-v4, live check L4](cutover-from-v4.md#l4--claude-code-itself-at-a8)
-- **Never run against a real identity provider.** Every sign-in of the test
-  suites and of the demo goes through a simulated provider (`FakeIdp`); the
-  sign-in with Google, Entra ID or Keycloak is a manual check that no run has
-  recorded. →
+- **Keycloak sign-in has never been run.** The test suites and the demo
+  sign in through a simulated provider (`FakeIdp`). Live, three instances
+  have signed people in since 2026-10-14: one through a GitHub OAuth App,
+  one through Google, one through Entra ID with its groups claim naming the
+  administrators. Keycloak, and any other OpenID Connect provider, follows
+  the same handbook without a recorded run. →
   [authentication, "Tests"](authentication.md#tests)
-- **Never run against a real provider.** Every provider call of every test is
-  answered by a double (`mockFetch`, a fake SSH transport, the demo's simulated
-  routes); no plugin has executed a tool on the service it models. →
+- **Most plugins have never executed a tool on the service they model.**
+  Every provider call of every test is answered by a double (`mockFetch`, a
+  fake SSH transport, the demo's simulated routes). Live, through the instance
+  that serves this project's own development: GitHub (the REST tools and the
+  git remote, since 2026-10-16) and Fly.io (apps, since 2026-10-18) have run
+  real tools; Supabase, Vercel and Cloudflare DNS have been connected, which
+  runs their discovery against the real service, and no tool call on them is
+  recorded; Resend, Upstash Redis, Stripe, Gmail, SSH, Miro, Notion and
+  Context7 have no live run at all, and Railway only the token check below. →
   [connections, "Tests"](connections.md#tests)
-- **Three live checks are still to do on GitHub and Railway**: whether GitHub
-  returns `state` on the installation callback (L1), whether connecting an App
-  that is already installed comes back with a `code` (L2), and whether
-  Railway's API accepts the token obtained for its MCP server (L3). →
+- **Two live checks are still to do on GitHub and Railway**: whether
+  connecting an App that is already installed comes back with a `code` (L2),
+  and whether Railway's API accepts the token obtained for its MCP server
+  (L3). The first check, GitHub returning `state` on the installation
+  callback (L1), is answered: the App is connected on the instance that
+  serves this project's development. →
   [cutover-from-v4, "The live checks"](cutover-from-v4.md#4-the-live-checks)
 - **Railway tokens: what was checked live and what was not.** A workspace
   token was checked against Railway's MCP server on 2026-10-14; an account
@@ -62,7 +68,13 @@ change that removes it.
   projects, its workspace's name) follow the public API's shape without a live
   run. →
   [railway, "Connecting with a workspace token"](providers/railway.md#connecting-with-a-workspace-token)
-- **The git remote has never pushed to github.com.** Its tests run the real
+- **The git remote has seen four of its moves live, not all.** Since
+  2026-10-16 the instance that serves this project's development has relayed
+  fetches and created `feature/*` branches on `vaubaan/gateway`; on
+  2026-10-18 it pushed the tag `v2.0.0-alpha.1` and refused an annotated
+  tag (a defect, fixed by #62); on 2026-10-19 it deleted a merged branch. A
+  fast-forward of an existing
+  branch and a force-push have not been seen live. Its tests run the real
   `git` client against `git http-backend` standing in for GitHub, with a REST
   API computed from the same repositories: protocol v2 relayed to GitHub
   itself, GitHub accepting a pack under `refs/vaubaan/*`, the compare API's
@@ -72,15 +84,12 @@ change that removes it.
   receive-pack command for a force-push or a delete are read from GitHub's
   documentation, not observed. →
   [git-remote, "Tests"](git-remote.md#tests)
-- **The release pipeline has published nothing yet.** `.github/workflows/release.yml`
-  has run once, as a dry run on `main` on 2026-10-18 (run 39133746971): the plan,
-  the gates and the `linux/amd64` image job — build, container smoke test, Trivy
-  scan, SBOM — all passed, and the three publishing jobs were skipped as a dry run
-  skips them. No `v2.*` tag exists: `push`, `publish` and `release` have never
-  run, so nothing was pushed to the registry, tagged or released by it, and
-  `scripts/release-image-index.sh` has met no real registry since its rehearsal
-  against a local one. On this private repository a release is `linux/amd64`
-  only and unattested, by design. →
+- **No `linux/arm64` image and no attestation have been published.** The one
+  release, `2.0.0-alpha.1` (2026-10-18, run 39134680809: plan, gates, image,
+  push, publish and release all passed), was cut while this repository was
+  private, which publishes `linux/amd64` only and signs nothing, by design.
+  The arm64 runner, the attestation and its verification by an operator have
+  therefore never run outside a dry run. →
   [coding workflow, "Release"](../workflow/coding-workflow.md#on-a-private-repository)
 - **Telemetry is postponed until after the pilot.** It is off by default
   (`telemetry.enabled: false`) and stays so; the collector is not deployed: the
