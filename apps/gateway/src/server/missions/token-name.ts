@@ -14,8 +14,7 @@ const TOKEN_NAME_SHAPE = /^[A-Za-z0-9][A-Za-z0-9 ._-]*$/;
 export const TOKEN_NAME_RULE = `1 to ${TOKEN_NAME_MAX_LENGTH} characters: letters, digits, spaces, dots, dashes and underscores, starting with a letter or a digit`;
 
 export type ParsedTokenName =
-  | { readonly ok: true; readonly value: string }
-  | { readonly ok: false; readonly problem: string };
+  { readonly ok: true; readonly value: string } | { readonly ok: false; readonly problem: string };
 
 /** The name as stored: trimmed, inner runs of spaces collapsed to one. */
 export function parseTokenName(raw: unknown): ParsedTokenName {

@@ -38,10 +38,9 @@ describe('the schema persists authorities as explicit rows', () => {
 
   const tableSql = (name: string): string =>
     store.db
-      .prepare<
-        [string],
-        { sql: string }
-      >("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?")
+      .prepare<[string], { sql: string }>(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
+      )
       .get(name)?.sql ?? '';
 
   const columns = (): ColumnRow[] =>

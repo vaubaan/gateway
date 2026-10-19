@@ -189,24 +189,22 @@ function githubRoutes(installationTokens: ReadonlyMap<string, DemoInstallation>)
             : [],
       }),
     },
-    ...DEMO_INSTALLATIONS.map(
-      (installation): MockRoute => ({
-        method: 'POST',
-        url: `${GITHUB_API}/app/installations/${installation.id}/access_tokens`,
-        status: 201,
-        respond: () => ({
-          token: tokenOf(installation),
-          expires_at: new Date(Date.now() + 3_600_000).toISOString(),
-          // The demo's App holds what the tools need (its default permissions).
-          permissions: defaultPermissionChoice(GITHUB_APP_PERMISSIONS),
-          repositories: installation.repositories.map((fullName, index) => ({
-            id: index + 1,
-            name: fullName.split('/')[1],
-            full_name: fullName,
-          })),
-        }),
+    ...DEMO_INSTALLATIONS.map((installation): MockRoute => ({
+      method: 'POST',
+      url: `${GITHUB_API}/app/installations/${installation.id}/access_tokens`,
+      status: 201,
+      respond: () => ({
+        token: tokenOf(installation),
+        expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+        // The demo's App holds what the tools need (its default permissions).
+        permissions: defaultPermissionChoice(GITHUB_APP_PERMISSIONS),
+        repositories: installation.repositories.map((fullName, index) => ({
+          id: index + 1,
+          name: fullName.split('/')[1],
+          full_name: fullName,
+        })),
       }),
-    ),
+    })),
     {
       method: 'GET',
       url: (url) => url.startsWith(`${GITHUB_API}/installation/repositories?`),
@@ -681,13 +679,11 @@ function upstashRoutes(): MockRoute[] {
         current_storage: 1_048_576,
       },
     },
-    ...DEMO_REDIS_DATABASES.map(
-      (database): MockRoute => ({
-        method: 'POST',
-        url: (url) => url.replace(/\/$/, '') === redisRestUrl(database.database_name),
-        respond: (call) => ({ result: redisResult(Array.isArray(call.json) ? call.json : []) }),
-      }),
-    ),
+    ...DEMO_REDIS_DATABASES.map((database): MockRoute => ({
+      method: 'POST',
+      url: (url) => url.replace(/\/$/, '') === redisRestUrl(database.database_name),
+      respond: (call) => ({ result: redisResult(Array.isArray(call.json) ? call.json : []) }),
+    })),
   ];
 }
 

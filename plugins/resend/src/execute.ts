@@ -257,30 +257,26 @@ export async function discoverResendResources(
   const domains = await listAll<DomainDto>(ctx, '/domains');
   const segments = await listAll<SegmentDto>(ctx, '/segments');
   return [
-    ...domains.map(
-      (d): Resource => ({
-        provider: RESEND_PROVIDER,
-        ref: domainRef(d.name),
-        displayName: d.status === 'verified' || !d.status ? d.name : `${d.name} (${d.status})`,
-        metadata: {
-          kind: 'domain',
-          domain_id: d.id,
-          ...(d.status ? { status: d.status } : {}),
-          ...(d.region ? { region: d.region } : {}),
-          internal_domains: [],
-          allowlist_domains: [],
-          allowlist_addresses: [],
-        },
-      }),
-    ),
-    ...segments.map(
-      (s): Resource => ({
-        provider: RESEND_PROVIDER,
-        ref: s.id,
-        displayName: s.name,
-        metadata: { kind: 'segment', segment_id: s.id },
-      }),
-    ),
+    ...domains.map((d): Resource => ({
+      provider: RESEND_PROVIDER,
+      ref: domainRef(d.name),
+      displayName: d.status === 'verified' || !d.status ? d.name : `${d.name} (${d.status})`,
+      metadata: {
+        kind: 'domain',
+        domain_id: d.id,
+        ...(d.status ? { status: d.status } : {}),
+        ...(d.region ? { region: d.region } : {}),
+        internal_domains: [],
+        allowlist_domains: [],
+        allowlist_addresses: [],
+      },
+    })),
+    ...segments.map((s): Resource => ({
+      provider: RESEND_PROVIDER,
+      ref: s.id,
+      displayName: s.name,
+      metadata: { kind: 'segment', segment_id: s.id },
+    })),
   ];
 }
 

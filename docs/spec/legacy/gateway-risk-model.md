@@ -839,25 +839,25 @@ Estimation : Phases 0-4 ~ 2 semaines focus full-time. Phases 5-6 ~
 
 ## 15. Comparaison v1 / v4 — checklist de bascule
 
-| Aspect                          | v1                                       | **v4**                                                                                       | Cassé ?                                              |
+| Aspect | v1 | **v4** | Cassé ? |
 | ------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------- | --- |
-| Unit de grant                   | `{provider, plane, level, action, env?}` | **`accepted_risks: RiskId[]` + bindings**                                                    | OUI                                                  |
-| Plane / level                   | top-level concept                        | **disparu du wire**, plomberie interne au plugin                                             | OUI                                                  |
-| Action                          | `read                                    | write`                                                                                       | **disparue du wire**, R/W reste au runtime sur slice | OUI |
-| Env                             | calque axe à part                        | **segment du data-model** + qualif du RiskId par binding                                     | OUI                                                  |
-| Macro-permission                | n/a (v2 only)                            | abandonnée — manager raisonne en risk-id catalogue                                           | n/a                                                  |
-| Slice (DSL)                     | n/a                                      | introduit, **plomberie interne** seulement                                                   | OUI (new)                                            |
-| Catalogue de risks par provider | n/a                                      | **NEW** — versionné YAML dans le repo provider                                               | OUI (new)                                            |
-| Project policy                  | matrice (plane,level,action,env,gate)    | **DROPPÉ** (ADR unified-gates-drop-confirm) — `acceptable_in_envs` au catalog seul garde-fou | OUI                                                  |
-| Plugin contract                 | `classify(t,a) → CapabilityV1`           | `classify(t,a) → Slice[]` + `dataModel`                                                      | OUI                                                  |
-| Gates                           | `allow / confirm / deny`                 | **DROPPÉ** — décision binaire `risk ∈ accepted_risks`                                        | OUI                                                  |
-| Default-deny                    | oui                                      | identique (catalogue-driven + fallback risk)                                                 | non                                                  |
-| Approval channels               | Telegram + Manual                        | **DROPPÉ** — `escalation_channel` runtime hors gateway                                       | OUI                                                  |
-| Polling                         | 202 + GET court                          | **DROPPÉ** (avec le mint-time approval)                                                      | OUI                                                  |
-| Single-use token                | oui                                      | identique                                                                                    | non                                                  |
-| Audit log                       | `capability_matched`                     | `slices_executed` + `risks_touched` + snapshot                                               | étendu                                               |
-| Tools `dispatch_workflow.W`     | exposés                                  | **retirés**                                                                                  | OUI                                                  |
-| Tools `execute_sql` write       | classifié via parser SQL                 | **Postgres read-only forced** ; writes via API tools                                         | OUI                                                  |
+| Unit de grant | `{provider, plane, level, action, env?}` | **`accepted_risks: RiskId[]` + bindings** | OUI |
+| Plane / level | top-level concept | **disparu du wire**, plomberie interne au plugin | OUI |
+| Action | `read                                    | write` | **disparue du wire**, R/W reste au runtime sur slice | OUI |
+| Env | calque axe à part | **segment du data-model** + qualif du RiskId par binding | OUI |
+| Macro-permission | n/a (v2 only) | abandonnée — manager raisonne en risk-id catalogue | n/a |
+| Slice (DSL) | n/a | introduit, **plomberie interne** seulement | OUI (new) |
+| Catalogue de risks par provider | n/a | **NEW** — versionné YAML dans le repo provider | OUI (new) |
+| Project policy | matrice (plane,level,action,env,gate) | **DROPPÉ** (ADR unified-gates-drop-confirm) — `acceptable_in_envs` au catalog seul garde-fou | OUI |
+| Plugin contract | `classify(t,a) → CapabilityV1` | `classify(t,a) → Slice[]` + `dataModel` | OUI |
+| Gates | `allow / confirm / deny` | **DROPPÉ** — décision binaire `risk ∈ accepted_risks` | OUI |
+| Default-deny | oui | identique (catalogue-driven + fallback risk) | non |
+| Approval channels | Telegram + Manual | **DROPPÉ** — `escalation_channel` runtime hors gateway | OUI |
+| Polling | 202 + GET court | **DROPPÉ** (avec le mint-time approval) | OUI |
+| Single-use token | oui | identique | non |
+| Audit log | `capability_matched` | `slices_executed` + `risks_touched` + snapshot | étendu |
+| Tools `dispatch_workflow.W` | exposés | **retirés** | OUI |
+| Tools `execute_sql` write | classifié via parser SQL | **Postgres read-only forced** ; writes via API tools | OUI |
 
 ## 16. Décisions résiduelles à acter
 

@@ -28,10 +28,9 @@ describe('config repository', () => {
     expect(await store.config.getSecret('idp.client_secret')).toBe('shh');
     expect(await store.config.get('idp.client_secret')).toBeNull();
     const row = store.db
-      .prepare<
-        [string],
-        { key_version: number; value: string | null }
-      >('SELECT key_version, value FROM instance_config WHERE key = ?')
+      .prepare<[string], { key_version: number; value: string | null }>(
+        'SELECT key_version, value FROM instance_config WHERE key = ?',
+      )
       .get('idp.client_secret');
     expect(row).toEqual({ key_version: 1, value: null });
   });

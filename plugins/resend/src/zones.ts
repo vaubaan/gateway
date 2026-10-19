@@ -74,8 +74,7 @@ export function parseAddress(value: unknown): EmailAddress | null {
 }
 
 export type RecipientsOutcome =
-  | { readonly recipients: readonly EmailAddress[] }
-  | { readonly denied: string };
+  { readonly recipients: readonly EmailAddress[] } | { readonly denied: string };
 
 /**
  * The union of `to`, `cc` and `bcc` (each a string or a list of strings).

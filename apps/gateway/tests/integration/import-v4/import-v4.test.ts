@@ -324,10 +324,9 @@ describe('import of a v4 organization', () => {
 
   function databaseText(): string {
     const tables = store.db
-      .prepare<
-        [],
-        { name: string }
-      >("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
+      .prepare<[], { name: string }>(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+      )
       .all();
     const parts: string[] = [];
     for (const { name } of tables) {
@@ -443,10 +442,9 @@ describe('import of a v4 organization', () => {
       expect(stderr).not.toContain(secret);
     }
     const entries = store.db
-      .prepare<
-        [],
-        { user_id: string; after_json: string | null; act: string }
-      >("SELECT user_id, after_json, act FROM audit WHERE kind = 'admin'")
+      .prepare<[], { user_id: string; after_json: string | null; act: string }>(
+        "SELECT user_id, after_json, act FROM audit WHERE kind = 'admin'",
+      )
       .all();
     expect(entries.length).toBeGreaterThanOrEqual(6);
     for (const entry of entries) {

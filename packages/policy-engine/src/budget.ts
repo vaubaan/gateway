@@ -34,11 +34,7 @@ export interface ValidBudget {
 
 /** The path of an illegal value inside the entry. */
 export type BudgetField =
-  | 'quota'
-  | 'rate_limit'
-  | 'rate_limit.max'
-  | 'rate_limit.window_seconds'
-  | 'gate';
+  'quota' | 'rate_limit' | 'rate_limit.max' | 'rate_limit.window_seconds' | 'gate';
 
 export interface BudgetIssue {
   readonly field: BudgetField;

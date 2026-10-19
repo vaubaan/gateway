@@ -201,8 +201,7 @@ export async function discoverVercelResources(
     const query: Record<string, string> = { teamId, limit: String(DISCOVERY_PAGE_SIZE) };
     if (until !== undefined) query.until = String(until);
     const body = (await callRest(call, 'GET', '/v10/projects', query, null)) as
-      | ProjectDto[]
-      | { projects?: ProjectDto[]; pagination?: { next?: number | null } };
+      ProjectDto[] | { projects?: ProjectDto[]; pagination?: { next?: number | null } };
     const batch = Array.isArray(body) ? body : (body.projects ?? []);
     projects.push(...batch);
     const next = Array.isArray(body) ? null : (body.pagination?.next ?? null);

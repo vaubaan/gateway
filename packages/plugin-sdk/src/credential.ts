@@ -315,8 +315,7 @@ export interface AppPermission {
 
 /** Who owns the app at the provider : an organisation (its login) or the administrator's own account. */
 export type AppOwner =
-  | { readonly kind: 'organization'; readonly login: string }
-  | { readonly kind: 'personal' };
+  { readonly kind: 'organization'; readonly login: string } | { readonly kind: 'personal' };
 
 /** What the host hands `buildManifest` : addresses on `public_url`, the chosen permissions. */
 export interface AppManifestInput {
@@ -419,10 +418,7 @@ export interface SshKeyCredentialSpec extends CredentialSpecCommon {
 }
 
 export type CredentialSpec =
-  | ApiKeyCredentialSpec
-  | OAuth2CredentialSpec
-  | AppInstallCredentialSpec
-  | SshKeyCredentialSpec;
+  ApiKeyCredentialSpec | OAuth2CredentialSpec | AppInstallCredentialSpec | SshKeyCredentialSpec;
 
 /** A way of connecting that goes through an app the company registers at the provider. */
 export type AppCredentialSpec = OAuth2CredentialSpec | AppInstallCredentialSpec;

@@ -646,10 +646,9 @@ describe('missions: members and per-holder tokens', () => {
 
       // The store: every column of every table, as text.
       const tables = root.store.db
-        .prepare<
-          [],
-          { name: string }
-        >("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
+        .prepare<[], { name: string }>(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+        )
         .all();
       expect(tables.length).toBeGreaterThan(20);
       for (const { name } of tables) {

@@ -212,10 +212,9 @@ describe('ownership and orphan states in the store', () => {
         runMigrations(db, shipped, t.clock);
 
         const rows = db
-          .prepare<
-            [],
-            { id: string; status: string; closed_at: string | null }
-          >('SELECT id, status, closed_at FROM missions ORDER BY id')
+          .prepare<[], { id: string; status: string; closed_at: string | null }>(
+            'SELECT id, status, closed_at FROM missions ORDER BY id',
+          )
           .all();
         expect(rows).toEqual([
           { id: 'm-active', status: 'active', closed_at: null },

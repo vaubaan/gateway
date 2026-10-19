@@ -249,8 +249,7 @@ export async function dispatchGithubTool(
         allow_force_pushes: args.allow_force_pushes as boolean | undefined,
         allow_deletions: args.allow_deletions as boolean | undefined,
         required_conversation_resolution: args.required_conversation_resolution as
-          | boolean
-          | undefined,
+          boolean | undefined,
       });
       return data;
     }

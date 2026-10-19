@@ -74,8 +74,7 @@ export interface OrphanReason {
 }
 
 export type GroundsVerdict =
-  | { readonly grounded: true }
-  | ({ readonly grounded: false } & OrphanReason);
+  { readonly grounded: true } | ({ readonly grounded: false } & OrphanReason);
 
 /** A mission as a reader sees it, with the reason when it reads `orphaned`. */
 export interface InspectedMission {

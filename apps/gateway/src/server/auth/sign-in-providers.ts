@@ -43,8 +43,7 @@ import { DEFAULT_CLAIM_MAPPING, IDP_CONFIG_KEYS, type IdpSettingsService } from 
 
 /** A provider without its secret (the union kept: `kind` still tells the two apart). */
 export type SignInProviderWithoutSecret =
-  | Omit<OidcSignInProvider, 'clientSecret'>
-  | Omit<GithubSignInProvider, 'clientSecret'>;
+  Omit<OidcSignInProvider, 'clientSecret'> | Omit<GithubSignInProvider, 'clientSecret'>;
 
 /** A provider as the pages and the authenticator see it: never its secret. */
 export type SignInProviderView = SignInProviderWithoutSecret & {

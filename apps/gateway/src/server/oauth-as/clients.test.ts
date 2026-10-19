@@ -254,10 +254,9 @@ describe('ClientRegistry', () => {
       const client = await rig.registerClient([WEB_REDIRECT]);
       expect(rig.clients.statusOf(client)).toBe('approved');
       const stored = rig.store.db
-        .prepare<
-          [string],
-          { operator_decision: string | null }
-        >('SELECT operator_decision FROM oauth_clients WHERE id = ?')
+        .prepare<[string], { operator_decision: string | null }>(
+          'SELECT operator_decision FROM oauth_clients WHERE id = ?',
+        )
         .get(client.id);
       expect(stored?.operator_decision).toBeNull();
 

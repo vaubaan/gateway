@@ -10,8 +10,7 @@
 import { isAbsolute } from 'node:path';
 
 export type RestoreSource =
-  | { readonly kind: 'file'; readonly path: string }
-  | { readonly kind: 'url'; readonly url: URL };
+  { readonly kind: 'file'; readonly path: string } | { readonly kind: 'url'; readonly url: URL };
 
 export type ParsedRestoreSource =
   | { readonly ok: true; readonly source: RestoreSource }

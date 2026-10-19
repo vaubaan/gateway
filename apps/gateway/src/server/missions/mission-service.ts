@@ -246,8 +246,7 @@ export interface MissionOnConnection {
 
 /** Who may close a mission, and on what ground (spec §2.3). */
 type Closer =
-  | { readonly as: 'creator' }
-  | { readonly as: 'connection-owner'; readonly connectionId: string };
+  { readonly as: 'creator' } | { readonly as: 'connection-owner'; readonly connectionId: string };
 
 export type SetGateResult =
   | {
