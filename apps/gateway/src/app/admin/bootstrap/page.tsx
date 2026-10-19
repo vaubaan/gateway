@@ -11,6 +11,7 @@ import { redirect } from 'next/navigation';
 
 import { LocalDate } from '@/components/LocalDate';
 import { AuthHeading, AuthPage } from '@/components/auth/AuthPage';
+import { BootstrapTokenInput } from '@/components/auth/BootstrapTokenInput';
 import styles from '@/components/auth/auth.module.css';
 import { BuildFooter } from '@/components/shell/BuildFooter';
 import { Button, ButtonLink, Callout, Field, Input, Mono } from '@/components/ui';
@@ -71,19 +72,12 @@ export default async function BootstrapPage({ searchParams }: Props) {
             hint={
               <>
                 The value of <Mono>VAUBAAN_BOOTSTRAP_TOKEN</Mono>, or of{' '}
-                <Mono>bootstrap_token</Mono> in <Mono>gateway.yaml</Mono>.
+                <Mono>bootstrap_token</Mono> in <Mono>gateway.yaml</Mono>; filled in when you opened
+                a setup link that carries it.
               </>
             }
           >
-            <Input
-              id="bootstrap-token"
-              type="password"
-              name="token"
-              required
-              autoComplete="off"
-              minLength={32}
-              mono
-            />
+            <BootstrapTokenInput id="bootstrap-token" name="token" />
           </Field>
           <div className={styles.act}>
             <Button type="submit" variant="primary" size="lg">
@@ -180,15 +174,7 @@ async function SetupKeyPage({
               </>
             }
           >
-            <Input
-              id="setup-token"
-              type="password"
-              name={TOKEN_FIELD}
-              required
-              autoComplete="off"
-              minLength={32}
-              mono
-            />
+            <BootstrapTokenInput id="setup-token" name={TOKEN_FIELD} />
           </Field>
           <Field
             label="Encryption key file"
