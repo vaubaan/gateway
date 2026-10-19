@@ -48,6 +48,7 @@ import { createSharesModule, type SharesModule } from '../shares';
 import { createUsersModule, type UsersModule } from '../users';
 import { createTelemetryModule, type TelemetryModule } from '../telemetry';
 import type { Store } from '../store';
+import type { Clock } from '../store/clock';
 import type { CacheClient, RateLimiter, SessionStore } from './ports';
 import { checkProviderApps, checkSelfResources, RegistryCatalogIndex } from './registry';
 import { wireManagementDoor, type ManagementDoorModule } from './management';
@@ -120,6 +121,8 @@ export type { BuildInfo };
 export interface RootDeps {
   readonly loadConfig?: () => LoadedConfig;
   readonly openStore?: (ctx: StoreContext) => Promise<Store>;
+  /** Tests: the clock of the authentication module (link expiry, lockouts); the system clock otherwise. */
+  readonly clock?: Clock;
   readonly buildRegistry?: (config: InstanceConfig, logger: Logger) => Promise<PluginRegistry>;
   readonly rateLimiter?: RateLimiter;
   readonly cache?: CacheClient;
@@ -367,6 +370,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
   const windows = new SlidingWindowRateLimiter();
   const rateLimiter = deps.rateLimiter ?? windows;
   const auth = createAuthModule({
+    clock: deps.clock,
     config,
     store,
     sessions,

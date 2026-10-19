@@ -533,7 +533,9 @@ export class SignInProvidersService {
       const raw = await this.store.get(key);
       const settings = raw ? parseStored(raw) : null;
       if (!settings) continue;
-      const secret = withSecrets ? await this.store.getSecret(secretKey(id)) : '';
+      // A local provider has no secret to read.
+      const secret =
+        withSecrets && settings.kind !== 'local' ? await this.store.getSecret(secretKey(id)) : '';
       if (secret === null) continue;
       const provider = toProvider(id, settings, secret);
       if (provider) out.push({ provider, createdAt: settings.created_at });

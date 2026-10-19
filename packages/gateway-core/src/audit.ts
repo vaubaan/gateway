@@ -188,6 +188,22 @@ export type AdminAct =
   | 'invitation-added'
   /** An administrator removed an address from the invitation list; `before.email`. */
   | 'invitation-removed'
+  /** A single-use link was made for a local account (ADR local-accounts-sign-in-provider):
+   *  an invitation to create one, or a password reset. Object: `instance-config` /
+   *  `local-account:<provider>`; `after` carries the kind, the address and the expiry —
+   *  never the link. The actor is the administrator, `bootstrap`, or the person
+   *  (`self`, a reset asked from the sign-in page). */
+  | 'local-link-created'
+  /** A local account was created: by its person through an invitation link (the actor
+   *  is who invited), or by the setup for the first administrator. `after`: the address. */
+  | 'local-account-created'
+  /** The password of a local account was set again, through a reset link or from Settings. */
+  | 'local-password-changed'
+  /** The second factor of a local account was enrolled, replaced or reset (by the person,
+   *  or by an administrator for them: `after.by`). Never the secret. */
+  | 'local-second-factor-changed'
+  /** An administrator removed a local account; the person can no longer sign in through it. */
+  | 'local-account-removed'
   /** An administrator downloaded the master key file (the setup's handover, or
    *  Administration → Encryption). Object: `instance-config` / `master-key`;
    *  `after` carries the key version and the page it was asked from. Never the key. */

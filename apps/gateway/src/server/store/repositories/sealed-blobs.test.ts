@@ -49,6 +49,10 @@ async function seeded(): Promise<{ store: Store; encryptor: SwitchableEncryptor;
   }
   await store.config.setSecret('idp.client_secret', 'company-secret');
   await store.config.set('telemetry', '{"enabled":false}');
+  const account = await store.localAccounts.create({ provider: 'local', email: 'u2@example.com' });
+  if (!account) throw new Error('no account');
+  await store.localAccounts.writeSecret(account.id, 'password', '$argon2id$stand-in');
+  ids.push(account.id);
   return { store, encryptor, ids };
 }
 
@@ -62,6 +66,7 @@ describe('sealed blobs: the master-key re-seal', () => {
     expect(versionsOf(await store.sealedBlobs.versions())).toEqual([
       'connections@1=2',
       'instance_config@1=1',
+      'local_secrets@1=1',
     ]);
   });
 
@@ -95,10 +100,19 @@ describe('sealed blobs: the master-key re-seal', () => {
         unreadable: 0,
         changed: 0,
       },
+      {
+        table: 'local_secrets',
+        current: 0,
+        currentUnreadable: 0,
+        resealed: 1,
+        unreadable: 0,
+        changed: 0,
+      },
     ]);
     expect(versionsOf(await store.sealedBlobs.versions())).toEqual([
       'connections@1=2',
       'instance_config@1=1',
+      'local_secrets@1=1',
     ]);
   });
 
@@ -106,10 +120,11 @@ describe('sealed blobs: the master-key re-seal', () => {
     const { store, encryptor, ids } = await seeded();
     encryptor.inner = await v2WithPrevious();
     const report = await store.sealedBlobs.reseal({ apply: true });
-    expect(report.tables.map((t) => t.resealed)).toEqual([2, 1, 0]);
+    expect(report.tables.map((t) => t.resealed)).toEqual([2, 1, 0, 1]);
     expect(versionsOf(await store.sealedBlobs.versions())).toEqual([
       'connections@2=2',
       'instance_config@2=1',
+      'local_secrets@2=1',
     ]);
 
     // Without the previous key, everything still opens: it was sealed again.
@@ -117,6 +132,9 @@ describe('sealed blobs: the master-key re-seal', () => {
     expect(await store.connections.getCredential(ids[0] ?? '')).toBe('first-credential');
     expect(await store.connections.getCredential(ids[1] ?? '')).toBe('second-credential');
     expect(await store.config.getSecret('idp.client_secret')).toBe('company-secret');
+    expect(await store.localAccounts.readSecret(ids[2] ?? '', 'password')).toBe(
+      '$argon2id$stand-in',
+    );
   });
 
   it('is idempotent: a second run finds the blobs current', async () => {
@@ -149,6 +167,14 @@ describe('sealed blobs: the master-key re-seal', () => {
         unreadable: 0,
         changed: 0,
       },
+      {
+        table: 'local_secrets',
+        current: 1,
+        currentUnreadable: 0,
+        resealed: 0,
+        unreadable: 0,
+        changed: 0,
+      },
     ]);
   });
 
@@ -160,10 +186,12 @@ describe('sealed blobs: the master-key re-seal', () => {
       [0, 2],
       [0, 1],
       [0, 0],
+      [0, 1],
     ]);
     expect(versionsOf(await store.sealedBlobs.versions())).toEqual([
       'connections@1=2',
       'instance_config@1=1',
+      'local_secrets@1=1',
     ]);
   });
 
@@ -175,7 +203,7 @@ describe('sealed blobs: the master-key re-seal', () => {
       previousKeys: new Map([[1, new Uint8Array(randomBytes(32))]]),
     });
     const report = await store.sealedBlobs.reseal({ apply: true });
-    expect(report.tables.map((t) => t.unreadable)).toEqual([2, 1, 0]);
+    expect(report.tables.map((t) => t.unreadable)).toEqual([2, 1, 0, 1]);
   });
 
   it('a row the gateway rewrites during the run is left as the gateway wrote it', async () => {

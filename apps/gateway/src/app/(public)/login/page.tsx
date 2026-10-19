@@ -18,6 +18,7 @@ import { redirect } from 'next/navigation';
 
 import { AuthHeading, AuthPage } from '@/components/auth/AuthPage';
 import styles from '@/components/auth/auth.module.css';
+import { PasswordSignInForm } from '@/components/auth/PasswordForm';
 import { isOperatorPrincipal } from '@/components/auth/principal';
 import { BuildFooter } from '@/components/shell/BuildFooter';
 import { Avatar, Button, ButtonLink, Callout, StatusMark } from '@/components/ui';
@@ -26,6 +27,7 @@ import { ACTIONS, ROLE_WORDS, ROUTES } from '@/lib/vocabulary';
 import {
   isLoginErrorCode,
   LOGIN_ERROR_MESSAGES,
+  RESET_DONE_PARAM,
   safeReturnTo,
   signInStartPath,
   type Principal,
@@ -102,6 +104,9 @@ export default async function LoginPage({ searchParams }: Props) {
   // Signed in: the home, not a card about being signed in.
   if (principal?.kind === 'user' && !failed) redirect(ROUTES.home);
   const providers = await root.auth.providers.views();
+  const local = providers.find((provider) => provider.kind === 'local') ?? null;
+  const redirecting = providers.filter((provider) => provider.kind !== 'local');
+  const resetDone = first(params[RESET_DONE_PARAM]) === 'done';
   const bootstrap = await root.auth.bootstrap.state();
   const instance = await root.instance.name.identity();
   // Where the sign-in lands: the address that sent the person here, else the home.
@@ -114,10 +119,22 @@ export default async function LoginPage({ searchParams }: Props) {
           ? principal.kind === 'user'
             ? 'The attempt below failed; the session you already had is still open.'
             : 'This session sets the gateway up; it is not a person’s.'
-          : providers.length > 1
-            ? 'Choose how you sign in. Nobody has a password here.'
-            : 'This gateway signs you in through a provider you already have an account at. Nobody has a password here.'}
+          : local && redirecting.length > 0
+            ? 'With your email address and password, or through a provider you already have an account at.'
+            : local
+              ? 'With the email address and the password of your account on this gateway.'
+              : providers.length > 1
+                ? 'Choose how you sign in. Nobody has a password here.'
+                : 'This gateway signs you in through a provider you already have an account at. Nobody has a password here.'}
       </AuthHeading>
+
+      {resetDone && !principal && (
+        <div className={styles.block}>
+          <Callout tone="ok" title="Password changed" testId="reset-done">
+            Sign in with the new password.
+          </Callout>
+        </div>
+      )}
 
       {errorCode && isLoginErrorCode(errorCode) && (
         <div className={styles.block}>
@@ -130,25 +147,34 @@ export default async function LoginPage({ searchParams }: Props) {
       {principal ? (
         <SignedIn principal={principal} />
       ) : providers.length > 0 ? (
-        <div className={styles.act} data-testid="sign-in-providers">
-          {providers.map((provider, index) => (
-            <ButtonLink
-              key={provider.id}
-              href={`${signInStartPath(provider.id)}?return_to=${encodeURIComponent(returnTo)}`}
-              variant={index === 0 ? 'primary' : 'secondary'}
-              size="lg"
-              // A plain link: a prefetch of /auth/login would start a sign-in.
-              external
-            >
-              Continue with {provider.name}
-            </ButtonLink>
-          ))}
-          {bootstrap.status === 'active' && (
-            <Link href="/admin/bootstrap" data-testid="bootstrap-link">
-              Set up this gateway with the install token
-            </Link>
+        <>
+          {local && (
+            <PasswordSignInForm
+              action={`/auth/local/${encodeURIComponent(local.id)}`}
+              returnTo={returnTo}
+              heading={local.name}
+            />
           )}
-        </div>
+          <div className={styles.act} data-testid="sign-in-providers">
+            {redirecting.map((provider, index) => (
+              <ButtonLink
+                key={provider.id}
+                href={`${signInStartPath(provider.id)}?return_to=${encodeURIComponent(returnTo)}`}
+                variant={index === 0 && !local ? 'primary' : 'secondary'}
+                size="lg"
+                // A plain link: a prefetch of /auth/login would start a sign-in.
+                external
+              >
+                Continue with {provider.name}
+              </ButtonLink>
+            ))}
+            {bootstrap.status === 'active' && (
+              <Link href="/admin/bootstrap" data-testid="bootstrap-link">
+                Set up this gateway with the install token
+              </Link>
+            )}
+          </div>
+        </>
       ) : (
         <div className={styles.block}>
           <Callout

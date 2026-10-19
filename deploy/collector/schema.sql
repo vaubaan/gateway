@@ -225,7 +225,7 @@ alter table public.instance_profiles
   add constraint instance_profiles_arch_known
     check (arch in ('x64', 'arm64', 'other')),
   add constraint instance_profiles_sign_in_kinds_known
-    check (sign_in_kinds <@ array['oidc', 'github']::text[]),
+    check (sign_in_kinds <@ array['oidc', 'github', 'local']::text[]),
   add constraint instance_profiles_counts_bucketed
     check (
       users in ('0', '1', '2-5', '6-20', '21-100', '101-1000', '>1000')

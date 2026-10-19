@@ -391,6 +391,37 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       post('/api/auth/bootstrap', headers, { token: TEST_BOOTSTRAP_TOKEN }),
     ),
   ),
+  // The forms of the local accounts (ADR local-accounts-sign-in-provider): no session
+  // to ride, an origin check and a window each; a refusal is a redirect with a code.
+  'auth.handlers.passwordLogin': form('origin-only', 303, (rig, headers) =>
+    rig.root.auth.handlers.passwordLogin(
+      post('/auth/local/local', headers, { email: 'ada@example.com', password: 'x' }),
+      'local',
+    ),
+  ),
+  'auth.handlers.createAccount': form('origin-only', 303, (rig, headers) =>
+    rig.root.auth.handlers.createAccount(
+      post('/api/account/create', headers, {
+        token: 'not-a-link',
+        password: 'a sentence long enough',
+        password_again: 'a sentence long enough',
+      }),
+    ),
+  ),
+  'auth.handlers.resetPassword': form('origin-only', 303, (rig, headers) =>
+    rig.root.auth.handlers.resetPassword(
+      post('/api/account/reset', headers, {
+        token: 'not-a-link',
+        password: 'a sentence long enough',
+        password_again: 'a sentence long enough',
+      }),
+    ),
+  ),
+  'auth.handlers.forgotPassword': form('origin-only', 303, (rig, headers) =>
+    rig.root.auth.handlers.forgotPassword(
+      post('/api/account/forgot', headers, { email: 'ada@example.com' }),
+    ),
+  ),
 };
 
 /** Handlers that change nothing on behalf of a browser form or script: why they have no origin check. */

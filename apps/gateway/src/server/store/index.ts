@@ -23,6 +23,7 @@ import type { RepoContext } from './repositories/context.ts';
 import { createDelegationsRepo, type DelegationsRepo } from './repositories/delegations.ts';
 import { createGroupsRepo, type GroupsRepo } from './repositories/groups.ts';
 import { createInvitationsRepo, type InvitationsRepo } from './repositories/invitations.ts';
+import { createLocalAccountsRepo, type LocalAccountsRepo } from './repositories/local-accounts.ts';
 import { createPendingRefsRepo, type PendingRefsRepo } from './repositories/pending-refs.ts';
 import { createMissionsRepo, type MissionsRepo } from './repositories/missions.ts';
 import { createRequestsRepo, type RequestsRepo } from './repositories/requests.ts';
@@ -53,6 +54,8 @@ export interface Store {
   readonly groups: GroupsRepo;
   /** The addresses an administrator invited to sign in (migration 0014). */
   readonly invitations: InvitationsRepo;
+  /** The accounts, secrets and links of a sign-in provider of kind `local`. */
+  readonly localAccounts: LocalAccountsRepo;
   /** Temporary refs of pushes waiting for an approval (migration 0015). */
   readonly pendingRefs: PendingRefsRepo;
   readonly connections: ConnectionsRepo;
@@ -108,6 +111,7 @@ export function openStore(options: StoreOptions): Store {
     users: createUsersRepo(ctx),
     groups: createGroupsRepo(ctx),
     invitations: createInvitationsRepo(ctx),
+    localAccounts: createLocalAccountsRepo(ctx),
     pendingRefs: createPendingRefsRepo(ctx),
     connections: createConnectionsRepo(ctx),
     shares: createSharesRepo(ctx),
@@ -182,6 +186,16 @@ export { effectiveResourceEnv, ownResourceEnv, type EffectiveEnv } from './resou
 export type { UpsertUserInput, UsersRepo } from './repositories/users.ts';
 export type { GroupsRepo } from './repositories/groups.ts';
 export type { InvitationRecord, InvitationsRepo } from './repositories/invitations.ts';
+export {
+  LOCAL_LINK_KINDS,
+  LOCAL_SECRET_KINDS,
+  type LocalAccountRecord,
+  type LocalAccountsRepo,
+  type LocalLinkKind,
+  type LocalLinkRecord,
+  type LocalSecretKind,
+  type LockoutRule,
+} from './repositories/local-accounts.ts';
 export type {
   NewPendingRef,
   PendingRefRecord,
