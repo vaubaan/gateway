@@ -77,10 +77,9 @@ describe('composition root over the embedded SQLite store', () => {
     const first = await boot(path);
     await first.store.config.setSecret('idp.client_secret', 's3cret-value');
     const raw = first.store.db
-      .prepare<
-        [string],
-        { secret_blob: Buffer; key_version: number }
-      >('SELECT secret_blob, key_version FROM instance_config WHERE key = ?')
+      .prepare<[string], { secret_blob: Buffer; key_version: number }>(
+        'SELECT secret_blob, key_version FROM instance_config WHERE key = ?',
+      )
       .get('idp.client_secret');
     expect(raw?.key_version).toBe(first.encryptor.currentKeyVersion);
     expect(raw?.secret_blob.toString('utf8')).not.toContain('s3cret-value');

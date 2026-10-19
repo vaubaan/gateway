@@ -138,10 +138,9 @@ describe('ProviderAppsService', () => {
       'instance_config:provider_apps.oauthco.client_secret',
     ]);
     const row = store.db
-      .prepare<
-        [string],
-        { value: string | null; secret_blob: Buffer | null }
-      >('SELECT value, secret_blob FROM instance_config WHERE key = ?')
+      .prepare<[string], { value: string | null; secret_blob: Buffer | null }>(
+        'SELECT value, secret_blob FROM instance_config WHERE key = ?',
+      )
       .get(providerAppKey('oauthco', 'client_secret'));
     expect(row?.value).toBeNull();
     expect(row?.secret_blob).toBeInstanceOf(Buffer);

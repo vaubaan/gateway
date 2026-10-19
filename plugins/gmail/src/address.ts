@@ -55,8 +55,7 @@ export function parseRecipient(value: unknown): EmailAddress | null {
 }
 
 export type RecipientsOutcome =
-  | { readonly recipients: readonly EmailAddress[] }
-  | { readonly denied: string };
+  { readonly recipients: readonly EmailAddress[] } | { readonly denied: string };
 
 const RECIPIENT_FIELDS = ['to', 'cc', 'bcc'] as const;
 

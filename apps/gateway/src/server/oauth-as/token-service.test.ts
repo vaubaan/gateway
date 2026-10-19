@@ -589,10 +589,9 @@ describe('TokenService', () => {
       expect(await rig.verifier.resolve(first.access_token)).not.toBeNull();
 
       const rows = rig.store.db
-        .prepare<
-          [],
-          { revoked_at: string | null; replaced_by_id: string | null }
-        >('SELECT revoked_at, replaced_by_id FROM oauth_refresh_tokens ORDER BY created_at')
+        .prepare<[], { revoked_at: string | null; replaced_by_id: string | null }>(
+          'SELECT revoked_at, replaced_by_id FROM oauth_refresh_tokens ORDER BY created_at',
+        )
         .all();
       expect(rows).toHaveLength(2);
       expect(rows[0]?.revoked_at).not.toBeNull();

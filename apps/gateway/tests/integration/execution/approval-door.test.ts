@@ -329,10 +329,9 @@ describe('approve an action through the execution door (GitHub developer preset)
     const refusal = refusalOf(await write());
     const requestId = requestIdOf(refusal);
     const sealed = rig.root.store.db
-      .prepare<
-        [string],
-        { args_blob: Buffer | null }
-      >('SELECT args_blob FROM requests WHERE id = ?')
+      .prepare<[string], { args_blob: Buffer | null }>(
+        'SELECT args_blob FROM requests WHERE id = ?',
+      )
       .get(requestId);
     // Encrypted at rest with the instance's master key: the bytes do not read.
     expect(sealed?.args_blob).not.toBeNull();
@@ -342,10 +341,9 @@ describe('approve an action through the execution door (GitHub developer preset)
     await write();
 
     const erased = rig.root.store.db
-      .prepare<
-        [string],
-        { args_blob: Buffer | null }
-      >('SELECT args_blob FROM requests WHERE id = ?')
+      .prepare<[string], { args_blob: Buffer | null }>(
+        'SELECT args_blob FROM requests WHERE id = ?',
+      )
       .get(requestId);
     expect(erased?.args_blob).toBeNull();
     const session = await rig.root.store.sessions.getByMission(rig.mission.mission.id);

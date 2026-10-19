@@ -158,10 +158,9 @@ describe('delegations repository — clients, reasons, replay lookups, sweep', (
       expect(await store.delegations.getClient(unused.id)).toBeNull();
       expect(
         store.db
-          .prepare<
-            [string],
-            { n: number }
-          >('SELECT COUNT(*) AS n FROM oauth_client_redirect_uris WHERE client_id = ?')
+          .prepare<[string], { n: number }>(
+            'SELECT COUNT(*) AS n FROM oauth_client_redirect_uris WHERE client_id = ?',
+          )
           .get(unused.id)?.n,
       ).toBe(0);
       for (const kept of [decided, used, recent]) {

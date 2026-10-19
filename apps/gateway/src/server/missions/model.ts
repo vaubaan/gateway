@@ -83,8 +83,7 @@ export interface DraftConnection {
 }
 
 export type DraftPeriod =
-  | { readonly kind: 'one-off' }
-  | { readonly kind: 'recurring'; readonly length_seconds: number };
+  { readonly kind: 'one-off' } | { readonly kind: 'recurring'; readonly length_seconds: number };
 
 export interface MissionDraft {
   readonly name: string;

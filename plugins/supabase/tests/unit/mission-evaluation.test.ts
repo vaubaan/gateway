@@ -399,19 +399,20 @@ describe('supabase presets — decisions on labelled projects', () => {
 
   test('migration-operator : any migration on staging ; on prod, plain DDL and RLS only', () => {
     const rows: Row[] = [
-      ...[DDL, RLS, BACKFILL, DROP_TABLE, GRANT, EXTENSION, FUNCTION, DYNAMIC].map(
-        (query): Row => [
-          `staging: ${query}`,
-          'supabase__apply_migration',
-          sql(STAGING, query),
-          'allowed',
-        ],
-      ),
+      ...[DDL, RLS, BACKFILL, DROP_TABLE, GRANT, EXTENSION, FUNCTION, DYNAMIC].map((query): Row => [
+        `staging: ${query}`,
+        'supabase__apply_migration',
+        sql(STAGING, query),
+        'allowed',
+      ]),
       ['prod: DDL', 'supabase__apply_migration', sql(PROD, DDL), 'allowed'],
       ['prod: RLS', 'supabase__apply_migration', sql(PROD, RLS), 'allowed'],
-      ...[BACKFILL, DROP_TABLE, GRANT, EXTENSION, FUNCTION, DYNAMIC].map(
-        (query): Row => [`prod: ${query}`, 'supabase__apply_migration', sql(PROD, query), 'denied'],
-      ),
+      ...[BACKFILL, DROP_TABLE, GRANT, EXTENSION, FUNCTION, DYNAMIC].map((query): Row => [
+        `prod: ${query}`,
+        'supabase__apply_migration',
+        sql(PROD, query),
+        'denied',
+      ]),
       ['unlabelled: DDL', 'supabase__apply_migration', sql(UNLABELLED, DDL), 'denied'],
       ['preview: DDL', 'supabase__apply_migration', sql(PREVIEW, DDL), 'denied'],
       ...[STAGING, PROD, UNLABELLED].flatMap((ref): Row[] => [

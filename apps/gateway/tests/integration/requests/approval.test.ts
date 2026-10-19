@@ -130,10 +130,9 @@ describe('approval gate: refusal, decision, replay', () => {
   /** The request row as it is stored, blob included: what "erased" is proven on. */
   function stored(requestId: string): StoredRequest {
     const row = f.store.db
-      .prepare<
-        [string],
-        StoredRequest
-      >('SELECT args_blob, key_version, state, decision_json FROM requests WHERE id = ?')
+      .prepare<[string], StoredRequest>(
+        'SELECT args_blob, key_version, state, decision_json FROM requests WHERE id = ?',
+      )
       .get(requestId);
     if (!row) throw new Error(`no request ${requestId}`);
     return row;
@@ -518,7 +517,9 @@ describe('approval gate: refusal, decision, replay', () => {
         .prepare<
           [string],
           { id: string; risk_id: string; risk_ids_json: string | null; state: string }
-        >('SELECT id, risk_id, risk_ids_json, state FROM requests WHERE mission_id = ? ORDER BY created_at, id')
+        >(
+          'SELECT id, risk_id, risk_ids_json, state FROM requests WHERE mission_id = ? ORDER BY created_at, id',
+        )
         .all(mission.id);
 
     it('drops ONE request listing every gated risk; granting it approves the call', async () => {
@@ -1085,10 +1086,9 @@ describe('approval gate: refusal, decision, replay', () => {
       }
       // Nothing in the store holds them either, once every request is closed.
       const blobs = f.store.db
-        .prepare<
-          [],
-          { n: number }
-        >('SELECT COUNT(*) AS n FROM requests WHERE args_blob IS NOT NULL')
+        .prepare<[], { n: number }>(
+          'SELECT COUNT(*) AS n FROM requests WHERE args_blob IS NOT NULL',
+        )
         .get();
       expect(blobs?.n).toBe(0);
     });

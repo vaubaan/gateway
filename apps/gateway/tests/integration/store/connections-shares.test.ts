@@ -56,10 +56,9 @@ describe('connections repository', () => {
       credential: null,
     });
     const blob = store.db
-      .prepare<
-        [string],
-        { credential_blob: Buffer }
-      >('SELECT credential_blob FROM connections WHERE id = ?')
+      .prepare<[string], { credential_blob: Buffer }>(
+        'SELECT credential_blob FROM connections WHERE id = ?',
+      )
       .get(c.id)?.credential_blob;
     store.db
       .prepare('UPDATE connections SET credential_blob = ?, key_version = 1 WHERE id = ?')
@@ -223,10 +222,9 @@ describe('connections repository', () => {
     });
     // The default is never written on the resource: the stored label stays the resource's own.
     const stored = store.db
-      .prepare<
-        [string],
-        { ref: string; env: string | null }
-      >('SELECT ref, env FROM connection_resources WHERE connection_id = ? ORDER BY ref')
+      .prepare<[string], { ref: string; env: string | null }>(
+        'SELECT ref, env FROM connection_resources WHERE connection_id = ? ORDER BY ref',
+      )
       .all(c.id);
     expect(stored).toEqual([
       { ref: 'acct:live', env: 'live' },
@@ -427,10 +425,9 @@ describe('shares repository', () => {
     });
     expect(share.restriction).toEqual(['github.code-read', 'github.write-feature-branch']);
     const rows = store.db
-      .prepare<
-        [string],
-        { risk_id: string }
-      >('SELECT risk_id FROM share_restrictions WHERE share_id = ? ORDER BY risk_id')
+      .prepare<[string], { risk_id: string }>(
+        'SELECT risk_id FROM share_restrictions WHERE share_id = ? ORDER BY risk_id',
+      )
       .all(share.id);
     expect(rows).toHaveLength(2);
   });

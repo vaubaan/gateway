@@ -1038,10 +1038,9 @@ describe('ownership, reconnection, revocation', () => {
     expect(await h.store.connections.getCredential(connection.id)).toBeNull();
     expect(
       h.store.db
-        .prepare<
-          [string],
-          { blob: Buffer | null }
-        >('SELECT credential_blob AS blob FROM connections WHERE id = ?')
+        .prepare<[string], { blob: Buffer | null }>(
+          'SELECT credential_blob AS blob FROM connections WHERE id = ?',
+        )
         .get(connection.id)?.blob,
     ).toBeNull();
 

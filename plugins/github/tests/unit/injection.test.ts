@@ -317,15 +317,13 @@ const POSITIONS: readonly Position[] = [
       ['github__add_issue_comment', 'issue_number', { body: 'hi' }],
       ['github__delete_release', 'release_id', {}],
     ] as const
-  ).map(
-    ([tool, key, extra]): Position => ({
-      name: `${tool.slice('github__'.length)}.${key}`,
-      kind: 'number',
-      tool,
-      args: (v) => ({ ...base, ...extra, [key]: v }),
-      paths: () => [],
-    }),
-  ),
+  ).map(([tool, key, extra]): Position => ({
+    name: `${tool.slice('github__'.length)}.${key}`,
+    kind: 'number',
+    tool,
+    args: (v) => ({ ...base, ...extra, [key]: v }),
+    paths: () => [],
+  })),
 ];
 
 /** One answer that satisfies every call sequence of the dispatcher. */

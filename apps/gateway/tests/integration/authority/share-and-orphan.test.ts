@@ -645,10 +645,9 @@ describe('a request on an orphaned mission still expires on the normal delay', (
     const purge = () => rig.call(mission, 'depot__purge', { space: 'scratch' });
     const blobOf = (id: string) =>
       rig.root.store.db
-        .prepare<
-          [string],
-          { args_blob: Buffer | null }
-        >('SELECT args_blob FROM requests WHERE id = ?')
+        .prepare<[string], { args_blob: Buffer | null }>(
+          'SELECT args_blob FROM requests WHERE id = ?',
+        )
         .get(id)?.args_blob;
 
     expect((await purge()).error?.data?.code).toBe('approval-required');

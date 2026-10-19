@@ -484,15 +484,15 @@ Pipeline:
    `isFallbackEntry` in the policy engine), named
    `<provider>.uncategorized-*` (the dash is part of the prefix) **and
    matching the catch-all write `<provider>.**.W`**; zero
-(`requireFallback`, default true) or two is an error. The pattern is
-checked because the fallback is left out of the touched risks whenever
-another entry matches: flagged on a narrow pattern, a named risk would
-silently stop being required. `wildcardIssues`(=`riskIdWildcardIssues`+`presetWildcardIssues`); `presetIssues`
-(`requirePresets`, default true): at least one preset, ids unique, every
-entry a legal budget (`budgetIssues`: positive integer quota and rate
-limit, gate from the closed set), every `risk_id`an
-explicit id of this provider present in the catalog, env-qualified
-entries only on env-scoped risks and inside`acceptable_in_envs`, no
+   (`requireFallback`, default true) or two is an error. The pattern is
+   checked because the fallback is left out of the touched risks whenever
+   another entry matches: flagged on a narrow pattern, a named risk would
+   silently stop being required. `wildcardIssues`(=`riskIdWildcardIssues`+`presetWildcardIssues`); `presetIssues`
+   (`requirePresets`, default true): at least one preset, ids unique, every
+   entry a legal budget (`budgetIssues`: positive integer quota and rate
+   limit, gate from the closed set), every `risk_id`an
+   explicit id of this provider present in the catalog, env-qualified
+   entries only on env-scoped risks and inside`acceptable_in_envs`, no
    deprecated risk, no repeated risk in a preset, **never the fallback** —
    it fires only on writes no other entry covers (ADR
    [fallback-risk-only-when-uncategorized](../decisions/fallback-risk-only-when-uncategorized.md)),
@@ -939,7 +939,7 @@ deletion touches, and `execute` and
   top-level `railway:` key fails with `provider: expected a lowercase
 slug` + `risks: expected a non-empty list` + `railway: unknown key`:
   convert it to `provider:` / `risks:`. `exactly one fallback entry
-  per catalog, found 2`: a second entry matches `<provider>.**.W` or is
+per catalog, found 2`: a second entry matches `<provider>.**.W` or is
   flagged — give it a narrower pattern or `fallback: false`.
   `risks[i].matches: the fallback '…' must match the catch-all write
 '<provider>.**.W'`: the entry flagged (or named) as the fallback has a

@@ -36,13 +36,7 @@ export const ROUTES = {
 } as const;
 
 export type NavKey =
-  | 'now'
-  | 'waiting'
-  | 'missions'
-  | 'accounts'
-  | 'activity'
-  | 'reference'
-  | 'settings';
+  'now' | 'waiting' | 'missions' | 'accounts' | 'activity' | 'reference' | 'settings';
 
 export const NAV: Readonly<Record<NavKey, { readonly label: string; readonly href: string }>> = {
   now: { label: 'Now', href: ROUTES.home },

@@ -60,10 +60,9 @@ export function createPermissionRequests(ctx: RepoContext) {
     async permissionDetails(requestId: string): Promise<PermissionRequestDetails | null> {
       return (
         db
-          .prepare<
-            [string],
-            PermissionRequestDetails
-          >('SELECT holder, token_id AS tokenId, reason FROM permission_requests WHERE request_id = ?')
+          .prepare<[string], PermissionRequestDetails>(
+            'SELECT holder, token_id AS tokenId, reason FROM permission_requests WHERE request_id = ?',
+          )
           .get(requestId) ?? null
       );
     },
@@ -96,10 +95,9 @@ export function createPermissionRequests(ctx: RepoContext) {
           const since = new Date(Date.parse(now) - 24 * 60 * 60_000).toISOString();
           const count =
             db
-              .prepare<
-                [string, string],
-                { n: number }
-              >("SELECT count(*) AS n FROM requests WHERE mission_id = ? AND kind = 'permission' AND created_at > ?")
+              .prepare<[string, string], { n: number }>(
+                "SELECT count(*) AS n FROM requests WHERE mission_id = ? AND kind = 'permission' AND created_at > ?",
+              )
               .get(input.missionId, since)?.n ?? 0;
           if (count >= 10) return { ok: false, reason: 'rate-limited' };
           const risks = JSON.parse(row.risk_ids_json) as string[];

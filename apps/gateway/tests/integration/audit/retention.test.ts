@@ -145,10 +145,9 @@ describe('audit retention sweeper', () => {
     expect(count('audit_risks')).toBe(4);
     expect(
       t.store.db
-        .prepare<
-          [string],
-          { n: number }
-        >('SELECT COUNT(*) AS n FROM audit_risks WHERE audit_id = ?')
+        .prepare<[string], { n: number }>(
+          'SELECT COUNT(*) AS n FROM audit_risks WHERE audit_id = ?',
+        )
         .get(tooOldCall.id)?.n,
     ).toBe(0);
   });

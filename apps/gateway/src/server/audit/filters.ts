@@ -62,8 +62,7 @@ export interface ParsedAuditQuery {
 }
 
 export type RawQuery =
-  | URLSearchParams
-  | Readonly<Record<string, string | readonly string[] | undefined>>;
+  URLSearchParams | Readonly<Record<string, string | readonly string[] | undefined>>;
 
 const MAX_VALUE_LENGTH = 200;
 const MS_PER_DAY = 86_400_000;

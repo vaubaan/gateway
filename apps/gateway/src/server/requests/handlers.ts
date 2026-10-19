@@ -57,10 +57,7 @@ const MS_PER_SECOND = 1000;
 
 /** Codes the creator's page shows after a refused form post (`?problem=`). */
 export type DecideProblemCode =
-  | ClaimProblemCode
-  | ApprovalProblemCode
-  | 'request-not-open'
-  | 'unsupported-kind';
+  ClaimProblemCode | ApprovalProblemCode | 'request-not-open' | 'unsupported-kind';
 
 export interface RequestHandlerDeps {
   readonly publicUrl: URL;

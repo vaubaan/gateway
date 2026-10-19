@@ -43,10 +43,9 @@ describe('IdpSettingsService', () => {
     const s = new IdpSettingsService(null, t.store.config);
     await s.save(INPUT);
     const row = t.store.db
-      .prepare<
-        [string],
-        { value: string | null; secret_blob: Buffer | null }
-      >('SELECT value, secret_blob FROM instance_config WHERE key = ?')
+      .prepare<[string], { value: string | null; secret_blob: Buffer | null }>(
+        'SELECT value, secret_blob FROM instance_config WHERE key = ?',
+      )
       .get(IDP_CONFIG_KEYS.clientSecret);
     expect(row?.value).toBeNull();
     expect(row?.secret_blob).not.toBeNull();

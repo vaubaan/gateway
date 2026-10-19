@@ -150,10 +150,9 @@ describe('audit repository', () => {
     ).toBe(0);
     expect(
       store.db
-        .prepare<
-          [string],
-          { n: number }
-        >('SELECT COUNT(*) AS n FROM audit_risks WHERE audit_id = ?')
+        .prepare<[string], { n: number }>(
+          'SELECT COUNT(*) AS n FROM audit_risks WHERE audit_id = ?',
+        )
         .get(old.id)?.n,
     ).toBe(0);
   });
@@ -182,10 +181,9 @@ describe('audit repository', () => {
     }).toThrow(/retention purge/);
     expect(
       store.db
-        .prepare<
-          [string],
-          { n: number }
-        >('SELECT COUNT(*) AS n FROM audit_risks WHERE audit_id = ?')
+        .prepare<[string], { n: number }>(
+          'SELECT COUNT(*) AS n FROM audit_risks WHERE audit_id = ?',
+        )
         .get(recent.id)?.n,
     ).toBe(2);
   });

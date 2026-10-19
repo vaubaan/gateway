@@ -84,17 +84,15 @@ function rowsOf(team: MissionTeam, calls: readonly HolderCalls[]): HolderRow[] {
   });
   const machines = team.tokens
     .filter((token) => token.holder.kind === 'named')
-    .map(
-      (token): HolderRow => ({
-        id: `machine:${token.holder.label}`,
-        name: token.holder.label,
-        machine: true,
-        member: null,
-        token,
-        calls: calls.find((c) => c.kind === 'named' && c.key === token.holder.label) ?? null,
-        mine: false,
-      }),
-    );
+    .map((token): HolderRow => ({
+      id: `machine:${token.holder.label}`,
+      name: token.holder.label,
+      machine: true,
+      member: null,
+      token,
+      calls: calls.find((c) => c.kind === 'named' && c.key === token.holder.label) ?? null,
+      mine: false,
+    }));
   return [...people, ...machines];
 }
 

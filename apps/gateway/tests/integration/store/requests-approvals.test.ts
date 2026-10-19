@@ -81,10 +81,9 @@ describe('requests repository', () => {
       pull_number: 7,
     });
     const raw = store.db
-      .prepare<
-        [string],
-        { args_blob: Buffer; key_version: number }
-      >('SELECT args_blob, key_version FROM requests WHERE id = ?')
+      .prepare<[string], { args_blob: Buffer; key_version: number }>(
+        'SELECT args_blob, key_version FROM requests WHERE id = ?',
+      )
       .get(request.id);
     expect(raw?.key_version).toBe(1);
     expect(raw?.args_blob.toString('utf8')).not.toBe(

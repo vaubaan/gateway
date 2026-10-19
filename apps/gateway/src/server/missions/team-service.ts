@@ -174,8 +174,7 @@ export type LeaveResult =
   | { readonly ok: false; readonly reason: 'creator-cannot-leave' };
 
 export type RevokeTokenResult =
-  | { readonly ok: true; readonly token_id: string; readonly already: boolean }
-  | NotFound;
+  { readonly ok: true; readonly token_id: string; readonly already: boolean } | NotFound;
 
 /**
  * Why one token was revoked on its own, as the audit entry says it. `member-removed`

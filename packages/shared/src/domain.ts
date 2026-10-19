@@ -43,8 +43,7 @@ export interface Group {
 
 /** A user or a group, where a rule applies to both (owner, share target). */
 export type Principal =
-  | { readonly kind: 'user'; readonly id: string }
-  | { readonly kind: 'group'; readonly id: string };
+  { readonly kind: 'user'; readonly id: string } | { readonly kind: 'group'; readonly id: string };
 
 /** A user's standing authorization for an agent to manage missions on their behalf. */
 export interface Delegation {

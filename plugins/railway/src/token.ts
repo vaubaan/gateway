@@ -109,8 +109,7 @@ export function railwayBearerOf(credential: CredentialSecret): string {
 
 /** A GraphQL answer, or what Railway said when it refused the token. */
 export type GraphqlAnswer<T> =
-  | { readonly ok: true; readonly data: T }
-  | { readonly ok: false; readonly said: string };
+  { readonly ok: true; readonly data: T } | { readonly ok: false; readonly said: string };
 
 /**
  * One GraphQL request whose refusal is an answer, not an exception : a 401 or

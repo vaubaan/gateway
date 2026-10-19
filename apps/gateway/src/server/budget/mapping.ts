@@ -45,8 +45,7 @@ export interface BudgetMission {
 
 /** A period as a creator states it: no anchor, the store sets it at issuance. */
 export type StatedPeriod =
-  | { readonly kind: 'one-off' }
-  | { readonly kind: 'recurring'; readonly length_seconds: number };
+  { readonly kind: 'one-off' } | { readonly kind: 'recurring'; readonly length_seconds: number };
 
 export function policyEntryOf(record: MissionPolicyEntryRecord): MissionPolicyEntry {
   return {

@@ -158,14 +158,11 @@ describe('board resolution', () => {
   });
 
   test('list_boards reads at most 50 boards', () => {
-    const many = Array.from(
-      { length: 51 },
-      (_, i): Resource => ({
-        provider: PROVIDER_ID,
-        ref: `board${i}~`,
-        displayName: `B${i}`,
-      }),
-    );
+    const many = Array.from({ length: 51 }, (_, i): Resource => ({
+      provider: PROVIDER_ID,
+      ref: `board${i}~`,
+      displayName: `B${i}`,
+    }));
     expect(denied(TOOL.listBoards, {}, many)).toMatch(/at most 50/);
     const fifty = slices(TOOL.listBoards, {}, many.slice(0, 50));
     expect(fifty).toHaveLength(1);

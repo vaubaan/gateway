@@ -189,19 +189,17 @@ export function compareWithShipped(
 ): ShippedComparison {
   const shippedVersion = migrations.reduce((max, m) => Math.max(max, m.version), 0);
   const table = db
-    .prepare<
-      [],
-      { n: number }
-    >("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'")
+    .prepare<[], { n: number }>(
+      "SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'",
+    )
     .get();
   if ((table?.n ?? 0) === 0) {
     return { hasMigrationsTable: false, version: 0, shippedVersion, unknown: [], changed: [] };
   }
   const recorded = db
-    .prepare<
-      [],
-      { version: number; name: string; checksum: string }
-    >('SELECT version, name, checksum FROM schema_migrations ORDER BY version')
+    .prepare<[], { version: number; name: string; checksum: string }>(
+      'SELECT version, name, checksum FROM schema_migrations ORDER BY version',
+    )
     .all();
   const shipped = new Map(migrations.map((m) => [m.version, m]));
   const label = (m: { version: number; name: string }) =>
