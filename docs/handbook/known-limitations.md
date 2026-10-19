@@ -84,9 +84,10 @@ change that removes it.
   receive-pack command for a force-push or a delete are read from GitHub's
   documentation, not observed. →
   [git-remote, "Tests"](git-remote.md#tests)
-- **No `linux/arm64` image and no attestation have been published.** The one
-  release, `2.0.0-alpha.1` (2026-10-18, run 39134680809: plan, gates, image,
-  push, publish and release all passed), was cut while this repository was
+- **No `linux/arm64` image and no attestation have been published.** Every
+  release so far — `2.0.0-alpha.1` (2026-10-18, run 39134680809: plan, gates,
+  image, push, publish and release all passed) and `2.0.0-alpha.2`
+  (2026-10-19) — was cut while this repository was
   private, which publishes `linux/amd64` only and signs nothing, by design.
   The arm64 runner, the attestation and its verification by an operator have
   therefore never run outside a dry run. →
