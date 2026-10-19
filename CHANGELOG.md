@@ -9,6 +9,8 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+## [2.0.0-alpha.2] - 2026-10-19
+
 ### Added
 
 - **"Everything I hold on this account"**, a preset the instance offers on every account
@@ -37,6 +39,42 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   kept waiting; a burst of creations makes at most two lookups. Plugins declare
   these tools in `resourceCreatingTools` (plugin SDK); Fly 0.2.0, Railway 4.3.0,
   Resend 0.4.0, Upstash Redis 3.1.0.
+- **Local accounts: a sign-in provider that lives in the instance** (ADR
+  `local-accounts-sign-in-provider`). A provider of kind `local`
+  (`sign_in.<id>.kind: local`, or "Add local accounts" in Settings → Sign-in)
+  keeps an email and a password per person — hashed with argon2id, twelve
+  characters at least, ten wrong passwords in fifteen minutes locking the
+  account for fifteen —, always "invited only": an invitation now also makes
+  the single-use, fifteen-minute link through which the invited person creates
+  their account, and People hands a password-reset link over the same way. A
+  **second factor** (a code from an authenticator app, eight recovery codes
+  shown once) is set up from Settings → Security, replaced or removed there,
+  and **required for an address of `admin.emails`**: that person enrols it
+  during their first sign-in. An administrator resets a person's second factor
+  from People. The setup checklist creates the first administrator's account
+  for an address of the admin rule; its first sign-in retires the bootstrap
+  token. New configuration block **`mail.*`** (`VAUBAAN_MAIL_SMTP_HOST`,
+  `_SMTP_PORT`, `_SMTP_USER`, `_SMTP_PASSWORD`, `_FROM`, `_TLS`): with a relay
+  the invitation and reset links are mailed, and "Forgot your password?" on the
+  sign-in page sends one; without it the links are handed over by an
+  administrator. The telemetry profile counts the kind `local` with the
+  others. Dependencies: `libsodium-wrappers-sumo` replaces
+  `libsodium-wrappers` (same vendor and version; argon2id), `nodemailer`,
+  `uqr`.
+- **The setup link fills the bootstrap token.** Whoever installs a gateway can
+  hand the operator `/admin/bootstrap#token=<token>`: the page reads the
+  token from the fragment (never sent to the instance, so it reaches neither
+  the access logs nor a referrer), fills the field and takes the token out of
+  the address bar; nothing is submitted without the click. `?token=` is read
+  too, for a link built the older way.
+
+### Changed
+
+- **A member of the admin rule's group is admitted at sign-in**, as an address
+  of `admin.emails` is (ADR `sign-in-providers-admission-and-admin-rule`,
+  amendment of 2026-10-19). An instance whose provider is "invited only" and
+  whose admin rule moved from `admin.emails` to `admin.group` no longer locks
+  its administrator out.
 
 ### Fixed
 
@@ -54,6 +92,8 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   now reviewed through the commit it points at, annotated or lightweight, under
   the same `github.tag-write`; a tag of a commit no branch reaches is still
   refused with the same words, and a tag that names no commit is refused too.
+- **The Settings icon is a gear.** It was a hub with eight rays, nearly the
+  theme toggle's sun.
 
 ## [2.0.0-alpha.1] - 2026-10-18
 
@@ -1130,5 +1170,6 @@ permission Workflows …`, with nothing sent to GitHub (it used to be stored at 
   package with a review date, and an audit that printed nothing is a broken gate, not a
   pass.
 
-[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.1...HEAD
+[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.2...HEAD
+[2.0.0-alpha.2]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.1...v2.0.0-alpha.2
 [2.0.0-alpha.1]: https://github.com/vaubaan/gateway/compare/v4-final...v2.0.0-alpha.1
