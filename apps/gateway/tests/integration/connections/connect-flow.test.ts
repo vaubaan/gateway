@@ -211,10 +211,9 @@ describe('connections: provider app, connect, resources, revoke', () => {
   function databaseDump(): string {
     const { db } = root.store;
     const tables = db
-      .prepare<
-        [],
-        { name: string }
-      >("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
+      .prepare<[], { name: string }>(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+      )
       .all();
     const parts: string[] = [];
     for (const { name } of tables) {

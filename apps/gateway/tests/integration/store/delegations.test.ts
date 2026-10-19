@@ -79,10 +79,9 @@ describe('delegations repository', () => {
       await store.delegations.rotateRefreshToken('r1', { tokenHash: 'r3', expiresAt: 'x' }),
     ).toBeNull();
     const rows = store.db
-      .prepare<
-        [string],
-        { id: string; revoked_at: string | null; replaced_by_id: string | null }
-      >('SELECT id, revoked_at, replaced_by_id FROM oauth_refresh_tokens WHERE delegation_id = ? ORDER BY created_at')
+      .prepare<[string], { id: string; revoked_at: string | null; replaced_by_id: string | null }>(
+        'SELECT id, revoked_at, replaced_by_id FROM oauth_refresh_tokens WHERE delegation_id = ? ORDER BY created_at',
+      )
       .all(d.id);
     expect(rows).toEqual([
       { id: first.id, revoked_at: t.clock.now().toISOString(), replaced_by_id: second?.id ?? null },
@@ -99,10 +98,9 @@ describe('delegations repository', () => {
       store.db.prepare<[], { n: number }>(`SELECT COUNT(*) AS n FROM ${table}`).get()?.n ?? 0;
     const consumedAt = (hash: string): string | null | undefined =>
       store.db
-        .prepare<
-          [string],
-          { consumed_at: string | null }
-        >('SELECT consumed_at FROM oauth_codes WHERE code_hash = ?')
+        .prepare<[string], { consumed_at: string | null }>(
+          'SELECT consumed_at FROM oauth_codes WHERE code_hash = ?',
+        )
         .get(hash)?.consumed_at;
 
     async function codeOf(hash = 'code-hash') {
@@ -204,10 +202,9 @@ describe('delegations repository', () => {
   describe('a rotation writes the access token of the renewal in the same transaction', () => {
     const refreshRows = () =>
       store.db
-        .prepare<
-          [],
-          { token_hash: string; revoked_at: string | null }
-        >('SELECT token_hash, revoked_at FROM oauth_refresh_tokens ORDER BY created_at, token_hash')
+        .prepare<[], { token_hash: string; revoked_at: string | null }>(
+          'SELECT token_hash, revoked_at FROM oauth_refresh_tokens ORDER BY created_at, token_hash',
+        )
         .all();
 
     it('rotateRefreshToken with an access token: both rows, or neither', async () => {
@@ -458,10 +455,9 @@ describe('delegations repository', () => {
       // One live head, and the family is a chain: r1 → r2 → r3.
       expect((await store.delegations.findRefreshToken('r1'))?.token.replacedById).toBe(second?.id);
       const live = store.db
-        .prepare<
-          [],
-          { n: number }
-        >('SELECT COUNT(*) AS n FROM oauth_refresh_tokens WHERE revoked_at IS NULL')
+        .prepare<[], { n: number }>(
+          'SELECT COUNT(*) AS n FROM oauth_refresh_tokens WHERE revoked_at IS NULL',
+        )
         .get();
       expect(live?.n).toBe(1);
     });

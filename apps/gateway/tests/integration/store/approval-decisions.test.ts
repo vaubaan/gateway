@@ -80,10 +80,9 @@ describe('store: the approval gate', () => {
 
   const blobOf = (id: string) =>
     store.db
-      .prepare<
-        [string],
-        { args_blob: Buffer | null; key_version: number | null }
-      >('SELECT args_blob, key_version FROM requests WHERE id = ?')
+      .prepare<[string], { args_blob: Buffer | null; key_version: number | null }>(
+        'SELECT args_blob, key_version FROM requests WHERE id = ?',
+      )
       .get(id);
 
   const eventsOf = async () => {
@@ -109,10 +108,9 @@ describe('store: the approval gate', () => {
   describe('migration 0005', () => {
     it('adds the tool to the approvals table and to its lookup index', () => {
       const columns = store.db
-        .prepare<
-          [],
-          { name: string; notnull: number; dflt_value: string | null }
-        >('SELECT name, "notnull", dflt_value FROM pragma_table_info(\'approvals\')')
+        .prepare<[], { name: string; notnull: number; dflt_value: string | null }>(
+          'SELECT name, "notnull", dflt_value FROM pragma_table_info(\'approvals\')',
+        )
         .all();
       expect(columns.find((c) => c.name === 'tool')).toEqual({
         name: 'tool',
@@ -120,10 +118,9 @@ describe('store: the approval gate', () => {
         dflt_value: "''",
       });
       const index = store.db
-        .prepare<
-          [],
-          { sql: string }
-        >("SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'approvals_lookup'")
+        .prepare<[], { sql: string }>(
+          "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'approvals_lookup'",
+        )
         .get();
       // Migration 0013: an approval is looked up by the call, then by the risks it lists.
       expect(index?.sql).toContain('(mission_id, tool, fingerprint)');

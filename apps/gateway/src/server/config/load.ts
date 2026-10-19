@@ -138,8 +138,7 @@ export interface SetupOutcome {
 }
 
 export type ConfigLoadOutcome =
-  | { readonly kind: 'ready'; readonly loaded: LoadedConfig }
-  | SetupOutcome;
+  { readonly kind: 'ready'; readonly loaded: LoadedConfig } | SetupOutcome;
 
 const MASTER_KEY_PATH = 'encryption.master_key';
 const GENERATE_PATH = 'encryption.generate_master_key';

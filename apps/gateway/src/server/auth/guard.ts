@@ -21,10 +21,7 @@ import { forbiddenOriginResponse, isSameOrigin } from './origin';
 export type GuardRole = 'user' | 'operator';
 
 export type GuardRefusalReason =
-  | 'origin-mismatch'
-  | 'no-session'
-  | 'not-a-user'
-  | 'not-an-operator';
+  'origin-mismatch' | 'no-session' | 'not-a-user' | 'not-an-operator';
 
 export interface GuardRefusal {
   readonly ok: false;

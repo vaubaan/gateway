@@ -32,8 +32,7 @@ import type { RefusalCode, RiskId } from '@vaubaan/shared';
 
 /** What `plugin.execute` ended with: its result, or what was thrown at the end of the retries. */
 export type PluginOutcome =
-  | { readonly ok: true; readonly result: unknown }
-  | { readonly ok: false; readonly error: unknown };
+  { readonly ok: true; readonly result: unknown } | { readonly ok: false; readonly error: unknown };
 
 export interface PluginExecution {
   /** The plugin that ran: its id, its version and the tools it declares. */

@@ -17,10 +17,9 @@ const AT = '2026-10-13T08:00:00.000Z';
 
 const labelsOf = (db: StoreDb) =>
   db
-    .prepare<
-      [],
-      { id: string; agent_label: string | null }
-    >('SELECT id, agent_label FROM events ORDER BY id')
+    .prepare<[], { id: string; agent_label: string | null }>(
+      'SELECT id, agent_label FROM events ORDER BY id',
+    )
     .all();
 
 describe('events.agent_label', () => {
@@ -111,10 +110,9 @@ describe('events.agent_label', () => {
       // The details are left as written.
       expect(
         db
-          .prepare<
-            [],
-            { details_json: string }
-          >("SELECT details_json FROM events WHERE id = '1-labelled'")
+          .prepare<[], { details_json: string }>(
+            "SELECT details_json FROM events WHERE id = '1-labelled'",
+          )
           .get()?.details_json,
       ).toBe(call('coder'));
       const indexes = db

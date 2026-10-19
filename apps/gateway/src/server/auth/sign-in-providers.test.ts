@@ -67,10 +67,9 @@ describe('SignInProvidersService', () => {
     expect(views[0]).not.toHaveProperty('clientSecret');
     expect((await s.resolve('github'))?.provider.clientSecret).toBe('github-secret');
     const row = t.store.db
-      .prepare<
-        [string],
-        { value: string | null; secret_blob: Buffer | null }
-      >('SELECT value, secret_blob FROM instance_config WHERE key = ?')
+      .prepare<[string], { value: string | null; secret_blob: Buffer | null }>(
+        'SELECT value, secret_blob FROM instance_config WHERE key = ?',
+      )
       .get('sign_in.github.client_secret');
     // Held as a sealed column (the test store's encryptor is a stand-in), never as a value.
     expect(row?.value).toBeNull();

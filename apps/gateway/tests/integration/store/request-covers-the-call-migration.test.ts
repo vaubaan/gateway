@@ -112,18 +112,16 @@ describe('requests and approvals written before migration 0013', () => {
       // What the backfill wrote is JSON a reader parses back to the same risk: the
       // brackets of an environment-qualified id need no escaping.
       for (const row of db
-        .prepare<
-          [],
-          { risk_id: string; risk_ids_json: string }
-        >('SELECT risk_id, risk_ids_json FROM requests WHERE risk_ids_json IS NOT NULL')
+        .prepare<[], { risk_id: string; risk_ids_json: string }>(
+          'SELECT risk_id, risk_ids_json FROM requests WHERE risk_ids_json IS NOT NULL',
+        )
         .all()) {
         expect(JSON.parse(row.risk_ids_json)).toEqual([row.risk_id]);
       }
       const index = db
-        .prepare<
-          [],
-          { sql: string }
-        >("SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'approvals_lookup'")
+        .prepare<[], { sql: string }>(
+          "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'approvals_lookup'",
+        )
         .get();
       expect(index?.sql).toContain('(mission_id, tool, fingerprint)');
     } finally {

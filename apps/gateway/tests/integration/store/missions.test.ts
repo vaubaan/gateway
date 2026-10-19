@@ -96,10 +96,9 @@ describe('missions repository', () => {
     expect(m.policy).toEqual(POLICY);
     expect(
       store.db
-        .prepare<
-          [string],
-          { n: number }
-        >('SELECT COUNT(*) AS n FROM mission_policy WHERE mission_id = ?')
+        .prepare<[string], { n: number }>(
+          'SELECT COUNT(*) AS n FROM mission_policy WHERE mission_id = ?',
+        )
         .get(m.id)?.n,
     ).toBe(2);
     expect(await store.missions.getById(m.id)).toEqual(m);

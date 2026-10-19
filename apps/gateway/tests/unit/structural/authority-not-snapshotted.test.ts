@@ -163,10 +163,9 @@ describe('authority is recomputed, never snapshotted', () => {
       expect((await rig.read(mission)).result).toBeDefined();
       const row = () =>
         rig.root.store.db
-          .prepare<
-            [string],
-            { status: string; updated_at: string; closed_at: string | null }
-          >('SELECT status, updated_at, closed_at FROM missions WHERE id = ?')
+          .prepare<[string], { status: string; updated_at: string; closed_at: string | null }>(
+            'SELECT status, updated_at, closed_at FROM missions WHERE id = ?',
+          )
           .get(mission.mission.id);
       const asIssued = row();
       expect(asIssued).toMatchObject({ status: 'active', closed_at: null });
