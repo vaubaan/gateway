@@ -75,6 +75,23 @@ export interface PendingLogin {
   readonly createdAt: string;
 }
 
+/**
+ * A local sign-in between its password and its session (ADR
+ * local-accounts-sign-in-provider): the second factor is asked, or enrolled when
+ * the person administers the gateway and has none. Bound to the browser by the
+ * same cookie as a pending OpenID Connect login, for the same ten minutes.
+ */
+export interface PendingLocalStep {
+  readonly kind: 'local-step';
+  readonly step: 'second-factor' | 'enrol';
+  readonly providerId: string;
+  readonly accountId: string;
+  readonly returnTo: string;
+  /** The secret being enrolled, base32, until the first code confirms it. */
+  readonly totpSecret?: string;
+  readonly createdAt: string;
+}
+
 export interface IssuedCookie {
   readonly id: string;
   /** Value for a `Set-Cookie` header. */
@@ -109,6 +126,20 @@ export function isWebSessionRecord(value: unknown): value is WebSessionRecord {
     typeof login.email === 'string' &&
     isStringArray(login.groups) &&
     (login.provider === undefined || typeof login.provider === 'string')
+  );
+}
+
+export function isPendingLocalStep(value: unknown): value is PendingLocalStep {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    v.kind === 'local-step' &&
+    (v.step === 'second-factor' || v.step === 'enrol') &&
+    typeof v.providerId === 'string' &&
+    typeof v.accountId === 'string' &&
+    typeof v.returnTo === 'string' &&
+    (v.totpSecret === undefined || typeof v.totpSecret === 'string') &&
+    typeof v.createdAt === 'string'
   );
 }
 
@@ -201,6 +232,37 @@ export class SessionService {
 
   clearPendingCookie(): string {
     return clearCookie(LOGIN_COOKIE);
+  }
+
+  /** The step between a local account's password and its session; same cookie, same lifetime. */
+  async createLocalStep(step: Omit<PendingLocalStep, 'kind' | 'createdAt'>): Promise<IssuedCookie> {
+    const id = newSessionId();
+    const full: PendingLocalStep = {
+      kind: 'local-step',
+      ...step,
+      createdAt: toIso(this.clock.now()),
+    };
+    await this.store.set(loginKey(id), full, LOGIN_TTL_MS);
+    return {
+      id,
+      setCookie: serializeCookie(LOGIN_COOKIE, id, { maxAgeSeconds: LOGIN_TTL_MS / 1000 }),
+    };
+  }
+
+  /** Reads the step without consuming it (the page that asks for the code). */
+  async peekLocalStep(headers: Headers): Promise<PendingLocalStep | null> {
+    const id = readCookie(headers, LOGIN_COOKIE);
+    if (!id) return null;
+    return this.readGuarded(loginKey(id), isPendingLocalStep);
+  }
+
+  /** Reads and consumes the step (the form that answers it). */
+  async takeLocalStep(headers: Headers): Promise<PendingLocalStep | null> {
+    const id = readCookie(headers, LOGIN_COOKIE);
+    if (!id) return null;
+    const step = await this.readGuarded(loginKey(id), isPendingLocalStep);
+    if (step) await this.store.delete(loginKey(id));
+    return step;
   }
 
   /** The value under `key` when it has the expected shape; otherwise the key is deleted. */

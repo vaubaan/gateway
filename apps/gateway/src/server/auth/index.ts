@@ -113,7 +113,10 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
   });
   const localHandlers = createLocalAuthHandlers({
     publicUrl: deps.config.publicUrl,
+    instanceLabel: deps.config.instanceName ?? deps.config.publicUrl.host,
     sessions,
+    sessionStore: deps.sessions,
+    authenticator,
     providers,
     accounts,
     login: {
@@ -301,9 +304,15 @@ export {
 export {
   ACCOUNT_ERROR_PARAM,
   createLocalAuthHandlers,
+  ENROL_PAGE,
+  ENROL_PARAM,
   FORGOT_SENT_PARAM,
+  FRESH_SIGN_IN_FOR_FACTOR_MS,
+  localAccountIdOf,
   localIdentity,
   RESET_DONE_PARAM,
+  SECOND_FACTOR_PAGE,
+  SECURITY_PAGE,
   type LinkMailer,
   type LocalAuthHandlers,
 } from './local-handlers';

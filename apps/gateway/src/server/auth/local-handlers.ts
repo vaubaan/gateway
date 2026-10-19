@@ -1,27 +1,48 @@
 /**
- * The anonymous forms of the local accounts (ADR local-accounts-sign-in-provider):
+ * The forms of the local accounts (ADR local-accounts-sign-in-provider).
  *
- *   POST /auth/local/<provider>      email + password → a session, or `/login?error=`
- *   POST /api/account/create         an invitation link's token + a password → the
- *                                    account, then the same sign-in
- *   POST /api/account/reset          a reset link's token + a password → `/login`
- *   POST /api/account/forgot         an address → a reset link, mailed when the
- *                                    instance sends mail; one answer for every address
+ * Anonymous, origin-checked and rate-limited (`AUTH_LIMITS`), answering with a
+ * redirect whose query carries a closed code — never a sentence that says
+ * whether an address exists:
  *
- * Every form is origin-checked, rate-limited (`AUTH_LIMITS`) and answers with a
- * redirect; a refusal is a closed code in the query, never a sentence that says
- * whether an address exists. The sign-in itself is the one every provider gets:
- * `admit()` (the address must still be invited or named by the admin rule), then
- * `completeLogin()` (the `users` row, the deactivation check), then a session.
+ *   POST /auth/local/<provider>         email + password → a session, the second
+ *                                       factor's step, or the enrolment's step
+ *   POST /auth/local/<provider>/code    the code of the authenticator app, or a
+ *                                       recovery code → the session
+ *   POST /auth/local/<provider>/enrol   the first code of a new authenticator →
+ *                                       the session; the recovery codes shown once
+ *   POST /api/account/create            an invitation link's token + a password
+ *   POST /api/account/reset             a reset link's token + a password
+ *   POST /api/account/forgot            an address; one answer for every address
+ *
+ * Signed in (`guardMutation`, role `user`), from Settings → Security:
+ *
+ *   POST /settings/security/second-factor/begin     a new secret to enrol
+ *   POST /settings/security/second-factor/confirm   the code that confirms it
+ *   POST /settings/security/second-factor/remove    after a fresh sign-in
+ *   POST /settings/security/password                the current password and a new one
+ *
+ * The sign-in itself is the one every provider gets: `admit()` (the address must
+ * still be invited or named by the admin rule), then `completeLogin()` (the
+ * `users` row, the deactivation check), then a session. Between the password
+ * and the session a `PendingLocalStep` holds the second factor's turn, bound to
+ * the browser by the pending-login cookie: an account with a second factor is
+ * asked for it; a person the admin rule names and who has none enrols one
+ * before the session exists (D4 of the ADR).
  */
+import type { AdminGroup, LocalSignInProvider } from '../config/sign-in';
+import { NoticeStore, type Notice } from '../connections/pending';
+import { createNoticeRedirect } from '../connections/notice-redirect';
+import type { SessionStore } from '../compose/ports';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
 import type { Clock } from '../store/clock';
 import type { LocalAccountRecord } from '../store';
-import type { AdminGroup, LocalSignInProvider } from '../config/sign-in';
 import { admit } from './admission';
+import type { Authenticator, UserPrincipal } from './authenticator';
 import type { IdentityClaims } from './claims';
 import { LocalAccountError, LoginError } from './errors';
+import { guardMutation, OPERATOR_REFUSALS, refusalResponse } from './guard';
 import { AUTH_LIMITS, LOGIN_PAGE, notAFormResponse, readForm, safeReturnTo } from './handlers';
 import {
   CREATE_ACCOUNT_PAGE,
@@ -32,7 +53,7 @@ import {
 } from './local-accounts';
 import { completeLogin, type LoginDeps } from './login';
 import { forbiddenOriginResponse, isSameOrigin } from './origin';
-import type { SessionService } from './session-service';
+import type { PendingLocalStep, SessionService } from './session-service';
 import type { SignInProvidersService } from './sign-in-providers';
 import { createThrottle, type ThrottleDeps } from './throttle';
 
@@ -44,8 +65,18 @@ export const ACCOUNT_ERROR_PARAM = 'error';
 export const FORGOT_SENT_PARAM = 'sent';
 /** `?reset=done` on the sign-in page after a reset. */
 export const RESET_DONE_PARAM = 'reset';
+/** The page that asks for the code of the authenticator app. */
+export const SECOND_FACTOR_PAGE = '/login/code';
+/** The page that enrols a second factor during a sign-in. */
+export const ENROL_PAGE = '/login/second-factor';
+/** Settings → Security: the person's own password and second factor. */
+export const SECURITY_PAGE = '/settings/security';
+/** `?enrol=1` on Settings → Security: an enrolment is in progress (the step cookie holds the secret). */
+export const ENROL_PARAM = 'enrol';
+/** A second factor is removed only within this long after signing in. */
+export const FRESH_SIGN_IN_FOR_FACTOR_MS = 10 * 60_000;
 
-/** What sends the mail of a link; absent when the instance sends no mail (wave C). */
+/** What sends the mail of a link; absent when the instance sends no mail. */
 export interface LinkMailer {
   sendLink(input: {
     readonly kind: 'invite' | 'reset';
@@ -57,7 +88,12 @@ export interface LinkMailer {
 
 export interface LocalAuthHandlerDeps extends ThrottleDeps {
   readonly publicUrl: URL;
+  /** The name the authenticator app shows for this gateway. */
+  readonly instanceLabel: string;
   readonly sessions: SessionService;
+  /** The web-session store, for the one-time notices (the recovery codes shown once). */
+  readonly sessionStore: SessionStore;
+  readonly authenticator: Authenticator;
   readonly providers: Pick<SignInProvidersService, 'resolve' | 'views' | 'adminRule'>;
   readonly accounts: LocalAccountsService;
   readonly login: LoginDeps;
@@ -70,9 +106,15 @@ export interface LocalAuthHandlerDeps extends ThrottleDeps {
 
 export interface LocalAuthHandlers {
   passwordLogin(request: Request, providerId: string): Promise<Response>;
+  secondFactorLogin(request: Request, providerId: string): Promise<Response>;
+  enrolAtSignIn(request: Request, providerId: string): Promise<Response>;
   createAccount(request: Request): Promise<Response>;
   resetPassword(request: Request): Promise<Response>;
   forgotPassword(request: Request): Promise<Response>;
+  beginSecondFactor(request: Request): Promise<Response>;
+  confirmSecondFactor(request: Request): Promise<Response>;
+  removeSecondFactor(request: Request): Promise<Response>;
+  changePassword(request: Request): Promise<Response>;
 }
 
 function stringField(form: FormData, name: string): string {
@@ -97,9 +139,23 @@ export function localIdentity(
   };
 }
 
+/** The local account behind a signed-in user, when they signed in through local accounts. */
+export function localAccountIdOf(
+  principal: Pick<UserPrincipal, 'user'>,
+  local: Pick<LocalSignInProvider, 'issuer'>,
+): string | null {
+  const issuer = principal.user.issuer?.replace(/\/+$/, '') ?? null;
+  return issuer === local.issuer.href.replace(/\/+$/, '') ? principal.user.subject : null;
+}
+
 export function createLocalAuthHandlers(deps: LocalAuthHandlerDeps): LocalAuthHandlers {
   const { logger } = deps;
   const admitted = createThrottle(deps);
+  const notices = new NoticeStore(deps.sessionStore);
+  const redirectWithNotice = createNoticeRedirect(
+    { publicUrl: deps.publicUrl, notices },
+    SECURITY_PAGE,
+  );
 
   function redirect(path: string, headers: Record<string, string> = {}): Response {
     return new Response(null, {
@@ -108,8 +164,8 @@ export function createLocalAuthHandlers(deps: LocalAuthHandlerDeps): LocalAuthHa
     });
   }
 
-  function loginError(code: string): Response {
-    return redirect(`${LOGIN_PAGE}?error=${encodeURIComponent(code)}`);
+  function loginError(code: string, headers: Record<string, string> = {}): Response {
+    return redirect(`${LOGIN_PAGE}?error=${encodeURIComponent(code)}`, headers);
   }
 
   function refused(page: string, token: string | null, code: string): Response {
@@ -130,14 +186,27 @@ export function createLocalAuthHandlers(deps: LocalAuthHandlerDeps): LocalAuthHa
     return effective?.provider.kind === 'local' ? effective.provider : null;
   }
 
+  async function throttled(request: Request, scope: 'password' | 'forgot'): Promise<boolean> {
+    return !(await admitted(
+      request,
+      scope,
+      scope === 'forgot' ? AUTH_LIMITS.forgotPerAddress : AUTH_LIMITS.passwordPerAddress,
+      scope === 'forgot' ? AUTH_LIMITS.forgotPerInstance : AUTH_LIMITS.passwordPerInstance,
+    ));
+  }
+
+  /** Whether the admin rule names this address (a local account carries no group). */
+  function namedByAdminRule(email: string): boolean {
+    return deps.adminEmails.includes(email.toLowerCase());
+  }
+
   /** Admission, the `users` row and the session: what every provider's sign-in ends with. */
-  async function signIn(
+  async function openSession(
     request: Request,
     provider: LocalSignInProvider,
     account: LocalAccountRecord,
     adminGroup: AdminGroup | null,
-    returnTo: string,
-  ): Promise<Response> {
+  ): Promise<{ readonly sessionId: string; readonly setCookie: string }> {
     const identity = localIdentity(provider, account);
     const admission = await admit(identity, provider, {
       isInvited: async (email) => (await deps.store.invitations.get(email)) !== null,
@@ -156,31 +225,119 @@ export function createLocalAuthHandlers(deps: LocalAuthHandlerDeps): LocalAuthHa
       login: { email: identity.email, groups: [], provider: provider.id },
     });
     logger.info('sign-in admitted', { provider: provider.id, admission });
-    return redirect(returnTo, { 'Set-Cookie': session.setCookie });
+    return { sessionId: session.id, setCookie: session.setCookie };
   }
 
-  function failLogin(err: unknown): Response {
+  /**
+   * After the password: the session, or the step before it — the second factor
+   * when the account has one, its enrolment when the person administers the
+   * gateway and has none.
+   */
+  async function continueSignIn(
+    request: Request,
+    provider: LocalSignInProvider,
+    account: LocalAccountRecord,
+    returnTo: string,
+  ): Promise<Response> {
+    if (deps.accounts.hasSecondFactor(account)) {
+      const step = await deps.sessions.createLocalStep({
+        step: 'second-factor',
+        providerId: provider.id,
+        accountId: account.id,
+        returnTo,
+      });
+      return redirect(SECOND_FACTOR_PAGE, { 'Set-Cookie': step.setCookie });
+    }
+    if (namedByAdminRule(account.email)) {
+      const enrolment = deps.accounts.beginTotpEnrolment(deps.instanceLabel, account.email);
+      const step = await deps.sessions.createLocalStep({
+        step: 'enrol',
+        providerId: provider.id,
+        accountId: account.id,
+        returnTo,
+        totpSecret: enrolment.secret,
+      });
+      logger.info('sign-in continues with the enrolment of a second factor', {
+        provider: provider.id,
+      });
+      return redirect(ENROL_PAGE, { 'Set-Cookie': step.setCookie });
+    }
+    try {
+      const rule = await deps.providers.adminRule();
+      const session = await openSession(request, provider, account, rule.group);
+      return redirect(returnTo, { 'Set-Cookie': session.setCookie });
+    } catch (err) {
+      return failLogin(err, { 'Set-Cookie': deps.sessions.clearPendingCookie() });
+    }
+  }
+
+  function failLogin(err: unknown, headers: Record<string, string> = {}): Response {
     if (err instanceof LoginError) {
       logger.warn('sign-in failed', { code: err.code, detail: err.message });
-      return loginError(err.code);
+      return loginError(err.code, headers);
     }
     logger.error('sign-in failed unexpectedly', { err });
-    return loginError('idp-error');
+    return loginError('idp-error', headers);
+  }
+
+  /** The step of the request when it is the expected one for this provider; else `null`. */
+  async function takeStep(
+    request: Request,
+    providerId: string,
+    expected: PendingLocalStep['step'],
+  ): Promise<PendingLocalStep | null> {
+    const step = await deps.sessions.takeLocalStep(request.headers);
+    if (!step || step.step !== expected || step.providerId !== providerId) return null;
+    return step;
+  }
+
+  /** The recovery codes, shown once on Settings → Security, as a notice read once. */
+  async function codesNotice(
+    sessionId: string,
+    recoveryCodes: readonly string[],
+    title: string,
+  ): Promise<string> {
+    return notices.put(sessionId, {
+      tone: 'success',
+      title,
+      lines: [
+        'Keep these recovery codes somewhere safe: each one signs you in once when your authenticator app is not at hand. They are shown only now.',
+        ...recoveryCodes,
+      ],
+    });
+  }
+
+  /** The signed-in local account behind a Settings → Security mutation, or the refusal. */
+  async function localUserOf(
+    request: Request,
+  ): Promise<
+    | { readonly ok: true; readonly principal: UserPrincipal; readonly accountId: string }
+    | { readonly ok: false; readonly response: Response }
+  > {
+    const guard = await guardMutation(request, deps, 'user');
+    if (!guard.ok) return { ok: false, response: refusalResponse(guard, OPERATOR_REFUSALS) };
+    const local = await localProvider();
+    const accountId = local ? localAccountIdOf(guard.principal, local) : null;
+    if (!accountId) {
+      const notice: Notice = {
+        tone: 'danger',
+        title: 'Not a local account',
+        lines: [
+          'You signed in through a provider that keeps your password and second factor; change them there.',
+        ],
+      };
+      return {
+        ok: false,
+        response: await redirectWithNotice(guard.principal.sessionId, SECURITY_PAGE, notice),
+      };
+    }
+    return { ok: true, principal: guard.principal, accountId };
   }
 
   return {
     async passwordLogin(request, providerId) {
       if (!isSameOrigin(request.headers, deps.publicUrl)) return forbiddenOriginResponse();
-      if (
-        !(await admitted(
-          request,
-          'password',
-          AUTH_LIMITS.passwordPerAddress,
-          AUTH_LIMITS.passwordPerInstance,
-        ))
-      ) {
-        return loginError('too-many-attempts');
-      }
+      if (await throttled(request, 'password')) return loginError('too-many-attempts');
       const provider = await localProvider(providerId);
       if (!provider) return loginError('provider-unknown');
       const form = await readForm(request);
@@ -195,26 +352,102 @@ export function createLocalAuthHandlers(deps: LocalAuthHandlerDeps): LocalAuthHa
         logger.warn('sign-in failed', { code: 'password-refused', cause: check.cause });
         return loginError('password-refused');
       }
+      return continueSignIn(request, provider, check.account, returnTo);
+    },
+
+    async secondFactorLogin(request, providerId) {
+      if (!isSameOrigin(request.headers, deps.publicUrl)) return forbiddenOriginResponse();
+      if (await throttled(request, 'password')) return loginError('too-many-attempts');
+      const provider = await localProvider(providerId);
+      if (!provider) return loginError('provider-unknown');
+      const step = await takeStep(request, providerId, 'second-factor');
+      if (!step) {
+        return loginError('login-expired', { 'Set-Cookie': deps.sessions.clearPendingCookie() });
+      }
+      const form = await readForm(request);
+      if (!form) return notAFormResponse();
+      const check = await deps.accounts.checkSecondFactor(
+        step.accountId,
+        stringField(form, 'code'),
+      );
+      if (!check.ok) {
+        // The step is kept: the person may try again, within the same ten minutes.
+        const again = await deps.sessions.createLocalStep(step);
+        logger.warn('sign-in failed', { code: 'second-factor-refused' });
+        return redirect(`${SECOND_FACTOR_PAGE}?error=second-factor-refused`, {
+          'Set-Cookie': again.setCookie,
+        });
+      }
+      const account = await deps.accounts.accountById(step.accountId);
+      if (!account) return loginError('account-deactivated');
       try {
         const rule = await deps.providers.adminRule();
-        return await signIn(request, provider, check.account, rule.group, returnTo);
+        const session = await openSession(request, provider, account, rule.group);
+        if (check.by === 'recovery-code') {
+          logger.info('sign-in by recovery code', {
+            provider: provider.id,
+            left: check.recoveryCodesLeft,
+          });
+        }
+        return redirect(step.returnTo, {
+          'Set-Cookie': session.setCookie,
+        });
       } catch (err) {
-        return failLogin(err);
+        return failLogin(err, { 'Set-Cookie': deps.sessions.clearPendingCookie() });
+      }
+    },
+
+    async enrolAtSignIn(request, providerId) {
+      if (!isSameOrigin(request.headers, deps.publicUrl)) return forbiddenOriginResponse();
+      if (await throttled(request, 'password')) return loginError('too-many-attempts');
+      const provider = await localProvider(providerId);
+      if (!provider) return loginError('provider-unknown');
+      const step = await takeStep(request, providerId, 'enrol');
+      if (!step?.totpSecret) {
+        return loginError('login-expired', { 'Set-Cookie': deps.sessions.clearPendingCookie() });
+      }
+      const form = await readForm(request);
+      if (!form) return notAFormResponse();
+      let confirmed: { recoveryCodes: string[] } | null;
+      try {
+        confirmed = await deps.accounts.confirmTotpEnrolment(
+          step.accountId,
+          step.totpSecret,
+          stringField(form, 'code'),
+          step.accountId,
+        );
+      } catch (err) {
+        if (err instanceof LocalAccountError) return loginError('account-deactivated');
+        throw err;
+      }
+      if (!confirmed) {
+        const again = await deps.sessions.createLocalStep(step);
+        logger.warn('sign-in failed', { code: 'second-factor-refused', at: 'enrolment' });
+        return redirect(`${ENROL_PAGE}?error=second-factor-refused`, {
+          'Set-Cookie': again.setCookie,
+        });
+      }
+      const account = await deps.accounts.accountById(step.accountId);
+      if (!account) return loginError('account-deactivated');
+      try {
+        const rule = await deps.providers.adminRule();
+        const session = await openSession(request, provider, account, rule.group);
+        const noticeId = await codesNotice(
+          session.sessionId,
+          confirmed.recoveryCodes,
+          'Second factor set up',
+        );
+        return redirect(`${SECURITY_PAGE}?notice=${encodeURIComponent(noticeId)}`, {
+          'Set-Cookie': session.setCookie,
+        });
+      } catch (err) {
+        return failLogin(err, { 'Set-Cookie': deps.sessions.clearPendingCookie() });
       }
     },
 
     async createAccount(request) {
       if (!isSameOrigin(request.headers, deps.publicUrl)) return forbiddenOriginResponse();
-      if (
-        !(await admitted(
-          request,
-          'password',
-          AUTH_LIMITS.passwordPerAddress,
-          AUTH_LIMITS.passwordPerInstance,
-        ))
-      ) {
-        return loginError('too-many-attempts');
-      }
+      if (await throttled(request, 'password')) return loginError('too-many-attempts');
       const form = await readForm(request);
       if (!form) return notAFormResponse();
       const token = stringField(form, LINK_TOKEN_PARAM);
@@ -233,26 +466,12 @@ export function createLocalAuthHandlers(deps: LocalAuthHandlerDeps): LocalAuthHa
       }
       const provider = await localProvider(account.provider);
       if (!provider) return loginError('provider-unknown');
-      try {
-        const rule = await deps.providers.adminRule();
-        return await signIn(request, provider, account, rule.group, '/');
-      } catch (err) {
-        return failLogin(err);
-      }
+      return continueSignIn(request, provider, account, '/');
     },
 
     async resetPassword(request) {
       if (!isSameOrigin(request.headers, deps.publicUrl)) return forbiddenOriginResponse();
-      if (
-        !(await admitted(
-          request,
-          'password',
-          AUTH_LIMITS.passwordPerAddress,
-          AUTH_LIMITS.passwordPerInstance,
-        ))
-      ) {
-        return loginError('too-many-attempts');
-      }
+      if (await throttled(request, 'password')) return loginError('too-many-attempts');
       const form = await readForm(request);
       if (!form) return notAFormResponse();
       const token = stringField(form, LINK_TOKEN_PARAM);
@@ -274,16 +493,7 @@ export function createLocalAuthHandlers(deps: LocalAuthHandlerDeps): LocalAuthHa
 
     async forgotPassword(request) {
       if (!isSameOrigin(request.headers, deps.publicUrl)) return forbiddenOriginResponse();
-      if (
-        !(await admitted(
-          request,
-          'forgot',
-          AUTH_LIMITS.forgotPerAddress,
-          AUTH_LIMITS.forgotPerInstance,
-        ))
-      ) {
-        return loginError('too-many-attempts');
-      }
+      if (await throttled(request, 'forgot')) return loginError('too-many-attempts');
       const form = await readForm(request);
       if (!form) return notAFormResponse();
       const email = stringField(form, 'email');
@@ -313,6 +523,143 @@ export function createLocalAuthHandlers(deps: LocalAuthHandlerDeps): LocalAuthHa
         }
       }
       return redirect(`${FORGOT_PASSWORD_PAGE}?${FORGOT_SENT_PARAM}=1`);
+    },
+
+    async beginSecondFactor(request) {
+      const who = await localUserOf(request);
+      if (!who.ok) return who.response;
+      const local = await localProvider();
+      if (!local) return redirect(SECURITY_PAGE);
+      const enrolment = deps.accounts.beginTotpEnrolment(
+        deps.instanceLabel,
+        who.principal.user.email,
+      );
+      const step = await deps.sessions.createLocalStep({
+        step: 'enrol',
+        providerId: local.id,
+        accountId: who.accountId,
+        returnTo: SECURITY_PAGE,
+        totpSecret: enrolment.secret,
+      });
+      return redirect(`${SECURITY_PAGE}?${ENROL_PARAM}=1`, { 'Set-Cookie': step.setCookie });
+    },
+
+    async confirmSecondFactor(request) {
+      const who = await localUserOf(request);
+      if (!who.ok) return who.response;
+      const step = await deps.sessions.takeLocalStep(request.headers);
+      const clear = deps.sessions.clearPendingCookie();
+      if (step?.step !== 'enrol' || step.accountId !== who.accountId || !step.totpSecret) {
+        return redirectWithNotice(who.principal.sessionId, SECURITY_PAGE, {
+          tone: 'danger',
+          title: 'Enrolment expired',
+          lines: ['Start again: the secret shown is no longer the one to confirm.'],
+        });
+      }
+      const form = await readForm(request);
+      if (!form) return notAFormResponse();
+      const confirmed = await deps.accounts.confirmTotpEnrolment(
+        who.accountId,
+        step.totpSecret,
+        stringField(form, 'code'),
+        who.principal.user.id,
+      );
+      if (!confirmed) {
+        const again = await deps.sessions.createLocalStep(step);
+        const notice: Notice = {
+          tone: 'danger',
+          title: 'Code not accepted',
+          lines: ['Enter the current code of the authenticator app, for the entry you just added.'],
+        };
+        const id = await notices.put(who.principal.sessionId, notice);
+        return redirect(`${SECURITY_PAGE}?${ENROL_PARAM}=1&notice=${encodeURIComponent(id)}`, {
+          'Set-Cookie': again.setCookie,
+        });
+      }
+      const id = await codesNotice(
+        who.principal.sessionId,
+        confirmed.recoveryCodes,
+        'Second factor set up',
+      );
+      return redirect(`${SECURITY_PAGE}?notice=${encodeURIComponent(id)}`, {
+        'Set-Cookie': clear,
+      });
+    },
+
+    async removeSecondFactor(request) {
+      const who = await localUserOf(request);
+      if (!who.ok) return who.response;
+      const session = await deps.sessions.read(request.headers);
+      const createdAt = session ? Date.parse(session.record.createdAt) : NaN;
+      const fresh =
+        Number.isFinite(createdAt) &&
+        deps.clock.now().getTime() - createdAt < FRESH_SIGN_IN_FOR_FACTOR_MS;
+      if (!fresh) {
+        return redirectWithNotice(who.principal.sessionId, SECURITY_PAGE, {
+          tone: 'danger',
+          title: 'Sign in again first',
+          lines: [
+            'Removing the second factor needs a session opened in the last ten minutes. Sign out, sign in again, then remove it.',
+          ],
+        });
+      }
+      if (namedByAdminRule(who.principal.user.email)) {
+        return redirectWithNotice(who.principal.sessionId, SECURITY_PAGE, {
+          tone: 'danger',
+          title: 'Administrators keep a second factor',
+          lines: ['You administer this gateway: replace the second factor instead of removing it.'],
+        });
+      }
+      await deps.accounts.resetSecondFactor(who.accountId, who.principal.user.id);
+      return redirectWithNotice(who.principal.sessionId, SECURITY_PAGE, {
+        tone: 'success',
+        title: 'Second factor removed',
+        lines: ['Your next sign-ins take the password alone. You can set one up again any time.'],
+      });
+    },
+
+    async changePassword(request) {
+      const who = await localUserOf(request);
+      if (!who.ok) return who.response;
+      const form = await readForm(request);
+      if (!form) return notAFormResponse();
+      const local = await localProvider();
+      const current = stringField(form, 'current_password');
+      const password = stringField(form, 'password');
+      if (password !== stringField(form, 'password_again')) {
+        return redirectWithNotice(who.principal.sessionId, SECURITY_PAGE, {
+          tone: 'danger',
+          title: 'Password not changed',
+          lines: ['The two new passwords differ. Type the same one twice.'],
+        });
+      }
+      const check = local
+        ? await deps.accounts.checkPassword(local.id, who.principal.user.email, current)
+        : { ok: false as const, cause: 'unknown' as const };
+      if (!check.ok) {
+        return redirectWithNotice(who.principal.sessionId, SECURITY_PAGE, {
+          tone: 'danger',
+          title: 'Password not changed',
+          lines: ['The current password is not right, or the account is locked for a few minutes.'],
+        });
+      }
+      try {
+        await deps.accounts.changePassword(who.accountId, password, who.principal.user.id);
+      } catch (err) {
+        if (err instanceof LocalAccountError) {
+          return redirectWithNotice(who.principal.sessionId, SECURITY_PAGE, {
+            tone: 'danger',
+            title: 'Password not changed',
+            lines: [err.sentence],
+          });
+        }
+        throw err;
+      }
+      return redirectWithNotice(who.principal.sessionId, SECURITY_PAGE, {
+        tone: 'success',
+        title: 'Password changed',
+        lines: ['Your open sessions stay open; the next sign-in takes the new password.'],
+      });
     },
   };
 }

@@ -28,7 +28,7 @@ import { createNoticeRedirect, type Notice, type NoticeStore } from '../connecti
 import type { Logger } from '../logging';
 import { USER_ADMIN_ERROR_MESSAGES, UserAdminError } from './errors';
 import type { LocalAccountsService } from '../auth/local-accounts';
-import type { LinkMailer } from '../auth/local-handlers';
+import { localAccountIdOf, type LinkMailer } from '../auth/local-handlers';
 import type { SignInProvidersService } from '../auth/sign-in-providers';
 import { LocalAccountError } from '../auth/errors';
 import type { LocalLinkKind } from '../store';
@@ -65,6 +65,8 @@ export interface UserAdminHandlers {
    * administrator to hand over otherwise.
    */
   accountLink(request: Request): Promise<Response>;
+  /** An administrator resets a person's second factor: their next sign-in takes the password alone (or enrols one, for an administrator). */
+  resetSecondFactor(request: Request, userId: string): Promise<Response>;
 }
 
 const plural = (count: number, one: string, many: string): string => (count === 1 ? one : many);
@@ -73,7 +75,7 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
   const redirectWithNotice = createNoticeRedirect(deps, USERS_PAGE);
 
   /** The one local provider of the instance, or `null`. */
-  async function localProvider(): Promise<{ id: string } | null> {
+  async function localProvider(): Promise<{ id: string; issuer: URL } | null> {
     return (await deps.providers.views()).find((p) => p.kind === 'local') ?? null;
   }
 
@@ -180,6 +182,24 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
         notice = failure(err, 'Not invited');
       }
       return redirectWithNotice(principal.sessionId, USERS_PAGE, notice);
+    },
+
+    resetSecondFactor(request, userId) {
+      return act(request, 'Second factor not reset', async (actor) => {
+        const local = await localProvider();
+        if (!local) throw new LocalAccountError('no-local-provider');
+        const user = await deps.users.get(userId);
+        const accountId = user ? localAccountIdOf({ user }, local) : null;
+        if (!accountId) throw new LocalAccountError('account-not-found');
+        const account = await deps.accounts.resetSecondFactor(accountId, actor.actorId);
+        return {
+          tone: 'success',
+          title: `Second factor of ${account.email} reset`,
+          lines: [
+            'Their next sign-in takes the password alone; if they administer this gateway, it asks them to set a new second factor up at once.',
+          ],
+        };
+      });
     },
 
     async accountLink(request) {

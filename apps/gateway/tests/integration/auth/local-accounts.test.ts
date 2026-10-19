@@ -7,7 +7,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { AUTH_LIMITS, LOCAL_LOCKOUT, SESSION_COOKIE } from '../../../src/server/auth';
+import { AUTH_LIMITS, LOCAL_LOCKOUT, LOGIN_COOKIE, SESSION_COOKIE } from '../../../src/server/auth';
+import { base32Decode, totpCode, totpStepOf } from '../../../src/server/crypto/totp';
 import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
 import { loadInstanceConfig } from '../../../src/server/config';
 import { validEnv } from '../../../src/server/config/testing';
@@ -29,11 +30,27 @@ function form(fields: Record<string, string>): Request {
   });
 }
 
-function sessionCookieOf(res: Response): string | null {
-  const header = res.headers.getSetCookie().find((c) => c.startsWith(`${SESSION_COOKIE}=`));
+function cookieOf(res: Response, name: string): string | null {
+  const header = res.headers.getSetCookie().find((c) => c.startsWith(`${name}=`));
   if (!header) return null;
   const [pair] = header.split(';');
   return pair ?? null;
+}
+
+function sessionCookieOf(res: Response): string | null {
+  return cookieOf(res, SESSION_COOKIE);
+}
+
+function formWith(cookie: string | null, fields: Record<string, string>): Request {
+  return new Request(`${PUBLIC_URL}/form`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/x-www-form-urlencoded',
+      origin: PUBLIC_URL,
+      ...(cookie ? { cookie } : {}),
+    },
+    body: new URLSearchParams(fields).toString(),
+  });
 }
 
 describe('local accounts: invitation link, password sign-in, lockout, reset', () => {
@@ -291,5 +308,209 @@ describe('local accounts: invitation link, password sign-in, lockout, reset', ()
     expect(throttled.headers.get('location')).toBe('/login?error=too-many-attempts');
     const other = await root.auth.handlers.passwordLogin(from('198.51.100.9'), 'local');
     expect(other.headers.get('location')).toBe('/login?error=password-refused');
+  });
+
+  describe('the second factor', () => {
+    const OPS = 'ops@example.com';
+    const OPS_PASSWORD = 'the operator sentence';
+
+    /** The code the authenticator app would show now for the secret of a pending step. */
+    function codeNow(secret: string): string {
+      const bytes = base32Decode(secret);
+      if (!bytes) throw new Error('bad secret');
+      return totpCode(bytes, totpStepOf(clock.now().getTime()));
+    }
+
+    async function stepOf(res: Response) {
+      const cookie = cookieOf(res, LOGIN_COOKIE);
+      const step = await root.auth.sessions.peekLocalStep(new Headers({ cookie: cookie ?? '' }));
+      if (!step) throw new Error('no pending step');
+      return { cookie, step };
+    }
+
+    /** The administrator's account, created on its link; its first sign-in enrols the factor. */
+    async function enrolledAdministrator(): Promise<{ recoveryCodes: string[]; secret: string }> {
+      await root.users.invitations.invite('bootstrap', OPS);
+      const issued = await root.auth.accounts.createLink({
+        kind: 'invite',
+        providerId: 'local',
+        email: OPS,
+        createdBy: 'bootstrap',
+      });
+      const created = await root.auth.handlers.createAccount(
+        form({ token: issued.token, password: OPS_PASSWORD, password_again: OPS_PASSWORD }),
+      );
+      // Named by the admin rule and without a second factor: the enrolment comes first.
+      expect(created.headers.get('location')).toBe('/login/second-factor');
+      expect(sessionCookieOf(created)).toBeNull();
+      const { cookie, step } = await stepOf(created);
+      expect(step.step).toBe('enrol');
+      const secret = step.totpSecret ?? '';
+      const wrong = await root.auth.handlers.enrolAtSignIn(
+        formWith(cookie, { code: '000000' }),
+        'local',
+      );
+      expect(wrong.headers.get('location')).toBe(
+        '/login/second-factor?error=second-factor-refused',
+      );
+      const again = cookieOf(wrong, LOGIN_COOKIE);
+      const done = await root.auth.handlers.enrolAtSignIn(
+        formWith(again, { code: codeNow(secret) }),
+        'local',
+      );
+      const location = done.headers.get('location') ?? '';
+      expect(location.startsWith('/settings/security?notice=')).toBe(true);
+      const session = sessionCookieOf(done);
+      expect(session).not.toBeNull();
+      const principal = await root.auth.authenticator.authenticate(
+        new Headers({ cookie: session ?? '' }),
+      );
+      expect(principal).toMatchObject({ kind: 'user', isOperator: true });
+      const noticeId = new URL(location, PUBLIC_URL).searchParams.get('notice');
+      const notice = await root.connections.notices.take(principal?.sessionId ?? '', noticeId);
+      const recoveryCodes = (notice?.lines ?? []).filter((line) =>
+        /^[a-z2-7]{5}-[a-z2-7]{5}$/.test(line),
+      );
+      expect(recoveryCodes).toHaveLength(8);
+      return { recoveryCodes, secret };
+    }
+
+    it('an administrator enrols a second factor before their first session; the codes are shown once', async () => {
+      const { secret } = await enrolledAdministrator();
+      const account = await root.auth.accounts.accountOf('local', OPS);
+      expect(account?.totpConfirmedAt).not.toBeNull();
+      expect(await root.store.localAccounts.readSecret(account?.id ?? '', 'totp')).toBe(secret);
+      const entries = await root.store.audit.search({
+        scope: {
+          missionCreatorUserId: null,
+          missionMemberUserId: null,
+          connectionOwners: [],
+          allAdmin: true,
+          allCalls: false,
+        },
+        kind: 'admin',
+        limit: 100,
+      });
+      expect(JSON.stringify(entries)).toContain('local-second-factor-changed');
+      expect(JSON.stringify(entries)).not.toContain(secret);
+    });
+
+    it('the next sign-in asks for the code; a code is accepted once; a recovery code once', async () => {
+      const { recoveryCodes, secret } = await enrolledAdministrator();
+      const first = await signIn(OPS, OPS_PASSWORD);
+      expect(first.headers.get('location')).toBe('/login/code');
+      expect(sessionCookieOf(first)).toBeNull();
+      const { cookie } = await stepOf(first);
+      const refused = await root.auth.handlers.secondFactorLogin(
+        formWith(cookie, { code: '123456' }),
+        'local',
+      );
+      expect(refused.headers.get('location')).toBe('/login/code?error=second-factor-refused');
+      // The code of the step the enrolment accepted is spent: one step later it is a replay.
+      clock.advance(60_000);
+      const code = codeNow(secret);
+      const ok = await root.auth.handlers.secondFactorLogin(
+        formWith(cookieOf(refused, LOGIN_COOKIE), { code }),
+        'local',
+      );
+      expect(ok.headers.get('location')).toBe('/');
+      expect(sessionCookieOf(ok)).not.toBeNull();
+      const replayStart = await signIn(OPS, OPS_PASSWORD);
+      const replay = await root.auth.handlers.secondFactorLogin(
+        formWith(cookieOf(replayStart, LOGIN_COOKIE), { code }),
+        'local',
+      );
+      expect(replay.headers.get('location')).toBe('/login/code?error=second-factor-refused');
+      const [recovery = ''] = recoveryCodes;
+      const byRecovery = await root.auth.handlers.secondFactorLogin(
+        formWith(cookieOf(replay, LOGIN_COOKIE), { code: recovery.toUpperCase() }),
+        'local',
+      );
+      expect(byRecovery.headers.get('location')).toBe('/');
+      const account = await root.auth.accounts.accountOf('local', OPS);
+      expect(await root.auth.accounts.recoveryCodesLeft(account?.id ?? '')).toBe(7);
+      const spent = await root.auth.handlers.secondFactorLogin(
+        formWith(cookieOf(await signIn(OPS, OPS_PASSWORD), LOGIN_COOKIE), { code: recovery }),
+        'local',
+      );
+      expect(spent.headers.get('location')).toBe('/login/code?error=second-factor-refused');
+      // The step cookie is single-use: a stale one is an expired login.
+      const stale = await root.auth.handlers.secondFactorLogin(
+        formWith(cookie, { code: codeNow(secret) }),
+        'local',
+      );
+      expect(stale.headers.get('location')).toBe('/login?error=login-expired');
+    });
+
+    it('an administrator resets a person’s second factor: their next sign-in enrols again', async () => {
+      await enrolledAdministrator();
+      const [user] = await root.store.users.list();
+      if (!user) throw new Error('no user');
+      const reset = await root.users.handlers.resetSecondFactor(formWith(null, {}), user.id);
+      expect(reset.status).toBe(401); // no session on this request
+      const account = await root.auth.accounts.accountOf('local', OPS);
+      await root.auth.accounts.resetSecondFactor(account?.id ?? '', 'other-admin');
+      const next = await signIn(OPS, OPS_PASSWORD);
+      expect(next.headers.get('location')).toBe('/login/second-factor');
+    });
+
+    it('a person who is not an administrator enrols from Settings → Security and may remove it after a fresh sign-in', async () => {
+      await invitedAccount();
+      const signedIn = await signIn(ADA, PASSWORD);
+      const session = sessionCookieOf(signedIn);
+      const begin = await root.auth.handlers.beginSecondFactor(formWith(session, {}));
+      expect(begin.headers.get('location')).toBe('/settings/security?enrol=1');
+      const { cookie, step } = await stepOf(begin);
+      const confirmed = await root.auth.handlers.confirmSecondFactor(
+        formWith(`${session}; ${cookie}`, { code: codeNow(step.totpSecret ?? '') }),
+      );
+      expect(confirmed.headers.get('location') ?? '').toMatch(/^\/settings\/security\?notice=/);
+      const account = await root.auth.accounts.accountOf('local', ADA);
+      expect(account?.totpConfirmedAt).not.toBeNull();
+      // From now on the password alone is not enough.
+      expect((await signIn(ADA, PASSWORD)).headers.get('location')).toBe('/login/code');
+      // Removal needs a session younger than ten minutes.
+      clock.advance(11 * 60_000);
+      const late = await root.auth.handlers.removeSecondFactor(formWith(session, {}));
+      expect(late.headers.get('location') ?? '').toMatch(/^\/settings\/security\?notice=/);
+      expect((await root.auth.accounts.accountOf('local', ADA))?.totpConfirmedAt).not.toBeNull();
+      const fresh = await signIn(ADA, PASSWORD);
+      const factor = await root.auth.handlers.secondFactorLogin(
+        formWith(cookieOf(fresh, LOGIN_COOKIE), { code: codeNow(step.totpSecret ?? '') }),
+        'local',
+      );
+      const removed = await root.auth.handlers.removeSecondFactor(
+        formWith(sessionCookieOf(factor), {}),
+      );
+      expect(removed.headers.get('location') ?? '').toMatch(/^\/settings\/security\?notice=/);
+      expect((await root.auth.accounts.accountOf('local', ADA))?.totpConfirmedAt).toBeNull();
+      expect((await signIn(ADA, PASSWORD)).headers.get('location')).toBe('/');
+    });
+
+    it('a person changes their password with the current one', async () => {
+      await invitedAccount();
+      const session = sessionCookieOf(await signIn(ADA, PASSWORD));
+      const wrong = await root.auth.handlers.changePassword(
+        formWith(session, {
+          current_password: 'not it',
+          password: 'a brand new sentence',
+          password_again: 'a brand new sentence',
+        }),
+      );
+      expect(wrong.headers.get('location') ?? '').toMatch(/^\/settings\/security\?notice=/);
+      expect((await signIn(ADA, PASSWORD)).headers.get('location')).toBe('/');
+      const changed = await root.auth.handlers.changePassword(
+        formWith(session, {
+          current_password: PASSWORD,
+          password: 'a brand new sentence',
+          password_again: 'a brand new sentence',
+        }),
+      );
+      expect(changed.headers.get('location') ?? '').toMatch(/^\/settings\/security\?notice=/);
+      expect((await signIn(ADA, PASSWORD)).headers.get('location')).toBe(
+        '/login?error=password-refused',
+      );
+      expect((await signIn(ADA, 'a brand new sentence')).headers.get('location')).toBe('/');
+    });
   });
 });

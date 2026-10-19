@@ -64,6 +64,12 @@ const AUTHENTICATING_HANDLERS: readonly string[] = [
   'shares.handlers.share',
   'shares.handlers.revoke',
   'oauth.handlers.revokeDelegation',
+  // Settings → Security (`src/server/auth/local-handlers.ts`): `guardMutation` with the role
+  // `user`, then the local account behind the session (ADR local-accounts-sign-in-provider).
+  'auth.handlers.beginSecondFactor',
+  'auth.handlers.confirmSecondFactor',
+  'auth.handlers.removeSecondFactor',
+  'auth.handlers.changePassword',
 ];
 const DELEGATION = /\(await getRoot\(\)\)\.([a-zA-Z]+\.handlers\.[a-zA-Z]+)\(request\b/g;
 

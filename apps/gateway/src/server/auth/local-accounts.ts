@@ -23,6 +23,14 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { AuditWriter } from '@vaubaan/gateway-core';
 
 import { decoyHash, hashPassword, passwordProblem, verifyPassword } from '../crypto/password';
+import {
+  base32Decode,
+  generateRecoveryCodes,
+  generateTotpSecret,
+  otpauthUrl,
+  recoveryCodeDigest,
+  verifyTotp,
+} from '../crypto/totp';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
 import { toIso, type Clock } from '../store/clock';
@@ -77,6 +85,16 @@ export interface LocalAccountsDeps {
   readonly logger: Logger;
   readonly publicUrl: URL;
 }
+
+/** What an enrolment shows: the secret for the QR code and for typing by hand. */
+export interface TotpEnrolment {
+  readonly secret: string;
+  readonly otpauth: string;
+}
+
+export type SecondFactorCheck =
+  | { readonly ok: true; readonly by: 'totp' | 'recovery-code'; readonly recoveryCodesLeft: number }
+  | { readonly ok: false };
 
 function tokenDigest(token: string): string {
   return createHash('sha256').update(token).digest('hex');
@@ -260,6 +278,113 @@ export class LocalAccountsService {
     return this.deps.store.localAccounts.pendingLinks(providerId, email);
   }
 
+  /* ---------------------------------------------------------------------- */
+  /* The second factor                                                        */
+  /* ---------------------------------------------------------------------- */
+
+  /** Whether the account has a confirmed second factor. */
+  hasSecondFactor(account: LocalAccountRecord): boolean {
+    return account.totpConfirmedAt !== null;
+  }
+
+  /**
+   * A fresh secret for the authenticator app, the enrolment's first half: it is
+   * returned to be shown and kept by the caller (a pending step, a settings page)
+   * until one code confirms it. Nothing is stored yet: the current factor, if any,
+   * stays in force until the new one is confirmed.
+   */
+  beginTotpEnrolment(instanceLabel: string, email: string): TotpEnrolment {
+    const secret = generateTotpSecret();
+    return { secret, otpauth: otpauthUrl({ issuer: instanceLabel, account: email, secret }) };
+  }
+
+  /**
+   * The enrolment's second half: the code proves the app holds the secret; the
+   * secret and eight fresh recovery codes are sealed, the codes returned once.
+   */
+  async confirmTotpEnrolment(
+    accountId: string,
+    secret: string,
+    code: string,
+    actor: string,
+  ): Promise<{ recoveryCodes: string[] } | null> {
+    const account = await this.deps.store.localAccounts.getById(accountId);
+    if (!account) throw new LocalAccountError('account-not-found');
+    const bytes = base32Decode(secret);
+    if (!bytes || bytes.length === 0) return null;
+    const step = verifyTotp(bytes, code, this.deps.clock.now().getTime());
+    if (step === null) return null;
+    const recoveryCodes = generateRecoveryCodes();
+    await this.deps.store.localAccounts.writeSecret(accountId, 'totp', secret);
+    await this.deps.store.localAccounts.writeSecret(
+      accountId,
+      'recovery',
+      JSON.stringify(recoveryCodes.map(recoveryCodeDigest)),
+    );
+    await this.deps.store.localAccounts.setTotp(accountId, {
+      confirmedAt: toIso(this.deps.clock.now()),
+      lastStep: step,
+    });
+    await this.audit(actor, 'local-second-factor-changed', account.provider, null, {
+      email: account.email,
+      by: actor === account.id ? 'self' : actor,
+      change: 'enrolled',
+    });
+    this.deps.logger.info('local account second factor enrolled', { provider: account.provider });
+    return { recoveryCodes };
+  }
+
+  /**
+   * A code of the authenticator app (never accepted twice: the time step must be
+   * later than the last one accepted), or a recovery code (spent on use).
+   */
+  async checkSecondFactor(accountId: string, code: string): Promise<SecondFactorCheck> {
+    const account = await this.deps.store.localAccounts.getById(accountId);
+    if (!account || account.totpConfirmedAt === null) return { ok: false };
+    const typed = code.trim();
+    if (/^[\d\s]{6,8}$/.test(typed)) {
+      const secret = await this.deps.store.localAccounts.readSecret(accountId, 'totp');
+      const bytes = secret ? base32Decode(secret) : null;
+      const step = bytes ? verifyTotp(bytes, typed, this.deps.clock.now().getTime()) : null;
+      if (step !== null && (await this.deps.store.localAccounts.advanceTotpStep(accountId, step))) {
+        return { ok: true, by: 'totp', recoveryCodesLeft: await this.recoveryCodesLeft(accountId) };
+      }
+      return { ok: false };
+    }
+    const raw = await this.deps.store.localAccounts.readSecret(accountId, 'recovery');
+    const digests = raw ? (JSON.parse(raw) as string[]) : [];
+    const digest = recoveryCodeDigest(typed);
+    if (!digests.includes(digest)) return { ok: false };
+    const left = digests.filter((d) => d !== digest);
+    await this.deps.store.localAccounts.writeSecret(accountId, 'recovery', JSON.stringify(left));
+    this.deps.logger.info('local account recovery code used', {
+      provider: account.provider,
+      left: left.length,
+    });
+    return { ok: true, by: 'recovery-code', recoveryCodesLeft: left.length };
+  }
+
+  async recoveryCodesLeft(accountId: string): Promise<number> {
+    const raw = await this.deps.store.localAccounts.readSecret(accountId, 'recovery');
+    return raw ? (JSON.parse(raw) as string[]).length : 0;
+  }
+
+  /** The person (after a fresh sign-in) or an administrator removes the second factor. */
+  async resetSecondFactor(accountId: string, actor: string): Promise<LocalAccountRecord> {
+    const account = await this.deps.store.localAccounts.getById(accountId);
+    if (!account) throw new LocalAccountError('account-not-found');
+    await this.deps.store.localAccounts.deleteSecret(accountId, 'totp');
+    await this.deps.store.localAccounts.deleteSecret(accountId, 'recovery');
+    await this.deps.store.localAccounts.setTotp(accountId, { confirmedAt: null, lastStep: null });
+    await this.audit(actor, 'local-second-factor-changed', account.provider, null, {
+      email: account.email,
+      by: actor === account.id ? 'self' : actor,
+      change: 'reset',
+    });
+    this.deps.logger.info('local account second factor reset', { provider: account.provider });
+    return account;
+  }
+
   /** An administrator removes an account: the person can no longer sign in through it. */
   async remove(accountId: string, actor: string): Promise<LocalAccountRecord> {
     const account = await this.deps.store.localAccounts.getById(accountId);
@@ -313,6 +438,7 @@ export class LocalAccountsService {
       | 'local-link-created'
       | 'local-account-created'
       | 'local-password-changed'
+      | 'local-second-factor-changed'
       | 'local-account-removed',
     providerId: string,
     before: unknown,
