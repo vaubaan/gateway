@@ -88,7 +88,7 @@ export function EnrolSecondFactor({
           Scan it with an authenticator app (Aegis, Google Authenticator, 1Password, Bitwarden…), or
           type the secret below into the app by hand.
         </p>
-        <CodeBlock label="Secret, to type by hand" wrap>
+        <CodeBlock label="Secret, to type by hand" wrap testId="totp-secret">
           {secret.match(/.{1,4}/g)?.join(' ') ?? secret}
         </CodeBlock>
       </div>
