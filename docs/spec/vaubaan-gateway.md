@@ -1368,7 +1368,8 @@ same for any agent, with no value of any mission.
 ### 7.1 Install an instance
 
 The operator deploys the image, provides the configuration (§4.3), opens
-the interface with the bootstrap token, downloads the encryption key when
+the interface with the bootstrap token — typed, or carried by a setup link
+whose fragment holds it, so that the token reaches no log —, downloads the encryption key when
 the instance generated it and confirms having kept it, adds a sign-in provider (or
 declares it in the configuration), signs in through it — which revokes
 the bootstrap token when they match the admin rule —, and invites the

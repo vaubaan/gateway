@@ -1030,7 +1030,15 @@ reset link made by another administrator from People.
 - **`/admin/bootstrap`** — "Set up this gateway", inside `AuthPage`: the
   token form (`POST /api/auth/bootstrap`, field `token`; the label says the
   expected shape, the hint where the value comes from), only while the state
-  is `active`; otherwise a note (`bootstrap-closed`) says when the token was
+  is `active`. **A setup link fills the field**: whoever installs the gateway
+  can hand the operator `/admin/bootstrap#token=<token>` — the fragment, which
+  the browser never sends, so the token reaches neither the access logs nor a
+  referrer; `?token=` is read too for a link built the older way. The field
+  (`BootstrapTokenInput`, a client component over `setup-link.ts`:
+  `tokenFromSetupLink`, `setupLinkWithoutToken`) reads it on mount, fills
+  itself, marks `data-from-link`, and takes the token out of the address bar
+  with `history.replaceState`; it stays editable and nothing is submitted
+  without the click. The setup-mode form takes the same field; otherwise a note (`bootstrap-closed`) says when the token was
   revoked (or that none exists) and points to `/login`. A refused token
   comes back as `?error=bootstrap-refused` (`bootstrap-error`); a visitor who
   already holds a
