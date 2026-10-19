@@ -305,6 +305,11 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       post('/admin/users/invitations', headers, { email: 'guest@example.org' }),
     ),
   ),
+  'users.handlers.accountLink': form('operator', 303, (rig, headers) =>
+    rig.root.users.handlers.accountLink(
+      post('/admin/users/local-link', headers, { kind: 'invite', email: 'guest@example.org' }),
+    ),
+  ),
   'users.handlers.removeInvitation': form('operator', 303, (rig, headers) =>
     rig.root.users.handlers.removeInvitation(
       post('/admin/users/invitations/remove', headers, { email: 'nobody@example.org' }),

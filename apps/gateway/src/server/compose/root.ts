@@ -16,7 +16,7 @@ import { MemoryCacheClient } from '@vaubaan/gateway-core';
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import { createAuditModule, type AuditModule } from '../audit';
-import { createAuthModule, type AuthModule, type OidcOptions } from '../auth';
+import { createAuthModule, type AuthModule, type LinkMailer, type OidcOptions } from '../auth';
 import { createAuthorityModule, derivedMissionReads, type AuthorityModule } from '../authority';
 import { SessionService } from '../budget';
 import { createConnectionsModule, type ConnectionsModule } from '../connections';
@@ -123,6 +123,8 @@ export interface RootDeps {
   readonly openStore?: (ctx: StoreContext) => Promise<Store>;
   /** Tests: the clock of the authentication module (link expiry, lockouts); the system clock otherwise. */
   readonly clock?: Clock;
+  /** Sends the mails of the local accounts' links; built from `mail.*` by the boot (wave C). */
+  readonly mailer?: LinkMailer;
   readonly buildRegistry?: (config: InstanceConfig, logger: Logger) => Promise<PluginRegistry>;
   readonly rateLimiter?: RateLimiter;
   readonly cache?: CacheClient;
@@ -524,6 +526,9 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     connections,
     authenticator: auth.authenticator,
     sessions: auth.sessions,
+    accounts: auth.accounts,
+    providers: auth.providers,
+    mailer: deps.mailer,
     logger,
   });
   const execution = createExecutionModule({

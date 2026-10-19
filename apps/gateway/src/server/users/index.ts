@@ -5,7 +5,10 @@
  * docs/handbook/authentication.md, "Deactivating a user".
  */
 import type { Authenticator } from '../auth/authenticator';
+import type { LocalAccountsService } from '../auth/local-accounts';
+import type { LinkMailer } from '../auth/local-handlers';
 import type { SessionService } from '../auth/session-service';
+import type { SignInProvidersService } from '../auth/sign-in-providers';
 import type { MembershipSettler } from '../authority';
 import type { InstanceConfig } from '../config/types';
 import type { ConnectionsModule } from '../connections';
@@ -28,6 +31,11 @@ export interface UsersModuleDeps {
   readonly authenticator: Authenticator;
   /** The web sessions: "sign out everywhere" clears the cookie of the browser it comes from. */
   readonly sessions: Pick<SessionService, 'destroy'>;
+  /** The local accounts and their links: an invitation also creates the account's link. */
+  readonly accounts: LocalAccountsService;
+  readonly providers: Pick<SignInProvidersService, 'views'>;
+  /** Sends the mails of the links; absent when the instance sends no mail. */
+  readonly mailer?: LinkMailer;
   readonly logger: Logger;
   readonly clock?: Clock;
 }
@@ -62,6 +70,9 @@ export function createUsersModule(deps: UsersModuleDeps): UsersModule {
     sessions: deps.sessions,
     users: service,
     invitations,
+    accounts: deps.accounts,
+    providers: deps.providers,
+    mailer: deps.mailer,
     notices: deps.connections.notices,
     logger,
   });
