@@ -1621,6 +1621,16 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   sign-in through it, not another; no self-lockout (unmake, provider removal,
   deactivation of the last administrator with a way in refused); removing a
   provider ends its users' sessions, not the remover's.
+- **`tests/integration/auth/provider-test.test.ts`** (6) — ADR
+  [[administrators-live-in-the-instance]] §5: a new provider saved off, not
+  offered, refused at sign-in (`provider-disabled`) and not switched on
+  untested; a test signs nobody in (no user, no group), keeps the tester's
+  session and records identity, `amr` and verdict, then the provider is
+  switched on, and an edit keeps it on with a stale test; a failed test
+  (GitHub's unverified address) lets nothing on; the bootstrap holder makes
+  the tested identity the first administrator, another session cannot use the
+  result; a callback carrying another session is `state-mismatch`; switching
+  off the last way in is refused.
 - **`server/compose/restored-admin-rule.test.ts`** (2) — the rule a backup of
   ADR [[backup-carries-the-sign-in-configuration]] carried is applied with the
   configuration's while the store names nobody, then deleted; with

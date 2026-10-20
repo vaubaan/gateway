@@ -9,6 +9,19 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Added
+
+- **Test a sign-in provider beside your session.** "Test" opens the provider
+  in another window, runs its sign-in to the end, and signs nobody in: the
+  result page shows what the provider returned and the verdict a sign-in would
+  get (administrator, user, or refused and why). During the setup, the tested
+  identity can be made the first administrator from there.
+- **Sign-in providers are switched on and off.** A provider added in
+  Settings → Sign-in is off until a test passes, then switched on; the sign-in
+  page offers only the providers that are on. Switching one off ends its
+  people's sessions, never yours, and is refused when it is the last way in of
+  every administrator. Providers saved before this version stay on.
+
 ### Changed
 
 - **The administrators live in the instance.** Who administers a gateway is

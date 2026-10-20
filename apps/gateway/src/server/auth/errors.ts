@@ -7,6 +7,7 @@
 export const LOGIN_ERROR_CODES = [
   'idp-not-configured',
   'provider-unknown',
+  'provider-disabled',
   'discovery-failed',
   'login-expired',
   'state-mismatch',
@@ -36,6 +37,8 @@ export const LOGIN_ERROR_MESSAGES: Readonly<Record<LoginErrorCode, string>> = {
   'idp-not-configured': 'No identity provider is configured on this gateway yet.',
   'provider-unknown':
     'This sign-in provider is not offered by this gateway (any more). Choose one of the providers below.',
+  'provider-disabled':
+    'This sign-in provider is switched off on this gateway. Choose one of the providers below, or ask an administrator.',
   'discovery-failed':
     'The identity provider could not be reached. Try again or contact the administrator of this gateway.',
   'login-expired': 'The sign-in attempt expired. Start again.',

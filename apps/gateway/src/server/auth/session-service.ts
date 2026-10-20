@@ -72,6 +72,12 @@ export interface PendingLogin {
   readonly codeVerifier: string;
   /** Same-origin path to land on after sign-in. */
   readonly returnTo: string;
+  /**
+   * Set when the attempt is a test of the provider beside the session (ADR
+   * administrators-live-in-the-instance, §5): the web session of the tester. The
+   * callback then signs nobody in.
+   */
+  readonly testerSessionId?: string;
   readonly createdAt: string;
 }
 
@@ -151,6 +157,7 @@ export function isPendingLogin(value: unknown): value is PendingLogin {
     typeof value.nonce === 'string' &&
     typeof value.codeVerifier === 'string' &&
     typeof value.returnTo === 'string' &&
+    (value.testerSessionId === undefined || typeof value.testerSessionId === 'string') &&
     typeof value.createdAt === 'string'
   );
 }

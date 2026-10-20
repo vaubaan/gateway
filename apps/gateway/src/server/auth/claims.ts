@@ -48,6 +48,11 @@ export interface IdentityClaims {
   readonly displayName: string | null;
   /** Distinct, trimmed, in claim order. Empty when the IdP sends none. */
   readonly groups: readonly string[];
+  /**
+   * The authentication methods the ID token names (`amr`, RFC 8176), when it names
+   * any: `mfa` says the provider asked a second factor. Absent: it says nothing.
+   */
+  readonly amr?: readonly string[];
 }
 
 const GROUP_DELIMITERS = /[\s,;]+/;
@@ -172,7 +177,15 @@ export function mapClaims(
     emailVerified: saysTrue(raw[verifiedClaim]) ? true : null,
     displayName: nonEmptyString(raw.name),
     groups: parseGroupsClaim(raw[mapping.groups]),
+    ...amrOf(raw.amr),
   };
+}
+
+/** The `amr` claim as a list of method names, or nothing when it is not one. */
+function amrOf(value: unknown): { readonly amr?: readonly string[] } {
+  if (!Array.isArray(value)) return {};
+  const methods = value.filter((m): m is string => typeof m === 'string' && m.length > 0);
+  return methods.length > 0 ? { amr: methods } : {};
 }
 
 /** Spec §4.3 optional allowed-domain filter; an empty list allows every domain. */

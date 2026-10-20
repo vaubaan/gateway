@@ -1095,16 +1095,27 @@ interpreted as markup.
   administrator, **Administration**: a setup checklist of what the instance
   still needs; **sign-in** — the list of sign-in providers, each with its
   kind (OpenID Connect, GitHub, local accounts), its admission rule and
-  the address to register at it; an administrator adds, edits, tests and
-  removes one, its secret never shown back, and a provider set by the
-  configuration file is shown read-only; local accounts are added in one
-  step and need no registration anywhere; Google and Entra ID are offered as
+  the address to register at it, and whether it is on; an administrator
+  adds, edits, tests, switches on and off and removes one, its secret never
+  shown back, and a provider set by the configuration file is shown
+  read-only and always on; local accounts are added in one step, on, and
+  need no registration anywhere; Google and Entra ID are offered as
   presets of OpenID Connect that fill the form and say where to register
-  the client;
-  removing one says how many people signed in through it: they can no
-  longer sign in and their sessions end, and their missions and connected
-  apps keep the rules of a deactivation (they stop only when the
-  administrator deactivates them); **people** — everyone who signed in, with the provider
+  the client. A provider added here is **off** until a test passed: the
+  **test** runs the provider's sign-in in another window and signs nobody
+  in — no person, no session, the tester's own untouched — then shows what
+  the provider returned (subject, email and whether it is verified, groups,
+  authentication methods) and the verdict a sign-in would get (admitted as
+  administrator, as a user and why, or refused and why); from that result
+  the administrator switches it on, and during the setup the holder of the
+  setup link makes the tested identity the first administrator. An edit of
+  a provider that is on keeps it on and marks its last test stale. The
+  sign-in page offers only the providers that are on. Switching one off or
+  removing it says how many people signed in through it: they can no
+  longer sign in and their sessions end — never the administrator's own —,
+  and their missions and connected apps keep the rules of a deactivation
+  (they stop only when the administrator deactivates them); neither is
+  allowed when it is the last way in of every administrator; **people** — everyone who signed in, with the provider
   they signed in through (deactivate, reactivate, make or unmake an
   administrator), the **administrators** (every person, pending address and
   group of a provider named administrator, and by whom: the setup, an
@@ -1325,7 +1336,7 @@ same for any agent, with no value of any mission.
   origin; a person, or an administrator for them, can end every session
   of that person at once. Every mutation requires a valid session and an
   origin check. **No self-lockout**: unmaking an administrator,
-  deactivating a person, removing a sign-in provider are refused when they
+  deactivating a person, switching off or removing a sign-in provider are refused when they
   would leave no administrator with a way in (an active administrator whose
   provider is configured); removing a provider ends its users' sessions,
   never the remover's own. The sign-in endpoints are rate-limited like every other
@@ -1536,6 +1547,7 @@ For an administrative act: timestamp, user, act (connection, share,
 revocation, issuance, extension, reset, approval, rotation, change of
 limits, a member removed or leaving, delegation granted or revoked,
 an administrator named or removed, the configuration's admin rule applied,
+a sign-in provider tested, switched on or off,
 configuration change), object, previous and new
 state when meaningful, and, when the act comes from the management
 surface, the identity of the delegated client.
@@ -1645,6 +1657,11 @@ automated suite. Trust comes from usage.
     nobody by itself, a pending address consumed by the first sign-in of
     its provider, and every act that would leave no administrator a way in
     refused;
+  - the test of a sign-in provider (§4.2): no user, session or group written,
+    the tester's session kept, a callback of another session refused, the
+    verdict computed as a sign-in would, the result usable by the tester's
+    session only; a provider saved off and switched on only after a test
+    passed since its last save, refused at sign-in while off;
   - the OAuth client of a service (§4.3, §7.2): declared on the connect
     page by an administrator only, the file winning over the page, the
     secret sealed and never echoed, an audit entry without a secret, the

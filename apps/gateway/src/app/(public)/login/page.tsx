@@ -103,7 +103,8 @@ export default async function LoginPage({ searchParams }: Props) {
   const failed = errorCode !== null && isLoginErrorCode(errorCode);
   // Signed in: the home, not a card about being signed in.
   if (principal?.kind === 'user' && !failed) redirect(ROUTES.home);
-  const providers = await root.auth.providers.views();
+  // A provider switched off is not offered: the page never shows a button that does not work.
+  const providers = (await root.auth.providers.views()).filter((provider) => provider.enabled);
   const local = providers.find((provider) => provider.kind === 'local') ?? null;
   const redirecting = providers.filter((provider) => provider.kind !== 'local');
   const resetDone = first(params[RESET_DONE_PARAM]) === 'done';

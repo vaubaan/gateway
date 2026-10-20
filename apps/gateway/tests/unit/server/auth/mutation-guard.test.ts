@@ -357,6 +357,24 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       post('/admin/users/invitations/remove', headers, { email: 'nobody@example.org' }),
     ),
   ),
+  'auth.handlers.enableSignInProvider': form('operator', 303, (rig, headers) =>
+    rig.root.auth.handlers.enableSignInProvider(
+      post('/api/admin/sign-in-providers/none/enable', headers, {}),
+      'none',
+    ),
+  ),
+  'auth.handlers.disableSignInProvider': form('operator', 303, (rig, headers) =>
+    rig.root.auth.handlers.disableSignInProvider(
+      post('/api/admin/sign-in-providers/none/disable', headers, {}),
+      'none',
+    ),
+  ),
+  'auth.handlers.makeAdministratorFromTest': form('operator', 303, (rig, headers) =>
+    rig.root.auth.handlers.makeAdministratorFromTest(
+      post('/api/admin/sign-in-providers/none/test/administrator', headers, {}),
+      'none',
+    ),
+  ),
   'auth.handlers.removeSignInProvider': form('operator', 303, (rig, headers) =>
     rig.root.auth.handlers.removeSignInProvider(
       post('/api/admin/sign-in-providers/none/remove', headers, {}),
@@ -503,6 +521,8 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
 const READS: Readonly<Record<string, string>> = {
   'auth.handlers.loginStart': 'GET; starts a sign-in, the pending login is bound to a cookie',
   'auth.handlers.loginCallback': 'GET from the IdP; protected by the single-use state and PKCE',
+  'auth.handlers.testStart':
+    'GET; starts a test of a provider for an administrator (authorizeAdmin), bound to their session; its callback signs nobody in',
   'connections.handlers.callback':
     'GET from the provider; protected by the single-use state bound to the user (guardSession)',
   'requests.handlers.open': 'GET; redirects or refuses, rate-limited (guardSession)',

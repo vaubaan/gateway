@@ -100,7 +100,24 @@ test('an administrator adds GitHub, an invited address signs in through it, and 
   await expect(table.getByRole('row')).toHaveCount(3);
   await expect(table).toContainText('invited people only');
   await expect(table).toContainText('open to anyone');
+  // Saved off: it is switched on after a test (ADR administrators-live-in-the-instance).
+  await expect(table).toContainText('off: test it first');
   await snap(page, 'settings-sign-in');
+
+  // The test opens GitHub in another window and signs nobody in: this session stays.
+  await nextGithubUser(request, GUEST);
+  const [popup] = await Promise.all([
+    page.context().waitForEvent('page'),
+    page.getByTestId('test-provider-github').click(),
+  ]);
+  await popup.waitForURL(/\/admin\/identity-provider\/github\/test/);
+  await expect(popup.getByTestId('test-passed')).toContainText(GUEST.email);
+  await expect(popup.getByTestId('test-passed')).toContainText('refused');
+  await snap(popup, 'settings-sign-in-test');
+  await popup.close();
+  await page.reload();
+  await page.getByTestId('enable-provider-github').click();
+  await expect(page.getByTestId('idp-enabled')).toBeVisible();
 
   // Signed out, the sign-in page offers both providers.
   await signOut(page);

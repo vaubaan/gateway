@@ -499,6 +499,60 @@ an OIDC one (`emailVerified: true`), and goes through the same admission and
 `completeLogin`. The team, when the user is in it, becomes an IdP group of the
 provider.
 
+## Testing a provider, switching it on and off
+
+ADR [administrators-live-in-the-instance](../decisions/administrators-live-in-the-instance.md) §5.
+
+**State.** A provider saved in Settings has a state in `instance_config`,
+`sign_in_state.<id>` (`SignInProvidersService.state`): `enabled`, `changed_at`
+(its last save) and the last `test` (`ProviderTestRecord`). No state reads as
+on — every provider saved before this version. `save` writes it: a new OpenID
+Connect or GitHub provider **off**, local accounts on; an edit keeps the switch
+and moves `changed_at`, so the last test reads stale ("changed since its last
+test"). `remove` deletes it. A provider of the file is always on. `views()`
+carries `enabled`; the sign-in page lists, and `/auth/login` without an id
+chooses among, the providers that are on; `loginStart` and `loginCallback`
+refuse one that is off (`provider-disabled`).
+
+**The test** (`GET /auth/test/<id>`, `handlers.testStart`; "Test" on Settings →
+Sign-in opens it in another window): an administrator or the bootstrap
+principal (`authorizeAdmin`), the sign-in start's windows. An OpenID Connect
+issuer is first checked as the form checks it (`checkIssuer`, the
+`RelyingPartyFactory` discovery of #81): a failure is recorded as
+`discovery-failed` with what the check said. Otherwise the provider's flow
+starts with a pending login that carries `testerSessionId` — the tester's web
+session —, on the same `__Host-vbn_login` cookie and callback as a sign-in. The
+callback (`loginCallback` → `finishTest`) recognises it by that field, requires
+the request's session to be that one and an administrator's (else
+`state-mismatch`), finishes the flow, and computes what a sign-in would get —
+`AdministratorsService.admits` and `admit()` with the invitation list — without
+writing anything: no `users` row, no group sync, no pending address consumed,
+no bootstrap revocation, no session. It records the outcome
+(`recordTest`: `passed` with the identity seen — issuer, subject, email,
+verified or not, display name, groups, `amr` — and the verdict; or `failed`
+with the closed `LoginErrorCode`), writes `sign-in-provider-tested`
+(`after`: outcome, error, email, verdict) and lands on
+`/admin/identity-provider/<id>/test`, the tester's session cookie untouched.
+
+**Switching on and off.** `POST /api/admin/sign-in-providers/<id>/enable`
+(`setEnabled(true)`): only after a test that passed since the last save
+(`testPassedSinceSaved`; local accounts need none), `sign-in-provider-enabled`.
+`…/disable`: `assertNoLockout({ withoutProvider })`, then off, then the
+sessions of its users end except the actor's (`endSessionsOfIssuer(issuer,
+actor)`), `sign-in-provider-disabled` with the count.
+
+**From a test to an administrator.**
+`POST /api/admin/sign-in-providers/<id>/test/administrator`
+(`makeAdministratorFromTest`): the last test of this provider, `passed`, run by
+**this** session (`test.sessionId`) — never a field of the form —; the identity's
+`users` row is written (`ensureIdentity`, no sign-in counted) and a `user`
+designation granted (`origin: setup` for the bootstrap principal, else
+`granted`). This is how the setup names the first administrator through a
+provider.
+
+Tests: `tests/integration/auth/provider-test.test.ts`; e2e
+`sign-in-providers.spec.ts` (test in a popup, then "Switch on").
+
 ## Removing a provider
 
 In Settings → Sign-in, "Remove" (asked first, saying how many people signed in

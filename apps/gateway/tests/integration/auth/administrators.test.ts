@@ -6,6 +6,7 @@
  * its person at the first sign-in, and no act leaves the instance without an
  * administrator who has a way in.
  */
+import { switchOnForTests } from '../../../src/server/auth/testing';
 import { afterEach, describe, expect, it } from 'vitest';
 import { CONFIGURATION_ACTOR_ID } from '@vaubaan/gateway-core';
 
@@ -245,6 +246,7 @@ describe('administrators live in the instance', () => {
       },
       'create',
     );
+    await switchOnForTests(root.store.config, 'github');
     const ops = await root.store.users.upsertFromIdp({
       issuer: 'https://github.com',
       subject: '1',
@@ -309,6 +311,7 @@ describe('administrators live in the instance', () => {
         },
         'create',
       );
+      await switchOnForTests(root.store.config, id);
     }
     const ops = await root.store.users.upsertFromIdp({
       issuer: 'https://github.com',

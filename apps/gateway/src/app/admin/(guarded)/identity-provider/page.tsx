@@ -2,20 +2,23 @@
  * `/admin/identity-provider` — Settings → Sign-in: the sign-in providers of the
  * gateway (spec §4.2; ADR sign-in-providers-admission-and-admin-rule). One row
  * each: its name and id, its kind, who it admits, how many people signed in
- * through it. A provider saved here is edited (`/admin/identity-provider/<id>`),
- * tested (the real sign-in, coming back here with what it returned) and removed
- * (asked first, with the people it concerns); one set by the mounted
- * configuration is shown read-only. "Add a sign-in provider" opens the form.
+ * through it, whether it is on. A provider saved here is edited
+ * (`/admin/identity-provider/<id>`), tested beside the session — in another window,
+ * signing nobody in, the result on `/admin/identity-provider/<id>/test` (ADR
+ * administrators-live-in-the-instance) —, switched on after a passed test, switched
+ * off and removed (asked first, with the people it concerns; never the last
+ * administrator's way in); one set by the mounted configuration is shown read-only
+ * and always on. "Add a sign-in provider" opens the form.
  */
 import styles from '@/components/settings/settings.module.css';
 import {
+  Button,
   ButtonLink,
   Callout,
   ConfirmSubmit,
   DataTable,
   EmptyState,
   Hint,
-  KeyValue,
   Mono,
   PageHeader,
   Section,
@@ -25,10 +28,12 @@ import {
 import { requireOperator } from '@/lib/auth/session';
 import { CONFIG_WORDS, SETTINGS_ACTIONS, SETTINGS_PAGES } from '@/lib/vocabulary';
 import {
-  IDP_PAGE,
   NEW_SIGN_IN_PROVIDER_PAGE,
   signInProviderPage,
-  signInStartPath,
+  signInTestPage,
+  signInTestPath,
+  testPassedSinceSaved,
+  type ProviderState,
   type SignInProviderView,
 } from '@/server/auth';
 import { isOpenProvider, issuerKey } from '@/server/config';
@@ -56,22 +61,26 @@ function admits(provider: SignInProviderView): string {
 
 interface Row {
   readonly provider: SignInProviderView;
+  readonly state: ProviderState;
   readonly people: number;
 }
 
 export default async function SignInSettingsPage({ searchParams }: Props) {
-  const { root, principal } = await requireOperator();
+  const { root } = await requireOperator();
   const params = await searchParams;
   const problems = ([] as string[]).concat(params.problem ?? []);
   const saved = first(params.saved);
   const removed = first(params.removed);
   const removedPeople = Number(first(params.people) ?? '0');
-  const tested = first(params.tested);
+  const enabled = first(params.enabled);
+  const disabled = first(params.disabled);
   const providers = await root.auth.providers.views();
   const administrators = await root.auth.administrators.current();
   const users = await root.store.users.list();
-  const rows: Row[] = providers.map((provider) => ({
+  const states = await Promise.all(providers.map((p) => root.auth.providers.state(p.id)));
+  const rows: Row[] = providers.map((provider, index) => ({
     provider,
+    state: states[index] ?? { enabled: true, changedAt: null, test: null },
     people: users.filter(
       (user) => user.issuer !== null && issuerKey(user.issuer) === issuerKey(provider.issuer),
     ).length,
@@ -104,6 +113,27 @@ export default async function SignInSettingsPage({ searchParams }: Props) {
       ),
     },
     { id: 'admits', header: 'Admits', cell: ({ provider }) => admits(provider) },
+    {
+      id: 'state',
+      header: 'State',
+      nowrap: true,
+      cell: ({ provider, state }) =>
+        provider.enabled ? (
+          provider.kind !== 'local' &&
+          provider.source === 'store' &&
+          !testPassedSinceSaved(state) ? (
+            <span className={styles.inline}>
+              on <Tag>changed since its last test</Tag>
+            </span>
+          ) : (
+            'on'
+          )
+        ) : (
+          <span className={styles.quiet}>
+            off{testPassedSinceSaved(state) ? ': test passed' : ': test it first'}
+          </span>
+        ),
+    },
     {
       id: 'people',
       header: 'People',
@@ -140,57 +170,41 @@ export default async function SignInSettingsPage({ searchParams }: Props) {
         }
       />
 
-      {(saved || removed || problems.length > 0 || (tested && principal.kind === 'user')) && (
+      {(saved || removed || enabled || disabled || problems.length > 0) && (
         <div className={styles.notes}>
           {saved && (
             <Callout tone="ok" title="Saved" testId="idp-saved">
-              The client secret is encrypted at rest. Use “{SETTINGS_ACTIONS.testSignIn}” to check
-              the settings; the first sign-in of an administrator revokes the install token.
+              The client secret is encrypted at rest. A new provider is off until a test passes: use
+              “Test”, which opens the provider in another window and signs nobody in, then switch it
+              on.
+            </Callout>
+          )}
+          {enabled && (
+            <Callout tone="ok" title={`Provider ${enabled} switched on`} testId="idp-enabled">
+              The sign-in page offers it from now on.
+            </Callout>
+          )}
+          {disabled && (
+            <Callout tone="ok" title={`Provider ${disabled} switched off`} testId="idp-disabled">
+              {removedPeople === 0
+                ? 'Nobody else had signed in through it.'
+                : `${removedPeople} ${removedPeople === 1 ? 'person' : 'people'} signed in through it: their sessions are over until it is on again.`}
             </Callout>
           )}
           {removed && (
             <Callout tone="ok" title={`Provider ${removed} removed`} testId="idp-removed">
               {removedPeople === 0
-                ? 'Nobody had signed in through it.'
+                ? 'Nobody else had signed in through it.'
                 : `${removedPeople} ${removedPeople === 1 ? 'person' : 'people'} signed in through it: their sessions are over and they can no longer sign in. Their missions and connected apps keep running until you deactivate them on People.`}
             </Callout>
           )}
           {problems.length > 0 && (
-            <Callout tone="bad" title="Not saved" testId="idp-problems">
+            <Callout tone="bad" title="Not done" testId="idp-problems">
               <ul className={styles.list}>
                 {problems.map((problem) => (
                   <li key={problem}>{problem}</li>
                 ))}
               </ul>
-            </Callout>
-          )}
-          {tested && principal.kind === 'user' && (
-            <Callout tone="info" title="What the provider returned" testId="idp-tested">
-              <KeyValue
-                items={[
-                  { term: 'Provider', value: <Mono>{principal.providerId ?? tested}</Mono> },
-                  { term: 'Email', value: principal.login.email },
-                  {
-                    term: 'Teams',
-                    value:
-                      principal.login.groups.length === 0 ? (
-                        <span className={styles.quiet}>none returned</span>
-                      ) : (
-                        <span className={styles.inline}>
-                          {principal.login.groups.map((group) => (
-                            <Tag key={group} mono>
-                              {group}
-                            </Tag>
-                          ))}
-                        </span>
-                      ),
-                  },
-                  {
-                    term: 'Administrator',
-                    value: principal.isOperator ? 'yes: you match the rule' : 'no',
-                  },
-                ]}
-              />
             </Callout>
           )}
         </div>
@@ -217,17 +231,56 @@ export default async function SignInSettingsPage({ searchParams }: Props) {
             columns={columns}
             rows={rows}
             rowKey={({ provider }) => provider.id}
-            actions={({ provider, people }) => (
+            actions={({ provider, people, state }) => (
               <span className={styles.inline}>
-                <ButtonLink
-                  href={`${signInStartPath(provider.id)}?return_to=${encodeURIComponent(`${IDP_PAGE}?tested=${provider.id}`)}`}
-                  size="sm"
-                  aria-label={`${SETTINGS_ACTIONS.testSignIn} through ${provider.name}`}
-                  // A plain link: a prefetch of /auth/login would start a sign-in.
-                  external
-                >
-                  Test
-                </ButtonLink>
+                {provider.kind !== 'local' && (
+                  <ButtonLink
+                    href={signInTestPath(provider.id)}
+                    size="sm"
+                    aria-label={`${SETTINGS_ACTIONS.testSignIn} through ${provider.name}`}
+                    // A plain link, in another window: the test runs beside this session.
+                    external
+                    target="_blank"
+                    rel="opener"
+                    data-testid={`test-provider-${provider.id}`}
+                  >
+                    Test
+                  </ButtonLink>
+                )}
+                {state.test && (
+                  <ButtonLink href={signInTestPage(provider.id)} size="sm" variant="ghost">
+                    Last test
+                  </ButtonLink>
+                )}
+                {provider.source === 'store' && !provider.enabled && (
+                  <form
+                    method="post"
+                    action={`/api/admin/sign-in-providers/${encodeURIComponent(provider.id)}/enable`}
+                  >
+                    <Button
+                      type="submit"
+                      size="sm"
+                      variant="primary"
+                      aria-label={`Switch ${provider.name} on`}
+                      data-testid={`enable-provider-${provider.id}`}
+                    >
+                      Switch on
+                    </Button>
+                  </form>
+                )}
+                {provider.source === 'store' && provider.enabled && (
+                  <ConfirmSubmit
+                    action={`/api/admin/sign-in-providers/${encodeURIComponent(provider.id)}/disable`}
+                    label="Switch off"
+                    ariaLabel={`Switch ${provider.name} off`}
+                    variant="ghost"
+                    tone="danger"
+                    title={`Switch ${provider.name} off?`}
+                    consequence="Nobody signs in through it until it is on again, and the sessions of its people end — not yours. Refused if it is the last way in of every administrator."
+                    confirmLabel="Switch off"
+                    testId={`disable-provider-${provider.id}`}
+                  />
+                )}
                 {provider.source === 'file' ? (
                   <Tag>{CONFIG_WORDS.file}</Tag>
                 ) : (
