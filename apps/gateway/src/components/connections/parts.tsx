@@ -60,7 +60,6 @@ export function NoticeBanner({ notice }: { notice: Notice | null }) {
 
 const CREDENTIAL_KIND_LABEL = {
   oauth2: 'OAuth authorization',
-  'app-install': 'App installation',
   'api-key': 'API key',
   'ssh-key': 'SSH key pair',
 } as const;

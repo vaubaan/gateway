@@ -61,8 +61,6 @@ export interface ProviderCard {
   readonly experimental: boolean;
   /** The primary way of connecting. */
   readonly credential_kind: CredentialKind;
-  /** Every way of connecting, primary first (a token beside the company app). */
-  readonly credential_kinds: readonly CredentialKind[];
   readonly counts: ProviderCounts;
   /** The planes of the data model, declaration order (`db`, `storage`, …). */
   readonly plane_slugs: readonly string[];
@@ -93,11 +91,6 @@ function cardOf(registered: RegisteredPlugin, risks: readonly CatalogRisk[]): Pr
     description: plugin.description ?? null,
     experimental: plugin.experimental === true,
     credential_kind: plugin.credential.kind,
-    // `credentialSpecsOf`, spelled out: this module also reaches client components, and
-    // a value import of the SDK would pull its server dependencies into the browser.
-    credential_kinds: [plugin.credential, ...(plugin.alternativeCredentials ?? [])].map(
-      (spec) => spec.kind,
-    ),
     counts: countsOf(registered, risks),
     plane_slugs: plugin.dataModel.planes.map((plane) => plane.slug),
     envs: catalogEnvs(plugin.catalog.risks),

@@ -1,17 +1,13 @@
 /**
  * Connections (spec §0 "Connection", "Resource"; §2.3 states; §7.2).
  *
- * One generic driver over the four `CredentialSpec` kinds — the plugin
- * declares, the host runs the flow:
+ * One generic driver over the three `CredentialSpec` kinds — the plugin
+ * declares one way of connecting, the host runs the flow (ADR
+ * one-place-to-authorize-services-token-first):
  *
+ *   api-key      start(): the form values, checked at paste and by a first discovery
  *   oauth2       start(): authorization redirect with a single-use `state` and PKCE
  *                complete(): code exchange with the company's OAuth client
- *   app-install  start(): redirect to the app's installation page with a `state`
- *                complete(): the installation id of the callback, accepted only once
- *                the provider confirms the authorizing user can reach it
- *                (`install-verification.ts`); a spec that cannot prove it is
- *                refused unless the operator accepted unverified installations
- *   api-key      start(): the form values, checked by a first discovery
  *   ssh-key      start(): an ed25519 key pair generated here, public key shown
  *
  * A connection is created under the name of the user who connected it. An
@@ -23,19 +19,13 @@
  * plugin at connect time and merged by `syncDiscoveredResources`, which
  * never overwrites an owner edit and never deletes a row.
  */
-import { isCredentialKind, UpstreamAuthError, type CredentialKind } from '@vaubaan/shared';
+import { UpstreamAuthError, type CredentialKind } from '@vaubaan/shared';
 import {
-  appCredentialSpecOf,
-  credentialSpecFor,
-  credentialSpecsOf,
-  isAppCredentialSpec,
   type ApiKeyCredentialSpec,
-  type AppInstallCredentialSpec,
   type ConnectionContext,
   type CredentialCheck,
   type CredentialField,
   type CredentialSecret,
-  type CredentialSpec,
   type OAuth2CredentialSpec,
   type PluginRegistry,
   type ProviderPlugin,
@@ -82,12 +72,6 @@ import {
   type FieldValues,
 } from './input';
 import {
-  InstallationRefused,
-  InstallationVerificationUnavailable,
-  verifyInstallation,
-  type InstallationRefusalReason,
-} from './install-verification';
-import {
   buildAuthorizationUrl,
   exchangeCode,
   newCodeVerifier,
@@ -107,24 +91,12 @@ export const DISCOVERY_TIMEOUT_MS = 30_000;
 export const CONNECTIONS_PATH = '/accounts';
 /**
  * Where a provider sends the browser back after an authorization. This path is
- * registered at the provider (the callback URL of the company's GitHub App, the
- * redirect URI of its OAuth apps): it is part of the protocol, so it kept its name
- * when the pages moved to `/accounts`.
+ * registered at the provider (the redirect URI of the company's OAuth client):
+ * it is part of the protocol, so it kept its name when the pages moved to
+ * `/accounts`.
  */
 export const CONNECT_CALLBACK_PATH = '/connections/callback';
-const INSTALLATION_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 const SSH_KEY_COMMENT = 'vaubaan-gateway';
-
-/** Why a connect attempt was refused before anything was stored (audit `after.reason`). */
-export type ConnectRefusalReason =
-  | InstallationRefusalReason
-  /** The callback carried no authorization code. */
-  | 'no-authorization-code'
-  /** The plugin declares no verification and the operator did not accept that. */
-  | 'verification-not-supported';
-
-/** How the installation behind a connection was bound to its owner (`metadata.installation_verification`). */
-export type InstallationBinding = 'user-authorization' | 'none';
 
 /** The human behind a request, with their *current* groups (never a snapshot). */
 export interface Actor {
@@ -154,67 +126,27 @@ export interface TokenGuideView {
   readonly docsUrl: string | null;
 }
 
-/** A tool a way of connecting cannot run, and why. */
-export interface UnavailableToolView extends ToolLabel {
-  readonly reason: string;
-}
-
 /**
- * One way an account of a service can be connected (ADR
- * token-connections-beside-the-integration-app): through the company's app,
- * or with a token pasted by hand, each with what the form asks and what it
- * cannot do.
+ * A service as the connect page shows it: its one way of connecting, read
+ * from the plugin's declaration, and whether it can be used now.
  */
-export interface ConnectMethod {
+export interface ConnectableProvider {
+  readonly id: string;
+  readonly displayName: string;
+  readonly description: string | null;
+  readonly experimental: boolean;
   readonly kind: CredentialKind;
-  /** Goes through an app the company registers at the service. */
+  /** Goes through an OAuth client the company declares at the service (`oauth2`). */
   readonly usesApp: boolean;
-  /** Usable now: its app is registered (and verifiable), or it needs none. */
+  /** Usable now: its OAuth client is declared, or it needs none. Users may connect. */
   readonly configured: boolean;
-  /** The fields of the connect form (`api-key`, `ssh-key`); empty for redirect flows. */
+  /** The fields of the connect form (`api-key`, `ssh-key`); empty for the redirect flow. */
   readonly fields: readonly CredentialField[];
   /** Where the user creates the key (`api-key`). */
   readonly createUrl: string | null;
   /** What the person creates, in the service's words (`api-key`): "fine-grained personal access token". */
   readonly label: string | null;
   readonly guide: TokenGuideView | null;
-  readonly unavailableTools: readonly UnavailableToolView[];
-}
-
-export interface ConnectableProvider {
-  readonly id: string;
-  readonly displayName: string;
-  readonly description: string | null;
-  readonly experimental: boolean;
-  /** The way offered first (`defaultMethod`); the four fields below are its own. */
-  readonly kind: CredentialKind;
-  /** At least one way can be used now: users may connect. */
-  readonly configured: boolean;
-  /** The fields of the connect form (`api-key`, `ssh-key`); empty for redirect flows. */
-  readonly fields: readonly CredentialField[];
-  /** Where the user creates the key (`api-key`). */
-  readonly createUrl: string | null;
-  /**
-   * Every way the plugin declares, primary first. The offered one is the
-   * first that is `configured` (the company's app when it is registered),
-   * else the primary.
-   */
-  readonly methods: readonly ConnectMethod[];
-}
-
-/** The way a page offers first: the first one usable now, else the primary. */
-export function defaultMethod(provider: Pick<ConnectableProvider, 'methods'>): ConnectMethod {
-  const first = provider.methods[0];
-  if (!first) throw new Error('a provider declares at least one way of connecting');
-  return provider.methods.find((m) => m.configured) ?? first;
-}
-
-/** The way of this kind, or `null` when the service does not connect that way. */
-export function methodOf(
-  provider: Pick<ConnectableProvider, 'methods'>,
-  kind: string | null | undefined,
-): ConnectMethod | null {
-  return provider.methods.find((m) => m.kind === kind) ?? null;
 }
 
 export interface DiscoveryRecord {
@@ -266,8 +198,6 @@ export interface ConnectionView {
   readonly tokenAccount: string | null;
   /** When the pasted token stops working, as the service said at connect time; `null` when it did not. */
   readonly tokenExpiresAt: string | null;
-  /** Tools of the service an account made this way cannot run, and why. */
-  readonly unavailableTools: readonly UnavailableToolView[];
   readonly ownerLabel: string;
   /** `ssh-key`: the line to append to `authorized_keys`. */
   readonly publicKey: string | null;
@@ -294,11 +224,6 @@ export interface StartInput {
   readonly reconnectId?: string | null;
   /** Form values for `api-key` / `ssh-key`. */
   readonly fields?: Readonly<Record<string, string>>;
-  /**
-   * The way to connect, a credential kind the plugin declares. Absent: the
-   * kind of the account being reconnected, else the way offered first.
-   */
-  readonly method?: string | null;
 }
 
 export interface Connected {
@@ -449,56 +374,36 @@ export class ConnectionService {
 
   private async describe(providerId: string): Promise<ConnectableProvider> {
     const { plugin } = this.deps.registry.require(providerId);
-    const app = appCredentialSpecOf(plugin);
-    // An installation nobody can verify is not connectable until the operator says so.
-    const status =
-      app && needsProviderApp(app) ? await this.deps.providerApps.status(providerId) : null;
-    const appConfigured =
-      status === null || (status.configured && status.installVerification !== 'unverified-refused');
-    const methods = credentialSpecsOf(plugin).map((spec) =>
-      methodView(plugin, spec, isAppCredentialSpec(spec) ? appConfigured : true),
-    );
-    const offered = defaultMethod({ methods });
+    const spec = plugin.credential;
+    const usesApp = needsProviderApp(spec);
+    const configured = usesApp
+      ? (await this.deps.providerApps.status(providerId)).configured
+      : true;
+    const guide = spec.kind === 'api-key' ? spec.guide : undefined;
     return {
       id: plugin.id,
       displayName: plugin.displayName,
       description: plugin.description ?? null,
       experimental: plugin.experimental === true,
-      kind: offered.kind,
-      configured: methods.some((m) => m.configured),
-      fields: offered.fields,
-      createUrl: offered.createUrl,
-      methods,
+      kind: spec.kind,
+      usesApp,
+      configured,
+      fields: spec.kind === 'api-key' || spec.kind === 'ssh-key' ? spec.fields : [],
+      createUrl: spec.kind === 'api-key' ? (spec.createUrl ?? null) : null,
+      label: spec.kind === 'api-key' ? (spec.label ?? null) : null,
+      guide: guide
+        ? {
+            steps: guide.steps,
+            permissions: guide.permissions.map((p) => ({
+              name: p.name,
+              access: p.access,
+              tools: p.tools.map((tool) => toolLabel(plugin, tool)),
+            })),
+            recommendedExpiryDays: guide.recommendedExpiryDays,
+            docsUrl: guide.docsUrl ?? null,
+          }
+        : null,
     };
-  }
-
-  /**
-   * The spec a connect flow runs: the way the form chose, else the way of the
-   * account being reconnected, else the way offered first. A way the plugin
-   * does not declare is refused.
-   */
-  private async chooseSpec(
-    plugin: ProviderPlugin,
-    method: string | null | undefined,
-    reconnect: ConnectionRecord | null,
-  ): Promise<CredentialSpec> {
-    if (method) {
-      const chosen = isCredentialKind(method) ? credentialSpecFor(plugin, method) : null;
-      if (!chosen) {
-        throw new ConnectError(
-          'invalid-input',
-          `${plugin.displayName} cannot be connected that way (${method.slice(0, 40)})`,
-        );
-      }
-      return chosen;
-    }
-    if (reconnect) {
-      const kind = connectionCredentialKind(reconnect, plugin.credential.kind);
-      const same = kind ? credentialSpecFor(plugin, kind) : null;
-      if (same) return same;
-    }
-    const offered = defaultMethod(await this.describe(plugin.id));
-    return credentialSpecFor(plugin, offered.kind) ?? plugin.credential;
   }
 
   // ── Reads ─────────────────────────────────────────────────────────────────
@@ -543,13 +448,11 @@ export class ConnectionService {
       returnTo,
       reconnectId: reconnect?.id ?? null,
     };
-    const spec = await this.chooseSpec(plugin, input.method, reconnect);
+    const spec = plugin.credential;
 
     switch (spec.kind) {
       case 'oauth2':
         return this.startOAuth2(flow, spec);
-      case 'app-install':
-        return this.startAppInstall(flow, spec);
       case 'api-key':
         return this.connectWithApiKey(flow, spec, input);
       case 'ssh-key':
@@ -566,25 +469,6 @@ export class ConnectionService {
       state,
       codeVerifier: pending.codeVerifier,
     });
-    return { kind: 'redirect', url: url.href };
-  }
-
-  private async startAppInstall(
-    flow: FlowStart,
-    spec: AppInstallCredentialSpec,
-  ): Promise<StartResult> {
-    const providerId = flow.plugin.id;
-    const appConfig = await this.hostAppConfig(providerId);
-    // Refused before the user is sent anywhere; checked again on the callback.
-    if (
-      !spec.userVerification &&
-      (await this.deps.providerApps.installVerification(providerId)) !== 'unverified-accepted'
-    ) {
-      throw new ConnectError('installation-unverifiable');
-    }
-    const url = new URL(spec.installUrl(appConfig));
-    const state = await this.deps.pending.create(this.newPending('app-install', flow, null));
-    url.searchParams.set('state', state);
     return { kind: 'redirect', url: url.href };
   }
 
@@ -645,8 +529,8 @@ export class ConnectionService {
     input: ImportPastedInput,
   ): Promise<Connected> {
     const plugin = this.requirePlugin(providerId);
-    const spec = credentialSpecFor(plugin, 'api-key');
-    if (!spec) {
+    const spec = plugin.credential;
+    if (spec.kind !== 'api-key') {
       throw new ConnectError('invalid-input', `${plugin.displayName} takes no pasted key`);
     }
     return this.connectPasted(
@@ -666,8 +550,8 @@ export class ConnectionService {
    */
   async importSshKey(actor: Actor, input: ImportSshInput): Promise<Connected> {
     const plugin = this.requirePlugin(input.providerId);
-    const spec = credentialSpecFor(plugin, 'ssh-key');
-    if (!spec) {
+    const spec = plugin.credential;
+    if (spec.kind !== 'ssh-key') {
       throw new ConnectError('invalid-input', `${plugin.displayName} takes no ssh key`);
     }
     const read = this.readFormOrThrow(spec.fields, { fields: input.fields });
@@ -718,7 +602,7 @@ export class ConnectionService {
     try {
       check = await spec.verify({
         credential: secret,
-        appConfig: await this.deps.providerApps.pluginAppConfigFor(plugin.id, secret.kind),
+        appConfig: await this.deps.providerApps.pluginAppConfig(plugin.id),
         fetch: this.deps.fetch,
         signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
       });
@@ -808,14 +692,9 @@ export class ConnectionService {
     const pending = await this.deps.pending.take(query.get('state'), actor.user.id);
     if (!pending || pending.providerId !== providerId) throw new ConnectError('state-invalid');
     const plugin = this.requirePlugin(providerId);
-
-    if (pending.kind === 'oauth2') {
-      const spec = credentialSpecFor(plugin, 'oauth2');
-      if (spec) return this.completeOAuth2(actor, plugin, spec, pending, query);
-    }
-    if (pending.kind === 'app-install') {
-      const spec = credentialSpecFor(plugin, 'app-install');
-      if (spec) return this.completeAppInstall(actor, plugin, spec, pending, query);
+    const spec = plugin.credential;
+    if (pending.kind === 'oauth2' && spec.kind === 'oauth2') {
+      return this.completeOAuth2(actor, plugin, spec, pending, query);
     }
     throw new ConnectError('state-invalid');
   }
@@ -858,122 +737,6 @@ export class ConnectionService {
       discovery: 'best-effort',
       metadata: {},
     });
-  }
-
-  private async completeAppInstall(
-    actor: Actor,
-    plugin: ProviderPlugin,
-    spec: AppInstallCredentialSpec,
-    pending: PendingConnect,
-    query: URLSearchParams,
-  ): Promise<Connected> {
-    const installationId = query.get(spec.installationIdParam);
-    if (!installationId || !INSTALLATION_ID_PATTERN.test(installationId)) {
-      throw new ConnectError(
-        'provider-denied',
-        'no installation was returned (it may be awaiting approval by an account owner)',
-      );
-    }
-    const binding = await this.bindInstallation(actor, plugin, spec, pending, query, {
-      installationId,
-    });
-    const secret: CredentialSecret = { kind: 'app-install', installationId, metadata: {} };
-    return this.finalize(actor, plugin, secret, {
-      displayName: pending.displayName,
-      reconnectId: pending.reconnectId,
-      returnTo: pending.returnTo,
-      discovery: 'reject-auth-failure',
-      metadata: { installation_id: installationId, installation_verification: binding },
-    });
-  }
-
-  /**
-   * Proves that the human behind the callback can reach the installation it
-   * names, or refuses. A refusal stores nothing and leaves an audit entry; an
-   * unreachable provider is not a refusal (the user retries).
-   */
-  private async bindInstallation(
-    actor: Actor,
-    plugin: ProviderPlugin,
-    spec: AppInstallCredentialSpec,
-    pending: PendingConnect,
-    query: URLSearchParams,
-    claim: { readonly installationId: string },
-  ): Promise<InstallationBinding> {
-    const refuse = async (
-      reason: ConnectRefusalReason,
-      error: ConnectError,
-    ): Promise<ConnectError> => {
-      await this.auditRefusal(actor, plugin, pending, claim.installationId, reason);
-      this.deps.logger.warn('connection refused: installation not bound to the user', {
-        provider: plugin.id,
-        user_id: actor.user.id,
-        installation_id: claim.installationId,
-        reason,
-      });
-      return error;
-    };
-
-    const verification = spec.userVerification;
-    if (!verification) {
-      const accepted =
-        (await this.deps.providerApps.installVerification(plugin.id)) === 'unverified-accepted';
-      if (!accepted) {
-        throw await refuse(
-          'verification-not-supported',
-          new ConnectError('installation-unverifiable'),
-        );
-      }
-      this.deps.logger.warn('installation accepted without verification (operator setting)', {
-        provider: plugin.id,
-        user_id: actor.user.id,
-        installation_id: claim.installationId,
-      });
-      return 'none';
-    }
-
-    const code = query.get(verification.codeParam);
-    if (!code) {
-      const denied = query.get('error');
-      throw await refuse(
-        'no-authorization-code',
-        new ConnectError(
-          'installation-not-verified',
-          denied
-            ? `the authorization was not granted (${denied})`
-            : 'the provider returned no user authorization; the app must request user authorization during installation',
-        ),
-      );
-    }
-    const app = await this.hostAppConfig(plugin.id);
-    const clientId = app[CLIENT_ID_FIELD];
-    const clientSecret = app[CLIENT_SECRET_FIELD];
-    if (!clientId || !clientSecret) throw new ConnectError('app-not-configured');
-    try {
-      await verifyInstallation(
-        verification,
-        { clientId, clientSecret },
-        { installationId: claim.installationId, code },
-        { fetch: this.deps.fetch, now: () => this.deps.clock.now() },
-      );
-    } catch (err) {
-      if (err instanceof InstallationVerificationUnavailable) {
-        throw new ConnectError('provider-unreachable', err.message);
-      }
-      if (err instanceof InstallationRefused) {
-        throw await refuse(
-          err.reason,
-          new ConnectError(
-            err.reason === 'authorization-code-rejected'
-              ? 'token-exchange-failed'
-              : 'installation-not-verified',
-            err.message,
-          ),
-        );
-      }
-      throw err;
-    }
-    return 'user-authorization';
   }
 
   /** First discovery, then the write, then the discovery's outcome on the connection. */
@@ -1021,7 +784,7 @@ export class ConnectionService {
     try {
       const resources = await this.discoverWith(plugin, {
         credential: secret,
-        appConfig: await this.deps.providerApps.pluginAppConfigFor(plugin.id, secret.kind),
+        appConfig: await this.deps.providerApps.pluginAppConfig(plugin.id),
         fetch: this.deps.fetch,
       });
       return { resources, error: null };
@@ -1557,8 +1320,8 @@ export class ConnectionService {
     const app = await this.hostAppConfig(plugin.id);
     const clientId = app[CLIENT_ID_FIELD];
     if (!clientId) throw new ConnectError('app-not-configured');
-    const spec = credentialSpecFor(plugin, 'oauth2');
-    const isPublic = spec !== null && spec.clientAuthMethod === 'none';
+    const spec = plugin.credential;
+    const isPublic = spec.kind === 'oauth2' && spec.clientAuthMethod === 'none';
     return { clientId, clientSecret: isPublic ? null : (app[CLIENT_SECRET_FIELD] ?? null) };
   }
 
@@ -1643,16 +1406,13 @@ export class ConnectionService {
         grant: { withdrawnByGateway: false, byHand: null },
       };
     }
-    // The way the account was made says where its grant lives: a pasted token
-    // is deleted on the token page, an app is uninstalled elsewhere.
     const kind =
       connectionCredentialKind(connection, plugin.credential.kind) ?? plugin.credential.kind;
-    const spec = credentialSpecFor(plugin, kind);
     return {
       providerLabel: plugin.displayName,
       grant: {
         withdrawnByGateway: canWithdraw(plugin, kind),
-        byHand: spec?.manualRevocation ?? plugin.manualRevocation ?? null,
+        byHand: plugin.manualRevocation ?? null,
       },
     };
   }
@@ -1661,7 +1421,6 @@ export class ConnectionService {
     const registered = this.deps.registry.get(connection.provider);
     const metadata = connection.metadata ?? {};
     const kind = connectionCredentialKind(connection, registered?.plugin.credential.kind ?? null);
-    const spec = registered && kind ? credentialSpecFor(registered.plugin, kind) : null;
     const pasted = kind === 'api-key';
     return {
       connection,
@@ -1671,7 +1430,6 @@ export class ConnectionService {
       credentialKind: kind,
       tokenAccount: pasted && typeof metadata.account === 'string' ? metadata.account : null,
       tokenExpiresAt: pasted ? connection.credentialExpiresAt : null,
-      unavailableTools: registered && spec ? unavailableToolsOf(registered.plugin, spec) : [],
       ownerLabel: await this.ownerLabel(connection),
       publicKey: typeof metadata.public_key === 'string' ? metadata.public_key : null,
       fields: connectionPublicFields(connection),
@@ -1769,31 +1527,6 @@ export class ConnectionService {
     });
   }
 
-  /** Nothing was created: the entry names the provider and the claim that was refused. */
-  private async auditRefusal(
-    actor: Actor,
-    plugin: ProviderPlugin,
-    pending: PendingConnect,
-    installationId: string,
-    reason: ConnectRefusalReason,
-  ): Promise<void> {
-    await this.deps.audit.write({
-      kind: 'admin',
-      ts: this.nowIso(),
-      user_id: actor.user.id,
-      act: 'connection-refused',
-      object: { type: 'connection', id: pending.reconnectId ?? `not-created:${plugin.id}` },
-      before: null,
-      after: {
-        provider: plugin.id,
-        reason,
-        installation_id: installationId,
-        reconnect: pending.reconnectId !== null,
-      },
-      delegated_client_id: null,
-    });
-  }
-
   private nowIso(): string {
     return toIso(this.deps.clock.now());
   }
@@ -1834,43 +1567,6 @@ export function toPluginResource(provider: string, record: ConnectionResourceRec
 
 function toolLabel(plugin: ProviderPlugin, name: string): ToolLabel {
   return { name, title: plugin.toolTitles?.[name] ?? name };
-}
-
-function unavailableToolsOf(plugin: ProviderPlugin, spec: CredentialSpec): UnavailableToolView[] {
-  return Object.entries(spec.unavailableTools ?? {}).map(([name, reason]) => ({
-    ...toolLabel(plugin, name),
-    reason,
-  }));
-}
-
-/** One way of connecting as the connect page shows it, read from the plugin's declaration. */
-function methodView(
-  plugin: ProviderPlugin,
-  spec: CredentialSpec,
-  configured: boolean,
-): ConnectMethod {
-  const guide = spec.kind === 'api-key' ? spec.guide : undefined;
-  return {
-    kind: spec.kind,
-    usesApp: isAppCredentialSpec(spec),
-    configured,
-    fields: spec.kind === 'api-key' || spec.kind === 'ssh-key' ? spec.fields : [],
-    createUrl: spec.kind === 'api-key' ? (spec.createUrl ?? null) : null,
-    label: spec.kind === 'api-key' ? (spec.label ?? null) : null,
-    guide: guide
-      ? {
-          steps: guide.steps,
-          permissions: guide.permissions.map((p) => ({
-            name: p.name,
-            access: p.access,
-            tools: p.tools.map((tool) => toolLabel(plugin, tool)),
-          })),
-          recommendedExpiryDays: guide.recommendedExpiryDays,
-          docsUrl: guide.docsUrl ?? null,
-        }
-      : null,
-    unavailableTools: unavailableToolsOf(plugin, spec),
-  };
 }
 
 function isTransportFailure(err: unknown): boolean {

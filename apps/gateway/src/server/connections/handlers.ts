@@ -1,7 +1,8 @@
 /**
- * Host-agnostic HTTP handlers of the Connections surface and of Admin →
- * Provider apps (`Request → Response`, never `next`). The Next route handlers
- * under `src/app/**` are one-line adapters over these.
+ * Host-agnostic HTTP handlers of the Connections surface and of the OAuth
+ * client an administrator declares for a service that connects that way
+ * (`Request → Response`, never `next`). The Next route handlers under
+ * `src/app/**` are one-line adapters over these.
  *
  *   POST /connections/connect/<provider>             start a flow / submit a form
  *   GET  /connections/callback/<provider>            the provider's redirect back
@@ -12,11 +13,8 @@
  *   POST /connections/<id>/resources/<resourceId>    owner edits on a resource
  *   POST /connections/<id>/default-env               the owner's default environment label
  *                                                    for the unlabelled resources
- *   POST /admin/provider-apps/<provider>             save / clear the company app, accept or
- *                                                    refuse unverified installations (operator)
- *   POST /admin/provider-apps/<provider>/create      start creating the company app from the
- *                                                    provider's manifest flow (operator)
- *   GET  /admin/provider-apps/<provider>/created     the provider's redirect back (operator)
+ *   POST /admin/provider-apps/<provider>             save / clear the OAuth client of a service
+ *                                                    (operator), from its connect page
  *
  * Every mutation requires a web session and passes the origin check (spec
  * §6). The callback is a top-level GET from the provider: it carries no
@@ -44,8 +42,6 @@ import { notAFormResponse, readForm } from '../auth/handlers';
 import { resolveReturnTo } from '../http/return-to';
 import { errorFields, type Logger } from '../logging';
 import {
-  AppRegistrationError,
-  type AppRegistrationService,
   ProviderAppError,
   type ProviderAppsService,
   type ProviderAppStatus,
@@ -57,36 +53,23 @@ import type { Notice, NoticeStore } from './pending';
 import { providerGrantReport } from './provider-grant';
 import {
   CONNECTIONS_PATH,
-  defaultMethod,
-  methodOf,
   type Actor,
   type Connected,
   type ConnectionService,
   type DiscoveryRecord,
 } from './service';
 
-/** The form input naming the way to connect (a credential kind of the plugin). */
-export const METHOD_FIELD = 'method';
-
 export const NEW_CONNECTION_PATH = `${CONNECTIONS_PATH}/new`;
-export const PROVIDER_APPS_PAGE = '/admin/provider-apps';
-/** Form inputs carrying the access chosen for one app permission are named `permission.<name>`. */
-export const APP_PERMISSION_PREFIX = 'permission.';
+/** The HTTP action that saves or clears the OAuth client of a service (operator). */
+export const PROVIDER_APP_ACTION_PATH = '/admin/provider-apps';
 
-/** The page that posts the manifest to the provider, for the flow `state` names. */
-export function appRegistrationConfirmPath(providerId: string, state: string): string {
-  return `${PROVIDER_APPS_PAGE}/${encodeURIComponent(providerId)}/confirm?state=${encodeURIComponent(state)}`;
+/** The connect page of a service: where its OAuth client is declared, and where a person connects. */
+export function connectPagePath(providerId: string): string {
+  return `${NEW_CONNECTION_PATH}/${encodeURIComponent(providerId)}`;
 }
-
-/** The Company apps page with the line of one service open. */
-export function providerAppPath(providerId: string): string {
-  const id = encodeURIComponent(providerId);
-  return `${PROVIDER_APPS_PAGE}?app=${id}#${id}`;
-}
-/** The connect page of a service on its token way, with the guide the plugin declares. */
-export function tokenConnectPath(providerId: string): string {
-  const query = new URLSearchParams({ [METHOD_FIELD]: 'api-key' });
-  return `${NEW_CONNECTION_PATH}/${encodeURIComponent(providerId)}?${query.toString()}`;
+/** The address the OAuth-client form of a service posts to. */
+export function providerAppActionPath(providerId: string): string {
+  return `${PROVIDER_APP_ACTION_PATH}/${encodeURIComponent(providerId)}`;
 }
 /** Administration → Connections: the connections that have no owner left. */
 export const OWNERLESS_CONNECTIONS_PAGE = '/admin/connections';
@@ -95,10 +78,8 @@ export const NOTICE_PARAM = 'notice';
 export const FIELD_PREFIX = 'field.';
 /** Form inputs carrying an editable metadata list are named `meta.<key>`. */
 export const METADATA_PREFIX = 'meta.';
-/** `action` values of the provider-app form besides the default save and `clear`. */
-export const ACCEPT_UNVERIFIED_ACTION = 'accept-unverified';
-export const REFUSE_UNVERIFIED_ACTION = 'refuse-unverified';
-const CLEAR_ACTION = 'clear';
+/** `action` value of the OAuth-client form besides the default save. */
+export const CLEAR_PROVIDER_APP_ACTION = 'clear';
 const LOGIN_PAGE = '/login';
 const SEE_OTHER = 303;
 const USER_REFUSALS: RefusalWording = {
@@ -114,8 +95,6 @@ export interface ConnectionHandlerDeps {
   /** Tells a provider this instance does not know from a failure of its app settings. */
   readonly registry: Pick<PluginRegistry, 'has'>;
   readonly providerApps: ProviderAppsService;
-  /** Creating a company app from the provider's manifest flow. */
-  readonly registration: AppRegistrationService;
   readonly notices: NoticeStore;
   readonly audit: AuditWriter;
   readonly logger: Logger;
@@ -132,8 +111,6 @@ export interface ConnectionHandlers {
   updateResource(request: Request, connectionId: string, resourceId: string): Promise<Response>;
   setDefaultEnv(request: Request, connectionId: string): Promise<Response>;
   saveProviderApp(request: Request, providerId: string): Promise<Response>;
-  startAppRegistration(request: Request, providerId: string): Promise<Response>;
-  completeAppRegistration(request: Request, providerId: string): Promise<Response>;
 }
 
 export function createConnectionHandlers(deps: ConnectionHandlerDeps): ConnectionHandlers {
@@ -216,35 +193,7 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
     }
   }
 
-  /** Accepts or refuses installations the plugin cannot verify. */
-  async function setInstallAcceptance(
-    providerId: string,
-    accept: boolean,
-  ): Promise<ProviderAppChange> {
-    const after = await deps.providerApps.setAcceptUnverifiedInstallations(providerId, accept);
-    logger.warn('provider app: acceptance of unverified installations changed', {
-      provider: providerId,
-      accept,
-    });
-    return {
-      after,
-      notice: accept
-        ? {
-            tone: 'warning',
-            title: `${after.displayName}: unverified installations are now accepted`,
-            lines: [
-              'Anyone signed in who knows the id of an installation of this app can connect it. Turn this off as soon as the plugin can verify installations.',
-            ],
-          }
-        : {
-            tone: 'success',
-            title: `${after.displayName}: unverified installations are refused`,
-            lines: ['The accounts already connected are unchanged; new ones are refused.'],
-          },
-    };
-  }
-
-  /** Removes the stored company app; refused when the mounted configuration sets it. */
+  /** Removes the stored OAuth client; refused when the mounted configuration sets it. */
   async function clearProviderApp(
     providerId: string,
     before: ProviderAppStatus,
@@ -261,13 +210,13 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
       after,
       notice: {
         tone: 'success',
-        title: `${after.displayName}: company app removed`,
-        lines: ['Nobody can connect a new account of this service until it is registered again.'],
+        title: `${after.displayName}: OAuth client removed`,
+        lines: ['Nobody can connect a new account of this service until it is declared again.'],
       },
     };
   }
 
-  /** Stores the company app from the form's `field.<name>` values. */
+  /** Stores the OAuth client from the form's `field.<name>` values. */
   async function storeProviderApp(providerId: string, form: FormData): Promise<ProviderAppChange> {
     await deps.providerApps.save(providerId, prefixedFields(form, FIELD_PREFIX));
     const after = await deps.providerApps.status(providerId);
@@ -289,9 +238,7 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
     before: ProviderAppStatus,
   ): Promise<ProviderAppChange> {
     const action = stringField(form, 'action');
-    if (action === ACCEPT_UNVERIFIED_ACTION) return setInstallAcceptance(providerId, true);
-    if (action === REFUSE_UNVERIFIED_ACTION) return setInstallAcceptance(providerId, false);
-    if (action === CLEAR_ACTION) return clearProviderApp(providerId, before);
+    if (action === CLEAR_PROVIDER_APP_ACTION) return clearProviderApp(providerId, before);
     return storeProviderApp(providerId, form);
   }
 
@@ -302,7 +249,6 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
       const form = await readForm(request);
       if (!form) return notAFormResponse();
       const reconnectId = stringField(form, 'connection_id') || null;
-      const method = stringField(form, METHOD_FIELD) || null;
       const typed = prefixedFields(form, FIELD_PREFIX);
       try {
         const result = await deps.connections.start(who.actor, providerId, {
@@ -310,7 +256,6 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
           returnTo: stringField(form, 'return_to') || null,
           reconnectId,
           fields: typed,
-          method,
         });
         if (result.kind === 'redirect') return redirect(result.url);
         return await redirectWithNotice(
@@ -324,7 +269,6 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
         // return to afterwards stay in its address.
         const query = new URLSearchParams();
         if (reconnectId) query.set('connection', reconnectId);
-        if (method) query.set(METHOD_FIELD, method);
         const returnTo = stringField(form, 'return_to');
         if (returnTo) query.set('return_to', returnTo);
         const back = unknownProvider
@@ -335,13 +279,12 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
         // The form comes back as it was typed, the field in error marked: the
         // name and the non-secret values only — a key is never kept.
         const provider = unknownProvider ? null : await deps.connections.provider(providerId);
-        const way = provider ? (methodOf(provider, method) ?? defaultMethod(provider)) : null;
         const notice = failureNotice(err, 'Not connected');
         return redirectWithNotice(
           who.principal,
           back,
-          way
-            ? { ...notice, form: echoOfForm(way.fields, typed, stringField(form, 'name')) }
+          provider
+            ? { ...notice, form: echoOfForm(provider.fields, typed, stringField(form, 'name')) }
             : notice,
         );
       }
@@ -543,13 +486,13 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
       // Only a provider this instance does not know is reported as unknown; a failure
       // to read its settings (the store, the configuration) is not, and propagates.
       if (!deps.registry.has(providerId)) {
-        return redirectWithNotice(guard.principal, PROVIDER_APPS_PAGE, {
+        return redirectWithNotice(guard.principal, NEW_CONNECTION_PATH, {
           tone: 'danger',
           title: 'Not saved',
           lines: [CONNECT_ERROR_MESSAGES['provider-unknown']],
         });
       }
-      const anchor = `${PROVIDER_APPS_PAGE}#${encodeURIComponent(providerId)}`;
+      const anchor = connectPagePath(providerId);
       const before = await deps.providerApps.status(providerId);
       try {
         const change = await applyProviderAppAction(providerId, form, before);
@@ -564,79 +507,6 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
           });
         }
         throw err;
-      }
-    },
-
-    async startAppRegistration(request, providerId) {
-      const guard = await guardMutation(request, deps, 'operator');
-      if (!guard.ok) return refusalResponse(guard, OPERATOR_REFUSALS);
-      const form = await readForm(request);
-      if (!form) return notAFormResponse();
-      if (!deps.registry.has(providerId)) {
-        return redirectWithNotice(guard.principal, PROVIDER_APPS_PAGE, {
-          tone: 'danger',
-          title: 'Not created',
-          lines: [CONNECT_ERROR_MESSAGES['provider-unknown']],
-        });
-      }
-      try {
-        const { state } = await deps.registration.start(
-          { sessionId: guard.principal.sessionId, actorId: auditActorId(guard.principal) },
-          providerId,
-          {
-            ownerKind: stringField(form, 'owner_kind'),
-            ownerLogin: stringField(form, 'owner_login'),
-            name: stringField(form, 'name'),
-            permissions: prefixedFields(form, APP_PERMISSION_PREFIX),
-          },
-        );
-        return redirect(appRegistrationConfirmPath(providerId, state));
-      } catch (err) {
-        if (!(err instanceof AppRegistrationError)) throw err;
-        return redirectWithNotice(guard.principal, providerAppPath(providerId), {
-          tone: 'danger',
-          title: 'The app was not created',
-          lines: err.problems,
-        });
-      }
-    },
-
-    async completeAppRegistration(request, providerId) {
-      // A top-level GET from the provider: no `Origin`. Its protection is the
-      // single-use state bound to the administrator's session.
-      const guard = await guardSession(request, deps, 'operator');
-      if (!guard.ok) {
-        return redirect(guard.reason === 'no-session' ? LOGIN_PAGE : PROVIDER_APPS_PAGE);
-      }
-      const back = providerAppPath(providerId);
-      try {
-        const app = await deps.registration.complete(
-          guard.principal.sessionId,
-          providerId,
-          new URL(request.url).searchParams,
-        );
-        return await redirectWithNotice(guard.principal, back, {
-          tone: 'success',
-          title: `${app.name} is created`,
-          lines: [
-            `It belongs to ${app.ownerLogin} at the service; its key and secret are stored encrypted in this gateway and are never shown.`,
-            'Next: install it on your repositories.',
-          ],
-        });
-      } catch (err) {
-        if (!(err instanceof AppRegistrationError)) {
-          logger.error('company app: unexpected failure', errorFields(err));
-          return redirectWithNotice(guard.principal, back, {
-            tone: 'danger',
-            title: 'The app was not created',
-            lines: ['An unexpected error occurred. The log of the gateway has the detail.'],
-          });
-        }
-        return redirectWithNotice(guard.principal, back, {
-          tone: 'danger',
-          title: 'The app was not created',
-          lines: err.problems,
-        });
       }
     },
   };
@@ -712,7 +582,6 @@ function auditView(status: ProviderAppStatus): Record<string, unknown> {
     source: status.source,
     values: status.values,
     secrets_set: status.secretsSet,
-    ...(status.installVerification ? { install_verification: status.installVerification } : {}),
   };
 }
 

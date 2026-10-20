@@ -60,25 +60,17 @@ export interface AdminRule {
 }
 
 /**
- * The app the company registered at a provider. Which fields a given
- * provider needs is declared by its plugin (`CredentialSpec`); the
- * loader only guarantees the shape and resolves secret references.
+ * The OAuth client the company declared at a provider that connects that
+ * way. Which fields a given provider needs is declared by its plugin
+ * (`CredentialSpec`); the loader only guarantees the shape and resolves
+ * secret references.
  */
 export interface ProviderAppConfig {
   readonly clientId?: string;
   readonly clientSecret?: string;
-  readonly appId?: string;
-  readonly appSlug?: string;
-  readonly privateKey?: string;
 }
 
-export const PROVIDER_APP_FIELDS = [
-  'client_id',
-  'client_secret',
-  'app_id',
-  'app_slug',
-  'private_key',
-] as const;
+export const PROVIDER_APP_FIELDS = ['client_id', 'client_secret'] as const;
 export type ProviderAppField = (typeof PROVIDER_APP_FIELDS)[number];
 
 export function isProviderAppField(raw: string): raw is ProviderAppField {
@@ -92,9 +84,6 @@ export const PROVIDER_APP_FIELD_PROPERTY: Readonly<
 > = {
   client_id: 'clientId',
   client_secret: 'clientSecret',
-  app_id: 'appId',
-  app_slug: 'appSlug',
-  private_key: 'privateKey',
 };
 
 export interface EncryptionConfig {
@@ -325,7 +314,6 @@ export function secretValues(config: InstanceConfig | SetupConfig): string[] {
   if (from) out.push(from.kind === 'url' ? from.url.href : from.path);
   for (const app of config.providers.values()) {
     if (app.clientSecret) out.push(app.clientSecret);
-    if (app.privateKey) out.push(app.privateKey);
   }
   if ('encryption' in config) {
     out.push(...keyEncodings(config.encryption.masterKey));

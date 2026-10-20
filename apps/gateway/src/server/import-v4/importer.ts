@@ -24,7 +24,6 @@
  * Handbook: docs/handbook/import-from-v4.md.
  */
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
-import { credentialSpecFor } from '@vaubaan/plugin-sdk';
 import type { MissionStatus as MissionState, RiskId } from '@vaubaan/shared';
 
 import { findActiveUserByEmail } from '../authority';
@@ -511,10 +510,10 @@ export class Importer {
     kind: 'api-key' | 'ssh-key',
     values: Record<string, string>,
   ) {
-    const plugin = this.ports.registry.get(provider)?.plugin;
-    const spec = plugin ? credentialSpecFor(plugin, kind) : null;
+    const spec = this.ports.registry.get(provider)?.plugin.credential;
+    const fields = spec && spec.kind === kind ? spec.fields : [];
     const visible: Record<string, string> = {};
-    for (const field of spec?.fields ?? []) {
+    for (const field of fields) {
       const value = values[field.name];
       if (!field.secret && value !== undefined) visible[field.name] = value;
     }

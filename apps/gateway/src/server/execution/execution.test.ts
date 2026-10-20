@@ -9,7 +9,7 @@ import { createRegistry } from '@vaubaan/plugin-sdk';
 import { parseSlice } from '@vaubaan/policy-engine';
 import { describe, expect, it, vi } from 'vitest';
 
-import { API_KEY_SPEC, fixturePlugin, OAUTH_SPEC } from '../connections/testing';
+import { API_KEY_SPEC, fixturePlugin } from '../connections/testing';
 import type { LegacyHashGate, MissionService, TokenVerification, VerifiedToken } from '../missions';
 import { UNKNOWN_CLIENT } from '../http/client-ip';
 import { SlidingWindowRateLimiter } from '../rate-limit';
@@ -207,16 +207,11 @@ describe('tool discovery', () => {
   });
 });
 
-describe('a tool the way of connecting cannot run', () => {
-  const NEEDS_APP = 'needs the Dual app: a token cannot list things.';
-  const dual = fixturePlugin({
-    id: 'dual',
-    displayName: 'Dual',
-    credential: OAUTH_SPEC,
-    alternativeCredentials: [
-      { ...API_KEY_SPEC, unavailableTools: { dual__list_things: NEEDS_APP } },
-    ],
-  });
+describe('an account connected a way the plugin no longer offers', () => {
+  // The GitHub App of catalog v8, the OAuth apps of Supabase and Railway : a stored
+  // connection may carry a credential kind the plugin no longer declares (ADR
+  // one-place-to-authorize-services-token-first). It runs nothing until reconnected.
+  const dual = fixturePlugin({ id: 'dual', displayName: 'Dual', credential: API_KEY_SPEC });
   const registry = createRegistry([dual]);
   const context = (credential_kind?: 'oauth2' | 'api-key'): MissionContext =>
     ({
@@ -233,12 +228,12 @@ describe('a tool the way of connecting cannot run', () => {
       policy: [{ risk_id: 'dual.read-things' }],
     }) as unknown as MissionContext;
 
-  it('is left out of tools/list for a token connection only', () => {
-    expect(callableTools(context('api-key'), registry)).toEqual([]);
-    expect(callableTools(context('oauth2'), registry).map((t) => t.name)).toEqual([
+  it('is left out of tools/list', () => {
+    expect(callableTools(context('oauth2'), registry)).toEqual([]);
+    expect(callableTools(context('api-key'), registry).map((t) => t.name)).toEqual([
       'dual__list_things',
     ]);
-    // A connection of a build that did not record the way is read as the primary way.
+    // A connection of a build that did not record the way is read as the plugin's way.
     expect(callableTools(context(), registry)).toHaveLength(1);
   });
 
@@ -248,19 +243,20 @@ describe('a tool the way of connecting cannot run', () => {
       connections: { listResources: async () => [] },
     });
     const call = { tool: 'dual__list_things', args: { space: 's' } } as unknown as CallRequest;
-    const refused = await stage.resolve(context('api-key'), call);
+    const refused = await stage.resolve(context('oauth2'), call);
     expect(refused).toEqual({
       ok: false,
-      reason: `tool 'dual__list_things' is not available on the Dual account 'Dual bot': ${NEEDS_APP}`,
+      reason:
+        "tool 'dual__list_things' is not available on the Dual account 'Dual bot': this account was connected a way Dual no longer offers on this gateway (oauth2); its owner reconnects it from Accounts.",
     });
     expect(
       toolUnavailableOn(
         dual,
-        { display_name: 'x', credential_kind: 'oauth2' },
+        { display_name: 'x', credential_kind: 'api-key' },
         'dual__list_things',
       ),
     ).toBeNull();
-    const allowed = await stage.resolve(context('oauth2'), call);
+    const allowed = await stage.resolve(context('api-key'), call);
     expect(allowed.ok).toBe(true);
   });
 });

@@ -197,7 +197,7 @@ export const SECTIONS = {
   peopleAndKeys: 'People and keys',
   permissionsAndUsage: 'Permissions and usage',
   connectedApps: 'Connected apps',
-  companyApps: 'Company apps',
+  oauthClients: 'OAuth clients',
   administrators: 'Administrators',
   peopleAndTeams: 'People and teams',
   setup: 'Setup',
@@ -786,10 +786,6 @@ export const SETTINGS_PAGES = {
     title: 'Sign-in',
     lede: 'The providers people sign in through. No password is stored here, and one person signing in through two providers is two people.',
   },
-  companyApps: {
-    title: 'Company apps',
-    lede: 'What your company registered at each service, so that people connect accounts through the service’s own sign-in.',
-  },
   people: {
     title: 'People',
     lede: 'Everyone who has signed in. Deactivating a person refuses every call of their keys at once.',
@@ -818,7 +814,7 @@ export const SETTINGS_PAGES = {
 
 export const SETTINGS_ACTIONS = {
   save: 'Save',
-  register: 'Register',
+  declare: 'Declare',
   edit: 'Edit',
   remove: 'Remove',
   deactivate: 'Deactivate',
@@ -842,22 +838,6 @@ export const SETTINGS_ACTIONS = {
 export const CONFIG_WORDS = {
   file: 'set in the mounted configuration',
   fileReadOnly: 'Set in the mounted configuration: change it there and restart.',
-} as const;
-
-/**
- * Settings → Company apps, for a service that also connects with a token
- * (ADR token-connections-beside-the-integration-app): its app is optional.
- */
-export const OPTIONAL_APP_WORDS = {
-  registeredAs: 'not registered · optional',
-  title: (service: string) => `The company app is optional for ${service}`,
-  body: (service: string, token: string | null) =>
-    `People can connect a ${service} account with ${token ? `a ${token}` : 'a token'} they create at ${service}, without anything here: the connect page guides them step by step. Register the app only if you want people to connect through ${service}’s own sign-in as well; both ways can stay.`,
-  tokenLink: (service: string) => `Connect ${service} with a token`,
-  hint: (services: string, several: boolean) =>
-    several
-      ? `${services} also connect with a token: their apps are optional.`
-      : `${services} also connects with a token: its app is optional.`,
 } as const;
 
 /** The state of a connected app (a delegation). Keyed by `DelegationState`. */
@@ -1271,12 +1251,6 @@ export function agoSentence(from: Date | string, now: Date = new Date()): string
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const TOKEN_CONNECT = {
-  useToken: 'Use a token instead',
-  useApp: (service: string) => `Connect through your company’s ${service} app instead`,
-  appMissing: (service: string) =>
-    `No company ${service} app is registered, so you connect with a token you create there.`,
-  appMissingForAdmin:
-    'Registering the company app under Settings → Company apps adds the other way; both can stay.',
   stepsTitle: (service: string) => `Create the token at ${service}`,
   openTokenPage: (service: string) => `Open the token page at ${service}`,
   permissionsTitle: 'Permissions to tick',
@@ -1293,8 +1267,6 @@ export const TOKEN_CONNECT = {
     'A shared service account is fine: agents act through missions, and Activity records which person and which mission made each call.',
   whatWeDo: (service: string) =>
     `Checked against ${service} when you paste it, then stored encrypted. It is never shown again, and no agent ever sees it.`,
-  notWithToken: (count: number) =>
-    count === 1 ? 'Not with a token' : `${count} tools need the company app`,
   submit: 'Check and connect',
   submitHint: (service: string) => `Checked against ${service} before saving, encrypted at rest.`,
   tokenFacts: 'Token',
@@ -1305,7 +1277,6 @@ export const TOKEN_CONNECT = {
   expiresSoonTitle: (date: string) => `The token expires ${date}`,
   expiresSoonBody:
     'Create a new token at the service and reconnect before then; missions keep running on the same account.',
-  orToken: 'or a token',
   pasteTitle: 'Paste it here',
 } as const;
 
