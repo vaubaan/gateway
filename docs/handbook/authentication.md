@@ -304,7 +304,21 @@ Enterprise Server base URL), `clientId`, `clientSecret`, `claims` (OIDC),
   client id, the secret (blank keeps the stored one **for the same issuer**,
   never sent to another), the claims, the domains, the admission rule
   (`admissionProblem`), one provider per issuer, and the admin rule's group
-  (above). Settings and secret are written by one `ConfigRepo.apply()`.
+  (above). An `oidc` provider at a github.com address (`isGithubDotComHost`:
+  `github.com` or any subdomain) is refused with `GITHUB_IS_NOT_OIDC`, "GitHub
+  is not an OpenID Connect provider: choose the GitHub kind" — GitHub speaks
+  OAuth, serves no discovery document, and such a provider would be saved and
+  then fail every sign-in with `discovery-failed`; the `github` kind is
+  untouched. Last, once every other field is valid and only for a **new
+  issuer** (a creation, or an update that changes it), an `oidc` provider's
+  discovery document is fetched (`options.checkIssuer`, wired to
+  `RelyingPartyFactory.checkIssuer`: the same `openid-client` discovery as a
+  sign-in, no client authentication, 10 s, nothing cached) and the save is
+  refused with what went wrong: no document (`HTTP <status>`), a document that
+  names another issuer (which it names), an answer that is not a discovery
+  document, or an issuer the gateway cannot reach. An edit that keeps the
+  issuer saves without reaching it. Settings and secret are written by one
+  `ConfigRepo.apply()`.
   `remove(id)` deletes the keys (refused for a file provider, and when it would
   change what the admin rule's group names).
 - **Callbacks**: `<public_url>/auth/callback/<id>`; the provider `idp` keeps
@@ -318,7 +332,9 @@ Enterprise Server base URL), `clientId`, `clientSecret`, `claims` (OIDC),
   domains or `invitation_only` (`idp.allowed_email_domains` /
   `sign_in.<id>.allowed_email_domains`, with both variables), `invitation_only`
   together with domains, two providers of one issuer, `sign_in.idp` next to the
-  `idp` block, a bad id or kind, `claims` on a GitHub provider, and a bare
+  `idp` block, a bad id or kind, `claims` on a GitHub provider, a github.com
+  issuer under `sign_in.<id>.kind: oidc` or `idp.issuer` (`GITHUB_IS_NOT_OIDC`;
+  a static check — the loader never fetches a discovery document), and a bare
   `admin.group` when the file sets several providers. The bootstrap token is
   required only while the configuration sets no provider.
 
@@ -1144,8 +1160,10 @@ reset link made by another administrator from People.
   Server address, blank for github.com), client id and secret, the claim
   names (OIDC), and **who may sign in** — radio buttons: everyone the directory
   signs in (OIDC only), these email domains and invited people, invited people
-  only (GitHub's default) — sent as `admission`. A refused form comes back as
-  it was typed, never the secret.
+  only (GitHub's default) — sent as `admission`. The OpenID Connect page says
+  that the issuer's discovery document is fetched before saving and that
+  GitHub is not an OpenID Connect provider: choose the GitHub kind. A refused
+  form comes back as it was typed, never the secret.
 - **`/admin/identity-provider/<id>`** — the same form for a provider saved
   here (`mode=update`): id and kind fixed, the secret blank keeps it; a file
   provider or an unknown id is "not found".
@@ -1331,17 +1349,22 @@ admits an email it did not say it verified, invited or admin alike.
 team), state and S256 PKCE, the numeric id as subject and the primary verified
 address, the team read (member, not member), a forged state, a wrong verifier,
 an unverified or absent primary address, an error of the provider.
-`src/auth/sign-in-providers.test.ts` (6): a GitHub provider saved with its
+`src/auth/sign-in-providers.test.ts` (10): a GitHub provider saved with its
 secret sealed and absent from every view; the blank secret kept for the same
 issuer and asked again for another; the provider `idp` in the single-provider
 keys; a file provider read-only; a bare admin group made ambiguous by a second
 provider refused; bad id, duplicate, change of kind, open provider without a
-rule. `src/auth/admin-rule.test.ts` (9): the group of the rule's provider only,
+rule; github.com refused as an `oidc` issuer before any discovery while the
+`github` kind still saves, resolves and edits; the discovery check refusing a
+new issuer with its problem, run again only when the issuer changes, and not
+while other fields are wrong. `src/auth/relying-party.test.ts` (5): the
+form's discovery check — a valid document, a 404, another issuer, a page that
+is not a discovery document, an unreachable issuer. `src/auth/admin-rule.test.ts` (9): the group of the rule's provider only,
 local groups never, emails of any provider, ambiguity, a removed provider's
-prefix, the legacy colon. `src/config/sign-in.test.ts` (15): the `idp.*` keys
+prefix, the legacy colon. `src/config/sign-in.test.ts` (19): the `idp.*` keys
 as the provider `idp`, a GitHub provider from the environment (bootstrap token
 then optional), several from the file with a secret by reference, every refusal
-of the loader, the env-name parser, the open issuers, `resolveAdminGroup`.
+of the loader (github.com under `kind: oidc` or `idp.issuer` included, the `github` kind still loading), the env-name parser, the open issuers, `isGithubDotComHost`, `resolveAdminGroup`, the Entra preset.
 
 Integration, `tests/integration/auth/sign-in-providers.test.ts` (16), over the
 real root with the `FakeIdp` (a company directory, allowed domain) and the

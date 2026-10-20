@@ -149,7 +149,7 @@ export default async function NewSignInProviderPage({ searchParams }: Props) {
               <p className={styles.prose}>
                 {github
                   ? 'At GitHub, under Settings → Developer settings → OAuth Apps (of your organisation or your own account), register a new OAuth App with the callback address below, generate a client secret, and paste both here.'
-                  : 'At your provider, register a web application with the redirect address below and the scopes openid, profile and email; paste its client id and secret here.'}
+                  : 'At your provider, register a web application with the redirect address below and the scopes openid, profile and email; paste its client id and secret here. For GitHub, choose the GitHub kind above: it speaks OAuth, not OpenID Connect.'}
               </p>
             )}
             <SignInProviderForm

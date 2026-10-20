@@ -8,6 +8,7 @@ import {
   admitsEveryone,
   fileSignInProviders,
   githubApiBase,
+  isGithubDotComHost,
   isOpenProvider,
   isSignInProviderId,
   issuerKey,
@@ -193,6 +194,48 @@ describe('sign-in providers in the configuration', () => {
     ).toMatch(/sign_in\.acme\.issuer: must use https/);
   });
 
+  it('refuses GitHub as an OpenID Connect provider, without reaching the network', () => {
+    for (const issuer of ['https://github.com', 'https://github.com/', 'https://www.GitHub.com']) {
+      expect(
+        messages(
+          failure({
+            VAUBAAN_SIGN_IN_GH_KIND: 'oidc',
+            VAUBAAN_SIGN_IN_GH_ISSUER: issuer,
+            VAUBAAN_SIGN_IN_GH_CLIENT_ID: 'x',
+            VAUBAAN_SIGN_IN_GH_CLIENT_SECRET: 'y',
+            VAUBAAN_SIGN_IN_GH_INVITATION_ONLY: 'true',
+          }),
+        ),
+      ).toContain(
+        'sign_in.gh.issuer: GitHub is not an OpenID Connect provider: choose the GitHub kind',
+      );
+    }
+    expect(messages(failure({ ...IDP_ENV, VAUBAAN_IDP_ISSUER: 'https://github.com' }))).toMatch(
+      /idp\.issuer: GitHub is not an OpenID Connect provider: choose the GitHub kind/,
+    );
+    // The GitHub kind at github.com loads as before: the way out the message names.
+    const { config } = loadInstanceConfig({ env: validEnv(GITHUB_ENV) });
+    expect(config.signIn).toEqual([
+      expect.objectContaining({
+        kind: 'github',
+        id: 'github',
+        issuer: new URL('https://github.com'),
+        clientSecret: 'github-secret-value',
+      }),
+    ]);
+    // A host that merely ends with "github.com" is another host.
+    expect(() =>
+      loadInstanceConfig({
+        env: validEnv({
+          VAUBAAN_SIGN_IN_GH_KIND: 'oidc',
+          VAUBAAN_SIGN_IN_GH_ISSUER: 'https://notgithub.com',
+          VAUBAAN_SIGN_IN_GH_CLIENT_ID: 'x',
+          VAUBAAN_SIGN_IN_GH_CLIENT_SECRET: 'y',
+        }),
+      }),
+    ).not.toThrow();
+  });
+
   it('keeps the bootstrap token required while no provider is configured', () => {
     expect(messages(failure({ VAUBAAN_BOOTSTRAP_TOKEN: undefined }))).toMatch(
       /bootstrap_token: missing required key/,
@@ -270,6 +313,14 @@ describe('sign-in helpers', () => {
     expect(adminGroupProblem('admins', ['a', 'b'])).toMatch(/"a:admins"/);
     expect(adminGroupProblem('admins', [])).toBeNull();
     expect(reservedGroupNames('github:acme/a')).toEqual(['github:acme/a', 'acme/a']);
+  });
+
+  it('knows a github.com address, whatever the subdomain', () => {
+    expect(isGithubDotComHost(new URL('https://github.com'))).toBe(true);
+    expect(isGithubDotComHost(new URL('https://api.github.com/x'))).toBe(true);
+    expect(isGithubDotComHost(new URL('https://github.com./'))).toBe(true);
+    expect(isGithubDotComHost(new URL('https://ghe.example.com'))).toBe(false);
+    expect(isGithubDotComHost(new URL('https://mygithub.com'))).toBe(false);
   });
 
   it('normalises issuers and derives the GitHub API', () => {

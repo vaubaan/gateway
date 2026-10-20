@@ -45,6 +45,7 @@ import type { LocalAccountRecord } from '../../../src/server/store';
 import type { ManagementActor } from '../../../src/server/management';
 import type { TokenResponse } from '../../../src/server/oauth-as';
 import { pkcePair } from '../../../src/server/oauth-as/testing';
+import { answerAnyDiscovery } from '../auth/fake-idp';
 import type {
   ConnectionRecord,
   GroupRecord,
@@ -258,6 +259,8 @@ async function openRig(): Promise<Rig> {
         fixturePlugin({ id: 'manifestco', credential: MANIFEST_SPEC }),
       ]),
     providerFetch: provider,
+    // The identity-provider form checks the issuer's discovery document before saving.
+    oidc: { fetch: answerAnyDiscovery },
     ...memoryStoreDeps,
   });
   const operator = await root.store.users.upsertFromIdp({

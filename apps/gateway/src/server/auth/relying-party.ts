@@ -16,7 +16,7 @@
 import * as oidc from 'openid-client';
 
 import { errorMessage } from '../config/errors';
-import { LEGACY_PROVIDER_ID } from '../config/sign-in';
+import { issuerKey, LEGACY_PROVIDER_ID } from '../config/sign-in';
 import type { IdpConfig } from '../config/types';
 import type { RawClaims } from './claims';
 import { LoginError } from './errors';
@@ -81,7 +81,16 @@ export interface RelyingPartyFactory {
   for(settings: RelyingPartySettings, redirectUri?: URL): OidcRelyingParty;
   /** The redirect URI of the single provider `idp`: `<public_url><CALLBACK_PATH>`. */
   readonly redirectUri: URL;
+  /**
+   * Fetches the issuer's discovery document the way a sign-in does, before an OpenID
+   * Connect provider is saved: `null` when it is valid (its `issuer` is this issuer),
+   * otherwise why not, in words for the form. Nothing is cached.
+   */
+  checkIssuer(issuer: URL): Promise<string | null>;
 }
+
+/** How long the form waits for an issuer's discovery document. */
+const ISSUER_CHECK_TIMEOUT_SECONDS = 10;
 
 /**
  * The callback of a sign-in provider: `<public_url>/auth/callback/<id>`, and for the
@@ -121,6 +130,14 @@ export function createRelyingPartyFactory(options: RelyingPartyOptions): Relying
 
   return {
     redirectUri,
+    async checkIssuer(issuer) {
+      try {
+        await discoveryOf(issuer, options, { timeoutSeconds: ISSUER_CHECK_TIMEOUT_SECONDS });
+        return null;
+      } catch (err) {
+        return issuerCheckProblem(issuer, err);
+      }
+    },
     for(settings, providerRedirectUri = redirectUri) {
       return {
         async describe() {
@@ -187,25 +204,87 @@ async function discover(
   settings: RelyingPartySettings,
   options: RelyingPartyOptions,
 ): Promise<oidc.Configuration> {
+  try {
+    return await discoveryOf(settings.issuer, options, {
+      clientId: settings.clientId,
+      clientAuth: oidc.ClientSecretPost(settings.clientSecret),
+    });
+  } catch (err) {
+    throw new LoginError('discovery-failed', `${settings.issuer.href}: ${errorMessage(err)}`, {
+      cause: err,
+    });
+  }
+}
+
+/**
+ * `<issuer>/.well-known/openid-configuration`, fetched and validated by
+ * `openid-client` (an answer whose `issuer` is not this issuer is refused). Without a
+ * client, for the form's check: no request beyond the discovery document is made.
+ */
+async function discoveryOf(
+  issuer: URL,
+  options: RelyingPartyOptions,
+  client: {
+    readonly clientId?: string;
+    readonly clientAuth?: oidc.ClientAuth;
+    readonly timeoutSeconds?: number;
+  },
+): Promise<oidc.Configuration> {
   const metadata: Partial<oidc.ClientMetadata> = {
     [oidc.clockTolerance]: options.clockToleranceSeconds ?? DEFAULT_CLOCK_TOLERANCE_SECONDS,
   };
   const discoveryOptions: oidc.DiscoveryRequestOptions = {};
   if (options.fetch) discoveryOptions[oidc.customFetch] = options.fetch;
   if (options.allowInsecureRequests) discoveryOptions.execute = [oidc.allowInsecureRequests];
-  try {
-    return await oidc.discovery(
-      settings.issuer,
-      settings.clientId,
-      metadata,
-      oidc.ClientSecretPost(settings.clientSecret),
-      discoveryOptions,
+  if (client.timeoutSeconds !== undefined) discoveryOptions.timeout = client.timeoutSeconds;
+  return oidc.discovery(
+    issuer,
+    client.clientId ?? DISCOVERY_CHECK_CLIENT_ID,
+    metadata,
+    client.clientAuth ?? oidc.None(),
+    discoveryOptions,
+  );
+}
+
+/** The client id of the form's check: discovery sends it nowhere. */
+const DISCOVERY_CHECK_CLIENT_ID = 'vaubaan-discovery-check';
+
+/** Why the discovery document of `issuer` was refused, for the form. */
+function issuerCheckProblem(issuer: URL, err: unknown): string {
+  const where = new URL('.well-known/openid-configuration', issuerKey(issuer) + '/').href;
+  const code = (err as { code?: unknown } | null)?.code;
+  if (code === 'OAUTH_JSON_ATTRIBUTE_COMPARISON_FAILED') {
+    const named = discoveredIssuer(err);
+    return (
+      `the discovery document at ${where} names another issuer` +
+      (named ? ` (${named})` : '') +
+      ': give the issuer exactly as the provider writes it there'
     );
-  } catch (err) {
-    throw new LoginError('discovery-failed', `${settings.issuer.href}: ${errorMessage(err)}`, {
-      cause: err,
-    });
   }
+  if (code === 'OAUTH_RESPONSE_IS_NOT_CONFORM') {
+    const response = (err as { cause?: unknown }).cause;
+    const status = response instanceof Response ? ` (HTTP ${response.status})` : '';
+    return `there is no OpenID Connect discovery document at ${where}${status}: check the issuer`;
+  }
+  if (typeof code === 'string' && NOT_A_DISCOVERY_DOCUMENT.has(code)) {
+    return `${where} is not a valid OpenID Connect discovery document: check the issuer`;
+  }
+  return `the discovery document at ${where} could not be fetched (${errorMessage(err)}): check the issuer, and that the gateway can reach it`;
+}
+
+/** What `openid-client` says of a discovery answer it refused (oauth4webapi's codes). */
+const NOT_A_DISCOVERY_DOCUMENT: ReadonlySet<string> = new Set([
+  'OAUTH_RESPONSE_IS_NOT_JSON',
+  'OAUTH_PARSE_ERROR',
+  'OAUTH_INVALID_RESPONSE',
+]);
+
+/** The `issuer` an issuer-mismatch error carries (`cause.body.issuer`), when there is one. */
+function discoveredIssuer(err: unknown): string | null {
+  const cause = (err as { cause?: unknown }).cause;
+  const body = (cause as { body?: unknown } | null | undefined)?.body;
+  const named = (body as { issuer?: unknown } | null | undefined)?.issuer;
+  return typeof named === 'string' ? named : null;
 }
 
 function scopesFor(config: oidc.Configuration): string {
