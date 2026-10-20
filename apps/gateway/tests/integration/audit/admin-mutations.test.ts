@@ -24,7 +24,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { SESSION_COOKIE } from '../../../src/server/auth';
 import { budgetMissionOf } from '../../../src/server/budget';
-import { completeLogin } from '../../../src/server/auth/login';
 import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
 import { memoryStoreDeps } from '../../../src/server/compose/testing';
 import { loadInstanceConfig } from '../../../src/server/config';
@@ -39,7 +38,6 @@ import {
 } from '../../../src/server/connections/testing';
 import type { IssuedLink } from '../../../src/server/auth';
 import { base32Decode, totpCode, totpStepOf } from '../../../src/server/crypto/totp';
-import { silentLogger } from '../../../src/server/logging';
 import type { LocalAccountRecord } from '../../../src/server/store';
 import type { ManagementActor } from '../../../src/server/management';
 import type { TokenResponse } from '../../../src/server/oauth-as';
@@ -1186,26 +1184,27 @@ const RULES: Readonly<Record<string, Rule>> = {
   'BootstrapService.revoke': {
     kind: 'mutation',
     target: (root) => root.auth.bootstrap,
-    // The first operator sign-in revokes the bootstrap token (`completeLogin`).
-    drive: (rig) =>
-      completeLogin(
-        {
-          store: rig.root.store,
-          bootstrap: rig.root.auth.bootstrap,
-          logger: silentLogger,
-        },
-        {
-          issuer: 'http://idp.test',
-          subject: 'idp|ops',
-          email: OPERATOR_EMAIL,
-          emailVerified: null,
-          displayName: 'Ops',
-          groups: [],
-        },
-        { providerId: 'idp', administrators: rig.root.auth.administrators },
-      ),
+    // "Finish setup" revokes the bootstrap token (ADR administrators-live-in-the-instance, §8):
+    // an administrator with a way in exists (a local account named by the setup).
+    prepare: async (rig) => {
+      await localProvider(rig);
+      const account = await rig.root.auth.accounts.createAccount({
+        providerId: 'local',
+        email: 'first@example.com',
+        password: LOCAL_PASSWORD,
+        actor: rig.operator.id,
+      });
+      const user = await rig.root.store.users.ensureIdentity({
+        issuer: 'urn:vaubaan:local:local',
+        subject: account.id,
+        email: account.email,
+      });
+      await rig.root.auth.administrators.grantUser(user.id, rig.operator.id);
+    },
+    drive: async (rig) =>
+      rig.root.users.handlers.finishSetup(await rig.operatorPost('/api/admin/setup/finish', {})),
     writes: {
-      act: 'config-changed',
+      act: 'setup-finished',
       object: 'instance-config',
       objectId: 'bootstrap',
       actor: 'operator',
@@ -1751,7 +1750,6 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'config-changed',
       'config-changed',
       'config-changed',
-      'config-changed',
       'connection-created',
       'connection-created',
       'connection-created',
@@ -1804,6 +1802,7 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'resource-edited',
       'resources-discovered',
       'resources-discovered',
+      'setup-finished',
       'share-created',
       'share-revoked',
       'sign-in-provider-disabled',

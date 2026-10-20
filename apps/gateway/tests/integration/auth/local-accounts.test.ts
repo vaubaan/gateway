@@ -517,7 +517,7 @@ describe('local accounts: invitation link, password sign-in, lockout, reset', ()
   describe('the setup and the mail', () => {
     const OPS = 'ops@example.com';
 
-    it('the bootstrap operator creates the first administrator; their first sign-in enrols the factor and retires the token', async () => {
+    it('the bootstrap operator creates the first administrator; their first sign-in enrols the factor; "Finish setup" retires the token', async () => {
       const bootstrap = await root.auth.sessions.create({ kind: 'bootstrap' });
       const created = await root.users.handlers.createFirstAdministrator(
         formWith(`${SESSION_COOKIE}=${bootstrap.id}`, {
@@ -550,7 +550,7 @@ describe('local accounts: invitation link, password sign-in, lockout, reset', ()
       expect(refused.headers.get('location') ?? '').toMatch(/^\/admin\?notice=/);
       expect(await root.auth.accounts.accountOf('local', 'second@example.com')).toBeNull();
       expect((await root.auth.bootstrap.state()).status).toBe('active');
-      // The first sign-in: password, then the enrolment, then the session — and the token is revoked.
+      // The first sign-in: password, then the enrolment, then the session; the token stays.
       const first = await signIn(OPS, 'the operator sentence');
       expect(first.headers.get('location')).toBe('/login/second-factor');
       const cookie = cookieOf(first, LOGIN_COOKIE);
@@ -559,6 +559,9 @@ describe('local accounts: invitation link, password sign-in, lockout, reset', ()
       const code = bytes ? totpCode(bytes, totpStepOf(clock.now().getTime())) : '';
       const done = await root.auth.handlers.enrolAtSignIn(formWith(cookie, { code }), 'local');
       expect(sessionCookieOf(done)).not.toBeNull();
+      expect((await root.auth.bootstrap.state()).status).toBe('active');
+      // The setup ends by its own step, once an administrator has a way in.
+      await root.users.handlers.finishSetup(formWith(`${SESSION_COOKIE}=${bootstrap.id}`, {}));
       expect((await root.auth.bootstrap.state()).status).toBe('revoked');
     });
 

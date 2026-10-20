@@ -14,6 +14,7 @@
  *   POST /admin/users/administrators/group        name a group of a provider (fields `provider`, `group`)
  *   POST /admin/users/administrators/remove       remove a designation (field `designation`)
  *   POST /admin/users/administrators/apply-configuration  apply the configuration's admin rule
+ *   POST /api/admin/setup/finish          end the setup: the install token is revoked
  *
  * Operator only, origin-checked (spec §6): the Administration layout does not
  * cover route handlers, so each handler authorizes by itself.
@@ -40,6 +41,9 @@ import { localAccountIdOf, type LinkMailer } from '../auth/local-handlers';
 import type { SignInProvidersService } from '../auth/sign-in-providers';
 import { LocalAccountError } from '../auth/errors';
 import type { LocalLinkKind } from '../store';
+import type { AuditWriter } from '@vaubaan/gateway-core';
+import type { BootstrapService } from '../auth/bootstrap';
+import { toIso, type Clock } from '../store/clock';
 import type { InvitationService } from './invitations';
 import type { UserAdminActor, UserAdminService } from './service';
 
@@ -48,6 +52,8 @@ export const USERS_PAGE = '/admin/users';
 export const ADMIN_SETUP_PAGE = '/admin';
 /** The page that creates the first administrator's local account. */
 export const FIRST_ADMINISTRATOR_PAGE = '/admin/first-administrator';
+/** "Finish setup": the form action that ends the setup. */
+export const FINISH_SETUP_ACTION = '/api/admin/setup/finish';
 
 export interface UserAdminHandlerDeps {
   readonly publicUrl: URL;
@@ -60,6 +66,10 @@ export interface UserAdminHandlerDeps {
   readonly providers: Pick<SignInProvidersService, 'views'>;
   /** The designations of the administrators (ADR administrators-live-in-the-instance). */
   readonly administrators: AdministratorsService;
+  readonly bootstrap: Pick<BootstrapService, 'state' | 'revoke'>;
+  readonly masterKey: { state(): Promise<{ readonly handoverPending: boolean }> };
+  readonly audit: AuditWriter;
+  readonly clock: Clock;
   readonly mailer?: LinkMailer;
   readonly notices: NoticeStore;
   readonly logger: Logger;
@@ -92,6 +102,25 @@ export interface UserAdminHandlers {
   addAdministratorGroup(request: Request): Promise<Response>;
   removeAdministratorDesignation(request: Request): Promise<Response>;
   applyConfigurationRule(request: Request): Promise<Response>;
+  /**
+   * "Finish setup": revokes the install token, once the key is handed over and an
+   * administrator has a way in (ADR administrators-live-in-the-instance, §8).
+   */
+  finishSetup(request: Request): Promise<Response>;
+}
+
+/** Why the setup cannot end yet, or `null`. */
+export async function setupCannotFinish(deps: {
+  readonly administrators: Pick<AdministratorsService, 'withAWayIn'>;
+  readonly masterKey: { state(): Promise<{ readonly handoverPending: boolean }> };
+}): Promise<string | null> {
+  if ((await deps.masterKey.state()).handoverPending) {
+    return 'Download the encryption key and confirm you kept it first.';
+  }
+  if ((await deps.administrators.withAWayIn()).length === 0) {
+    return 'Name an administrator who can sign in first: create their local account, or make the identity of a passed provider test an administrator.';
+  }
+  return null;
 }
 
 const plural = (count: number, one: string, many: string): string => (count === 1 ? one : many);
@@ -421,6 +450,45 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
         notice = failure(err, 'Not removed');
       }
       return redirectWithNotice(principal.sessionId, USERS_PAGE, notice);
+    },
+
+    async finishSetup(request) {
+      const principal = await operatorOf(request);
+      if (principal instanceof Response) return principal;
+      let notice: Notice;
+      try {
+        if ((await deps.bootstrap.state()).status !== 'active') {
+          notice = { tone: 'warning', title: 'The setup has already ended', lines: [] };
+        } else {
+          const problem = await setupCannotFinish(deps);
+          if (problem) {
+            notice = { tone: 'danger', title: 'The setup is not finished', lines: [problem] };
+          } else {
+            const revoked = await deps.bootstrap.revoke();
+            await deps.audit.write({
+              kind: 'admin',
+              ts: revoked.status === 'revoked' ? revoked.revokedAt : toIso(deps.clock.now()),
+              user_id: auditActorId(principal),
+              act: 'setup-finished',
+              object: { type: 'instance-config', id: 'bootstrap' },
+              before: { status: 'active' },
+              after: { status: revoked.status },
+              delegated_client_id: null,
+            });
+            deps.logger.info('setup finished: the install token is revoked');
+            notice = {
+              tone: 'success',
+              title: 'The setup is finished',
+              lines: [
+                'The install token and the setup link no longer open anything. From now on people sign in through the providers that are on.',
+              ],
+            };
+          }
+        }
+      } catch (err) {
+        notice = failure(err, 'The setup is not finished');
+      }
+      return redirectWithNotice(principal.sessionId, ADMIN_SETUP_PAGE, notice);
     },
 
     async applyConfigurationRule(request) {

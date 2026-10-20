@@ -252,8 +252,8 @@ describe('several sign-in providers: OpenID Connect and GitHub on one instance',
       new Headers({ cookie: cookieHeader(b) }),
     );
     expect(grace).toMatchObject({ kind: 'user', isOperator: true });
-    // The first operator sign-in revokes the install token.
-    expect((await root.auth.bootstrap.state()).status).toBe('revoked');
+    // A sign-in revokes nothing: the setup ends by its own step.
+    expect((await root.auth.bootstrap.state()).status).toBe('active');
 
     idp.nextClaims = { sub: 'emp-2', email: 'mallory@example.com', groups: [ADMIN_TEAM] };
     const m = fresh();

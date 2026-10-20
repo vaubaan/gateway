@@ -1405,10 +1405,13 @@ the instance generated it and confirms having kept it, and names the first
 administrator: with local accounts, the setup creates their account — any
 address, a password; the second factor and the recovery codes at its first
 sign-in —; with a provider of the company, the configuration's admin rule
-names them at the first start. They add a sign-in provider (or declare it
-in the configuration), sign in through it — which revokes the bootstrap
-token when they are an administrator —, and invite the addresses an open
-provider should admit. Nothing else stands between them and the first
+names them at the first start, or a passed test of the company's provider
+makes the tested identity the first administrator. They add a sign-in
+provider (or declare it in the configuration), test it and switch it on,
+invite the addresses an open provider should admit, and **finish the
+setup**: an explicit step, allowed once the key was handed over and an
+administrator has a way in, that revokes the bootstrap token — no sign-in
+revokes it by itself. Nothing else stands between them and the first
 account: a service that signs people in through an OAuth client (Gmail) is
 declared on its connect page the first time someone opens it; every other
 service is connected with a key.

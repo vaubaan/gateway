@@ -24,6 +24,11 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Changed
 
+- **The setup ends by an explicit step.** "Finish setup" on the setup page
+  revokes the install token, once the encryption key was handed over and an
+  administrator can sign in. A sign-in no longer revokes it: an instance whose
+  token is still active keeps showing the step until an administrator takes it.
+
 - **The administrators live in the instance.** Who administers a gateway is
   kept in its store and changed from Administration → Users ("Make
   administrator", "No longer administrator", a group of a sign-in provider,
