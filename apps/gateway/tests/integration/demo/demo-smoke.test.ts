@@ -23,6 +23,7 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { SESSION_COOKIE } from '../../../src/server/auth';
+import { base32Decode, totpCode, totpStepOf } from '../../../src/server/crypto/totp';
 import { DEMO_IDP_PATH } from '../../demo/demo-idp';
 import { hasBuild } from '../../demo/demo-instance';
 import { ALICE, BOB, DEMO_PEOPLE, type DemoPerson } from '../../demo/people';
@@ -111,6 +112,27 @@ class Browser {
       headers: { cookie: [...this.cookies].map(([k, v]) => `${k}=${v}`).join('; ') },
       redirect: 'manual',
     });
+    this.absorb(response);
+    return response;
+  }
+
+  /** A same-origin form post, as the gateway's pages make them. */
+  async post(path: string, fields: Record<string, string>): Promise<Response> {
+    const response = await fetch(new URL(path, this.origin), {
+      method: 'POST',
+      headers: {
+        cookie: [...this.cookies].map(([k, v]) => `${k}=${v}`).join('; '),
+        origin: this.origin,
+        'content-type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams(fields).toString(),
+      redirect: 'manual',
+    });
+    this.absorb(response);
+    return response;
+  }
+
+  private absorb(response: Response): void {
     for (const header of response.headers.getSetCookie()) {
       const [pair = '', ...attributes] = header.split(';');
       const [name = '', value = ''] = pair.split('=');
@@ -120,8 +142,20 @@ class Browser {
         this.cookies.set(name.trim(), value.trim());
       }
     }
-    return response;
   }
+}
+
+/**
+ * The gateway's own second factor at a sign-in (ADR administrators-live-in-the-instance
+ * §7), enrolled as a person would: the secret the page shows, typed into an app.
+ */
+async function enrolAsked(browser: Browser, finished: Response): Promise<Response> {
+  if (finished.headers.get('location') !== '/login/second-factor') return finished;
+  const page = await (await browser.get('/login/second-factor')).text();
+  const shown = /([A-Z2-7]{4}(?: [A-Z2-7]{4}){7})/.exec(page)?.[1]?.replace(/ /g, '');
+  const bytes = shown ? base32Decode(shown) : null;
+  if (!bytes) throw new Error('no secret on the enrolment page');
+  return browser.post('/auth/factor/enrol', { code: totpCode(bytes, totpStepOf(Date.now())) });
 }
 
 /** Signs a person in through the demo identity provider's account picker. */
@@ -130,7 +164,7 @@ async function signIn(browser: Browser, person: DemoPerson): Promise<void> {
   const authorization = new URL(locationOf(started));
   authorization.searchParams.set('account', person.key);
   const picked = await browser.get(authorization.href);
-  const finished = await browser.get(locationOf(picked));
+  const finished = await enrolAsked(browser, await browser.get(locationOf(picked)));
   if (finished.status !== 303 || !browser.has(SESSION_COOKIE)) {
     throw new Error(`${person.name} was not signed in (${finished.status})`);
   }
@@ -214,9 +248,12 @@ describe.skipIf(!hasBuild())('npm run demo', () => {
     const callback = new URL(locationOf(picked));
     expect(callback.pathname).toBe('/auth/callback');
 
-    const finished = await browser.get(callback.href);
+    // Alice administers the demo: she enrols the gateway's own second factor first.
+    const asked = await browser.get(callback.href);
+    expect(locationOf(asked)).toBe('/login/second-factor');
+    const finished = await enrolAsked(browser, asked);
     expect(finished.status).toBe(303);
-    expect(locationOf(finished)).toBe('/missions');
+    expect(locationOf(finished)).toMatch(/^\/settings\/security\?notice=.*return_to=%2Fmissions/);
     expect(browser.has(SESSION_COOKIE)).toBe(true);
   });
 

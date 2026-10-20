@@ -12,7 +12,8 @@
  * are answered by the launcher's control endpoints: the "user" consents and
  * the browser is sent back with what the real page would hand over.
  */
-import type { APIRequestContext, BrowserContext, Route } from '@playwright/test';
+import { base32Decode, totpCode, totpStepOf } from '../../../src/server/crypto/totp';
+import type { APIRequestContext, BrowserContext, Page, Route } from '@playwright/test';
 
 import { controlUrl, GITHUB_SIGN_IN_BASE, IDP_ISSUER, localOrigin, PUBLIC_URL } from './instance';
 
@@ -144,6 +145,48 @@ export async function checkToken(request: APIRequestContext, token: string): Pro
  * default user: every spec calls this in its `beforeEach` (and again when a
  * scenario changes hands).
  */
+/**
+ * The gateway's own second factor at the end of a sign-in (ADR
+ * administrators-live-in-the-instance §7), answered as the person's authenticator app
+ * would: the enrolment with the secret the page shows (then "continue" past the
+ * recovery codes), or the code of the factor enrolled earlier. Nothing when the
+ * sign-in asked none.
+ */
+export async function passSecondFactor(
+  page: Page,
+  request: APIRequestContext,
+  email: string,
+): Promise<void> {
+  // The sign-in hops through the provider and the callback: wait for the page it lands on.
+  const gateway = new URL(PUBLIC_URL).host;
+  await page.waitForURL((url) => url.host === gateway && !url.pathname.startsWith('/auth/'));
+  await page.waitForLoadState();
+  const path = new URL(page.url()).pathname;
+  if (path === '/login/second-factor') {
+    const shown = (await page.getByTestId('totp-secret').locator('code').innerText()).replace(
+      /\s/g,
+      '',
+    );
+    const bytes = base32Decode(shown);
+    if (!bytes) throw new Error(`not a base32 secret: ${shown}`);
+    await page
+      .getByLabel(/^The code the app shows now/)
+      .fill(totpCode(bytes, totpStepOf(Date.now())));
+    await page.getByRole('button', { name: 'Confirm' }).click();
+    await page.waitForURL(/\/settings\/security\?notice=/);
+    const next = page.getByTestId('continue-after-enrolment').getByRole('link');
+    if (await next.count()) await next.click();
+    return;
+  }
+  if (path === '/login/code') {
+    const response = await request.post(controlUrl('/factor/code'), { data: { email } });
+    if (!response.ok()) throw new Error(`factor/code answered ${response.status()}`);
+    const { code } = (await response.json()) as { code: string };
+    await page.getByLabel(/^Code/).fill(code);
+    await page.getByRole('button', { name: 'Sign in' }).click();
+  }
+}
+
 export async function signInAs(
   request: APIRequestContext,
   user: { readonly sub: string; readonly email: string; readonly name: string },

@@ -102,8 +102,13 @@ company registered at a provider).
   most one per instance), always "invited only": an account exists only for
   an invited address or an administrator, and is created by the
   person through a single-use link, or by the setup for the first
-  administrator (any address the holder of the setup link types). An
-  administrator must have a second factor; other people may.
+  administrator (any address the holder of the setup link types).
+- **Second factor** — a one-time code from an authenticator app (with
+  recovery codes shown once) that the instance itself asks at the end of
+  every sign-in, through any provider, of every person: enrolled at their
+  first sign-in. An administrator may waive it for a sign-in provider whose
+  directory enforces its own — outright, or only when the provider says in
+  the sign-in that it asked one —, never for an administrator.
 - **Open provider** — a sign-in provider at which anyone in the world can
   hold an account (GitHub, Google accounts outside a Workspace, Microsoft
   personal accounts). It never admits by itself: it needs allowed email
@@ -1086,9 +1091,10 @@ interpreted as markup.
   that stands for them is shown only to who answers for the call — the
   creator of its mission, an owner of its account — never to a teammate or
   to an administrator as such.
-- **Settings** — for everyone: the theme; for a local account, its
-  **second factor** (enrol one from a QR code and confirm it with a code,
-  the recovery codes shown once, replace it after a fresh sign-in); and
+- **Settings** — for everyone: the theme; the **second factor** (enrol one
+  from a QR code and confirm it with a code, the recovery codes shown once,
+  replace it, remove it after a fresh sign-in — never an administrator's);
+  for a local account, its password; and
   **Connected apps**, the agents I allowed to prepare missions in my name:
   until when each consent runs, the missions each prepared, and its
   disconnection, asked first. For an
@@ -1325,9 +1331,13 @@ same for any agent, with no value of any mission.
   provider's verified-email signal too. **Local accounts** hold their
   password hashed with a memory-hard function (argon2id); a wrong password
   is answered like an unknown address, the sign-in form is rate-limited and
-  an account is locked for a while after repeated failures; the second
-  factor is a time-based one-time code never accepted twice, or a
-  recovery code used once; the links that create an account or reset a
+  an account is locked for a while after repeated failures. **Every
+  sign-in**, through any provider, ends with the instance's **second
+  factor** before the session exists — a time-based one-time code never
+  accepted twice, or a recovery code used once; enrolled at the person's
+  first sign-in —, unless an administrator waived it for that provider
+  (outright, or when the provider's token says it asked a second factor of
+  its own), and never waived for an administrator; the links that create an account or reset a
   password are single-use, expire in minutes and are known to the store
   by their digest only; password hashes, second-factor secrets and
   recovery codes are sealed under the master key, and none of them reaches
@@ -1550,7 +1560,8 @@ For an administrative act: timestamp, user, act (connection, share,
 revocation, issuance, extension, reset, approval, rotation, change of
 limits, a member removed or leaving, delegation granted or revoked,
 an administrator named or removed, the configuration's admin rule applied,
-a sign-in provider tested, switched on or off,
+a sign-in provider tested, switched on or off, a second factor enrolled,
+reset or waived for a provider,
 configuration change), object, previous and new
 state when meaningful, and, when the act comes from the management
 surface, the identity of the delegated client.
@@ -1660,6 +1671,11 @@ automated suite. Trust comes from usage.
     nobody by itself, a pending address consumed by the first sign-in of
     its provider, and every act that would leave no administrator a way in
     refused;
+  - the second factor (§6): enrolled at the first sign-in through any
+    provider and asked at every one after, before the session; waived for
+    a provider outright or on its token's `mfa`, never for an
+    administrator; the factor of an earlier local account moved to its
+    person;
   - the test of a sign-in provider (§4.2): no user, session or group written,
     the tester's session kept, a callback of another session refused, the
     verdict computed as a sign-in would, the result usable by the tester's

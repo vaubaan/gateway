@@ -268,19 +268,17 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
                       </Button>
                     </form>
                   )}
-                  {isLocal(view) && (
-                    <ConfirmSubmit
-                      action={`${base}/reset-second-factor`}
-                      label="Reset second factor"
-                      ariaLabel={`Reset the second factor of ${view.user.email}`}
-                      variant="ghost"
-                      tone="danger"
-                      title={`Reset the second factor of ${nameOf(view)}?`}
-                      consequence="Their authenticator app and recovery codes stop working. Their next sign-in takes the password alone, or sets a new second factor up if they administer this gateway. Do it only for a person you have identified yourself."
-                      confirmLabel="Reset"
-                      testId={`reset-second-factor-${view.user.id}`}
-                    />
-                  )}
+                  <ConfirmSubmit
+                    action={`${base}/reset-second-factor`}
+                    label="Reset second factor"
+                    ariaLabel={`Reset the second factor of ${view.user.email}`}
+                    variant="ghost"
+                    tone="danger"
+                    title={`Reset the second factor of ${nameOf(view)}?`}
+                    consequence="Their authenticator app and recovery codes stop working. Their next sign-in sets a new one up. Do it only for a person you have identified yourself."
+                    confirmLabel="Reset"
+                    testId={`reset-second-factor-${view.user.id}`}
+                  />
                   <form method="post" action={`${base}/end-sessions`}>
                     <Button
                       type="submit"

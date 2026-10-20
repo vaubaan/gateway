@@ -7,6 +7,7 @@
 import type { AdministratorsService } from '../auth/administrators';
 import type { Authenticator } from '../auth/authenticator';
 import type { BootstrapService } from '../auth/bootstrap';
+import type { SecondFactorService } from '../auth/second-factor';
 import type { LocalAccountsService } from '../auth/local-accounts';
 import type { LinkMailer } from '../auth/local-handlers';
 import type { SessionService } from '../auth/session-service';
@@ -27,6 +28,8 @@ export interface UsersModuleDeps {
   readonly config: Pick<InstanceConfig, 'publicUrl'>;
   /** The designations of the administrators. */
   readonly administrators: AdministratorsService;
+  /** The second factor of every person: an administrator resets one from People. */
+  readonly secondFactors: SecondFactorService;
   /** The install token the setup ends by revoking. */
   readonly bootstrap: Pick<BootstrapService, 'state' | 'revoke'>;
   /** Whether the generated master key still waits for its handover. */
@@ -82,6 +85,7 @@ export function createUsersModule(deps: UsersModuleDeps): UsersModule {
     providers: deps.providers,
     administrators: deps.administrators,
     bootstrap: deps.bootstrap,
+    secondFactors: deps.secondFactors,
     masterKey: deps.masterKey,
     audit: deps.store.auditWriter,
     clock: deps.clock ?? systemClock,

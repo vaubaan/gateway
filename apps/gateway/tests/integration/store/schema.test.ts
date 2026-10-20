@@ -54,6 +54,8 @@ const EXPECTED_TABLES = [
   'sessions',
   'share_restrictions',
   'shares',
+  'user_second_factor_secrets',
+  'user_second_factors',
   'users',
   'web_sessions',
 ];
@@ -96,7 +98,7 @@ describe('store schema v1', () => {
   it('creates every table of the plan on an in-memory database', () => {
     const { store } = openTestStore();
     opened.push(store);
-    expect(store.schemaVersion).toBe(20);
+    expect(store.schemaVersion).toBe(21);
     expect(tableNames(store)).toEqual(EXPECTED_TABLES);
   });
 
@@ -135,10 +137,10 @@ describe('store schema v1', () => {
     opened.splice(opened.indexOf(first), 1);
 
     const second = fileStore(path);
-    expect(second.schemaVersion).toBe(20);
+    expect(second.schemaVersion).toBe(21);
     expect(
       second.db.prepare<[], { n: number }>('SELECT COUNT(*) AS n FROM schema_migrations').get()?.n,
-    ).toBe(20);
+    ).toBe(21);
   });
 
   it('serializes two writers on the same file with BEGIN IMMEDIATE', async () => {

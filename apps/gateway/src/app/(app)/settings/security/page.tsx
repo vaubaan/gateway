@@ -1,7 +1,7 @@
 /**
- * `/settings/security` — a person's own password and second factor, for a local
- * account (ADR local-accounts-sign-in-provider). A person who signed in through
- * a provider is told that the provider keeps both. The recovery codes of a new
+ * `/settings/security` — a person's own second factor, whatever their sign-in
+ * provider (ADR administrators-live-in-the-instance, §7), and the password of a
+ * local account (ADR local-accounts-sign-in-provider). The recovery codes of a new
  * second factor arrive here as a one-time notice.
  */
 import { headers } from 'next/headers';
@@ -12,9 +12,9 @@ import styles from '@/components/settings/settings.module.css';
 import { SettingsFrame } from '@/components/shell/AppShell';
 import {
   Button,
+  ButtonLink,
   ConfirmSubmit,
   Field,
-  Hint,
   Input,
   PageHeader,
   Row,
@@ -24,7 +24,7 @@ import {
 import { currentUser } from '@/lib/auth/session';
 import { NeedsUser } from '@/components/auth/NeedsUser';
 import { takeNotice, type PageSearchParams } from '@/lib/connections/session';
-import { ENROL_PARAM, localAccountIdOf, SECURITY_PAGE } from '@/server/auth';
+import { ENROL_PARAM, localAccountIdOf, safeReturnTo, SECURITY_PAGE } from '@/server/auth';
 import { PASSWORD_MIN_LENGTH } from '@/server/crypto/password';
 import { otpauthUrl } from '@/server/crypto/totp';
 
@@ -40,10 +40,16 @@ export default async function SecurityPage({ searchParams }: { searchParams: Pag
   const local = providers.find((p) => p.kind === 'local') ?? null;
   const accountId = local ? localAccountIdOf(principal, local) : null;
   const account = accountId ? await root.auth.accounts.accountById(accountId) : null;
+  const hasFactor = await root.auth.secondFactors.has(principal.user.id);
+  const codesLeft = hasFactor
+    ? await root.auth.secondFactors.recoveryCodesLeft(principal.user.id)
+    : 0;
+  const providerName =
+    providers.find((p) => p.id === principal.providerId)?.name ?? 'your sign-in provider';
   const enrolling = params[ENROL_PARAM] !== undefined;
   const step = enrolling ? await root.auth.sessions.peekLocalStep(await headers()) : null;
   const enrolment =
-    step?.step === 'enrol' && step.accountId === accountId && step.totpSecret
+    step?.step === 'enrol' && step.userId === principal.user.id && step.totpSecret
       ? {
           secret: step.totpSecret,
           otpauth: otpauthUrl({
@@ -54,80 +60,86 @@ export default async function SecurityPage({ searchParams }: { searchParams: Pag
         }
       : null;
   const administrator = principal.isOperator;
+  // After an enrolment at sign-in: where the sign-in was going, once the codes are kept.
+  const rawNext = typeof params.return_to === 'string' ? params.return_to : null;
+  const next = rawNext ? safeReturnTo(rawNext, root.config.publicUrl, '') : '';
 
   return (
     <SettingsFrame principal={principal}>
       <PageHeader
         title="Security"
-        lede="Your password and your second factor, for the account this gateway keeps for you."
+        lede={
+          account
+            ? 'Your password and your second factor, for the account this gateway keeps for you.'
+            : `Your second factor on this gateway. Your password stays with ${providerName}.`
+        }
       />
       <NoticeBanner notice={notice} />
-      {!account ? (
-        <Section first>
-          <Hint>
-            You signed in through{' '}
-            {providers.find((p) => p.id === principal.providerId)?.name ?? 'a provider'}, which
-            keeps your password and your second factor: change them there.
-          </Hint>
+      {next && (
+        <Section first testId="continue-after-enrolment">
+          <ButtonLink href={next} variant="primary" external>
+            I kept the recovery codes — continue
+          </ButtonLink>
         </Section>
-      ) : (
-        <>
-          <Section
-            title="Second factor"
-            note="A code from an authenticator app at each sign-in, after the password."
-            first
-            testId="second-factor"
-          >
-            {enrolment ? (
-              <EnrolSecondFactor
-                otpauth={enrolment.otpauth}
-                secret={enrolment.secret}
-                action={`${SECURITY_PAGE}/second-factor/confirm`}
+      )}
+      <>
+        <Section
+          title="Second factor"
+          note="A code from an authenticator app at each sign-in, asked by this gateway whatever provider you sign in through."
+          first
+          testId="second-factor"
+        >
+          {enrolment ? (
+            <EnrolSecondFactor
+              otpauth={enrolment.otpauth}
+              secret={enrolment.secret}
+              action={`${SECURITY_PAGE}/second-factor/confirm`}
+            />
+          ) : (
+            <Rows>
+              <Row
+                title={
+                  hasFactor
+                    ? 'Set up'
+                    : administrator
+                      ? 'Not set up — your next sign-in asks for it'
+                      : 'Not set up'
+                }
+                description={
+                  hasFactor
+                    ? `${codesLeft} recovery codes left. Replacing it shows new ones.`
+                    : 'Recommended: without it, whoever holds your sign-in opens every account this gateway holds for you.'
+                }
+                end={
+                  <form method="post" action={`${SECURITY_PAGE}/second-factor/begin`}>
+                    <Button type="submit" size="sm" data-testid="begin-second-factor">
+                      {hasFactor ? 'Replace' : 'Set up'}
+                    </Button>
+                  </form>
+                }
               />
-            ) : (
-              <Rows>
+              {hasFactor && !administrator && (
                 <Row
-                  title={
-                    account.totpConfirmedAt
-                      ? 'Set up'
-                      : administrator
-                        ? 'Not set up — your next sign-in asks for it'
-                        : 'Not set up'
-                  }
-                  description={
-                    account.totpConfirmedAt
-                      ? `${await root.auth.accounts.recoveryCodesLeft(account.id)} recovery codes left. Replacing it shows new ones.`
-                      : 'Recommended: your password alone opens every account this gateway holds for you.'
-                  }
+                  title="Remove the second factor"
+                  description="Within ten minutes of signing in. Your next sign-in asks for one again, unless your provider's own stands in for it."
                   end={
-                    <form method="post" action={`${SECURITY_PAGE}/second-factor/begin`}>
-                      <Button type="submit" size="sm" data-testid="begin-second-factor">
-                        {account.totpConfirmedAt ? 'Replace' : 'Set up'}
-                      </Button>
-                    </form>
+                    <ConfirmSubmit
+                      action={`${SECURITY_PAGE}/second-factor/remove`}
+                      label="Remove"
+                      variant="danger"
+                      tone="danger"
+                      title="Remove your second factor?"
+                      consequence="Your authenticator app and recovery codes stop working here."
+                      confirmLabel="Remove"
+                      testId="remove-second-factor"
+                    />
                   }
                 />
-                {account.totpConfirmedAt && !administrator && (
-                  <Row
-                    title="Remove the second factor"
-                    description="Within ten minutes of signing in. Your sign-ins then take the password alone."
-                    end={
-                      <ConfirmSubmit
-                        action={`${SECURITY_PAGE}/second-factor/remove`}
-                        label="Remove"
-                        variant="danger"
-                        tone="danger"
-                        title="Remove your second factor?"
-                        consequence="Your password alone will open your account and every account this gateway holds for you."
-                        confirmLabel="Remove"
-                        testId="remove-second-factor"
-                      />
-                    }
-                  />
-                )}
-              </Rows>
-            )}
-          </Section>
+              )}
+            </Rows>
+          )}
+        </Section>
+        {account && (
           <Section title="Password" testId="password">
             <form method="post" action={`${SECURITY_PAGE}/password`} className={styles.form}>
               <Field label="Current password" htmlFor="current-password">
@@ -170,8 +182,8 @@ export default async function SecurityPage({ searchParams }: { searchParams: Pag
               </div>
             </form>
           </Section>
-        </>
-      )}
+        )}
+      </>
     </SettingsFrame>
   );
 }

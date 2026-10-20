@@ -82,16 +82,21 @@ export interface PendingLogin {
 }
 
 /**
- * A local sign-in between its password and its session (ADR
- * local-accounts-sign-in-provider): the second factor is asked, or enrolled when
- * the person administers the gateway and has none. Bound to the browser by the
- * same cookie as a pending OpenID Connect login, for the same ten minutes.
+ * A sign-in between its provider and its session (ADR
+ * administrators-live-in-the-instance, §7): the person's second factor is asked, or
+ * enrolled when they have none. Any provider: the password of a local account, the
+ * callback of an OpenID Connect or GitHub provider. Bound to the browser by the same
+ * cookie as a pending sign-in, for the same ten minutes. Settings → Security uses the
+ * same record for an enrolment in progress.
  */
 export interface PendingLocalStep {
   readonly kind: 'local-step';
   readonly step: 'second-factor' | 'enrol';
   readonly providerId: string;
-  readonly accountId: string;
+  /** The person signing in (their `users` row exists: the sign-in was admitted). */
+  readonly userId: string;
+  /** What the session records of the sign-in, for display (`UserSessionRecord.login`). */
+  readonly login: { readonly email: string; readonly groups: readonly string[] };
   readonly returnTo: string;
   /** The secret being enrolled, base32, until the first code confirms it. */
   readonly totpSecret?: string;
@@ -142,7 +147,10 @@ export function isPendingLocalStep(value: unknown): value is PendingLocalStep {
     v.kind === 'local-step' &&
     (v.step === 'second-factor' || v.step === 'enrol') &&
     typeof v.providerId === 'string' &&
-    typeof v.accountId === 'string' &&
+    typeof v.userId === 'string' &&
+    typeof v.login === 'object' &&
+    v.login !== null &&
+    typeof (v.login as Record<string, unknown>).email === 'string' &&
     typeof v.returnTo === 'string' &&
     (v.totpSecret === undefined || typeof v.totpSecret === 'string') &&
     typeof v.createdAt === 'string'

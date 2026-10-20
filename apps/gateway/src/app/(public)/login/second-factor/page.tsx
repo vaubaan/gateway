@@ -1,8 +1,8 @@
 /**
- * `/login/second-factor` — an administrator's sign-in continues with the
- * enrolment of a second factor (ADR local-accounts-sign-in-provider, D4):
- * the QR code, the secret, the first code. Reachable only with the step
- * cookie the password form set.
+ * `/login/second-factor` — a sign-in continues with the enrolment of the
+ * gateway's second factor (ADR administrators-live-in-the-instance, §7): the QR
+ * code, the secret, the first code. Reachable only with the step cookie the sign-in
+ * set, whatever the provider.
  */
 import Link from 'next/link';
 import { headers } from 'next/headers';
@@ -28,22 +28,20 @@ export default async function EnrolAtSignInPage({ searchParams }: Props) {
   const { root } = await currentPrincipal();
   const step = await root.auth.sessions.peekLocalStep(await headers());
   if (step?.step !== 'enrol' || !step.totpSecret) redirect('/login?error=login-expired');
-  const account = await root.auth.accounts.accountById(step.accountId);
-  if (!account) redirect('/login?error=login-expired');
   const instance = await root.instance.name.identity();
   const error = typeof params.error === 'string' ? params.error : null;
   const otpauth = otpauthUrl({
     issuer: instance.label,
-    account: account.email,
+    account: step.login.email,
     secret: step.totpSecret,
   });
 
   return (
     <AuthPage instance={instance} footer={<BuildFooter />}>
       <AuthHeading title="Set up your second factor">
-        You administer {instance.label}: a password alone is not enough for that. Add this gateway
-        to an authenticator app, then enter the code it shows. Recovery codes come next; keep them
-        safe — nobody can open your account for you.
+        {instance.label} asks a code of its own at each sign-in. Add it to an authenticator app,
+        then enter the code it shows. Recovery codes come next; keep them safe — they are the way
+        back when the app is not at hand.
       </AuthHeading>
       {error && isLoginErrorCode(error) && (
         <div className={styles.block}>
@@ -55,7 +53,7 @@ export default async function EnrolAtSignInPage({ searchParams }: Props) {
       <EnrolSecondFactor
         otpauth={otpauth}
         secret={step.totpSecret}
-        action={`/auth/local/${encodeURIComponent(step.providerId)}/enrol`}
+        action="/auth/factor/enrol"
         cancel={<Link href="/login">Start again</Link>}
       />
     </AuthPage>

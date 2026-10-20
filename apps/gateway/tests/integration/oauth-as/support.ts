@@ -12,6 +12,7 @@
 import type { OAuthClientMetadata } from '@modelcontextprotocol/client';
 
 import { SESSION_COOKIE } from '../../../src/server/auth';
+import { isSecondFactorStep, passSecondFactor } from '../../../src/server/auth/testing';
 import { buildRoot, type GatewayRoot, type RootDeps } from '../../../src/server/compose/root';
 import { memoryStoreDeps } from '../../../src/server/compose/testing';
 import { loadInstanceConfig } from '../../../src/server/config';
@@ -292,6 +293,21 @@ export class Browser {
       if (target.origin === this.instance.idp.issuer.origin) {
         this.instance.idp.nextClaims = { ...claims };
         response = await this.get(this.instance.idp.authorize(target).href);
+      } else if (isSecondFactorStep(response)) {
+        // The gateway's own second factor, as the person's authenticator app answers it.
+        const answered = await passSecondFactor(
+          this.instance.root,
+          PUBLIC_URL,
+          this.cookieHeader(),
+        );
+        if (!answered) return response;
+        this.absorb(answered);
+        response = answered;
+      } else if (target.origin === PUBLIC_URL && target.pathname === '/settings/security') {
+        // The recovery codes were shown; the sign-in goes on where it was going.
+        const next = target.searchParams.get('return_to');
+        if (!next) return response;
+        response = new Response(null, { status: 303, headers: { location: next } });
       } else if (
         target.origin === PUBLIC_URL &&
         ROUTES.some((route) => match(route, target.pathname) !== null)

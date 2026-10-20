@@ -246,8 +246,16 @@ export async function startDemo(options: DemoOptions): Promise<RunningDemo> {
       throw new Error('another composition root already exists in this process');
     }
 
+    // The demo's directory stands in for one that enforces its own second factor: its
+    // people sign in without the gateway's code — Alice, an administrator, gives it
+    // (ADR administrators-live-in-the-instance §7).
+    await root.auth.providers.setWaiver('idp', 'always');
     progress('seeding people, accounts, missions and calls');
     const seeded = await seedDemo({ root, idp, providers });
+    // The seed answered Alice's second factor with a secret nobody keeps: she enrols her
+    // own at her first sign-in in the browser.
+    for (const user of await root.store.users.list())
+      await root.auth.secondFactors.reset(user, 'demo');
     rateLimiter.seeding = false;
 
     progress('starting the web application');

@@ -23,6 +23,7 @@
  * Everything runs in the process, on the root's host-agnostic handlers
  * (`Request → Response`): no browser and no HTTP round trip to the pages.
  */
+import { isSecondFactorStep, passSecondFactor } from '../../src/server/auth/testing';
 import { randomBytes } from 'node:crypto';
 
 import type { MissionPolicyEntry, RiskId } from '@vaubaan/shared';
@@ -157,9 +158,14 @@ class Seeder {
     if (!authorization) fail('sign-in did not start', started.status);
     const pending = cookieOf(started, LOGIN_COOKIE);
     const callback = this.ctx.idp.consent(new URL(authorization), person);
-    const finished = await handlers.loginCallback(
+    let finished = await handlers.loginCallback(
       new Request(callback, { headers: { cookie: pending } }),
     );
+    if (isSecondFactorStep(finished)) {
+      // An administrator gives the gateway's own second factor, as their app would.
+      const step = cookieOf(finished, LOGIN_COOKIE);
+      finished = (await passSecondFactor(this.ctx.root, this.origin, step)) ?? finished;
+    }
     const cookie = cookieOf(finished, SESSION_COOKIE);
     const principal = await authenticator.authenticate(new Headers({ cookie }));
     if (principal?.kind !== 'user') fail('sign-in produced no user session', person.email);

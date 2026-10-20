@@ -43,7 +43,8 @@ import { BOOTSTRAP_MAX_MISSES, type BootstrapService } from './bootstrap';
 import { IdpSettingsError, LOGIN_ERROR_MESSAGES, LoginError, type LoginErrorCode } from './errors';
 import { guardMutation, OPERATOR_REFUSALS, refusalResponse } from './guard';
 import { splitList } from './idp-settings';
-import { completeLogin, type LoginDeps } from './login';
+import type { LoginDeps } from './login';
+import type { FinishSignIn } from './local-handlers';
 import { forbiddenOriginResponse, isSameOrigin } from './origin';
 import type { PendingLogin, SessionService } from './session-service';
 import type { SignInFlows } from './sign-in-flows';
@@ -131,6 +132,8 @@ export interface AuthHandlerDeps {
    * `null` (`RelyingPartyFactory.checkIssuer`). A test reads it before it starts.
    */
   readonly checkIssuer?: (issuer: URL) => Promise<string | null>;
+  /** Admission, the user, the second factor's step or the session (`local-handlers.ts`). */
+  readonly finishSignIn: FinishSignIn;
 }
 
 export interface AuthHandlers {
@@ -149,6 +152,8 @@ export interface AuthHandlers {
   disableSignInProvider(request: Request, providerId: string): Promise<Response>;
   /** The identity the session's last test of this provider returned becomes an administrator. */
   makeAdministratorFromTest(request: Request, providerId: string): Promise<Response>;
+  /** Field `waiver`: `always`, `amr`, or `none` (ADR administrators-live-in-the-instance, §7). */
+  setSecondFactorWaiver(request: Request, providerId: string): Promise<Response>;
 }
 
 export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
@@ -287,30 +292,15 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
           .for(provider, groupsOfProvider(administrators, provider.id))
           .finish(url, pending);
         for (const warning of finished.warnings) logger.warn('sign-in warning', { warning });
-        const identity = finished.identity;
-        const admission = await admit(identity, provider, {
-          isInvited: async (email) => (await deps.store.invitations.get(email)) !== null,
-          isAdministrator: () => deps.administrators.admits(identity, provider.id),
-        });
-        const outcome = await completeLogin(deps.login, identity, {
-          providerId: provider.id,
-          administrators: deps.administrators,
-        });
-        // A sign-in replaces the session the browser already had, it does not add one.
-        await deps.sessions.destroy(request.headers);
-        const session = await deps.sessions.create({
-          kind: 'user',
-          userId: outcome.user.id,
-          login: { email: identity.email, groups: identity.groups, provider: provider.id },
-        });
-        logger.info('sign-in admitted', { provider: provider.id, admission });
-        // Validated again where it becomes a `Location`: a pending sign-in stored by
-        // an older build cannot leave the instance.
-        const location = safeReturnTo(pending.returnTo, deps.publicUrl);
-        const headers = new Headers({ Location: location, 'Cache-Control': 'no-store' });
-        headers.append('Set-Cookie', session.setCookie);
-        headers.append('Set-Cookie', clearPending);
-        return new Response(null, { status: SEE_OTHER, headers });
+        // Admission, the user, then the second factor's step or the session — what every
+        // provider's sign-in ends with. The return path is validated again where it
+        // becomes a `Location`: a pending sign-in stored by an older build cannot leave.
+        return await deps.finishSignIn(
+          request,
+          provider,
+          finished.identity,
+          safeReturnTo(pending.returnTo, deps.publicUrl),
+        );
       } catch (err) {
         return failLogin(err, { 'Set-Cookie': clearPending });
       }
@@ -590,6 +580,32 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
         return redirect(`${page}?administrator=1`);
       } catch (err) {
         return problemRedirect(err, page);
+      }
+    },
+
+    async setSecondFactorWaiver(request, providerId) {
+      const guard = await guardMutation(request, deps, 'operator');
+      if (!guard.ok) return refusalResponse(guard, OPERATOR_REFUSALS);
+      const form = await readForm(request);
+      if (!form) return notAFormResponse();
+      const field = stringField(form, 'waiver');
+      const waiver = field === 'always' || field === 'amr' ? field : null;
+      try {
+        const { provider, before } = await deps.providers.setWaiver(providerId, waiver);
+        await deps.audit.write({
+          kind: 'admin',
+          ts: toIso(deps.clock.now()),
+          user_id: auditActorId(guard.principal),
+          act: 'second-factor-waiver-changed',
+          object: { type: 'instance-config', id: signInAuditObjectId(provider.id) },
+          before: { waiver: before },
+          after: { waiver },
+          delegated_client_id: null,
+        });
+        logger.warn('second factor waiver changed', { provider: provider.id, waiver });
+        return redirect(`${IDP_PAGE}?waiver=${encodeURIComponent(provider.id)}`);
+      } catch (err) {
+        return problemRedirect(err, IDP_PAGE);
       }
     },
 

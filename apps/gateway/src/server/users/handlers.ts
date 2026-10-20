@@ -37,12 +37,13 @@ import { createNoticeRedirect, type Notice, type NoticeStore } from '../connecti
 import type { Logger } from '../logging';
 import { USER_ADMIN_ERROR_MESSAGES, UserAdminError } from './errors';
 import type { LocalAccountsService } from '../auth/local-accounts';
-import { localAccountIdOf, type LinkMailer } from '../auth/local-handlers';
+import type { LinkMailer } from '../auth/local-handlers';
 import type { SignInProvidersService } from '../auth/sign-in-providers';
 import { LocalAccountError } from '../auth/errors';
 import type { LocalLinkKind } from '../store';
 import type { AuditWriter } from '@vaubaan/gateway-core';
 import type { BootstrapService } from '../auth/bootstrap';
+import type { SecondFactorService } from '../auth/second-factor';
 import { toIso, type Clock } from '../store/clock';
 import type { InvitationService } from './invitations';
 import type { UserAdminActor, UserAdminService } from './service';
@@ -67,6 +68,7 @@ export interface UserAdminHandlerDeps {
   /** The designations of the administrators (ADR administrators-live-in-the-instance). */
   readonly administrators: AdministratorsService;
   readonly bootstrap: Pick<BootstrapService, 'state' | 'revoke'>;
+  readonly secondFactors: Pick<SecondFactorService, 'reset'>;
   readonly masterKey: { state(): Promise<{ readonly handoverPending: boolean }> };
   readonly audit: AuditWriter;
   readonly clock: Clock;
@@ -243,17 +245,14 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
 
     resetSecondFactor(request, userId) {
       return act(request, 'Second factor not reset', async (actor) => {
-        const local = await localProvider();
-        if (!local) throw new LocalAccountError('no-local-provider');
         const user = await deps.users.get(userId);
-        const accountId = user ? localAccountIdOf({ user }, local) : null;
-        if (!accountId) throw new LocalAccountError('account-not-found');
-        const account = await deps.accounts.resetSecondFactor(accountId, actor.actorId);
+        if (!user) throw new AdministratorsError('not-a-user', userId);
+        await deps.secondFactors.reset(user, actor.actorId);
         return {
           tone: 'success',
-          title: `Second factor of ${account.email} reset`,
+          title: `Second factor of ${user.email} reset`,
           lines: [
-            'Their next sign-in takes the password alone; if they administer this gateway, it asks them to set a new second factor up at once.',
+            'Their next sign-in asks them to set a new one up, unless their provider’s waiver applies (never to an administrator).',
           ],
         };
       });

@@ -112,6 +112,10 @@ identity provider, which shows a picker of three people (`people.ts`: the
 | Carol  | in the team GitHub admins       | the GitHub account owned by the team "GitHub admins", which she co-owns as one of its people, and her own Stripe account (test and live as two resources), on which she gave Alice access                   |
 
 Alice administers the gateway because the demo's admin rule lists her email.
+The demo's directory waives the gateway's second factor (ADR
+administrators-live-in-the-instance §7), so Bob and Carol sign in with one click;
+Alice, an administrator, enrols her own at her first sign-in — an authenticator
+app reads the QR code the page shows (the seed's own sign-in factor is reset).
 To sign in as someone else, open your name at the foot of the side navigation
 and "Sign out": it returns to the picker.
 

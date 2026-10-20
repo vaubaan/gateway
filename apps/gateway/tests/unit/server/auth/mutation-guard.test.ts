@@ -360,6 +360,12 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       post('/admin/users/invitations/remove', headers, { email: 'nobody@example.org' }),
     ),
   ),
+  'auth.handlers.setSecondFactorWaiver': form('operator', 303, (rig, headers) =>
+    rig.root.auth.handlers.setSecondFactorWaiver(
+      post('/api/admin/sign-in-providers/none/waiver', headers, { waiver: 'always' }),
+      'none',
+    ),
+  ),
   'auth.handlers.enableSignInProvider': form('operator', 303, (rig, headers) =>
     rig.root.auth.handlers.enableSignInProvider(
       post('/api/admin/sign-in-providers/none/enable', headers, {}),

@@ -223,7 +223,7 @@ five-id catalog).
   with no resource…), driver errors (`SqliteError` with `code`) for constraint
   violations the schema catches (`UNIQUE`, `FOREIGN KEY`, `CHECK`).
 
-## Schema (`0001_schema.sql` … `0020_administrators.sql`)
+## Schema (`0001_schema.sql` … `0021_user_second_factors.sql`)
 
 Schema version 19. `0001` creates every table and trigger; `0002` only replaces the
 `audit_risks` delete trigger (see Audit); `0003` adds `web_sessions`; `0004` adds the
@@ -1056,3 +1056,17 @@ sealed. Repository `repositories/administrators.ts` (`list`, `count`, `get`,
 pending address turned into its user's row in one transaction —, `addMany`).
 `instance_config` keeps `administrators.seeded_rule`, the configuration's rule
 the boot applied (canonical JSON).
+
+## Second factors (migration 0021)
+
+`0021_user_second_factors.sql`: `user_second_factors` (one row per user with a
+confirmed factor: `confirmed_at`, `last_step` — a code is never accepted twice —,
+cascade on the user's deletion) and `user_second_factor_secrets` (`<user id>:<kind>`,
+`kind` in `totp`, `recovery`, sealed `blob` with `key_version`; listed in
+`SEALED_COLUMNS` with the associated data `user-second-factor:<id>`, so the probe,
+the re-seal and the restore check open it like every sealed table). Repository
+`repositories/second-factors.ts` (`get`, `set` — seed, recovery codes and the
+confirmed row in one transaction —, `remove`, `readSecret`, `writeSecret`,
+`advanceStep`). The `totp_*` columns of `local_accounts` and the `totp` /
+`recovery` rows of `local_secrets` are emptied by the boot's move and no longer
+written.

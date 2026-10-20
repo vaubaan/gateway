@@ -16,7 +16,7 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 
 import { base32Decode, totpCode, totpStepOf } from '../../../src/server/crypto/totp';
-import { routeToInstance, signInAs } from './browser';
+import { passSecondFactor, routeToInstance, signInAs } from './browser';
 import { controlUrl, E2E_OPERATOR, PUBLIC_URL } from './instance';
 
 const GUEST_EMAIL = 'lin@guest.example.org';
@@ -58,6 +58,7 @@ async function operatorAt(page: Page, request: APIRequestContext, path: string):
   await signInAs(request, E2E_OPERATOR);
   await page.goto(`/login?return_to=${encodeURIComponent(path)}`);
   await page.getByRole('link', { name: 'Continue with idp.e2e.test' }).click();
+  await passSecondFactor(page, request, E2E_OPERATOR.email);
 }
 
 /** The code an authenticator app shows now for the secret the page displays. */
@@ -126,7 +127,8 @@ test('an invited person creates a local account on the link, signs in, enrols a 
   if (!link) throw new Error('no account link in the notice');
   await snap(page, 'settings-people-local-link');
 
-  // The invited person creates the account: the address shown, a password twice, then the home.
+  // The invited person creates the account: the address shown, a password twice, then the
+  // gateway's own second factor — every person enrols one at the first sign-in.
   await signOut(page);
   const response = await page.goto(link);
   const headers = response?.headers() ?? {};
@@ -139,6 +141,12 @@ test('an invited person creates a local account on the link, signs in, enrols a 
   await form.getByLabel('The same password again').fill(GUEST_PASSWORD);
   await snap(page, 'account-create');
   await form.getByRole('button', { name: 'Create my account' }).click();
+  await expect(page).toHaveURL(`${PUBLIC_URL}/login/second-factor`);
+  await page.getByLabel(/^The code the app shows now/).fill(await codeShownNow(page));
+  await page.getByRole('button', { name: 'Confirm' }).click();
+  const firstCodes = await recoveryCodesOf(page);
+  expect(firstCodes).toHaveLength(8);
+  await page.getByTestId('continue-after-enrolment').getByRole('link').click();
   await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible();
 
   // The link is spent: opened again, it says so and nothing else.
@@ -151,13 +159,16 @@ test('an invited person creates a local account on the link, signs in, enrols a 
   await expect(page.getByTestId('login-error')).toContainText('not right');
   await snap(page, 'login-local');
   await passwordSignIn(page, GUEST_EMAIL, GUEST_PASSWORD);
+  await expect(page).toHaveURL(`${PUBLIC_URL}/login/code`);
+  await page.getByLabel(/^Code/).fill(firstCodes[0] ?? '');
+  await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible();
 
-  // Settings → Security: the second factor, from a secret the page shows and a first code.
+  // Settings → Security: the second factor replaced, from a secret the page shows and a first code.
   await page.goto('/settings');
   await page.getByTestId('settings-security').getByRole('link', { name: 'Open' }).click();
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Security');
-  await expect(page.getByTestId('second-factor')).toContainText('Not set up');
+  await expect(page.getByTestId('second-factor')).toContainText('7 recovery codes left');
   await page.getByTestId('begin-second-factor').click();
   await expect(page.getByTestId('otpauth-qr')).toBeVisible();
   await snap(page, 'settings-security-enrol');

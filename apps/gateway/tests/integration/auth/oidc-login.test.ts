@@ -5,6 +5,7 @@
  * (`openid-client`) talking to the in-process `FakeIdp` through `customFetch`,
  * the host-agnostic handlers driven with web-standard `Request`s.
  */
+import { throughSecondFactor } from '../../../src/server/auth/testing';
 import { switchOnForTests } from '../../../src/server/auth/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BOOTSTRAP_ACTOR_ID } from '@vaubaan/gateway-core';
@@ -106,7 +107,11 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
       new Request(seen.href, { headers: { cookie: cookieHeader(b) } }),
     );
     absorbCookies(b, finish);
-    return finish;
+    // The gateway's own second factor, answered as the person's app would.
+    return throughSecondFactor(root, PUBLIC_URL, finish, {
+      cookie: () => cookieHeader(b),
+      absorb: (r) => absorbCookies(b, r),
+    });
   }
 
   function headersOf(b: Browser, extra: Record<string, string> = {}): Headers {
@@ -743,6 +748,8 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
 
   it('sessions live in the embedded store (web_sessions), not in process memory', async () => {
     await configureIdp();
+    // No second factor here: the one-time notice of its recovery codes is a row too.
+    await root.auth.providers.setWaiver('idp', 'always');
     const b: Browser = { cookies: new Map() };
     await signIn(b, { sub: 'idp|hal', email: 'hal@example.com' });
     expect(await root.store.webSessions.count()).toBe(1);

@@ -26,6 +26,7 @@ import { secretAd } from './config.ts';
 import type { RepoContext } from './context.ts';
 import { requestAd } from './requests.ts';
 import { localSecretAd } from './local-accounts.ts';
+import { secondFactorSecretAd } from './second-factors.ts';
 
 export const SEALED_COLUMNS = [
   {
@@ -51,6 +52,12 @@ export const SEALED_COLUMNS = [
     idColumn: 'id',
     blobColumn: 'blob',
     associatedData: localSecretAd,
+  },
+  {
+    table: 'user_second_factor_secrets',
+    idColumn: 'id',
+    blobColumn: 'blob',
+    associatedData: secondFactorSecretAd,
   },
 ] as const;
 

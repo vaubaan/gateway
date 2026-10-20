@@ -5,6 +5,7 @@
  * that still have grounds, nobody can share or reconnect it — and the
  * operator's reassignment, their only act on the domain.
  */
+import { throughSecondFactor } from '../../../src/server/auth/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { SESSION_COOKIE } from '../../../src/server/auth';
@@ -306,11 +307,25 @@ describe('a sign-in that changes the IdP groups settles what the lost membership
       .map((header) => header.split(';')[0])
       .join('; ');
     const callback = idp.authorize(new URL(start.headers.get('location') ?? ''));
-    const finish = await rig.root.auth.handlers.loginCallback(
+    const first = await rig.root.auth.handlers.loginCallback(
       new Request(callback.href, { headers: { cookie: cookies } }),
     );
+    // The gateway's own second factor, answered as the person's app would.
+    let jar = first.headers
+      .getSetCookie()
+      .map((header) => header.split(';')[0])
+      .join('; ');
+    let sessionSet = jar.includes(`${SESSION_COOKIE}=`);
+    const finish = await throughSecondFactor(rig.root, PUBLIC_URL, first, {
+      cookie: () => jar,
+      absorb: (r) => {
+        const set = r.headers.getSetCookie().map((header) => header.split(';')[0]);
+        sessionSet ||= set.some((c) => c?.startsWith(`${SESSION_COOKIE}=`) === true);
+        jar = [jar, ...set].join('; ');
+      },
+    });
     expect(finish.status).toBe(303);
-    expect(finish.headers.getSetCookie().join('\n')).toContain(`${SESSION_COOKIE}=`);
+    expect(sessionSet).toBe(true);
   }
 
   const bobClaims = (groups: string[]) => ({ sub: 'idp|bob', email: 'bob@example.com', groups });

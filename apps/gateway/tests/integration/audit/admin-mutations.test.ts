@@ -1051,6 +1051,29 @@ const RULES: Readonly<Record<string, Rule>> = {
   'SignInProvidersService.ofIssuer': READ,
   'SignInProvidersService.isReadOnly': READ,
   'SignInProvidersService.state': READ,
+  'SignInProvidersService.setWaiver': {
+    kind: 'mutation',
+    target: (root) => root.auth.providers,
+    prepare: (rig) =>
+      rig.root.auth.idp.save({
+        issuer: 'https://idp.example.com',
+        clientId: 'c',
+        clientSecret: 's',
+        claims: { sub: 'sub', email: 'email', groups: 'groups' },
+        allowedEmailDomains: [],
+      }),
+    drive: async (rig) =>
+      rig.root.auth.handlers.setSecondFactorWaiver(
+        await rig.operatorPost('/api/admin/sign-in-providers/idp/waiver', { waiver: 'amr' }),
+        'idp',
+      ),
+    writes: {
+      act: 'second-factor-waiver-changed',
+      object: 'instance-config',
+      objectId: 'idp',
+      actor: 'operator',
+    },
+  },
   'SignInProvidersService.recordTest': exempt(
     'the outcome of a test beside the session, recorded by the handler that writes its `sign-in-provider-tested` entry (tests/integration/auth/provider-test.test.ts)',
   ),
@@ -1332,13 +1355,16 @@ const RULES: Readonly<Record<string, Rule>> = {
   'LocalAccountsService.accountById': READ,
   'LocalAccountsService.list': READ,
   'LocalAccountsService.pendingLinks': READ,
-  'LocalAccountsService.hasSecondFactor': READ,
-  'LocalAccountsService.beginTotpEnrolment': READ,
-  'LocalAccountsService.recoveryCodesLeft': READ,
+  'SecondFactorService.has': READ,
+  'SecondFactorService.beginEnrolment': READ,
+  'SecondFactorService.recoveryCodesLeft': READ,
+  'SecondFactorService.adoptLocalFactors': exempt(
+    'run by the boot alone: moves the factors local accounts kept to their people, a change of storage and of nobody’s authority (tests/integration/auth/second-factor.test.ts)',
+  ),
   'LocalAccountsService.checkPassword': exempt(
     'the person’s own sign-in: counts a wrong password towards the lockout and clears the count on a right one; refusals are logged, not audited (spec §8 names a human actor)',
   ),
-  'LocalAccountsService.checkSecondFactor': exempt(
+  'SecondFactorService.check': exempt(
     'the person’s own sign-in: advances the accepted time step or spends a recovery code; a sign-in by recovery code is logged',
   ),
   'LocalAccountsService.createLink': {
@@ -1439,39 +1465,37 @@ const RULES: Readonly<Record<string, Rule>> = {
       actor: 'operator',
     },
   },
-  'LocalAccountsService.confirmTotpEnrolment': {
+  'SecondFactorService.confirmEnrolment': {
     kind: 'mutation',
-    target: accounts,
-    prepare: localAccount,
-    drive: async (rig, prepared: never) => {
-      const account = prepared as LocalAccountRecord;
-      const { secret } = rig.root.auth.accounts.beginTotpEnrolment('Test', account.email);
+    target: (root) => root.auth.secondFactors,
+    drive: async (rig) => {
+      const { secret } = rig.root.auth.secondFactors.beginEnrolment('Test', rig.alice.user.email);
       const bytes = base32Decode(secret);
       const code = bytes ? totpCode(bytes, totpStepOf(Date.now())) : '';
-      return rig.root.auth.accounts.confirmTotpEnrolment(account.id, secret, code, rig.operator.id);
-    },
-    writes: {
-      act: 'local-second-factor-changed',
-      object: 'instance-config',
-      objectId: LOCAL_OBJECT,
-      actor: 'operator',
-    },
-  },
-  'LocalAccountsService.resetSecondFactor': {
-    kind: 'mutation',
-    target: accounts,
-    prepare: localAccount,
-    drive: (rig, prepared: never) =>
-      rig.root.auth.accounts.resetSecondFactor(
-        (prepared as LocalAccountRecord).id,
+      return rig.root.auth.secondFactors.confirmEnrolment(
+        rig.alice.user,
+        secret,
+        code,
         rig.operator.id,
-      ),
-    writes: {
-      act: 'local-second-factor-changed',
-      object: 'instance-config',
-      objectId: LOCAL_OBJECT,
-      actor: 'operator',
+      );
     },
+    writes: { act: 'second-factor-changed', object: 'user', actor: 'operator' },
+  },
+  'SecondFactorService.reset': {
+    kind: 'mutation',
+    target: (root) => root.auth.secondFactors,
+    prepare: async (rig) => {
+      const { secret } = rig.root.auth.secondFactors.beginEnrolment('Test', rig.alice.user.email);
+      const bytes = base32Decode(secret);
+      const code = bytes ? totpCode(bytes, totpStepOf(Date.now())) : '';
+      await rig.root.auth.secondFactors.confirmEnrolment(rig.alice.user, secret, code, 'x');
+    },
+    drive: async (rig) =>
+      rig.root.users.handlers.resetSecondFactor(
+        await rig.operatorPost(`/admin/users/${rig.alice.user.id}/reset-second-factor`, {}),
+        rig.alice.user.id,
+      ),
+    writes: { act: 'second-factor-changed', object: 'user', actor: 'operator' },
   },
   'LocalAccountsService.remove': {
     kind: 'mutation',
@@ -1775,8 +1799,6 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'local-link-created',
       'local-password-changed',
       'local-password-changed',
-      'local-second-factor-changed',
-      'local-second-factor-changed',
       'mission-issued',
       'mission-issued',
       'mission-issued',
@@ -1802,6 +1824,9 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'resource-edited',
       'resources-discovered',
       'resources-discovered',
+      'second-factor-changed',
+      'second-factor-changed',
+      'second-factor-waiver-changed',
       'setup-finished',
       'share-created',
       'share-revoked',
