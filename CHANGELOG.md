@@ -24,6 +24,18 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Changed
 
+- **A second factor for everyone, whatever the sign-in provider.** Every
+  sign-in now ends with the gateway's own code (an authenticator app, recovery
+  codes shown once), enrolled at the person's first sign-in — through OpenID
+  Connect and GitHub too, not only local accounts. **After the upgrade, every
+  person is asked to enrol one at their next sign-in.** An administrator may
+  waive it for a provider whose directory enforces its own (Settings →
+  Sign-in): outright, or, for OpenID Connect, only when the provider's token
+  says it asked one (`amr` contains `mfa`, as Entra ID and Okta send) — never
+  for administrators. The factors local accounts already had move to their
+  people at the first start. An administrator resets anyone's factor from
+  People.
+
 - **The setup ends by an explicit step.** "Finish setup" on the setup page
   revokes the install token, once the encryption key was handed over and an
   administrator can sign in. A sign-in no longer revokes it: an instance whose

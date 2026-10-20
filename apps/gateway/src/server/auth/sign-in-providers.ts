@@ -98,6 +98,12 @@ export interface ProviderState {
   /** When its settings were last saved: a test before that is stale. */
   readonly changedAt: string | null;
   readonly test: ProviderTestRecord | null;
+  /**
+   * The second factor waived for the people of this provider (ADR
+   * administrators-live-in-the-instance §7): `always`, or `amr` when the ID token
+   * says `mfa`; `null` when the instance asks its own. Never for an administrator.
+   */
+  readonly waiver: 'always' | 'amr' | null;
 }
 
 /** A provider with its secret, for a sign-in. */
@@ -295,14 +301,16 @@ function stateKey(id: string): string {
 }
 
 function parseState(raw: string | null): ProviderState {
-  if (!raw) return { enabled: true, changedAt: null, test: null };
+  if (!raw) return { enabled: true, changedAt: null, test: null, waiver: null };
   try {
     const value = JSON.parse(raw) as {
       enabled?: unknown;
       changed_at?: unknown;
       test?: unknown;
+      waiver?: unknown;
     };
     return {
+      waiver: value.waiver === 'always' || value.waiver === 'amr' ? value.waiver : null,
       enabled: value.enabled !== false,
       changedAt: typeof value.changed_at === 'string' ? value.changed_at : null,
       test:
@@ -311,7 +319,7 @@ function parseState(raw: string | null): ProviderState {
           : null,
     };
   } catch {
-    return { enabled: true, changedAt: null, test: null };
+    return { enabled: true, changedAt: null, test: null, waiver: null };
   }
 }
 
@@ -320,6 +328,7 @@ function serializeState(state: ProviderState): string {
     enabled: state.enabled,
     changed_at: state.changedAt,
     ...(state.test ? { test: state.test } : {}),
+    ...(state.waiver ? { waiver: state.waiver } : {}),
   });
 }
 
@@ -392,6 +401,33 @@ export class SignInProvidersService {
     return parseState(await this.store.get(stateKey(id)));
   }
 
+  /**
+   * Waives the second factor for this provider's people, or asks it again (`null`).
+   * Local accounts never; GitHub `always` only (it sends no `amr`). Works for a
+   * provider of the file too: the waiver lives in the store, never in the
+   * configuration. Returns the waiver it replaced.
+   */
+  async setWaiver(
+    id: string,
+    waiver: 'always' | 'amr' | null,
+  ): Promise<{ provider: SignInProviderView; before: ProviderState['waiver'] }> {
+    const provider = await this.view(id);
+    if (!provider) throw new IdpSettingsError([`no sign-in provider has the id '${id}'`]);
+    if (waiver !== null && provider.kind === 'local') {
+      throw new IdpSettingsError([
+        'the second factor of local accounts is the instance’s own: it cannot be waived',
+      ]);
+    }
+    if (waiver === 'amr' && provider.kind !== 'oidc') {
+      throw new IdpSettingsError([
+        'GitHub says nothing of how the person signed in: waive it always, or not at all',
+      ]);
+    }
+    const current = parseState(await this.store.get(stateKey(id)));
+    await this.store.set(stateKey(id), serializeState({ ...current, waiver }));
+    return { provider, before: current.waiver };
+  }
+
   /** Records the outcome of a test beside the session; returns it. */
   async recordTest(id: string, test: ProviderTestRecord): Promise<void> {
     const current = parseState(await this.store.get(stateKey(id)));
@@ -462,6 +498,7 @@ export class SignInProvidersService {
         enabled: result.before === null ? result.saved.kind === 'local' : current.enabled,
         changedAt: this.clock.now().toISOString(),
         test: current.test,
+        waiver: current.waiver,
       }),
     );
     return result;

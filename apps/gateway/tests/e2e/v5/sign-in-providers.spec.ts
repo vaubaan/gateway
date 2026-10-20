@@ -12,7 +12,7 @@
  */
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 
-import { routeToInstance, signInAs } from './browser';
+import { passSecondFactor, routeToInstance, signInAs } from './browser';
 import { controlUrl, E2E_OPERATOR, GITHUB_SIGN_IN_BASE, GITHUB_SIGN_IN_CLIENT } from './instance';
 
 const GUEST = { id: 77_001, login: 'lin-guest', email: 'lin@guest.example.org' } as const;
@@ -67,6 +67,7 @@ test('an administrator adds GitHub, an invited address signs in through it, and 
   // The operator signs in through the company directory, the one provider so far.
   await signInAs(request, E2E_OPERATOR);
   await page.goto('/auth/login?return_to=/admin/identity-provider');
+  await passSecondFactor(page, request, E2E_OPERATOR.email);
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Sign-in');
   const table = page.getByTestId('sign-in-providers');
   await expect(table.getByRole('row')).toHaveCount(2); // header + the directory
@@ -118,6 +119,11 @@ test('an administrator adds GitHub, an invited address signs in through it, and 
   await page.reload();
   await page.getByTestId('enable-provider-github').click();
   await expect(page.getByTestId('idp-enabled')).toBeVisible();
+  // Its people are asked no second factor of the gateway's: the administrator waives it,
+  // asked first (never for administrators).
+  await page.getByRole('button', { name: 'Second factor for GitHub' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Waive' }).click();
+  await expect(page.getByTestId('waiver-github')).toBeVisible();
 
   // Signed out, the sign-in page offers both providers.
   await signOut(page);
@@ -137,6 +143,7 @@ test('an administrator adds GitHub, an invited address signs in through it, and 
   await signInAs(request, E2E_OPERATOR);
   await page.goto('/login');
   await page.getByRole('link', { name: 'Continue with idp.e2e.test' }).click();
+  await passSecondFactor(page, request, E2E_OPERATOR.email);
   await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible();
   await page.goto('/admin/users');
   await page.getByLabel('Email address').fill(GUEST.email);
@@ -158,6 +165,7 @@ test('an administrator adds GitHub, an invited address signs in through it, and 
   await signInAs(request, E2E_OPERATOR);
   await page.goto('/login');
   await page.getByRole('link', { name: 'Continue with idp.e2e.test' }).click();
+  await passSecondFactor(page, request, E2E_OPERATOR.email);
   await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible();
   await page.goto('/admin/users');
   await expect(page.getByTestId('people')).toContainText(GUEST.login);

@@ -1623,6 +1623,15 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   provider ends its users' sessions, not the remover's; "Finish setup" refused
   while no administrator has a way in, then revoking the token and its
   sessions, with `setup-finished` (8 in all).
+- **`tests/integration/auth/second-factor.test.ts`** (5) — ADR
+  [[administrators-live-in-the-instance]] §7: a person enrols at the first
+  sign-in through OpenID Connect (a wrong code refused, the session only after
+  the code, the step cookie cleared, the codes page leading back to the
+  sign-in's destination) and gives the code at the next; the waiver `always`
+  lets a user in without it, never an administrator; the waiver `amr` holds
+  only for a token saying `mfa`; local accounts are never waived and GitHub
+  only `always`, audited; the factor a local account kept moves to its person,
+  once, and still verifies.
 - **`tests/integration/auth/provider-test.test.ts`** (6) — ADR
   [[administrators-live-in-the-instance]] §5: a new provider saved off, not
   offered, refused at sign-in (`provider-disabled`) and not switched on

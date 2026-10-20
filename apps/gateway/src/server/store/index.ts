@@ -32,6 +32,7 @@ import { createPendingRefsRepo, type PendingRefsRepo } from './repositories/pend
 import { createMissionsRepo, type MissionsRepo } from './repositories/missions.ts';
 import { createRequestsRepo, type RequestsRepo } from './repositories/requests.ts';
 import { createSealedBlobsRepo, type SealedBlobsRepo } from './repositories/sealed-blobs.ts';
+import { createSecondFactorsRepo, type SecondFactorsRepo } from './repositories/second-factors.ts';
 import { createSessionsRepo, type SessionsRepo } from './repositories/sessions.ts';
 import { createSharesRepo, type SharesRepo } from './repositories/shares.ts';
 import { createUsersRepo, type UsersRepo } from './repositories/users.ts';
@@ -62,6 +63,8 @@ export interface Store {
   readonly administrators: AdministratorsRepo;
   /** The accounts, secrets and links of a sign-in provider of kind `local`. */
   readonly localAccounts: LocalAccountsRepo;
+  /** The second factor of every person, whatever their provider (migration 0021). */
+  readonly secondFactors: SecondFactorsRepo;
   /** Temporary refs of pushes waiting for an approval (migration 0015). */
   readonly pendingRefs: PendingRefsRepo;
   readonly connections: ConnectionsRepo;
@@ -119,6 +122,7 @@ export function openStore(options: StoreOptions): Store {
     invitations: createInvitationsRepo(ctx),
     administrators: createAdministratorsRepo(ctx),
     localAccounts: createLocalAccountsRepo(ctx),
+    secondFactors: createSecondFactorsRepo(ctx),
     pendingRefs: createPendingRefsRepo(ctx),
     connections: createConnectionsRepo(ctx),
     shares: createSharesRepo(ctx),
@@ -214,6 +218,11 @@ export * from './types.ts';
 export { effectiveResourceEnv, ownResourceEnv, type EffectiveEnv } from './resource-env.ts';
 export type { UpsertUserInput, UsersRepo } from './repositories/users.ts';
 export type { GroupsRepo } from './repositories/groups.ts';
+export type {
+  SecondFactorRecord,
+  SecondFactorsRepo,
+  SecondFactorSecretKind,
+} from './repositories/second-factors.ts';
 export type { InvitationRecord, InvitationsRepo } from './repositories/invitations.ts';
 export {
   ADMINISTRATOR_KINDS,

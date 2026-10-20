@@ -7,7 +7,7 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 
-import { routeToInstance, signInAs } from './browser';
+import { passSecondFactor, routeToInstance, signInAs } from './browser';
 import { E2E_OPERATOR, E2E_USER, localOrigin, PUBLIC_URL } from './instance';
 
 /** Keeps a screenshot of a step when `E2E_V5_SCREENSHOT_DIR` names a folder (design review). */
@@ -331,6 +331,8 @@ test('Settings leads a person to their own pages and an administrator to the gat
   await routeToInstance(context);
   const ops = await context.newPage();
   await ops.goto(`${PUBLIC_URL}/auth/login?return_to=/settings`);
+  // An administrator always gives the gateway's own second factor.
+  await passSecondFactor(ops, request, E2E_OPERATOR.email);
   const admin = ops.getByRole('navigation', { name: 'Settings' });
   await expect(admin.getByRole('link')).toHaveText([
     'Preferences',

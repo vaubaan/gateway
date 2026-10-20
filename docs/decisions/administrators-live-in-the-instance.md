@@ -226,7 +226,7 @@ provider ends the other users' sessions, **never the remover's own**.
   their next sign-in; open sessions are not ended.
 - **Waiver per provider**, from Settings → Sign-in only (never from the
   configuration: it lowers what the instance checks), stored as
-  `sign_in_waiver.<id>`: `always` ("this directory enforces its own second
+  the `waiver` of the provider's state (`sign_in_state.<id>`, §5): `always` ("this directory enforces its own second
   factor": the administrator's word) or `amr` (only for a sign-in whose ID
   token's `amr` contains `mfa`; otherwise the factor is asked). An OpenID
   Connect provider takes either, GitHub `always` only, local accounts

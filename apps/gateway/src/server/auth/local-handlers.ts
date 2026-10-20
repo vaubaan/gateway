@@ -30,7 +30,7 @@
  * asked for it; an administrator who has none enrols one
  * before the session exists (D4 of the ADR).
  */
-import type { LocalSignInProvider } from '../config/sign-in';
+import type { LocalSignInProvider, SignInProvider } from '../config/sign-in';
 import { NoticeStore, type Notice } from '../connections/pending';
 import { createNoticeRedirect } from '../connections/notice-redirect';
 import type { SessionStore } from '../compose/ports';
@@ -39,6 +39,7 @@ import type { Store } from '../store';
 import type { Clock } from '../store/clock';
 import type { LocalAccountRecord } from '../store';
 import type { AdministratorsService } from './administrators';
+import { waiverApplies, type SecondFactorService } from './second-factor';
 import { admit } from './admission';
 import type { Authenticator, UserPrincipal } from './authenticator';
 import type { IdentityClaims } from './claims';
@@ -95,12 +96,14 @@ export interface LocalAuthHandlerDeps extends ThrottleDeps {
   /** The web-session store, for the one-time notices (the recovery codes shown once). */
   readonly sessionStore: SessionStore;
   readonly authenticator: Authenticator;
-  readonly providers: Pick<SignInProvidersService, 'resolve' | 'views'>;
+  readonly providers: Pick<SignInProvidersService, 'resolve' | 'views' | 'state'>;
   readonly accounts: LocalAccountsService;
   readonly login: LoginDeps;
-  readonly store: Pick<Store, 'invitations'>;
+  readonly store: Pick<Store, 'invitations' | 'users'>;
   /** Who administers: admitted without an invitation, and never without a second factor. */
   readonly administrators: AdministratorsService;
+  /** The second factor of every person (ADR administrators-live-in-the-instance, §7). */
+  readonly secondFactors: SecondFactorService;
   readonly logger: Logger;
   readonly clock: Clock;
   readonly mailer?: LinkMailer;
@@ -108,8 +111,10 @@ export interface LocalAuthHandlerDeps extends ThrottleDeps {
 
 export interface LocalAuthHandlers {
   passwordLogin(request: Request, providerId: string): Promise<Response>;
-  secondFactorLogin(request: Request, providerId: string): Promise<Response>;
-  enrolAtSignIn(request: Request, providerId: string): Promise<Response>;
+  /** The code of the second factor's step, of any provider (`providerId`: the route's, if any). */
+  secondFactorLogin(request: Request, providerId?: string): Promise<Response>;
+  /** The first code of the enrolment's step, of any provider. */
+  enrolAtSignIn(request: Request, providerId?: string): Promise<Response>;
   createAccount(request: Request): Promise<Response>;
   resetPassword(request: Request): Promise<Response>;
   forgotPassword(request: Request): Promise<Response>;
@@ -150,7 +155,17 @@ export function localAccountIdOf(
   return issuer === local.issuer.href.replace(/\/+$/, '') ? principal.user.subject : null;
 }
 
-export function createLocalAuthHandlers(deps: LocalAuthHandlerDeps): LocalAuthHandlers {
+/** What every provider's sign-in ends with (`proceed`): admission, the user, the second factor. */
+export type FinishSignIn = (
+  request: Request,
+  provider: SignInProvider,
+  identity: IdentityClaims,
+  returnTo: string,
+) => Promise<Response>;
+
+export function createLocalAuthHandlers(
+  deps: LocalAuthHandlerDeps,
+): LocalAuthHandlers & { readonly proceed: FinishSignIn } {
   const { logger } = deps;
   const admitted = createThrottle(deps);
   const notices = new NoticeStore(deps.sessionStore);
@@ -164,6 +179,12 @@ export function createLocalAuthHandlers(deps: LocalAuthHandlerDeps): LocalAuthHa
       status: SEE_OTHER,
       headers: { Location: path, 'Cache-Control': 'no-store', ...headers },
     });
+  }
+
+  function redirectWithCookies(path: string, cookies: readonly string[]): Response {
+    const headers = new Headers({ Location: path, 'Cache-Control': 'no-store' });
+    for (const cookie of cookies) headers.append('Set-Cookie', cookie);
+    return new Response(null, { status: SEE_OTHER, headers });
   }
 
   function loginError(code: string, headers: Record<string, string> = {}): Response {
@@ -197,21 +218,34 @@ export function createLocalAuthHandlers(deps: LocalAuthHandlerDeps): LocalAuthHa
     ));
   }
 
-  /** Whether the person behind the account administers the gateway, or will once signed in. */
-  async function administers(
-    provider: LocalSignInProvider,
-    account: LocalAccountRecord,
-  ): Promise<boolean> {
-    return deps.administrators.admits(localIdentity(provider, account), provider.id);
-  }
-
-  /** Admission, the `users` row and the session: what every provider's sign-in ends with. */
+  /** A session for the person, replacing the one the browser had; the pending cookie cleared. */
   async function openSession(
     request: Request,
-    provider: LocalSignInProvider,
-    account: LocalAccountRecord,
+    step: Pick<PendingLocalStep, 'userId' | 'providerId' | 'login'>,
   ): Promise<{ readonly sessionId: string; readonly setCookie: string }> {
-    const identity = localIdentity(provider, account);
+    await deps.sessions.destroy(request.headers);
+    const session = await deps.sessions.create({
+      kind: 'user',
+      userId: step.userId,
+      login: { email: step.login.email, groups: [...step.login.groups], provider: step.providerId },
+    });
+    return { sessionId: session.id, setCookie: session.setCookie };
+  }
+
+  /**
+   * What every provider's sign-in ends with, once the provider vouched for the
+   * identity (the password of a local account, the callback of OpenID Connect or
+   * GitHub): admission, the `users` row, then the second factor's step — the code when
+   * the person has a factor, its enrolment when they have none — or, when the
+   * provider's waiver applies (never to an administrator), the session (ADR
+   * administrators-live-in-the-instance, §7). Throws the `LoginError` of a refusal.
+   */
+  async function proceed(
+    request: Request,
+    provider: SignInProvider,
+    identity: IdentityClaims,
+    returnTo: string,
+  ): Promise<Response> {
     const admission = await admit(identity, provider, {
       isInvited: async (email) => (await deps.store.invitations.get(email)) !== null,
       isAdministrator: () => deps.administrators.admits(identity, provider.id),
@@ -220,43 +254,23 @@ export function createLocalAuthHandlers(deps: LocalAuthHandlerDeps): LocalAuthHa
       providerId: provider.id,
       administrators: deps.administrators,
     });
-    await deps.sessions.destroy(request.headers);
-    const session = await deps.sessions.create({
-      kind: 'user',
-      userId: outcome.user.id,
-      login: { email: identity.email, groups: [], provider: provider.id },
-    });
     logger.info('sign-in admitted', { provider: provider.id, admission });
-    return { sessionId: session.id, setCookie: session.setCookie };
-  }
-
-  /**
-   * After the password: the session, or the step before it — the second factor
-   * when the account has one, its enrolment when the person administers the
-   * gateway and has none.
-   */
-  async function continueSignIn(
-    request: Request,
-    provider: LocalSignInProvider,
-    account: LocalAccountRecord,
-    returnTo: string,
-  ): Promise<Response> {
-    if (deps.accounts.hasSecondFactor(account)) {
-      const step = await deps.sessions.createLocalStep({
-        step: 'second-factor',
-        providerId: provider.id,
-        accountId: account.id,
-        returnTo,
-      });
+    const base = {
+      providerId: provider.id,
+      userId: outcome.user.id,
+      login: { email: identity.email, groups: identity.groups },
+      returnTo,
+    };
+    if (await deps.secondFactors.has(outcome.user.id)) {
+      const step = await deps.sessions.createLocalStep({ ...base, step: 'second-factor' });
       return redirect(SECOND_FACTOR_PAGE, { 'Set-Cookie': step.setCookie });
     }
-    if (await administers(provider, account)) {
-      const enrolment = deps.accounts.beginTotpEnrolment(deps.instanceLabel, account.email);
+    const { waiver } = await deps.providers.state(provider.id);
+    if (!waiverApplies(waiver, { isOperator: outcome.isOperator, amr: identity.amr })) {
+      const enrolment = deps.secondFactors.beginEnrolment(deps.instanceLabel, identity.email);
       const step = await deps.sessions.createLocalStep({
+        ...base,
         step: 'enrol',
-        providerId: provider.id,
-        accountId: account.id,
-        returnTo,
         totpSecret: enrolment.secret,
       });
       logger.info('sign-in continues with the enrolment of a second factor', {
@@ -264,12 +278,17 @@ export function createLocalAuthHandlers(deps: LocalAuthHandlerDeps): LocalAuthHa
       });
       return redirect(ENROL_PAGE, { 'Set-Cookie': step.setCookie });
     }
-    try {
-      const session = await openSession(request, provider, account);
-      return redirect(returnTo, { 'Set-Cookie': session.setCookie });
-    } catch (err) {
-      return failLogin(err, { 'Set-Cookie': deps.sessions.clearPendingCookie() });
-    }
+    const session = await openSession(request, base);
+    const headers = new Headers({ Location: returnTo, 'Cache-Control': 'no-store' });
+    headers.append('Set-Cookie', session.setCookie);
+    headers.append('Set-Cookie', deps.sessions.clearPendingCookie());
+    return new Response(null, { status: SEE_OTHER, headers });
+  }
+
+  /** The step's person may still sign in: active, not deactivated meanwhile. */
+  async function stillActive(step: PendingLocalStep): Promise<boolean> {
+    const user = await deps.store.users.getById(step.userId);
+    return user !== null && user.status === 'active';
   }
 
   function failLogin(err: unknown, headers: Record<string, string> = {}): Response {
@@ -284,11 +303,12 @@ export function createLocalAuthHandlers(deps: LocalAuthHandlerDeps): LocalAuthHa
   /** The step of the request when it is the expected one for this provider; else `null`. */
   async function takeStep(
     request: Request,
-    providerId: string,
+    providerId: string | undefined,
     expected: PendingLocalStep['step'],
   ): Promise<PendingLocalStep | null> {
     const step = await deps.sessions.takeLocalStep(request.headers);
-    if (!step || step.step !== expected || step.providerId !== providerId) return null;
+    if (!step || step.step !== expected) return null;
+    if (providerId !== undefined && step.providerId !== providerId) return null;
     return step;
   }
 
@@ -336,6 +356,7 @@ export function createLocalAuthHandlers(deps: LocalAuthHandlerDeps): LocalAuthHa
   }
 
   return {
+    proceed,
     async passwordLogin(request, providerId) {
       if (!isSameOrigin(request.headers, deps.publicUrl)) return forbiddenOriginResponse();
       if (await throttled(request, 'password')) return loginError('too-many-attempts');
@@ -353,24 +374,23 @@ export function createLocalAuthHandlers(deps: LocalAuthHandlerDeps): LocalAuthHa
         logger.warn('sign-in failed', { code: 'password-refused', cause: check.cause });
         return loginError('password-refused');
       }
-      return continueSignIn(request, provider, check.account, returnTo);
+      try {
+        return await proceed(request, provider, localIdentity(provider, check.account), returnTo);
+      } catch (err) {
+        return failLogin(err, { 'Set-Cookie': deps.sessions.clearPendingCookie() });
+      }
     },
 
     async secondFactorLogin(request, providerId) {
       if (!isSameOrigin(request.headers, deps.publicUrl)) return forbiddenOriginResponse();
       if (await throttled(request, 'password')) return loginError('too-many-attempts');
-      const provider = await localProvider(providerId);
-      if (!provider) return loginError('provider-unknown');
       const step = await takeStep(request, providerId, 'second-factor');
       if (!step) {
         return loginError('login-expired', { 'Set-Cookie': deps.sessions.clearPendingCookie() });
       }
       const form = await readForm(request);
       if (!form) return notAFormResponse();
-      const check = await deps.accounts.checkSecondFactor(
-        step.accountId,
-        stringField(form, 'code'),
-      );
+      const check = await deps.secondFactors.check(step.userId, stringField(form, 'code'));
       if (!check.ok) {
         // The step is kept: the person may try again, within the same ten minutes.
         const again = await deps.sessions.createLocalStep(step);
@@ -379,47 +399,36 @@ export function createLocalAuthHandlers(deps: LocalAuthHandlerDeps): LocalAuthHa
           'Set-Cookie': again.setCookie,
         });
       }
-      const account = await deps.accounts.accountById(step.accountId);
-      if (!account) return loginError('account-deactivated');
-      try {
-        const session = await openSession(request, provider, account);
-        if (check.by === 'recovery-code') {
-          logger.info('sign-in by recovery code', {
-            provider: provider.id,
-            left: check.recoveryCodesLeft,
-          });
-        }
-        return redirect(step.returnTo, {
-          'Set-Cookie': session.setCookie,
+      if (!(await stillActive(step))) return loginError('account-deactivated');
+      if (check.by === 'recovery-code') {
+        logger.info('sign-in by recovery code', {
+          provider: step.providerId,
+          left: check.recoveryCodesLeft,
         });
-      } catch (err) {
-        return failLogin(err, { 'Set-Cookie': deps.sessions.clearPendingCookie() });
       }
+      const session = await openSession(request, step);
+      return redirectWithCookies(safeReturnTo(step.returnTo, deps.publicUrl, '/'), [
+        session.setCookie,
+        deps.sessions.clearPendingCookie(),
+      ]);
     },
 
     async enrolAtSignIn(request, providerId) {
       if (!isSameOrigin(request.headers, deps.publicUrl)) return forbiddenOriginResponse();
       if (await throttled(request, 'password')) return loginError('too-many-attempts');
-      const provider = await localProvider(providerId);
-      if (!provider) return loginError('provider-unknown');
       const step = await takeStep(request, providerId, 'enrol');
       if (!step?.totpSecret) {
         return loginError('login-expired', { 'Set-Cookie': deps.sessions.clearPendingCookie() });
       }
       const form = await readForm(request);
       if (!form) return notAFormResponse();
-      let confirmed: { recoveryCodes: string[] } | null;
-      try {
-        confirmed = await deps.accounts.confirmTotpEnrolment(
-          step.accountId,
-          step.totpSecret,
-          stringField(form, 'code'),
-          step.accountId,
-        );
-      } catch (err) {
-        if (err instanceof LocalAccountError) return loginError('account-deactivated');
-        throw err;
-      }
+      if (!(await stillActive(step))) return loginError('account-deactivated');
+      const confirmed = await deps.secondFactors.confirmEnrolment(
+        { id: step.userId, email: step.login.email },
+        step.totpSecret,
+        stringField(form, 'code'),
+        step.userId,
+      );
       if (!confirmed) {
         const again = await deps.sessions.createLocalStep(step);
         logger.warn('sign-in failed', { code: 'second-factor-refused', at: 'enrolment' });
@@ -427,21 +436,21 @@ export function createLocalAuthHandlers(deps: LocalAuthHandlerDeps): LocalAuthHa
           'Set-Cookie': again.setCookie,
         });
       }
-      const account = await deps.accounts.accountById(step.accountId);
-      if (!account) return loginError('account-deactivated');
-      try {
-        const session = await openSession(request, provider, account);
-        const noticeId = await codesNotice(
-          session.sessionId,
-          confirmed.recoveryCodes,
-          'Second factor set up',
-        );
-        return redirect(`${SECURITY_PAGE}?notice=${encodeURIComponent(noticeId)}`, {
-          'Set-Cookie': session.setCookie,
-        });
-      } catch (err) {
-        return failLogin(err, { 'Set-Cookie': deps.sessions.clearPendingCookie() });
-      }
+      const session = await openSession(request, step);
+      const noticeId = await codesNotice(
+        session.sessionId,
+        confirmed.recoveryCodes,
+        'Second factor set up',
+      );
+      // The recovery codes are shown once, on Security, which then leads on to where the
+      // sign-in was going (an authorization in progress, a page).
+      const next = safeReturnTo(step.returnTo, deps.publicUrl, '/');
+      const query = new URLSearchParams({ notice: noticeId });
+      if (next !== SECURITY_PAGE) query.set(RETURN_TO_PARAM, next);
+      return redirectWithCookies(`${SECURITY_PAGE}?${query.toString()}`, [
+        session.setCookie,
+        deps.sessions.clearPendingCookie(),
+      ]);
     },
 
     async createAccount(request) {
@@ -465,7 +474,11 @@ export function createLocalAuthHandlers(deps: LocalAuthHandlerDeps): LocalAuthHa
       }
       const provider = await localProvider(account.provider);
       if (!provider) return loginError('provider-unknown');
-      return continueSignIn(request, provider, account, '/');
+      try {
+        return await proceed(request, provider, localIdentity(provider, account), '/');
+      } catch (err) {
+        return failLogin(err, { 'Set-Cookie': deps.sessions.clearPendingCookie() });
+      }
     },
 
     async resetPassword(request) {
@@ -525,18 +538,15 @@ export function createLocalAuthHandlers(deps: LocalAuthHandlerDeps): LocalAuthHa
     },
 
     async beginSecondFactor(request) {
-      const who = await localUserOf(request);
-      if (!who.ok) return who.response;
-      const local = await localProvider();
-      if (!local) return redirect(SECURITY_PAGE);
-      const enrolment = deps.accounts.beginTotpEnrolment(
-        deps.instanceLabel,
-        who.principal.user.email,
-      );
+      const guard = await guardMutation(request, deps, 'user');
+      if (!guard.ok) return refusalResponse(guard, OPERATOR_REFUSALS);
+      const who = guard.principal;
+      const enrolment = deps.secondFactors.beginEnrolment(deps.instanceLabel, who.user.email);
       const step = await deps.sessions.createLocalStep({
         step: 'enrol',
-        providerId: local.id,
-        accountId: who.accountId,
+        providerId: who.providerId ?? '',
+        userId: who.user.id,
+        login: { email: who.user.email, groups: [] },
         returnTo: SECURITY_PAGE,
         totpSecret: enrolment.secret,
       });
@@ -544,12 +554,13 @@ export function createLocalAuthHandlers(deps: LocalAuthHandlerDeps): LocalAuthHa
     },
 
     async confirmSecondFactor(request) {
-      const who = await localUserOf(request);
-      if (!who.ok) return who.response;
+      const guard = await guardMutation(request, deps, 'user');
+      if (!guard.ok) return refusalResponse(guard, OPERATOR_REFUSALS);
+      const who = guard.principal;
       const step = await deps.sessions.takeLocalStep(request.headers);
       const clear = deps.sessions.clearPendingCookie();
-      if (step?.step !== 'enrol' || step.accountId !== who.accountId || !step.totpSecret) {
-        return redirectWithNotice(who.principal.sessionId, SECURITY_PAGE, {
+      if (step?.step !== 'enrol' || step.userId !== who.user.id || !step.totpSecret) {
+        return redirectWithNotice(who.sessionId, SECURITY_PAGE, {
           tone: 'danger',
           title: 'Enrolment expired',
           lines: ['Start again: the secret shown is no longer the one to confirm.'],
@@ -557,11 +568,11 @@ export function createLocalAuthHandlers(deps: LocalAuthHandlerDeps): LocalAuthHa
       }
       const form = await readForm(request);
       if (!form) return notAFormResponse();
-      const confirmed = await deps.accounts.confirmTotpEnrolment(
-        who.accountId,
+      const confirmed = await deps.secondFactors.confirmEnrolment(
+        who.user,
         step.totpSecret,
         stringField(form, 'code'),
-        who.principal.user.id,
+        who.user.id,
       );
       if (!confirmed) {
         const again = await deps.sessions.createLocalStep(step);
@@ -570,31 +581,28 @@ export function createLocalAuthHandlers(deps: LocalAuthHandlerDeps): LocalAuthHa
           title: 'Code not accepted',
           lines: ['Enter the current code of the authenticator app, for the entry you just added.'],
         };
-        const id = await notices.put(who.principal.sessionId, notice);
+        const id = await notices.put(who.sessionId, notice);
         return redirect(`${SECURITY_PAGE}?${ENROL_PARAM}=1&notice=${encodeURIComponent(id)}`, {
           'Set-Cookie': again.setCookie,
         });
       }
-      const id = await codesNotice(
-        who.principal.sessionId,
-        confirmed.recoveryCodes,
-        'Second factor set up',
-      );
+      const id = await codesNotice(who.sessionId, confirmed.recoveryCodes, 'Second factor set up');
       return redirect(`${SECURITY_PAGE}?notice=${encodeURIComponent(id)}`, {
         'Set-Cookie': clear,
       });
     },
 
     async removeSecondFactor(request) {
-      const who = await localUserOf(request);
-      if (!who.ok) return who.response;
+      const guard = await guardMutation(request, deps, 'user');
+      if (!guard.ok) return refusalResponse(guard, OPERATOR_REFUSALS);
+      const who = guard.principal;
       const session = await deps.sessions.read(request.headers);
       const createdAt = session ? Date.parse(session.record.createdAt) : NaN;
       const fresh =
         Number.isFinite(createdAt) &&
         deps.clock.now().getTime() - createdAt < FRESH_SIGN_IN_FOR_FACTOR_MS;
       if (!fresh) {
-        return redirectWithNotice(who.principal.sessionId, SECURITY_PAGE, {
+        return redirectWithNotice(who.sessionId, SECURITY_PAGE, {
           tone: 'danger',
           title: 'Sign in again first',
           lines: [
@@ -602,18 +610,20 @@ export function createLocalAuthHandlers(deps: LocalAuthHandlerDeps): LocalAuthHa
           ],
         });
       }
-      if (who.principal.isOperator) {
-        return redirectWithNotice(who.principal.sessionId, SECURITY_PAGE, {
+      if (who.isOperator) {
+        return redirectWithNotice(who.sessionId, SECURITY_PAGE, {
           tone: 'danger',
           title: 'Administrators keep a second factor',
           lines: ['You administer this gateway: replace the second factor instead of removing it.'],
         });
       }
-      await deps.accounts.resetSecondFactor(who.accountId, who.principal.user.id);
-      return redirectWithNotice(who.principal.sessionId, SECURITY_PAGE, {
+      await deps.secondFactors.reset(who.user, who.user.id);
+      return redirectWithNotice(who.sessionId, SECURITY_PAGE, {
         tone: 'success',
         title: 'Second factor removed',
-        lines: ['Your next sign-ins take the password alone. You can set one up again any time.'],
+        lines: [
+          'Your next sign-in asks you to set one up again, unless your sign-in provider’s own second factor stands in for it.',
+        ],
       });
     },
 

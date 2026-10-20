@@ -108,6 +108,14 @@ describe('sealed blobs: the master-key re-seal', () => {
         unreadable: 0,
         changed: 0,
       },
+      {
+        table: 'user_second_factor_secrets',
+        current: 0,
+        currentUnreadable: 0,
+        resealed: 0,
+        unreadable: 0,
+        changed: 0,
+      },
     ]);
     expect(versionsOf(await store.sealedBlobs.versions())).toEqual([
       'connections@1=2',
@@ -120,7 +128,7 @@ describe('sealed blobs: the master-key re-seal', () => {
     const { store, encryptor, ids } = await seeded();
     encryptor.inner = await v2WithPrevious();
     const report = await store.sealedBlobs.reseal({ apply: true });
-    expect(report.tables.map((t) => t.resealed)).toEqual([2, 1, 0, 1]);
+    expect(report.tables.map((t) => t.resealed)).toEqual([2, 1, 0, 1, 0]);
     expect(versionsOf(await store.sealedBlobs.versions())).toEqual([
       'connections@2=2',
       'instance_config@2=1',
@@ -175,6 +183,14 @@ describe('sealed blobs: the master-key re-seal', () => {
         unreadable: 0,
         changed: 0,
       },
+      {
+        table: 'user_second_factor_secrets',
+        current: 0,
+        currentUnreadable: 0,
+        resealed: 0,
+        unreadable: 0,
+        changed: 0,
+      },
     ]);
   });
 
@@ -187,6 +203,7 @@ describe('sealed blobs: the master-key re-seal', () => {
       [0, 1],
       [0, 0],
       [0, 1],
+      [0, 0],
     ]);
     expect(versionsOf(await store.sealedBlobs.versions())).toEqual([
       'connections@1=2',
@@ -203,7 +220,7 @@ describe('sealed blobs: the master-key re-seal', () => {
       previousKeys: new Map([[1, new Uint8Array(randomBytes(32))]]),
     });
     const report = await store.sealedBlobs.reseal({ apply: true });
-    expect(report.tables.map((t) => t.unreadable)).toEqual([2, 1, 0, 1]);
+    expect(report.tables.map((t) => t.unreadable)).toEqual([2, 1, 0, 1, 0]);
   });
 
   it('a row the gateway rewrites during the run is left as the gateway wrote it', async () => {

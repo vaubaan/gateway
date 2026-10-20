@@ -20,7 +20,7 @@
 import { expect, test, type Browser, type Page } from '@playwright/test';
 
 import { connectAgent, type Agent } from './agent';
-import { routeToInstance, seedShareScenario, signInAs } from './browser';
+import { passSecondFactor, routeToInstance, seedShareScenario, signInAs } from './browser';
 import { E2E_OPERATOR, E2E_SHARE_OWNER, E2E_SHARE_TARGET } from './instance';
 import { createMission, permissionRow, pickPreset } from './mission-pages';
 
@@ -68,6 +68,8 @@ async function browserOf(
   opened.push(page);
   await signInAs(request, user);
   await page.goto(`/auth/login?return_to=${encodeURIComponent(landing)}`);
+  // An administrator gives the gateway's own second factor; the others' directory waives it.
+  await passSecondFactor(page, request, user.email);
   await expect(page.getByTestId('user-menu')).toContainText(user.email);
   return page;
 }

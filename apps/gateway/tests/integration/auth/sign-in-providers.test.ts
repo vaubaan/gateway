@@ -6,6 +6,7 @@
  * `FakeIdp` and GitHub through the in-process `FakeGithub`, the host-agnostic
  * handlers driven with web-standard `Request`s. No network.
  */
+import { throughSecondFactor } from '../../../src/server/auth/testing';
 import { switchOnForTests } from '../../../src/server/auth/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -135,7 +136,11 @@ describe('several sign-in providers: OpenID Connect and GitHub on one instance',
       callbackId,
     );
     absorbCookies(b, finish);
-    return finish;
+    // The gateway's own second factor, answered as the person's app would.
+    return throughSecondFactor(root, PUBLIC_URL, finish, {
+      cookie: () => cookieHeader(b),
+      absorb: (r) => absorbCookies(b, r),
+    });
   }
 
   const fresh = (): Browser => ({ cookies: new Map() });

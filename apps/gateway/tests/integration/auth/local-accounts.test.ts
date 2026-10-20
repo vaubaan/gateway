@@ -5,6 +5,7 @@
  * network, no mail: the links are taken from the service as an administrator
  * would copy them from People.
  */
+import { throughSecondFactor } from '../../../src/server/auth/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AUTH_LIMITS, LOCAL_LOCKOUT, LOGIN_COOKIE, SESSION_COOKIE } from '../../../src/server/auth';
@@ -94,6 +95,29 @@ describe('local accounts: invitation link, password sign-in, lockout, reset', ()
     return root.auth.handlers.passwordLogin(form({ email, password }), 'local');
   }
 
+  /**
+   * A sign-in carried through the gateway's second factor (every person has one since
+   * ADR administrators-live-in-the-instance §7): the response that lands, its cookies.
+   */
+  async function through(res: Response): Promise<Response> {
+    let jar = res.headers
+      .getSetCookie()
+      .map((header) => header.split(';')[0])
+      .join('; ');
+    return throughSecondFactor(
+      root,
+      PUBLIC_URL,
+      res,
+      {
+        cookie: () => jar,
+        absorb: (r) => {
+          jar = [jar, ...r.headers.getSetCookie().map((header) => header.split(';')[0])].join('; ');
+        },
+      },
+      clock.now().getTime(),
+    );
+  }
+
   async function invitedAccount(): Promise<void> {
     await root.users.invitations.invite('bootstrap', ADA);
     const issued = await root.auth.accounts.createLink({
@@ -102,8 +126,10 @@ describe('local accounts: invitation link, password sign-in, lockout, reset', ()
       email: ADA,
       createdBy: 'bootstrap',
     });
-    const created = await root.auth.handlers.createAccount(
-      form({ token: issued.token, password: PASSWORD, password_again: PASSWORD }),
+    const created = await through(
+      await root.auth.handlers.createAccount(
+        form({ token: issued.token, password: PASSWORD, password_again: PASSWORD }),
+      ),
     );
     expect(created.status).toBe(303);
     expect(created.headers.get('location')).toBe('/');
@@ -190,7 +216,7 @@ describe('local accounts: invitation link, password sign-in, lockout, reset', ()
 
   it('the password signs in; a wrong one, an unknown address and a locked account get one answer', async () => {
     await invitedAccount();
-    const ok = await signIn('Ada@Example.com', PASSWORD);
+    const ok = await through(await signIn('Ada@Example.com', PASSWORD));
     expect(ok.headers.get('location')).toBe('/');
     const principal = await root.auth.authenticator.authenticate(
       new Headers({ cookie: sessionCookieOf(ok) ?? '' }),
@@ -208,7 +234,7 @@ describe('local accounts: invitation link, password sign-in, lockout, reset', ()
     const locked = await signIn(ADA, PASSWORD);
     expect(locked.headers.get('location')).toBe('/login?error=password-refused');
     clock.advance(LOCAL_LOCKOUT.lockMs + 1);
-    const after = await signIn(ADA, PASSWORD);
+    const after = await through(await signIn(ADA, PASSWORD));
     expect(after.headers.get('location')).toBe('/');
     const account = await root.auth.accounts.accountOf('local', ADA);
     expect(account?.failedAttempts).toBe(0);
@@ -249,7 +275,9 @@ describe('local accounts: invitation link, password sign-in, lockout, reset', ()
     expect((await signIn(ADA, PASSWORD)).headers.get('location')).toBe(
       '/login?error=password-refused',
     );
-    expect((await signIn(ADA, 'another sentence of ada')).headers.get('location')).toBe('/');
+    expect(
+      (await through(await signIn(ADA, 'another sentence of ada'))).headers.get('location'),
+    ).toBe('/');
     const twice = await root.auth.handlers.resetPassword(
       form({
         token: issued.token,
@@ -377,9 +405,10 @@ describe('local accounts: invitation link, password sign-in, lockout, reset', ()
 
     it('an administrator enrols a second factor before their first session; the codes are shown once', async () => {
       const { secret } = await enrolledAdministrator();
-      const account = await root.auth.accounts.accountOf('local', OPS);
-      expect(account?.totpConfirmedAt).not.toBeNull();
-      expect(await root.store.localAccounts.readSecret(account?.id ?? '', 'totp')).toBe(secret);
+      // The factor is the person's (ADR administrators-live-in-the-instance §7).
+      const [user] = await root.store.users.list();
+      expect(await root.auth.secondFactors.has(user?.id ?? '')).toBe(true);
+      expect(await root.store.secondFactors.readSecret(user?.id ?? '', 'totp')).toBe(secret);
       const entries = await root.store.audit.search({
         scope: {
           missionCreatorUserId: null,
@@ -391,7 +420,7 @@ describe('local accounts: invitation link, password sign-in, lockout, reset', ()
         kind: 'admin',
         limit: 100,
       });
-      expect(JSON.stringify(entries)).toContain('local-second-factor-changed');
+      expect(JSON.stringify(entries)).toContain('second-factor-changed');
       expect(JSON.stringify(entries)).not.toContain(secret);
     });
 
@@ -427,8 +456,8 @@ describe('local accounts: invitation link, password sign-in, lockout, reset', ()
         'local',
       );
       expect(byRecovery.headers.get('location')).toBe('/');
-      const account = await root.auth.accounts.accountOf('local', OPS);
-      expect(await root.auth.accounts.recoveryCodesLeft(account?.id ?? '')).toBe(7);
+      const [opsUser] = await root.store.users.list();
+      expect(await root.auth.secondFactors.recoveryCodesLeft(opsUser?.id ?? '')).toBe(7);
       const spent = await root.auth.handlers.secondFactorLogin(
         formWith(cookieOf(await signIn(OPS, OPS_PASSWORD), LOGIN_COOKIE), { code: recovery }),
         'local',
@@ -448,15 +477,15 @@ describe('local accounts: invitation link, password sign-in, lockout, reset', ()
       if (!user) throw new Error('no user');
       const reset = await root.users.handlers.resetSecondFactor(formWith(null, {}), user.id);
       expect(reset.status).toBe(401); // no session on this request
-      const account = await root.auth.accounts.accountOf('local', OPS);
-      await root.auth.accounts.resetSecondFactor(account?.id ?? '', 'other-admin');
+      await root.auth.secondFactors.reset(user, 'other-admin');
       const next = await signIn(OPS, OPS_PASSWORD);
       expect(next.headers.get('location')).toBe('/login/second-factor');
     });
 
     it('a person who is not an administrator enrols from Settings → Security and may remove it after a fresh sign-in', async () => {
       await invitedAccount();
-      const signedIn = await signIn(ADA, PASSWORD);
+      // Every person enrols at their first sign-in now; Settings replaces the factor.
+      const signedIn = await through(await signIn(ADA, PASSWORD));
       const session = sessionCookieOf(signedIn);
       const begin = await root.auth.handlers.beginSecondFactor(formWith(session, {}));
       expect(begin.headers.get('location')).toBe('/settings/security?enrol=1');
@@ -465,15 +494,16 @@ describe('local accounts: invitation link, password sign-in, lockout, reset', ()
         formWith(`${session}; ${cookie}`, { code: codeNow(step.totpSecret ?? '') }),
       );
       expect(confirmed.headers.get('location') ?? '').toMatch(/^\/settings\/security\?notice=/);
-      const account = await root.auth.accounts.accountOf('local', ADA);
-      expect(account?.totpConfirmedAt).not.toBeNull();
-      // From now on the password alone is not enough.
+      const [ada] = await root.store.users.list();
+      expect(await root.auth.secondFactors.has(ada?.id ?? '')).toBe(true);
+      // The password alone is not enough.
       expect((await signIn(ADA, PASSWORD)).headers.get('location')).toBe('/login/code');
       // Removal needs a session younger than ten minutes.
       clock.advance(11 * 60_000);
       const late = await root.auth.handlers.removeSecondFactor(formWith(session, {}));
       expect(late.headers.get('location') ?? '').toMatch(/^\/settings\/security\?notice=/);
-      expect((await root.auth.accounts.accountOf('local', ADA))?.totpConfirmedAt).not.toBeNull();
+      expect(await root.auth.secondFactors.has(ada?.id ?? '')).toBe(true);
+      clock.advance(60_000);
       const fresh = await signIn(ADA, PASSWORD);
       const factor = await root.auth.handlers.secondFactorLogin(
         formWith(cookieOf(fresh, LOGIN_COOKIE), { code: codeNow(step.totpSecret ?? '') }),
@@ -483,13 +513,14 @@ describe('local accounts: invitation link, password sign-in, lockout, reset', ()
         formWith(sessionCookieOf(factor), {}),
       );
       expect(removed.headers.get('location') ?? '').toMatch(/^\/settings\/security\?notice=/);
-      expect((await root.auth.accounts.accountOf('local', ADA))?.totpConfirmedAt).toBeNull();
-      expect((await signIn(ADA, PASSWORD)).headers.get('location')).toBe('/');
+      expect(await root.auth.secondFactors.has(ada?.id ?? '')).toBe(false);
+      // Removed: the next sign-in asks to enrol one again (local accounts are never waived).
+      expect((await signIn(ADA, PASSWORD)).headers.get('location')).toBe('/login/second-factor');
     });
 
     it('a person changes their password with the current one', async () => {
       await invitedAccount();
-      const session = sessionCookieOf(await signIn(ADA, PASSWORD));
+      const session = sessionCookieOf(await through(await signIn(ADA, PASSWORD)));
       const wrong = await root.auth.handlers.changePassword(
         formWith(session, {
           current_password: 'not it',
@@ -498,7 +529,7 @@ describe('local accounts: invitation link, password sign-in, lockout, reset', ()
         }),
       );
       expect(wrong.headers.get('location') ?? '').toMatch(/^\/settings\/security\?notice=/);
-      expect((await signIn(ADA, PASSWORD)).headers.get('location')).toBe('/');
+      expect((await signIn(ADA, PASSWORD)).headers.get('location')).toBe('/login/code');
       const changed = await root.auth.handlers.changePassword(
         formWith(session, {
           current_password: PASSWORD,
@@ -510,7 +541,9 @@ describe('local accounts: invitation link, password sign-in, lockout, reset', ()
       expect((await signIn(ADA, PASSWORD)).headers.get('location')).toBe(
         '/login?error=password-refused',
       );
-      expect((await signIn(ADA, 'a brand new sentence')).headers.get('location')).toBe('/');
+      expect((await signIn(ADA, 'a brand new sentence')).headers.get('location')).toBe(
+        '/login/code',
+      );
     });
   });
 
@@ -611,7 +644,8 @@ describe('local accounts: invitation link, password sign-in, lockout, reset', ()
       const created = await root.auth.handlers.createAccount(
         form({ token, password: PASSWORD, password_again: PASSWORD }),
       );
-      expect(created.headers.get('location')).toBe('/');
+      // The account exists; the first sign-in goes on with the second factor's enrolment.
+      expect(created.headers.get('location')).toBe('/login/second-factor');
       await root.auth.handlers.forgotPassword(form({ email: ADA }));
       await root.auth.handlers.forgotPassword(form({ email: 'nobody@example.com' }));
       expect(sent.map((m) => m.kind)).toEqual(['invite', 'reset']);

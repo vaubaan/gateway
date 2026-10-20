@@ -502,6 +502,59 @@ an OIDC one (`emailVerified: true`), and goes through the same admission and
 `completeLogin`. The team, when the user is in it, becomes an IdP group of the
 provider.
 
+## The second factor of every person
+
+ADR [administrators-live-in-the-instance](../decisions/administrators-live-in-the-instance.md) §7.
+
+**Per user.** `SecondFactorService` (`auth/second-factor.ts`) over
+`store.secondFactors` (migration `0021`: `user_second_factors` — confirmed when,
+the last accepted time step — and `user_second_factor_secrets`, sealed `totp` and
+`recovery` blobs, associated data `user-second-factor:<user id>:<kind>`, in
+`SEALED_COLUMNS`). `beginEnrolment` (a fresh secret, stored nowhere yet),
+`confirmEnrolment` (the first code; the seed and eight recovery codes sealed,
+`second-factor-changed` on the user), `check` (a code never accepted twice —
+`advanceStep` —, or a recovery code spent on use), `reset`
+(`second-factor-changed`, `change: reset`). The TOTP itself is `crypto/totp.ts`
+as before. At every boot, `adoptLocalFactors` moves the factor a local account
+kept (migration 0019) to the account's user — opened with the old associated
+data, sealed with the new one, then deleted from the account — once.
+
+**Every sign-in.** `proceed` (`local-handlers.ts`; injected into `handlers.ts` as
+`finishSignIn`) is how every provider's sign-in ends: `admit()`,
+`completeLogin()`, then a `PendingLocalStep` bound to the user (`userId`,
+`providerId`, the `login` the session will record, `returnTo`) on the
+pending-login cookie: `second-factor` (`/login/code`) when the user has a
+factor, else `enrol` (`/login/second-factor`, the secret in the step) — unless
+`waiverApplies(waiver, { isOperator, amr })`, which opens the session at once.
+The forms post to `/auth/factor/code` and `/auth/factor/enrol`
+(`secondFactorLogin`, `enrolAtSignIn`; the older `/auth/local/<id>/code|enrol`
+stay as aliases): the user must still be active, the session replaces the
+browser's, the step cookie is cleared. After an enrolment the session lands on
+Settings → Security with the recovery codes (a one-time notice) and a
+"continue" link to where the sign-in was going (`return_to`), an authorization
+in progress included.
+
+**Waiver.** `SignInProvidersService.setWaiver(id, 'always' | 'amr' | null)`
+writes `waiver` into the provider's state (`sign_in_state.<id>`, which a provider
+of the file has too): local accounts never, GitHub `always` only (no ID token).
+`POST /api/admin/sign-in-providers/<id>/waiver` (field `waiver`), asked first on
+Settings → Sign-in, `second-factor-waiver-changed`; the provider's row says
+"second factor waived" while it is. `amr` reads the ID token's `amr` claim
+(`IdentityClaims.amr`, RFC 8176): waived only when it contains `mfa`.
+Administrators are never waived (`isOperator` after the sign-in's
+`completeLogin`).
+
+**Settings → Security** (`/settings/security`): every person's factor (set up,
+replace — `beginSecondFactor`, `confirmSecondFactor` —, remove within ten minutes
+of signing in, never an administrator's); the password section for a local
+account only. **People**: "Reset second factor" for anyone
+(`users.handlers.resetSecondFactor` → `SecondFactorService.reset`).
+
+Tests: `tests/integration/auth/second-factor.test.ts`; the test browsers answer
+the step with `passSecondFactor` / `throughSecondFactor` (`auth/testing.ts`), the
+e2e browser with `passSecondFactor` (`tests/e2e/v5/browser.ts`, the control
+endpoint `/factor/code`), and the e2e directory is waived.
+
 ## Testing a provider, switching it on and off
 
 ADR [administrators-live-in-the-instance](../decisions/administrators-live-in-the-instance.md) §5.
@@ -1112,48 +1165,16 @@ send is logged as `mail failed` without the address or the link, and the
 handler that asked decides what to say (the forgot form says nothing either
 way; People shows the failure). The gateway sends nothing else.
 
-**The second factor** (`crypto/totp.ts`, `LocalAccountsService`): TOTP, RFC
-6238 — HMAC-SHA-1, six digits, thirty-second steps, one step of drift each way
-(`verifyTotp`, the RFC's vectors in `totp.test.ts`); the secret is 20 random
-bytes in base32, shown as a QR code (`uqr`'s SVG as a data URL, white ground
-in both themes) and as text, in an `otpauth://totp/` URL whose issuer is the
-instance's name. Enrolment is two halves: `beginTotpEnrolment` returns a
-secret the caller keeps in a pending step (nothing stored yet: the current
-factor stays in force), `confirmTotpEnrolment` takes the first code, seals the
-seed and eight fresh **recovery codes** (`k7m2p-x4q9z`, compared without
-case, spaces or hyphens, kept as SHA-256), and returns the codes once.
-`checkSecondFactor` accepts a code of the app — never twice:
-`advanceTotpStep` accepts a time step only later than the last one accepted
-— or a recovery code, spent on use. `resetSecondFactor` (the person after a
-fresh sign-in, or an administrator from People, "Reset second factor") deletes
-both secrets.
-
-**The sign-in** (`local-handlers.ts`): `POST /auth/local/<id>` (email,
-password, `return_to`) → `checkPassword` → `continueSignIn`: an account with a
-second factor gets a `PendingLocalStep` of step `second-factor`
-(`SessionService.createLocalStep`: the pending-login cookie, ten minutes) and
-`/login/code`; an **administrator** (or a pending address) who has none gets a step
-`enrol` carrying a fresh secret and `/login/second-factor` (an administrator
-cannot finish a sign-in without a factor); anyone else gets the session at
-once. `POST …/code` takes the step (`takeLocalStep`, single use), checks the
-code or recovery code, opens the session; a refused code recreates the step
-and answers `?error=second-factor-refused`; a stale cookie is
-`login-expired`. `POST …/enrol` confirms the enrolment, opens the session and
-lands on `/settings/security?notice=` where the recovery codes are shown once
-(a `NoticeStore` entry keyed by the new session). A local account's identity
-carries `emailVerified: true` (the link proved the mailbox, or the setup typed
-the address) and no group: a designated group never names a local account; a
-`user` row or a pending address does.
-
-**Settings → Security** (`/settings/security`, a user's own page; the row
-"Security" of Settings): for a local account, the second factor (set up or
-replace — `beginSecondFactor` puts the secret in a step and comes back with
-`?enrol=1`, `confirmSecondFactor` takes the code; remove — `removeSecondFactor`,
-only within ten minutes of signing in (`FRESH_SIGN_IN_FOR_FACTOR_MS`) and never
-for an administrator) and the password (`changePassword`: the
-current one, checked through the same lockout, and the new one twice). A
-person who signed in through another provider reads that the provider keeps
-both. The four are `guardMutation(…, 'user')` mutations.
+**The second factor and the sign-in.** A local account's password is checked by
+`POST /auth/local/<id>` (email, password, `return_to`, `checkPassword`); what
+follows is every provider's end of a sign-in — admission, the user, the second
+factor's step or the session — described in "The second factor of every person"
+above (the factor is the person's since migration 0021; local accounts are never
+waived). A local account's identity carries `emailVerified: true` (the link proved
+the mailbox, or the setup typed the address) and no group: a designated group never
+names a local account; a `user` row or a pending address does. **Settings →
+Security** keeps, for a local account, the password (`changePassword`: the current
+one, checked through the same lockout, and the new one twice).
 
 **The setup** (`/admin/first-administrator`, the checklist step "The first
 administrator's account" on `/admin` while a local provider exists and the
@@ -1167,9 +1188,9 @@ then retires the bootstrap token.
 
 **Audit** (object `instance-config` / `local-account:<provider>`):
 `local-link-created` (kind, address, expiry — never the link),
-`local-account-created`, `local-password-changed`, `local-second-factor-changed`
-(`after.change`: `enrolled` or `reset`, `after.by`: `self` or the actor),
-`local-account-removed`. Logs name a provider, a kind, a cause (`unknown`,
+`local-account-created`, `local-password-changed`, `local-account-removed`
+(`local-second-factor-changed` names the entries written before the factor moved to
+the person; it is `second-factor-changed` on the user now). Logs name a provider, a kind, a cause (`unknown`,
 `wrong`, `locked`), never an address, a password, a code or a link. The
 telemetry profile counts the kind `local` with the others (`sign_in_kinds`).
 

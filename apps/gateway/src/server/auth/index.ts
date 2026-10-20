@@ -11,6 +11,7 @@ import type { Logger } from '../logging';
 import type { Store } from '../store';
 import { systemClock, type Clock } from '../store/clock';
 import { AdministratorsService } from './administrators';
+import { SecondFactorService } from './second-factor';
 import { Authenticator } from './authenticator';
 import { BootstrapService } from './bootstrap';
 import { createAuthHandlers, type AuthHandlers } from './handlers';
@@ -61,6 +62,8 @@ export interface AuthModule {
   readonly providers: SignInProvidersService;
   /** Who administers the instance: the designations of the store (ADR administrators-live-in-the-instance). */
   readonly administrators: AdministratorsService;
+  /** The second factor of every person, whatever the provider. */
+  readonly secondFactors: SecondFactorService;
   readonly flows: SignInFlows;
   readonly bootstrap: BootstrapService;
   readonly relyingParties: RelyingPartyFactory;
@@ -128,7 +131,13 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
     logger: logger.child({ component: 'local-accounts' }),
     publicUrl: deps.config.publicUrl,
   });
-  const localHandlers = createLocalAuthHandlers({
+  const secondFactors = new SecondFactorService({
+    store: deps.store,
+    audit: deps.store.auditWriter,
+    clock,
+    logger: logger.child({ component: 'second-factor' }),
+  });
+  const { proceed: finishSignIn, ...localHandlers } = createLocalAuthHandlers({
     publicUrl: deps.config.publicUrl,
     instanceLabel: deps.config.instanceName ?? deps.config.publicUrl.host,
     sessions,
@@ -145,6 +154,7 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
     },
     store: deps.store,
     administrators,
+    secondFactors,
     logger,
     clock,
     rateLimiter: deps.rateLimiter,
@@ -173,12 +183,14 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
     rateLimiter: deps.rateLimiter,
     clientIp,
     checkIssuer: (issuer) => relyingParties.checkIssuer(issuer),
+    finishSignIn,
   });
   return {
     sessions,
     idp,
     providers,
     administrators,
+    secondFactors,
     flows,
     bootstrap,
     relyingParties,
@@ -209,6 +221,13 @@ export {
 } from './administrators';
 export { admit, type AdmissionContext, type AdmissionReason } from './admission';
 export { GithubSignIn, readableTeams } from './github';
+export {
+  SecondFactorService,
+  waiverApplies,
+  type SecondFactorCheck,
+  type SecondFactorWaiver,
+  type TotpEnrolment,
+} from './second-factor';
 export {
   createSignInFlows,
   type FinishedSignIn,

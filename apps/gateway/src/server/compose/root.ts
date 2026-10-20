@@ -539,6 +539,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     config,
     administrators: auth.administrators,
     bootstrap: auth.bootstrap,
+    secondFactors: auth.secondFactors,
     masterKey: masterKey.service,
     store,
     membership: authority.membership,
@@ -628,6 +629,11 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
  * token, has no way to a first administrator: the boot stops and says so.
  */
 async function settleAdministrators(auth: AuthModule, config: InstanceConfig): Promise<void> {
+  // The factors local accounts kept per account move to their people, once (§7).
+  const providers = await auth.providers.views();
+  await auth.secondFactors.adoptLocalFactors(
+    providers.filter((p) => p.kind === 'local').map((p) => p.id),
+  );
   await auth.administrators.seedFromConfiguration();
   if (config.bootstrapToken !== null || (await auth.administrators.any())) return;
   throw new ConfigError([

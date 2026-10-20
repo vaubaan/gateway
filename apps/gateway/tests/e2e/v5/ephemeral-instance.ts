@@ -41,6 +41,7 @@
  * the test files out of it (`outputFileTracingExcludes`, `next.config.ts`).
  * Never part of the image.
  */
+import { base32Decode, totpCode, totpStepOf } from '../../../src/server/crypto/totp';
 import { cpSync, existsSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createRequire } from 'node:module';
@@ -437,6 +438,10 @@ async function main(): Promise<void> {
     claims: { sub: 'sub', email: 'email', groups: 'groups' },
     allowedEmailDomains: [],
   });
+  // The company directory of the specs enforces its own second factor: its people sign
+  // in without the gateway's code — its administrators never (ADR
+  // administrators-live-in-the-instance §7), and the specs answer it for them.
+  await root.auth.providers.setWaiver('idp', 'always');
   // Seeded under the issuer their ID tokens will carry: the same people sign in below.
   const seeded = await seedInstance(root, idp.iss);
   // Ada's GitHub connection holds a token of the mocked GitHub, so her
@@ -509,6 +514,24 @@ async function main(): Promise<void> {
           );
         }
         sendJson(res, 200, { ok: true });
+        return;
+      }
+      if (url.pathname === `${CONTROL_PREFIX}/factor/code` && req.method === 'POST') {
+        // The code the person's authenticator app shows now. A code is never accepted
+        // twice in one time step; the specs sign one person in more often than that,
+        // so the last accepted step is forgotten first.
+        const { email } = JSON.parse(await readBody(req)) as { email: string };
+        for (const user of await root.store.users.findByEmail(email.toLowerCase())) {
+          const secret = await root.store.secondFactors.readSecret(user.id, 'totp');
+          const bytes = secret ? base32Decode(secret) : null;
+          if (!bytes) continue;
+          root.store.db
+            .prepare('UPDATE user_second_factors SET last_step = NULL WHERE user_id = ?')
+            .run(user.id);
+          sendJson(res, 200, { code: totpCode(bytes, totpStepOf(Date.now())) });
+          return;
+        }
+        sendJson(res, 404, { error: 'no second factor for this address' });
         return;
       }
       if (url.pathname === `${CONTROL_PREFIX}/local/cleanup` && req.method === 'POST') {

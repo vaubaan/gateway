@@ -1,8 +1,8 @@
 /**
- * `/login/code` — the second factor of a local sign-in (ADR
- * local-accounts-sign-in-provider): the code of the authenticator app, or a
- * recovery code. Reachable only with the step cookie the password form set;
- * without it, back to the sign-in page.
+ * `/login/code` — the second factor of a sign-in through any provider (ADR
+ * administrators-live-in-the-instance, §7): the code of the authenticator app, or a
+ * recovery code. Reachable only with the step cookie the sign-in set; without it,
+ * back to the sign-in page.
  */
 import Link from 'next/link';
 import { headers } from 'next/headers';
@@ -43,7 +43,7 @@ export default async function SecondFactorPage({ searchParams }: Props) {
         </div>
       )}
       <SecondFactorCodeForm
-        action={`/auth/local/${encodeURIComponent(step.providerId)}/code`}
+        action="/auth/factor/code"
         submitLabel="Sign in"
         withRecovery
         cancel={<Link href="/login">Start again</Link>}
