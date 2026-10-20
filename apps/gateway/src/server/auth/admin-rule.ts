@@ -14,6 +14,7 @@
  */
 import { LEGACY_PROVIDER_ID, resolveAdminGroup, type AdminGroup } from '../config/sign-in';
 import type { AdminRule } from '../config/types';
+import type { ConfigRepo } from '../store/repositories/config';
 import type { GroupRecord } from '../store/types';
 
 /** The admin rule against the providers configured now. */
@@ -71,4 +72,66 @@ export function describeAdminRule(rule: ResolvedAdminRule): string {
   }
   if (rule.emails.length > 0) parts.push(`${rule.emails.length} listed email(s)`);
   return parts.join(' or ');
+}
+
+/* ------------------------------------------------------------------------ */
+/* The admin rule a backup carried (ADR backup-carries-the-sign-in-configuration) */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * The `instance_config` key of the admin rule a backup carried from its source:
+ * JSON `{ "group": "<provider>:<group>" | null, "emails": [...] }`. Written into the
+ * copy by the `backup` command, never into a live store; deleting it drops it.
+ */
+export const RESTORED_ADMIN_RULE_KEY = 'restored.admin_rule';
+
+/** The carried rule, or `null` when the key is absent or does not parse. */
+export function parseRestoredAdminRule(raw: string | null): AdminRule | null {
+  if (raw === null) return null;
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  const { group, emails } = value as Record<string, unknown>;
+  if (group !== null && typeof group !== 'string') return null;
+  if (!Array.isArray(emails) || !emails.every((e) => typeof e === 'string')) return null;
+  return { group, emails: emails.map((e) => e.toLowerCase()) };
+}
+
+export function serializeRestoredAdminRule(rule: AdminRule): string {
+  return JSON.stringify({ group: rule.group, emails: rule.emails });
+}
+
+export interface MergedAdminRule {
+  readonly rule: AdminRule;
+  /** The carried group the configured one replaced (one group per rule), or `null`. */
+  readonly droppedGroup: string | null;
+}
+
+/**
+ * The configured rule plus a carried one: the emails are the union; the group is
+ * the configured one when it sets one, the carried one otherwise.
+ */
+export function mergeAdminRules(configured: AdminRule, carried: AdminRule | null): MergedAdminRule {
+  if (carried === null) return { rule: configured, droppedGroup: null };
+  const emails = [...configured.emails];
+  for (const email of carried.emails) if (!emails.includes(email)) emails.push(email);
+  const group = configured.group ?? carried.group;
+  const droppedGroup =
+    configured.group !== null && carried.group !== null && carried.group !== configured.group
+      ? carried.group
+      : null;
+  return { rule: { group, emails }, droppedGroup };
+}
+
+/** The configured rule merged with the one a restored store carries. */
+export async function withRestoredAdminRule(
+  configured: AdminRule,
+  store: Pick<ConfigRepo, 'get'>,
+): Promise<MergedAdminRule & { readonly carried: boolean }> {
+  const carried = parseRestoredAdminRule(await store.get(RESTORED_ADMIN_RULE_KEY));
+  return { ...mergeAdminRules(configured, carried), carried: carried !== null };
 }

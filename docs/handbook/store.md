@@ -2,7 +2,7 @@
 title: Store — embedded SQLite, schema and migrations, repositories
 status: current
 date: 2026-10-13
-last_synced: 2026-10-18
+last_synced: 2026-10-20
 tracks:
   - apps/gateway/migrations/
   - apps/gateway/src/server/store/
@@ -16,6 +16,7 @@ tracks:
   - apps/gateway/tests/integration/compose/boot.test.ts
   - apps/gateway/src/server/store/repositories/pending-refs.ts
   - apps/gateway/src/server/restore/
+  - apps/gateway/src/server/backup/
   - apps/gateway/tests/integration/restore/
 ---
 
@@ -773,7 +774,19 @@ overwrites a file (exit 73), never writes elsewhere, refuses root (77) and an
 unconfigured instance (78). It then opens the copy read-only and prints its path,
 size, schema version, `PRAGMA integrity_check` (exit 1 unless `ok`) and the
 master-key versions its blobs are sealed under (`sealedVersionsOf`): **the copy
-opens only with the keys of those versions, as they are when it is made.** The
+opens only with the keys of those versions, as they are when it is made.**
+
+**The copy carries the sign-in configuration** (ADR
+[backup-carries-the-sign-in-configuration](../decisions/backup-carries-the-sign-in-configuration.md)).
+Before the check, the command opens the copy for writing (`openCopyConfig`:
+`openCopyForWriting` — no migration, no journal-mode change — and a
+`ConfigRepo`) and runs `SignInProvidersService.carryIntoStore()`: every
+sign-in provider the configuration sets becomes a store-held provider of the
+copy, its client secret sealed under the current master key, and the admin
+rule is written as `restored.admin_rule` (handbook authentication, "The admin
+rule a backup carried"). The live store is never written. The command prints
+the ids it carried, never a secret; if the writing fails, the copy is removed
+(exit 1). The
 Docker smoke test runs it (step 12). Getting the file off a Railway volume:
 `deploy/railway.md` §6.
 

@@ -9,9 +9,9 @@
  */
 
 import { SqliteAuditWriter, type AuditWriter } from './audit-writer.ts';
-import type { CatalogIndex } from './catalog-index.ts';
+import { SetCatalogIndex, type CatalogIndex } from './catalog-index.ts';
 import { systemClock, type Clock } from './clock.ts';
-import { backupTo, MEMORY_PATH, openDb, type StoreDb } from './db.ts';
+import { backupTo, MEMORY_PATH, openCopyForWriting, openDb, type StoreDb } from './db.ts';
 import type { Encryptor } from './encryptor.ts';
 import { newId, type IdGenerator } from './ids.ts';
 import { DEFAULT_MIGRATIONS_DIR, loadMigrations, runMigrations } from './migrate.ts';
@@ -135,6 +135,28 @@ export function openStore(options: StoreOptions): Store {
       db.close();
     },
   };
+}
+
+/**
+ * The `instance_config` of a store copy, open for writing (ADR
+ * backup-carries-the-sign-in-configuration): what the `backup` command writes into
+ * the copy it made. No migration runs; the secrets are sealed by `encryptor`.
+ */
+export function openCopyConfig(
+  path: string,
+  encryptor: Encryptor,
+  clock: Clock = systemClock,
+): { readonly config: ConfigRepo; close(): void } {
+  const db = openCopyForWriting(path);
+  const config = createConfigRepo({
+    db,
+    clock,
+    newId,
+    encryptor,
+    // instance_config names no RiskId.
+    catalog: new SetCatalogIndex([]),
+  });
+  return { config, close: () => db.close() };
 }
 
 /** Ephemeral store for tests: fresh schema in memory, gone on `close()`. */

@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import type { GroupRecord } from '../store/types';
-import { describeAdminRule, isOperator, resolveAdminRule } from './admin-rule';
+import {
+  describeAdminRule,
+  isOperator,
+  mergeAdminRules,
+  parseRestoredAdminRule,
+  resolveAdminRule,
+  serializeRestoredAdminRule,
+} from './admin-rule';
 
 function group(
   name: string,
@@ -80,5 +87,30 @@ describe('admin rule', () => {
     expect(describeAdminRule(single)).toBe(
       'members of the group "gateway-admins" of sign-in provider "idp"',
     );
+  });
+});
+
+describe('the admin rule a backup carried', () => {
+  it('round-trips, and refuses what does not parse', () => {
+    const rule = { group: 'entra:admins', emails: ['a@x.example'] };
+    expect(parseRestoredAdminRule(serializeRestoredAdminRule(rule))).toEqual(rule);
+    expect(parseRestoredAdminRule(null)).toBeNull();
+    expect(parseRestoredAdminRule('not json')).toBeNull();
+    expect(parseRestoredAdminRule('{"group":3,"emails":[]}')).toBeNull();
+    expect(parseRestoredAdminRule('{"group":null,"emails":"a"}')).toBeNull();
+  });
+
+  it('merges: emails united, the configured group first', () => {
+    const configured = { group: null, emails: ['a@x.example'] };
+    const carried = { group: 'entra:admins', emails: ['b@x.example', 'a@x.example'] };
+    expect(mergeAdminRules(configured, null)).toEqual({ rule: configured, droppedGroup: null });
+    expect(mergeAdminRules(configured, carried)).toEqual({
+      rule: { group: 'entra:admins', emails: ['a@x.example', 'b@x.example'] },
+      droppedGroup: null,
+    });
+    expect(mergeAdminRules({ group: 'idp:ops', emails: [] }, carried)).toEqual({
+      rule: { group: 'idp:ops', emails: ['b@x.example', 'a@x.example'] },
+      droppedGroup: 'entra:admins',
+    });
   });
 });
