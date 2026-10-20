@@ -193,16 +193,8 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
     }
   }
 
-  /** Removes the stored OAuth client; refused when the mounted configuration sets it. */
-  async function clearProviderApp(
-    providerId: string,
-    before: ProviderAppStatus,
-  ): Promise<ProviderAppChange> {
-    if (deps.providerApps.isReadOnly(providerId)) {
-      throw new ProviderAppError([
-        `${before.displayName} is set in the mounted configuration; edit it there`,
-      ]);
-    }
+  /** Removes the stored OAuth client; the service refuses it when the mounted configuration sets it. */
+  async function clearProviderApp(providerId: string): Promise<ProviderAppChange> {
     await deps.providerApps.clear(providerId);
     const after = await deps.providerApps.status(providerId);
     logger.info('provider app settings saved', { provider: providerId, cleared: true });
@@ -232,13 +224,9 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
   }
 
   /** The form's `action` picks the change; no action is a save. */
-  function applyProviderAppAction(
-    providerId: string,
-    form: FormData,
-    before: ProviderAppStatus,
-  ): Promise<ProviderAppChange> {
+  function applyProviderAppAction(providerId: string, form: FormData): Promise<ProviderAppChange> {
     const action = stringField(form, 'action');
-    if (action === CLEAR_PROVIDER_APP_ACTION) return clearProviderApp(providerId, before);
+    if (action === CLEAR_PROVIDER_APP_ACTION) return clearProviderApp(providerId);
     return storeProviderApp(providerId, form);
   }
 
@@ -495,7 +483,7 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
       const anchor = connectPagePath(providerId);
       const before = await deps.providerApps.status(providerId);
       try {
-        const change = await applyProviderAppAction(providerId, form, before);
+        const change = await applyProviderAppAction(providerId, form);
         await auditProviderApp(guard.principal, providerId, before, change.after);
         return await redirectWithNotice(guard.principal, anchor, change.notice);
       } catch (err) {

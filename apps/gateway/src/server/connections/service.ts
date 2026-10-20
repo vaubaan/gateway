@@ -78,7 +78,12 @@ import {
   OAuth2TokenError,
   type OAuth2Client,
 } from './oauth2';
-import { connectionCredentialKind, connectionOwnerOf, connectionPublicFields } from './mapping';
+import {
+  connectionCredentialKind,
+  connectionOwnerOf,
+  connectionPublicFields,
+  type StoredCredentialKind,
+} from './mapping';
 import type { PendingConnect, PendingConnectStore, PendingFlowKind } from './pending';
 import { generateEd25519KeyPair, type SshKeyPair } from './ssh-keypair';
 
@@ -193,7 +198,7 @@ export interface ConnectionView {
   readonly providerGrant: ProviderGrantView;
   readonly experimental: boolean;
   /** How this account was made (`connectionCredentialKind`); `null` when unknown and the plugin is gone. */
-  readonly credentialKind: CredentialKind | null;
+  readonly credentialKind: StoredCredentialKind | null;
   /** What the service said the pasted token acts as, at connect time (`octocat`); `null` when not said. */
   readonly tokenAccount: string | null;
   /** When the pasted token stops working, as the service said at connect time; `null` when it did not. */

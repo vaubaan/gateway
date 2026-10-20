@@ -308,8 +308,8 @@ export async function explainMcpRefusal(
   }
   const wayOut =
     probe.kind === 'account'
-      ? 'Railway accepts workspace tokens there: reconnect the account with a workspace token, or through the company Railway app.'
-      : 'Check that the token still belongs to a member of the workspace, or reconnect the account through the company Railway app.';
+      ? 'Railway accepts workspace tokens there: reconnect the account with a workspace token.'
+      : 'Check that the token still belongs to a member of the workspace, or reconnect the account with a new workspace token.';
   return new UpstreamAuthError(
     `Railway's MCP server refused this ${probe.kind} token (HTTP ${status}) while Railway's API accepts it; the variable tools still run. ${wayOut}`,
     HTTP_FORBIDDEN,

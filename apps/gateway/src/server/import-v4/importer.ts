@@ -669,7 +669,7 @@ export class Importer {
     const reason = isPastedKeyProvider(provider)
       ? (pastedKeyFields(account) as { readonly reason: string }).reason
       : account.installation_id !== null
-        ? 'a v4 app installation: this instance installs its own app'
+        ? 'a v4 GitHub App installation: connect this account with a fine-grained token'
         : 'a v4 OAuth grant: sharing its refresh token would break v4 or v5';
     return {
       provider,

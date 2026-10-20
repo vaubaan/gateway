@@ -24,7 +24,7 @@ import {
   type Resource,
 } from '@vaubaan/plugin-sdk';
 
-import { GITHUB_API_BASE, GITHUB_API_HEADERS } from './api.ts';
+import { GITHUB_API_BASE, GITHUB_API_HEADERS, HTTP_FORBIDDEN } from './api.ts';
 import { PROVIDER, githubRepoRefs, readGithubCall, repoFullName, type GithubCall } from './call.ts';
 import { githubTokenOf } from './credential.ts';
 import { isGitTool } from './git-call.ts';
@@ -35,9 +35,6 @@ import { dispatchGithubTool, type OctokitLike } from './octokit-dispatch.ts';
 /** Repositories per page and page cap of `discoverResources` (GitHub maxes `per_page` at 100). */
 export const DISCOVERY_PAGE_SIZE = 100;
 export const DISCOVERY_MAX_PAGES = 10;
-
-/** GitHub's HTTP status for a token that authenticates but may not do this. */
-export const HTTP_FORBIDDEN = 403;
 
 /**
  * What the reader denies, and the merge guard that does not hold, is declined :

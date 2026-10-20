@@ -8,6 +8,9 @@ export const GITHUB_API_BASE = 'https://api.github.com';
 /** GitHub's web origin : the repositories git clones from and pushes to. */
 export const GITHUB_WEB_BASE = 'https://github.com';
 
+/** GitHub's HTTP status for a token that authenticates but may not do this. */
+export const HTTP_FORBIDDEN = 403;
+
 /** Headers every call to the GitHub REST API carries. */
 export const GITHUB_API_HEADERS = {
   Accept: 'application/vnd.github+json',

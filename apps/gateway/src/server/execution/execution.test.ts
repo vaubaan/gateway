@@ -213,7 +213,7 @@ describe('an account connected a way the plugin no longer offers', () => {
   // one-place-to-authorize-services-token-first). It runs nothing until reconnected.
   const dual = fixturePlugin({ id: 'dual', displayName: 'Dual', credential: API_KEY_SPEC });
   const registry = createRegistry([dual]);
-  const context = (credential_kind?: 'oauth2' | 'api-key'): MissionContext =>
+  const context = (credential_kind?: 'oauth2' | 'api-key' | 'app-install'): MissionContext =>
     ({
       mission: { id: 'm' },
       connections: [
@@ -230,6 +230,8 @@ describe('an account connected a way the plugin no longer offers', () => {
 
   it('is left out of tools/list', () => {
     expect(callableTools(context('oauth2'), registry)).toEqual([]);
+    // The GitHub App of earlier builds: a kind the contract no longer knows at all.
+    expect(callableTools(context('app-install'), registry)).toEqual([]);
     expect(callableTools(context('api-key'), registry).map((t) => t.name)).toEqual([
       'dual__list_things',
     ]);
@@ -258,6 +260,12 @@ describe('an account connected a way the plugin no longer offers', () => {
     ).toBeNull();
     const allowed = await stage.resolve(context('api-key'), call);
     expect(allowed.ok).toBe(true);
+    const retired = await stage.resolve(context('app-install'), call);
+    expect(retired).toEqual({
+      ok: false,
+      reason:
+        "tool 'dual__list_things' is not available on the Dual account 'Dual bot': this account was connected a way Dual no longer offers on this gateway (app-install); its owner reconnects it from Accounts.",
+    });
   });
 });
 

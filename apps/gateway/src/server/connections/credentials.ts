@@ -32,7 +32,6 @@ import {
   type ProviderAppConfig,
   type ProviderPlugin,
 } from '@vaubaan/plugin-sdk';
-import type { CredentialKind } from '@vaubaan/shared';
 
 import type { Logger } from '../logging';
 import { CLIENT_ID_FIELD, CLIENT_SECRET_FIELD, type ProviderAppsService } from '../provider-apps';
@@ -83,7 +82,7 @@ export interface CredentialBrokerDeps {
  */
 export function canWithdraw(
   plugin: Pick<ProviderPlugin, 'revoke' | 'credential'>,
-  kind: CredentialKind = plugin.credential.kind,
+  kind: string = plugin.credential.kind,
 ): boolean {
   if (kind !== plugin.credential.kind) return false;
   if (plugin.revoke) return true;

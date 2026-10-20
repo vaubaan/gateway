@@ -33,23 +33,23 @@ import {
 
 import { githubRepoRefs } from './call.ts';
 import { GIT_FETCH_TOOL, GIT_PUSH_TOOL, readGitCall, type GitCall } from './git-call.ts';
+import { HTTP_FORBIDDEN } from './api.ts';
 import { upstream } from './git-credential.ts';
+import { GITHUB_TOKEN_PERMISSIONS } from './permissions.ts';
 import { GithubRest, HTTP_UNAUTHORIZED, HTTP_UNPROCESSABLE, refPath } from './git-rest.ts';
 
 /** What the gateway calls itself in the capabilities it sends GitHub. */
 const GIT_AGENT = 'vaubaan-gateway';
 const HTTP_SERVER_ERROR = 500;
-/** GitHub's HTTP status for a token that authenticates but may not do this. */
-const HTTP_FORBIDDEN = 403;
 
 /**
  * GitHub's words for a token that lacks a permission: the REST API's
- * "Resource not accessible by personal access token" (or "by integration"),
- * and the git push's "refusing to allow a Personal Access Token to create or
- * update workflow … without `workflows` permission".
+ * "Resource not accessible by personal access token", and the git push's
+ * "refusing to allow a Personal Access Token to create or update workflow …
+ * without `workflows` permission".
  */
 const MISSING_PERMISSION_WORDS =
-  /Resource not accessible by (personal access token|integration)|without [`'"]?workflows[`'"]? permission|refusing to allow a (Personal Access Token|GitHub App)/i;
+  /Resource not accessible by personal access token|without [`'"]?workflows[`'"]? permission|refusing to allow a Personal Access Token/i;
 
 /** Whether GitHub refused a move for a permission the token lacks. A 403 for any other reason is not this. */
 export function isMissingPermissionRefusal(status: number | null, message: string): boolean {
@@ -62,7 +62,16 @@ const MAX_QUOTED_GITHUB_MESSAGE = 200;
 /** The ref's error when GitHub refused its move for a permission the token lacks. */
 export function refusedForPermissionSentence(githubSaid: string): string {
   const said = (githubSaid.split('\n')[0] ?? '').slice(0, MAX_QUOTED_GITHUB_MESSAGE);
-  return `${GIT_PUSH_TOOL} was refused by GitHub for a permission the account's token lacks (GitHub: “${said}”). The token needs Contents (read and write), and Workflows (read and write) for a change under .github/workflows/: create a token with them at GitHub and reconnect the account.`;
+  return `${GIT_PUSH_TOOL} was refused by GitHub for a permission the account's token lacks (GitHub: “${said}”). The token needs ${pushPermissionWords()}: create a token with them at GitHub and reconnect the account.`;
+}
+
+/** "Contents (read and write), and Workflows (read and write) for a change under .github/workflows/", read off the one declaration. */
+function pushPermissionWords(): string {
+  const named = GITHUB_TOKEN_PERMISSIONS.filter((p) => p.tools.includes(GIT_PUSH_TOOL));
+  const words = named.map((p) => `${p.name} (${p.access === 'read' ? 'read' : 'read and write'})`);
+  const workflows = named.findIndex((p) => p.name === 'Workflows');
+  if (workflows >= 0) words[workflows] += ' for a change under .github/workflows/';
+  return words.join(', and ');
 }
 
 type MoveOutcome = { readonly ok: true } | { readonly ok: false; readonly error: string };
@@ -137,7 +146,7 @@ class RefMover {
     path: string,
     body: unknown,
   ): Promise<MoveOutcome> {
-    const res = await this.rest.request('write', method, path, body);
+    const res = await this.rest.request(method, path, body);
     const message = res.ok ? '' : await messageOf(res);
     if (isMissingPermissionRefusal(res.status, message)) return this.refusedForPermission(message);
     if (res.ok) {

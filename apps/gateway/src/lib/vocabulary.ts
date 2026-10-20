@@ -92,7 +92,6 @@ export const TERMS = {
   namedToken: { one: 'machine key', many: 'machine keys' },
   request: { one: 'request', many: 'requests' },
   delegation: { one: 'connected app', many: 'connected apps' },
-  providerApp: { one: 'company app', many: 'company apps' },
   provider: { one: 'service', many: 'services' },
   member: { one: 'teammate', many: 'teammates' },
   operator: { one: 'administrator', many: 'administrators' },
@@ -552,14 +551,6 @@ export const ACCOUNT_WORDS = {
   self: "this instance's own project: never reachable by a mission",
   experimental: 'experimental',
   noLabel: 'without an environment label',
-} as const;
-
-/** How a service takes its credential, as the picker and the connect form say it. Keyed by `CredentialKind`. */
-export const CREDENTIAL_WORDS = {
-  oauth2: { how: 'sign in at the service', noun: 'a sign-in at the service' },
-  'app-install': { how: 'install the company app', noun: 'an installation of the company app' },
-  'api-key': { how: 'paste a key', noun: 'a key you paste' },
-  'ssh-key': { how: 'a key pair made here', noun: 'a key pair this gateway generates' },
 } as const;
 
 /** "the Platform team" — the server labels a group owner `group <name>`. */

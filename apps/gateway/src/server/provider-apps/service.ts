@@ -223,8 +223,14 @@ export class ProviderAppsService {
     return writes;
   }
 
-  /** Removes everything the page stored for this provider. */
+  /** Removes everything the page stored for this provider; refused, like `save`, when the file sets it. */
   async clear(providerId: string): Promise<void> {
+    const { plugin } = this.registry.require(providerId);
+    if (this.isReadOnly(providerId)) {
+      throw new ProviderAppError([
+        `${plugin.displayName} is set by the mounted configuration (providers.${providerId}.*); edit it there`,
+      ]);
+    }
     const prefix = providerAppKey(providerId, '');
     const stored = (await this.config.keys()).filter((key) => key.startsWith(prefix));
     await this.config.apply(stored.map((key) => ({ kind: 'delete', key })));

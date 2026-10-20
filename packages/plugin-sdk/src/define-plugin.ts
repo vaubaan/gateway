@@ -417,12 +417,9 @@ function hookIssues(plugin: ProviderPlugin): string[] {
 export const CREDENTIAL_SENTENCE_MAX_LENGTH = 300;
 
 function credentialSpecIssues(plugin: ProviderPlugin): string[] {
-  return oneSpecIssues(plugin, plugin.credential, 'credential');
-}
-
-function oneSpecIssues(plugin: ProviderPlugin, spec: CredentialSpec, at: string): string[] {
-  const own = kindSpecIssues(spec);
-  const issues = at === 'credential' ? own : own.map((i) => i.replace(/^credential/, at));
+  const at = 'credential';
+  const spec = plugin.credential;
+  const issues = kindSpecIssues(spec);
   if (!isRecord(spec) || typeof spec.kind !== 'string') return issues;
   // The git remote's tools need permissions on a token too.
   const tools = declaredToolNames(plugin);

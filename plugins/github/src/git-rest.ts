@@ -11,7 +11,6 @@ import {
   UpstreamAuthError,
   UpstreamHttpError,
   type ExecuteContext,
-  type GitAccess,
   type GitTreeEntry,
 } from '@vaubaan/plugin-sdk';
 
@@ -113,7 +112,6 @@ export class GithubRest {
   }
 
   async request(
-    access: GitAccess,
     method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
     path: string,
     body?: unknown,
@@ -138,7 +136,7 @@ export class GithubRest {
 
   /** The repository's default branch, or `null` for an empty repository. */
   async defaultBranch(): Promise<string | null> {
-    const res = await this.request('read', 'GET', '');
+    const res = await this.request('GET', '');
     if (!res.ok)
       throw new UpstreamHttpError(`github GET /repos failed with HTTP ${res.status}`, res.status);
     const body = (await res.json()) as { default_branch?: unknown };
@@ -150,7 +148,7 @@ export class GithubRest {
    * `GET /git/ref/{ref}` answers one exact ref; anything else is "absent".
    */
   async refValue(ref: string): Promise<string | null> {
-    const res = await this.request('read', 'GET', `/git/ref/${refPath(ref)}`);
+    const res = await this.request('GET', `/git/ref/${refPath(ref)}`);
     if (res.status === HTTP_NOT_FOUND || res.status === HTTP_CONFLICT) {
       // 409: an empty repository has no ref at all.
       await res.body?.cancel();
@@ -167,7 +165,6 @@ export class GithubRest {
   /** `base...head` : what `head` brings since its merge base with `base`. */
   async compare(base: string, head: string, label: string): Promise<Comparison> {
     const res = await this.request(
-      'read',
       'GET',
       `/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`,
     );
@@ -212,7 +209,6 @@ export class GithubRest {
    */
   async ancestors(sha: string, page: number): Promise<readonly string[]> {
     const res = await this.request(
-      'read',
       'GET',
       `/commits?sha=${encodeURIComponent(sha)}&per_page=${ANCESTORS_PAGE_SIZE}&page=${page}`,
     );
@@ -233,7 +229,7 @@ export class GithubRest {
    * `null` when GitHub holds neither under this id.
    */
   async gitObject(sha: string): Promise<GitObjectRead | null> {
-    const commit = await this.request('read', 'GET', `/git/commits/${encodeURIComponent(sha)}`);
+    const commit = await this.request('GET', `/git/commits/${encodeURIComponent(sha)}`);
     if (commit.ok) {
       const body = (await commit.json()) as {
         sha?: unknown;
@@ -253,7 +249,7 @@ export class GithubRest {
         commit.status,
       );
     }
-    const tag = await this.request('read', 'GET', `/git/tags/${encodeURIComponent(sha)}`);
+    const tag = await this.request('GET', `/git/tags/${encodeURIComponent(sha)}`);
     if (!tag.ok) {
       await tag.body?.cancel();
       if (isAbsent(tag.status)) return null;
@@ -277,7 +273,7 @@ export class GithubRest {
    * or truncated its listing.
    */
   async gitTree(sha: string): Promise<readonly GitTreeEntry[] | null> {
-    const res = await this.request('read', 'GET', `/git/trees/${encodeURIComponent(sha)}`);
+    const res = await this.request('GET', `/git/trees/${encodeURIComponent(sha)}`);
     if (!res.ok) {
       await res.body?.cancel();
       if (isAbsent(res.status)) return null;
@@ -301,7 +297,7 @@ export class GithubRest {
 
   /** The paths one commit changes against its first parent; `null` when GitHub truncated the list. */
   async commitPaths(sha: string): Promise<readonly string[] | null> {
-    const res = await this.request('read', 'GET', `/commits/${encodeURIComponent(sha)}`);
+    const res = await this.request('GET', `/commits/${encodeURIComponent(sha)}`);
     if (!res.ok) {
       throw new UpstreamHttpError(`github GET commit failed with HTTP ${res.status}`, res.status);
     }

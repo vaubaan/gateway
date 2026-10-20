@@ -16,7 +16,6 @@
 
 import type {
   Connection,
-  CredentialKind,
   ConnectionResource,
   Mission,
   MissionPolicy,
@@ -88,7 +87,8 @@ export type MissionConnection = Pick<Connection, 'id' | 'provider' | 'display_na
   /** How the connection was made, when its plugin connects in more than one
    *  way: a tool its way cannot run is refused before the budget and left out
    *  of `tools/list`. Absent or `null`: the plugin's primary way. */
-  readonly credential_kind?: CredentialKind | null;
+  /** As stored by the connection: a kind of the contract, or a word it no longer knows (refused by the host). */
+  readonly credential_kind?: string | null;
   /** The connection can reach a resource that hosts this gateway (`self_resources`):
    *  the plugin's `unboundTools` are unavailable on it. Absent: false. */
   readonly hosts_instance?: boolean;

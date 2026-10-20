@@ -64,8 +64,12 @@ const CREDENTIAL_KIND_LABEL = {
   'ssh-key': 'SSH key pair',
 } as const;
 
-export function credentialKindLabel(kind: keyof typeof CREDENTIAL_KIND_LABEL | null): string {
-  return kind ? CREDENTIAL_KIND_LABEL[kind] : 'unknown';
+/** A kind the contract no longer knows (`app-install`) is named as stored, with what it means now. */
+export function credentialKindLabel(kind: string | null): string {
+  if (kind === null) return 'unknown';
+  if (kind in CREDENTIAL_KIND_LABEL)
+    return CREDENTIAL_KIND_LABEL[kind as keyof typeof CREDENTIAL_KIND_LABEL];
+  return `${kind} (a way this gateway no longer offers: reconnect the account)`;
 }
 
 /** Multi-line secrets (PEM private keys) need a textarea; other secrets are masked. */
