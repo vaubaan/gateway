@@ -115,6 +115,17 @@ Consequently:
   reconnect those accounts with a token after the upgrade; the release notes
   say so and the account shows "Needs reconnecting" with the reason.
 
+### Amendment of 2026-10-20 — what the contract keeps without a shipped user
+
+Three generic capabilities of the plugin contract had the GitHub App as
+their only shipped user and stay, each under its own decision: the
+per-connection upstream credential cache (`ExecuteContext.credentialCache`,
+ADR upstream-credential-cache-and-rejected-credentials), the git remote's
+`admitPush` hook (ADR gateway-as-git-remote, amendment of 2026-10-18) and
+`tokenHandouts` (spec §2.4, "one deliberate exception"). They describe how a
+plugin that derives a short-lived credential per call behaves, which the
+next such plugin will need; removing them would be a decision of their own.
+
 ## Rejected alternatives
 
 ### Keep the GitHub App, token first everywhere else (the proposal of 2026-10-16)

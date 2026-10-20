@@ -51,6 +51,7 @@ import {
   TERMS,
 } from '@/lib/vocabulary';
 import { isOperator } from '@/server/auth';
+import { oauthClientChecklist } from '@/server/now';
 import { connectPagePath } from '@/server/connections';
 import {
   INSTANCE_NAME_MAX_LENGTH,
@@ -178,10 +179,8 @@ export default async function SetupPage({ searchParams }: Props) {
   const fresh =
     handover && (await signedInFreshly(root.auth.sessions, await headers(), new Date()));
 
-  const needApp = apps.filter((app) => app.needsApp);
-  const registered = needApp.filter((app) => app.configured);
-  const missing = needApp.filter((app) => !app.configured);
-  const keyed = apps.filter((app) => !app.needsApp);
+  const { registered, missing, keyed } = oauthClientChecklist(apps);
+  const needApp = [...registered, ...missing];
   const waiting = clients.filter((view) => view.status === 'pending');
   const administrators = users.filter(
     (view) =>

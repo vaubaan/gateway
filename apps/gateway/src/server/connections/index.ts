@@ -149,7 +149,6 @@ export {
   buildAuthorizationUrl,
   codeChallengeS256,
   exchangeCode,
-  exchangeUnsolicitedCode,
   newCodeVerifier,
   newState,
   OAuth2TokenError,

@@ -5,7 +5,7 @@
  * Settings.
  */
 import type { AuthModule } from '../auth';
-import type { ProviderAppsService } from '../provider-apps';
+import type { ProviderAppsService, ProviderAppStatus } from '../provider-apps';
 import type { TelemetryModule } from '../telemetry';
 
 export interface SetupDeps {
@@ -34,17 +34,34 @@ export interface SetupView {
   };
 }
 
+/** The services split by what they need from an administrator before anyone connects them. */
+export interface OAuthClientChecklist {
+  /** Services whose OAuth client is declared. */
+  readonly registered: readonly ProviderAppStatus[];
+  /** Services whose OAuth client is still to declare. */
+  readonly missing: readonly ProviderAppStatus[];
+  /** Services connected with a key: nothing to declare. */
+  readonly keyed: readonly ProviderAppStatus[];
+}
+
+/** The one split of the OAuth clients the admin home and the first run both show. */
+export function oauthClientChecklist(apps: readonly ProviderAppStatus[]): OAuthClientChecklist {
+  return {
+    registered: apps.filter((app) => app.needsApp && app.configured),
+    missing: apps.filter((app) => app.needsApp && !app.configured),
+    keyed: apps.filter((app) => !app.needsApp),
+  };
+}
+
 export async function readSetup(deps: SetupDeps): Promise<SetupView> {
   const providers = await deps.providers.views();
-  const apps = (await deps.providerApps.list()).filter((app) => app.needsApp);
+  const apps = oauthClientChecklist(await deps.providerApps.list());
   const { state } = await deps.telemetry.overview();
   return {
     sign_in: providers.length > 0 ? providers.map((provider) => provider.name).join(', ') : null,
     company_apps: {
-      registered: apps.filter((app) => app.configured).map((app) => app.displayName),
-      missing: apps
-        .filter((app) => !app.configured)
-        .map((app) => ({ id: app.providerId, name: app.displayName })),
+      registered: apps.registered.map((app) => app.displayName),
+      missing: apps.missing.map((app) => ({ id: app.providerId, name: app.displayName })),
     },
     telemetry: { enabled: state.enabled, decided: state.source !== 'default' },
   };
