@@ -63,9 +63,9 @@ apps/gateway/src/server/execution/      host-agnostic, never imports `next`
   token-verifier.ts   TokenVerifier — asks the mission service at every call; throttles the argon2id check of legacy tokens
   mission-context.ts  loadMissionContext(), missionResourceOf(), periodOf()
   resource-stage.ts   createResourceStage(), citedRefs(), toolUnavailableOn()
-                                                                → resource-not-in-mission; a tool the
-                                                                  connection's way cannot run (a token where the
-                                                                  tool needs the company app: `unavailableTools`;
+                                                                → resource-not-in-mission; an account connected
+                                                                  a way the plugin no longer declares (its stored
+                                                                  credential kind is not the plugin's);
                                                                   an unbound tool on a connection that reaches
                                                                   the gateway's own hosting: `unboundTools`,
                                                                   `hosts_instance`)
@@ -588,12 +588,10 @@ only`); the upstream stage calls it on a 401 and when the connection turns
 unavailable. A reconnect, a refresh or a revocation rewrites the connection row,
 so older entries are unreachable whatever the cache.
 
-The only user today is GitHub (`plugins/github/src/token-cache.ts`):
-`installationTokenForCall(ctx, repo)` keeps one installation token per
-repository scope (`installation-token:<repo | *>`) for
-`INSTALLATION_TOKEN_CACHE_SECONDS` (50 min), never serves one within
-`INSTALLATION_TOKEN_EXPIRY_MARGIN_SECONDS` (5 min) of its expiry, and is
-bypassed by `github__mint_install_token`, whose result leaves the gateway.
+No shipped plugin uses it today: the GitHub plugin cached its per-call
+installation tokens there until the App left (ADR
+one-place-to-authorize-services-token-first); a pasted token is sent as it
+is.
 
 ## What the agent receives
 
@@ -1002,7 +1000,7 @@ inject a clock.
 
 Done on 2026-10-13 on the standalone build, with a temporary configuration and
 SQLite file. `tests/manual/seed-demo.ts` seeds a user, a GitHub connection (a
-placeholder installation id: enough to list tools, not to reach GitHub) and a
+placeholder token: enough to list tools, not to reach GitHub) and a
 `read-only` mission on `acme/app`, through the repositories and
 `MissionService.issue`, and prints the bootstrap kit.
 
@@ -1064,7 +1062,7 @@ The instance listened on plain HTTP with no proxy in front, so the kit's URL
 `StreamableHTTPClientTransport` with the `Authorization` header, `connect()`,
 `listTools()`, once with the default handshake and once pinned to 2026-07-28.
 No call reached GitHub: an allowed `tools/call` on this seed would fail
-upstream, the installation being a placeholder.
+upstream, the token being a placeholder.
 
 What was **not** done: connecting Claude Code itself to the instance, which is
 the definition of done of the feature. The check above uses `curl` with the
@@ -1306,9 +1304,10 @@ decision stage failed` at `error` with the stage, the tool, the error
   connection is untouched. The agent's tool result has the provider's
   sentence; the audit row has only the provider id, the status and the error
   class, so the detail is read on the agent's side.
-- **GitHub is called with a stale installation token** — entries live at most
-  50 min and are dropped on a 401; `root.execution.credentialCache.drop(id)`
-  empties a connection's entries by hand.
+- **A plugin is called with a stale cached credential** — entries are dropped
+  on a 401 and when the connection turns unavailable;
+  `root.execution.credentialCache.drop(id)` empties a connection's entries by
+  hand (no shipped plugin caches today).
 - **A call is not attributed to the label the agent set** — the value was
   dropped: look for `agent label dropped` with the mission id; `reason` says
   why (a space, a character outside `. _ - : / @ +`, more than 64

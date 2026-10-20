@@ -83,7 +83,7 @@ single import, and defines only what is specific to the core:
 Two names deserve a word. **`BearerKind`** is the kind of bearer a door
 receives; it is not `CredentialKind` from `@vaubaan/shared`, which is how a
 _connection_ authenticates to its provider (`api-key`, `oauth2`,
-`app-install`, `ssh-key`) and belongs to the plugin contract. The refusal
+`ssh-key`) and belongs to the plugin contract. The refusal
 code stays `wrong-credential-kind`, the spec's name. **`AuditDecision`**
 says `allowed` or `refused` (spec §8 "one entry per call, allowed or
 refused").

@@ -135,7 +135,7 @@ function providerDoc(plugin: PluginInfo): GeneratedDoc {
     `providers/${plugin.id}.mdx`,
     `/docs/providers/${plugin.id}`,
     `Connect ${plugin.name}`,
-    `How to connect a ${plugin.name} account to Vaubaan Gateway${plugin.experimental ? ' (experimental plugin)' : ''}: the company app or the token, and what to grant.`,
+    `How to connect a ${plugin.name} account to Vaubaan Gateway${plugin.experimental ? ' (experimental plugin)' : ''}: the token to make, and what to grant.`,
     splitTitle(markdown).rest,
     [plugin.dir],
   );

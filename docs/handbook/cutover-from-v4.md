@@ -75,49 +75,40 @@ instance uses apps the company owns, never the ones the v4 operator held.
       (stored encrypted), or in the mounted configuration (`idp.*`; the page is
       then read-only and no bootstrap token is needed).
 
-### 1.3 One app per provider that needs one
+### 1.3 The OAuth client of a service that signs people in
 
-The URL to register at each provider is shown on Settings → Company apps
-(`/admin/provider-apps`, in the form of each service):
+Only Gmail connects through an OAuth client the company declares (ADR
+[one-place-to-authorize-services-token-first](../decisions/one-place-to-authorize-services-token-first.md));
+every other service takes a key a person makes (§1.4). The redirect URI to
+register at the service is shown on its connect page:
 `<public_url>/connections/callback/<provider>`.
 
-- [ ] **GitHub — a GitHub App of your own** (Settings → Developer settings →
-      GitHub Apps → New GitHub App).
-  - Permissions: Contents (read & write), Pull requests (read & write), Issues
-    (read & write), Metadata (read), Actions (read), Administration (read &
-    write, for branch protection), Workflows (read & write, for pushes
-    touching `.github/workflows/`).
-  - Under "Identifying and authorizing users": tick **Request user
-    authorization (OAuth) during installation**, and set the **Callback URL**
-    to `<public_url>/connections/callback/github`. With that box ticked GitHub
-    offers no setup URL. Keep "Expire user authorization tokens" on.
-  - Generate a **private key** and a **client secret**.
-  - Five values go into the instance: `app_id`, `app_slug`, `private_key`
-    (PEM), **`client_id`** (the App's client ID, not its App ID) and
-    **`client_secret`**. Until the last two are set GitHub is shown
-    "Incomplete: … missing" and cannot be connected: the gateway refuses to connect an
-    installation it cannot bind to the person who installed it.
-- [ ] **Supabase — an OAuth app** in your organization (dashboard →
-      organization → OAuth Apps), redirect URL
-      `<public_url>/connections/callback/supabase`, with the scopes the tools
-      need (`database:read`, `database:write`, `secrets:read`, and `auth`,
-      `storage`, `edge_functions`, `environment`, `organizations`, `projects`).
-      Client id and secret.
-- [ ] **Railway — an auth app** (Workspace → Developer → Auth apps → New app),
-      Device Flow off, redirect URI
-      `<public_url>/connections/callback/railway`. Client id and secret.
 - [ ] **Google — an OAuth client**, only if you connect Gmail (Google Cloud
       Console → Credentials → OAuth client ID, web application, Gmail API
       enabled), redirect URI `<public_url>/connections/callback/gmail`. The
       Gmail plugin is experimental and exposes **no tool** today: connecting it
       is not part of the acceptance set.
 
-Provider apps can be entered on Settings → Company apps (stored encrypted) or
-mounted as `providers.<id>.*` / `VAUBAAN_PROVIDER_<ID>_<FIELD>`; a mounted
-block wins for the whole provider and makes its form read-only.
+An OAuth client is entered on the service's connect page by an administrator
+(stored encrypted) or mounted as `providers.<id>.*` /
+`VAUBAAN_PROVIDER_<ID>_CLIENT_ID|CLIENT_SECRET`; a mounted block wins for the
+whole provider and makes its form read-only.
 
-### 1.4 Keys for the providers that need no app
+### 1.4 Keys for the providers
 
+- [ ] **GitHub** — a **fine-grained personal access token** made on the
+      account the agents will act as (a shared service account is fine), with
+      the organisation as resource owner, the repositories the missions need,
+      and the permissions the connect page lists (Contents, Pull requests,
+      Issues read and write; Actions read; Administration read and write for
+      branch protection; Workflows read and write for pushes touching
+      `.github/workflows/`). One token per organisation; the organisation may
+      have to allow fine-grained tokens or approve them.
+- [ ] **Supabase** — a scoped **personal access token** (Account preferences →
+      Access tokens) on the organisation and projects the missions need, with
+      the permissions the connect page lists.
+- [ ] **Railway** — a **workspace token** (Account settings → Tokens, the
+      workspace selected); an account token works too.
 - [ ] **Vercel** — an access token scoped to the team, and the team id
       (`team_…`).
 - [ ] **Resend** — a **full-access** API key. A sending-only key is refused at
@@ -151,8 +142,8 @@ show during the day. None of these is an unexpected refusal; all of them are
 listed again, as questions, in the [appendix](#appendix--decisions-to-confirm).
 
 - **Some entries of the `developer` presets ask you each time.** They are
-  gated `approval`: `github.workflow-write-via-file`,
-  `github.mint-install-token-push`, `railway[prod].deploy` and
+  gated `approval`: `github.workflow-write-via-file`, `github.force-push`,
+  `railway[prod].deploy` and
   `railway[prod].upsert-variable`. A call touching one is refused
   `approval-required` with a URL; you open it (or find it under **Waiting for you**), read the tool
   and the arguments, and approve — the agent then replays the
@@ -212,9 +203,9 @@ Preconditions: section 1 done; v4 untouched and serving.
       token; configure the IdP on Settings → Sign-in; "Test the sign-in" shows
       your email and Administrator "yes: you match the rule"; sign in through
       the IdP; Settings → Setup (`/admin`) shows the install token as revoked.
-- [ ] **A3 — Provider apps.** Enter each app of §1.3 on Settings → Company
-      apps; every row reads "registered" (GitHub also reads "installations
-      verified").
+- [ ] **A3 — OAuth clients.** For Gmail only, if connected: declare the
+      client of §1.3 on its connect page; Settings → Setup reads it as
+      declared.
 - [ ] **A4 — Import, then connect what the import cannot carry.** Run the
       importer's dry run, then `--apply` ([import-from-v4](import-from-v4.md)
       §2.2–2.3): Cloudflare, Vercel, Stripe and SSH accounts are created
@@ -272,8 +263,8 @@ Only after B. Each line is irreversible.
       fails loudly.
 - [ ] **C3** — Revoke the provider credentials **at the providers**: uninstall
       and delete the v4 GitHub App and the separate GitHub OAuth App used for
-      sign-in; revoke the v4 Supabase OAuth app and any Supabase management token;
-      revoke the v4 Railway auth app; revoke the Vercel tokens; rotate or delete
+      sign-in; revoke the v4 Supabase OAuth app and any Supabase management token
+      v4 held; revoke the v4 Railway auth app; revoke the Vercel tokens; rotate or delete
       the Cloudflare, Upstash, Resend and Stripe keys that were pasted into v4;
       remove v4's SSH public keys from every host it was bound to.
 - [ ] **C4** — Vercel (v4's host): delete the v4 project, or detach the
@@ -314,42 +305,14 @@ question with a yes / no answer; write the answer next to it. Two of them
 (L1, L4) were answered by the instance that serves this project's own
 development; the answers are recorded below.
 
-### L1 — Does GitHub send `state` back on the install callback? (at A4)
+### L1, L2 — The GitHub App's installation callback (retired)
 
-The fix that binds an installation to the person who installs it relies on
-GitHub returning the `state` the gateway put on the installation URL when
-"Request user authorization (OAuth) during installation" is on.
-
-- Do: connect GitHub on an account where the App is **not** installed yet.
-- Expect: back on `/accounts/<id>` with the notice "Connected" and the
-  repositories.
-- If not: "Not connected", then "This authorization attempt has expired, was
-  already used, or was started by another session. …" (`state-invalid`) means GitHub dropped the `state`. Copy the callback
-  URL from the address bar (it holds no secret that outlives a minute) and
-  stop: the connect flow needs a host-initiated authorize redirect before
-  GitHub can be connected at all.
-- [x] Answer: **yes.** The App was connected this way on the instance that
-      serves this project's development (its connection is active and its pull
-      requests are opened by the App); `state` came back.
-
-### L2 — Connecting an App that is already installed (at A4)
-
-For an App already installed on the account, GitHub shows its configure page
-instead of the installation page, and may come back without a `code`.
-
-- Do: disconnect the account made in L1 on the gateway ("Disconnect", the
-  last line of its page; the App stays installed at GitHub), then connect
-  GitHub again.
-- Expect: back with "Connected".
-- If not: "Not connected", with "the provider returned no user
-  authorization; …" as its last line. The
-  workaround for the day is to uninstall the App at GitHub and connect again
-  (L1's path); report it, the same host-initiated redirect fixes both.
-- [ ] Answer: \_\_\_\_
-
-Also note, for the record: connecting proves that your GitHub account can
-_reach_ the installation (`GET /user/installations`), not that you
-administer the organisation.
+Both checks concerned the GitHub App's installation callback (`state`
+returned, a `code` on an already-installed App). GitHub is connected with a
+fine-grained token since 2026-10-20 (ADR
+[one-place-to-authorize-services-token-first](../decisions/one-place-to-authorize-services-token-first.md)):
+neither question arises. L1 had been answered yes on the instance that serves
+this project's development before the App left.
 
 ### L3 — Does Railway's API accept the MCP-audience token? (at A4)
 
@@ -481,12 +444,10 @@ cutover; each is a default that can be changed, most in one place.
 
 ### GitHub
 
-| Question                                                                  | Current behaviour                            |
-| ------------------------------------------------------------------------- | -------------------------------------------- |
-| Does GitHub return `state` on the install callback?                       | Assumed yes — **live check L1**.             |
-| Does connecting an already-installed App come back with a `code`?         | Unknown — **live check L2**.                 |
-| Is "the user can reach the installation" enough, or require an org owner? | Reach is enough (`GET /user/installations`). |
-| Drop the personal-access-token path?                                      | Dropped: App installation only.              |
+| Question                                            | Current behaviour                            |
+| --------------------------------------------------- | -------------------------------------------- |
+| Does GitHub return `state` on the install callback? | Moot: GitHub connects with a token (L1, L2). |
+| Drop the personal-access-token path?                | The opposite: the token is the one way.      |
 
 ### Other providers
 

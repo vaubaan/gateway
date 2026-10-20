@@ -2,9 +2,9 @@
 title: Supabase provider — plugin on the v5 SDK
 status: current
 date: 2026-10-13
-last_synced: 2026-10-15
+last_synced: 2026-10-20
 tracks:
-  - plugins/supabase/src/token.ts
+  - plugins/supabase/src/credential.ts
   - plugins/supabase/src/
   - plugins/supabase/tests/unit/
 ---
@@ -30,14 +30,14 @@ modelling rationale (research, edge cases) is preserved in git history
 | `tools`             | `src/tools.ts`          | 44, prefix `supabase__`. The three v4 `*_to_venv` tools are gone (plan §8-Q5).                                                                                                                                                        |
 | `dataModel`         | `src/data-model.ts`     | 4 planes (`db`, `storage`, `auth`, `functions` : 14 / 6 / 8 / 6 entities, 34 in all) rooted on `project` (`envScopable`). Also the one list of the schemas Supabase manages (`SUPABASE_MANAGED_SCHEMAS`), which both SQL readers use. |
 | `catalog`           | `src/risk-catalog.yaml` | `catalog_version: 5`, 24 live risks + the deprecated `supabase.row-write-one` + `supabase.uncategorized-write`, 3 presets. Loaded by `loadCatalogFile` at import.                                                                     |
-| `credential`        | `src/credential.ts`     | `oauth2`, PKCE, `client_secret_basic`, scope `all`, `refreshable: true`.                                                                                                                                                              |
+| `credential`        | `src/credential.ts`     | `api-key`: a personal access token (`sbp_…`), checked at paste, with its guide.                                                                                                                                                       |
 | `classify`          | `src/classify.ts`       | Pure ; identifiers validated, missing identifiers denied, undeclared arguments denied. Exports `resolveProjectRef`, `readIdentifiers` and `tableSchemas`, which `execute` shares, and the grammar `base64Text`.                       |
 | migration reading   | `src/migration-sql.ts`  | Pure allow-list reader of the SQL of `apply_migration` : the write classes it takes, every class when a statement is not recognised.                                                                                                  |
 | query reading       | `src/query-sql.ts`      | Pure allow-list reader of the SQL of `execute_sql` : whether the read reaches the managed schemas, and yes when it cannot tell.                                                                                                       |
 | SQL tokeniser       | `src/sql-tokens.ts`     | Shared by the two readers : comments and literals removed, statements of tokens, `null` on any construct whose extent it will not guess.                                                                                              |
 | `execute`           | `src/execute.ts`        | Management API + per-project data plane ; `UpstreamAuthError` on 401/403 ; `fetch` and `signal` from the context ; target from `resolveProjectRef`, identifiers from `readIdentifiers`.                                               |
 | `discoverResources` | `src/execute.ts`        | One `Resource` per project of every organization, capped at 200.                                                                                                                                                                      |
-| `refresh`           | —                       | None : the standard `refresh_token` grant (Basic client auth) is performed by the host from the spec.                                                                                                                                 |
+| `refresh`           | —                       | None : a pasted token is not refreshed ; a 401 expires the account.                                                                                                                                                                   |
 
 ## Classification rules
 
@@ -338,7 +338,7 @@ call in `mission-evaluation.test.ts`. Values provisional until ADR
 ## Execution
 
 - Management API base `https://api.supabase.com/v1` (constant of the plugin).
-  Bearer = the OAuth access token.
+  Bearer = the pasted personal access token.
 - **Fail closed** : `executeSupabase` first runs `classifySupabase(tool,
 args, ctx.resources)` and returns whatever it denies as an `isError`
   result, before any request — the `service_role` key lookup included. That
@@ -388,47 +388,24 @@ ctx.resources)` — the classifier's function, with the mission's
 
 ## Credential and discovery
 
-The company registers an OAuth app in its Supabase organization (dashboard →
-OAuth Apps) with the instance callback URL, and enters the client id and
-secret in the instance configuration. The host runs the authorization-code
-flow from `supabaseCredential` and the refresh : Supabase's is the standard
-RFC 6749 `refresh_token` grant with Basic client authentication, so the
-plugin declares `refreshable: true` and implements nothing (the alignment of the plugins on the v5 SDK
-removed `refreshSupabaseCredential` and `shouldRefreshSupabaseCredential`).
+The one way of connecting (ADR
+[one-place-to-authorize-services-token-first](../../decisions/one-place-to-authorize-services-token-first.md);
+the company OAuth app of earlier builds is described there) is a
+**personal access token** of the Management API, below.
 `discoverResources` reads `/organizations` and `/projects` (unpaged upstream,
 capped at `MAX_DISCOVERED_PROJECTS` with a logger warning) and returns
 `{ ref, displayName: "<org> / <project>", metadata: { organization,
 organization_name, region, status } }` ; the owner labels `env`. A project
 whose ref is not a host label (`projectRefIdent`) fails discovery : no call
-could name it.
-
-**Revoking the grant at Supabase.** On disconnection the host sends
-`POST https://api.supabase.com/v1/oauth/revoke` (`SUPABASE_OAUTH_REVOKE_URL`,
-format `client-credentials-json`): `Content-Type: application/json`, body
-`{ client_id, client_secret, refresh_token }`, no `Authorization` header; any
-2xx counts as withdrawn. Checked on 2026-10-14 against the Management API's
-OpenAPI document (`https://api.supabase.com/api/v1-json`, operation
-`v1-revoke-token`, "Revoke oauth app authorization and it's corresponding
-tokens"): method `POST`, body `application/json` schema `OAuthRevokeTokenBody`
-with the three fields **required** and `additionalProperties: false`
-(`client_id` a UUID), no `security` on the operation, success `204`, errors
-`401`, `403`, `429`. The implementation matches; nothing was changed. The
-operation is marked **Beta / experimental** by Supabase: a change of it shows
-as `failed` on the disconnected account (the person is told to remove the app
-by hand), never as a silent success. _Fallback, Context7 missing — check by
-hand at the next review_: Context7 (`/supabase/supabase`,
-`/websites/supabase`, `/websites/api_supabase_api_v1`) returned nothing for this
-operation, only the project-level OAuth server's `revokeGrant`, which is a
-different API.
+could name it. Nothing is withdrawn at Supabase on disconnection: the
+person deletes the token by hand (`manualRevocation`).
 
 ## Connecting with a personal access token
 
-Beside the OAuth app, `src/token.ts` declares a **personal access token**
-(`sbp_…`) pasted by hand, the way offered when no Supabase app is registered
-(ADR [token-connections-beside-the-integration-app](../../decisions/token-connections-beside-the-integration-app.md)). Every tool runs with it: the Management API takes it as the same
-`Authorization: Bearer` (`supabaseBearerOf` returns the OAuth access token
-or the pasted one), and the data-plane tools read the `service_role` key
-through it as before.
+`src/credential.ts` declares a **personal access token** (`sbp_…`, field
+`access_token`, `api-key` kind) pasted by hand. Every tool runs with it: the
+Management API takes it as `Authorization: Bearer` (`supabaseBearerOf`), and
+the data-plane tools read the `service_role` key through it.
 
 - **Check at paste** (`verifySupabaseToken`): `GET /v1/organizations` → the
   organisation names, kept as the account ("Acme, Side and 2 more"). Supabase

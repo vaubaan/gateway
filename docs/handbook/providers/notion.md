@@ -706,10 +706,9 @@ any tool, so a call that carries it is refused (§2).
 
 ### 6.1 Credential (**PO**: `api-key`, token first)
 
-`src/credential.ts`. One `api-key` spec, no alternative, no company app: an
+`src/credential.ts`. One `api-key` spec, the one way: an
 internal connection is made per workspace by its owner (ADR
-[`company-apps-kept-where-they-add-something`](../../decisions/company-apps-kept-where-they-add-something.md),
-D2 "token first";
+[`one-place-to-authorize-services-token-first`](../../decisions/one-place-to-authorize-services-token-first.md);
 [`token-connections-beside-the-integration-app`](../../decisions/token-connections-beside-the-integration-app.md)
 D1 for `label`, `guide`, `verify`). A public connection (OAuth) is out
 (decision 9).

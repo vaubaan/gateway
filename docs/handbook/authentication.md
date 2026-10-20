@@ -1114,9 +1114,10 @@ reset link made by another administrator from People.
 - **`/admin`** — **Setup**: a checklist (`Rows` with a `CheckMark` each) that
   says what a fresh install needs, what is done and what is left, each line
   read from the service that owns the fact: sign-in (`auth.idp.current()`),
-  the public address (always done: it is the configuration's), company apps
-  (`providerApps.list()`: "1/4" when some are missing, the missing ones named,
-  and a "Register <service>" button that opens its form), administrators
+  the public address (always done: it is the configuration's), OAuth clients
+  (`providerApps.list()`: the services that sign people in through one, the
+  missing ones named, and a "Declare <service>" button that opens the
+  service's connect page), administrators
   (who matches the rule today), telemetry (`telemetry.overview()`), and — only
   when they need someone — accounts without owner
   (`connections.service.listOwnerless()`) and apps waiting for approval
@@ -1151,8 +1152,7 @@ reset link made by another administrator from People.
   navigation, with the local navigation of Settings beside the page
   (`AdminShell`, `SettingsFrame` and `settingsNav` in `components/shell/`,
   handbook [web-app](web-app.md), "The shell"). Under "Administration" it lists
-  Setup (`/admin`), Sign-in (`/admin/identity-provider`), Company apps
-  (`/admin/provider-apps`, handbook [connections](connections.md)), People
+  Setup (`/admin`), Sign-in (`/admin/identity-provider`), People
   (`/admin/users`, below), Teams and Accounts without owner (`/admin/groups`,
   `/admin/connections`, handbook [authority](authority.md)), Telemetry
   (`/admin/telemetry`, handbook [telemetry](telemetry.md)), Registered apps

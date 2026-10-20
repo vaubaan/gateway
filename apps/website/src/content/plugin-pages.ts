@@ -159,9 +159,7 @@ export function pluginPageMarkdown(
 function credentialKindWords(c: CredentialInfo): string {
   switch (c.kind) {
     case 'oauth2':
-      return "through your company's OAuth app at the service (one click once the app is registered)";
-    case 'app-install':
-      return "by installing your company's app on your account at the service";
+      return "through your company's OAuth client at the service (one click once an administrator declared it)";
     case 'api-key':
       return `with a ${c.label ?? 'key'} pasted by hand`;
     case 'ssh-key':
@@ -169,17 +167,8 @@ function credentialKindWords(c: CredentialInfo): string {
   }
 }
 
-function credentialMarkdown(c: CredentialInfo, index: number): string[] {
-  const lines: string[] = [
-    `### ${index === 0 ? 'The usual way' : 'Another way'}: ${credentialKindWords(c)}`,
-    '',
-  ];
-  if (c.createdFromSettings) {
-    lines.push(
-      'An administrator creates the company app from the instance: Settings → Administration → Company apps, then "Create the app". The app\'s id, key and secrets come back stored encrypted; nothing to copy.',
-      '',
-    );
-  }
+function credentialMarkdown(c: CredentialInfo): string[] {
+  const lines: string[] = [`### The way: ${credentialKindWords(c)}`, ''];
   if (c.steps.length > 0) {
     lines.push(...c.steps.map((step, i) => `${i + 1}. ${text(step)}`), '');
   }
@@ -198,22 +187,14 @@ function credentialMarkdown(c: CredentialInfo, index: number): string[] {
   if (c.scopes.length > 0) lines.push(`Scopes asked: ${c.scopes.map(code).join(', ')}.`, '');
   if (c.fields.length > 0) {
     lines.push(
-      c.kind === 'oauth2' || c.kind === 'app-install'
-        ? 'What the administrator enters for the company app:'
+      c.kind === 'oauth2'
+        ? 'What the administrator enters for the OAuth client:'
         : 'What the connect page asks:',
       '',
       ...c.fields.map(
         (f) =>
           `- ${text(f.label)}${f.secret ? ' (secret)' : ''}${f.help ? `: ${text(f.help)}` : ''}`,
       ),
-      '',
-    );
-  }
-  if (c.unavailableTools.length > 0) {
-    lines.push(
-      'Not available when connected this way:',
-      '',
-      ...c.unavailableTools.map((u) => `- ${code(u.tool)}: ${text(u.why)}`),
       '',
     );
   }
@@ -241,10 +222,10 @@ export function connectPageMarkdown(plugin: PluginInfo, readmeCredentialSections
     '',
     '## How to connect',
     '',
-    'On the instance: Accounts → Connect an account, then pick the service. A company app, when the service needs one, is registered once by an administrator under Settings → Administration → Company apps, or set in the configuration (`providers.<id>.*`, see [configuration keys](/docs/configuration/keys)). Every instance registers its own app: this gateway never uses an app shared with another one.',
+    'On the instance: Accounts → Connect an account, then pick the service. A service that signs people in through its own authorization (Gmail) needs its OAuth client declared once by an administrator, on the same page, or set in the configuration (`providers.<id>.*`, see [configuration keys](/docs/configuration/keys)). Every instance declares its own client: this gateway never uses one shared with another instance.',
     '',
   );
-  plugin.credentials.forEach((c, i) => lines.push(...credentialMarkdown(c, i)));
+  plugin.credentials.forEach((c) => lines.push(...credentialMarkdown(c)));
   if (plugin.manualRevocation) {
     lines.push('## Disconnecting', '', text(plugin.manualRevocation), '');
   }
@@ -252,7 +233,7 @@ export function connectPageMarkdown(plugin: PluginInfo, readmeCredentialSections
     lines.push(
       '## Registration notes from the plugin',
       '',
-      `From the plugin's [README](${githubBlob(`${plugin.dir}/README.md`)}), written for the people who register the app or create the token.`,
+      `From the plugin's [README](${githubBlob(`${plugin.dir}/README.md`)}), written for the people who create the token or declare the OAuth client.`,
       '',
       // The README's own headings start at level 2; under this section they move one level down.
       readmeCredentialSections.replace(/^(#{2,5}) /gm, '#$1 '),

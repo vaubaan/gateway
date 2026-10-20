@@ -70,7 +70,7 @@ export function landingFaq(serviceNames: readonly string[]): Faq[] {
     {
       question: 'Does the agent ever see a credential?',
       answer:
-        'No stored credential is ever returned to an agent. One exception is named: a few tools exist to hand the agent a short-lived token, such as a GitHub installation token to clone or push; each is a permission of its own, refused unless the mission holds it.',
+        'No stored credential is ever returned to an agent. Git goes through the gateway’s own remote, so no token leaves for a clone or a push. A plugin may declare a tool that hands the agent a short-lived token; each is a permission of its own, refused unless the mission holds it, and no shipped plugin declares one today.',
     },
     {
       question: 'Which services does it support?',

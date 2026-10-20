@@ -27,7 +27,6 @@ tracks:
   - plugins/github/src/git-heads.ts
   - plugins/github/src/git-moves.ts
   - plugins/github/src/git-call.ts
-  - plugins/github/src/permission-check.ts
   - apps/gateway/tests/integration/git/
   - apps/gateway/tests/e2e/v5/git-remote.spec.ts
   - packages/plugin-sdk/tests/unit/git-wire.test.ts
@@ -50,7 +49,7 @@ what git prints. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2.4,
 remote), [threat-model](threat-model.md).
 
 Nothing is stored but rows of temporary refs: the pack is streamed, never
-held; the provider's credential is minted or decrypted in memory for the
+held; the provider's credential is decrypted in memory for the
 request, never returned; the mission key is never logged and never sent
 upstream.
 
@@ -91,13 +90,12 @@ packages/plugin-sdk/src/git/
   remote.ts        GitRemoteCapability (pushRisk, inspectPack, admitPush, abilities, insteadOf…), GitRefUpdate, GitInspectedUpdate, GitReviewedUpdate, GIT_TEMPORARY_REF_PREFIX
 plugins/github/src/
   git-remote.ts      githubGitRemote: the capability, assembled from the modules below
-  git-credential.ts  gitGrant(), upstream(), repositoryOf(), GIT_TOKEN_PERMISSIONS
+  git-credential.ts  upstream(), repositoryOf(), targetOf()
   git-rest.ts        GithubRest: refValue, defaultBranch, compare (with its commits), commitPaths, gitObject, gitTree, request
   git-inspect.ts     inspectPack(): what each pushed tip changes under .github/workflows/, before the pack leaves
-  git-review.ts      review(): stale info, kind, net files, every commit's workflow paths, permissions; compareUrl(); branchHeads()
+  git-review.ts      review(): stale info, kind, net files, every commit's workflow paths; compareUrl(); branchHeads()
   git-moves.ts       executeGit(): REST create and fast-forward, receive-pack compare-and-swap for force and delete
   git-call.ts        GIT_FETCH_TOOL, GIT_PUSH_TOOL, readGitCall(), pushedRef() — shared by classify and execute
-  permission-check.ts  gitFetchNeeds(), gitPushNeeds(), missingPermissionSentence()
 ```
 
 ## Routes
@@ -109,7 +107,7 @@ plugins/github/src/
 | `POST …/git-upload-pack` (v0/v1 negotiation, v2 other) | the audited, counted call `github__git_fetch { step: 'pack' }`; bytes relayed by its upstream stage                      |
 | `GET …/info/refs?service=git-receive-pack`             | precheck (read), the mission's `pushRisk`, then the provider's refs minus `refs/vaubaan/*`, with the door's capabilities |
 | `POST …/git-receive-pack`                              | the same two checks, then a push (`push.ts`)                                                                             |
-| `…/info/lfs/*`                                         | `501`, Git LFS's JSON error: not supported (use `github__mint_install_token`)                                            |
+| `…/info/lfs/*`                                         | `501`, Git LFS's JSON error: not supported (a known gap since the GitHub App left)                                       |
 | `info/refs` without `service` (dumb protocol), other   | `403` / `404` text: smart HTTP only                                                                                      |
 | wrong method                                           | `405` with `Allow`                                                                                                       |
 
@@ -160,7 +158,7 @@ The request that transfers objects is the call: the door attaches a
 **single-process only**: a job lives for one request in one process; a
 multi-replica host needs nothing more, the job never leaves the request) and
 runs `pipeline.execute`. After the decision and the budget decrement, the git
-pipeline's upstream stage mints the read credential, calls the provider and
+pipeline's upstream stage resolves the read credential, calls the provider and
 hands the response to git through `observed()`; the audit entry is written
 when the stream ends, so its latency covers the transfer, and a broken stream
 or a client that went away is an upstream error. A plain clone is one entry;
@@ -210,15 +208,16 @@ write credential exists. Then `Push.handle()`:
    plugin that throws or leaves an update out refuses the push. Nothing is
    inspected for a push of deletions only.
    Then **admit** (`gitRemote.admitPush`, optional; amendment of 2026-10-18 to
-   the ADR): once the mission has decided, the plugin says whether its
-   credential can carry the push — for GitHub, the push token must hold
-   `workflows: write` when the inspection found a workflow change, a cached
-   token short of it being minted afresh once — and a sentence refuses the
-   push by name, audited, **before any byte leaves**. Asked after the
-   precheck, so the mission's own refusal (`workflow-write-via-file`) comes
-   first whatever the token holds. The write endpoint is then asked for again
+   the ADR): once the mission has decided, a plugin may say whether its
+   credential can carry the push, and a sentence then refuses the push by
+   name, audited, **before any byte leaves**. Asked after the precheck, so
+   the mission's own refusal (`workflow-write-via-file`) comes first whatever
+   the credential holds. The write endpoint is then asked for again
    (`TemporaryRefs.renewUpstream`): the pack leaves with the credential
-   admitted. A plugin that throws refuses the push.
+   admitted. A plugin that throws refuses the push. The GitHub plugin
+   declares none since it connects with a pasted token whose permissions
+   it does not know: GitHub's own refusal, once the pack is sent, is named
+   on the ref (step 8).
 5. **Store** (`TemporaryRefs.store`) the pack at GitHub under temporary refs
    `refs/vaubaan/<32 random hex>` (`temporaryRefName`; no mission id: every
    reader of the repository at GitHub can list them): first the mission's
@@ -226,8 +225,8 @@ write credential exists. Then `Push.handle()`:
    `git_pending_refs` with the ref it stands for and the deadline
    `now + git.request_timeout + 5 min`, then the pack sent untouched (the
    command list and the buffered pack, two chunks). A store GitHub refuses (its
-   report names the ref) drops the connection's cached credentials, so the next
-   push starts from a token minted afresh.
+   report names the ref) drops the connection's cached credentials (none for
+   the GitHub plugin, which caches nothing).
 6. **Review** (`gitRemote.review`, `git-review.ts`): for each ref, its value
    at GitHub (`GET git/ref/<ref>`) must equal the client's `old` — a client
    that claims a later `old` is refused as _stale info_ —; a **tag** is
@@ -254,9 +253,9 @@ write credential exists. Then `Push.handle()`:
    merge) is read by its trees instead (`workflowPathsOfCommit`: no change
    when its workflows equal one parent's; unreadable: a change). Beyond 300
    files or 250 commits per comparison, 100 commits per push, an unrelated
-   history, an empty repository: refused. The review does not read the push
-   token's permissions (amendment of 2026-10-18): the decision comes first;
-   the token is checked by the admission before and by the move after.
+   history, an empty repository: refused. The review does not read the
+   credential's permissions (amendment of 2026-10-18): the decision comes
+   first.
 7. **Decide**: one `github__git_push { repository, updates[] }`, the reviewed
    updates as arguments, each with the inspection's workflow paths added
    (`withInspection`: the union, so neither can make a push look smaller): one
@@ -269,11 +268,10 @@ write credential exists. Then `Push.handle()`:
    receive-pack command `<old> <new|0> <ref>` with an empty pack — a
    compare-and-swap GitHub checks under the ref's lock. A provider failure on
    one ref reports that ref (`GitHub did not apply this update`) and the next
-   ones are tried; a failure before any ref fails the call. Before any ref
-   moves the push token must cover what the review found (a workflow file of
-   an intermediate commit included), else declined by name; a move GitHub
-   refuses for a missing permission is tried once more with a token minted
-   afresh, then named on the ref.
+   ones are tried; a failure before any ref fails the call. A move GitHub
+   refuses for a permission the token lacks is named on the ref: the token
+   needs Contents, and Workflows for a change under `.github/workflows/`
+   (`refusedForPermissionSentence`, `git-moves.ts`).
 9. **Clean up** (`TemporaryRefs.cleanUp`) on every path — success, refusal,
    provider failure, a client gone mid-pack: `deleteTemporaryRefs`
    (receive-pack, compare-and-swap on the object id, per ref; a ref GitHub
@@ -362,7 +360,7 @@ http-backend` over bare repositories, a REST API for tokens, refs and
   compare): clone v0/v1/v2, fetch, push, main refused, `refs/vaubaan/`,
   force-push approval and replay, workflow approval, tags and deletions,
   compare limits, the pack cap, budget and claim URL, keys rotated, revoked,
-  expired missions, a token connection, the App's permissions, the sweeper,
+  expired missions, the token's permissions, the sweeper,
   the catalog, the shared admission (`git-remote*.test.ts`); multi-ref pushes,
   lying old ids, ref-name tricks, unsupported capabilities, truncated streams,
   a client gone mid-pack (`git-remote-security.test.ts`); one regression test

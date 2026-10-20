@@ -181,7 +181,13 @@ flowchart LR
 
 The company creates a Google Cloud OAuth client (web application, Gmail API
 enabled, consent screen configured) with the instance callback as redirect
-URI and enters client id and secret in the instance configuration. The host
+URI; an administrator enters its client id and secret on Gmail's connect
+page (`/accounts/new/gmail`, handbook [connections](../connections.md), "The
+OAuth client of a service") or in the instance configuration
+(`providers.gmail.*`). Google offers no token a person can make for a
+personal mailbox, which is why Gmail is the one shipped service that signs
+people in this way (ADR
+[one-place-to-authorize-services-token-first](../../decisions/one-place-to-authorize-services-token-first.md)). The host
 runs the authorization-code flow from `gmailCredentialSpec` ; the plugin
 implements no provider-specific refresh. Scopes follow the v4 decision :
 `gmail.readonly` + `gmail.compose`, **no `gmail.modify`** (required upstream
