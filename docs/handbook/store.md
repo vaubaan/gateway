@@ -223,7 +223,7 @@ five-id catalog).
   with no resource…), driver errors (`SqliteError` with `code`) for constraint
   violations the schema catches (`UNIQUE`, `FOREIGN KEY`, `CHECK`).
 
-## Schema (`0001_schema.sql` … `0019_local_accounts.sql`)
+## Schema (`0001_schema.sql` … `0020_administrators.sql`)
 
 Schema version 19. `0001` creates every table and trigger; `0002` only replaces the
 `audit_risks` delete trigger (see Audit); `0003` adds `web_sessions`; `0004` adds the
@@ -1039,3 +1039,20 @@ ones of the same kind for the address, `useLink` succeeds once,
 `pendingLinks`). Tests: `sealed-blobs.test.ts` seeds a secret and checks it is
 resealed with the rest; `tests/integration/auth/local-accounts.test.ts` drives
 the tables through the service.
+
+## Administrators (migration 0020)
+
+`0020_administrators.sql` adds `administrators` (ADR
+administrators-live-in-the-instance): one designation per row, `kind` in
+`user` (`user_id`, cascade on the user's deletion), `email` (lower-cased
+address, `provider` or `NULL` for any) and `group` (`group_name`, `provider` or
+`NULL` for a bare group carried from the configuration); `granted_by` (a user
+id, `bootstrap`, `configuration`, `recovery`), `origin` (`setup`, `granted`,
+`configuration`, `recovered`), `created_at`. A `CHECK` ties the columns to the
+kind; three partial unique indexes make a user, an address per provider and a
+group per provider one row each (`INSERT … ON CONFLICT DO NOTHING`). Nothing
+sealed. Repository `repositories/administrators.ts` (`list`, `count`, `get`,
+`ofUser`, `addUser`, `addEmail`, `addGroup`, `remove`, `consumeEmail` — a
+pending address turned into its user's row in one transaction —, `addMany`).
+`instance_config` keeps `administrators.seeded_rule`, the configuration's rule
+the boot applied (canonical JSON).

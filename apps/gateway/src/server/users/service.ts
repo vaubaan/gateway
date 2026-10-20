@@ -100,12 +100,24 @@ export interface UserAdminServiceDeps {
 export class UserAdminService {
   constructor(private readonly deps: UserAdminServiceDeps) {}
 
-  /** Every user the instance knows, in sign-up order, with their current groups. */
   /** One user by id, or `null`. */
   async get(id: string): Promise<UserRecord | null> {
     return this.deps.store.users.getById(id);
   }
 
+  /**
+   * The user of an identity, created when absent without counting as a sign-in: the
+   * setup names an administrator before they ever signed in.
+   */
+  async ensureIdentity(input: {
+    readonly issuer: string;
+    readonly subject: string;
+    readonly email: string;
+  }): Promise<UserRecord> {
+    return this.deps.store.users.ensureIdentity(input);
+  }
+
+  /** Every user the instance knows, in sign-up order, with their current groups. */
   async list(): Promise<UserView[]> {
     const views: UserView[] = [];
     for (const user of await this.deps.store.users.list()) {

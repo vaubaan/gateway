@@ -10,6 +10,7 @@ import type { InstanceConfig } from '../config/types';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
 import { systemClock, type Clock } from '../store/clock';
+import { AdministratorsService } from './administrators';
 import { Authenticator } from './authenticator';
 import { BootstrapService } from './bootstrap';
 import { createAuthHandlers, type AuthHandlers } from './handlers';
@@ -58,6 +59,8 @@ export interface AuthModule {
   readonly idp: IdpSettingsService;
   /** Every sign-in provider: the configuration's and the ones saved in Settings → Sign-in. */
   readonly providers: SignInProvidersService;
+  /** Who administers the instance: the designations of the store (ADR administrators-live-in-the-instance). */
+  readonly administrators: AdministratorsService;
   readonly flows: SignInFlows;
   readonly bootstrap: BootstrapService;
   readonly relyingParties: RelyingPartyFactory;
@@ -85,7 +88,10 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
   });
   const providers = new SignInProvidersService(
     deps.config,
-    deps.config.admin,
+    async () =>
+      (await deps.store.administrators.list()).flatMap((d) =>
+        d.kind === 'group' && d.provider === null ? [d.groupName] : [],
+      ),
     idp,
     deps.store.config,
     clock,
@@ -99,10 +105,18 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
     relyingParties,
     fetch: deps.oidc?.fetch,
   });
+  const administrators = new AdministratorsService({
+    store: deps.store,
+    providers: () => providers.views(),
+    rule: deps.config.admin,
+    audit: deps.store.auditWriter,
+    logger: logger.child({ component: 'administrators' }),
+    clock,
+  });
   const authenticator = new Authenticator(
     sessions,
     deps.store,
-    deps.config.admin,
+    administrators,
     bootstrap,
     providers,
   );
@@ -130,7 +144,7 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
       membershipsChanging: deps.membershipsChanging,
     },
     store: deps.store,
-    adminEmails: deps.config.admin.emails,
+    administrators,
     logger,
     clock,
     rateLimiter: deps.rateLimiter,
@@ -145,7 +159,7 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
     bootstrap,
     authenticator,
     store: deps.store,
-    adminEmails: deps.config.admin.emails,
+    administrators,
     login: {
       store: deps.store,
       bootstrap,
@@ -163,6 +177,7 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
     sessions,
     idp,
     providers,
+    administrators,
     flows,
     bootstrap,
     relyingParties,
@@ -174,12 +189,23 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
 }
 
 export {
-  describeAdminRule,
+  ADMINISTRATORS_ERROR_CODES,
+  ADMINISTRATORS_ERROR_MESSAGES,
+  ADMINISTRATORS_OBJECT_ID,
+  AdministratorsError,
+  AdministratorsService,
+  designationView,
+  groupsOfProvider,
   isOperator,
-  resolveAdminRule,
-  type AdminRuleSubject,
-  type ResolvedAdminRule,
-} from './admin-rule';
+  pendingEmailNames,
+  resolveAdministrators,
+  resolveGroupDesignation,
+  SEEDED_RULE_KEY,
+  type AdministratorsErrorCode,
+  type AdministratorSubject,
+  type ConfigurationDrift,
+  type ResolvedAdministrators,
+} from './administrators';
 export { admit, type AdmissionContext, type AdmissionReason } from './admission';
 export { GithubSignIn, readableTeams } from './github';
 export {

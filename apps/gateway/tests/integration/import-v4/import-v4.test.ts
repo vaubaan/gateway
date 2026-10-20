@@ -257,7 +257,16 @@ describe('import of a v4 organization', () => {
     ]);
     const encryptor = await createEncryptor(loaded.config.encryption);
     store = openMemoryStore({ encryptor, catalog: new RegistryCatalogIndex(registry) });
-    await store.users.upsertFromIdp({ issuer: 'http://idp.test', subject: 'owner', email: OWNER });
+    const owner = await store.users.upsertFromIdp({
+      issuer: 'http://idp.test',
+      subject: 'owner',
+      email: OWNER,
+    });
+    // The instance has booted once already: its administrators live in the store.
+    await store.administrators.addUser(owner.id, {
+      grantedBy: 'configuration',
+      origin: 'configuration',
+    });
 
     const { generateKeyPairSync } = await import('node:crypto');
     const sshKey = generateKeyPairSync('ed25519', {

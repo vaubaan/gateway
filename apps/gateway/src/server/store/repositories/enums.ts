@@ -118,6 +118,16 @@ export const ADMIN_ACTS = membersOf<AdminAct>({
   'local-second-factor-changed': true,
   'local-account-removed': true,
   'master-key-downloaded': true,
+  'administrator-granted': true,
+  'administrator-revoked': true,
+  'administrators-seeded': true,
+  'setup-finished': true,
+  'sign-in-provider-tested': true,
+  'sign-in-provider-enabled': true,
+  'sign-in-provider-disabled': true,
+  'second-factor-waiver-changed': true,
+  'second-factor-changed': true,
+  'administrator-recovered': true,
   'config-changed': true,
 });
 

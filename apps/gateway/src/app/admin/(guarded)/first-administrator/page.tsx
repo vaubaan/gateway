@@ -1,8 +1,8 @@
 /**
  * `/admin/first-administrator` — the setup creates the first administrator's
- * local account (ADR local-accounts-sign-in-provider, D7): an address of the
- * admin rule, a password twice. The account's first sign-in enrols the second
- * factor, shows the recovery codes, and retires the bootstrap token.
+ * local account (ADR administrators-live-in-the-instance, §4): any address, a
+ * password twice. The account administers from its creation; its first sign-in
+ * enrols the second factor and shows the recovery codes.
  */
 import styles from '@/components/settings/settings.module.css';
 import {
@@ -14,7 +14,6 @@ import {
   Input,
   PageHeader,
   Section,
-  Select,
 } from '@/components/ui';
 import { requireOperator } from '@/lib/auth/session';
 import { SETTINGS_PAGES } from '@/lib/vocabulary';
@@ -27,16 +26,12 @@ export default async function FirstAdministratorPage() {
   const { root } = await requireOperator();
   const providers = await root.auth.providers.views();
   const local = providers.find((p) => p.kind === 'local') ?? null;
-  const candidates: string[] = [];
-  for (const email of root.config.admin.emails) {
-    if (local && !(await root.auth.accounts.accountOf(local.id, email))) candidates.push(email);
-  }
 
   return (
     <>
       <PageHeader
         title="Create the first administrator"
-        lede="An address the admin rule names, and the password it will sign in with. The second factor comes at the first sign-in."
+        lede="The address and the password the first administrator will sign in with. The second factor comes at the first sign-in."
         crumbs={[{ label: SETTINGS_PAGES.setup.title, href: ADMIN_SETUP_PAGE }]}
         width="narrow"
       />
@@ -45,13 +40,6 @@ export default async function FirstAdministratorPage() {
           <Callout tone="neutral" title="No local accounts yet" testId="first-admin-no-provider">
             Add local accounts under Sign-in first, or sign in through the provider you set up: an
             administrator of that provider needs no local account.
-          </Callout>
-        ) : candidates.length === 0 ? (
-          <Callout tone="ok" title="Nothing to create" testId="first-admin-done">
-            Every address the admin rule names already has its account.{' '}
-            <ButtonLink href={USERS_PAGE} size="sm">
-              People
-            </ButtonLink>
           </Callout>
         ) : (
           <form
@@ -63,15 +51,9 @@ export default async function FirstAdministratorPage() {
             <Field
               label="Address"
               htmlFor="first-admin-email"
-              hint="One of the admin rule's emails (admin.emails in the configuration). A rule made of a group alone cannot name a local account."
+              hint="The administrator's own address: it receives the password resets once this gateway sends mail."
             >
-              <Select id="first-admin-email" name="email" defaultValue={candidates[0]} required>
-                {candidates.map((email) => (
-                  <option key={email} value={email}>
-                    {email}
-                  </option>
-                ))}
-              </Select>
+              <Input id="first-admin-email" name="email" type="email" autoComplete="off" required />
             </Field>
             <Field
               label="Password"

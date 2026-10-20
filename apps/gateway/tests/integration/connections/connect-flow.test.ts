@@ -396,6 +396,8 @@ describe('connections: provider app, connect, resources, revoke', () => {
         e.kind === 'admin' ? e.act : null,
       ),
     ).toEqual([
+      // The boot applied the configuration's admin rule while the store named nobody.
+      'administrators-seeded',
       'config-changed',
       'connection-created',
       'resource-edited',

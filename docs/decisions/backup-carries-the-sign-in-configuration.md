@@ -61,6 +61,17 @@ managed offer asked for it (request 17 of its spec, `managed-instances.md`
    defined as a backup, and will call the same writer
    (`SignInProvidersService.carryIntoStore`).
 
+### Amendment 2026-10-20 — the administrators supersede the carried rule
+
+ADR [administrators-live-in-the-instance](administrators-live-in-the-instance.md)
+moves the administrators into the store, so D4 changes: the `backup` command no
+longer writes `restored.admin_rule` (the administrators are rows of the copy),
+and the boot no longer merges a carried rule into the configured one. A copy
+made by a build of D4 is still read: while the restored store names no
+administrator, the boot applies its carried rule with the configuration's —
+both groups, every email — as designations, then deletes the key; a store that
+already names administrators drops the key unread. D1, D2, D3 and D5 hold.
+
 ## Consequences
 
 - A restore on a fresh host signs people in as before, with the old host's

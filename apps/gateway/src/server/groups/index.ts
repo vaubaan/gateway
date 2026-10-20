@@ -16,7 +16,7 @@ import { createGroupHandlers, type GroupHandlers } from './handlers';
 import { GroupService } from './service';
 
 export interface GroupsModuleDeps {
-  readonly config: Pick<InstanceConfig, 'publicUrl' | 'admin'>;
+  readonly config: Pick<InstanceConfig, 'publicUrl'>;
   readonly store: Store;
   readonly membership: Pick<MembershipSettler, 'watch'>;
   readonly connections: Pick<ConnectionsModule, 'notices'>;
@@ -35,7 +35,12 @@ export function createGroupsModule(deps: GroupsModuleDeps): GroupsModule {
   const service = new GroupService({
     store: deps.store,
     membership: deps.membership,
-    reservedNames: reservedGroupNames(deps.config.admin.group),
+    reservedNames: async () =>
+      (await deps.store.administrators.list()).flatMap((d) =>
+        d.kind === 'group'
+          ? reservedGroupNames(d.provider === null ? d.groupName : `${d.provider}:${d.groupName}`)
+          : [],
+      ),
     audit: deps.store.auditWriter,
     clock: deps.clock ?? systemClock,
     logger,

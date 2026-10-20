@@ -259,7 +259,9 @@ describe('audit search: visibility, filters, paging', () => {
       'resource-edited',
     ]);
     expect(acts(await search(userViewer(rig.seeded.bob)))).toEqual([]);
+    // The boot applied the configuration's admin rule: `administrators-seeded`.
     expect(acts(await search(userViewer(rig.operator, true))).sort()).toEqual([
+      'administrators-seeded',
       'config-changed',
       'mission-issued',
       'resource-edited',
@@ -267,6 +269,7 @@ describe('audit search: visibility, filters, paging', () => {
     // The bootstrap operator owns nothing and sees the administrative entries, no call.
     await seedCall(rig, mission);
     expect(acts(await search(BOOTSTRAP)).sort()).toEqual([
+      'administrators-seeded',
       'config-changed',
       'mission-issued',
       'resource-edited',

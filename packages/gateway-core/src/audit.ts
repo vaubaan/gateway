@@ -208,6 +208,36 @@ export type AdminAct =
    *  Administration → Encryption). Object: `instance-config` / `master-key`;
    *  `after` carries the key version and the page it was asked from. Never the key. */
   | 'master-key-downloaded'
+  /** A designation of an administrator was made (ADR administrators-live-in-the-instance):
+   *  a user made administrator, an address or a group of a provider named, or a pending
+   *  address turned into its user at their first sign-in. Object: `instance-config` /
+   *  `administrators`; `after` carries the designation (kind, user, address, provider,
+   *  group, origin). The actor is an administrator, `bootstrap`, `configuration` or
+   *  `recovery`. */
+  | 'administrator-granted'
+  /** A designation was removed: a user unmade, a pending address or a group dropped. */
+  | 'administrator-revoked'
+  /** The configuration's admin rule was applied while the store named nobody (the
+   *  first boot of an instance, or its upgrade). `after` lists what it named. */
+  | 'administrators-seeded'
+  /** The setup ended: "Finish setup" revoked the bootstrap token. */
+  | 'setup-finished'
+  /** A sign-in provider was tested beside the session: `after` carries the outcome, the
+   *  identity seen and the verdict. Nothing was created. Object: `sign-in:<id>`. */
+  | 'sign-in-provider-tested'
+  /** A sign-in provider was switched on after a passed test. Object: `sign-in:<id>`. */
+  | 'sign-in-provider-enabled'
+  /** A sign-in provider was switched off; its users' sessions ended (the actor's kept). */
+  | 'sign-in-provider-disabled'
+  /** The second factor was waived for a provider, or the waiver was changed or removed:
+   *  `before` / `after` carry the waiver (`always`, `amr`, or none). */
+  | 'second-factor-waiver-changed'
+  /** A person's second factor was enrolled, replaced or reset (by the person, or by an
+   *  administrator for them: `after.by`). Never the secret. Object: the user. */
+  | 'second-factor-changed'
+  /** The master key's holder named an administrator through the recovery page:
+   *  `after` carries what was named. The actor is `recovery`. */
+  | 'administrator-recovered'
   | 'config-changed';
 
 export type AdminObjectType =
@@ -230,6 +260,21 @@ export const BOOTSTRAP_ACTOR_ID = 'bootstrap';
 
 /** How the bootstrap operator is named wherever an actor is shown. */
 export const BOOTSTRAP_ACTOR_LABEL = 'Bootstrap operator';
+
+/**
+ * The `user_id` of entries the boot wrote by applying the configuration's admin rule
+ * (ADR administrators-live-in-the-instance): nobody signed in did it.
+ */
+export const CONFIGURATION_ACTOR_ID = 'configuration';
+
+/** How the configuration is named wherever an actor is shown. */
+export const CONFIGURATION_ACTOR_LABEL = 'The configuration';
+
+/** The `user_id` of entries written through the recovery by the master key. */
+export const RECOVERY_ACTOR_ID = 'recovery';
+
+/** How a recovery is named wherever an actor is shown. */
+export const RECOVERY_ACTOR_LABEL = 'Recovery with the master key';
 
 export interface AdminAuditEntry {
   readonly kind: 'admin';

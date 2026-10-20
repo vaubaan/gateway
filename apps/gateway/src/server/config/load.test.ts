@@ -59,11 +59,11 @@ describe('loadInstanceConfig — required keys', () => {
         'public_url',
         'store.path',
         'encryption.master_key',
-        'admin',
         'bootstrap_token',
       ]),
     );
-    expect(err.message).toContain('Invalid instance configuration (5 problems)');
+    expect(paths(err)).not.toContain('admin');
+    expect(err.message).toContain('Invalid instance configuration (4 problems)');
     expect(err.message).toContain(
       'encryption.master_key: missing required key (env: VAUBAAN_MASTER_KEY or VAUBAAN_MASTER_KEY_FILE)',
     );
@@ -226,14 +226,13 @@ describe('loadInstanceConfig — admin rule', () => {
     expect(config.admin.emails).toEqual(['ops@example.com', 'cto@example.com']);
   });
 
-  it('accepts both, and refuses neither', () => {
+  it('accepts both, and neither: the rule is an optional seed (ADR administrators-live-in-the-instance)', () => {
     const both = loadInstanceConfig({
       env: validEnv({ VAUBAAN_ADMIN_GROUP: 'admins', VAUBAAN_ADMIN_EMAILS: 'a@example.com' }),
     });
     expect(both.config.admin).toEqual({ group: 'admins', emails: ['a@example.com'] });
-    const err = failure(validEnv({ VAUBAAN_ADMIN_EMAILS: undefined }));
-    expect(paths(err)).toEqual(['admin']);
-    expect(err.message).toContain('VAUBAAN_ADMIN_GROUP or VAUBAAN_ADMIN_EMAILS');
+    const none = loadInstanceConfig({ env: validEnv({ VAUBAAN_ADMIN_EMAILS: undefined }) });
+    expect(none.config.admin).toEqual({ group: null, emails: [] });
   });
 
   it('refuses a value that is not an email address', () => {

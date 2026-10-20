@@ -9,6 +9,22 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Changed
+
+- **The administrators live in the instance.** Who administers a gateway is
+  kept in its store and changed from Administration → Users ("Make
+  administrator", "No longer administrator", a group of a sign-in provider,
+  pending addresses), audited. `admin.emails` and `admin.group` become
+  optional: the first start of this version applies them once, while the store
+  names nobody — **an instance upgraded from an earlier version keeps every
+  administrator it had** — and a rule changed afterwards is shown, never
+  applied by itself. Without a rule, the setup names the first administrator:
+  the local account it creates may have any address. An act that would leave
+  no administrator a way in (unmaking, deactivating, removing a provider) is
+  refused, and removing a provider no longer signs its remover out. A start
+  with no administrator, no rule and no bootstrap token is refused. ADR
+  administrators-live-in-the-instance.
+
 ### Fixed
 
 - **GitHub is refused as an OpenID Connect provider, with the way out.** GitHub

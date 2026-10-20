@@ -71,11 +71,21 @@ company registered at a provider).
 - **Operator** — the person or team that installs, configures and
   maintains the instance (sign-in providers, provider apps, master key,
   telemetry). The operator is not an identity of the domain; they have
-  access to the configuration, not to other people's missions. Until a
-  sign-in provider is configured, the operator is whoever holds the
-  bootstrap token. Afterwards, the operator is any user matching the
-  **admin rule** of the instance configuration: a group of a named
-  sign-in provider, or a list of emails that a provider has verified.
+  access to the configuration, not to other people's missions. During the
+  setup, the operator is whoever holds the bootstrap token (the setup
+  link). Afterwards, the operators are the **administrators** of the
+  instance.
+- **Administrator** — a user the instance itself names as such: in its
+  store, never in its configuration after the first start. An
+  administrator is named by the setup (the holder of the setup link names
+  the first one), by another administrator, once by the configuration's
+  **admin rule** while the instance names nobody yet (its first start, or
+  the upgrade of an instance from before this rule), or by the holder of
+  the master key through the recovery. An administrator is a person, an
+  address waiting for its first sign-in through a provider, or a group of
+  a named sign-in provider (every member that provider claims). A change of
+  the configuration's rule afterwards names nobody by itself: it is shown,
+  and an administrator applies it or not.
 - **Identity provider (IdP), sign-in provider** — an authentication
   service to which the instance delegates the identification of humans:
   the company's directory through OpenID Connect (Entra ID, Google
@@ -90,10 +100,10 @@ company registered at a provider).
   and recovery codes shown once), for a company without a directory of its
   own. Local accounts are a sign-in provider of their own kind (`local`, at
   most one per instance), always "invited only": an account exists only for
-  an invited address or one the admin rule names, and is created by the
+  an invited address or an administrator, and is created by the
   person through a single-use link, or by the setup for the first
-  administrator. An administrator must have a second factor; other people
-  may.
+  administrator (any address the holder of the setup link types). An
+  administrator must have a second factor; other people may.
 - **Open provider** — a sign-in provider at which anyone in the world can
   hold an account (GitHub, Google accounts outside a Workspace, Microsoft
   personal accounts). It never admits by itself: it needs allowed email
@@ -101,8 +111,8 @@ company registered at a provider).
   Workspace restricted to its domain, the company's Okta or Keycloak) may
   admit everyone its directory authenticates.
 - **Invitation** — an email address an administrator allowed to sign in,
-  instance-wide, through any provider that verified it. The people the
-  admin rule names, by email or by group, need none.
+  instance-wide, through any provider that verified it. The administrators
+  — a person, an address, or a member of a named group — need none.
 
 **Identities**
 
@@ -1106,7 +1116,14 @@ interpreted as markup.
   at the service and its permissions, and the next step: installing it
   on the company's repositories, which is connecting an account);
   **people** — everyone who signed in, with the provider
-  they signed in through (deactivate, reactivate), and the
+  they signed in through (deactivate, reactivate, make or unmake an
+  administrator), the **administrators** (every person, pending address and
+  group of a provider named administrator, and by whom: the setup, an
+  administrator, the configuration at its first start, a recovery; an
+  administrator names a group of a provider or removes a designation, and,
+  when the configuration's rule differs from the one applied, the page says
+  so and offers to apply it; an act that would leave no administrator a way
+  in is refused), and the
   **invitations** (invite an address, remove one; removing it is asked
   first and stops the next sign-ins, not an open session; with local
   accounts, inviting sends the person the link that creates their account,
@@ -1164,16 +1181,21 @@ a mounted file, never committing anything:
   instance, whose key would reach every installation of every company
   using it. Optional for a provider whose plugin also accepts a pasted
   token: without the app, people connect that provider with a token;
-- the operator's **bootstrap token**, usable until a sign-in provider
-  is configured;
-- the **admin rule**: a group of a named sign-in provider
+- the operator's **bootstrap token**, the secret of the setup link: it
+  opens the setup until the setup ends. Required while the configuration
+  sets no sign-in provider; and an instance whose store names no
+  administrator, with neither a token nor an admin rule, refuses to start;
+- optionally, the **admin rule**: a group of a named sign-in provider
   (`<provider>:<group>`; a GitHub group is an organisation team,
-  `org/team`) and/or a list of emails, that defines who is operator once
-  the bootstrap token is revoked. An email matches the verified email of a
-  user of any provider. A group matches only the members that provider
+  `org/team`) and/or a list of emails. It is a **seed**: applied once, at
+  the start where the store names no administrator yet — each email an
+  administrator at its first sign-in through any provider (at once for a
+  user already known by it), the group a group of administrators — and
+  never again by itself. A group matches only the members that provider
   claims: a group of provider A never satisfies a rule written for
   provider B. A group without a provider is accepted while one provider
-  is configured, and refused once there are several;
+  is configured, and refused once there are several. Without a rule, the
+  setup names the first administrator;
 - the **telemetry level** (off, plugin-health, plugin-health +
   usage-stats; §9) and the collector URL (default supplied,
   overridable, disableable);
@@ -1290,10 +1312,10 @@ same for any agent, with no value of any mission.
   is bound to the provider that started it: a response for provider A
   never completes an attempt started for provider B. A sign-in is
   admitted only on an email the provider verified, matching that
-  provider's allowed domains, the invitation list or the admin rule (its
-  emails, or its group when the provider claims the person a member) —
-  or, for a tenant provider without allowed domains, any user of the
-  tenant. An unverified email never admits and never makes an
+  provider's allowed domains, the invitation list or the administrators
+  (the person, a pending address for that provider, or a group the
+  provider claims the person a member of) — or, for a tenant provider
+  without allowed domains, any user of the tenant. An unverified email never admits and never makes an
   administrator; a tenant provider may be configured to require the
   provider's verified-email signal too. **Local accounts** hold their
   password hashed with a memory-hard function (argon2id); a wrong password
@@ -1308,7 +1330,11 @@ same for any agent, with no value of any mission.
   absolute lifetime and an idle timeout) and bound to the instance's
   origin; a person, or an administrator for them, can end every session
   of that person at once. Every mutation requires a valid session and an
-  origin check. The sign-in endpoints are rate-limited like every other
+  origin check. **No self-lockout**: unmaking an administrator,
+  deactivating a person, removing a sign-in provider are refused when they
+  would leave no administrator with a way in (an active administrator whose
+  provider is configured); removing a provider ends its users' sessions,
+  never the remover's own. The sign-in endpoints are rate-limited like every other
   anonymous surface.
 - **What a provider says stays with the agent.** A provider's error text
   reaches the calling agent only; the instance logs, stores and shows the
@@ -1372,13 +1398,14 @@ same for any agent, with no value of any mission.
 The operator deploys the image, provides the configuration (§4.3), opens
 the interface with the bootstrap token — typed, or carried by a setup link
 whose fragment holds it, so that the token reaches no log —, downloads the encryption key when
-the instance generated it and confirms having kept it, adds a sign-in provider (or
-declares it in the configuration), signs in through it — which revokes
-the bootstrap token when they match the admin rule —, and invites the
-addresses an open provider should admit. With local accounts, the setup
-creates the first administrator instead — the account of an address of the
-admin rule, with its password, its second factor and its recovery codes —
-and that account's first sign-in revokes the token. They then register one app per
+the instance generated it and confirms having kept it, and names the first
+administrator: with local accounts, the setup creates their account — any
+address, a password; the second factor and the recovery codes at its first
+sign-in —; with a provider of the company, the configuration's admin rule
+names them at the first start. They add a sign-in provider (or declare it
+in the configuration), sign in through it — which revokes the bootstrap
+token when they are an administrator —, and invite the addresses an open
+provider should admit. They then register one app per
 provider in use — in one step from Administration → Company apps where
 the provider offers it (GitHub), otherwise at the provider, entering its
 secrets by hand.
@@ -1510,6 +1537,7 @@ of [gateway-risk-model](./gateway-risk-model.md) §12.
 For an administrative act: timestamp, user, act (connection, share,
 revocation, issuance, extension, reset, approval, rotation, change of
 limits, a member removed or leaving, delegation granted or revoked,
+an administrator named or removed, the configuration's admin rule applied,
 configuration change), object, previous and new
 state when meaningful, and, when the act comes from the management
 surface, the identity of the delegated client.
@@ -1613,6 +1641,12 @@ automated suite. Trust comes from usage.
     a recovery code once; a link once and before its expiry; an unknown
     address and a wrong password get the same answer; no secret in a log,
     an audit entry or a telemetry report;
+  - the administrators (§0, §6): the configuration's rule applied once
+    while the store names nobody — an upgraded instance keeps every
+    administrator of its email or group rule —, a changed rule naming
+    nobody by itself, a pending address consumed by the first sign-in of
+    its provider, and every act that would leave no administrator a way in
+    refused;
   - creating a company app from the interface (§6): the request built
     per permission choice, the `state` single-use, expiring and bound to
     the session, every failure of the exchange, the refusals when the
@@ -1704,8 +1738,10 @@ automated suite. Trust comes from usage.
 - Resources belong to the connection, labelled with an environment by
   the owner; a mission selects a subset per connection (all by default)
   and is refused outside it.
-- After bootstrap, the operator is defined by the admin rule of the
-  instance configuration.
+- After the setup, the operators are the administrators the instance
+  keeps in its store; the configuration's admin rule is a seed applied
+  once, while the store names nobody (ADR
+  [administrators-live-in-the-instance](../decisions/administrators-live-in-the-instance.md)).
 - Several sign-in providers per instance, OpenID Connect and GitHub;
   identities never merge by email; admission by allowed domains, an
   instance-wide invitation list and the admin rule (emails and group), an
@@ -1784,5 +1820,6 @@ overturn. A question an ADR settled is in §11.1.
 _Date: 2026-10-12; §0 "Words", §4.2, §4.4 and §7 aligned with the redesigned
 interface on 2026-10-14; several sign-in providers, invitations and the
 admin rule across providers on 2026-10-14; local accounts, the second factor
-and mail delivery on 2026-10-19. Author: rpelissier + Claude (drafting). Status:
+and mail delivery on 2026-10-19; the administrators kept by the instance on
+2026-10-20. Author: rpelissier + Claude (drafting). Status:
 draft v5 for review._

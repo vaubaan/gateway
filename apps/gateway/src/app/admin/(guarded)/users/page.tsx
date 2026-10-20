@@ -12,6 +12,13 @@
  * joins them. Under the list, the invitations: the addresses administrators
  * allowed to sign in (spec §0 "Invitation"), with "Invite" and "Remove" (asked
  * first: it stops the next sign-ins, not an open session).
+ *
+ * The administrators live here (ADR administrators-live-in-the-instance): "Make
+ * administrator" and "No longer administrator" on a person, and a section listing
+ * every designation — people, addresses waiting for their first sign-in, groups of a
+ * provider — with "Remove". An act that would leave no administrator a way in is
+ * refused. When the configuration's admin rule changed since it was applied, the
+ * section says so and offers to apply it: the configuration grants nothing by itself.
  */
 import styles from '@/components/settings/settings.module.css';
 import { NoticeBanner } from '@/components/connections/parts';
@@ -26,6 +33,7 @@ import {
   Input,
   Mono,
   PageHeader,
+  Select,
   Section,
   type Column,
 } from '@/components/ui';
@@ -41,6 +49,7 @@ import {
 } from '@/lib/vocabulary';
 import { isOperator } from '@/server/auth';
 import { issuerKey } from '@/server/config';
+import type { Designation } from '@/server/store';
 import { USERS_PAGE, type InvitationView, type UserView } from '@/server/users';
 
 export const dynamic = 'force-dynamic';
@@ -59,18 +68,25 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
   const { root, principal } = await requireOperator();
   const params = await searchParams;
   const notice = await takeNotice(root, principal.sessionId, params);
-  const [users, invitations, providers, rule] = await Promise.all([
+  const [users, invitations, providers, administrators, drift] = await Promise.all([
     root.users.service.list(),
     root.users.invitations.list(),
     root.auth.providers.views(),
-    root.auth.providers.adminRule(),
+    root.auth.administrators.current(),
+    root.auth.administrators.configurationDrift(),
   ]);
+  const emailOfUser = new Map(users.map((view) => [view.user.id, view.user.email]));
+  const groupProviders = providers.filter((p) => p.kind !== 'local');
   const local = providers.find((p) => p.kind === 'local') ?? null;
   const sendsMail = root.auth.sendsMail;
   const isLocal = (view: UserView): boolean =>
     local !== null &&
     view.user.issuer !== null &&
     issuerKey(view.user.issuer) === issuerKey(local.issuer);
+  const providerIdOf = (view: UserView): string | null => {
+    const key = view.user.issuer === null ? null : issuerKey(view.user.issuer);
+    return providers.find((p) => issuerKey(p.issuer) === key)?.id ?? null;
+  };
   const providerOf = (view: UserView): string => {
     const key = view.user.issuer === null ? null : issuerKey(view.user.issuer);
     return providers.find((p) => issuerKey(p.issuer) === key)?.name ?? 'a removed provider';
@@ -86,7 +102,16 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
       cell: (view) => {
         const active = view.user.status === 'active';
         const administrator =
-          active && isOperator({ email: view.user.email, groups: view.groupRecords }, rule);
+          active &&
+          isOperator(
+            {
+              id: view.user.id,
+              email: view.user.email,
+              providerId: providerIdOf(view),
+              groups: view.groupRecords,
+            },
+            administrators,
+          );
         const words = qualifiers([
           view.user.id === self && ROLE_WORDS.you,
           administrator && ROLE_WORDS.admin,
@@ -193,9 +218,35 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
                   </form>
                 );
               }
-              if (view.user.id === self) return null;
+              const toggle = administrators.userIds.has(view.user.id) ? (
+                <ConfirmSubmit
+                  action={`${base}/unmake-administrator`}
+                  label="No longer administrator"
+                  ariaLabel={`${view.user.email} no longer administers`}
+                  variant="ghost"
+                  tone="danger"
+                  title={`${nameOf(view)} no longer administers this gateway?`}
+                  consequence="Their next page no longer shows Administration. Refused if nobody else would have a way in."
+                  confirmLabel="Confirm"
+                  testId={`unmake-administrator-${view.user.id}`}
+                />
+              ) : (
+                <form method="post" action={`${base}/make-administrator`}>
+                  <Button
+                    type="submit"
+                    size="sm"
+                    variant="ghost"
+                    aria-label={`Make ${view.user.email} administrator`}
+                    data-testid={`make-administrator-${view.user.id}`}
+                  >
+                    Make administrator
+                  </Button>
+                </form>
+              );
+              if (view.user.id === self) return toggle;
               return (
                 <>
+                  {toggle}
                   {isLocal(view) && (
                     <form method="post" action={`${USERS_PAGE}/local-link`}>
                       <input type="hidden" name="kind" value="reset" />
@@ -276,6 +327,89 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
       </Section>
 
       <Section
+        title="Administrators"
+        note="Who administers this gateway: named here, by the setup, or once by the configuration of its first start — never by the configuration afterwards."
+        testId="administrators"
+      >
+        {drift && (
+          <div data-testid="admin-rule-drift">
+            <Hint>
+              The configuration names{' '}
+              {[
+                drift.configured.emails.length > 0 && drift.configured.emails.join(', '),
+                drift.configured.group && `the group “${drift.configured.group}”`,
+              ]
+                .filter(Boolean)
+                .join(' and ')}{' '}
+              as administrators, which is not what was applied
+              {drift.applied ? '' : ' (nothing was)'}. It does not apply by itself: apply it here if
+              you mean it.
+            </Hint>
+            <ConfirmSubmit
+              action={`${USERS_PAGE}/administrators/apply-configuration`}
+              label="Apply the configuration’s rule"
+              ariaLabel="Apply the configuration’s admin rule"
+              variant="secondary"
+              title="Apply the configuration’s admin rule?"
+              consequence="Every address and group it names becomes an administrator, in your name. Nobody is removed."
+              confirmLabel="Apply"
+              testId="apply-admin-rule"
+            />
+          </div>
+        )}
+        {administrators.designations.length === 0 ? (
+          <Hint>Nobody yet: the setup names the first administrator.</Hint>
+        ) : (
+          <DataTable
+            caption="Administrators of this gateway"
+            columns={designationColumns(emailOfUser)}
+            rows={[...administrators.designations]}
+            rowKey={(d) => d.id}
+            actions={(d) =>
+              d.kind === 'user' ? null : (
+                <ConfirmSubmit
+                  action={`${USERS_PAGE}/administrators/remove`}
+                  fields={{ designation: d.id }}
+                  label={SETTINGS_ACTIONS.remove}
+                  ariaLabel="Remove this administrator"
+                  variant="ghost"
+                  tone="danger"
+                  title="Remove this administrator?"
+                  consequence="Nobody administers through it any more. Refused if nobody else would have a way in."
+                  confirmLabel={SETTINGS_ACTIONS.remove}
+                  testId={`remove-administrator-${d.id}`}
+                />
+              )
+            }
+            testId="administrator-list"
+          />
+        )}
+        {groupProviders.length > 0 && (
+          <form
+            method="post"
+            action={`${USERS_PAGE}/administrators/group`}
+            className={styles.lineForm}
+          >
+            <Field label="Sign-in provider" htmlFor="admin-group-provider">
+              <Select id="admin-group-provider" name="provider" required>
+                {groupProviders.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Group (GitHub: a team, org/team)" htmlFor="admin-group-name">
+              <Input id="admin-group-name" name="group" required autoComplete="off" />
+            </Field>
+            <Button type="submit" variant="secondary">
+              Name the group
+            </Button>
+          </form>
+        )}
+      </Section>
+
+      <Section
         title="Invitations"
         note={
           local
@@ -301,7 +435,7 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
         </form>
         {invitations.length === 0 ? (
           <Hint>
-            Nobody is invited. Only allowed domains and the administrators’ emails are admitted on a
+            Nobody is invited. Only allowed domains and the administrators are admitted on a
             provider where anyone can open an account.
           </Hint>
         ) : (
@@ -348,3 +482,43 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
     </>
   );
 }
+
+/** One designation per row: who, through what, since when. */
+function designationColumns(
+  emailOfUser: ReadonlyMap<string, string>,
+): readonly Column<Designation>[] {
+  return [
+    {
+      id: 'who',
+      header: 'Administrator',
+      cell: (d) =>
+        d.kind === 'user' ? (
+          <span>{emailOfUser.get(d.userId) ?? d.userId}</span>
+        ) : d.kind === 'email' ? (
+          <span>
+            <Mono>{d.email}</Mono>{' '}
+            <span className={styles.quiet}>
+              at their first sign-in{d.provider ? ` through ${d.provider}` : ''}
+            </span>
+          </span>
+        ) : (
+          <span>
+            members of <Mono>{d.groupName}</Mono>
+            {d.provider ? <span className={styles.quiet}> of {d.provider}</span> : null}
+          </span>
+        ),
+    },
+    {
+      id: 'origin',
+      header: 'Named by',
+      cell: (d) => <span className={styles.quiet}>{ORIGIN_WORDS[d.origin]}</span>,
+    },
+  ];
+}
+
+const ORIGIN_WORDS: Readonly<Record<Designation['origin'], string>> = {
+  setup: 'the setup',
+  granted: 'an administrator',
+  configuration: 'the configuration, at its first start',
+  recovered: 'a recovery with the master key',
+};

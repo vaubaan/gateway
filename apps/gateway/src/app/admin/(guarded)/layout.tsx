@@ -51,9 +51,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             />
           }
         >
-          You are signed in, but you do not match its administrator rule (
-          {describeRule(root.config.admin.group, root.config.admin.emails.length)}). Ask an
-          administrator.
+          You are signed in, but you are not one of its administrators. Ask an administrator to make
+          you one, under People.
         </EmptyState>
       </AppShell>
     );
@@ -63,11 +62,4 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       {children}
     </AdminShell>
   );
-}
-
-function describeRule(group: string | null, emailCount: number): string {
-  const parts: string[] = [];
-  if (group) parts.push(`the group "${group}" of its sign-in provider`);
-  if (emailCount > 0) parts.push(`${emailCount} listed ${emailCount === 1 ? 'email' : 'emails'}`);
-  return parts.join(' or ');
 }

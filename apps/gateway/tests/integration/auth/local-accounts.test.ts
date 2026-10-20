@@ -528,16 +528,27 @@ describe('local accounts: invitation link, password sign-in, lockout, reset', ()
       );
       expect(created.headers.get('location') ?? '').toMatch(/^\/admin\?notice=/);
       expect(await root.auth.accounts.accountOf('local', OPS)).not.toBeNull();
-      // Not an address of the rule: refused, with a notice, nothing created.
+      // The account administers from its creation: named in the store by the setup.
+      const account = await root.auth.accounts.accountOf('local', OPS);
+      const user = await root.store.users.getByIdentity(
+        'urn:vaubaan:local:local',
+        account?.id ?? '',
+      );
+      expect(user?.lastLoginAt).toBeNull();
+      expect(await root.store.administrators.ofUser(user?.id ?? '')).toMatchObject({
+        origin: 'setup',
+        grantedBy: 'bootstrap',
+      });
+      // Two different passwords: refused, with a notice, nothing created.
       const refused = await root.users.handlers.createFirstAdministrator(
         formWith(`${SESSION_COOKIE}=${bootstrap.id}`, {
-          email: 'mallory@example.com',
+          email: 'second@example.com',
           password: 'the operator sentence',
-          password_again: 'the operator sentence',
+          password_again: 'another sentence entirely',
         }),
       );
       expect(refused.headers.get('location') ?? '').toMatch(/^\/admin\?notice=/);
-      expect(await root.auth.accounts.accountOf('local', 'mallory@example.com')).toBeNull();
+      expect(await root.auth.accounts.accountOf('local', 'second@example.com')).toBeNull();
       expect((await root.auth.bootstrap.state()).status).toBe('active');
       // The first sign-in: password, then the enrolment, then the session — and the token is revoked.
       const first = await signIn(OPS, 'the operator sentence');

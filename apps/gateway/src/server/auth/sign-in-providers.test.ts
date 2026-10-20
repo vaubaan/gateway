@@ -46,7 +46,7 @@ describe('SignInProvidersService', () => {
     const legacy = new IdpSettingsService(idp, t.store.config);
     return new SignInProvidersService(
       { idp, signIn: options.file?.signIn ?? [] },
-      options.rule ?? { group: null, emails: ['ops@example.com'] },
+      async () => (options.rule?.group ? [options.rule.group] : []),
       legacy,
       t.store.config,
       CLOCK,
@@ -125,14 +125,12 @@ describe('SignInProvidersService', () => {
     const s = service({ rule: { group: 'gateway-admins', emails: [] } });
     await s.save(COMPANY, 'create');
     await expect(s.save(GITHUB, 'create')).rejects.toMatchObject({
-      problems: [expect.stringContaining('<provider>:<group>')],
+      problems: [expect.stringContaining('does not say which provider claims it')],
     });
     // Named with its provider, the rule allows both.
     const named = service({ rule: { group: 'company:gateway-admins', emails: [] } });
-    await named.save(GITHUB, 'create');
-    expect((await named.adminRule()).group).toEqual({
-      provider: 'company',
-      name: 'gateway-admins',
+    await expect(named.save(GITHUB, 'create')).resolves.toMatchObject({
+      saved: { id: 'github' },
     });
   });
 
@@ -171,7 +169,7 @@ describe('SignInProvidersService — what an OpenID Connect issuer must be', () 
   function service(): SignInProvidersService {
     return new SignInProvidersService(
       { idp: null, signIn: [] },
-      { group: null, emails: ['ops@example.com'] },
+      async () => [],
       new IdpSettingsService(null, t.store.config),
       t.store.config,
       CLOCK,

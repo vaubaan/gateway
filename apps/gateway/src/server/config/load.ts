@@ -444,7 +444,7 @@ function validate(
   const level = readLogLevel(r);
 
   if (issues.items.length > before) return null;
-  if (!publicUrl || !storePath || !encryption || !admin || !collectorUrl) return null;
+  if (!publicUrl || !storePath || !encryption || !collectorUrl) return null;
   // An absent key file the boot tolerates: the block is complete but for the key
   // itself, which the caller takes out again (`SetupOutcome`).
 
@@ -1091,7 +1091,7 @@ function checkSignInProviders(
   return all;
 }
 
-function readAdmin(r: Reader, signInProviders: readonly SignInProvider[]): AdminRule | null {
+function readAdmin(r: Reader, signInProviders: readonly SignInProvider[]): AdminRule {
   const group = r.string('admin.group') ?? null;
   const emails = r.stringList('admin.emails').map((e) => e.toLowerCase());
   for (const email of emails) {
@@ -1111,14 +1111,8 @@ function readAdmin(r: Reader, signInProviders: readonly SignInProvider[]): Admin
         )
       : null;
   if (groupProblem) r.issues.add('admin.group', groupProblem, envNamesFor('admin.group'));
-  if (group === null && emails.length === 0) {
-    r.issues.add(
-      'admin',
-      'the admin rule needs admin.group (an IdP group name) or admin.emails (a non-empty list)',
-      [...envNamesFor('admin.group'), ...envNamesFor('admin.emails')],
-    );
-    return null;
-  }
+  // Optional: a seed the boot applies while the store names no administrator (ADR
+  // administrators-live-in-the-instance). Without one the setup names the first.
   return { group, emails };
 }
 

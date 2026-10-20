@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { RESTORED_ADMIN_RULE_KEY, withRestoredAdminRule } from '../auth/admin-rule';
+import { RESTORED_ADMIN_RULE_KEY } from '../auth/restored-admin-rule';
 import { IdpSettingsService } from '../auth/idp-settings';
 import { SignInProvidersService } from '../auth/sign-in-providers';
 import { loadInstanceConfig, type InstanceConfig } from '../config';
@@ -64,13 +64,11 @@ async function open(path: string, config: InstanceConfig): Promise<Store> {
   return openStore({ path, encryptor, catalog: new SetCatalogIndex([]) });
 }
 
-async function providersOf(config: InstanceConfig, store: Store) {
-  const merged = await withRestoredAdminRule(config.admin, store.config);
+function providersOf(config: InstanceConfig, store: Store) {
   return {
-    merged,
     service: new SignInProvidersService(
       config,
-      merged.rule,
+      async () => [],
       new IdpSettingsService(config.idp, store.config),
       store.config,
       clock,
@@ -129,7 +127,7 @@ describe('a backup carries the sign-in configuration', () => {
     const { config } = load(targetPath, TARGET_SIGN_IN);
     const store = await open(targetPath, config);
     try {
-      const { service, merged } = await providersOf(config, store);
+      const { service } = providersOf(config, store);
       const views = await service.views();
       expect(views.map((v) => [v.id, v.source])).toEqual([
         ['vaubaan', 'file'],
@@ -147,11 +145,9 @@ describe('a backup carries the sign-in configuration', () => {
       expect(entra.provider.claims.emailVerified).toBe('xms_edov');
       expect(entra.provider.invitationOnly).toBe(true);
 
-      // The admin rule: the new host's plus the carried one.
-      expect(merged.carried).toBe(true);
-      expect(merged.rule.group).toBe('entra:admins');
-      expect(merged.rule.emails).toEqual(['support@vaubaan.example', 'boss@fiabilis.example']);
-      expect((await service.adminRule()).group).toEqual({ provider: 'entra', name: 'admins' });
+      // No admin rule is carried: the administrators are rows of the copied store
+      // (ADR administrators-live-in-the-instance).
+      expect(await store.config.get(RESTORED_ADMIN_RULE_KEY)).toBeNull();
 
       // An edit in the form keeps what the form does not show.
       await service.save(
@@ -190,22 +186,18 @@ describe('a backup carries the sign-in configuration', () => {
     });
     const store = await open(targetPath, config);
     try {
-      const { service, merged } = await providersOf(config, store);
+      const { service } = providersOf(config, store);
       const entra = await service.resolve('entra');
       expect(entra?.source).toBe('file');
       if (entra?.provider.kind !== 'oidc') throw new Error('not oidc');
       expect(entra.provider.clientSecret).toBe(OTHER_SECRET);
       expect((await service.views()).filter((v) => v.id === 'entra')).toHaveLength(1);
-      // One group per rule: the configured one; the carried one is reported as dropped.
-      expect(merged.rule.group).toBe('entra:operators');
-      expect(merged.droppedGroup).toBe('entra:admins');
-      expect(merged.rule.emails).toContain('boss@fiabilis.example');
     } finally {
       await store.close();
     }
   });
 
-  it('a backup of a restored instance carries the merged rule again', async () => {
+  it('a backup of a restored instance carries its providers again', async () => {
     const targetPath = restoredPath(await backup());
     let second = '';
     const code = await runBackupCli(
@@ -218,15 +210,8 @@ describe('a backup carries the sign-in configuration', () => {
     const { config } = load(againPath, {});
     const store = await open(againPath, config);
     try {
-      const { merged, service } = await providersOf(config, store);
-      expect(merged.rule.group).toBe('entra:admins');
-      expect(merged.rule.emails).toEqual(
-        expect.arrayContaining([
-          'ops@example.com',
-          'support@vaubaan.example',
-          'boss@fiabilis.example',
-        ]),
-      );
+      const { service } = providersOf(config, store);
+      expect(await store.config.get(RESTORED_ADMIN_RULE_KEY)).toBeNull();
       expect((await service.views()).map((v) => v.id).sort()).toEqual([
         'entra',
         'local',
