@@ -292,7 +292,18 @@ describe('the Entra ID preset', () => {
     expect(entraIssuer(' Contoso.onmicrosoft.com ')?.href).toBe(
       'https://login.microsoftonline.com/contoso.onmicrosoft.com/v2.0',
     );
-    for (const bad of ['', 'common', 'organizations', 'consumers', 'not a tenant', 'a/b']) {
+    for (const bad of [
+      '',
+      'common',
+      'organizations',
+      'consumers',
+      'not a tenant',
+      'a/b',
+      '-contoso.com',
+      'contoso-.com',
+      'contoso..com',
+      '.com',
+    ]) {
       expect(entraIssuer(bad)).toBeNull();
     }
   });

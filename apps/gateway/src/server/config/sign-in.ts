@@ -332,9 +332,24 @@ export const GOOGLE_ISSUER = 'https://accounts.google.com';
 export const ENTRA_ISSUER_PREFIX = 'https://login.microsoftonline.com/';
 export const ENTRA_ISSUER_SUFFIX = '/v2.0';
 
-/** A tenant id (a GUID) or a tenant domain (`contoso.onmicrosoft.com`, `contoso.com`). */
-const ENTRA_TENANT =
-  /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+)$/i;
+/** A tenant id: a GUID (fixed length, so the check cannot backtrack). */
+const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const DOMAIN_LABEL = /^[a-z0-9-]+$/;
+
+/**
+ * A tenant id (a GUID) or a tenant domain (`contoso.onmicrosoft.com`, `contoso.com`):
+ * two labels or more of letters, digits and hyphens, none starting or ending with a
+ * hyphen. Written as a walk over the labels rather than one regular expression, so
+ * that no input can make the check backtrack.
+ */
+function isEntraTenant(value: string): boolean {
+  if (GUID.test(value)) return true;
+  const labels = value.split('.');
+  if (labels.length < 2) return false;
+  return labels.every(
+    (label) => DOMAIN_LABEL.test(label) && !label.startsWith('-') && !label.endsWith('-'),
+  );
+}
 
 /**
  * The issuer of an Entra ID tenant, or `null` when `tenant` is neither a GUID nor a
@@ -344,7 +359,7 @@ const ENTRA_TENANT =
  */
 export function entraIssuer(tenant: string): URL | null {
   const trimmed = tenant.trim().toLowerCase();
-  if (!ENTRA_TENANT.test(trimmed)) return null;
+  if (!isEntraTenant(trimmed)) return null;
   return new URL(`${ENTRA_ISSUER_PREFIX}${trimmed}${ENTRA_ISSUER_SUFFIX}`);
 }
 
@@ -353,5 +368,5 @@ export function entraTenantOf(issuer: URL): string | null {
   const key = issuerKey(issuer);
   if (!key.startsWith(ENTRA_ISSUER_PREFIX) || !key.endsWith(ENTRA_ISSUER_SUFFIX)) return null;
   const tenant = key.slice(ENTRA_ISSUER_PREFIX.length, -ENTRA_ISSUER_SUFFIX.length);
-  return ENTRA_TENANT.test(tenant) ? tenant : null;
+  return isEntraTenant(tenant) ? tenant : null;
 }

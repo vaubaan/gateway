@@ -12,6 +12,7 @@
 import styles from '@/components/settings/settings.module.css';
 import { Button, ButtonLink, CodeBlock, Field, Input, Radio } from '@/components/ui';
 import { ACTIONS, SETTINGS_ACTIONS } from '@/lib/vocabulary';
+import { ENTRA_ISSUER_PREFIX, ENTRA_ISSUER_SUFFIX } from '@/server/config';
 
 export type AdmissionChoice = 'everyone' | 'domains' | 'invited';
 
@@ -99,7 +100,7 @@ export function SignInProviderForm({
           label="Tenant"
           shape="the tenant ID (a GUID) or the tenant domain"
           htmlFor={`${prefix}-tenant`}
-          hint="From the Entra admin center, Overview of your tenant. The issuer becomes https://login.microsoftonline.com/<tenant>/v2.0."
+          hint={`From the Entra admin center, Overview of your tenant. The issuer becomes ${ENTRA_ISSUER_PREFIX}<tenant>${ENTRA_ISSUER_SUFFIX}.`}
         >
           <Input
             id={`${prefix}-tenant`}
