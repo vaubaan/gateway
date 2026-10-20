@@ -538,6 +538,8 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
   const users = createUsersModule({
     config,
     administrators: auth.administrators,
+    bootstrap: auth.bootstrap,
+    masterKey: masterKey.service,
     store,
     membership: authority.membership,
     delegations: oauth.delegations,

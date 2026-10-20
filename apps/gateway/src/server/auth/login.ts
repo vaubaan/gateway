@@ -1,7 +1,8 @@
 /**
  * What a successful IdP sign-in does to the store (plan §3.4):
- * `users` upsert, IdP-sourced memberships replaced, bootstrap token revoked
- * on the first operator sign-in. Authority is never cached here: callers
+ * `users` upsert, IdP-sourced memberships replaced, a pending administrator
+ * address consumed. It revokes nothing: the setup ends by its own explicit step
+ * (ADR administrators-live-in-the-instance, §8). Authority is never cached here: callers
  * recompute it with `currentAuthority()` on every check (spec §10).
  *
  * A user an operator deactivated does not sign in: the identity provider
@@ -12,7 +13,7 @@
 import { LEGACY_PROVIDER_ID } from '../config/sign-in';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
-import { systemClock, toIso, type Clock } from '../store/clock';
+import type { Clock } from '../store/clock';
 import type { GroupRecord, UserRecord } from '../store/types';
 import {
   isOperator,
@@ -30,8 +31,6 @@ export interface Authority {
 
 export interface LoginOutcome extends Authority {
   readonly user: UserRecord;
-  /** True when this sign-in revoked the bootstrap token. */
-  readonly bootstrapRevoked: boolean;
 }
 
 export interface LoginDeps {
@@ -169,30 +168,11 @@ export async function completeLogin(
     context.providerId,
   );
 
-  let bootstrapRevoked = false;
-  if (authority.isOperator && (await deps.bootstrap.state()).status === 'active') {
-    const revoked = await deps.bootstrap.revoke();
-    bootstrapRevoked = true;
-    await deps.store.auditWriter.write({
-      kind: 'admin',
-      ts:
-        revoked.status === 'revoked' ? revoked.revokedAt : toIso((deps.clock ?? systemClock).now()),
-      user_id: user.id,
-      act: 'config-changed',
-      object: { type: 'instance-config', id: 'bootstrap' },
-      before: { status: 'active' },
-      after: { status: revoked.status },
-      delegated_client_id: null,
-    });
-    deps.logger.info('bootstrap token revoked after the first operator sign-in', {
-      user_id: user.id,
-    });
-  }
   deps.logger.info('user signed in', {
     user_id: user.id,
     provider: context.providerId,
     groups: authority.groups.length,
     operator: authority.isOperator,
   });
-  return { user, ...authority, bootstrapRevoked };
+  return { user, ...authority };
 }

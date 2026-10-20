@@ -177,17 +177,20 @@ tested without Next.
 | Provider(s), token active | both: bootstrap token **or** a provider's sign-in           | bootstrap holder, and every administrator |
 | Token revoked (or absent) | a provider's sign-in only                                   | every **administrator** the store names   |
 
-The transition happens on the **first sign-in of an administrator**:
-`completeLogin()` writes `bootstrap.revoked_at` into `instance_config`
-(`BootstrapService.revoke()`) and an administrative audit entry
-(`config-changed` on `instance-config` / `bootstrap`, in that user's name); the
-token is refused from then on even if it is still present in the configuration, and open bootstrap sessions stop being
-a principal at their next `authenticate()`, on every surface. A non-operator signing in first does not revoke
-anything (that would lock the instance). When the IdP is set in the mounted
+The transition is an **explicit step** (ADR
+administrators-live-in-the-instance §8): "Finish setup" on `/admin`
+(`POST /api/admin/setup/finish`, `users.handlers.finishSetup`, an
+administrator or the bootstrap principal) is allowed when the generated master
+key was handed over and `AdministratorsService.withAWayIn()` is not empty
+(`setupCannotFinish` says otherwise, on the checklist too); it writes
+`bootstrap.revoked_at` (`BootstrapService.revoke()`) and one `setup-finished`
+entry on `instance-config` / `bootstrap`. The token is refused from then on even
+if it is still present in the configuration, and open bootstrap sessions stop
+being a principal at their next `authenticate()`, on every surface. **No sign-in
+revokes it** — an upgraded instance whose token was still active keeps its setup
+open until an administrator finishes it. When the IdP is set in the mounted
 configuration the token is optional: without one,
-`InstanceConfig.bootstrapToken` is `null` and the state is `unavailable`; one
-given next to the IdP is kept and stays `active` until the first operator
-sign-in. A store that names no administrator, with no token and no admin rule
+`InstanceConfig.bootstrapToken` is `null` and the state is `unavailable`. A store that names no administrator, with no token and no admin rule
 in the configuration, has no way to a first administrator: `buildRoot`
 (`settleAdministrators`) refuses to start with a `ConfigError` on
 `bootstrap_token` (exit 78).
@@ -1159,9 +1162,8 @@ creates the account of **any address** with its password
 (`users.handlers.createFirstAdministrator`), its `users` row
 (`ensureIdentity`, no sign-in counted) and a `user` designation (`origin:
 setup`, ADR administrators-live-in-the-instance §4); that account's first
-sign-in enrols the second factor, shows the recovery codes and — being an
-operator's — revokes the bootstrap token as `completeLogin` does for every
-first operator sign-in.
+sign-in enrols the second factor and shows the recovery codes. "Finish setup"
+then retires the bootstrap token.
 
 **Audit** (object `instance-config` / `local-account:<provider>`):
 `local-link-created` (kind, address, expiry — never the link),

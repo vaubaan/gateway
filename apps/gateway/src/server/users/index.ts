@@ -6,6 +6,7 @@
  */
 import type { AdministratorsService } from '../auth/administrators';
 import type { Authenticator } from '../auth/authenticator';
+import type { BootstrapService } from '../auth/bootstrap';
 import type { LocalAccountsService } from '../auth/local-accounts';
 import type { LinkMailer } from '../auth/local-handlers';
 import type { SessionService } from '../auth/session-service';
@@ -26,6 +27,10 @@ export interface UsersModuleDeps {
   readonly config: Pick<InstanceConfig, 'publicUrl'>;
   /** The designations of the administrators. */
   readonly administrators: AdministratorsService;
+  /** The install token the setup ends by revoking. */
+  readonly bootstrap: Pick<BootstrapService, 'state' | 'revoke'>;
+  /** Whether the generated master key still waits for its handover. */
+  readonly masterKey: { state(): Promise<{ readonly handoverPending: boolean }> };
   readonly store: Store;
   readonly membership: Pick<MembershipSettler, 'watch'>;
   readonly delegations: Pick<DelegationService, 'revokeAllOf'>;
@@ -76,6 +81,10 @@ export function createUsersModule(deps: UsersModuleDeps): UsersModule {
     accounts: deps.accounts,
     providers: deps.providers,
     administrators: deps.administrators,
+    bootstrap: deps.bootstrap,
+    masterKey: deps.masterKey,
+    audit: deps.store.auditWriter,
+    clock: deps.clock ?? systemClock,
     mailer: deps.mailer,
     notices: deps.connections.notices,
     logger,
@@ -92,7 +101,9 @@ export {
 export {
   ADMIN_SETUP_PAGE,
   createUserAdminHandlers,
+  FINISH_SETUP_ACTION,
   FIRST_ADMINISTRATOR_PAGE,
+  setupCannotFinish,
   USERS_PAGE,
   type UserAdminHandlers,
 } from './handlers';

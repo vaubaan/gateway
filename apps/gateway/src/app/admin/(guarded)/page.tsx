@@ -25,6 +25,7 @@ import {
   Callout,
   Checkbox,
   CheckMark,
+  ConfirmSubmit,
   Field,
   Hint,
   Input,
@@ -78,7 +79,7 @@ import {
   type MasterKeyProblem,
 } from '@/server/master-key';
 
-import { FIRST_ADMINISTRATOR_PAGE } from '@/server/users';
+import { FIRST_ADMINISTRATOR_PAGE, FINISH_SETUP_ACTION, setupCannotFinish } from '@/server/users';
 
 export const dynamic = 'force-dynamic';
 
@@ -207,6 +208,14 @@ export default async function SetupPage({ searchParams }: Props) {
   const firstAdministrator: 'done' | 'todo' | null =
     local && bootstrap.status === 'active' ? (rule.userIds.size > 0 ? 'done' : 'todo') : null;
   const drift = await root.auth.administrators.configurationDrift();
+  // The setup ends by its own step (ADR administrators-live-in-the-instance, §8).
+  const finishProblem =
+    bootstrap.status === 'active'
+      ? await setupCannotFinish({
+          administrators: root.auth.administrators,
+          masterKey: root.masterKey.service,
+        })
+      : null;
 
   const steps: Step[] = [
     ...(key.generatedAt !== null
@@ -294,7 +303,7 @@ export default async function SetupPage({ searchParams }: Props) {
             title: 'The first administrator’s account',
             description:
               firstAdministrator === 'done'
-                ? 'An administrator is named. Its first sign-in sets the second factor up and retires the bootstrap token.'
+                ? 'An administrator is named. Its first sign-in sets the second factor up; then finish the setup.'
                 : 'Local accounts are set up: create the first administrator’s account, then sign in with it.',
             action:
               firstAdministrator === 'todo'
@@ -313,6 +322,20 @@ export default async function SetupPage({ searchParams }: Props) {
           ? `${listOf(administrators.map((view) => view.user.displayName ?? view.user.email))}.`
           : 'Nobody named administrator has signed in yet.',
     },
+    ...(bootstrap.status === 'active'
+      ? [
+          {
+            key: 'finish-setup',
+            counted: true,
+            state: 'todo' as CheckState,
+            title: 'Finish the setup',
+            description:
+              finishProblem ??
+              'An administrator can sign in: finish the setup to retire the install token.',
+            action: finishProblem ? undefined : { label: 'Finish setup', href: '#finish-setup' },
+          },
+        ]
+      : []),
     ...(ownerless.length > 0
       ? [
           {
@@ -449,6 +472,27 @@ export default async function SetupPage({ searchParams }: Props) {
         </Section>
       )}
 
+      {bootstrap.status === 'active' && (
+        <Section title="Finish the setup" id="finish-setup" testId="finish-setup">
+          <Hint>
+            {finishProblem ??
+              'The install token and the setup link stop opening anything. Do it once an administrator has signed in, or can.'}
+          </Hint>
+          {!finishProblem && (
+            <ConfirmSubmit
+              action={FINISH_SETUP_ACTION}
+              label="Finish setup"
+              ariaLabel="Finish the setup"
+              variant="primary"
+              title="Finish the setup?"
+              consequence="The install token and the setup link stop working for good. From then on people sign in through the providers that are on; a lost way in is recovered with the master key."
+              confirmLabel="Finish setup"
+              testId="finish-setup-button"
+            />
+          )}
+        </Section>
+      )}
+
       <Section
         title={SECTIONS.administrators}
         note="Named in this gateway, under People. The configuration's rule names them once, at the first start, and never again by itself."
@@ -496,11 +540,11 @@ export default async function SetupPage({ searchParams }: Props) {
               term: 'Install token',
               value:
                 bootstrap.status === 'active' ? (
-                  'Still valid: it is revoked at the first sign-in of an administrator.'
+                  'Still valid: it is revoked when the setup is finished, below.'
                 ) : bootstrap.status === 'revoked' ? (
                   <>
-                    Revoked on <LocalDate ts={bootstrap.revokedAt} dateOnly />, at the first sign-in
-                    of an administrator. Nothing to do.
+                    Revoked on <LocalDate ts={bootstrap.revokedAt} dateOnly />, when the setup
+                    ended. Nothing to do.
                   </>
                 ) : (
                   'None was configured.'

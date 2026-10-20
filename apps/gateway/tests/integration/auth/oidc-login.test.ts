@@ -234,7 +234,7 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
     });
   });
 
-  it('bootstrap: the token opens /admin while no IdP is configured, is revoked by the first operator sign-in, then refused', async () => {
+  it('bootstrap: the token opens /admin while no IdP is configured, is revoked by "Finish setup", then refused', async () => {
     const b: Browser = { cookies: new Map() };
     const post = (token: string, origin: string | null = PUBLIC_URL) =>
       root.auth.handlers.bootstrapLogin(
@@ -311,12 +311,25 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
     await signIn(dev, { sub: 'idp|dev', email: 'dev@example.com', groups: ['dev'] });
     expect(await root.auth.bootstrap.state()).toEqual({ status: 'active' });
 
-    // the first operator sign-in does
+    // nor does an operator's sign-in: the setup ends by its own step
+    // (ADR administrators-live-in-the-instance, §8)
     const ops: Browser = { cookies: new Map() };
     await signIn(ops, { sub: 'idp|ops', email: 'ops@example.com', groups: [] });
+    expect(await root.auth.bootstrap.state()).toEqual({ status: 'active' });
+    const finished = await root.users.handlers.finishSetup(
+      new Request(`${PUBLIC_URL}/api/admin/setup/finish`, {
+        method: 'POST',
+        headers: headersOf(b, {
+          origin: PUBLIC_URL,
+          'content-type': 'application/x-www-form-urlencoded',
+        }),
+        body: '',
+      }),
+    );
+    expect(finished.status).toBe(303);
     expect(await root.auth.bootstrap.state()).toMatchObject({ status: 'revoked' });
     expect(await root.store.config.get(BOOTSTRAP_REVOKED_KEY)).toMatch(/^\d{4}-/);
-    expect(lines.join('\n')).toContain('bootstrap token revoked');
+    expect(lines.join('\n')).toContain('setup finished');
 
     // refused from now on: new attempts and the existing bootstrap session alike
     const late = await post(TEST_BOOTSTRAP_TOKEN);

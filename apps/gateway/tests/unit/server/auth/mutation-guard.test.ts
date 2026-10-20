@@ -341,6 +341,9 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       post('/admin/users/administrators/apply-configuration', headers, {}),
     ),
   ),
+  'users.handlers.finishSetup': form('operator', 303, (rig, headers) =>
+    rig.root.users.handlers.finishSetup(post('/api/admin/setup/finish', headers, {})),
+  ),
   'users.handlers.resetSecondFactor': form('operator', 303, (rig, headers) =>
     rig.root.users.handlers.resetSecondFactor(
       post('/admin/users/none/reset-second-factor', headers, {}),

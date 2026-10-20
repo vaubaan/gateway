@@ -341,3 +341,51 @@ describe('administrators live in the instance', () => {
     expect(await root.auth.authenticator.authenticate(peerHeaders)).toBeNull();
   });
 });
+
+describe('the setup ends by an explicit step', () => {
+  it('"Finish setup" is refused while no administrator has a way in, then revokes the token and its sessions', async () => {
+    const root = await boot({ store: null }, { VAUBAAN_ADMIN_EMAILS: undefined });
+    try {
+      const session = await root.auth.sessions.create({ kind: 'bootstrap' });
+      const bootstrap = new Headers({ cookie: `${SESSION_COOKIE}=${session.id}` });
+      const finish = () =>
+        root.users.handlers.finishSetup(post('/api/admin/setup/finish', bootstrap));
+
+      await finish();
+      expect((await root.auth.bootstrap.state()).status).toBe('active');
+
+      // A local administrator named by the setup is a way in.
+      await root.auth.providers.save(
+        {
+          id: 'local',
+          kind: 'local',
+          name: '',
+          issuer: '',
+          clientId: '',
+          clientSecret: null,
+          allowedEmailDomains: [],
+          invitationOnly: true,
+        },
+        'create',
+      );
+      await root.users.handlers.createFirstAdministrator(
+        post('/admin/users/first-administrator', bootstrap, {
+          email: 'first@example.com',
+          password: 'a sentence long enough',
+          password_again: 'a sentence long enough',
+        }),
+      );
+      // Nothing revokes the token by itself any more; the explicit step does.
+      expect((await root.auth.bootstrap.state()).status).toBe('active');
+      await finish();
+      expect((await root.auth.bootstrap.state()).status).toBe('revoked');
+      expect(await root.auth.authenticator.authenticate(bootstrap)).toBeNull();
+      const acts = (await root.store.audit.list({ kind: 'admin' })).flatMap((e) =>
+        e.kind === 'admin' ? [e.act] : [],
+      );
+      expect(acts).toContain('setup-finished');
+    } finally {
+      await root.close();
+    }
+  });
+});

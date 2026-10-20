@@ -1620,7 +1620,9 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   refuses; a pending address bound to a provider is consumed by the first
   sign-in through it, not another; no self-lockout (unmake, provider removal,
   deactivation of the last administrator with a way in refused); removing a
-  provider ends its users' sessions, not the remover's.
+  provider ends its users' sessions, not the remover's; "Finish setup" refused
+  while no administrator has a way in, then revoking the token and its
+  sessions, with `setup-finished` (8 in all).
 - **`tests/integration/auth/provider-test.test.ts`** (6) — ADR
   [[administrators-live-in-the-instance]] §5: a new provider saved off, not
   offered, refused at sign-in (`provider-disabled`) and not switched on
