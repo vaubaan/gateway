@@ -36,7 +36,7 @@ export function AccountSections() {
                 unavailable
                 lead={<ServiceMark name="Railway" />}
                 title="Railway"
-                description="needs a company app · ask an administrator"
+                description="needs its OAuth client · ask an administrator"
               />
             </PickGrid>
           )}

@@ -5,7 +5,7 @@
  * configuration holds.
  *
  * Each line is read from the service that owns the fact: sign-in from the
- * identity-provider settings, company apps from `ProviderAppsService`, the
+ * identity-provider settings, the OAuth clients from `ProviderAppsService`, the
  * accounts without owner from `ConnectionService.listOwnerless`, the apps that
  * wait from the client registry, telemetry from its overview, the name from
  * `InstanceNameService`. Nothing is decided here.

@@ -80,7 +80,7 @@ function isMultiline(field: CredentialField): boolean {
  *
  * Each label is bound to its input through `credentialFieldId(idPrefix,
  * name)`. `idPrefix` must be unique on the page: a page that renders several
- * lists (Settings → Company apps, one per service) gives each its own.
+ * forms (the connect form and the OAuth-client form of a service) gives each its own.
  *
  * The shape a value must have is said before the person types: in the label,
  * read from the plugin's `pattern` (`shapeOfPattern`), in the field as its

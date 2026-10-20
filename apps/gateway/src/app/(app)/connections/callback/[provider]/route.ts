@@ -1,6 +1,6 @@
 /**
  * `GET /connections/callback/<provider>` — where the provider sends the
- * browser back (OAuth redirect URI, app-installation setup URL). The
+ * browser back (the OAuth redirect URI). The
  * single-use `state` of the query string names the pending flow. One-line
  * adapter over the host-agnostic handler.
  */

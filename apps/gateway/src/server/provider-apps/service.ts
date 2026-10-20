@@ -139,7 +139,7 @@ export class ProviderAppsService {
 
   /**
    * The complete app configuration, secrets included — for the host's own
-   * flows (OAuth client authentication, installation URL). Throws
+   * flows (OAuth client authentication). Throws
    * `ProviderAppNotConfigured` naming the missing fields.
    */
   async hostAppConfig(providerId: string): Promise<ProviderAppConfig> {

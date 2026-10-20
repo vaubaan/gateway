@@ -147,10 +147,10 @@ export function StateSections() {
                 end="done"
               />
               <Row
-                lead={<CheckMark state="partial" partial="2/3" />}
-                title="Company apps"
-                description="GitHub and Supabase are registered. Railway is not: nobody can connect a Railway account until it is."
-                end={<Button size="sm">Register Railway</Button>}
+                lead={<CheckMark state="todo" />}
+                title="OAuth clients"
+                description="Gmail is not declared: nobody can connect a Gmail account until it is."
+                end={<Button size="sm">Declare Gmail</Button>}
               />
               <Row
                 lead={<CheckMark state="todo" />}
