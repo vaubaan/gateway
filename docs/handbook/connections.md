@@ -310,12 +310,11 @@ Basic` with form-encoded id and secret (RFC 6749 §2.3.1),
   (`firstDiscovery`), then writes (`persist`: create or reconnect, audited),
   then records the discovery's outcome. Discovery policy per kind:
 
-  | Policy                | Kind      | A failed discovery…                                                                        |
-  | --------------------- | --------- | ------------------------------------------------------------------------------------------ |
-  | `required`            | `api-key` | refuses the connection (`credential-rejected` / `provider-unreachable`); nothing is stored |
-  | `best-effort`         | `oauth2`  | keeps the connection, records the error (the authorization code is spent)                  |
-  | `deferred`            | `ssh-key` | is not attempted: the public key is not installed yet                                      |
-  | `reject-auth-failure` | —         | refuses only on `UpstreamAuthError`; no shipped kind uses it since the GitHub App left     |
+  | Policy        | Kind      | A failed discovery…                                                                        |
+  | ------------- | --------- | ------------------------------------------------------------------------------------------ |
+  | `required`    | `api-key` | refuses the connection (`credential-rejected` / `provider-unreachable`); nothing is stored |
+  | `best-effort` | `oauth2`  | keeps the connection, records the error (the authorization code is spent)                  |
+  | `deferred`    | `ssh-key` | is not attempted: the public key is not installed yet                                      |
 
   The `detail` of the error is the provider's status in the gateway's own
   words (`providerFailureReason`, `connections/failure-reason.ts`: "the

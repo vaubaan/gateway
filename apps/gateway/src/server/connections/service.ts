@@ -314,8 +314,6 @@ export interface ConnectionServiceDeps {
 type DiscoveryPolicy =
   /** Any failure refuses the connection: the user can simply retry (api-key form). */
   | 'required'
-  /** Only a rejection by the provider refuses it (a forged installation id). */
-  | 'reject-auth-failure'
   /** The credential is kept whatever happens: the authorization code is spent. */
   | 'best-effort'
   /** Not attempted: the public key is not installed yet (ssh-key). */
@@ -790,7 +788,7 @@ export class ConnectionService {
       return { resources, error: null };
     } catch (err) {
       const rejected = err instanceof UpstreamAuthError;
-      if (policy === 'required' || (policy === 'reject-auth-failure' && rejected)) {
+      if (policy === 'required') {
         throw new ConnectError(
           rejected || !isTransportFailure(err) ? 'credential-rejected' : 'provider-unreachable',
           `${plugin.displayName}: ${providerFailureReason(err)}`,
