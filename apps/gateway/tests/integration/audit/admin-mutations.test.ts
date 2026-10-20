@@ -1176,6 +1176,9 @@ const RULES: Readonly<Record<string, Rule>> = {
   'SignInProvidersService.ofIssuer': READ,
   'SignInProvidersService.adminRule': READ,
   'SignInProvidersService.isReadOnly': READ,
+  'SignInProvidersService.carryIntoStore': exempt(
+    'the backup command writes it into its copy of the store, never into the live store: nobody acts on this instance (ADR backup-carries-the-sign-in-configuration)',
+  ),
   'SignInProvidersService.save': {
     kind: 'mutation',
     target: (root) => root.auth.providers,

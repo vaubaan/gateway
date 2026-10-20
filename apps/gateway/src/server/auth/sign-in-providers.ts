@@ -42,7 +42,13 @@ import {
 } from '../config/sign-in';
 import type { AdminRule, IdpClaimMapping, InstanceConfig } from '../config/types';
 import type { ConfigRepo, ConfigWrite } from '../store/repositories/config';
-import { resolveAdminRule, type ResolvedAdminRule } from './admin-rule';
+import {
+  RESTORED_ADMIN_RULE_KEY,
+  resolveAdminRule,
+  serializeRestoredAdminRule,
+  withRestoredAdminRule,
+  type ResolvedAdminRule,
+} from './admin-rule';
 import { IdpSettingsError } from './errors';
 import { DEFAULT_CLAIM_MAPPING, IDP_CONFIG_KEYS, type IdpSettingsService } from './idp-settings';
 
@@ -112,7 +118,15 @@ interface StoredSettings {
   readonly claims?: IdpClaimMapping;
   readonly allowed_email_domains: readonly string[];
   readonly invitation_only: boolean;
+  /** OpenID Connect only: `requireVerifiedEmail` (absent: false). */
+  readonly require_verified_email?: boolean;
   readonly created_at: string;
+}
+
+/** What `carryIntoStore` wrote: the ids of the providers, never a secret. */
+export interface CarriedSignIn {
+  readonly providers: readonly string[];
+  readonly adminRule: boolean;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -160,7 +174,14 @@ function parseStored(raw: string): StoredSettings | null {
     typeof claims.sub === 'string' &&
     typeof claims.email === 'string' &&
     typeof claims.groups === 'string'
-      ? { sub: claims.sub, email: claims.email, groups: claims.groups }
+      ? {
+          sub: claims.sub,
+          email: claims.email,
+          groups: claims.groups,
+          ...(typeof claims.emailVerified === 'string'
+            ? { emailVerified: claims.emailVerified }
+            : {}),
+        }
       : undefined;
   return {
     kind,
@@ -170,6 +191,7 @@ function parseStored(raw: string): StoredSettings | null {
     claims: parsedClaims,
     allowed_email_domains,
     invitation_only,
+    ...(value.require_verified_email === true ? { require_verified_email: true } : {}),
     created_at,
   };
 }
@@ -193,7 +215,32 @@ function toProvider(id: string, s: StoredSettings, clientSecret: string): SignIn
   };
   return s.kind === 'github'
     ? { kind: 'github', ...base }
-    : { kind: 'oidc', ...base, claims: s.claims ?? DEFAULT_CLAIM_MAPPING };
+    : {
+        kind: 'oidc',
+        ...base,
+        claims: s.claims ?? DEFAULT_CLAIM_MAPPING,
+        ...(s.require_verified_email === true ? { requireVerifiedEmail: true } : {}),
+      };
+}
+
+/** The JSON of `sign_in.<id>` for an OpenID Connect or GitHub provider. */
+function storedSettingsOf(
+  provider: OidcSignInProvider | GithubSignInProvider,
+  createdAt: string,
+): StoredSettings {
+  return {
+    kind: provider.kind,
+    name: provider.name,
+    issuer: provider.issuer.href,
+    client_id: provider.clientId,
+    ...(provider.kind === 'oidc' ? { claims: provider.claims } : {}),
+    allowed_email_domains: provider.allowedEmailDomains,
+    invitation_only: provider.invitationOnly,
+    ...(provider.kind === 'oidc' && provider.requireVerifiedEmail === true
+      ? { require_verified_email: true }
+      : {}),
+    created_at: createdAt,
+  };
 }
 
 function viewOf(provider: SignInProvider, source: SignInProviderSource): SignInProviderView {
@@ -404,10 +451,22 @@ export class SignInProvidersService {
       allowedEmailDomains,
       invitationOnly: input.invitationOnly,
     };
+    // The form shows neither: an edit keeps what the provider had (a carried
+    // Entra provider must keep requiring a verified email).
+    const keptOidc = before?.kind === 'oidc' ? before : null;
+    const keptVerifiedClaim =
+      keptOidc?.claims.emailVerified !== undefined
+        ? { emailVerified: keptOidc.claims.emailVerified }
+        : {};
     const saved: SignInProvider =
       kind === 'github'
         ? { kind: 'github', ...base }
-        : { kind: 'oidc', ...base, claims: claims ?? DEFAULT_CLAIM_MAPPING };
+        : {
+            kind: 'oidc',
+            ...base,
+            claims: { ...(claims ?? DEFAULT_CLAIM_MAPPING), ...keptVerifiedClaim },
+            ...(keptOidc?.requireVerifiedEmail === true ? { requireVerifiedEmail: true } : {}),
+          };
 
     if (id === LEGACY_PROVIDER_ID && saved.kind === 'oidc') {
       // The single-provider keys: what an instance saved before several providers existed.
@@ -421,16 +480,10 @@ export class SignInProvidersService {
       });
       return { saved: legacyProviderOf(legacy), before };
     }
-    const stored: StoredSettings = {
-      kind: saved.kind,
-      name,
-      issuer: saved.issuer.href,
-      client_id: clientId,
-      ...(saved.kind === 'oidc' ? { claims: saved.claims } : {}),
-      allowed_email_domains: allowedEmailDomains,
-      invitation_only: input.invitationOnly,
-      created_at: (await this.createdAt(id)) ?? this.clock.now().toISOString(),
-    };
+    const stored = storedSettingsOf(
+      saved,
+      (await this.createdAt(id)) ?? this.clock.now().toISOString(),
+    );
     // One transaction: never the settings of one provider with the secret of another.
     await this.store.apply([
       { kind: 'value', key: settingsKey(id), value: JSON.stringify(stored) },
@@ -460,6 +513,88 @@ export class SignInProvidersService {
           ];
     await this.store.apply(writes);
     return existing.provider;
+  }
+
+  /**
+   * Writes every provider the configuration sets, and the admin rule, into this
+   * store as store-held ones (ADR backup-carries-the-sign-in-configuration). Run by
+   * the `backup` command on its copy, never on a live store: the copy restored
+   * elsewhere signs people in as the source did. The client secrets are sealed like
+   * any stored secret; the provider `idp` goes to the single-provider keys. The
+   * admin rule's group is written `<provider>:<group>` against the providers of now,
+   * so a host that adds its own does not make it ambiguous. One transaction.
+   */
+  async carryIntoStore(): Promise<CarriedSignIn> {
+    const ids = (await this.views()).map((p) => p.id);
+    const resolved = resolveAdminGroup(
+      this.rule.group,
+      ids.length > 0 ? ids : [LEGACY_PROVIDER_ID],
+    );
+    const merged = await withRestoredAdminRule(
+      {
+        group: resolved ? `${resolved.provider}:${resolved.name}` : this.rule.group,
+        emails: this.rule.emails,
+      },
+      this.store,
+    );
+    const writes: ConfigWrite[] = [];
+    for (const provider of this.file) {
+      writes.push(...(await this.carriedWritesOf(provider)));
+    }
+    writes.push({
+      kind: 'value',
+      key: RESTORED_ADMIN_RULE_KEY,
+      value: serializeRestoredAdminRule(merged.rule),
+    });
+    await this.store.apply(writes);
+    return { providers: this.file.map((p) => p.id), adminRule: true };
+  }
+
+  private async carriedWritesOf(provider: SignInProvider): Promise<ConfigWrite[]> {
+    if (provider.kind === 'local') {
+      const stored: StoredSettings = {
+        kind: 'local',
+        name: provider.name,
+        issuer: '',
+        client_id: '',
+        allowed_email_domains: [],
+        invitation_only: true,
+        created_at: (await this.createdAt(provider.id)) ?? this.clock.now().toISOString(),
+      };
+      return [
+        { kind: 'value', key: settingsKey(provider.id), value: JSON.stringify(stored) },
+        { kind: 'delete', key: secretKey(provider.id) },
+      ];
+    }
+    if (provider.id === LEGACY_PROVIDER_ID && provider.kind === 'oidc') {
+      return [
+        { kind: 'value', key: IDP_CONFIG_KEYS.issuer, value: provider.issuer.href },
+        { kind: 'value', key: IDP_CONFIG_KEYS.clientId, value: provider.clientId },
+        { kind: 'secret', key: IDP_CONFIG_KEYS.clientSecret, plain: provider.clientSecret },
+        { kind: 'value', key: IDP_CONFIG_KEYS.claimSub, value: provider.claims.sub },
+        { kind: 'value', key: IDP_CONFIG_KEYS.claimEmail, value: provider.claims.email },
+        { kind: 'value', key: IDP_CONFIG_KEYS.claimGroups, value: provider.claims.groups },
+        {
+          kind: 'value',
+          key: IDP_CONFIG_KEYS.allowedEmailDomains,
+          value: JSON.stringify(provider.allowedEmailDomains),
+        },
+        {
+          kind: 'value',
+          key: IDP_CONFIG_KEYS.invitationOnly,
+          value: String(provider.invitationOnly),
+        },
+      ];
+    }
+    const createdAt = (await this.createdAt(provider.id)) ?? this.clock.now().toISOString();
+    return [
+      {
+        kind: 'value',
+        key: settingsKey(provider.id),
+        value: JSON.stringify(storedSettingsOf(provider, createdAt)),
+      },
+      { kind: 'secret', key: secretKey(provider.id), plain: provider.clientSecret },
+    ];
   }
 
   /**

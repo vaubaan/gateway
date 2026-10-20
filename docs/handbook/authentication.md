@@ -321,6 +321,22 @@ Enterprise Server base URL), `clientId`, `clientSecret`, `claims` (OIDC),
   `ConfigRepo.apply()`.
   `remove(id)` deletes the keys (refused for a file provider, and when it would
   change what the admin rule's group names).
+- **What a store-held provider keeps** (`sign_in.<id>` JSON): kind, name,
+  issuer, client id, the claims (`email_verified` included when set), the
+  allowed domains, `invitation_only`, `require_verified_email` (absent: false)
+  and `created_at`. The form shows neither `claims.email_verified` nor
+  `require_verified_email`; an edit keeps them from the provider it updates,
+  so a carried Entra provider keeps requiring a verified email.
+- **A backup carries the file's providers** (ADR
+  [backup-carries-the-sign-in-configuration](../decisions/backup-carries-the-sign-in-configuration.md)):
+  `carryIntoStore()` writes every provider of the configuration into a store
+  as a store-held one, as `save` would (secret sealed, `idp` in the
+  single-provider keys), and the admin rule as `restored.admin_rule` (below).
+  The `backup` command runs it on its copy, never on the live store. Restored
+  on another host, they are `store` providers there, editable in
+  Administration → Identity provider; that host's configuration adds its own,
+  and **wins on an id collision** (the usual file-over-store rule; the carried
+  one stays in the store, hidden). Test: `backup/carry-sign-in.test.ts`.
 - **Callbacks**: `<public_url>/auth/callback/<id>`; the provider `idp` keeps
   `<public_url>/auth/callback`, the address companies registered before
   (`callbackUrl(publicUrl, id)`, `root.auth.flows.callbackUrl(id)`).
@@ -337,6 +353,20 @@ Enterprise Server base URL), `clientId`, `clientSecret`, `claims` (OIDC),
   a static check — the loader never fetches a discovery document), and a bare
   `admin.group` when the file sets several providers. The bootstrap token is
   required only while the configuration sets no provider.
+
+### The admin rule a backup carried
+
+`restored.admin_rule` in `instance_config` (`RESTORED_ADMIN_RULE_KEY`,
+`admin-rule.ts`): JSON `{ group, emails }`, written by the `backup` command
+into its copy, the group qualified `<provider>:<group>` against the source's
+providers. At boot (`buildRoot`, `withCarriedAdminRule`) the effective
+`config.admin` is the configured rule plus this one (`mergeAdminRules`): the
+emails united; the configured group when the configuration sets one, the
+carried one otherwise — a carried group so replaced is logged at `warn`
+(one group per rule). The configuration still needs an admin rule at boot.
+Dropping the carried rule: delete that key from `instance_config` and
+restart. A backup of a restored instance carries the merged rule again.
+Tests: `admin-rule.test.ts`, `compose/restored-admin-rule.test.ts`.
 
 ## Admission
 

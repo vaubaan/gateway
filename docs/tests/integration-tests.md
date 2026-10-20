@@ -4845,6 +4845,20 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
   integrity `ok`, the key versions named, no key printed; never overwrites, no
   directory in the name, root refused, no store refused. Smoke step 12 runs it in
   the image.
+- **The backup carries the sign-in configuration** (ADR
+  backup-carries-the-sign-in-configuration) — `backup/carry-sign-in.test.ts` (3):
+  a backup of a store whose environment sets an Entra provider (secret,
+  `require_verified_email`, `claims.email_verified`), a local provider and an
+  admin rule, copied onto a fresh host whose environment sets another provider
+  and another rule: the source's providers are `store` providers there with
+  their secret, flags and name, editable (an edit keeps the flags), the host's
+  own is `file`; the secret is in neither the copy's bytes nor the command's
+  output; the live store was not written; the admin rule is the union. The
+  host's environment wins on an id collision (its secret; the carried group
+  reported as dropped). A backup of the restored instance carries everything
+  again. `compose/restored-admin-rule.test.ts` (1): the boot merges
+  `restored.admin_rule` into `config.admin` and logs it without the emails;
+  `admin-rule.test.ts` (+2): parse/serialize and `mergeAdminRules`.
 - **`config/secret-env.test.ts`** (5) — the secret variables of the key
   table, sign-in and provider secrets and their `_FILE` siblings are named;
   the YAML's `${NAME}` references at a secret key only; `loadProcessConfig`

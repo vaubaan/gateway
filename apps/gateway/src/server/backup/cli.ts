@@ -13,13 +13,23 @@
  * the copy, its schema version and the master-key versions its blobs are sealed
  * under: the copy opens only with the keys of those versions, as they are now.
  *
+ * Before checking it, it writes into the copy (never into the live store) the
+ * sign-in providers and the admin rule the configuration sets, as store-held ones,
+ * client secrets sealed under the master key (ADR
+ * backup-carries-the-sign-in-configuration): restored elsewhere, the copy signs
+ * people in as this instance does. It prints the ids it carried, never a secret.
+ *
  * Exit codes (sysexits): 0 done, 1 the copy failed its integrity check or an
  * unexpected failure, 64 usage, 73 the file exists, 77 run as root, 78 not configured.
  */
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, rmSync, statSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 
+import { IdpSettingsService } from '../auth/idp-settings';
+import { SignInProvidersService, type CarriedSignIn } from '../auth/sign-in-providers';
 import { ConfigError, loadProcessConfig, type LoadedConfig } from '../config';
+import { createEncryptor } from '../crypto';
+import { openCopyConfig } from '../store';
 import {
   backupTo,
   integrityOf,
@@ -44,9 +54,12 @@ export const USAGE = `Usage: node apps/gateway/backup.mjs [<file name>]
 
 Writes a consistent copy of this instance's store (VACUUM INTO) next to it, on
 the data volume: backup-<UTC timestamp>.sqlite, or the plain file name given
-(no directory). Never overwrites a file. Prints the path, the size, the
-integrity check and the master-key versions the copy's secrets are sealed
-under: it opens only with those keys. Download it, and keep those keys with it.
+(no directory). Never overwrites a file. The copy also carries the sign-in
+providers and the admin rule the configuration sets, their client secrets
+sealed under the master key, so that it signs people in once restored
+elsewhere. Prints the path, the size, the integrity check and the master-key
+versions the copy's secrets are sealed under: it opens only with those keys.
+Download it, and keep those keys with it.
 
   --help    this text
 
@@ -77,14 +90,14 @@ export async function runBackupCli(
   deps: BackupDeps = {},
 ): Promise<number> {
   try {
-    return run(argv, io, deps);
+    return await run(argv, io, deps);
   } catch {
     io.stderr(UNEXPECTED_FAILURE);
     return EXIT_FAILED;
   }
 }
 
-function run(argv: readonly string[], io: BackupIo, deps: BackupDeps): number {
+async function run(argv: readonly string[], io: BackupIo, deps: BackupDeps): Promise<number> {
   if (argv.includes('--help') || argv.includes('-h')) {
     io.stderr(USAGE);
     return EXIT_OK;
@@ -133,6 +146,17 @@ function run(argv: readonly string[], io: BackupIo, deps: BackupDeps): number {
     source.close();
   }
 
+  let carried: CarriedSignIn;
+  try {
+    carried = await carrySignIn(loaded, target, deps.now);
+  } catch {
+    rmSync(target, { force: true });
+    io.stderr(
+      'backup: the sign-in configuration could not be written into the copy (details withheld); the copy was removed. The store was only read.\n',
+    );
+    return EXIT_FAILED;
+  }
+
   let copy: StoreDb | null = null;
   try {
     copy = openReadonlyDb(target);
@@ -150,11 +174,42 @@ function run(argv: readonly string[], io: BackupIo, deps: BackupDeps): number {
           ? 'backup: it holds no sealed secret.'
           : `backup: its secrets are sealed under master key version(s) ${versions.join(', ')}: ` +
             'the copy opens only with the keys of those versions as they are now. Keep them with it.',
+        carried.providers.length === 0
+          ? 'backup: it carries the admin rule the configuration sets (no sign-in provider is set there).'
+          : `backup: it carries the sign-in provider(s) the configuration sets (${carried.providers.join(', ')}) ` +
+            'as providers kept in the store, their client secrets sealed, and the admin rule.',
         'backup: copy it off the volume (deploy/railway.md §6), then delete it from the volume.',
       ].join('\n') + '\n',
     );
     return integrity === 'ok' ? EXIT_OK : EXIT_FAILED;
   } finally {
     copy?.close();
+  }
+}
+
+/**
+ * Writes the configuration's sign-in providers and admin rule into the copy as
+ * store-held ones (`SignInProvidersService.carryIntoStore`).
+ */
+async function carrySignIn(
+  loaded: LoadedConfig,
+  target: string,
+  now: (() => Date) | undefined,
+): Promise<CarriedSignIn> {
+  const { config } = loaded;
+  const encryptor = await createEncryptor(config.encryption);
+  const clock = { now: now ?? (() => new Date()) };
+  const copy = openCopyConfig(target, encryptor, clock);
+  try {
+    const providers = new SignInProvidersService(
+      config,
+      config.admin,
+      new IdpSettingsService(config.idp, copy.config),
+      copy.config,
+      clock,
+    );
+    return await providers.carryIntoStore();
+  } finally {
+    copy.close();
   }
 }

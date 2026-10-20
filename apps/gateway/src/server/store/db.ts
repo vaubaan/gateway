@@ -102,6 +102,18 @@ export function openReadonlyDb(path: string): StoreDb {
 }
 
 /**
+ * Opens a store copy the `backup` command just made, to write into it: no
+ * migration, no journal-mode change (the copy stays a single file, never WAL),
+ * foreign keys on as everywhere.
+ */
+export function openCopyForWriting(path: string): StoreDb {
+  const db = new BetterSqlite3(path, { fileMustExist: true });
+  assertSqliteVersion(db);
+  db.pragma('foreign_keys = ON');
+  return db;
+}
+
+/**
  * Whether another connection holds the database file (the running gateway): opens it,
  * checkpoints its WAL, closes it. SQLite deletes the `-wal` file when the last
  * connection of a WAL database closes; when it survives our close, someone else has

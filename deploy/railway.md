@@ -179,7 +179,15 @@ would still leave your machine; the clean archive above is the procedure.
   # backup: /data/backup-2026-10-16T08-00-00-000Z.sqlite
   # backup: 1234567 bytes, schema version 15, integrity_check: ok
   # backup: its secrets are sealed under master key version(s) 1: …
+  # backup: it carries the sign-in provider(s) the configuration sets (entra) …
   ```
+
+  The copy also carries the sign-in providers and the admin rule the
+  variables set (`VAUBAAN_SIGN_IN_*`, `VAUBAAN_IDP_*`, `VAUBAAN_ADMIN_*`), the
+  client secrets sealed like the rest: restored elsewhere, people sign in as
+  before (register the new host's callback address at the identity provider),
+  and the new host's variables add their own, winning on a provider id they
+  share.
 
   It copies `/data/gateway.db` with SQLite's `VACUUM INTO` next to it, never
   overwrites a file, refuses root (`vaubaan-entrypoint` drops to the image

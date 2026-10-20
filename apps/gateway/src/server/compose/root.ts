@@ -17,6 +17,7 @@ import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import { createAuditModule, type AuditModule } from '../audit';
 import { createAuthModule, type AuthModule, type LinkMailer, type OidcOptions } from '../auth';
+import { withRestoredAdminRule } from '../auth/admin-rule';
 import { createLinkMailer } from '../mail';
 import { createAuthorityModule, derivedMissionReads, type AuthorityModule } from '../authority';
 import { SessionService } from '../budget';
@@ -145,7 +146,12 @@ export interface RootDeps {
 }
 
 export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
-  const { config, configFile, masterKeyGenerated } = (deps.loadConfig ?? loadBootConfig)();
+  const {
+    config: bootConfig,
+    configFile,
+    masterKeyGenerated,
+  } = (deps.loadConfig ?? loadBootConfig)();
+  let config = bootConfig;
   const logger = createLogger({
     level: config.log.level,
     redact: createRedactor(secretValues(config)),
@@ -184,6 +190,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
   // a failed build, and a retry must not find a second handle on the same file.
   const opened: Closer[] = [() => store.close()];
   try {
+    config = await withCarriedAdminRule(config, store, logger);
     await checkSealedKeys(store, config, logger);
     const modules = await wireModules(
       { config, logger, registry, store, build, masterKeyGenerated },
@@ -213,6 +220,30 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
     await closeAfterFailedBuild(opened, logger);
     throw err;
   }
+}
+
+/**
+ * The configured admin rule plus the one a restored backup carried (ADR
+ * backup-carries-the-sign-in-configuration): said once at boot, never the emails.
+ */
+async function withCarriedAdminRule(
+  config: InstanceConfig,
+  store: Store,
+  logger: Logger,
+): Promise<InstanceConfig> {
+  const merged = await withRestoredAdminRule(config.admin, store.config);
+  if (!merged.carried) return config;
+  logger.info('admin rule: the configured one plus the one a restored backup carried', {
+    group: merged.rule.group ?? 'none',
+    emails: merged.rule.emails.length,
+  });
+  if (merged.droppedGroup !== null) {
+    logger.warn(
+      'admin rule: the group a restored backup carried is replaced by the configured one (one group per rule)',
+      { carried_group: merged.droppedGroup, configured_group: config.admin.group },
+    );
+  }
+  return { ...config, admin: merged.rule };
 }
 
 /**
