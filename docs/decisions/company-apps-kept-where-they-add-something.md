@@ -1,6 +1,7 @@
 ---
 title: Company apps kept where they add something; a token is the default way everywhere else
-status: proposed
+status: superseded
+superseded-by: one-place-to-authorize-services-token-first
 date: 2026-10-16
 extends:
   - token-connections-beside-the-integration-app

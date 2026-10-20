@@ -1,6 +1,7 @@
 ---
 title: A service connects through the company app or with a token pasted by hand, both kept
-status: accepted
+status: superseded
+superseded-by: one-place-to-authorize-services-token-first
 date: 2026-10-13
 extends:
   - plugin-contract-and-credential-spec
