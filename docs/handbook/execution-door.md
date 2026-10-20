@@ -27,9 +27,7 @@ tracks:
   - packages/plugin-sdk/src/plugin.ts
   - packages/plugin-sdk/src/streaming.ts
   - deploy/caddy/Caddyfile
-  - plugins/github/src/token-cache.ts
   - apps/gateway/src/server/connections/discovery-after-call.ts
-  - plugins/github/tests/unit/token-cache.test.ts
 ---
 
 # Execution door — `/mcp`, the call pipeline's stages, the agent label, streaming, the catalog
@@ -1252,8 +1250,7 @@ plugin streams), and a run behind a proxy other than Caddy.
   that throws before the decision (the classifier, the resource stage, the
   budget stage: audited, nothing forwarded, no message kept; a thrown value
   that is not an error; an observer that throws; the audit write of that
-  refusal failing still propagates);
-  `plugins/github/tests/unit/token-cache.test.ts` (5).
+  refusal failing still propagates).
 
 Scenarios in [integration-tests](../tests/integration-tests.md).
 
