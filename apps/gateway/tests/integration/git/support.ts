@@ -8,7 +8,6 @@
  * `VAUBAAN_MISSION_TOKEN`, never written anywhere.
  */
 import { execFile, spawn } from 'node:child_process';
-import { generateKeyPairSync } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -29,15 +28,10 @@ import {
 import type { ConnectionRecord } from '../../../src/server/store/types';
 import { FakeGithubHost, isolatedGitEnv } from './fake-github-host';
 
-export const INSTALLATION_ID = '4242';
+/** The fine-grained token of Ada's GitHub account, accepted by the host with every permission. */
+export const CONNECTION_TOKEN = 'github_pat_11AAAAAAA0GITRIG_0123456789abcdefghijklmnopqrstuv';
 export const REPOSITORY = 'acme/app';
 export const OTHER_REPOSITORY = 'acme/lib';
-
-const { privateKey: APP_PRIVATE_KEY } = generateKeyPairSync('rsa', {
-  modulusLength: 2048,
-  privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-  publicKeyEncoding: { type: 'spki', format: 'pem' },
-});
 
 /** The inline credential helper of the setup kit: the key comes from the environment. */
 export const KIT_CREDENTIAL_HELPER =
@@ -62,9 +56,9 @@ export interface GitRig extends ExecutionInstance {
     readonly policy?: readonly MissionPolicyEntry[];
     readonly repositories?: readonly string[];
   }): Promise<IssuedMission>;
-  /** Another installation of the company's App, holding only `permissions`, with the two repositories. */
-  installation(
-    installationId: string,
+  /** Another account, whose token holds only `permissions`, with the repository. */
+  tokenHolding(
+    token: string,
     permissions: Readonly<Record<string, string>>,
   ): Promise<ConnectionRecord>;
   /** A mission on another connection, from a shipped preset or an explicit policy. */
@@ -115,24 +109,20 @@ export async function openGitRig(options: GitRigOptions = {}): Promise<GitRig> {
   const instance = await executionInstance({
     plugins: [githubPlugin],
     env: {
-      VAUBAAN_PROVIDER_GITHUB_APP_ID: '123',
-      VAUBAAN_PROVIDER_GITHUB_APP_SLUG: 'acme-gateway',
-      VAUBAAN_PROVIDER_GITHUB_PRIVATE_KEY: APP_PRIVATE_KEY,
-      VAUBAAN_PROVIDER_GITHUB_CLIENT_ID: 'Iv1.0000000000000000',
-      VAUBAAN_PROVIDER_GITHUB_CLIENT_SECRET: 'github-app-client-secret-never-sent',
       VAUBAAN_LOG_LEVEL: 'debug',
       ...options.env,
     },
     deps: { providerFetch: host.fetch, logWrite: (_level, text) => logs.push(text) },
   });
   const { store } = instance.root;
+  host.acceptToken(CONNECTION_TOKEN, { metadata: 'read', contents: 'write', workflows: 'write' });
   const github = await store.connections.create({
     provider: 'github',
     owner: { kind: 'user', id: instance.ada.id },
     displayName: 'acme-org',
     credential: serializeSecret({
-      kind: 'app-install',
-      installationId: INSTALLATION_ID,
+      kind: 'api-key',
+      fields: { token: CONNECTION_TOKEN },
       metadata: {},
     }),
   });
@@ -177,13 +167,13 @@ export async function openGitRig(options: GitRigOptions = {}): Promise<GitRig> {
       if (!issued.ok) throw new Error(`issue refused: ${JSON.stringify(issued)}`);
       return { mission: issued.mission, token: issued.token.secret, prefix: issued.token.prefix };
     },
-    async installation(installationId, permissions) {
-      host.installations.set(installationId, permissions);
+    async tokenHolding(token, permissions) {
+      host.acceptToken(token, permissions);
       const connection = await store.connections.create({
         provider: 'github',
         owner: { kind: 'user', id: instance.ada.id },
-        displayName: `acme-${installationId}`,
-        credential: serializeSecret({ kind: 'app-install', installationId, metadata: {} }),
+        displayName: `acme-${token.slice(-6)}`,
+        credential: serializeSecret({ kind: 'api-key', fields: { token }, metadata: {} }),
       });
       await store.connections.syncDiscoveredResources(connection.id, [
         { ref: REPOSITORY, displayName: REPOSITORY, env: null },

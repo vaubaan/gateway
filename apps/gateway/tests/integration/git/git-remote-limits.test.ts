@@ -150,9 +150,12 @@ describe('a token connection (fine-grained personal access token)', () => {
   });
 });
 
-describe("the permissions of the company's App (one declaration, app-manifest.ts)", () => {
-  it('an installation without contents: write still clones, and a push is refused by that permission', async () => {
-    const readOnly = await rig.installation('5151', { metadata: 'read', contents: 'read' });
+describe('what the token holds at GitHub', () => {
+  it('a token without contents: write still clones, and a push is refused by GitHub for that permission', async () => {
+    const readOnly = await rig.tokenHolding(`github_pat_${'5151'.repeat(8)}`, {
+      metadata: 'read',
+      contents: 'read',
+    });
     const mission = await rig.missionOn(readOnly, 'developer');
     const dir = rig.workdir();
     ok(await rig.git(dir, ['clone', '-q', rig.remote(), 'app'], mission.token));
@@ -161,41 +164,16 @@ describe("the permissions of the company's App (one declaration, app-manifest.ts
     await commit(repo, 'ro.txt', 'ro');
     const result = await rig.git(repo, ['push', 'origin', 'feature/ro'], mission.token);
     expect(result.code).not.toBe(0);
-    expect(result.stderr).toContain(
-      'github__git_push needs the GitHub App permissions Contents (contents: write',
-    );
+    // GitHub refuses the pack with 403: the gateway relays the refusal, nothing moves.
+    expect(result.stderr).toMatch(/HTTP 403|refused by GitHub/);
     expect(await rig.host.refOf(REPOSITORY, 'refs/heads/feature/ro')).toBeNull();
   });
 
-  it('an installation without workflows: write pushes code, and refuses a workflow change by name', async () => {
-    const noWorkflows = await rig.installation('6161', { metadata: 'read', contents: 'write' });
-    const mission = await rig.missionOn(noWorkflows, 'developer');
-    const repo = await cloneWith(mission);
-    ok(await rig.git(repo, ['checkout', '-q', '-b', 'feature/code'], null));
-    const sha = await commit(repo, 'code.txt', 'code');
-    ok(await rig.git(repo, ['push', '-q', 'origin', 'feature/code'], mission.token));
-    expect(await rig.host.refOf(REPOSITORY, 'refs/heads/feature/code')).toBe(sha);
-
-    mkdirSync(join(repo, '.github', 'workflows'), { recursive: true });
-    await commit(repo, '.github/workflows/new.yml', 'name: new\non: push\njobs: {}\n');
-    const sentBefore = receivePackPosts();
-    const result = await rig.git(repo, ['push', 'origin', 'feature/code'], mission.token);
-    expect(result.code).not.toBe(0);
-    expect(result.stderr).toContain(
-      'github__git_push needs the GitHub App permission Workflows (workflows: write',
-    );
-    expect(await rig.host.refOf(REPOSITORY, 'refs/heads/feature/code')).toBe(sha);
-    // Declined before the pack left: nothing was sent to GitHub's receive-pack.
-    expect(receivePackPosts()).toBe(sentBefore);
-    // Refused before the decision: audited, nothing counted.
-    const pushes = (await rig.root.store.audit.list({ missionId: mission.mission.id })).filter(
-      (e): e is AuditCallRecord => e.kind === 'call' && e.tool === 'github__git_push',
-    );
-    expect(pushes.at(-1)).toMatchObject({ decision: 'refused', refusal_code: null });
-  });
-
-  it("the mission decides a workflow change first, whatever the installation's token holds", async () => {
-    const noWorkflows = await rig.installation('6262', { metadata: 'read', contents: 'write' });
+  it('the mission decides a workflow change first, whatever the token holds', async () => {
+    const noWorkflows = await rig.tokenHolding(`github_pat_${'6262'.repeat(8)}`, {
+      metadata: 'read',
+      contents: 'write',
+    });
     const mission = await rig.missionOn(noWorkflows, [
       line('github.read-code'),
       line('github.git-push'),
@@ -211,46 +189,8 @@ describe("the permissions of the company's App (one declaration, app-manifest.ts
     expect(result.stderr).toContain(
       'permission github.workflow-write-via-file is not in this mission',
     );
-    expect(result.stderr).not.toContain('GitHub App permission');
+    expect(result.stderr).not.toContain('refused by GitHub');
     expect(receivePackPosts()).toBe(sentBefore);
-  });
-
-  it('a permission granted on the App is seen at the next push, not 50 minutes later', async () => {
-    const late = await rig.installation('7171', { metadata: 'read', contents: 'write' });
-    const mission = await rig.missionOn(late, [
-      line('github.read-code'),
-      line('github.git-push'),
-      line('github.feature-branch-write'),
-      line('github.workflow-write-via-file'),
-    ]);
-    const repo = await cloneWith(mission);
-    ok(await rig.git(repo, ['checkout', '-q', '-b', 'feature/late'], null));
-    await commit(repo, 'late.txt', 'late');
-    // A push token minted and cached while the installation lacks `workflows`.
-    ok(await rig.git(repo, ['push', '-q', 'origin', 'feature/late'], mission.token));
-
-    mkdirSync(join(repo, '.github', 'workflows'), { recursive: true });
-    const sha = await commit(
-      repo,
-      '.github/workflows/late.yml',
-      'name: late\non: push\njobs: {}\n',
-    );
-    const refused = await rig.git(repo, ['push', 'origin', 'feature/late'], mission.token);
-    expect(refused.stderr).toContain('needs the GitHub App permission Workflows');
-
-    // The administrator grants Workflows; the organisation accepts it.
-    rig.host.installations.set('7171', {
-      metadata: 'read',
-      contents: 'write',
-      workflows: 'write',
-    });
-    const minted = rig.host.minted.length;
-    ok(await rig.git(repo, ['push', '-q', 'origin', 'feature/late'], mission.token));
-    expect(await rig.host.refOf(REPOSITORY, 'refs/heads/feature/late')).toBe(sha);
-    // The cached grant without `workflows` was dropped and minted afresh.
-    expect(rig.host.minted.slice(minted).some((m) => m.permissions?.workflows === 'write')).toBe(
-      true,
-    );
   });
 });
 

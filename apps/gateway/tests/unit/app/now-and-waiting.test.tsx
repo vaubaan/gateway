@@ -813,7 +813,7 @@ describe('the home, when nothing waits', () => {
 describe('the first run', () => {
   const setup: SetupView = {
     sign_in: 'login.acme.example',
-    company_apps: { registered: [], missing: ['Gmail'], optional: ['GitHub', 'Supabase'] },
+    company_apps: { registered: [], missing: [{ id: 'gmail', name: 'Gmail' }] },
     telemetry: { enabled: false, decided: false },
   };
 
@@ -889,15 +889,14 @@ describe('the first run', () => {
     inOrder(text(html), [
       'Set up this gateway',
       'Sign-in through login.acme.example',
-      'Company apps',
-      'Register your company’s app for Gmail',
-      'GitHub and Supabase also connect with a token: their apps are optional.',
+      'OAuth clients',
+      'Declare your company’s OAuth client for Gmail',
       'Telemetry',
       'Then, like everyone',
       'Connect an account',
     ]);
     expect(html.match(/v_primary/g)).toHaveLength(1);
-    expect(text(html)).toContain('Register Gmail');
+    expect(text(html)).toContain('Declare Gmail');
   });
 });
 

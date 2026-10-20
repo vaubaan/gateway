@@ -2,9 +2,8 @@
 title: GitHub provider plugin
 status: current
 date: 2026-10-13
-last_synced: 2026-10-18
+last_synced: 2026-10-20
 tracks:
-  - plugins/github/src/token.ts
   - plugins/github/src/index.ts
   - plugins/github/src/risk-catalog.yaml
   - plugins/github/src/data-model.ts
@@ -12,13 +11,10 @@ tracks:
   - plugins/github/src/call.ts
   - plugins/github/src/classify.ts
   - plugins/github/src/credential.ts
-  - plugins/github/src/app-install.ts
+  - plugins/github/src/permissions.ts
+  - plugins/github/src/api.ts
   - plugins/github/src/execute.ts
   - plugins/github/src/octokit-dispatch.ts
-  - plugins/github/src/token-cache.ts
-  - plugins/github/src/app-manifest.ts
-  - plugins/github/src/permission-check.ts
-  - plugins/github/src/credential-keys.ts
   - plugins/github/src/git-remote.ts
   - plugins/github/src/git-inspect.ts
   - plugins/github/src/git-rest.ts
@@ -47,192 +43,99 @@ in git history.
 
 ## What one connection is
 
-A **GitHub App installation** on the company's organisation. An administrator
-creates the App once — from Settings → Administration → Company apps through
-GitHub's App manifest flow ("The company's App, created from the page"
-below), or by hand at GitHub with "Request user authorization (OAuth) during
-installation" enabled — and the instance holds five app-config keys
-(`app_id`, `private_key`, `app_slug`, `client_id`, `client_secret`); a user
-connects by installing the App and the host stores the `installation_id` as
-the connection's secret (`app-install` credential kind) — once it has
-checked that this user can reach that installation. Resources are the
-repositories the installation can reach, discovered as `owner/repo`; a
-repository whose `full_name` is not `owner/repo` by the grammar of the
-calls (`repoFullName`) is left out with a logger warning, since no call
-could name it.
+A **fine-grained personal access token** a person creates at GitHub and
+pastes (`api-key` credential kind, field `token`; `src/credential.ts`,
+`githubCredential`) — the one way of connecting GitHub (ADR
+[one-place-to-authorize-services-token-first](../../decisions/one-place-to-authorize-services-token-first.md);
+the GitHub App, its manifest flow, the installation verification, the
+per-call installation tokens and `github__mint_install_token` of plugin
+3.x are described there). Often made on a shared service account: Vaubaan
+decides who may do what, GitHub enforces what the token may do. A classic
+token (`ghp_`) is refused by the field's shape (`^github_pat_…`): it
+reaches every repository and organisation of its account with coarse
+scopes; a fine-grained one names its resource owner, its repositories and
+its permissions.
 
-### Installation binding
-
-`githubCredential.userVerification` (`src/credential.ts`) is the
-declaration the host runs on the callback
-([connections](../connections.md), "Installation binding"; the plugin
-executes none of it):
-
-| Member                   | Value                                                               |
-| ------------------------ | ------------------------------------------------------------------- |
-| `codeParam`              | `code`                                                              |
-| `tokenUrl`               | `https://github.com/login/oauth/access_token`                       |
-| `clientAuthMethod`       | `client_secret_post` (`client_id`, `client_secret`, `code` in body) |
-| `installationsUrl`       | `https://api.github.com/user/installations`                         |
-| `installationsHeaders`   | `GITHUB_API_HEADERS` (`Accept`, `User-Agent`, API version)          |
-| `installationsListField` | `installations`                                                     |
-| `installationIdField`    | `id`                                                                |
-| `pagination`             | `page` / `per_page`, 100 per page                                   |
-
-With the checkbox enabled, GitHub starts its web application flow right
-after the installation and redirects to the App's first **callback URL**
-with `code` next to `installation_id` (and no setup URL can be set). The
-host exchanges the code for a user access token and calls
-`GET /user/installations`, which lists the installations of this App the
-token's user can reach; the claimed id must be among them. The user token
-is then dropped. `client_secret` is used by the host only and is not in the
-`ctx.appConfig` this plugin receives; `GITHUB_APP_CONFIG.clientId` /
-`.clientSecret` name the keys for the spec, not for a reader.
+- **Check at paste** (`verifyGithubToken`): `GET /user` → the login, kept as
+  the account; the `github-authentication-token-expiration` header, when
+  GitHub sends it (`2026-12-31 00:00:00 UTC`), → the expiry (`expiryOf`; an
+  unreadable value is "not said"). 401 or 403 refuses the token.
+- **Resources**: the repositories the token reaches, `GET /user/repos`
+  (bare list, 100 per page, 10 pages at most), discovered as `owner/repo`;
+  a repository whose `full_name` is not `owner/repo` by the grammar of the
+  calls (`repoFullName`) is left out with a logger warning, since no call
+  could name it.
+- **Calls**: every tool sends the token as the bearer (Octokit sends it as
+  `Authorization: token …`); nothing is minted, nothing is cached. 401/403
+  anywhere → `UpstreamAuthError` (the host then expires the account: a
+  token cannot be refreshed); any other failed status of the repository
+  listing → `UpstreamHttpError` carrying the status. `execute` reads the
+  call first (`readGithubCall`, see "Identifiers") and declines on a
+  refusal **before** anything is sent.
+- **Removal**: nothing is sent to GitHub (`/credentials/revoke` is the
+  leak-report endpoint); `manualRevocation` says where the person deletes
+  the token: Settings, Developer settings, Personal access tokens,
+  Fine-grained tokens.
 
 ```mermaid
 sequenceDiagram
   participant Host
   participant Plugin
   participant GitHub
-  Host->>Plugin: execute(ctx{credential: installationId, appConfig, fetch}, tool, args)
-  Plugin->>Plugin: buildAppJwt(app_id, private_key) — RS256, 9 min
-  Plugin->>GitHub: POST /app/installations/{id}/access_tokens {repositories:[repo]}
-  GitHub-->>Plugin: installation token (1 h)
-  Plugin->>GitHub: REST call via Octokit, fetch = ctx.fetch
+  Host->>Plugin: execute(ctx{credential: token, fetch}, tool, args)
+  Plugin->>Plugin: readGithubCall(tool, args, mission repositories) — refused: nothing sent
+  Plugin->>GitHub: REST call via Octokit, fetch = ctx.fetch, the token as bearer
   GitHub-->>Plugin: data
   Plugin-->>Host: McpToolResult (JSON text)
 ```
 
-The token is scoped to the repository the call names (installation-wide
-for the two search tools). `installationTokenForCall(ctx, repo)`
-(`src/token-cache.ts`) reuses it for up to 50 minutes per connection and
-repository through the host-provided `ExecuteContext.credentialCache`, so
-the diagram above is the cache-miss path; without a cache every call mints.
-`github__mint_install_token` never uses the cache: the token it hands out
-is always minted for that call. 401/403 anywhere → `UpstreamAuthError`;
-any other failed status of the token mint or of the repository listing of
-discovery → `UpstreamHttpError` carrying the status. No
-PAT path. `execute` reads the call first (`readGithubCall`, see
-"Identifiers") and declines on a refusal **before** the mint: a call without
-a well-formed repository of the mission never obtains a token, scoped or
-installation-wide. The installation id is a segment of the mint path and
-must be decimal digits (`installationIdOf` in `src/app-install.ts`, at most
-20); anything else throws `the installation id of the connection is not a
-number` and nothing is sent.
+### The permissions of the token
 
-### The company's App, created from the page
+`GITHUB_TOKEN_PERMISSIONS` (`src/permissions.ts`) is the one declaration of
+the permissions a token needs, as GitHub's token page names them, each with
+the tools it serves; the connect page's guide ("Permissions to tick") is
+read off it, and `definePlugin` checks that every tool is served:
 
-`githubManifestRegistration` (`src/app-manifest.ts`, wired as
-`githubCredential.manifestRegistration`; ADR
-[company-app-created-from-a-manifest](../../decisions/company-app-created-from-a-manifest.md))
-posts a manifest to `https://github.com/organizations/<org>/settings/apps/new`
-or `https://github.com/settings/apps/new` (the login checked against
-`GITHUB_LOGIN_PATTERN`): `name` (34 characters at most), `url` =
-`public_url`, `redirect_url` = the instance's return route, `callback_urls` =
-[the connection callback], `request_oauth_on_install: true`, `public: false`,
-the chosen `default_permissions`; no `hook_attributes`, no `default_events`,
-no `setup_url` (the gateway takes no webhook; with OAuth on install GitHub
-sends the installing person to the callback). `POST
-/app-manifests/{code}/conversions` (the code checked against
-`[A-Za-z0-9_-]{1,128}`, no authentication) answers the App;
-`githubRegisteredApp` keeps `id` → `app_id`, `pem` → `private_key`, `slug`,
-`client_id`, `client_secret`, and drops `webhook_secret`.
+| Permission       | Access         | Tools                                                                                                                                                   |
+| ---------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Metadata`       | read           | `list_tags` — GitHub grants it to every fine-grained token                                                                                              |
+| `Contents`       | read and write | branches, commits, files, `search_code`, releases, `git_fetch`; branch and file writes, `push_files`, merge, releases, `git_push`                       |
+| `Pull requests`  | read and write | list, get, merge (reads the pull request first), create                                                                                                 |
+| `Issues`         | read and write | list, get, `search_issues`, `add_issue_comment`                                                                                                         |
+| `Actions`        | read           | `list_workflows`, `list_workflow_runs`, `list_workflow_jobs`, `get_job_logs`                                                                            |
+| `Administration` | read and write | `get_branch_protection`, `update_branch_protection`                                                                                                     |
+| `Workflows`      | read and write | a file write, `push_files`, delete or `git_push` under `.github/workflows/` — GitHub refuses the write without it, whatever the token holds on Contents |
 
-`GITHUB_APP_PERMISSIONS` is the one declaration of what the App may request,
-level by level, with the tools each level serves:
-
-| Permission       | Read                                                                         | Write                                                                                              |
-| ---------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `metadata`       | `list_tags` — mandatory, GitHub grants it                                    | —                                                                                                  |
-| `contents`       | branches, commits, files, `search_code`, releases, the clone token           | branch and file writes, `push_files`, merge, releases, the push token — **sensitive**              |
-| `pull_requests`  | list, get, merge (reads the pull request first)                              | create, merge; on a push token when held                                                           |
-| `issues`         | list, get, `search_issues`                                                   | `add_issue_comment`                                                                                |
-| `actions`        | `list_workflows`, `list_workflow_runs`, `list_workflow_jobs`, `get_job_logs` | —                                                                                                  |
-| `administration` | `get_branch_protection`                                                      | `update_branch_protection` — **sensitive**                                                         |
-| `workflows`      | —                                                                            | a file write, push or delete under `.github/workflows/`; on a push token when held — **sensitive** |
-
-The permissions of the App are the hard ceiling at GitHub, which matters
+The permissions of the token are the hard ceiling at GitHub, which matters
 where a repository has no branch protection (private repositories on a free
-plan). `src/permission-check.ts` checks every call against what the
-installation holds — the `permissions` GitHub reports with the per-call
-installation token, kept beside it in the cache — and declines a call that
-lacks one with an `ExecutorRefusal` naming it (`github__create_branch needs
-the GitHub App permission Contents (contents: write, “Read and write”)…`),
-before anything is sent. A token whose permissions GitHub did not report
-(an entry cached by an older build) declines nothing. The push token asks
-for `contents: write` plus `pull_requests` and `workflows` (`MINT_PERMISSIONS`);
-GitHub answers 422 when the installation lacks one, and the mint is retried
-with `contents: write` and `metadata: read` only; a second 422 is declined by
-name.
-
-**A permission granted since the token was cached** (an administrator adds it
-to the App, the organisation accepts it) is seen at the next call, not when
-the cached entry expires (up to 50 minutes). `installationGrantForCall` says
-whether the grant came from the cache (`cached`) and takes `{ fresh: true }`
-to drop it and mint anew. `execute` (`sendThroughTheApp`) mints afresh
-**once** when a cached grant lacks what the call needs, before declining it,
-and when GitHub refuses the call for a missing permission
-(`isMissingPermissionRefusal`: a 403 "Resource not accessible by
-integration") it mints afresh once and sends the call once more. Refused
-again — or refused with a grant minted for this very call — the call is
-declined by name (`refusedForPermissionSentence`: `github__list_workflows was
-refused by GitHub for a permission this installation of the company's App
-lacks (GitHub: “…”), with a token minted afresh. It needs Actions (actions:
-read, “Read”). …`). Any other 403 (a rate limit) stays an
-`UpstreamAuthError`; a token connection is never re-minted.
-
-## Connecting with a fine-grained token
-
-Beside the App, the plugin declares a second way (`alternativeCredentials`,
-`src/token.ts`, ADR [token-connections-beside-the-integration-app](../../decisions/token-connections-beside-the-integration-app.md)): a **fine-grained personal access token** pasted
-by hand, the way offered when no GitHub App is registered. A classic token
-(`ghp_`) is refused by the field's shape (`^github_pat_…`): it reaches every
-repository and organisation of its account with coarse scopes.
-
-- **Check at paste** (`verifyGithubToken`): `GET /user` → the login, kept as
-  the account; the `github-authentication-token-expiration` header, when
-  GitHub sends it (`2026-12-31 00:00:00 UTC`), → the expiry (`expiryOf`; an
-  unreadable value is "not said"). 401 or 403 refuses the token.
-- **Resources**: `GET /user/repos` (bare list, 100 per page, 10 pages at most).
-- **Calls**: every tool sends the token as the bearer; no installation token
-  is minted, nothing is cached. A 401 expires the account (a token cannot be
-  refreshed).
-- **`github__mint_install_token`** is `unavailableTools` for this way
-  (`MINT_NEEDS_THE_APP`: "needs the GitHub App: …"): the host refuses it
-  before the budget and does not list it; `execute` declines it too.
-- **Guide**: the steps of GitHub's "Creating a fine-grained personal access
-  token", and the permissions per tool read off `GITHUB_APP_PERMISSIONS`
-  (`tokenPermissionsOf` of the SDK: a `read` level as read, any other level
-  as read and write, the mint left out) — fine-grained tokens use the App's
-  permission names, so the manifest and the guide have one source.
-  `definePlugin` checks every API tool is served.
-- **Removal**: nothing is sent to GitHub (`/credentials/revoke` is the
-  leak-report endpoint); the person deletes the token under Settings,
-  Developer settings, Personal access tokens, Fine-grained tokens.
+plan). The plugin does not know them: a call GitHub refuses for a permission
+the token lacks ("Resource not accessible by personal access token") is a
+403, thrown as `UpstreamAuthError`; a ref move the git remote sends is the
+one place the plugin names what is missing (`refusedForPermissionSentence`,
+`git-moves.ts`: the token needs Contents, and Workflows for a change under
+`.github/workflows/`; create a token with them and reconnect the account).
 
 ## Files
 
-| File                      | Role                                                                                                                                                                                                                                                                                                                                             |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `src/index.ts`            | `definePlugin` → `githubPlugin` v3.3.0.                                                                                                                                                                                                                                                                                                          |
-| `src/risk-catalog.yaml`   | 18 risks + fallback, 3 presets, `catalog_version: 8`.                                                                                                                                                                                                                                                                                            |
-| `src/data-model.ts`       | Plane `repo`, 19 entities (`delete` under `release` is a verb leaf); `branch` is `envScopable`.                                                                                                                                                                                                                                                  |
-| `src/tools.ts`            | 28 tools. Retired by risk-model §7.2 #1 and not declared: `dispatch_workflow`, `cancel_workflow_run`, `rerun_workflow_run`.                                                                                                                                                                                                                      |
-| `src/call.ts`             | The grammar of every identifier (`ownerName`, `repoName`, `repoFullName`, `repoPath`, `revision`, `branchName`, `tagName`, `pullRequestHead`, `positiveInteger`, `workflowRef`) and `readGithubCall`, the one reader `classify` and `execute` share; the refusal wording (`repositoryNotSelectedMessage`).                                       |
-| `src/classify.ts`         | `classifyGithub(tool, args, resources)` = `readGithubCall` then `slicesOf(call)`; `isWorkflowPath`.                                                                                                                                                                                                                                              |
-| `src/credential.ts`       | `githubCredential` (app-install spec), `installationTokenFor(ctx, scope)`.                                                                                                                                                                                                                                                                       |
-| `src/app-install.ts`      | `buildAppJwt`, `mintInstallationToken`, `installationIdOf`, `GITHUB_API_BASE`, `GITHUB_API_HEADERS`.                                                                                                                                                                                                                                             |
-| `src/execute.ts`          | `executeGithub` (the body run under the SDK's `declining`), `discoverGithubResources`, `MINT_PERMISSIONS`, discovery paging constants (100 per page, 10 pages at most).                                                                                                                                                                          |
-| `src/app-manifest.ts`     | `GITHUB_APP_PERMISSIONS`, `githubManifestRegistration`, `buildGithubManifest`, `githubRegisteredApp`, `GITHUB_LOGIN_PATTERN`.                                                                                                                                                                                                                    |
-| `src/permission-check.ts` | `needsOf(call)`, `assertAppPermissions(call, granted)`, `assertGranted`, `missingPermissionSentence`, `declineMissingPermissions`, `mintPermissions`, `MINT_NEEDS`, `gitFetchNeeds`, `gitPushNeeds`, `isMissingPermissionRefusal`, `refusedForPermissionSentence`.                                                                               |
-| `src/credential-keys.ts`  | `GITHUB_APP_CONFIG`, `GITHUB_WEB_BASE` (shared by the credential spec and the manifest flow).                                                                                                                                                                                                                                                    |
-| `src/token-cache.ts`      | `installationTokenForCall(ctx, repo)`, `installationGrantForCall(ctx, repo, now, { fresh })`: per-call token served from `ctx.credentialCache` (`cached`), 50 min at most, 5 min expiry margin; `fresh` replaces the entry.                                                                                                                      |
-| `src/octokit-dispatch.ts` | `dispatchGithubTool(octokit, call, args)`: checked call → Octokit call; reads the pull request before a merge and declines (`ExecutorRefusal`) a base other than the declared one.                                                                                                                                                               |
-| `src/job-logs.ts`         | `readJobLogs`: `get_job_logs` — the API's redirect read with `redirect: 'manual'`, the https download fetched without the token, the body read bounded (`readBounded`: the first `max_bytes`, or with `tail` the last, at most `JOB_LOG_TAIL_READ_MAX` streamed).                                                                                |
-| `src/git-call.ts`         | `GIT_FETCH_TOOL`, `GIT_PUSH_TOOL`, `readGitCall` (the one reader of the git tools' arguments, shared by `classify` and `execute`), `pushedRef` (branches and tags only, `refs/vaubaan/` reserved).                                                                                                                                               |
-| `src/git-remote.ts`       | `githubGitRemoteOf(catalog)` (the plugin's `gitRemote`, built in `index.ts` as `githubGitRemote`): `upstream` (credential per access), `inspectPack`, `admitPush`, `review`, `compareUrl`, `insteadOf`, `abilities`; `workingBranchesOf(catalog)` (the branch list of `feature-branch-write`, read from the YAML); `executeGit` (the ref moves). |
-| `src/git-inspect.ts`      | `inspectPack`: what each pushed tip changes under `.github/workflows/`, decided before the pack leaves the gateway; `workflowPathsOfCommit` (a commit GitHub lists 300 files of, read by its trees); `WORKFLOWS_UNVERIFIED`, `INSPECT_HEAD_BASES_MAX`, `INSPECT_WALK_MAX`.                                                                       |
-| `src/git-credential.ts`   | `gitGrant(ctx, target, access, { fresh })` (the push or fetch token, cached per repository and access as `git-token:<repo>:<access>`, `cached` said), `GIT_TOKEN_PERMISSIONS`, `admitPush` (the push token against the inspection, before the pack leaves), `upstream`, `repositoryOf`.                                                          |
+| File                      | Role                                                                                                                                                                                                                                                                                                        |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/index.ts`            | `definePlugin` → `githubPlugin` v4.0.0.                                                                                                                                                                                                                                                                     |
+| `src/risk-catalog.yaml`   | 16 risks + 2 deprecated + fallback, 3 presets, `catalog_version: 9`.                                                                                                                                                                                                                                        |
+| `src/data-model.ts`       | Plane `repo`, 18 entities (`delete` under `release` is a verb leaf); `branch` is `envScopable`.                                                                                                                                                                                                             |
+| `src/tools.ts`            | 27 tools. Retired by risk-model §7.2 #1 and not declared: `dispatch_workflow`, `cancel_workflow_run`, `rerun_workflow_run`.                                                                                                                                                                                 |
+| `src/call.ts`             | The grammar of every identifier (`ownerName`, `repoName`, `repoFullName`, `repoPath`, `revision`, `branchName`, `tagName`, `pullRequestHead`, `positiveInteger`, `workflowRef`) and `readGithubCall`, the one reader `classify` and `execute` share; the refusal wording (`repositoryNotSelectedMessage`).  |
+| `src/classify.ts`         | `classifyGithub(tool, args, resources)` = `readGithubCall` then `slicesOf(call)`; `isWorkflowPath`.                                                                                                                                                                                                         |
+| `src/credential.ts`       | `githubCredential` (the fine-grained token: field, guide, `verify`), `githubTokenOf(ctx)`, `verifyGithubToken`, `expiryOf`.                                                                                                                                                                                 |
+| `src/permissions.ts`      | `GITHUB_TOKEN_PERMISSIONS`: the permissions of the token and the tools each serves.                                                                                                                                                                                                                         |
+| `src/api.ts`              | `GITHUB_API_BASE`, `GITHUB_WEB_BASE`, `GITHUB_API_HEADERS`.                                                                                                                                                                                                                                                 |
+| `src/execute.ts`          | `executeGithub` (the body run under the SDK's `declining`), `discoverGithubResources`, discovery paging constants (100 per page, 10 pages at most).                                                                                                                                                         |
+| `src/octokit-dispatch.ts` | `dispatchGithubTool(octokit, call, args)`: checked call → Octokit call; reads the pull request before a merge and declines (`ExecutorRefusal`) a base other than the declared one.                                                                                                                          |
+| `src/job-logs.ts`         | `readJobLogs`: `get_job_logs` — the API's redirect read with `redirect: 'manual'`, the https download fetched without the token, the body read bounded (`readBounded`: the first `max_bytes`, or with `tail` the last, at most `JOB_LOG_TAIL_READ_MAX` streamed).                                           |
+| `src/git-call.ts`         | `GIT_FETCH_TOOL`, `GIT_PUSH_TOOL`, `readGitCall` (the one reader of the git tools' arguments, shared by `classify` and `execute`), `pushedRef` (branches and tags only, `refs/vaubaan/` reserved).                                                                                                          |
+| `src/git-remote.ts`       | `githubGitRemoteOf(catalog)` (the plugin's `gitRemote`, built in `index.ts` as `githubGitRemote`): `upstream`, `inspectPack`, `review`, `compareUrl`, `insteadOf`, `abilities`; `workingBranchesOf(catalog)` (the branch list of `feature-branch-write`, read from the YAML); `executeGit` (the ref moves). |
+| `src/git-inspect.ts`      | `inspectPack`: what each pushed tip changes under `.github/workflows/`, decided before the pack leaves the gateway; `workflowPathsOfCommit` (a commit GitHub lists 300 files of, read by its trees); `WORKFLOWS_UNVERIFIED`, `INSPECT_HEAD_BASES_MAX`, `INSPECT_WALK_MAX`.                                  |
+| `src/git-credential.ts`   | `upstream(ctx, repository, access)` (the repository's smart HTTP endpoint and `Basic x-access-token:<token>`), `targetOf`, `repositoryOf`.                                                                                                                                                                  |
+| `src/git-moves.ts`        | `executeGit` (the ref moves), `isMissingPermissionRefusal`, `refusedForPermissionSentence`.                                                                                                                                                                                                                 |
 
 ## The git remote
 
@@ -244,20 +147,13 @@ the pipeline decides and audits but that are **not MCP tools** (refused on
 `github__git_push { repository, updates[] }`, whose arguments are the host's
 review.
 
-- **Credential** (`gitGrant`, `git-credential.ts`). An App connection mints a token for the one
-  repository: `contents: read` to fetch and review; to push,
-  `contents: write` + `workflows: write`, or `contents: write` alone when the
-  installation lacks `workflows` (GitHub answers 422 to the first; the mint
-  falls back, as `mint_install_token` does, and says so in the log — the
-  permission names, never a token), and a refusal naming the
-  permission when even that is refused. Cached per repository and access in
-  `ctx.credentialCache` (`git-token:<repo>:<access>`, 50 minutes at most), with the permissions GitHub reported
-  for the token: what the fallback left out is known, and `admitPush` acts on
-  it. `{ fresh: true }` drops the cached grant and mints anew. A token
-  connection (`api-key`, field `token`, the fine-grained personal access
-  token) presents its token; its permissions are unknown, nothing is
-  declined on a guess. The git transport is `Basic x-access-token:<token>` to
-  `https://github.com/<owner>/<repo>.git`.
+- **Credential** (`upstream`, `git-credential.ts`). The connection's token,
+  for every access: its permissions are GitHub's to enforce, nothing is
+  declined on a guess. The git transport is `Basic x-access-token:<token>`
+  to `https://github.com/<owner>/<repo>.git`. The plugin declares no
+  `admitPush`: the mission's decision is what narrows a push, and a push
+  GitHub refuses for a permission the token lacks is named on the ref
+  (`executeGit`, below).
 - **Inspect** (`inspectPack`, `git-inspect.ts`; ADR
   [git-push-inspected-before-it-leaves](../../decisions/git-push-inspected-before-it-leaves.md)),
   before the pack leaves the gateway. For each created or moved ref, the
@@ -277,20 +173,6 @@ review.
   neither in the pack nor at GitHub, an API error, a truncated tree —
   reports `.github/workflows/` (`WORKFLOWS_UNVERIFIED`). Only tips: GitHub
   runs the workflows of the pushed tip. A deletion changes nothing.
-- **Admit** (`admitPush`, `git-credential.ts`; SDK `GitRemoteCapability.admitPush`),
-  asked by the host **after** the mission's precheck on the inspection and
-  **before** the pack is stored: the push token must cover
-  `gitPushNeeds(inspected)` — `contents: write`, plus `workflows: write` when
-  an update's tip changes `.github/workflows/`. A grant from the cache that
-  falls short is minted afresh once (an administrator may have granted
-  Workflows since); still short, the push is refused by the permission's name
-  (`github__git_push needs the GitHub App permission Workflows (workflows:
-write, …)`) and nothing reaches GitHub. Because the mission decides first,
-  a mission without `github.workflow-write-via-file` is refused for that
-  permission whatever the installation holds — the mission's decision never
-  depends on the token (friction 12 of 2026-10-16). A token connection's
-  permissions are unknown: nothing is declined on a guess. The host then asks
-  `upstream` again, so the pack leaves with the token admitted.
 - **Review** (`review`, `git-review.ts`). For each ref: `GET git/ref/<ref>`
   must equal the client's `old` (else stale info — a lie about `old` would
   keep commits out of the review); a tag's `new` and `old` are peeled to the
@@ -316,9 +198,8 @@ write, …)`) and nothing reaches GitHub. Because the mission decides first,
   differ from the first parent, `.github/workflows/` when unreadable.
   Workflow files: anything under `.github/workflows/`. 300 files or 250
   commits per comparison, an unrelated history, an empty repository: not
-  reviewable, refused. The review does not read the push token's
-  permissions: the decision comes next, on everything the review found, and
-  the token is checked by `admitPush` before and by `executeGit` after it.
+  reviewable, refused. The review does not read the token's permissions:
+  the decision comes next, on everything the review found.
 - **Execute** (`executeGit`, `git-moves.ts`), per ref, in order, reported
   per ref: create `POST git/refs`; fast-forward
   `PATCH git/refs/<ref> force:false`; force (accepted `force-push` only) and
@@ -326,15 +207,14 @@ write, …)`) and nothing reaches GitHub. Because the mission decides first,
   whose `old` GitHub checks under the ref's lock (compare-and-swap). A 422 on
   a fast-forward reads "non-fast-forward … fetch first"; a 5xx on a ref after
   the first reports that ref and the next ones are tried; before any ref, it
-  is an upstream error. Before any ref moves, the push token must cover
-  `gitPushNeeds` of the reviewed updates (a workflow file found by the review
-  in an intermediate commit included), a cached grant short of it minted
-  afresh first, else the push is declined by name. A move GitHub refuses for
-  a permission (`isMissingPermissionRefusal`: a REST 403 "Resource not
-  accessible by integration", a receive-pack "refusing to allow a GitHub App
-  to create or update workflow … without `workflows` permission") is retried
-  once with a token minted afresh (`GithubRest.renew`) when the grant came
-  from the cache; refused again, the ref's error names the permission.
+  is an upstream error. A move GitHub refuses for a permission the token
+  lacks (`isMissingPermissionRefusal`: a REST 403 "Resource not accessible
+  by personal access token", a receive-pack "refusing to allow a Personal
+  Access Token to create or update workflow … without `workflows`
+  permission") is reported on the ref with `refusedForPermissionSentence`:
+  the token needs Contents (read and write), and Workflows for a change
+  under `.github/workflows/`; create a token with them at GitHub and
+  reconnect the account.
 - **Slices** (`gitSlicesOf`, `classify.ts`): fetch `repo[R].branch.R`,
   `repo[R].tag.R` (`read-code`); every pushed ref `<ref>.push.W`
   (`git-push`); a branch `branch[B].W` (`feature-branch-write`,
@@ -343,10 +223,9 @@ write, …)`) and nothing reaches GitHub. Because the mission decides first,
   `<ref>.force.W` (`force-push`); a deletion `<ref>.delete.W`
   (`branch-delete`, `tag-write`; a deleted branch also writes `branch[B].W`);
   workflow files `<ref>.workflow-via-file.W` (`workflow-write-via-file`).
-- **App permissions** (`app-manifest.ts`): `github__git_fetch` under
-  `contents: read`, `github__git_push` under `contents: write`, and under
-  `workflows: write` "for a git push that changes a file under
-  .github/workflows/".
+- **Token permissions** (`permissions.ts`): `github__git_fetch` and
+  `github__git_push` under `Contents`, `github__git_push` under `Workflows`
+  too (a push that changes a file under `.github/workflows/`).
 - **Interface**: `insteadOf: https://github.com/` (the setup kit's rewrite),
   `abilities` (what each permission means for git, for the mission page;
   the working-branch line lists the globs of `feature-branch-write`'s
@@ -359,7 +238,7 @@ write, …)`) and nothing reaches GitHub. Because the mission decides first,
 A failed CI is diagnosed through the gateway with three reads of
 `github.read-meta` (catalog v8 added the patterns
 `repo[**].workflow-run[**].job[**].R` and `repo[**].job[**].log[**].R`), all
-under the App permission Actions (read):
+under the token permission Actions (read):
 
 - `list_workflow_runs` finds the run;
 - `list_workflow_jobs` (`run_id`, optional `filter: latest | all`, `per_page`)
@@ -371,7 +250,7 @@ under the App permission Actions (read):
   `GET /repos/{owner}/{repo}/actions/jobs/{job_id}/logs`, which answers a 302
   to a short-lived download URL. The plugin reads that answer with
   `redirect: 'manual'`, requires an `https:` location, and fetches it
-  **without** the installation token (the URL is signed; the token never
+  **without** the connection's token (the URL is signed; the token never
   leaves for another host). The body is streamed and at most `max_bytes` kept
   (default 65 536, at most 1 048 576): the beginning, the stream cancelled as
   soon as more arrives; or with `tail: true` the end, the whole log streamed
@@ -431,15 +310,15 @@ query `q`, and the blob `sha` of `create_or_update_file` / `delete_file`,
 which is forwarded as given. Each request is built field by field from
 those declared arguments: an argument no tool declares is never read, so it
 is ignored, not refused. A value outside its grammar refuses the call —
-`denied` for the classifier, an `isError` result before the token mint for
+`denied` for the classifier, an `isError` result before any request for
 the executor; nothing is escaped, trimmed, repaired or defaulted on one side
 only (ADR
 [`plugin-identifiers-one-grammar-for-classify-and-execute`](../../decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md)).
 
 | Argument                                                             | Grammar (`src/call.ts`)                                                                                                                                                            | Where it lands                                                                |
 | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `owner`, `repo`                                                      | `ownerName` (`[A-Za-z0-9_-]`, ≤ 39) and `repoName` (`[A-Za-z0-9._-]`, ≤ 100, not `.` or `..`), together one of the mission's repositories                                          | URL path, token scope, slice `repo[X]`                                        |
-| `repoFullName` (`mint_install_token`), a discovered `full_name`      | `repoFullName` — `owner/repo`, exactly one separator, two well-formed names                                                                                                        | token scope, resource ref, slice `repo[X]`                                    |
+| `owner`, `repo`                                                      | `ownerName` (`[A-Za-z0-9_-]`, ≤ 39) and `repoName` (`[A-Za-z0-9._-]`, ≤ 100, not `.` or `..`), together one of the mission's repositories                                          | URL path, slice `repo[X]`                                                     |
+| a discovered `full_name`                                             | `repoFullName` — `owner/repo`, exactly one separator, two well-formed names                                                                                                        | resource ref, slice `repo[X]`                                                 |
 | file `path`, `files[].path`                                          | `repoPath` — relative, `/`-separated, no empty, `.` or `..` segment, no backslash, no control character, ≤ 4096 characters                                                         | URL path (`/contents/{path}`) or tree body, slice `file[path]`                |
 | `branch`, `from_branch`, `base`                                      | `branchName` — a git ref name (`git check-ref-format`: no `..`, no component starting with `.` or ending in `.lock`, no blank, none of `~ ^ : ? * [ \`), ≤ 255, not a ref spelling | URL path, query or body, slice `branch[b]` / `branch-protection[b]`           |
 | `head` (`create_pull_request`)                                       | `pullRequestHead` — a `branchName`, or `owner:branch` for a fork                                                                                                                   | body, slice `branch[head]`                                                    |
@@ -448,7 +327,6 @@ only (ADR
 | `pull_number`, `issue_number`, `release_id`, `run_id`, `job_id`      | `positiveInteger` — a number, a positive safe integer                                                                                                                              | URL path, slice ident                                                         |
 | `workflow_id`                                                        | `workflowRef` — a positive integer, or one file name (no `/` or `\`, not `.` or `..`, ≤ 255)                                                                                       | URL path, slice `workflow[id]`                                                |
 | `max_bytes`, `tail`, `filter` (`get_job_logs`, `list_workflow_jobs`) | `logByteCount` — an integer from 1 to 1 048 576 (default 65 536); a boolean; `latest` or `all`                                                                                     | how much of the log is returned; query string — not a slice segment           |
-| the installation id of the connection                                | `installationIdOf` (`src/app-install.ts`) — decimal digits, ≤ 20                                                                                                                   | URL path of the token mint                                                    |
 
 Why a grammar per kind and not an escape: Octokit expands a path parameter
 with `encodeURIComponent`, which leaves `.` and `..` untouched, and a URL
@@ -462,31 +340,30 @@ held to the same grammar before it reaches a path: the default branch read
 for a `create_branch` without `from_branch` must be a `branchName`, or
 nothing is created.
 
-| Tool                                      | Slices                                                                                               |
-| ----------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `list_branches`                           | `repo[X].branch.R`                                                                                   |
-| `list_commits`                            | `repo[X].commit.R`, or `repo[X].branch[sha].commit.R` when `sha` is given                            |
-| `get_file_contents`                       | `repo[X].branch[ref].file[path].R` (`branch.file[…]` without `ref`)                                  |
-| `get_commit`                              | `repo[X].commit[sha].R`                                                                              |
-| `list_tags`                               | `repo[X].tag.R`                                                                                      |
-| `list_pull_requests` / `get_pull_request` | `repo[X].pull_request.R` / `repo[X].pull_request[N].R`                                               |
-| `list_issues` / `get_issue`               | `repo[X].issue.R` / `repo[X].issue[N].R`                                                             |
-| `list_releases`                           | `repo[X].release.R`                                                                                  |
-| `list_workflows` / `list_workflow_runs`   | `repo[X].workflow.R` / `repo[X].workflow-run.R` or `repo[X].workflow[id].workflow-run.R`             |
-| `list_workflow_jobs`                      | `repo[X].workflow-run[run].job.R`                                                                    |
-| `get_job_logs`                            | `repo[X].job[id].log.R`                                                                              |
-| `get_branch_protection`                   | `repo[X].branch-protection[branch].R`                                                                |
-| `search_code` / `search_issues`           | `github.search.code.R` / `github.search.issues.R` (no resource check)                                |
-| `create_branch`                           | `repo[X].branch[name].W`                                                                             |
-| `create_or_update_file` / `delete_file`   | `repo[X].branch[b].file[path].W` + `repo[X].branch[b].workflow-via-file.W` if path is a workflow     |
-| `push_files`                              | one `file[path].W` per file (+ workflow marker), + `repo[X].branch[b].files-bulk.W` when 2+ files    |
-| `create_pull_request`                     | `repo[X].pull_request.W` + `repo[X].branch[head].propose-to[base].W`                                 |
-| `merge_pull_request`                      | `repo[X].pull_request[N].W` + `repo[X].branch[base ?? main].merge-into.W`                            |
-| `add_issue_comment`                       | `repo[X].issue[N].comment.W` (issue/PR number space is unified)                                      |
-| `create_release`                          | `repo[X].release.W` + `repo[X].tag[name].W`                                                          |
-| `delete_release`                          | `repo[X].release[id].delete.W`                                                                       |
-| `update_branch_protection`                | `repo[X].branch-protection[branch].W`                                                                |
-| `mint_install_token`                      | `repo[X].install-token[clone\|push].W` for `repoFullName`, or one per GitHub resource of the mission |
+| Tool                                      | Slices                                                                                            |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `list_branches`                           | `repo[X].branch.R`                                                                                |
+| `list_commits`                            | `repo[X].commit.R`, or `repo[X].branch[sha].commit.R` when `sha` is given                         |
+| `get_file_contents`                       | `repo[X].branch[ref].file[path].R` (`branch.file[…]` without `ref`)                               |
+| `get_commit`                              | `repo[X].commit[sha].R`                                                                           |
+| `list_tags`                               | `repo[X].tag.R`                                                                                   |
+| `list_pull_requests` / `get_pull_request` | `repo[X].pull_request.R` / `repo[X].pull_request[N].R`                                            |
+| `list_issues` / `get_issue`               | `repo[X].issue.R` / `repo[X].issue[N].R`                                                          |
+| `list_releases`                           | `repo[X].release.R`                                                                               |
+| `list_workflows` / `list_workflow_runs`   | `repo[X].workflow.R` / `repo[X].workflow-run.R` or `repo[X].workflow[id].workflow-run.R`          |
+| `list_workflow_jobs`                      | `repo[X].workflow-run[run].job.R`                                                                 |
+| `get_job_logs`                            | `repo[X].job[id].log.R`                                                                           |
+| `get_branch_protection`                   | `repo[X].branch-protection[branch].R`                                                             |
+| `search_code` / `search_issues`           | `github.search.code.R` / `github.search.issues.R` (no resource check)                             |
+| `create_branch`                           | `repo[X].branch[name].W`                                                                          |
+| `create_or_update_file` / `delete_file`   | `repo[X].branch[b].file[path].W` + `repo[X].branch[b].workflow-via-file.W` if path is a workflow  |
+| `push_files`                              | one `file[path].W` per file (+ workflow marker), + `repo[X].branch[b].files-bulk.W` when 2+ files |
+| `create_pull_request`                     | `repo[X].pull_request.W` + `repo[X].branch[head].propose-to[base].W`                              |
+| `merge_pull_request`                      | `repo[X].pull_request[N].W` + `repo[X].branch[base ?? main].merge-into.W`                         |
+| `add_issue_comment`                       | `repo[X].issue[N].comment.W` (issue/PR number space is unified)                                   |
+| `create_release`                          | `repo[X].release.W` + `repo[X].tag[name].W`                                                       |
+| `delete_release`                          | `repo[X].release[id].delete.W`                                                                    |
+| `update_branch_protection`                | `repo[X].branch-protection[branch].W`                                                             |
 
 Concrete slices never carry wildcards: a "list all" read emits the entity
 name without a leaf and the catalog's terminal `[**]` absorbs it. A branch
@@ -532,9 +409,12 @@ outside the ident class before it reaches a slice.
   slice, so a mission that accepts `create-release` alone cannot delete a
   release, and the reverse; `release-manager` carries both, each under
   `approval`.
-- Two mint risks (`clone` vs `push`): the push token leaves the gateway's
-  perimeter with write permissions, hence a separate entry. Since catalog v6
-  no preset carries either: the git remote gives git without a token leaving.
+- **Catalog v9 — the two mint risks are deprecated.** `mint-install-token-clone`
+  and `mint-install-token-push` were the install tokens of the GitHub App,
+  which left with it (ADR one-place-to-authorize-services-token-first). An id
+  is never removed: the entries stay with `deprecated: true` and `replaced_by`
+  (`read-code`, `git-push`), no call touches them, no preset may list them,
+  and a stored mission that still names them holds a risk nothing matches.
 - **Catalog v6 — git through the remote.** `git-push` (every pushed ref,
   leaf `push`), `force-push` (leaf `force`), `branch-delete` (leaf `delete`
   on a branch), `tag-write` (leaves `push` and `delete` on a tag). Nothing
@@ -559,46 +439,46 @@ outside the ident class before it reaches a slice.
 
 The numbers are defaults the creator adjusts at issuance; the deferred ADR
 `mission-presets-default-values` (plan §5.5) will settle them across
-plugins. `branch-protection-write`, `branch-delete` and both mint risks are in
-no preset. Missions issued from the v5 `developer` keep their mint risks: a
-policy is stored, not derived from the preset.
+plugins. `branch-protection-write` and `branch-delete` are in no preset.
 
 ## Tests
 
-`npx vitest run plugins/github` — 737 tests, no network:
+`npx vitest run plugins/github` — 635 tests, no network:
 
-- `plugin.test.ts` (17): kit assertions, coverage with samples per tool
-  and per git tool (the 18 named risks touched, `fallbackHits` empty), the fallback catching
-  a write on an unconventional branch and a merge into a non-protected one,
-  preset invariants, credential spec, resource check.
-- `risk-catalog.test.ts` (80): the table `[tool, arguments, risks touched]`
+- `plugin.test.ts` (15): kit assertions, coverage with samples per tool
+  and per git tool (the 16 named risks touched, the two deprecated ones
+  untouched, `fallbackHits` empty), the fallback catching a write on an
+  unconventional branch and a merge into a non-protected one, preset
+  invariants, the credential spec (a fine-grained token with its guide; the
+  mint tool gone, its risks deprecated), resource check.
+- `risk-catalog.test.ts` (76): the table `[tool, arguments, risks touched]`
   evaluated through `classifyGithub` and the shipped catalog — at least one
-  row per tool, every risk of the catalog named by a row (protected and
-  feature branches, workflow files, bulk pushes, merges, both mint
-  purposes, git fetches and pushes — every ref, force, deletion, tags,
-  workflow files —, the fallback cases); the v6 presets (developer without
-  the mint risks, force-push asking first; release-manager's tags).
-- `classify.test.ts` (69): the per-tool security suite of `classifyGithub`
+  row per tool, every non-deprecated risk of the catalog named by a row
+  (protected and feature branches, workflow files, bulk pushes, merges, git
+  fetches and pushes — every ref, force, deletion, tags, workflow files —,
+  the fallback cases); the presets (developer with force-push asking first;
+  release-manager's tags).
+- `classify.test.ts` (64): the per-tool security suite of `classifyGithub`
   (reads, branch and file writes, pull requests, comments, releases, rules,
-  mint, retired tools, structural denials: non-canonical paths, refs given
-  as branches, malformed `files`, wildcard characters, repositories outside
-  the mission).
-- `execute.test.ts` (25): JWT claims (RS256, `iss`, 540 s), mint request
-  (Bearer JWT, scoping body, PEM un-escaping, missing key names the key,
-  kind mismatch, 401 → `UpstreamAuthError`), Octokit over `mockFetch`
-  (per-call repository scoping, installation-wide for search, JSON body,
-  403 → `UpstreamAuthError`), branch-protection and release tools, the merge
-  bound to the declared base (read then merge; a mismatch is declined with
-  no merge, an unreadable base throws), `push_files` declining malformed
-  `files`, mint tool (clone/push permission sets, fan-out over mission
-  resources, refusals before any call, as `isError` results), discovery
-  (metadata, paging to `total_count`, 401).
-- `injection.test.ts` (425): every identifier position fed `..`, `.`,
+  retired tools, structural denials: non-canonical paths, refs given as
+  branches, malformed `files`, wildcard characters, repositories outside the
+  mission).
+- `credential.test.ts` (9): the declaration (the one way, fine-grained
+  tokens only matched), the check at paste (account, expiry header read or
+  not said, a rejected token), discovery through `/user/repos`, an API tool
+  with the pasted token as bearer, a 401 as a rejected credential.
+- `execute.test.ts` (15): Octokit over `mockFetch` (the token as bearer on a
+  repository call and on a search, JSON body, 401/403 → `UpstreamAuthError`,
+  an unknown tool failing before any call), branch-protection and release
+  tools, the merge bound to the declared base (read then merge; a mismatch
+  is declined with no merge, an unreadable base throws), `push_files`
+  declining malformed `files`, discovery (metadata, paging until a short
+  page, 401).
+- `injection.test.ts` (403): every identifier position fed `..`, `.`,
   `a/../b`, encoded forms, an empty, an overlong and a multi-line value, to
-  `classify` and to `execute` — refused by both with nothing sent (not even
-  the token mint), or sent as the exact path that was classified; numbers;
-  the installation id of the connection and the repository names discovery
-  returns; `run_id` and `job_id` refused unless positive integers.
+  `classify` and to `execute` — refused by both with nothing sent, or sent
+  as the exact path that was classified; numbers; the repository names
+  discovery returns; `run_id` and `job_id` refused unless positive integers.
 - `job-logs.test.ts` (22): the slices of `list_workflow_jobs` and
   `get_job_logs`, their arguments refused by both sides (run and job ids,
   `filter`, `max_bytes` out of range, a non-boolean `tail`); the jobs listing
@@ -607,32 +487,7 @@ policy is stored, not derived from the preset.
   URL in neither result nor failure, a non-https location not followed, an
   expired log (410); `readBounded` across chunks, the head read stopping
   early.
-- `permission-remint.test.ts` (16): the family of GitHub refusals for a
-  missing permission (and a rate limit, which is not one); API tools — a
-  cached grant short of the call minted afresh before anything is sent, a
-  403 "not accessible by integration" minted afresh and sent once more,
-  refused again declined by name, a grant minted for the call not minted
-  twice, another 403 left an `UpstreamAuthError`; `admitPush` — code admitted
-  and a workflow change declined by name on an installation without
-  Workflows, a permission granted since the grant was cached seen at once
-  (the cache entry replaced), a fresh grant not minted twice; the ref moves —
-  a fast-forward and a force-push refused for a permission moved with a
-  token minted afresh, refused again named on the ref.
-- `token-cache.test.ts` (5): a mint per call without a host cache, one mint
-  per repository scope with one, no token served or stored close to its
-  expiry, lifetime bounded by what is left of the token,
-  `github__mint_install_token` never cached.
 - `data-model.test.ts` (1): data-model integrity.
-- `app-manifest.test.ts` (36): the declaration names every tool, its
-  defaults, its three sensitive permissions and the tools lost per level;
-  the manifest per permission choice; the registration URLs and the logins
-  refused; the code grammar; the conversion answer read and refused field by
-  field; a call without its permission declined by name with nothing sent
-  past the token mint (a workflow file needs Workflows, another file does
-  not); nothing declined when GitHub did not report the permissions; the push
-  token's 422 fallback and its refusal; the git remote's two tools in the
-  declaration.
-
 - `git-inspect.test.ts` (19): `inspectPack` over packs of the real
   `git pack-objects` (every upstream ref left out, as `git push` does) and a
   real bare repository behind a fake git database: a change outside the
@@ -659,39 +514,34 @@ connection) is tested by the host against a git-backed stand-in of GitHub:
 - **`Invalid risk catalog` at boot** — read every bullet of the
   `CatalogError`; paths are exact. Presets must reference ids of this
   catalog only.
-- **`github: app configuration key 'app_id' is missing`** — the instance
-  configuration lacks one of the app-config keys; nothing was sent to
-  GitHub.
-- **"Not connected — the provider returned no user authorization"** — the
-  App does not have "Request user authorization (OAuth) during
-  installation" enabled, so GitHub came back without `code`.
-- **"Not connected — … not among those the authorizing account can
-  reach"** — the GitHub account signed in during the installation cannot
-  reach the installation whose id came back; `GET /user/installations` with
-  that account's token does not list it.
-- **`token-exchange-failed` with `incorrect_client_credentials`** — the
-  client ID or client secret entered for the App is wrong (the client ID is
-  not the App ID).
-- **`GitHub App token mint failed (404)`** — the installation id is unknown
-  to this App (App uninstalled, or the wrong App's key); 401 means the key
-  does not match `app_id`.
+- **"Not connected — GitHub rejected the token"** at paste — the token is
+  revoked or expired (`GET /user` answered 401), or the field refused a
+  classic `ghp_` token before anything was sent.
+- **A call is refused with "connected a way GitHub no longer offers"** —
+  the account was made through the GitHub App of plugin 3.x; its owner
+  reconnects it from Accounts with a fine-grained token (same id, same
+  missions).
+- **A call answers 403 "Resource not accessible by personal access
+  token"** — the token lacks the permission the call needs (the guide's
+  table above); on a git push the ref's error names it. Create a token with
+  the permission and reconnect the account: a token's permissions cannot be
+  changed by the gateway.
 - **A call names a repository outside the mission** — the classifier
   refuses with the sentence below. Up to five selected repositories are
   named; above, the message ends with `N repositories are selected.` Add
   the repository to the mission (or the connection's discovered resources
-  are stale: refresh them). `github__mint_install_token` with a foreign
-  `repoFullName` gets the same sentence.
+  are stale: refresh them; a token made for other repositories reaches
+  nothing new).
 
   ```text
   github repository 'acme/lib' is not selected in this mission. Selected: acme/app.
   ```
 
 - **The mission holds no GitHub repository** — every repo-scoped tool is
-  refused with the first line, the mint tool with the second.
+  refused with:
 
   ```text
   no GitHub repository is selected in this mission.
-  github__mint_install_token: no GitHub repository is selected in this mission.
   ```
 
 - **A client still names `dispatch_workflow`, `cancel_workflow_run` or
@@ -726,9 +576,9 @@ connection) is tested by the host against a git-backed stand-in of GitHub:
   did not hold. The text is the reason. What GitHub itself fails is thrown
   (`UpstreamAuthError`, `UpstreamHttpError`, Octokit's own error) and
   recorded as an upstream failure; so are the conditions the executor
-  still throws as plain errors: an installation id that is not a number, a
-  missing app-configuration key, a pull request whose base cannot be read
-  and a default branch GitHub answers that is not a branch name.
+  still throws as plain errors: a stored token without its field, a pull
+  request whose base cannot be read and a default branch GitHub answers
+  that is not a branch name.
 - **`delete_release` is refused with `github.delete-release` missing on a
   mission that holds `create-release`** — they are separate risks (catalog
   v4); add `delete-release`.
@@ -738,11 +588,6 @@ connection) is tested by the host against a git-backed stand-in of GitHub:
   protected name, so only the fallback caught it (a `git push` of
   `feat/<slug>` did, before catalog v7). Rename the branch, or have the
   creator add the fallback to the mission explicitly.
-- **"needs the GitHub App permission Actions (actions: read) … does not hold"
-  while the installation shows Actions "Read and write"** — fixed: a level
-  above the declared one covers it (`accessCovers`). Before the fix, any
-  installation granted more than the plugin declares was refused. A cached
-  per-call token keeps the old answer for up to 50 minutes.
 - **`mockFetch: unexpected GET …`** in tests — Octokit built a URL no route
   covers; the message names it.
 

@@ -1,19 +1,17 @@
 /**
- * Connecting an account with a token pasted by hand, beside the company app
- * (ADR token-connections-beside-the-integration-app), in a browser against the
- * ephemeral instance. The providers are mocked in the launcher: nothing
- * reaches a network.
+ * Connecting an account with a token pasted by hand, the one way of
+ * connecting these services (ADR one-place-to-authorize-services-token-first),
+ * in a browser against the ephemeral instance. The providers are mocked in
+ * the launcher: nothing reaches a network.
  *
- *   - Supabase has no company app here: the token is the way offered, with
- *     the guide its plugin declares; a personal access token is pasted,
- *     checked at the mocked Supabase, and the account page says who it acts
- *     as. The token is never shown back.
- *   - GitHub has its company app: the app is the way offered, and "Use a
- *     token instead" is one click away; a classic token is refused by its
- *     shape before GitHub is asked.
- *   - Railway has no company app: a workspace token is the way offered, the
- *     account token second; the token pasted is checked at the mocked
- *     Railway and the account page names its workspace.
+ *   - Supabase: a personal access token, with the guide its plugin declares,
+ *     pasted, checked at the mocked Supabase; the account page says who it
+ *     acts as. The token is never shown back.
+ *   - GitHub: a fine-grained token, its permissions listed; a classic token
+ *     is refused by its shape before GitHub is asked.
+ *   - Railway: a workspace token, the account token second; the token pasted
+ *     is checked at the mocked Railway and the account page names its
+ *     workspace.
  *
  * `E2E_V5_PK_SHOTS` names a folder: the connect pages are captured there at
  * 1440×900 and 390 px wide, light and dark (design review).
@@ -65,12 +63,12 @@ async function captureAll(page: Page, name: string): Promise<void> {
   await page.goto(url);
 }
 
-test('Supabase without a company app: the token is the way, guided, checked, never shown back', async ({
+test('Supabase: the token is the way, guided, checked, never shown back', async ({
   page,
   request,
 }) => {
   await signIn(page);
-  // The picker says how: a token to paste, no company app needed.
+  // The picker says how: a token to paste.
   await page.goto('/accounts/new');
   const card = page.getByTestId('service-supabase');
   await expect(card).toContainText('paste: personal access token');
@@ -88,8 +86,6 @@ test('Supabase without a company app: the token is the way, guided, checked, nev
   await expect(permissions).toContainText('Edge Functions');
   await expect(guide).toContainText('Choose an expiry of about 90 days');
   await expect(page.getByText('A shared service account is fine')).toBeVisible();
-  // No app way to switch to: none is registered.
-  await expect(page.getByTestId('connect-other-way')).toHaveCount(0);
   await captureAll(page, 'connect-supabase-token');
 
   const token = `sbp_fc${randomBytes(20).toString('hex')}`;
@@ -109,25 +105,16 @@ test('Supabase without a company app: the token is the way, guided, checked, nev
   expect(log.calls.some((c) => c.url === 'https://api.supabase.com/v1/organizations')).toBe(true);
 });
 
-test('GitHub with its company app: the app first, a token one click away, a classic token refused', async ({
+test('GitHub: a fine-grained token, its permissions listed, a classic token refused', async ({
   page,
 }) => {
   await signIn(page);
   await page.goto('/accounts/new/github');
-  await expect(page.getByRole('button', { name: 'Continue to GitHub' })).toBeVisible();
-  const other = page.getByTestId('connect-other-way');
-  await expect(other).toHaveText('Use a token instead');
-  await captureAll(page, 'connect-github-app');
-
-  await other.click();
-  await expect(page).toHaveURL(/method=api-key/);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Connect a GitHub account$/);
   await expect(page.getByTestId('token-permissions')).toContainText('Contents');
-  const unavailable = page.getByTestId('token-unavailable');
-  await expect(unavailable).toContainText('github__mint_install_token');
-  await expect(unavailable).toContainText('needs the GitHub App');
-  await expect(page.getByTestId('connect-other-way')).toHaveText(
-    'Connect through your company’s GitHub app instead',
-  );
+  await expect(page.getByTestId('token-permissions')).toContainText('Workflows');
+  // One way of connecting: nothing else is offered.
+  await expect(page.getByRole('button', { name: 'Continue to GitHub' })).toHaveCount(0);
   await captureAll(page, 'connect-github-token');
 
   // A classic token does not have the shape: refused before GitHub is asked, never echoed.
@@ -135,7 +122,7 @@ test('GitHub with its company app: the app first, a token one click away, a clas
   const field = page.getByLabel(/Fine-grained personal access token/);
   await field.fill(classic);
   await page.getByRole('button', { name: 'Check and connect' }).click();
-  await expect(page).toHaveURL(/method=api-key/);
+  await expect(page).toHaveURL(/\/accounts\/new\/github\?notice=/);
   await expect(page.getByLabel(/Fine-grained personal access token/)).toHaveAttribute(
     'aria-invalid',
     'true',
@@ -143,10 +130,7 @@ test('GitHub with its company app: the app first, a token one click away, a clas
   expect(await page.content()).not.toContain(classic);
 });
 
-test('Railway without a company app: a workspace token, checked, named by its workspace', async ({
-  page,
-  request,
-}) => {
+test('Railway: a workspace token, checked, named by its workspace', async ({ page, request }) => {
   await signIn(page);
   await page.goto('/accounts/new');
   const card = page.getByTestId('service-railway');
@@ -158,8 +142,6 @@ test('Railway without a company app: a workspace token, checked, named by its wo
   await expect(guide).toContainText('a workspace token reaches that workspace only');
   await expect(guide).toContainText('An account token, created with No workspace selected');
   await expect(guide).toContainText('A project token is not accepted');
-  // Every tool runs with a token: nothing is listed as needing the app.
-  await expect(page.getByTestId('token-unavailable')).toHaveCount(0);
   await captureAll(page, 'connect-railway-token');
 
   const token = randomBytes(16).toString('hex');

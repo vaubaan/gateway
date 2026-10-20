@@ -342,16 +342,6 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       'github',
     ),
   ),
-  'connections.handlers.startAppRegistration': form('operator', 303, (rig, headers) =>
-    rig.root.connections.handlers.startAppRegistration(
-      post('/admin/provider-apps/github/create', headers, {
-        owner_kind: 'personal',
-        name: 'Vaubaan test',
-        'permission.contents': 'read',
-      }),
-      'github',
-    ),
-  ),
   'auth.handlers.saveIdpSettings': form('operator', 303, (rig, headers) =>
     rig.root.auth.handlers.saveIdpSettings(
       post('/api/admin/identity-provider', headers, {
@@ -488,8 +478,6 @@ const READS: Readonly<Record<string, string>> = {
   'auth.handlers.loginCallback': 'GET from the IdP; protected by the single-use state and PKCE',
   'connections.handlers.callback':
     'GET from the provider; protected by the single-use state bound to the user (guardSession)',
-  'connections.handlers.completeAppRegistration':
-    'GET from the provider; protected by the single-use state bound to the administrator’s web session (guardSession)',
   'requests.handlers.open': 'GET; redirects or refuses, rate-limited (guardSession)',
   'requests.handlers.inbox': 'GET; reads the caller’s inbox (guardSession)',
   'oauth.handlers.authorize':

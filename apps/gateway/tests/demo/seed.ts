@@ -49,7 +49,9 @@ import {
   type DemoPerson,
 } from './people';
 import {
-  DEMO_INSTALLATIONS,
+  DEMO_GITHUB_TOKENS,
+  githubTokenFields,
+  type DemoGithubToken,
   DEMO_REDIS_DATABASES,
   DEMO_RESEND_DOMAINS,
   type DemoProviders,
@@ -169,20 +171,9 @@ class Seeder {
     return { user, groups: await this.ctx.root.store.groups.groupsOf(user.id) };
   }
 
-  /** Installs the company's GitHub App on one organisation of the simulated GitHub. */
-  async connectGithub(user: UserRecord, installationId: string, name: string) {
-    const { service } = this.ctx.root.connections;
-    const actor = await this.actor(user);
-    const started = await service.start(actor, 'github', { displayName: name });
-    if (started.kind !== 'redirect') fail('github connect did not redirect', started.kind);
-    const state = new URL(started.url).searchParams.get('state');
-    const callback = this.ctx.providers.githubInstallCallback(
-      this.ctx.root.config.publicUrl,
-      installationId,
-      state,
-    );
-    const connected = await service.complete(actor, 'github', callback.searchParams);
-    return connected.connection;
+  /** Pastes one of the simulated GitHub's fine-grained tokens. */
+  async connectGithub(user: UserRecord, token: DemoGithubToken, name: string) {
+    return this.connectWithKey(user, 'github', name, githubTokenFields(token));
   }
 
   async connectWithKey(
@@ -383,12 +374,12 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
   await root.groups.service.addMember(alice.user.id, contractors.id, bob.user.email);
 
   // ── Alice's connections ────────────────────────────────────────────────────
-  const [product, platform] = DEMO_INSTALLATIONS;
-  if (!product || !platform) fail('the simulated GitHub has fewer than two installations', 0);
-  const github = await seeder.connectGithub(alice.user, product.id, 'Acme product repositories');
+  const [product, platform] = DEMO_GITHUB_TOKENS;
+  if (!product || !platform) fail('the simulated GitHub has fewer than two tokens', 0);
+  const github = await seeder.connectGithub(alice.user, product, 'Acme product repositories');
   const platformGithub = await seeder.connectGithub(
     alice.user,
-    platform.id,
+    platform,
     'Acme platform repositories',
   );
   await root.connections.service.transfer(

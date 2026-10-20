@@ -25,7 +25,6 @@ import { CONFIG_FILE_ENV } from '../../../src/server/config';
 import { DEMO_IDP_PATH } from '../../demo/demo-idp';
 import { DEMO_PREFIX } from '../../demo/demo-instance';
 import { assertDemoAllowed, DEFAULT_DEMO_PORT, demoPort, DemoRefusal } from '../../demo/guards';
-import { GITHUB_INSTALL_PATH } from '../../demo/providers';
 import { buildTestRoot } from '../missions/support';
 
 const appDir = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -78,10 +77,9 @@ describe('the demo refuses to start next to anything real', () => {
 });
 
 describe('everything the demo serves is under one prefix', () => {
-  it('keeps the identity provider and the installation page under /__demo', () => {
+  it('keeps the identity provider under /__demo', () => {
     expect(DEMO_PREFIX).toBe('/__demo');
     expect(DEMO_IDP_PATH.startsWith(`${DEMO_PREFIX}/`)).toBe(true);
-    expect(GITHUB_INSTALL_PATH.startsWith(`${DEMO_PREFIX}/`)).toBe(true);
   });
 });
 
@@ -101,17 +99,15 @@ describe('the application has no demo seam', () => {
     expect(naming.map((path) => relative(appDir, path))).toEqual([]);
   });
 
-  it('composes a root that sends installations to GitHub and has no identity provider', async () => {
+  it('composes a root with the shipped GitHub plugin and no identity provider', async () => {
     const root = await buildTestRoot();
     try {
       const github = root.registry.require('github').plugin;
-      // The very object the plugin ships: the demo replaces it in its own registry only.
+      // The very object the plugin ships: the demo registers it as is.
       expect(github.credential).toBe(githubCredential);
-      expect(github.credential.kind).toBe('app-install');
-      if (github.credential.kind === 'app-install') {
-        expect(github.credential.installUrl({ app_slug: 'acme' })).toMatch(
-          /^https:\/\/github\.com\//,
-        );
+      expect(github.credential.kind).toBe('api-key');
+      if (github.credential.kind === 'api-key') {
+        expect(github.credential.createUrl).toMatch(/^https:\/\/github\.com\//);
       }
       expect(root.config.publicUrl.protocol).toBe('https:');
       expect(await root.auth.idp.current()).toBeNull();

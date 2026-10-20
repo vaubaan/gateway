@@ -1,17 +1,15 @@
 /**
  * A GitHub account connected with a fine-grained personal access token, end
- * to end inside the process (ADR token-connections-beside-the-integration-app):
+ * to end inside the process (ADR one-place-to-authorize-services-token-first):
  * the real composition root on the `:memory:` store with the REAL encryptor,
  * the REAL GitHub plugin, and GitHub mocked by `mockFetch` (any other request
  * fails the test).
  *
- *   no company app → the token is the way offered → pasted, checked at
- *   GitHub, stored sealed (the database is scanned for it) → a mission calls a
- *   tool with it → `github__mint_install_token` is not listed and is refused
- *   before the budget → GitHub rejects the token → the account needs
- *   reconnecting → removing it asks GitHub nothing.
+ *   the token is the one way → pasted, checked at GitHub, stored sealed (the
+ *   database is scanned for it) → a mission calls a tool with it → GitHub
+ *   rejects the token → the account needs reconnecting → removing it asks
+ *   GitHub nothing.
  */
-import type { CallAuditEntry } from '@vaubaan/gateway-core';
 import { createRegistry } from '@vaubaan/plugin-sdk';
 import { mockFetch, type MockFetch } from '@vaubaan/plugin-sdk/testing';
 import githubPlugin from '@vaubaan/plugin-github';
@@ -134,30 +132,28 @@ describe('a GitHub account connected with a token', () => {
     };
   }
 
-  it('connects, runs a tool with the token, refuses the mint, then needs reconnecting', async () => {
+  it('connects, runs a tool with the token, then needs reconnecting', async () => {
     const alice = await signIn('alice@example.com');
 
-    // No GitHub App is registered: the token is the way offered.
+    // The token is the one way: nothing to declare first.
     const offered = await root.connections.service.provider('github');
-    expect(offered).toMatchObject({ configured: true, kind: 'api-key' });
+    expect(offered).toMatchObject({ configured: true, kind: 'api-key', usesApp: false });
 
     // A classic token is refused by the field's shape, before GitHub is asked.
     const classic = await root.connections.handlers.connect(
       post('/accounts/connect/github', alice.cookie, {
-        method: 'api-key',
         'field.token': 'ghp_0123456789abcdefghijklmnopqrstuvwxyzAB',
       }),
       'github',
     );
     expect(classic.status).toBe(303);
-    expect(
-      new URL(classic.headers.get('location') ?? '', PUBLIC_URL).searchParams.get('method'),
-    ).toBe('api-key');
+    expect(new URL(classic.headers.get('location') ?? '', PUBLIC_URL).pathname).toBe(
+      '/accounts/new/github',
+    );
     expect(github.calls).toHaveLength(0);
 
     const connected = await root.connections.handlers.connect(
       post('/accounts/connect/github', alice.cookie, {
-        method: 'api-key',
         name: 'GitHub bot',
         'field.token': PAT,
       }),
@@ -184,7 +180,7 @@ describe('a GitHub account connected with a token', () => {
     expect(databaseDump()).not.toContain(PAT);
     for (const call of github.calls) expect(call.headers.authorization).toBe(`Bearer ${PAT}`);
 
-    // A mission on it: the mint is neither listed nor run.
+    // A mission on it calls a tool with the token.
     const issued = await root.missions.service.issue(alice.user, {
       name: 'Read code',
       connections: [
@@ -194,12 +190,6 @@ describe('a GitHub account connected with a token', () => {
           policy: [
             {
               risk_id: 'github.read-code',
-              quota: 10,
-              rate_limit: { max: 100, window_seconds: 60 },
-              gate: 'auto',
-            },
-            {
-              risk_id: 'github.mint-install-token-clone',
               quota: 10,
               rate_limit: { max: 100, window_seconds: 60 },
               gate: 'auto',
@@ -216,7 +206,6 @@ describe('a GitHub account connected with a token', () => {
     const listed = await rpc(key, 'tools/list', {});
     const names = (listed.result?.tools ?? []).map((t) => t.name);
     expect(names).toContain('github__list_branches');
-    expect(names).not.toContain('github__mint_install_token');
 
     const branches = await rpc(key, 'tools/call', {
       name: 'github__list_branches',
@@ -224,23 +213,6 @@ describe('a GitHub account connected with a token', () => {
     });
     expect(branches.error).toBeUndefined();
     expect(JSON.parse(branches.result?.content?.[0]?.text ?? 'null')).toEqual([{ name: 'main' }]);
-
-    const before = github.calls.length;
-    const mint = await rpc(key, 'tools/call', {
-      name: 'github__mint_install_token',
-      arguments: { purpose: 'clone', repoFullName: 'acme/app' },
-    });
-    expect(JSON.stringify(mint)).toContain('needs the GitHub App');
-    expect(github.calls).toHaveLength(before);
-    const entries = (await root.store.audit.list({
-      missionId: issued.mission.id,
-      kind: 'call',
-    })) as unknown as CallAuditEntry[];
-    const mintEntry = entries.find((e) => e.tool === 'github__mint_install_token');
-    expect(mintEntry?.decision).toBe('refused');
-    const session = await root.store.sessions.getByMission(issued.mission.id);
-    const counters = session ? await root.store.sessions.counters(session.id) : [];
-    expect(counters.filter((c) => c.riskId === 'github.mint-install-token-clone')).toEqual([]);
 
     // GitHub stops accepting the token (expired or deleted there): the account needs reconnecting.
     rejectToken = true;

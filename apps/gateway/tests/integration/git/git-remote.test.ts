@@ -14,7 +14,14 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { budgetMissionOf } from '../../../src/server/budget';
 import type { AuditCallRecord } from '../../../src/server/store';
 import { line, type IssuedMission } from '../../../src/server/execution/testing';
-import { openGitRig, OTHER_REPOSITORY, REPOSITORY, type GitResult, type GitRig } from './support';
+import {
+  CONNECTION_TOKEN,
+  openGitRig,
+  OTHER_REPOSITORY,
+  REPOSITORY,
+  type GitResult,
+  type GitRig,
+} from './support';
 
 const PUSH = 'github__git_push';
 const FETCH = 'github__git_fetch';
@@ -78,10 +85,11 @@ describe('clone and fetch', () => {
     expect(upstream.some((r) => r.host === 'git' && r.gitProtocol === 'version=2')).toBe(true);
     // The mission key never reaches GitHub.
     expect(upstream.every((r) => !(r.authorization ?? '').includes(developer.token))).toBe(true);
-    // The fetch token reads one repository, nothing else.
-    const fetchToken = rig.host.minted.at(-1);
-    expect(fetchToken?.permissions).toEqual({ contents: 'read' });
-    expect(fetchToken?.repositories).toEqual(['app']);
+    // The connection's token is what GitHub sees, as the Basic password git expects.
+    const basic = `Basic ${Buffer.from(`x-access-token:${CONNECTION_TOKEN}`).toString('base64')}`;
+    expect(upstream.filter((r) => r.host === 'git').every((r) => r.authorization === basic)).toBe(
+      true,
+    );
     const fetches = (await auditOf(developer)).filter((e) => e.tool === FETCH);
     expect(fetches.map((e) => [e.decision, e.risks_touched])).toEqual([
       ['allowed', ['github.read-code']],

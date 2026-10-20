@@ -184,35 +184,20 @@
 #   emails:
 #     - ops@example.com
 
-# Apps your company registered at each provider, keyed by plugin id. Only
-# providers connected through an app need one (an App installation or an
-# OAuth client); providers connected with an API key or an SSH key have no
-# block here. Which fields a provider needs is
-# declared by its plugin (plugins/<id>/README.md); allowed fields: client_id,
-# client_secret, app_id, app_slug, private_key.
-# env: VAUBAAN_PROVIDER_<ID>_<FIELD>, e.g. VAUBAAN_PROVIDER_GITHUB_APP_ID,
-#      VAUBAAN_PROVIDER_GITHUB_PRIVATE_KEY_FILE (a hyphen in the plugin id
+# The OAuth client your company declared at a provider that signs people in
+# through its own consent screen, keyed by plugin id. Only a provider whose
+# plugin offers no key a person can make needs one (Gmail today); every
+# other provider is connected with a key pasted on its connect page and has
+# no block here. The same client can be declared from the provider's connect
+# page instead; a block here wins over it and makes it read-only there.
+# Allowed fields: client_id, client_secret.
+# env: VAUBAAN_PROVIDER_<ID>_<FIELD>, e.g. VAUBAAN_PROVIDER_GMAIL_CLIENT_ID,
+#      VAUBAAN_PROVIDER_GMAIL_CLIENT_SECRET_FILE (a hyphen in the plugin id
 #      becomes an underscore)
 # providers:
-#   github:
-#     app_id: '12345'
-#     app_slug: acme-gateway
-#     private_key: ${file:/run/secrets/github_app_key.pem}
-#     # OAuth client of the same GitHub App (not the App ID). Required: the
-#     # App must have "Request user authorization (OAuth) during installation"
-#     # enabled, and the gateway checks that whoever installs it can reach the
-#     # installation before connecting it.
-#     # env: VAUBAAN_PROVIDER_GITHUB_CLIENT_ID,
-#     #      VAUBAAN_PROVIDER_GITHUB_CLIENT_SECRET[_FILE]
-#     client_id: Iv1.0123456789abcdef
-#     client_secret: ${file:/run/secrets/github_app_client_secret}
-#   # OAuth providers take the client id and secret of your OAuth app.
-#   supabase:
-#     client_id: ${SUPABASE_CLIENT_ID}
-#     client_secret: ${SUPABASE_CLIENT_SECRET}
-#   railway:
-#     client_id: ${RAILWAY_CLIENT_ID}
-#     client_secret: ${RAILWAY_CLIENT_SECRET}
+#   gmail:
+#     client_id: 123456789012-abcdefghijklmnop.apps.googleusercontent.com
+#     client_secret: ${file:/run/secrets/gmail_client_secret}
 
 # REQUIRED while no sign-in provider is configured. At least 32 characters; lets the
 # operator sign in at /admin/bootstrap and configure the IdP from the Admin

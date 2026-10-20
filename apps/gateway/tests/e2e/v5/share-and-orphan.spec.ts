@@ -347,7 +347,7 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   const disconnecting = ines
     .getByRole('dialog')
     .filter({ hasText: `Disconnect ${connectionName}?` });
-  // A GitHub App installation is not uninstalled by the gateway: the owner is told so first.
+  // A pasted token is not deleted at GitHub by the gateway: the owner is told so first.
   await expect(disconnecting).toContainText('The gateway cannot withdraw the access at GitHub');
   await expect(disconnecting).toContainText('This cannot be undone');
   await snap(ines, 'connection-revoke-dialog');
@@ -360,7 +360,7 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   // What is left to do at the service is said once: by the note of the act…
   const byHand = ines.getByText(/Still granted at GitHub\./);
   await expect(byHand).toHaveCount(1);
-  await expect(ines.getByText(/Uninstall your company.s GitHub App/)).toHaveCount(1);
+  await expect(ines.getByText(/Delete the token at GitHub/)).toHaveCount(1);
   await expect(ines.getByRole('main')).not.toContainText('by hand');
   // …which also says the credential is erased: the page does not say it a second time.
   await expect(ines.getByTestId('account-disconnected')).toHaveCount(0);

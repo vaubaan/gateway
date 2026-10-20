@@ -164,12 +164,18 @@ describe('the deployment examples show the provider apps the shipped plugins tak
   });
 
   describe('the checks themselves', () => {
-    const [appProvider, app] = [...APP_PROVIDERS].find(([, a]) => !a.experimental) ?? [];
+    // The provider the checks are tried on: a stable one that takes an app when the image
+    // ships one, else an experimental one (Gmail, the one OAuth client shipped today).
+    const [appProvider, app] =
+      [...APP_PROVIDERS].find(([, a]) => !a.experimental) ?? [...APP_PROVIDERS][0] ?? [];
     const keyProvider = SHIPPED_IDS.find((id) => !APP_PROVIDERS.has(id));
     if (!appProvider || !app || !keyProvider) throw new Error('the shipped plugins changed shape');
-    /** A complete example: every stable provider that takes an app, with all its fields. */
+    /** A complete example: every stable provider that takes an app, with all its fields, and the tried one. */
     const complete = (): Map<string, readonly string[]> =>
-      new Map([...APP_PROVIDERS].filter(([, a]) => !a.experimental).map(([id, a]) => [id, a.all]));
+      new Map([
+        ...[...APP_PROVIDERS].filter(([, a]) => !a.experimental).map(([id, a]) => [id, a.all]),
+        [appProvider, app.all],
+      ] as [string, readonly string[]][]);
 
     it('accept a complete example', () => {
       expect(mismatches(complete())).toEqual([]);
@@ -195,7 +201,9 @@ describe('the deployment examples show the provider apps the shipped plugins tak
     it('refuse a missing provider and a missing required field', () => {
       const missing = complete();
       missing.delete(appProvider);
-      expect(mismatches(missing)).toEqual([`${appProvider}: takes an app, has no example`]);
+      expect(mismatches(missing)).toEqual(
+        app.experimental ? [] : [`${appProvider}: takes an app, has no example`],
+      );
 
       const required = app.required[0];
       if (!required) throw new Error(`${appProvider} has no required field`);
@@ -216,14 +224,14 @@ describe('the deployment examples show the provider apps the shipped plugins tak
       const env = envProviders(
         [
           '# VAUBAAN_PROVIDER_CLOUDFLARE_DNS_CLIENT_SECRET_FILE=/run/secrets/x',
-          'VAUBAAN_PROVIDER_ACME_APP_ID=1',
+          'VAUBAAN_PROVIDER_ACME_CLIENT_ID=1',
           '# VAUBAAN_PROVIDER_ACME_TOKEN=nope',
           '# FIELD is one of CLIENT_ID; see VAUBAAN_PROVIDER_<ID>_<FIELD>',
         ].join('\n'),
       );
       expect([...env.shown]).toEqual([
         ['cloudflare-dns', ['client_secret']],
-        ['acme', ['app_id']],
+        ['acme', ['client_id']],
       ]);
       expect(env.unparsed).toEqual(['VAUBAAN_PROVIDER_ACME_TOKEN']);
     });

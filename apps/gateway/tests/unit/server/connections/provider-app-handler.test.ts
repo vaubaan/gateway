@@ -3,8 +3,7 @@
  * Connections surface, at their edges: an audit entry that cannot be written
  * after the change is committed, and a body that is not a form.
  *
- * Over the real composition root (`:memory:` store) with fixture plugins: no
- * shipped plugin has unverifiable installations to accept.
+ * Over the real composition root (`:memory:` store) with a fixture plugin.
  */
 import { createRegistry } from '@vaubaan/plugin-sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -14,12 +13,12 @@ import { buildRoot, type GatewayRoot } from '../../../../src/server/compose/root
 import { memoryStoreDeps } from '../../../../src/server/compose/testing';
 import { loadInstanceConfig } from '../../../../src/server/config';
 import { validEnv } from '../../../../src/server/config/testing';
-import { NOTICE_PARAM, PROVIDER_APPS_PAGE } from '../../../../src/server/connections';
 import {
-  fixturePlugin,
-  OAUTH_SPEC,
-  UNVERIFIED_APP_INSTALL_SPEC,
-} from '../../../../src/server/connections/testing';
+  connectPagePath,
+  NOTICE_PARAM,
+  providerAppActionPath,
+} from '../../../../src/server/connections';
+import { fixturePlugin, OAUTH_SPEC } from '../../../../src/server/connections/testing';
 import type { UserRecord } from '../../../../src/server/store/types';
 
 const PUBLIC_URL = 'https://gateway.example.com';
@@ -41,10 +40,7 @@ describe('provider-app handler: audit failure and malformed bodies', () => {
         }),
       logWrite: (_level, line) => lines.push(line),
       buildRegistry: async () =>
-        createRegistry([
-          fixturePlugin({ id: 'oauthco', credential: OAUTH_SPEC }),
-          fixturePlugin({ id: 'oldappco', credential: UNVERIFIED_APP_INSTALL_SPEC }),
-        ]),
+        createRegistry([fixturePlugin({ id: 'oauthco', credential: OAUTH_SPEC })]),
       providerFetch: async () => {
         throw new Error('no provider is reachable from a test');
       },
@@ -106,15 +102,14 @@ describe('provider-app handler: audit failure and malformed bodies', () => {
   function expectSavedRedirect(response: Response, provider: string): void {
     expect(response.status).toBe(303);
     const location = new URL(response.headers.get('location') ?? '', PUBLIC_URL);
-    expect(location.pathname).toBe(PROVIDER_APPS_PAGE);
-    expect(location.hash).toBe(`#${provider}`);
+    expect(location.pathname).toBe(connectPagePath(provider));
     expect(location.searchParams.get(NOTICE_PARAM)).toBeTruthy();
   }
 
   it('a saved provider app whose audit entry cannot be written stands, and is logged at error', async () => {
     auditFails();
     const response = await root.connections.handlers.saveProviderApp(
-      await formPost(`${PROVIDER_APPS_PAGE}/oauthco`, {
+      await formPost(providerAppActionPath('oauthco'), {
         'field.client_id': 'cid',
         'field.client_secret': CLIENT_SECRET,
       }),
@@ -128,23 +123,10 @@ describe('provider-app handler: audit failure and malformed bodies', () => {
     errorLineFor('oauthco');
   });
 
-  it('accepting unverified installations whose audit entry cannot be written stands too', async () => {
-    auditFails();
-    const response = await root.connections.handlers.saveProviderApp(
-      await formPost(`${PROVIDER_APPS_PAGE}/oldappco`, { action: 'accept-unverified' }),
-      'oldappco',
-    );
-    expectSavedRedirect(response, 'oldappco');
-    expect((await root.providerApps.status('oldappco')).installVerification).toBe(
-      'unverified-accepted',
-    );
-    errorLineFor('oldappco');
-  });
-
   it('writes the audit entry and no error line when the audit works', async () => {
     const write = vi.spyOn(root.store.auditWriter, 'write');
     const response = await root.connections.handlers.saveProviderApp(
-      await formPost(`${PROVIDER_APPS_PAGE}/oauthco`, {
+      await formPost(providerAppActionPath('oauthco'), {
         'field.client_id': 'cid',
         'field.client_secret': CLIENT_SECRET,
       }),
@@ -165,7 +147,7 @@ describe('provider-app handler: audit failure and malformed bodies', () => {
   it('answers 400 to a body that is not a form, on every form handler, and writes nothing', async () => {
     const responses = [
       await root.connections.handlers.saveProviderApp(
-        await jsonPost(`${PROVIDER_APPS_PAGE}/oauthco`),
+        await jsonPost(providerAppActionPath('oauthco')),
         'oauthco',
       ),
       await root.connections.handlers.connect(

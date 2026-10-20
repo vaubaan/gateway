@@ -234,7 +234,7 @@ test('a gated action of the developer preset: refused, approved by its creator o
   const afterReplay = await workflowWrites();
   expect(afterReplay).toHaveLength(writesBefore + 1);
   expect(afterReplay.at(-1)?.url).toContain(`/repos/${OWNER}/${REPO}/contents/`);
-  expect(afterReplay.at(-1)?.with_installation_token).toBe(true);
+  expect(afterReplay.at(-1)?.with_connection_token).toBe(true);
 
   await hedy.reload();
   await expect(hedy.getByTestId('approval-outcome')).toContainText('The agent ran it on');

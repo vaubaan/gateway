@@ -9,10 +9,10 @@
  * is never forwarded to the real provider.
  *
  * Simulated:
- *   - GitHub — the App installation flow with its user-verification step
- *     (token exchange, `GET /user/installations`), installation tokens, the
- *     repositories of two installations and the REST endpoints behind the
- *     common tools (branches, commits, files, pull requests, issues, …);
+ *   - GitHub — two fine-grained tokens (one per organisation): the check at
+ *     paste (`GET /user`), the repositories each reaches (`GET /user/repos`)
+ *     and the REST endpoints behind the common tools (branches, commits,
+ *     files, pull requests, issues, …);
  *   - Stripe — `GET /v1/account` per key (test and live as two resources),
  *     the list endpoints and the writes of the plugin's tools;
  *   - Cloudflare DNS — two zones and their records;
@@ -27,11 +27,10 @@
  * Every provider URL is read off the plugin that calls it (its credential
  * spec or its exported API base), never spelled a second time here.
  */
-import { generateKeyPairSync, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 
 import { CLOUDFLARE_API_BASE } from '@vaubaan/plugin-cloudflare-dns';
-import { GITHUB_APP_PERMISSIONS, githubCredential } from '@vaubaan/plugin-github';
-import { defaultPermissionChoice } from '@vaubaan/plugin-sdk';
+import { GITHUB_TOKEN_FIELD, githubCredential } from '@vaubaan/plugin-github';
 import { RESEND_API_BASE } from '@vaubaan/plugin-resend';
 import { mockFetch, type MockRoute, type RecordedCall } from '@vaubaan/plugin-sdk/testing';
 import { STRIPE_API_BASE } from '@vaubaan/plugin-stripe';
@@ -54,56 +53,34 @@ export class DemoProviderError extends Error {
 /* GitHub                                                                    */
 /* ------------------------------------------------------------------------ */
 
-const declaredVerification = githubCredential.userVerification;
-if (!declaredVerification) throw new Error('the github plugin no longer verifies installations');
-const verification = declaredVerification;
-const GITHUB_API = new URL(verification.installationsUrl).origin;
+const GITHUB_API = 'https://api.github.com';
 
-export interface DemoInstallation {
-  readonly id: string;
-  /** The account the App is installed on, as the install page names it. */
+export interface DemoGithubToken {
+  /** The fine-grained token, of the shape the plugin's field accepts. */
+  readonly token: string;
+  /** The account the token was made for, as `GET /user` names it. */
   readonly account: string;
   readonly repositories: readonly string[];
 }
 
-/** The two organisations the demo GitHub lets the company's App be installed on. */
-export const DEMO_INSTALLATIONS: readonly DemoInstallation[] = [
+/** The two organisations of the demo GitHub, one fine-grained token each. */
+export const DEMO_GITHUB_TOKENS: readonly DemoGithubToken[] = [
   {
-    id: '4242',
+    token: `github_pat_11DEMO0000000000000_${'a'.repeat(40)}`,
     account: 'acme-org',
     repositories: ['acme-org/app', 'acme-org/web', 'acme-org/infra', 'acme-org/docs'],
   },
   {
-    id: '4343',
+    token: `github_pat_11DEMO0000000000000_${'b'.repeat(40)}`,
     account: 'acme-platform',
     repositories: ['acme-platform/terraform', 'acme-platform/runbooks'],
   },
 ];
 
-/** Path of the simulated installation page on the demo listener. */
-export const GITHUB_INSTALL_PATH = '/__demo/github/install';
-
-export interface DemoGithubApp {
-  readonly appId: string;
-  readonly slug: string;
-  readonly clientId: string;
-  readonly clientSecret: string;
-  readonly privateKey: string;
-}
-
-/** The company's GitHub App: key pair and secrets generated per run, kept in memory only. */
-function generateGithubApp(): DemoGithubApp {
-  return {
-    appId: '123456',
-    slug: 'acme-vaubaan-gateway',
-    clientId: 'Iv1.demo000000000000',
-    clientSecret: random(),
-    privateKey: generateKeyPairSync('rsa', {
-      modulusLength: 2048,
-      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-      publicKeyEncoding: { type: 'spki', format: 'pem' },
-    }).privateKey,
-  };
+/** The form values that connect GitHub with one of the demo's tokens. */
+export function githubTokenFields(token: DemoGithubToken): Record<string, string> {
+  if (githubCredential.kind !== 'api-key') throw new Error('github connects with a token');
+  return { [GITHUB_TOKEN_FIELD]: token.token };
 }
 
 const BRANCHES = [
@@ -164,62 +141,32 @@ const lastNumberOf = (url: string): number =>
 const jsonOf = (call: RecordedCall): Record<string, unknown> =>
   typeof call.json === 'object' && call.json !== null ? (call.json as Record<string, unknown>) : {};
 
-function githubRoutes(installationTokens: ReadonlyMap<string, DemoInstallation>): MockRoute[] {
+function githubRoutes(): MockRoute[] {
   const api = escapeRegExp(GITHUB_API);
   const repo = `^${api}/repos/[^/]+/[^/]+`;
-  const installationOf = (call: RecordedCall): DemoInstallation | undefined =>
-    installationTokens.get((call.headers.authorization ?? '').replace(/^(token|Bearer)\s+/i, ''));
-  const tokenOf = (installation: DemoInstallation): string =>
-    [...installationTokens].find(([, value]) => value === installation)?.[0] ?? '';
+  const tokenOf = (call: RecordedCall): DemoGithubToken | undefined => {
+    const bearer = (call.headers.authorization ?? '').replace(/^(token|Bearer)\s+/i, '');
+    return DEMO_GITHUB_TOKENS.find((known) => known.token === bearer);
+  };
 
   return [
-    // ── The connect flow: user verification, then the installation's token ──
+    // ── The connect flow: the check at paste, then the repositories the token reaches ──
     {
-      method: 'POST',
-      url: verification.tokenUrl,
-      respond: () => ({ access_token: `ghu_${random()}`, token_type: 'bearer' }),
+      method: 'GET',
+      url: `${GITHUB_API}/user`,
+      // A token the demo does not know names nobody: the plugin's check refuses it.
+      respond: (call) => ({ login: tokenOf(call)?.account ?? null }),
     },
     {
       method: 'GET',
-      url: (url) => url.startsWith(`${verification.installationsUrl}?`),
-      respond: (call) => ({
-        installations:
-          new URL(call.url).searchParams.get('page') === '1'
-            ? DEMO_INSTALLATIONS.map((installation) => ({ id: Number(installation.id) }))
-            : [],
-      }),
-    },
-    ...DEMO_INSTALLATIONS.map((installation): MockRoute => ({
-      method: 'POST',
-      url: `${GITHUB_API}/app/installations/${installation.id}/access_tokens`,
-      status: 201,
-      respond: () => ({
-        token: tokenOf(installation),
-        expires_at: new Date(Date.now() + 3_600_000).toISOString(),
-        // The demo's App holds what the tools need (its default permissions).
-        permissions: defaultPermissionChoice(GITHUB_APP_PERMISSIONS),
-        repositories: installation.repositories.map((fullName, index) => ({
-          id: index + 1,
-          name: fullName.split('/')[1],
+      url: (url) => url.startsWith(`${GITHUB_API}/user/repos?`),
+      respond: (call) =>
+        (tokenOf(call)?.repositories ?? []).map((fullName) => ({
           full_name: fullName,
+          default_branch: 'main',
+          private: true,
+          archived: false,
         })),
-      }),
-    })),
-    {
-      method: 'GET',
-      url: (url) => url.startsWith(`${GITHUB_API}/installation/repositories?`),
-      respond: (call) => {
-        const repositories = installationOf(call)?.repositories ?? [];
-        return {
-          total_count: repositories.length,
-          repositories: repositories.map((fullName) => ({
-            full_name: fullName,
-            default_branch: 'main',
-            private: true,
-            archived: false,
-          })),
-        };
-      },
     },
     // ── Reads ───────────────────────────────────────────────────────────────
     { method: 'GET', url: new RegExp(`${repo}/branches(\\?|$)`), body: BRANCHES },
@@ -846,13 +793,6 @@ export interface DemoProviders {
   readonly fetch: typeof fetch;
   /** Every outbound request the instance made, in order (the smoke test reads it). */
   readonly calls: readonly RecordedCall[];
-  /** The company's GitHub App, for the `providers.github` block of the configuration. */
-  readonly githubApp: DemoGithubApp;
-  /**
-   * The user's step on the simulated installation page: where GitHub sends the
-   * browser back once the App is installed on `installationId`.
-   */
-  githubInstallCallback(publicUrl: URL, installationId: string, state: string | null): URL;
 }
 
 export interface DemoProvidersOptions {
@@ -861,14 +801,8 @@ export interface DemoProvidersOptions {
 }
 
 export function createDemoProviders(options: DemoProvidersOptions = {}): DemoProviders {
-  const githubApp = generateGithubApp();
-  // One installation token per installation, so the mock knows which
-  // repositories a request authenticated with it may see.
-  const installationTokens = new Map(
-    DEMO_INSTALLATIONS.map((installation) => [`ghs_${random()}`, installation] as const),
-  );
   const mock = mockFetch([
-    ...githubRoutes(installationTokens),
+    ...githubRoutes(),
     ...stripeRoutes(),
     ...cloudflareRoutes(),
     ...resendRoutes(),
@@ -891,26 +825,5 @@ export function createDemoProviders(options: DemoProvidersOptions = {}): DemoPro
   return {
     fetch: demoFetch,
     calls: mock.calls,
-    githubApp,
-    githubInstallCallback(publicUrl, installationId, state) {
-      const base = publicUrl.href.replace(/\/$/, '');
-      const callback = new URL(`${base}/connections/callback/github`);
-      callback.searchParams.set(githubCredential.installationIdParam, installationId);
-      callback.searchParams.set('setup_action', 'install');
-      callback.searchParams.set(verification.codeParam, random(10));
-      if (state) callback.searchParams.set('state', state);
-      return callback;
-    },
-  };
-}
-
-/** The `VAUBAAN_PROVIDER_GITHUB_*` variables of the demo configuration. */
-export function githubAppEnv(app: DemoGithubApp): Record<string, string> {
-  return {
-    VAUBAAN_PROVIDER_GITHUB_APP_ID: app.appId,
-    VAUBAAN_PROVIDER_GITHUB_APP_SLUG: app.slug,
-    VAUBAAN_PROVIDER_GITHUB_PRIVATE_KEY: app.privateKey,
-    VAUBAAN_PROVIDER_GITHUB_CLIENT_ID: app.clientId,
-    VAUBAAN_PROVIDER_GITHUB_CLIENT_SECRET: app.clientSecret,
   };
 }

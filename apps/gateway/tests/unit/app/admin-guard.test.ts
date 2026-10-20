@@ -138,8 +138,6 @@ describe('the Administration surface authorizes in every page and route', () => 
         'identity-provider/[id]/page.tsx',
         'oauth-clients/page.tsx',
         'page.tsx',
-        'provider-apps/page.tsx',
-        'provider-apps/[provider]/confirm/page.tsx',
         'telemetry/page.tsx',
         'users/page.tsx',
       ].sort(),
@@ -150,7 +148,6 @@ describe('the Administration surface authorizes in every page and route', () => 
   /** The params a page with a dynamic segment renders for: the provider `idp` saved by `configureIdp`. */
   const PAGE_PARAMS: Readonly<Record<string, Record<string, string>>> = {
     'identity-provider/[id]/page.tsx': { id: 'idp' },
-    'provider-apps/[provider]/confirm/page.tsx': { provider: 'github' },
   };
 
   describe.each(PAGES)('page $name', ({ path, name }) => {
