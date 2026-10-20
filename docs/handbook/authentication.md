@@ -2,7 +2,7 @@
 title: Authentication — sign-in providers (OIDC, GitHub, local accounts), admission, web session, bootstrap token, admin rule
 status: current
 date: 2026-10-13
-last_synced: 2026-10-19
+last_synced: 2026-10-20
 tracks:
   - apps/gateway/src/server/auth/
   - apps/gateway/src/server/users/
@@ -142,7 +142,7 @@ apps/gateway/src/app/
   admin/(guarded)/layout.tsx             the shell with the local navigation of Settings, or "You do not administer this gateway" — not the boundary
   admin/(guarded)/page.tsx               /admin
   admin/(guarded)/identity-provider/page.tsx         /admin/identity-provider — Settings → Sign-in: the list
-  admin/(guarded)/identity-provider/new/page.tsx     …/new?kind=oidc|github — add one
+  admin/(guarded)/identity-provider/new/page.tsx     …/new?kind=oidc|google|entra|github|local — add one; google and entra are presets of oidc (components/settings/sign-in-presets.ts)
   admin/(guarded)/identity-provider/[id]/page.tsx    …/<id> — edit one saved in Settings
   admin/(guarded)/users/page.tsx         /admin/users
   admin/(guarded)/users/[id]/deactivate/route.ts   POST /admin/users/<id>/deactivate
@@ -280,6 +280,19 @@ Enterprise Server base URL), `clientId`, `clientSecret`, `claims` (OIDC),
 | configuration (`file`)      | `idp.*` as the provider `idp`; every `sign_in.<id>.*` (`VAUBAAN_SIGN_IN_<ID>_<FIELD>`)                                | read-only; wins on its id      |
 | `instance_config` (`store`) | `idp` in the single-provider keys below; any other as `sign_in.<id>` (JSON) and `sign_in.<id>.client_secret` (sealed) | added, edited, tested, removed |
 
+- **Presets.** "Add a sign-in provider" offers Google and Entra ID beside
+  OpenID Connect, GitHub and local accounts (`sign-in-presets.ts`,
+  `SIGN_IN_PRESETS`): the page fills the issuer (`GOOGLE_ISSUER`) or asks for
+  the **Entra tenant** instead (field `tenant`, a GUID or a domain; the
+  handler writes `https://login.microsoftonline.com/<tenant>/v2.0` with
+  `entraIssuer`, and refuses by name a word that is no tenant — `common`,
+  `organizations`, `consumers` included, since they would make the provider
+  open without the form saying so), the claim names, the admission rule that
+  fits, and lists the registration steps and what to know (Entra's group
+  object ids, `xms_edov`). The form posts `preset` so that a refusal comes
+  back on the preset's page; what is saved is an `oidc` provider, and the
+  edit page shows the preset's fields again (`entraTenantOf`). Test:
+  `sign-in-providers.test.ts` ("the Entra ID preset").
 - `views()` lists them, the file's first, **without the secret** (no
   decryption: the authenticator reads it on every request); `resolve(id)`
   returns one with its secret, for a sign-in; `ofIssuer(iss)` finds a user's

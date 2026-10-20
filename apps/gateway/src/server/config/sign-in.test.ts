@@ -13,6 +13,8 @@ import {
   issuerKey,
   reservedGroupNames,
   resolveAdminGroup,
+  entraIssuer,
+  entraTenantOf,
 } from './sign-in';
 import { parseSignInEnvName } from './sources';
 import { fakeFiles, TEST_BOOTSTRAP_TOKEN, validEnv } from './testing';
@@ -279,5 +281,38 @@ describe('sign-in helpers', () => {
     expect(isSignInProviderId('acme-entra')).toBe(true);
     expect(isSignInProviderId('Acme')).toBe(false);
     expect(isSignInProviderId('1x')).toBe(false);
+  });
+});
+
+describe('the Entra ID preset', () => {
+  it('builds the tenant issuer from a GUID or a domain, and refuses the rest', () => {
+    expect(entraIssuer('55fbb1e8-b8c7-455f-9be7-412e8fdb4120')?.href).toBe(
+      'https://login.microsoftonline.com/55fbb1e8-b8c7-455f-9be7-412e8fdb4120/v2.0',
+    );
+    expect(entraIssuer(' Contoso.onmicrosoft.com ')?.href).toBe(
+      'https://login.microsoftonline.com/contoso.onmicrosoft.com/v2.0',
+    );
+    for (const bad of [
+      '',
+      'common',
+      'organizations',
+      'consumers',
+      'not a tenant',
+      'a/b',
+      '-contoso.com',
+      'contoso-.com',
+      'contoso..com',
+      '.com',
+    ]) {
+      expect(entraIssuer(bad)).toBeNull();
+    }
+  });
+
+  it('reads the tenant back from an Entra issuer only', () => {
+    expect(entraTenantOf(new URL('https://login.microsoftonline.com/contoso.com/v2.0/'))).toBe(
+      'contoso.com',
+    );
+    expect(entraTenantOf(new URL('https://login.microsoftonline.com/common/v2.0'))).toBeNull();
+    expect(entraTenantOf(new URL('https://accounts.google.com'))).toBeNull();
   });
 });

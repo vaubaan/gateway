@@ -20,7 +20,7 @@
 import type { AuditWriter } from '@vaubaan/gateway-core';
 
 import type { RateLimiter } from '../compose/ports';
-import { LEGACY_PROVIDER_ID } from '../config/sign-in';
+import { entraIssuer, LEGACY_PROVIDER_ID } from '../config/sign-in';
 import { resolveReturnTo } from '../http/return-to';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
@@ -326,11 +326,16 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
             ? 'update'
             : 'create';
       const admission = stringField(form, 'admission');
+      // The Entra ID preset asks for the tenant and writes the issuer itself; a tenant that
+      // is neither a GUID nor a domain is left blank, which the service refuses by name.
+      const tenant = stringField(form, 'tenant');
+      const preset = stringField(form, 'preset');
+      const issuerFromTenant = tenant ? entraIssuer(tenant) : null;
       const input = {
         id,
         kind,
         name: stringField(form, 'name'),
-        issuer: stringField(form, 'issuer'),
+        issuer: tenant ? (issuerFromTenant?.href ?? '') : stringField(form, 'issuer'),
         clientId: stringField(form, 'client_id'),
         clientSecret: stringField(form, 'client_secret') || null,
         claims: {
@@ -349,6 +354,11 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
           : stringField(form, 'invitation_only') === 'true',
       };
       try {
+        if (tenant && !issuerFromTenant) {
+          throw new IdpSettingsError([
+            `'${tenant}' is not an Entra ID tenant: give the tenant ID (a GUID) or the tenant domain, such as contoso.onmicrosoft.com`,
+          ]);
+        }
         const { saved, before } = await deps.providers.save(input, mode);
         const actor = auditActorId(guard.principal);
         await writeAudit(
@@ -368,12 +378,14 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
           const params = new URLSearchParams();
           for (const p of err.problems) params.append('problem', p);
           if (mode === 'update') return redirect(`${signInProviderPage(id)}?${params.toString()}`);
-          // A refused new provider comes back as it was typed — never the secret.
-          params.set('kind', kind);
+          // A refused new provider comes back as it was typed — never the secret; a preset
+          // comes back on its own page.
+          params.set('kind', preset || kind);
           params.set('id', id);
           for (const field of [
             'name',
             'issuer',
+            'tenant',
             'client_id',
             'claim_sub',
             'claim_email',
