@@ -12,6 +12,8 @@ import type { Store } from '../store';
 import { systemClock, type Clock } from '../store/clock';
 import { AdministratorsService } from './administrators';
 import { SecondFactorService } from './second-factor';
+import { RecoveryService } from './recovery';
+import { createRecoveryHandlers, type RecoveryHandlers } from './recovery-handlers';
 import { Authenticator } from './authenticator';
 import { BootstrapService } from './bootstrap';
 import { createAuthHandlers, type AuthHandlers } from './handlers';
@@ -68,8 +70,10 @@ export interface AuthModule {
   readonly bootstrap: BootstrapService;
   readonly relyingParties: RelyingPartyFactory;
   readonly authenticator: Authenticator;
-  /** The sign-in endpoints, the forms of the local accounts (`LocalAuthHandlers`) included. */
-  readonly handlers: AuthHandlers & LocalAuthHandlers;
+  /** The sign-in endpoints, the forms of the local accounts and the recovery page included. */
+  readonly handlers: AuthHandlers & LocalAuthHandlers & RecoveryHandlers;
+  /** Recovery by the master key, loudly (ADR administrators-live-in-the-instance §9). */
+  readonly recovery: RecoveryService;
   /** The accounts of a sign-in provider of kind `local`, and their links. */
   readonly accounts: LocalAccountsService;
   /** Whether the instance sends the mails of the links (a mailer was configured). */
@@ -185,8 +189,30 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
     checkIssuer: (issuer) => relyingParties.checkIssuer(issuer),
     finishSignIn,
   });
+  const recovery = new RecoveryService({
+    publicUrl: deps.config.publicUrl,
+    masterKey: deps.config.encryption.masterKey,
+    sessions: deps.sessions,
+    store: deps.store,
+    administrators,
+    audit: deps.store.auditWriter,
+    clock,
+    logger: logger.child({ component: 'recovery' }),
+    mailer: deps.mailer,
+  });
+  const recoveryHandlers = createRecoveryHandlers({
+    publicUrl: deps.config.publicUrl,
+    recovery,
+    providers,
+    accounts,
+    sessions: deps.sessions,
+    logger,
+    rateLimiter: deps.rateLimiter,
+    clientIp,
+  });
   return {
     sessions,
+    recovery,
     idp,
     providers,
     administrators,
@@ -195,7 +221,7 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
     bootstrap,
     relyingParties,
     authenticator,
-    handlers: { ...handlers, ...localHandlers },
+    handlers: { ...handlers, ...localHandlers, ...recoveryHandlers },
     accounts,
     sendsMail: deps.mailer !== undefined,
   };
@@ -221,6 +247,21 @@ export {
 } from './administrators';
 export { admit, type AdmissionContext, type AdmissionReason } from './admission';
 export { GithubSignIn, readableTeams } from './github';
+export {
+  CHALLENGE_COOKIE,
+  RECOVERY_BANNER_MS,
+  RECOVERY_COOKIE,
+  RecoveryService,
+  type RecoveryRecord,
+} from './recovery';
+export { recoveryProof } from '../crypto';
+export {
+  RECOVER_DONE_PARAM,
+  RECOVER_PAGE,
+  takeRecoveryOutcome,
+  type RecoveryHandlers,
+  type RecoveryOutcome,
+} from './recovery-handlers';
 export {
   SecondFactorService,
   waiverApplies,

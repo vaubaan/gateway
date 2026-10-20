@@ -516,6 +516,22 @@ async function main(): Promise<void> {
         sendJson(res, 200, { ok: true });
         return;
       }
+      if (url.pathname === `${CONTROL_PREFIX}/master-key` && req.method === 'GET') {
+        // The key file an administrator was handed: what the recovery spec uploads.
+        sendJson(res, 200, {
+          file: `${Buffer.from(root.config.encryption.masterKey).toString('base64')}\n`,
+        });
+        return;
+      }
+      if (url.pathname === `${CONTROL_PREFIX}/recovery/cleanup` && req.method === 'POST') {
+        await root.store.config.delete('recovery.last');
+        // Who the recovery spec named stops administering: the other specs know Ada as a user.
+        for (const d of await root.store.administrators.list()) {
+          if (d.origin === 'recovered') await root.store.administrators.remove(d.id);
+        }
+        sendJson(res, 200, { ok: true });
+        return;
+      }
       if (url.pathname === `${CONTROL_PREFIX}/factor/code` && req.method === 'POST') {
         // The code the person's authenticator app shows now. A code is never accepted
         // twice in one time step; the specs sign one person in more often than that,

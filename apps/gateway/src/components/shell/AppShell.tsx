@@ -15,6 +15,7 @@
  * The words come from `lib/vocabulary`; a feature adds no entry here — seven
  * is the budget.
  */
+import { RecoveryBanner } from './RecoveryBanner';
 import Link from 'next/link';
 
 import { isOperatorPrincipal } from '@/components/auth/principal';
@@ -129,6 +130,7 @@ export async function AppShell({
         </aside>
         <div className={styles.main}>
           <main id="main" className={styles.page} tabIndex={-1}>
+            <RecoveryBanner />
             {children}
           </main>
           <BuildFooter />

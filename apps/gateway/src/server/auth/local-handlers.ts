@@ -86,6 +86,15 @@ export interface LinkMailer {
     readonly url: URL;
     readonly expiresAt: string;
   }): Promise<void>;
+  /**
+   * A plain notice to one address (the recovery by the master key tells the
+   * administrators). Optional: a mailer that cannot send one leaves it unsent.
+   */
+  sendNotice?(input: {
+    readonly to: string;
+    readonly subject: string;
+    readonly text: string;
+  }): Promise<void>;
 }
 
 export interface LocalAuthHandlerDeps extends ThrottleDeps {

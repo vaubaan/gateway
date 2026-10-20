@@ -1337,7 +1337,14 @@ same for any agent, with no value of any mission.
   accepted twice, or a recovery code used once; enrolled at the person's
   first sign-in —, unless an administrator waived it for that provider
   (outright, or when the provider's token says it asked a second factor of
-  its own), and never waived for an administrator; the links that create an account or reset a
+  its own), and never waived for an administrator. **Recovery by the master key**: a
+  page reachable without a session lets whoever holds the instance's
+  master key name one administrator — an existing person, an address
+  through a provider, or a group of a provider — and nothing else; the key
+  never leaves the browser (the page proves holding it against a
+  single-use challenge, and the instance checks the proof with the key it
+  holds), and the naming is recorded, mailed to the administrators when
+  the instance sends mail, and shown on every page for thirty days; the links that create an account or reset a
   password are single-use, expire in minutes and are known to the store
   by their digest only; password hashes, second-factor secrets and
   recovery codes are sealed under the master key, and none of them reaches
@@ -1561,7 +1568,7 @@ revocation, issuance, extension, reset, approval, rotation, change of
 limits, a member removed or leaving, delegation granted or revoked,
 an administrator named or removed, the configuration's admin rule applied,
 a sign-in provider tested, switched on or off, a second factor enrolled,
-reset or waived for a provider,
+reset or waived for a provider, an administrator named with the master key,
 configuration change), object, previous and new
 state when meaningful, and, when the act comes from the management
 surface, the identity of the delegated client.
@@ -1676,6 +1683,10 @@ automated suite. Trust comes from usage.
     a provider outright or on its token's `mfa`, never for an
     administrator; the factor of an earlier local account moved to its
     person;
+  - the recovery by the master key (§6): the browser's proof equal to the
+    instance's, a wrong key and a replayed challenge refused, the recovery
+    session naming one administrator and nothing else, the entry, the mail
+    and the banner of thirty days;
   - the test of a sign-in provider (§4.2): no user, session or group written,
     the tester's session kept, a callback of another session refused, the
     verdict computed as a sign-in would, the result usable by the tester's

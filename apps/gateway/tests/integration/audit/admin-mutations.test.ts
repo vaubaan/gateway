@@ -1355,6 +1355,17 @@ const RULES: Readonly<Record<string, Rule>> = {
   'LocalAccountsService.accountById': READ,
   'LocalAccountsService.list': READ,
   'LocalAccountsService.pendingLinks': READ,
+  'RecoveryService.banner': READ,
+  'RecoveryService.isOpen': READ,
+  'RecoveryService.challenge': exempt(
+    'anonymous: a challenge record bound to a cookie, session state of the recovery page (spec §8 names a human actor)',
+  ),
+  'RecoveryService.prove': exempt(
+    'anonymous: checks a proof and opens a recovery session that can only name an administrator; a refused proof is logged at error; what the session does is audited by name()',
+  ),
+  'RecoveryService.name': exempt(
+    'no human actor: the holder of the master key; writes `administrator-recovered` (actor `recovery`) besides the designation’s own `administrator-granted` (tests/integration/auth/recovery.test.ts)',
+  ),
   'SecondFactorService.has': READ,
   'SecondFactorService.beginEnrolment': READ,
   'SecondFactorService.recoveryCodesLeft': READ,

@@ -396,6 +396,9 @@ The owner asked on 2026-10-20 that these be decided in this record.
 
 ## Delivery
 
+Delivered on 2026-10-20: slice 1 in #83, slice 2 in #85, slice 3 in #86, slice 4
+in #87, slice 5 in the pull request that adds this line.
+
 Five slices, each a pull request to `main` with its tests, spec and handbook:
 
 1. **Administrators in the store** — §1, §2, §3, §4 (local), §6 (designations,

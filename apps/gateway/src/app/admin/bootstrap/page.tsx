@@ -50,9 +50,8 @@ export default async function BootstrapPage({ searchParams }: Props) {
     // Outside every layout: the page carries the build line itself.
     <AuthPage instance={await root.instance.name.identity()} footer={<BuildFooter />}>
       <AuthHeading title="Set up this gateway">
-        Sign in once with the bootstrap token of the configuration to connect the identity provider
-        of your company. The token stops working as soon as the first administrator signs in through
-        that provider.
+        Sign in with the bootstrap token of the configuration to set the gateway up and name its
+        first administrator. The token stops working when the setup is finished.
       </AuthHeading>
 
       {error && isLoginErrorCode(error) && (
@@ -103,13 +102,13 @@ export default async function BootstrapPage({ searchParams }: Props) {
           >
             {state.status === 'revoked' ? (
               <>
-                It was revoked on <LocalDate ts={state.revokedAt} />, when the first administrator
-                signed in.
+                It was revoked on <LocalDate ts={state.revokedAt} />, when the setup was finished.
               </>
             ) : (
               'The identity provider is set in its configuration.'
             )}{' '}
-            Administrators now sign in through the identity provider.
+            Administrators now sign in through the identity provider. Nobody can administer it any
+            more? <a href="/admin/recover">Recover with the master key</a>.
           </Callout>
         </div>
       )}

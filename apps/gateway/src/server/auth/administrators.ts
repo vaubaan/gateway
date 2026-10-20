@@ -190,6 +190,8 @@ export interface LockoutChange {
   readonly withoutDesignation?: string;
   readonly withoutUser?: string;
   readonly withoutProvider?: string;
+  /** Every active administrator, whether or not a provider lets them in now. */
+  readonly anyWay?: boolean;
 }
 
 /** A provider as the way-in check reads it. */
@@ -440,6 +442,11 @@ export class AdministratorsService {
       for (const member of await this.deps.store.groups.listMembers(record.id)) {
         candidates.set(member.id, member);
       }
+    }
+    if (change.anyWay === true) {
+      return [...candidates.values()].filter(
+        (user) => user.status === 'active' && user.id !== change.withoutUser,
+      );
     }
     const out: UserRecord[] = [];
     for (const user of candidates.values()) {

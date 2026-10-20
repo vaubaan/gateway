@@ -492,6 +492,22 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       'local',
     ),
   ),
+  // Recovery by the master key: no session, origin-checked (ADR administrators-live-in-the-instance §9).
+  'auth.handlers.recoverChallenge': json('origin-only', 200, (rig, headers) =>
+    rig.root.auth.handlers.recoverChallenge(post('/api/recover/challenge', headers, {})),
+  ),
+  'auth.handlers.recoverProof': json('origin-only', 403, (rig, headers) =>
+    rig.root.auth.handlers.recoverProof(post('/api/recover/proof', headers, { proof: 'x' })),
+  ),
+  'auth.handlers.recoverName': form('origin-only', 303, (rig, headers) =>
+    rig.root.auth.handlers.recoverName(
+      post('/api/recover/name', headers, {
+        kind: 'email',
+        provider: 'idp',
+        email: 'x@example.org',
+      }),
+    ),
+  ),
   'auth.handlers.enrolAtSignIn': form('origin-only', 303, (rig, headers) =>
     rig.root.auth.handlers.enrolAtSignIn(
       post('/auth/local/local/enrol', headers, { code: '000000' }),
