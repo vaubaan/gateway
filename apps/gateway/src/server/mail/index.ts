@@ -102,6 +102,20 @@ export function createLinkMailer(deps: MailerDeps): LinkMailer {
         throw new Error(`mail delivery failed (${input.kind})`);
       }
     },
+    async sendNotice(input) {
+      try {
+        await transport.sendMail({
+          from: deps.config.from,
+          to: input.to,
+          subject: `${input.subject} — ${deps.instanceLabel}`,
+          text: input.text,
+        });
+        logger.info('mail sent', { kind: 'notice' });
+      } catch (err) {
+        logger.error('mail failed', { kind: 'notice', detail: describe(err) });
+        throw new Error('mail delivery failed (notice)');
+      }
+    },
   };
 }
 

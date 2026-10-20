@@ -1623,6 +1623,13 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   provider ends its users' sessions, not the remover's; "Finish setup" refused
   while no administrator has a way in, then revoking the token and its
   sessions, with `setup-finished` (8 in all).
+- **`tests/integration/auth/recovery.test.ts`** (5) — ADR
+  [[administrators-live-in-the-instance]] §9: the Web Crypto proof of the page
+  equals the server's; a wrong key and a replayed challenge are refused and open
+  no session; the right key opens a recovery session that is no web session and
+  names one administrator only, with `administrator-recovered` (actor
+  `recovery`), the banner, and a mail to every administrator; the banner lasts
+  thirty days; an address of local accounts gets its account link, once.
 - **`tests/integration/auth/second-factor.test.ts`** (5) — ADR
   [[administrators-live-in-the-instance]] §7: a person enrols at the first
   sign-in through OpenID Connect (a wrong code refused, the session only after

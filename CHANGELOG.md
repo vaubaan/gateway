@@ -11,6 +11,15 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Added
 
+- **Recovery by the master key, loudly.** A gateway nobody can administer any
+  more (a provider misconfigured, the last administrator's second factor lost,
+  a restore on a new host) is recovered at `/admin/recover` by whoever holds
+  its master key: the key file is read in the browser and never sent — the page
+  proves holding it against a single-use challenge —, and the recovery names
+  one administrator and nothing else. It is audited
+  (`administrator-recovered`), mailed to the administrators when the gateway
+  sends mail, and shown on every page for thirty days.
+
 - **Test a sign-in provider beside your session.** "Test" opens the provider
   in another window, runs its sign-in to the end, and signs nobody in: the
   result page shows what the provider returned and the verdict a sign-in would

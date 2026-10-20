@@ -555,6 +555,46 @@ the step with `passSecondFactor` / `throughSecondFactor` (`auth/testing.ts`), th
 e2e browser with `passSecondFactor` (`tests/e2e/v5/browser.ts`, the control
 endpoint `/factor/code`), and the e2e directory is waived.
 
+## Recovery by the master key
+
+ADR [administrators-live-in-the-instance](../decisions/administrators-live-in-the-instance.md) §9.
+
+`/admin/recover` (outside every guarded layout; linked from the bootstrap page once
+the setup has ended). **The proof** (`components/auth/recovery-proof.ts` in the
+browser, `recoveryProof` in `auth/recovery.ts` on the server, equal by test):
+`K = HKDF-SHA-256(master key, salt empty, info "vaubaan/recovery-proof/v1")`,
+`proof = base64url(HMAC-SHA-256(K, "vaubaan-recovery-v1\n" + public origin + "\n" + challenge))`.
+The page (`RecoverWithKey`, a client component) reads the key file
+(`FileReader`, base64 of 32 bytes), asks `POST /api/recover/challenge` (32 random
+bytes, a `recover:<id>` record in the session store, cookie `__Host-vbn_recover`,
+five minutes), computes the proof with Web Crypto, wipes the key bytes, and posts
+`POST /api/recover/proof` (`{ proof }`). `RecoveryService.prove` consumes the
+challenge whatever the outcome, compares in constant time with the **current** key
+(`config.encryption.masterKey`; a rotated-out key is refused), logs a refusal at
+`error`, and on success opens a recovery session (`recovery:<id>`, cookie
+`__Host-vbn_recovery`, fifteen minutes) — not a web session: `authenticate()` never
+sees it. Both endpoints are origin-checked and share the bootstrap token's
+instance-wide window (10 per 10 minutes). The key never travels: not in a request,
+not through the TLS terminator, not in a log.
+
+**The one act.** With a recovery session the page shows three forms: a person who
+signed in, an address through a provider, a group of a provider
+(`POST /api/recover/name`, field `kind`). `RecoveryService.name` closes the session
+first, then names through `AdministratorsService` (`origin: recovered`, actor
+`recovery`); for an address of local accounts it also makes the account-creation
+link, shown once. Then it writes `administrator-recovered` (object
+`instance-config` / `administrators`, `after` the designation), records
+`recovery.last` in `instance_config`, and mails every active administrator
+(`withAWayIn({ anyWay: true })`, `LinkMailer.sendNotice`) when the gateway sends
+mail. The page reads what happened once (`recover-done:<id>`, five minutes).
+
+**The banner.** `RecoveryBanner` (in `AppShell`, so on every page of the
+interface) shows `recovery.last` for thirty days (`RECOVERY_BANNER_MS`) to every
+signed-in person: when, and who was named.
+
+Tests: `tests/integration/auth/recovery.test.ts`; e2e `recovery.spec.ts` (the real
+page and Web Crypto; no request carries the key).
+
 ## Testing a provider, switching it on and off
 
 ADR [administrators-live-in-the-instance](../decisions/administrators-live-in-the-instance.md) §5.
