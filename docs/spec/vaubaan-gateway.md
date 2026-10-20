@@ -1087,7 +1087,9 @@ interpreted as markup.
   the address to register at it; an administrator adds, edits, tests and
   removes one, its secret never shown back, and a provider set by the
   configuration file is shown read-only; local accounts are added in one
-  step and need no registration anywhere;
+  step and need no registration anywhere; Google and Entra ID are offered as
+  presets of OpenID Connect that fill the form and say where to register
+  the client;
   removing one says how many people signed in through it: they can no
   longer sign in and their sessions end, and their missions and connected
   apps keep the rules of a deactivation (they stop only when the

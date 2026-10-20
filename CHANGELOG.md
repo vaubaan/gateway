@@ -9,6 +9,17 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Added
+
+- **Google and Entra ID as presets of "Add a sign-in provider."** Beside OpenID
+  Connect, GitHub and local accounts, two buttons fill the form in — Google's
+  issuer, or the Entra tenant (its ID or domain, from which the gateway writes
+  the issuer), the claim names, the admission rule that fits (a Workspace
+  domain or invited people for Google, everyone of the tenant for Entra) — and
+  spell out where to register the client, step by step, with the redirect
+  address to paste. What is saved is an OpenID Connect provider, as before; a
+  provider saved from a preset is edited with the same fields.
+
 ## [2.0.0-alpha.2] - 2026-10-19
 
 ### Added

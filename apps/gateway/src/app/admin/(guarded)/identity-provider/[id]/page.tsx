@@ -16,6 +16,7 @@ import { Callout, PageHeader, Section } from '@/components/ui';
 import { requireOperator } from '@/lib/auth/session';
 import { SETTINGS_PAGES } from '@/lib/vocabulary';
 import { DEFAULT_CLAIM_MAPPING, IDP_PAGE } from '@/server/auth';
+import { entraTenantOf, GOOGLE_ISSUER, issuerKey } from '@/server/config';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,6 +33,16 @@ export default async function SignInProviderPage({ params, searchParams }: Props
   const provider = await root.auth.providers.view(decodeURIComponent(id));
   if (!provider || provider.source === 'file') notFound();
   const github = provider.kind === 'github';
+  // A provider saved from a preset is edited with the preset's fields (the Entra tenant).
+  const tenant = provider.kind === 'oidc' ? entraTenantOf(provider.issuer) : null;
+  const preset =
+    provider.kind === 'oidc'
+      ? tenant
+        ? ('entra' as const)
+        : issuerKey(provider.issuer) === GOOGLE_ISSUER
+          ? ('google' as const)
+          : undefined
+      : undefined;
 
   return (
     <>
@@ -65,6 +76,8 @@ export default async function SignInProviderPage({ params, searchParams }: Props
             mode="update"
             values={{
               kind: provider.kind,
+              ...(preset ? { preset } : {}),
+              ...(tenant ? { tenant } : {}),
               id: provider.id,
               name: provider.name,
               issuer:

@@ -321,3 +321,37 @@ export function fileSignInProviders(config: {
 }): SignInProvider[] {
   return [...(config.idp ? [legacyProviderOf(config.idp)] : []), ...config.signIn];
 }
+
+/* ------------------------------------------------------------------------ */
+/* The presets of the form: Google and Entra ID are OpenID Connect providers */
+/* ------------------------------------------------------------------------ */
+
+/** Google accounts and Google Workspace: one issuer for every tenant. */
+export const GOOGLE_ISSUER = 'https://accounts.google.com';
+/** Entra ID's v2.0 issuer, per tenant: `https://login.microsoftonline.com/<tenant>/v2.0`. */
+export const ENTRA_ISSUER_PREFIX = 'https://login.microsoftonline.com/';
+export const ENTRA_ISSUER_SUFFIX = '/v2.0';
+
+/** A tenant id (a GUID) or a tenant domain (`contoso.onmicrosoft.com`, `contoso.com`). */
+const ENTRA_TENANT =
+  /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+)$/i;
+
+/**
+ * The issuer of an Entra ID tenant, or `null` when `tenant` is neither a GUID nor a
+ * domain. The multi-tenant words (`common`, `organizations`, `consumers`) are refused
+ * here on purpose: they make the provider open to anyone, which the form says
+ * nothing about; an operator who wants them writes the issuer by hand.
+ */
+export function entraIssuer(tenant: string): URL | null {
+  const trimmed = tenant.trim().toLowerCase();
+  if (!ENTRA_TENANT.test(trimmed)) return null;
+  return new URL(`${ENTRA_ISSUER_PREFIX}${trimmed}${ENTRA_ISSUER_SUFFIX}`);
+}
+
+/** The tenant an Entra issuer names, for the edit form; `null` for any other issuer. */
+export function entraTenantOf(issuer: URL): string | null {
+  const key = issuerKey(issuer);
+  if (!key.startsWith(ENTRA_ISSUER_PREFIX) || !key.endsWith(ENTRA_ISSUER_SUFFIX)) return null;
+  const tenant = key.slice(ENTRA_ISSUER_PREFIX.length, -ENTRA_ISSUER_SUFFIX.length);
+  return ENTRA_TENANT.test(tenant) ? tenant : null;
+}

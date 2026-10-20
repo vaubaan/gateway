@@ -308,6 +308,59 @@ describe('several sign-in providers: OpenID Connect and GitHub on one instance',
     );
   });
 
+  it('the Entra ID preset writes the issuer from the tenant; a word that is no tenant is refused by name', async () => {
+    github.nextUser = {
+      id: 4004,
+      login: 'ops',
+      name: 'Ops',
+      emails: [{ email: 'ops@example.com', primary: true, verified: true }],
+    };
+    const b = fresh();
+    await signIn(b, 'github');
+    const save = (fields: Record<string, string>) =>
+      root.auth.handlers.saveIdpSettings(
+        new Request(`${PUBLIC_URL}/api/admin/sign-in-providers`, {
+          method: 'POST',
+          headers: {
+            cookie: cookieHeader(b),
+            origin: PUBLIC_URL,
+            'content-type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({
+            mode: 'create',
+            kind: 'oidc',
+            preset: 'entra',
+            provider_id: 'entra',
+            name: 'Entra ID',
+            client_id: 'app-client-id',
+            client_secret: 'app-secret',
+            claim_sub: 'sub',
+            claim_email: 'email',
+            claim_groups: 'groups',
+            admission: 'everyone',
+            ...fields,
+          }).toString(),
+        }),
+      );
+    const refused = await save({ tenant: 'common' });
+    const back = new URL(refused.headers.get('location') ?? '', PUBLIC_URL);
+    expect(back.pathname).toBe('/admin/identity-provider/new');
+    expect(back.searchParams.get('kind')).toBe('entra');
+    expect(back.searchParams.get('tenant')).toBe('common');
+    expect(back.searchParams.get('problem')).toContain('not an Entra ID tenant');
+    expect(await root.auth.providers.view('entra')).toBeNull();
+
+    const saved = await save({ tenant: 'Contoso.onmicrosoft.com' });
+    expect(saved.headers.get('location')).toBe('/admin/identity-provider?saved=entra');
+    const view = await root.auth.providers.view('entra');
+    expect(view?.kind).toBe('oidc');
+    expect(view?.issuer.href).toBe(
+      'https://login.microsoftonline.com/contoso.onmicrosoft.com/v2.0',
+    );
+    expect(view?.allowedEmailDomains).toEqual([]);
+    expect(view?.invitationOnly).toBe(false);
+  });
+
   it('removing an invitation refuses the next sign-in and leaves an open session', async () => {
     await root.users.invitations.invite('bootstrap', 'ada@example.com');
     github.nextUser = ADA_GITHUB;

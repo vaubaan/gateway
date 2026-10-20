@@ -17,9 +17,13 @@ export type AdmissionChoice = 'everyone' | 'domains' | 'invited';
 
 export interface SignInProviderFormValues {
   readonly kind: 'oidc' | 'github';
+  /** A preset the form was opened with (Google, Entra ID): fills the issuer or asks for the tenant. */
+  readonly preset?: 'google' | 'entra';
   readonly id: string;
   readonly name: string;
   readonly issuer: string;
+  /** The Entra tenant (id or domain), when the preset asks for it instead of the issuer. */
+  readonly tenant?: string;
   readonly clientId: string;
   readonly claims: { readonly sub: string; readonly email: string; readonly groups: string };
   readonly domains: string;
@@ -50,11 +54,14 @@ export function SignInProviderForm({
   cancelHref: string;
 }) {
   const github = values.kind === 'github';
+  const entra = values.preset === 'entra';
+  const google = values.preset === 'google';
   const prefix = `sign-in-${mode}`;
   return (
     <form method="post" action="/api/admin/sign-in-providers" className={styles.form}>
       <input type="hidden" name="mode" value={mode} />
       <input type="hidden" name="kind" value={values.kind} />
+      {values.preset && <input type="hidden" name="preset" value={values.preset} />}
       {mode === 'update' && <input type="hidden" name="provider_id" value={values.id} />}
       <div className={styles.block}>
         <CodeBlock label={github ? 'Authorization callback URL' : 'Redirect URI'}>
@@ -87,31 +94,63 @@ export function SignInProviderForm({
           placeholder={github ? 'GitHub' : 'Acme (Entra ID)'}
         />
       </Field>
-      <Field
-        label={github ? 'GitHub Enterprise Server address' : 'Issuer URL'}
-        shape={github ? 'https; leave blank for github.com' : 'https, as the provider prints it'}
-        optional={github}
-        htmlFor={`${prefix}-issuer`}
-        hint={
-          github ? undefined : 'Discovery runs against <issuer>/.well-known/openid-configuration.'
-        }
-      >
-        <Input
-          id={`${prefix}-issuer`}
-          name="issuer"
-          type="url"
-          required={!github}
-          defaultValue={values.issuer}
-          placeholder={
-            github ? 'https://github.example.com' : 'https://login.example.com/realms/acme'
+      {entra ? (
+        <Field
+          label="Tenant"
+          shape="the tenant ID (a GUID) or the tenant domain"
+          htmlFor={`${prefix}-tenant`}
+          hint="From the Entra admin center, Overview of your tenant. The issuer becomes https://login.microsoftonline.com/<tenant>/v2.0."
+        >
+          <Input
+            id={`${prefix}-tenant`}
+            name="tenant"
+            required
+            defaultValue={values.tenant ?? ''}
+            placeholder="contoso.onmicrosoft.com"
+            autoComplete="off"
+            mono
+          />
+        </Field>
+      ) : (
+        <Field
+          label={github ? 'GitHub Enterprise Server address' : 'Issuer URL'}
+          shape={github ? 'https; leave blank for github.com' : 'https, as the provider prints it'}
+          optional={github}
+          htmlFor={`${prefix}-issuer`}
+          hint={
+            github
+              ? undefined
+              : google
+                ? 'Google’s one issuer, for every account and every Workspace.'
+                : 'Discovery runs against <issuer>/.well-known/openid-configuration.'
           }
-          mono
-        />
-      </Field>
+        >
+          <Input
+            id={`${prefix}-issuer`}
+            name="issuer"
+            type="url"
+            required={!github}
+            defaultValue={values.issuer}
+            placeholder={
+              github ? 'https://github.example.com' : 'https://login.example.com/realms/acme'
+            }
+            readOnly={google}
+            mono
+          />
+        </Field>
+      )}
       <Field
         label="Client ID"
         htmlFor={`${prefix}-client-id`}
-        hint={github ? 'Of the OAuth App you registered at GitHub.' : undefined}
+        hint={
+          github
+            ? 'Of the OAuth App you registered at GitHub.'
+            : entra
+              ? 'The "Application (client) ID" of the app registration.'
+              : google
+                ? 'Of the OAuth client ID you created in the Google Cloud Console.'
+                : undefined
+        }
       >
         <Input
           id={`${prefix}-client-id`}
