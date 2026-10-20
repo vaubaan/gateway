@@ -251,12 +251,10 @@ export {
   CHALLENGE_COOKIE,
   RECOVERY_BANNER_MS,
   RECOVERY_COOKIE,
-  RECOVERY_INFO,
-  RECOVERY_MESSAGE_PREFIX,
-  recoveryProof,
   RecoveryService,
   type RecoveryRecord,
 } from './recovery';
+export { recoveryProof } from '../crypto';
 export {
   RECOVER_DONE_PARAM,
   RECOVER_PAGE,

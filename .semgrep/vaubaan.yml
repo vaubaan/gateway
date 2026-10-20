@@ -79,6 +79,11 @@ rules:
     paths:
       exclude:
         - /apps/gateway/src/server/crypto/
+        # The browser half of the recovery proof (ADR
+        # administrators-live-in-the-instance §9): the master key never leaves
+        # the browser, so the page derives and signs with Web Crypto; the
+        # server half is server/crypto/recovery-proof.ts, held equal by test.
+        - /apps/gateway/src/components/auth/recovery-proof.ts
     pattern-either:
       - pattern: $C.createCipheriv(...)
       - pattern: $C.createDecipheriv(...)

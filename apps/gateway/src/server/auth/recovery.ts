@@ -14,11 +14,12 @@
  * the administrators when the instance sends mail, and puts a banner on every page for
  * thirty days (`recovery.last`).
  */
-import { createHmac, hkdfSync, randomBytes, timingSafeEqual } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 
 import { RECOVERY_ACTOR_ID, type AuditWriter } from '@vaubaan/gateway-core';
 
 import type { SessionStore } from '../compose/ports';
+import { recoveryProof } from '../crypto';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
 import { toIso, type Clock } from '../store/clock';
@@ -30,8 +31,6 @@ import {
 } from './administrators';
 import type { LinkMailer } from './local-handlers';
 
-export const RECOVERY_INFO = 'vaubaan/recovery-proof/v1';
-export const RECOVERY_MESSAGE_PREFIX = 'vaubaan-recovery-v1';
 export const CHALLENGE_COOKIE = `${HOST_PREFIX}vbn_recover`;
 export const RECOVERY_COOKIE = `${HOST_PREFIX}vbn_recovery`;
 export const CHALLENGE_TTL_MS = 5 * 60_000;
@@ -39,14 +38,6 @@ export const RECOVERY_SESSION_TTL_MS = 15 * 60_000;
 /** How long every page says that a recovery happened. */
 export const RECOVERY_BANNER_MS = 30 * 24 * 60 * 60_000;
 export const RECOVERY_LAST_KEY = 'recovery.last';
-
-/** The proof the page computes, computed here with the key the instance holds. */
-export function recoveryProof(masterKey: Uint8Array, origin: string, challenge: string): string {
-  const key = Buffer.from(hkdfSync('sha256', masterKey, new Uint8Array(0), RECOVERY_INFO, 32));
-  return createHmac('sha256', key)
-    .update(`${RECOVERY_MESSAGE_PREFIX}\n${origin}\n${challenge}`)
-    .digest('base64url');
-}
 
 interface ChallengeRecord {
   readonly kind: 'recovery-challenge';

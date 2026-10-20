@@ -561,7 +561,7 @@ ADR [administrators-live-in-the-instance](../decisions/administrators-live-in-th
 
 `/admin/recover` (outside every guarded layout; linked from the bootstrap page once
 the setup has ended). **The proof** (`components/auth/recovery-proof.ts` in the
-browser, `recoveryProof` in `auth/recovery.ts` on the server, equal by test):
+browser, `recoveryProof` in `crypto/recovery-proof.ts` on the server, equal by test):
 `K = HKDF-SHA-256(master key, salt empty, info "vaubaan/recovery-proof/v1")`,
 `proof = base64url(HMAC-SHA-256(K, "vaubaan-recovery-v1\n" + public origin + "\n" + challenge))`.
 The page (`RecoverWithKey`, a client component) reads the key file

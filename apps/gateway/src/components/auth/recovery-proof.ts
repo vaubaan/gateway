@@ -3,7 +3,7 @@
  * made in the browser with Web Crypto: `HKDF-SHA-256(key, salt "", info
  * "vaubaan/recovery-proof/v1")`, then `HMAC-SHA-256` of
  * `"vaubaan-recovery-v1\n" + origin + "\n" + challenge`, base64url. The gateway
- * computes the same (`server/auth/recovery.ts`, `recoveryProof`). Pure: no React.
+ * computes the same (`server/crypto/recovery-proof.ts`, `recoveryProof`). Pure: no React.
  */
 const INFO = 'vaubaan/recovery-proof/v1';
 const PREFIX = 'vaubaan-recovery-v1';
