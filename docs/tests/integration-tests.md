@@ -118,7 +118,8 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/components/connections/shape.test.ts`                                                                          |         5 |
 | `apps/gateway/src/lib/dates.test.ts`                                                                                             |         8 |
 | `apps/gateway/src/server/audit/filters.test.ts`                                                                                  |        24 |
-| `apps/gateway/src/server/auth/admin-rule.test.ts`                                                                                |        11 |
+| `apps/gateway/src/server/auth/administrators.test.ts`                                                                            |         8 |
+| `apps/gateway/src/server/auth/restored-admin-rule.test.ts`                                                                       |         1 |
 | `apps/gateway/src/server/auth/admission.test.ts`                                                                                 |         6 |
 | `apps/gateway/src/server/auth/bootstrap.test.ts`                                                                                 |         3 |
 | `apps/gateway/src/server/auth/claims.test.ts`                                                                                    |        22 |
@@ -1601,9 +1602,29 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   unknown is not "none"; an ID token that carries the groups itself, even an
   empty list, signs in; a missing identity claim is reported first; without
   a failure, an absent groups claim is an IdP that sends none.
-- **`server/auth/admin-rule.test.ts`** (5) — group match, email match
-  (case-insensitive), neither, either half of a combined rule,
-  `describeAdminRule` without secrets.
+- **`server/auth/administrators.test.ts`** (8) — a `user` designation names
+  that user only; a designated group of the one provider names its members,
+  never a local group; a pending address names its person case-insensitively,
+  for its provider or any; a group of provider A never satisfies a
+  designation of provider B; a bare group is ambiguous with several providers;
+  a group naming a removed provider names nobody; the legacy colon group of
+  `idp`; no provider reads a bare group as `idp`'s.
+- **`tests/integration/auth/administrators.test.ts`** (7) — ADR
+  [[administrators-live-in-the-instance]]: an upgraded instance on
+  `admin.emails` keeps its administrators (known user → `user` row, unknown →
+  pending address, `administrators-seeded` by `configuration`); one on
+  `admin.group` keeps every member (the Fiabilis shape, `idp:<object id>`) and
+  admits a member who never signed in through an invitation-only provider; a
+  rule changed after the first boot names nobody, is logged and shown, and an
+  administrator applies it; no administrator, no rule, no token → the boot
+  refuses; a pending address bound to a provider is consumed by the first
+  sign-in through it, not another; no self-lockout (unmake, provider removal,
+  deactivation of the last administrator with a way in refused); removing a
+  provider ends its users' sessions, not the remover's.
+- **`server/compose/restored-admin-rule.test.ts`** (2) — the rule a backup of
+  ADR [[backup-carries-the-sign-in-configuration]] carried is applied with the
+  configuration's while the store names nobody, then deleted; with
+  administrators already named it is dropped unread.
 - **`server/auth/origin.test.ts`** (5) — matching `Origin`; another origin,
   scheme or the internal host refused; `Referer` fallback; neither header
   or `Origin: null` refused; 403 body `origin-mismatch`.
@@ -1869,7 +1890,7 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   - **`server/auth/admission.test.ts`** (5), **`server/auth/github.test.ts`**
     (9, against the in-process `FakeGithub`),
     **`server/auth/sign-in-providers.test.ts`** (6),
-    **`server/auth/admin-rule.test.ts`** (9) — handbook
+    **`server/auth/administrators.test.ts`** (8) — handbook
     [[authentication]], "Tests".
   - **`tests/integration/auth/sign-in-providers.test.ts`** (16) — a company
     directory (`FakeIdp`) and GitHub (`FakeGithub`, invitation only) on one
@@ -4867,12 +4888,13 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
   and another rule: the source's providers are `store` providers there with
   their secret, flags and name, editable (an edit keeps the flags), the host's
   own is `file`; the secret is in neither the copy's bytes nor the command's
-  output; the live store was not written; the admin rule is the union. The
-  host's environment wins on an id collision (its secret; the carried group
-  reported as dropped). A backup of the restored instance carries everything
-  again. `compose/restored-admin-rule.test.ts` (1): the boot merges
-  `restored.admin_rule` into `config.admin` and logs it without the emails;
-  `admin-rule.test.ts` (+2): parse/serialize and `mergeAdminRules`.
+  output; the live store was not written; no admin rule is carried (the
+  administrators are rows of the copy, ADR administrators-live-in-the-instance).
+  The host's environment wins on an id collision (its secret). A backup of the
+  restored instance carries its providers again.
+  `compose/restored-admin-rule.test.ts` (2): a carried `restored.admin_rule` is
+  applied by the seed while the store names nobody, then deleted; dropped unread
+  otherwise. `auth/restored-admin-rule.test.ts` (1): parse/serialize.
 - **`config/secret-env.test.ts`** (5) — the secret variables of the key
   table, sign-in and provider secrets and their `_FILE` siblings are named;
   the YAML's `${NAME}` references at a secret key only; `loadProcessConfig`

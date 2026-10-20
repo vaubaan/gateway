@@ -24,7 +24,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SESSION_COOKIE } from '../../../src/server/auth';
 import { budgetMissionOf } from '../../../src/server/budget';
 import { completeLogin } from '../../../src/server/auth/login';
-import { resolveAdminRule } from '../../../src/server/auth/admin-rule';
 import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
 import { memoryStoreDeps } from '../../../src/server/compose/testing';
 import { loadInstanceConfig } from '../../../src/server/config';
@@ -1051,7 +1050,6 @@ const RULES: Readonly<Record<string, Rule>> = {
   'SignInProvidersService.view': READ,
   'SignInProvidersService.resolve': READ,
   'SignInProvidersService.ofIssuer': READ,
-  'SignInProvidersService.adminRule': READ,
   'SignInProvidersService.isReadOnly': READ,
   'SignInProvidersService.carryIntoStore': exempt(
     'the backup command writes it into its copy of the store, never into the live store: nobody acts on this instance (ADR backup-carries-the-sign-in-configuration)',
@@ -1168,7 +1166,7 @@ const RULES: Readonly<Record<string, Rule>> = {
           displayName: 'Ops',
           groups: [],
         },
-        { providerId: 'idp', adminRule: resolveAdminRule(rig.root.config.admin, ['idp']) },
+        { providerId: 'idp', administrators: rig.root.auth.administrators },
       ),
     writes: {
       act: 'config-changed',
@@ -1179,6 +1177,117 @@ const RULES: Readonly<Record<string, Rule>> = {
   },
   'Authenticator.authenticate': exempt(SESSION_STATE),
   'Authenticator.authorizeAdmin': exempt(SESSION_STATE),
+  // The administrators of the store (ADR administrators-live-in-the-instance).
+  'AdministratorsService.current': READ,
+  'AdministratorsService.any': READ,
+  'AdministratorsService.isAdministrator': READ,
+  'AdministratorsService.providerIdOf': READ,
+  'AdministratorsService.admits': READ,
+  'AdministratorsService.designationOfUser': READ,
+  'AdministratorsService.withAWayIn': READ,
+  'AdministratorsService.assertNoLockout': READ,
+  'AdministratorsService.configurationDrift': READ,
+  'AdministratorsService.consumeAtSignIn': {
+    kind: 'mutation',
+    target: (root) => root.auth.administrators,
+    prepare: (rig) =>
+      rig.root.auth.administrators.grantEmail('newcomer@example.org', null, rig.operator.id),
+    drive: async (rig) =>
+      rig.root.auth.administrators.consumeAtSignIn(
+        await rig.root.store.users.upsertFromIdp({
+          issuer: 'http://idp.test',
+          subject: 'idp|newcomer',
+          email: 'newcomer@example.org',
+        }),
+        'idp',
+      ),
+    writes: {
+      act: 'administrator-granted',
+      object: 'instance-config',
+      objectId: 'administrators',
+      actor: 'operator',
+    },
+  },
+  'AdministratorsService.grantUser': {
+    kind: 'mutation',
+    target: (root) => root.auth.administrators,
+    drive: async (rig) =>
+      rig.root.users.handlers.makeAdministrator(
+        await rig.operatorPost(`/admin/users/${rig.alice.user.id}/make-administrator`, {}),
+        rig.alice.user.id,
+      ),
+    writes: {
+      act: 'administrator-granted',
+      object: 'instance-config',
+      objectId: 'administrators',
+      actor: 'operator',
+    },
+  },
+  'AdministratorsService.grantEmail': {
+    kind: 'mutation',
+    target: (root) => root.auth.administrators,
+    drive: (rig) =>
+      rig.root.auth.administrators.grantEmail('later@example.org', null, rig.operator.id),
+    writes: {
+      act: 'administrator-granted',
+      object: 'instance-config',
+      objectId: 'administrators',
+      actor: 'operator',
+    },
+  },
+  'AdministratorsService.grantGroup': {
+    kind: 'mutation',
+    target: (root) => root.auth.administrators,
+    prepare: (rig) =>
+      rig.root.auth.idp.save({
+        issuer: 'https://idp.example.com',
+        clientId: 'c',
+        clientSecret: 's',
+        claims: { sub: 'sub', email: 'email', groups: 'groups' },
+        allowedEmailDomains: [],
+      }),
+    drive: async (rig) =>
+      rig.root.users.handlers.addAdministratorGroup(
+        await rig.operatorPost('/admin/users/administrators/group', {
+          provider: 'idp',
+          group: 'platform',
+        }),
+      ),
+    writes: {
+      act: 'administrator-granted',
+      object: 'instance-config',
+      objectId: 'administrators',
+      actor: 'operator',
+    },
+  },
+  'AdministratorsService.revoke': {
+    kind: 'mutation',
+    target: (root) => root.auth.administrators,
+    prepare: (rig) =>
+      rig.root.auth.administrators.grantEmail('later@example.org', null, rig.operator.id),
+    drive: async (rig) => {
+      const pending = (await rig.root.store.administrators.list()).find(
+        (d) => d.kind === 'email' && d.email === 'later@example.org',
+      );
+      return rig.root.users.handlers.removeAdministratorDesignation(
+        await rig.operatorPost('/admin/users/administrators/remove', {
+          designation: pending?.id ?? '',
+        }),
+      );
+    },
+    writes: {
+      act: 'administrator-revoked',
+      object: 'instance-config',
+      objectId: 'administrators',
+      actor: 'operator',
+    },
+  },
+  'AdministratorsService.seedFromConfiguration': exempt(
+    'run by the boot alone, before any request: its `administrators-seeded` entry names the configuration as actor (tests/integration/auth/administrators.test.ts)',
+  ),
+  'AdministratorsService.applyConfiguration': exempt(
+    'writes one `administrator-granted` entry per designation through grantUser/grantEmail, classified above, or none when the rule names nobody new (tests/integration/auth/administrators.test.ts)',
+  ),
   // Local accounts (ADR local-accounts-sign-in-provider): the service audits what an
   // administrator or a link does; a person's own sign-in (the password, the second
   // factor) writes counters and spends codes but is no administrative act.
@@ -1356,6 +1465,9 @@ const RULES: Readonly<Record<string, Rule>> = {
   // ── users (the caller authorizes: operator only) ──────────────────────────
   'UserAdminService.list': READ,
   'UserAdminService.get': READ,
+  'UserAdminService.ensureIdentity': exempt(
+    'the user row of an identity the setup names administrator: the act is audited by AdministratorsService.grantUser',
+  ),
   'UserAdminService.deactivate': {
     kind: 'mutation',
     target: (root) => root.users.service,
@@ -1590,6 +1702,11 @@ describe('every administrative mutation writes an admin audit entry', () => {
 
   it('covers every mutating act the services can perform', () => {
     expect(MUTATIONS.map((m) => m.rule.writes.act).sort()).toEqual([
+      'administrator-granted',
+      'administrator-granted',
+      'administrator-granted',
+      'administrator-granted',
+      'administrator-revoked',
       'approval-granted',
       'config-changed',
       'config-changed',

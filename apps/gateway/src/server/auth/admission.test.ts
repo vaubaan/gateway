@@ -23,8 +23,7 @@ const GOOGLE = 'https://accounts.google.com';
 const DIRECTORY = 'https://kc.example.com/realms/acme';
 const nobodyInvited = {
   isInvited: async () => false,
-  adminEmails: [] as string[],
-  adminGroup: null,
+  isAdministrator: async () => false,
 };
 
 async function code(promise: Promise<unknown>): Promise<string | null> {
@@ -51,7 +50,7 @@ describe('admission', () => {
     );
   });
 
-  it('domains admit their addresses, and invitations and admin emails the others', async () => {
+  it('domains admit their addresses, and invitations and administrators the others', async () => {
     const p = oidc(DIRECTORY, { allowedEmailDomains: ['example.com'] });
     expect(await admit(who('a@Example.com'), p, nobodyInvited)).toBe('domain');
     expect(await code(admit(who('a@other.example'), p, nobodyInvited))).toBe(
@@ -63,27 +62,20 @@ describe('admission', () => {
     expect(
       await admit(who('ops@other.example'), p, {
         ...nobodyInvited,
-        adminEmails: ['ops@other.example'],
+        isAdministrator: async () => true,
       }),
-    ).toBe('admin-email');
+    ).toBe('administrator');
   });
 
-  it("the members of the admin group are admitted when the group is this provider's", async () => {
+  it('an administrator of the store is admitted by an invitation-only provider', async () => {
     const p = oidc(DIRECTORY, { invitationOnly: true });
-    const rule = { ...nobodyInvited, adminGroup: { provider: 'p', name: 'gateway-admins' } };
-    expect(await admit(who('a@example.com', true, ['gateway-admins']), p, rule)).toBe(
-      'admin-group',
+    const admins = { ...nobodyInvited, isAdministrator: async () => true };
+    expect(await admit(who('a@example.com', true, ['gateway-admins']), p, admins)).toBe(
+      'administrator',
     );
-    expect(await code(admit(who('a@example.com', true, ['staff']), p, rule))).toBe('not-invited');
-    // A group of another provider named like the rule's never admits.
-    const other = { ...rule, adminGroup: { provider: 'github', name: 'gateway-admins' } };
-    expect(await code(admit(who('a@example.com', true, ['gateway-admins']), p, other))).toBe(
+    expect(await code(admit(who('a@example.com', true, ['staff']), p, nobodyInvited))).toBe(
       'not-invited',
     );
-    const withDomains = oidc(DIRECTORY, { allowedEmailDomains: ['example.com'] });
-    expect(
-      await code(admit(who('a@other.example', true, ['gateway-admins']), withDomains, other)),
-    ).toBe('email-domain-not-allowed');
   });
 
   it('invitation only admits invited addresses only', async () => {
@@ -98,8 +90,7 @@ describe('admission', () => {
     const p = oidc(GOOGLE, { invitationOnly: true });
     const everything = {
       isInvited: async () => true,
-      adminEmails: ['ops@example.com'],
-      adminGroup: { provider: 'p', name: 'admins' },
+      isAdministrator: async () => true,
     };
     expect(await code(admit(who('ops@example.com', null, ['admins']), p, everything))).toBe(
       'email-not-verified',

@@ -25,6 +25,12 @@ export interface UsersRepo {
    * provider says (`reactivate` is the only way back).
    */
   upsertFromIdp(input: UpsertUserInput): Promise<UserRecord>;
+  /**
+   * The user of this identity, created when absent without counting as a sign-in
+   * (`last_login_at` stays empty): the setup naming an administrator before they ever
+   * signed in. An existing user is returned unchanged.
+   */
+  ensureIdentity(input: UpsertUserInput): Promise<UserRecord>;
   getById(id: string): Promise<UserRecord | null>;
   /** The account of this subject AT THIS ISSUER; the same subject elsewhere is somebody else. */
   getByIdentity(issuer: string, subject: string): Promise<UserRecord | null>;
@@ -55,9 +61,10 @@ export interface UsersRepo {
    * Ends every web session of the users recorded under `issuer` (with or without a
    * trailing slash): `sessions_ended_at` = now, the status untouched. A sign-in
    * provider was removed; its users' next request finds no session. Returns how
-   * many users were concerned.
+   * many users were concerned. `exceptUserId`: the administrator who removed it keeps
+   * their own session.
    */
-  endSessionsOfIssuer(issuer: string): Promise<number>;
+  endSessionsOfIssuer(issuer: string, exceptUserId?: string | null): Promise<number>;
   /**
    * Ends every web session of one active user ("sign out everywhere"):
    * `sessions_ended_at` = now, the status untouched. Returns `false` when the user is
@@ -157,8 +164,15 @@ export function createUsersRepo(ctx: RepoContext): UsersRepo {
   const remove = db.prepare<[string, string, string]>(
     `UPDATE users SET status = 'removed', removed_at = ?, sessions_ended_at = ? WHERE id = ?`,
   );
-  const endSessions = db.prepare<[string, string, string]>(
-    'UPDATE users SET sessions_ended_at = ? WHERE issuer = ? OR issuer = ?',
+  const endSessions = db.prepare<[string, string, string, string]>(
+    'UPDATE users SET sessions_ended_at = ? WHERE (issuer = ? OR issuer = ?) AND id <> ?',
+  );
+  const insertIdentity = db.prepare<
+    [string, string, string, string, string, string | null, string]
+  >(
+    `INSERT INTO users (id, identity_key, issuer, subject, email, display_name, status, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, 'active', ?)
+     ON CONFLICT (identity_key) DO NOTHING`,
   );
   const endSessionsOfUser = db.prepare<[string, string]>(
     `UPDATE users SET sessions_ended_at = ? WHERE id = ? AND status = 'active'`,
@@ -183,11 +197,24 @@ export function createUsersRepo(ctx: RepoContext): UsersRepo {
       );
       return toRecord(requireRow(byIdentityKey.get(key), 'user', input.subject));
     },
-    async endSessionsOfIssuer(issuer) {
+    async ensureIdentity(input) {
+      const key = identityKeyOf(input.issuer, input.subject);
+      insertIdentity.run(
+        ctx.newId(),
+        key,
+        input.issuer,
+        input.subject,
+        input.email,
+        input.displayName ?? null,
+        nowIso(ctx),
+      );
+      return toRecord(requireRow(byIdentityKey.get(key), 'user', input.subject));
+    },
+    async endSessionsOfIssuer(issuer, exceptUserId = null) {
       const bare = issuer.replace(/\/+$/, '');
       return withImmediateTransaction(
         db,
-        () => endSessions.run(nowIso(ctx), bare, `${bare}/`).changes,
+        () => endSessions.run(nowIso(ctx), bare, `${bare}/`, exceptUserId ?? '').changes,
       );
     },
     async endSessions(id) {

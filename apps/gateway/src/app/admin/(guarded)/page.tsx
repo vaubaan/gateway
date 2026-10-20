@@ -56,6 +56,7 @@ import { connectPagePath } from '@/server/connections';
 import {
   INSTANCE_NAME_MAX_LENGTH,
   INSTANCE_NAME_PROBLEMS,
+  issuerKey,
   type InstanceConfig,
 } from '@/server/config';
 import {
@@ -150,7 +151,7 @@ function ruleWords(admin: InstanceConfig['admin']): React.ReactNode {
       </span>,
     );
   }
-  return parts.length > 0 ? parts : 'nobody: no rule is set';
+  return parts.length > 0 ? parts : 'no rule: administrators are named in this gateway';
 }
 
 export default async function SetupPage({ searchParams }: Props) {
@@ -163,7 +164,7 @@ export default async function SetupPage({ searchParams }: Props) {
   const [providers, rule, bootstrap, apps, ownerless, clients, telemetry, users, identity, key] =
     await Promise.all([
       root.auth.providers.views(),
-      root.auth.providers.adminRule(),
+      root.auth.administrators.current(),
       root.auth.bootstrap.state(),
       root.providerApps.list(),
       root.connections.service.listOwnerless(),
@@ -185,20 +186,27 @@ export default async function SetupPage({ searchParams }: Props) {
   const administrators = users.filter(
     (view) =>
       view.user.status === 'active' &&
-      isOperator({ email: view.user.email, groups: view.groupRecords }, rule),
+      isOperator(
+        {
+          id: view.user.id,
+          email: view.user.email,
+          providerId:
+            providers.find(
+              (p) =>
+                view.user.issuer !== null && issuerKey(p.issuer) === issuerKey(view.user.issuer),
+            )?.id ?? null,
+          groups: view.groupRecords,
+        },
+        rule,
+      ),
   );
   const host = root.config.publicUrl.host;
-  // Local accounts: the setup creates the first administrator's account for an address of
-  // the admin rule (ADR local-accounts-sign-in-provider, D7); its first sign-in does the rest.
+  // Local accounts: the setup creates the first administrator's account, for any address,
+  // and names them administrator (ADR administrators-live-in-the-instance, §4).
   const local = providers.find((provider) => provider.kind === 'local') ?? null;
-  let firstAdministrator: 'done' | 'todo' | null = null;
-  if (local && bootstrap.status === 'active') {
-    let created = false;
-    for (const email of root.config.admin.emails) {
-      if (await root.auth.accounts.accountOf(local.id, email)) created = true;
-    }
-    firstAdministrator = created ? 'done' : 'todo';
-  }
+  const firstAdministrator: 'done' | 'todo' | null =
+    local && bootstrap.status === 'active' ? (rule.userIds.size > 0 ? 'done' : 'todo') : null;
+  const drift = await root.auth.administrators.configurationDrift();
 
   const steps: Step[] = [
     ...(key.generatedAt !== null
@@ -286,12 +294,10 @@ export default async function SetupPage({ searchParams }: Props) {
             title: 'The first administrator’s account',
             description:
               firstAdministrator === 'done'
-                ? 'Created. Its first sign-in sets the second factor up and retires the bootstrap token.'
-                : root.config.admin.emails.length > 0
-                  ? 'Local accounts are set up: create the account of an address the admin rule names, then sign in with it.'
-                  : 'The admin rule names no email: a local account cannot be an administrator until admin.emails lists one.',
+                ? 'An administrator is named. Its first sign-in sets the second factor up and retires the bootstrap token.'
+                : 'Local accounts are set up: create the first administrator’s account, then sign in with it.',
             action:
-              firstAdministrator === 'todo' && root.config.admin.emails.length > 0
+              firstAdministrator === 'todo'
                 ? { label: 'Create the account', href: FIRST_ADMINISTRATOR_PAGE }
                 : undefined,
           },
@@ -304,8 +310,8 @@ export default async function SetupPage({ searchParams }: Props) {
       title: SECTIONS.administrators,
       description:
         administrators.length > 0
-          ? `${listOf(administrators.map((view) => view.user.displayName ?? view.user.email))} — by the rule below.`
-          : 'Nobody who matches the rule below has signed in yet.',
+          ? `${listOf(administrators.map((view) => view.user.displayName ?? view.user.email))}.`
+          : 'Nobody named administrator has signed in yet.',
     },
     ...(ownerless.length > 0
       ? [
@@ -445,18 +451,31 @@ export default async function SetupPage({ searchParams }: Props) {
 
       <Section
         title={SECTIONS.administrators}
-        note={CONFIG_WORDS.fileReadOnly}
+        note="Named in this gateway, under People. The configuration's rule names them once, at the first start, and never again by itself."
         id="administrators"
         testId="administrators"
       >
         <KeyValue
           items={[
-            { term: 'Rule', value: ruleWords(root.config.admin) },
+            {
+              term: 'In the configuration',
+              value: (
+                <>
+                  {ruleWords(root.config.admin)}
+                  {drift && (
+                    <span className={styles.sub} data-testid="admin-rule-drift-setup">
+                      Not what was applied: it does not apply by itself. Apply it from People if you
+                      mean it.
+                    </span>
+                  )}
+                </>
+              ),
+            },
             {
               term: 'Today',
               value:
                 administrators.length === 0 ? (
-                  <span className={styles.quiet}>nobody has signed in under this rule yet</span>
+                  <span className={styles.quiet}>no administrator has signed in yet</span>
                 ) : (
                   <span className={styles.inline}>
                     {administrators.map((view) => (

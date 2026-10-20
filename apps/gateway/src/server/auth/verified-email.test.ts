@@ -33,8 +33,7 @@ function entra(rest: Partial<OidcSignInProvider> = {}): OidcSignInProvider {
 
 const admins = {
   isInvited: async () => false,
-  adminEmails: ['boss@acme.example'],
-  adminGroup: null,
+  isAdministrator: async () => true,
 };
 
 async function codeOf(run: Promise<unknown>): Promise<string | null> {
@@ -58,14 +57,14 @@ describe('a verified email for a company directory', () => {
     expect(() => mapClaims({ ...base, xms_edov: false }, mapping)).toThrow(LoginError);
   });
 
-  it('without the option, a directory admits the admin email on its word (unchanged)', async () => {
+  it('without the option, a directory admits an administrator on its word (unchanged)', async () => {
     const identity = {
       email: 'boss@acme.example',
       emailVerified: null,
       subject: 'x',
       groups: [],
     } as const;
-    expect(await admit(identity, entra(), admins)).toBe('admin-email');
+    expect(await admit(identity, entra(), admins)).toBe('administrator');
   });
 
   it('with the option, an unverified admin email is refused; a verified one is admitted', async () => {
@@ -78,7 +77,7 @@ describe('a verified email for a company directory', () => {
     } as const;
     expect(await codeOf(admit(unverified, provider, admins))).toBe('email-not-verified');
     const verified = { ...unverified, emailVerified: true } as const;
-    expect(await admit(verified, provider, admins)).toBe('admin-email');
+    expect(await admit(verified, provider, admins)).toBe('administrator');
   });
 
   it('is read from the environment, and refused on a GitHub provider', () => {

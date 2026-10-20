@@ -314,6 +314,33 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       }),
     ),
   ),
+  'users.handlers.makeAdministrator': form('operator', 303, (rig, headers) =>
+    rig.root.users.handlers.makeAdministrator(
+      post('/admin/users/none/make-administrator', headers, {}),
+      'none',
+    ),
+  ),
+  'users.handlers.unmakeAdministrator': form('operator', 303, (rig, headers) =>
+    rig.root.users.handlers.unmakeAdministrator(
+      post('/admin/users/none/unmake-administrator', headers, {}),
+      'none',
+    ),
+  ),
+  'users.handlers.addAdministratorGroup': form('operator', 303, (rig, headers) =>
+    rig.root.users.handlers.addAdministratorGroup(
+      post('/admin/users/administrators/group', headers, { provider: 'none', group: 'g' }),
+    ),
+  ),
+  'users.handlers.removeAdministratorDesignation': form('operator', 303, (rig, headers) =>
+    rig.root.users.handlers.removeAdministratorDesignation(
+      post('/admin/users/administrators/remove', headers, { designation: 'none' }),
+    ),
+  ),
+  'users.handlers.applyConfigurationRule': form('operator', 303, (rig, headers) =>
+    rig.root.users.handlers.applyConfigurationRule(
+      post('/admin/users/administrators/apply-configuration', headers, {}),
+    ),
+  ),
   'users.handlers.resetSecondFactor': form('operator', 303, (rig, headers) =>
     rig.root.users.handlers.resetSecondFactor(
       post('/admin/users/none/reset-second-factor', headers, {}),

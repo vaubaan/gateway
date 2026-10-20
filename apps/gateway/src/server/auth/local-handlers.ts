@@ -23,14 +23,14 @@
  *   POST /settings/security/password                the current password and a new one
  *
  * The sign-in itself is the one every provider gets: `admit()` (the address must
- * still be invited or named by the admin rule), then `completeLogin()` (the
+ * still be invited, or an administrator), then `completeLogin()` (the
  * `users` row, the deactivation check), then a session. Between the password
  * and the session a `PendingLocalStep` holds the second factor's turn, bound to
  * the browser by the pending-login cookie: an account with a second factor is
- * asked for it; a person the admin rule names and who has none enrols one
+ * asked for it; an administrator who has none enrols one
  * before the session exists (D4 of the ADR).
  */
-import type { AdminGroup, LocalSignInProvider } from '../config/sign-in';
+import type { LocalSignInProvider } from '../config/sign-in';
 import { NoticeStore, type Notice } from '../connections/pending';
 import { createNoticeRedirect } from '../connections/notice-redirect';
 import type { SessionStore } from '../compose/ports';
@@ -38,6 +38,7 @@ import type { Logger } from '../logging';
 import type { Store } from '../store';
 import type { Clock } from '../store/clock';
 import type { LocalAccountRecord } from '../store';
+import type { AdministratorsService } from './administrators';
 import { admit } from './admission';
 import type { Authenticator, UserPrincipal } from './authenticator';
 import type { IdentityClaims } from './claims';
@@ -94,11 +95,12 @@ export interface LocalAuthHandlerDeps extends ThrottleDeps {
   /** The web-session store, for the one-time notices (the recovery codes shown once). */
   readonly sessionStore: SessionStore;
   readonly authenticator: Authenticator;
-  readonly providers: Pick<SignInProvidersService, 'resolve' | 'views' | 'adminRule'>;
+  readonly providers: Pick<SignInProvidersService, 'resolve' | 'views'>;
   readonly accounts: LocalAccountsService;
   readonly login: LoginDeps;
   readonly store: Pick<Store, 'invitations'>;
-  readonly adminEmails: readonly string[];
+  /** Who administers: admitted without an invitation, and never without a second factor. */
+  readonly administrators: AdministratorsService;
   readonly logger: Logger;
   readonly clock: Clock;
   readonly mailer?: LinkMailer;
@@ -131,8 +133,8 @@ export function localIdentity(
     issuer: provider.issuer.href,
     subject: account.id,
     email: account.email,
-    // The address was proven by the link that created the account, or named by the
-    // admin rule for the first administrator.
+    // The address was proven by the link that created the account, or typed by the
+    // setup for the first administrator.
     emailVerified: true,
     displayName: null,
     groups: [],
@@ -195,9 +197,12 @@ export function createLocalAuthHandlers(deps: LocalAuthHandlerDeps): LocalAuthHa
     ));
   }
 
-  /** Whether the admin rule names this address (a local account carries no group). */
-  function namedByAdminRule(email: string): boolean {
-    return deps.adminEmails.includes(email.toLowerCase());
+  /** Whether the person behind the account administers the gateway, or will once signed in. */
+  async function administers(
+    provider: LocalSignInProvider,
+    account: LocalAccountRecord,
+  ): Promise<boolean> {
+    return deps.administrators.admits(localIdentity(provider, account), provider.id);
   }
 
   /** Admission, the `users` row and the session: what every provider's sign-in ends with. */
@@ -205,18 +210,15 @@ export function createLocalAuthHandlers(deps: LocalAuthHandlerDeps): LocalAuthHa
     request: Request,
     provider: LocalSignInProvider,
     account: LocalAccountRecord,
-    adminGroup: AdminGroup | null,
   ): Promise<{ readonly sessionId: string; readonly setCookie: string }> {
     const identity = localIdentity(provider, account);
     const admission = await admit(identity, provider, {
       isInvited: async (email) => (await deps.store.invitations.get(email)) !== null,
-      adminEmails: deps.adminEmails,
-      adminGroup,
+      isAdministrator: () => deps.administrators.admits(identity, provider.id),
     });
-    const rule = await deps.providers.adminRule();
     const outcome = await completeLogin(deps.login, identity, {
       providerId: provider.id,
-      adminRule: rule,
+      administrators: deps.administrators,
     });
     await deps.sessions.destroy(request.headers);
     const session = await deps.sessions.create({
@@ -248,7 +250,7 @@ export function createLocalAuthHandlers(deps: LocalAuthHandlerDeps): LocalAuthHa
       });
       return redirect(SECOND_FACTOR_PAGE, { 'Set-Cookie': step.setCookie });
     }
-    if (namedByAdminRule(account.email)) {
+    if (await administers(provider, account)) {
       const enrolment = deps.accounts.beginTotpEnrolment(deps.instanceLabel, account.email);
       const step = await deps.sessions.createLocalStep({
         step: 'enrol',
@@ -263,8 +265,7 @@ export function createLocalAuthHandlers(deps: LocalAuthHandlerDeps): LocalAuthHa
       return redirect(ENROL_PAGE, { 'Set-Cookie': step.setCookie });
     }
     try {
-      const rule = await deps.providers.adminRule();
-      const session = await openSession(request, provider, account, rule.group);
+      const session = await openSession(request, provider, account);
       return redirect(returnTo, { 'Set-Cookie': session.setCookie });
     } catch (err) {
       return failLogin(err, { 'Set-Cookie': deps.sessions.clearPendingCookie() });
@@ -381,8 +382,7 @@ export function createLocalAuthHandlers(deps: LocalAuthHandlerDeps): LocalAuthHa
       const account = await deps.accounts.accountById(step.accountId);
       if (!account) return loginError('account-deactivated');
       try {
-        const rule = await deps.providers.adminRule();
-        const session = await openSession(request, provider, account, rule.group);
+        const session = await openSession(request, provider, account);
         if (check.by === 'recovery-code') {
           logger.info('sign-in by recovery code', {
             provider: provider.id,
@@ -430,8 +430,7 @@ export function createLocalAuthHandlers(deps: LocalAuthHandlerDeps): LocalAuthHa
       const account = await deps.accounts.accountById(step.accountId);
       if (!account) return loginError('account-deactivated');
       try {
-        const rule = await deps.providers.adminRule();
-        const session = await openSession(request, provider, account, rule.group);
+        const session = await openSession(request, provider, account);
         const noticeId = await codesNotice(
           session.sessionId,
           confirmed.recoveryCodes,
@@ -603,7 +602,7 @@ export function createLocalAuthHandlers(deps: LocalAuthHandlerDeps): LocalAuthHa
           ],
         });
       }
-      if (namedByAdminRule(who.principal.user.email)) {
+      if (who.principal.isOperator) {
         return redirectWithNotice(who.principal.sessionId, SECURITY_PAGE, {
           tone: 'danger',
           title: 'Administrators keep a second factor',

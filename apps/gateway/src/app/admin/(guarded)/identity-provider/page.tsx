@@ -25,7 +25,6 @@ import {
 import { requireOperator } from '@/lib/auth/session';
 import { CONFIG_WORDS, SETTINGS_ACTIONS, SETTINGS_PAGES } from '@/lib/vocabulary';
 import {
-  describeAdminRule,
   IDP_PAGE,
   NEW_SIGN_IN_PROVIDER_PAGE,
   signInProviderPage,
@@ -69,7 +68,7 @@ export default async function SignInSettingsPage({ searchParams }: Props) {
   const removedPeople = Number(first(params.people) ?? '0');
   const tested = first(params.tested);
   const providers = await root.auth.providers.views();
-  const rule = await root.auth.providers.adminRule();
+  const administrators = await root.auth.administrators.current();
   const users = await root.store.users.list();
   const rows: Row[] = providers.map((provider) => ({
     provider,
@@ -275,9 +274,13 @@ export default async function SignInSettingsPage({ searchParams }: Props) {
           />
         )}
         <Hint>
-          Administrators: {describeAdminRule(rule) || 'nobody yet'}. A provider where anyone can
-          open an account — GitHub, personal Google or Microsoft accounts — admits only allowed
-          domains and invited people; the gateway never joins two accounts of one person.
+          Administrators:{' '}
+          {administrators.designations.length === 0
+            ? 'nobody yet'
+            : `${administrators.designations.length} named under People`}
+          . A provider where anyone can open an account — GitHub, personal Google or Microsoft
+          accounts — admits only allowed domains and invited people; the gateway never joins two
+          accounts of one person.
         </Hint>
       </Section>
     </>

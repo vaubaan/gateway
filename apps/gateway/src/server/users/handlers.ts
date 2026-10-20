@@ -9,13 +9,21 @@
  *   POST /logout/everywhere              the signed-in user ends all their own sessions
  *   POST /admin/users/invitations         invite an address (form field `email`)
  *   POST /admin/users/invitations/remove  remove an invitation (form field `email`)
+ *   POST /admin/users/<id>/make-administrator     the user administers from now on
+ *   POST /admin/users/<id>/unmake-administrator   no longer (refused for the last way in)
+ *   POST /admin/users/administrators/group        name a group of a provider (fields `provider`, `group`)
+ *   POST /admin/users/administrators/remove       remove a designation (field `designation`)
+ *   POST /admin/users/administrators/apply-configuration  apply the configuration's admin rule
  *
  * Operator only, origin-checked (spec §6): the Administration layout does not
  * cover route handlers, so each handler authorizes by itself.
  */
 import {
+  ADMINISTRATORS_ERROR_MESSAGES,
+  AdministratorsError,
   auditActorId,
   guardMutation,
+  type AdministratorsService,
   OPERATOR_REFUSALS,
   refusalResponse,
   LOGIN_PAGE,
@@ -50,8 +58,8 @@ export interface UserAdminHandlerDeps {
   readonly invitations: InvitationService;
   readonly accounts: LocalAccountsService;
   readonly providers: Pick<SignInProvidersService, 'views'>;
-  /** The admin rule's emails, lower-cased: who the setup may create the first account for. */
-  readonly adminEmails: readonly string[];
+  /** The designations of the administrators (ADR administrators-live-in-the-instance). */
+  readonly administrators: AdministratorsService;
   readonly mailer?: LinkMailer;
   readonly notices: NoticeStore;
   readonly logger: Logger;
@@ -74,11 +82,16 @@ export interface UserAdminHandlers {
   /** An administrator resets a person's second factor: their next sign-in takes the password alone (or enrols one, for an administrator). */
   resetSecondFactor(request: Request, userId: string): Promise<Response>;
   /**
-   * The setup creates the first administrator's local account (fields `email`, one of
-   * `admin.emails`; `password`, `password_again`); their first sign-in enrols the second
-   * factor and revokes the bootstrap token (ADR local-accounts-sign-in-provider, D7).
+   * The setup creates the first administrator's local account (fields `email`, any
+   * address; `password`, `password_again`) and names them administrator; their first
+   * sign-in enrols the second factor (ADR administrators-live-in-the-instance, §4).
    */
   createFirstAdministrator(request: Request): Promise<Response>;
+  makeAdministrator(request: Request, userId: string): Promise<Response>;
+  unmakeAdministrator(request: Request, userId: string): Promise<Response>;
+  addAdministratorGroup(request: Request): Promise<Response>;
+  removeAdministratorDesignation(request: Request): Promise<Response>;
+  applyConfigurationRule(request: Request): Promise<Response>;
 }
 
 const plural = (count: number, one: string, many: string): string => (count === 1 ? one : many);
@@ -126,6 +139,9 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
     }
     if (err instanceof LocalAccountError) {
       return { tone: 'danger', title, lines: [err.sentence] };
+    }
+    if (err instanceof AdministratorsError) {
+      return { tone: 'danger', title, lines: [ADMINISTRATORS_ERROR_MESSAGES[err.code]] };
     }
     deps.logger.error('users: unexpected failure', {
       detail: err instanceof Error ? err.message : String(err),
@@ -228,24 +244,32 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
       try {
         const local = await localProvider();
         if (!local) throw new LocalAccountError('no-local-provider');
-        if (!deps.adminEmails.includes(email)) throw new LocalAccountError('not-admitted');
         if (field('password') !== field('password_again')) {
           throw new LocalAccountError(
             'password-weak',
             'The two passwords differ. Type the same one twice.',
           );
         }
+        const actor = auditActorId(principal);
         const account = await deps.accounts.createAccount({
           providerId: local.id,
           email,
           password: field('password'),
-          actor: auditActorId(principal),
+          actor,
         });
+        // The person exists from now on, and administers: named by the holder of the
+        // setup link, inside the instance (ADR administrators-live-in-the-instance, §4).
+        const user = await deps.users.ensureIdentity({
+          issuer: local.issuer.href,
+          subject: account.id,
+          email: account.email,
+        });
+        await deps.administrators.grantUser(user.id, actor, 'setup');
         notice = {
           tone: 'success',
           title: `Account of ${account.email} created`,
           lines: [
-            'Sign in with it now: the first sign-in sets the second factor up, shows the recovery codes, and retires the bootstrap token.',
+            'It administers this gateway. Sign in with it now: the first sign-in sets the second factor up and shows the recovery codes.',
           ],
         };
       } catch (err) {
@@ -306,8 +330,124 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
       return redirectWithNotice(principal.sessionId, USERS_PAGE, notice);
     },
 
+    makeAdministrator(request, userId) {
+      return act(request, 'Not made administrator', async (actor) => {
+        const user = await deps.users.get(userId);
+        if (!user) throw new AdministratorsError('not-a-user', userId);
+        const row = await deps.administrators.grantUser(userId, actor.actorId);
+        return {
+          tone: 'success',
+          title: row ? `${user.email} administers this gateway` : `${user.email} already did`,
+          lines: row
+            ? [
+                'From their next page they see Administration. If they have no second factor yet, their next sign-in asks them to set one up.',
+              ]
+            : [],
+        };
+      });
+    },
+
+    unmakeAdministrator(request, userId) {
+      return act(request, 'Still administrator', async (actor) => {
+        const user = await deps.users.get(userId);
+        if (!user) throw new AdministratorsError('not-a-user', userId);
+        const designation = await deps.administrators.designationOfUser(userId);
+        if (!designation) {
+          return {
+            tone: 'warning',
+            title: `${user.email} is not administrator by name`,
+            lines: [
+              'They administer through a group of their sign-in provider: remove that group from the administrators below, or remove them from the group at the provider.',
+            ],
+          };
+        }
+        await deps.administrators.revoke(designation.id, actor.actorId);
+        return {
+          tone: 'success',
+          title: `${user.email} no longer administers this gateway`,
+          lines: ['Their next page no longer shows Administration. Nothing else changes.'],
+        };
+      });
+    },
+
+    async addAdministratorGroup(request) {
+      const principal = await operatorOf(request);
+      if (principal instanceof Response) return principal;
+      const form = await readForm(request);
+      if (!form) return notAFormResponse();
+      const provider = String(form.get('provider') ?? '').trim();
+      const group = String(form.get('group') ?? '').trim();
+      let notice: Notice;
+      try {
+        const row = await deps.administrators.grantGroup(provider, group, auditActorId(principal));
+        notice = {
+          tone: 'success',
+          title: row
+            ? `Members of “${group}” (${provider}) administer this gateway`
+            : `“${group}” (${provider}) already did`,
+          lines: row
+            ? [
+                'Each member is an administrator from their next sign-in through that provider, as long as the provider says they belong to the group.',
+              ]
+            : [],
+        };
+      } catch (err) {
+        notice = failure(err, 'Group not named');
+      }
+      return redirectWithNotice(principal.sessionId, USERS_PAGE, notice);
+    },
+
+    async removeAdministratorDesignation(request) {
+      const principal = await operatorOf(request);
+      if (principal instanceof Response) return principal;
+      const form = await readForm(request);
+      if (!form) return notAFormResponse();
+      const id = String(form.get('designation') ?? '');
+      let notice: Notice;
+      try {
+        const removed = await deps.administrators.revoke(id, auditActorId(principal));
+        notice = {
+          tone: 'success',
+          title: 'Administrator removed',
+          lines: [
+            removed.kind === 'group'
+              ? `Members of “${removed.groupName}” no longer administer through it.`
+              : removed.kind === 'email'
+                ? `${removed.email} will not be an administrator when it signs in.`
+                : 'They no longer administer this gateway.',
+          ],
+        };
+      } catch (err) {
+        notice = failure(err, 'Not removed');
+      }
+      return redirectWithNotice(principal.sessionId, USERS_PAGE, notice);
+    },
+
+    async applyConfigurationRule(request) {
+      const principal = await operatorOf(request);
+      if (principal instanceof Response) return principal;
+      let notice: Notice;
+      try {
+        const written = await deps.administrators.applyConfiguration(auditActorId(principal));
+        notice = {
+          tone: 'success',
+          title: 'The configuration’s rule is applied',
+          lines: [
+            written.length === 0
+              ? 'It named nobody new.'
+              : `${written.length} ${plural(written.length, 'administrator was', 'administrators were')} named, in your name.`,
+          ],
+        };
+      } catch (err) {
+        notice = failure(err, 'Not applied');
+      }
+      return redirectWithNotice(principal.sessionId, USERS_PAGE, notice);
+    },
+
     deactivate(request, userId) {
       return act(request, 'Not deactivated', async (actor) => {
+        // No self-lockout: the last administrator with a way in stays.
+        await deps.administrators.assertNoLockout({ withoutUser: userId });
         const done = await deps.users.deactivate(actor, userId);
         const lines = [
           'They can no longer sign in, their open sessions are over, and they hold nothing on any account.',

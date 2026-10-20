@@ -205,7 +205,7 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
     expect(await root.auth.authenticator.authorizeAdmin(principal)).toEqual({
       ok: false,
       status: 403,
-      reason: 'user does not match the admin rule',
+      reason: 'user is not an administrator of this instance',
     });
     const form = new URLSearchParams({
       issuer: 'https://x.test',
@@ -291,7 +291,9 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
     expect(await root.store.config.getSecret(IDP_CONFIG_KEYS.clientSecret)).toBe(
       CLIENT.clientSecret,
     );
-    const audit = await root.store.audit.list({ kind: 'admin' });
+    const audit = (await root.store.audit.list({ kind: 'admin' })).filter(
+      (e) => e.kind === 'admin' && e.act !== 'administrators-seeded',
+    );
     expect(audit).toHaveLength(1);
     expect(audit[0]).toMatchObject({
       kind: 'admin',

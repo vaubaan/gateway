@@ -26,6 +26,12 @@ import type { Logger } from '../logging';
 import type { Store } from '../store';
 import type { Clock } from '../store/clock';
 import { toIso } from '../store/clock';
+import {
+  ADMINISTRATORS_ERROR_MESSAGES,
+  AdministratorsError,
+  groupsOfProvider,
+  type AdministratorsService,
+} from './administrators';
 import { admit } from './admission';
 import { auditActorId, type Authenticator } from './authenticator';
 import { BOOTSTRAP_MAX_MISSES, type BootstrapService } from './bootstrap';
@@ -96,8 +102,8 @@ export interface AuthHandlerDeps {
   readonly authenticator: Authenticator;
   readonly login: LoginDeps;
   readonly store: Pick<Store, 'invitations' | 'users'>;
-  /** The admin rule's emails, lower-cased: always admitted (they are named by the configuration). */
-  readonly adminEmails: readonly string[];
+  /** Who administers: admitted although nobody invited them, and named at sign-in. */
+  readonly administrators: AdministratorsService;
   readonly audit: AuditWriter;
   readonly logger: Logger;
   readonly clock: Clock;
@@ -195,8 +201,10 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
       try {
         const effective = await deps.providers.resolve(id);
         if (!effective) return loginError('provider-unknown');
-        const rule = await deps.providers.adminRule();
-        const started = await deps.flows.for(effective.provider, rule.group).start();
+        const administrators = await deps.administrators.current();
+        const started = await deps.flows
+          .for(effective.provider, groupsOfProvider(administrators, effective.provider.id))
+          .start();
         const pending = await deps.sessions.createPending({
           providerId: effective.provider.id,
           state: started.state,
@@ -241,18 +249,19 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
       const url = deps.flows.callbackUrl(provider.id);
       url.search = new URL(request.url).search;
       try {
-        const rule = await deps.providers.adminRule();
-        const finished = await deps.flows.for(provider, rule.group).finish(url, pending);
+        const administrators = await deps.administrators.current();
+        const finished = await deps.flows
+          .for(provider, groupsOfProvider(administrators, provider.id))
+          .finish(url, pending);
         for (const warning of finished.warnings) logger.warn('sign-in warning', { warning });
         const identity = finished.identity;
         const admission = await admit(identity, provider, {
           isInvited: async (email) => (await deps.store.invitations.get(email)) !== null,
-          adminEmails: deps.adminEmails,
-          adminGroup: rule.group,
+          isAdministrator: () => deps.administrators.admits(identity, provider.id),
         });
         const outcome = await completeLogin(deps.login, identity, {
           providerId: provider.id,
-          adminRule: rule,
+          administrators: deps.administrators,
         });
         // A sign-in replaces the session the browser already had, it does not add one.
         await deps.sessions.destroy(request.headers);
@@ -409,11 +418,17 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
       const guard = await guardMutation(request, deps, 'operator');
       if (!guard.ok) return refusalResponse(guard, OPERATOR_REFUSALS);
       try {
+        // No self-lockout: the last administrators' only way in stays.
+        await deps.administrators.assertNoLockout({ withoutProvider: providerId });
         const removed = await deps.providers.remove(providerId);
-        // Its users can no longer sign in; what they had open ends now. Their missions,
-        // keys and connected apps follow the rules of a deactivation: they stop only
-        // when an administrator deactivates them (handbook authentication).
-        const ended = await deps.store.users.endSessionsOfIssuer(removed.issuer.href);
+        // Its users can no longer sign in; what they had open ends now — except the
+        // session of the administrator who removed it. Their missions, keys and
+        // connected apps follow the rules of a deactivation: they stop only when an
+        // administrator deactivates them (handbook authentication).
+        const ended = await deps.store.users.endSessionsOfIssuer(
+          removed.issuer.href,
+          guard.principal.kind === 'user' ? guard.principal.user.id : null,
+        );
         const actor = auditActorId(guard.principal);
         await writeAudit(
           actor,
@@ -424,9 +439,13 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
         logger.warn('sign-in provider removed', { provider: removed.id, users: ended });
         return redirect(`${IDP_PAGE}?removed=${encodeURIComponent(removed.id)}&people=${ended}`);
       } catch (err) {
-        if (err instanceof IdpSettingsError) {
+        if (err instanceof IdpSettingsError || err instanceof AdministratorsError) {
+          const problems =
+            err instanceof AdministratorsError
+              ? [ADMINISTRATORS_ERROR_MESSAGES[err.code]]
+              : err.problems;
           const params = new URLSearchParams();
-          for (const p of err.problems) params.append('problem', p);
+          for (const p of problems) params.append('problem', p);
           return redirect(`${IDP_PAGE}?${params.toString()}`);
         }
         throw err;

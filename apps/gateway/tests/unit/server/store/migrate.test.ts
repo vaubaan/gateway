@@ -106,7 +106,7 @@ describe('migration runner', () => {
     );
   });
 
-  it('ships the nineteen migrations 0001 to 0019 in the default directory', () => {
+  it('ships the twenty migrations 0001 to 0020 in the default directory', () => {
     const shipped = loadMigrations(DEFAULT_MIGRATIONS_DIR);
     expect(shipped.map((m) => [m.version, m.name])).toEqual([
       [1, 'schema'],
@@ -128,6 +128,7 @@ describe('migration runner', () => {
       [17, 'connection_default_env'],
       [18, 'mission_reaches_the_whole_connection'],
       [19, 'local_accounts'],
+      [20, 'administrators'],
     ]);
   });
 });

@@ -63,7 +63,7 @@ interface SignInProviderBase {
   readonly clientSecret: string;
   /** Lower-cased. Empty: see `admitsEveryone`. */
   readonly allowedEmailDomains: readonly string[];
-  /** Only invited addresses (and the admin emails) are admitted, whatever the domain. */
+  /** Only invited addresses (and the administrators) are admitted, whatever the domain. */
   readonly invitationOnly: boolean;
 }
 
@@ -211,7 +211,7 @@ export function admissionProblem(
   if (provider.allowedEmailDomains.length > 0 || provider.invitationOnly) return null;
   return (
     `anyone can hold an account at ${issuerKey(provider.issuer)}, so provider '${provider.id}' needs an admission rule: ` +
-    'list allowed email domains, or admit invited addresses only (the admin emails are always admitted)'
+    'list allowed email domains, or admit invited addresses only (the administrators are always admitted)'
   );
 }
 

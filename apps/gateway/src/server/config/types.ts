@@ -45,8 +45,10 @@ export interface IdpConfig {
 }
 
 /**
- * The admin rule (spec §4.3): who is operator once the bootstrap token is
- * revoked. At least one of the two members is non-empty.
+ * The admin rule of the configuration (spec §4.3): optional, a seed. The boot applies
+ * it once while the store names no administrator; afterwards the administrators live
+ * in the store and a changed rule is only shown (ADR administrators-live-in-the-instance).
+ * Both members empty: no rule.
  */
 export interface AdminRule {
   /**

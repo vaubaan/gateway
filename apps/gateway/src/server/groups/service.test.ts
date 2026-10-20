@@ -5,7 +5,7 @@ import {
   READ,
   type AuthorityRig,
 } from '../../../tests/integration/authority/support';
-import { currentAuthority, resolveAdminRule } from '../auth';
+import { currentAuthority } from '../auth';
 import { findActiveUserByEmail } from '../authority';
 import { GROUP_NAME_MAX_LENGTH } from './service';
 
@@ -63,11 +63,11 @@ describe('GroupService — local groups kept by the operator', () => {
     });
 
     it('never makes an operator of a member of a local group, whatever its name', async () => {
-      const { store, config } = rig.root;
+      const { store } = rig.root;
       // A local group that carries the admin rule's name (created before the rule named it).
       const local = await store.groups.getOrCreate(ADMIN_GROUP, 'local');
       await store.groups.addMember(local.id, rig.bob.id);
-      const rule = resolveAdminRule(config.admin, ['idp']);
+      const rule = await rig.root.auth.administrators.current();
       expect(await currentAuthority(store, rig.bob, rule)).toMatchObject({
         isOperator: false,
         groups: [{ name: ADMIN_GROUP, source: 'local' }],

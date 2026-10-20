@@ -119,7 +119,7 @@ export interface RefusalWording {
 export const OPERATOR_REFUSALS: RefusalWording = {
   field: 'reason',
   noSession: 'no session',
-  forbidden: 'user does not match the admin rule',
+  forbidden: 'user is not an administrator of this instance',
 };
 
 /** The JSON answer to a refusal; `origin-mismatch` is worded once, in `origin.ts`. */

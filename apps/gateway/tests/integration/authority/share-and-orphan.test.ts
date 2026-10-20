@@ -513,8 +513,8 @@ describe('share → issue within the restriction → exceed → revoke → orpha
     expect(await actsSeenBy(rig.bob)).toEqual(
       [`mission-issued:${mission.mission.id}`, `mission-orphaned:${mission.mission.id}`].sort(),
     );
-    // An operator reads every administrative act.
-    expect(await actsSeenBy(rig.operator, true)).toHaveLength(4);
+    // An operator reads every administrative act (the boot's `administrators-seeded` included).
+    expect(await actsSeenBy(rig.operator, true)).toHaveLength(5);
   });
 
   describe('only the owner shares (spec §11.2: no transitive sharing)', () => {

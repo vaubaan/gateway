@@ -8,7 +8,7 @@
  * whose `iss` is not the provider's issuer is refused here, whatever the
  * library already checked, because a user is (issuer, subject) and the
  * provider of a user is found by that issuer (sessions end when it is removed,
- * its groups count for the admin rule).
+ * its groups count for the administrators).
  */
 import { issuerKey, type AdminGroup, type SignInProvider } from '../config/sign-in';
 import { mapClaims, type IdentityClaims } from './claims';
@@ -36,10 +36,11 @@ export interface SignInFlow {
 
 export interface SignInFlows {
   /**
-   * The flow of `provider`. `adminGroup`: the admin rule's group, resolved against
-   * the providers configured now; a GitHub provider reads that team when it is its own.
+   * The flow of `provider`. `adminGroups`: the designated administrators' groups,
+   * resolved against the providers configured now; a GitHub provider reads the teams
+   * that are its own.
    */
-  for(provider: SignInProvider, adminGroup: AdminGroup | null): SignInFlow;
+  for(provider: SignInProvider, adminGroups: readonly AdminGroup[]): SignInFlow;
   /** The callback to register at the provider. */
   callbackUrl(providerId: string): URL;
 }
@@ -53,7 +54,7 @@ export interface SignInFlowsDeps {
 export function createSignInFlows(deps: SignInFlowsDeps): SignInFlows {
   return {
     callbackUrl: (providerId) => callbackUrl(deps.publicUrl, providerId),
-    for(provider, adminGroup) {
+    for(provider, adminGroups) {
       const redirectUri = callbackUrl(deps.publicUrl, provider.id);
       if (provider.kind === 'local') {
         // Local accounts sign in on the form of the sign-in page (`local-handlers.ts`),
@@ -64,7 +65,7 @@ export function createSignInFlows(deps: SignInFlowsDeps): SignInFlows {
         );
       }
       if (provider.kind === 'github') {
-        const teams = adminGroup?.provider === provider.id ? [adminGroup.name] : [];
+        const teams = adminGroups.filter((g) => g.provider === provider.id).map((g) => g.name);
         const github = new GithubSignIn(provider, { redirectUri, teams, fetch: deps.fetch });
         return {
           start: () => github.start(),

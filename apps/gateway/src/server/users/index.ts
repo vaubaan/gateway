@@ -4,6 +4,7 @@
  * provider. Built once by the composition root as `root.users`. Handbook:
  * docs/handbook/authentication.md, "Deactivating a user".
  */
+import type { AdministratorsService } from '../auth/administrators';
 import type { Authenticator } from '../auth/authenticator';
 import type { LocalAccountsService } from '../auth/local-accounts';
 import type { LinkMailer } from '../auth/local-handlers';
@@ -22,7 +23,9 @@ import { InvitationService } from './invitations';
 import { UserAdminService } from './service';
 
 export interface UsersModuleDeps {
-  readonly config: Pick<InstanceConfig, 'publicUrl' | 'admin'>;
+  readonly config: Pick<InstanceConfig, 'publicUrl'>;
+  /** The designations of the administrators. */
+  readonly administrators: AdministratorsService;
   readonly store: Store;
   readonly membership: Pick<MembershipSettler, 'watch'>;
   readonly delegations: Pick<DelegationService, 'revokeAllOf'>;
@@ -72,7 +75,7 @@ export function createUsersModule(deps: UsersModuleDeps): UsersModule {
     invitations,
     accounts: deps.accounts,
     providers: deps.providers,
-    adminEmails: deps.config.admin.emails,
+    administrators: deps.administrators,
     mailer: deps.mailer,
     notices: deps.connections.notices,
     logger,

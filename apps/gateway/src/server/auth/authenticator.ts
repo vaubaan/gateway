@@ -7,10 +7,9 @@
 import { BOOTSTRAP_ACTOR_ID } from '@vaubaan/gateway-core';
 
 import { issuerKey } from '../config/sign-in';
-import type { AdminRule } from '../config/types';
 import type { Store } from '../store';
 import type { GroupRecord, UserRecord } from '../store/types';
-import { resolveAdminRule } from './admin-rule';
+import type { AdministratorsService } from './administrators';
 import type { BootstrapService } from './bootstrap';
 import { currentAuthority } from './login';
 import type { SignInProvidersService } from './sign-in-providers';
@@ -61,7 +60,7 @@ export class Authenticator {
   constructor(
     private readonly sessions: SessionService,
     private readonly store: Store,
-    private readonly adminRule: AdminRule,
+    private readonly administrators: Pick<AdministratorsService, 'current'>,
     private readonly bootstrap: BootstrapService,
     private readonly providers: Pick<SignInProvidersService, 'views'>,
   ) {}
@@ -83,15 +82,16 @@ export class Authenticator {
       return null;
     }
     // A provider removed in Settings ended its users' sessions (`sessions_ended_at`,
-    // above); the provider is looked up for the admin rule and for display.
+    // above); the provider is looked up for display.
     const providers = await this.providers.views();
     const key = user.issuer === null ? null : issuerKey(user.issuer);
     const provider = providers.find((p) => issuerKey(p.issuer) === key) ?? null;
-    const rule = resolveAdminRule(
-      this.adminRule,
-      providers.map((p) => p.id),
+    const authority = await currentAuthority(
+      this.store,
+      user,
+      await this.administrators.current(),
+      provider?.id ?? null,
     );
-    const authority = await currentAuthority(this.store, user, rule);
     return {
       kind: 'user',
       sessionId: session.id,
@@ -103,8 +103,8 @@ export class Authenticator {
   }
 
   /**
-   * Admin surface: the bootstrap operator while the token is active, a user
-   * matching the admin rule afterwards (and before, if one exists).
+   * Admin surface: the bootstrap operator while the token is active, and every
+   * administrator the store names (ADR administrators-live-in-the-instance).
    * `authenticate()` already decided whether a bootstrap session is still
    * somebody (a revoked token makes it `null`), so a bootstrap principal is
    * an operator here.
@@ -113,7 +113,7 @@ export class Authenticator {
     if (!principal) return { ok: false, status: 401, reason: 'no session' };
     if (principal.kind === 'bootstrap') return { ok: true, principal };
     if (!principal.isOperator) {
-      return { ok: false, status: 403, reason: 'user does not match the admin rule' };
+      return { ok: false, status: 403, reason: 'user is not an administrator of this instance' };
     }
     return { ok: true, principal };
   }

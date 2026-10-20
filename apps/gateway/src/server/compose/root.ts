@@ -17,13 +17,13 @@ import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import { createAuditModule, type AuditModule } from '../audit';
 import { createAuthModule, type AuthModule, type LinkMailer, type OidcOptions } from '../auth';
-import { withRestoredAdminRule } from '../auth/admin-rule';
 import { createLinkMailer } from '../mail';
 import { createAuthorityModule, derivedMissionReads, type AuthorityModule } from '../authority';
 import { SessionService } from '../budget';
 import { createConnectionsModule, type ConnectionsModule } from '../connections';
 import {
   buildInfoFromEnv,
+  ConfigError,
   type BuildInfo,
   type InstanceConfig,
   type LoadedConfig,
@@ -146,12 +146,7 @@ export interface RootDeps {
 }
 
 export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
-  const {
-    config: bootConfig,
-    configFile,
-    masterKeyGenerated,
-  } = (deps.loadConfig ?? loadBootConfig)();
-  let config = bootConfig;
+  const { config, configFile, masterKeyGenerated } = (deps.loadConfig ?? loadBootConfig)();
   const logger = createLogger({
     level: config.log.level,
     redact: createRedactor(secretValues(config)),
@@ -190,7 +185,6 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
   // a failed build, and a retry must not find a second handle on the same file.
   const opened: Closer[] = [() => store.close()];
   try {
-    config = await withCarriedAdminRule(config, store, logger);
     await checkSealedKeys(store, config, logger);
     const modules = await wireModules(
       { config, logger, registry, store, build, masterKeyGenerated },
@@ -220,30 +214,6 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
     await closeAfterFailedBuild(opened, logger);
     throw err;
   }
-}
-
-/**
- * The configured admin rule plus the one a restored backup carried (ADR
- * backup-carries-the-sign-in-configuration): said once at boot, never the emails.
- */
-async function withCarriedAdminRule(
-  config: InstanceConfig,
-  store: Store,
-  logger: Logger,
-): Promise<InstanceConfig> {
-  const merged = await withRestoredAdminRule(config.admin, store.config);
-  if (!merged.carried) return config;
-  logger.info('admin rule: the configured one plus the one a restored backup carried', {
-    group: merged.rule.group ?? 'none',
-    emails: merged.rule.emails.length,
-  });
-  if (merged.droppedGroup !== null) {
-    logger.warn(
-      'admin rule: the group a restored backup carried is replaced by the configured one (one group per rule)',
-      { carried_group: merged.droppedGroup, configured_group: config.admin.group },
-    );
-  }
-  return { ...config, admin: merged.rule };
 }
 
 /**
@@ -289,7 +259,12 @@ function logConfigurationSummary(
     instance_name: config.instanceName ?? 'not set (Administration decides; the host by default)',
     idp: config.idp ? config.idp.issuer.origin : 'not configured',
     sign_in: config.signIn.map((provider) => `${provider.id} (${provider.kind})`),
-    admin_rule: config.admin.group ? 'group' : `emails (${config.admin.emails.length})`,
+    admin_rule:
+      config.admin.group === null && config.admin.emails.length === 0
+        ? 'none (administrators live in the instance)'
+        : config.admin.group
+          ? 'group (a seed: applied while the store names nobody)'
+          : `emails (${config.admin.emails.length}; a seed: applied while the store names nobody)`,
     providers: [...config.providers.keys()],
     telemetry: !config.telemetry.enabledSetByConfig
       ? 'not set (Administration decides; off by default)'
@@ -429,6 +404,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
       };
     },
   });
+  await settleAdministrators(auth, config);
   const missions = createMissionsModule({
     config,
     store,
@@ -561,6 +537,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
   // After the authorization server: deactivating a user revokes their delegations.
   const users = createUsersModule({
     config,
+    administrators: auth.administrators,
     store,
     membership: authority.membership,
     delegations: oauth.delegations,
@@ -642,6 +619,25 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
  * write to). Every closer runs even when one fails; the first failure is
  * rethrown once all have run.
  */
+/**
+ * The administrators live in the store (ADR administrators-live-in-the-instance): the
+ * configuration's rule is applied while the store names nobody, and shown — never
+ * applied — once it does. A store that names nobody, with no rule and no bootstrap
+ * token, has no way to a first administrator: the boot stops and says so.
+ */
+async function settleAdministrators(auth: AuthModule, config: InstanceConfig): Promise<void> {
+  await auth.administrators.seedFromConfiguration();
+  if (config.bootstrapToken !== null || (await auth.administrators.any())) return;
+  throw new ConfigError([
+    {
+      path: 'bootstrap_token',
+      env: ['VAUBAAN_BOOTSTRAP_TOKEN'],
+      message:
+        'this gateway has no administrator yet and no admin rule: set a bootstrap token (32 characters or more) and open the setup link to name the first administrator',
+    },
+  ]);
+}
+
 async function closeAll(opened: readonly Closer[]): Promise<void> {
   let failure: { readonly error: unknown } | null = null;
   for (const close of [...opened].reverse()) {

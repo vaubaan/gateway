@@ -31,7 +31,7 @@ const BOOTSTRAP: Principal = { kind: 'bootstrap', sessionId: 'session-b' };
 async function authorizeAdmin(principal: Principal | null): Promise<AdminDecision> {
   if (!principal) return { ok: false, status: 401, reason: 'no session' };
   if (principal.kind === 'bootstrap' || principal.isOperator) return { ok: true, principal };
-  return { ok: false, status: 403, reason: 'user does not match the admin rule' };
+  return { ok: false, status: 403, reason: 'user is not an administrator of this instance' };
 }
 
 function depsFor(principal: Principal | null) {
@@ -159,7 +159,7 @@ describe('refusalResponse', () => {
     );
     expect(await admin.json()).toEqual({
       error: 'forbidden',
-      reason: 'user does not match the admin rule',
+      reason: 'user is not an administrator of this instance',
     });
   });
 });

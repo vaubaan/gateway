@@ -40,15 +40,8 @@ import {
   localProviderOf,
   type LocalSignInProvider,
 } from '../config/sign-in';
-import type { AdminRule, IdpClaimMapping, InstanceConfig } from '../config/types';
+import type { IdpClaimMapping, InstanceConfig } from '../config/types';
 import type { ConfigRepo, ConfigWrite } from '../store/repositories/config';
-import {
-  RESTORED_ADMIN_RULE_KEY,
-  resolveAdminRule,
-  serializeRestoredAdminRule,
-  withRestoredAdminRule,
-  type ResolvedAdminRule,
-} from './admin-rule';
 import { IdpSettingsError } from './errors';
 import { DEFAULT_CLAIM_MAPPING, IDP_CONFIG_KEYS, type IdpSettingsService } from './idp-settings';
 
@@ -126,7 +119,6 @@ interface StoredSettings {
 /** What `carryIntoStore` wrote: the ids of the providers, never a secret. */
 export interface CarriedSignIn {
   readonly providers: readonly string[];
-  readonly adminRule: boolean;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -279,7 +271,12 @@ export class SignInProvidersService {
 
   constructor(
     config: Pick<InstanceConfig, 'idp' | 'signIn'>,
-    private readonly rule: AdminRule,
+    /**
+     * The groups designated without a provider (a bare `admin.group` carried over from
+     * the configuration): they name the group of the one provider, so a change of the
+     * provider list must not make them ambiguous or move them.
+     */
+    private readonly bareAdminGroups: () => Promise<readonly string[]>,
     private readonly legacy: IdpSettingsService,
     private readonly store: ConfigRepo,
     private readonly clock: { now(): Date },
@@ -313,12 +310,6 @@ export class SignInProvidersService {
     if (issuer === null) return null;
     const key = issuerKey(issuer);
     return (await this.views()).find((p) => issuerKey(p.issuer) === key) ?? null;
-  }
-
-  /** The admin rule against the providers configured now. */
-  async adminRule(): Promise<ResolvedAdminRule> {
-    const ids = (await this.views()).map((p) => p.id);
-    return resolveAdminRule(this.rule, ids);
   }
 
   isReadOnly(id: string): boolean {
@@ -373,11 +364,12 @@ export class SignInProvidersService {
           `provider '${twin.id}' already keeps this gateway's local accounts: one local provider per instance`,
         );
       }
-      const ruleProblem = this.adminRuleChange(
-        others.map((p) => p.id),
-        [...others.map((p) => p.id), id],
+      problems.push(
+        ...(await this.adminRuleChange(
+          others.map((p) => p.id),
+          [...others.map((p) => p.id), id],
+        )),
       );
-      if (ruleProblem) problems.push(ruleProblem);
       if (problems.length > 0) throw new IdpSettingsError(problems);
       const saved = localProviderOf(id, input.name.trim() || DEFAULT_LOCAL_PROVIDER_NAME);
       const stored: StoredSettings = {
@@ -430,11 +422,12 @@ export class SignInProvidersService {
         );
       }
     }
-    const ruleProblem = this.adminRuleChange(
-      others.map((p) => p.id),
-      [...others.map((p) => p.id), id],
+    problems.push(
+      ...(await this.adminRuleChange(
+        others.map((p) => p.id),
+        [...others.map((p) => p.id), id],
+      )),
     );
-    if (ruleProblem) problems.push(ruleProblem);
     if (problems.length > 0 || !issuer || !clientSecret) throw new IdpSettingsError(problems);
     // Last, and only for a new issuer: the one check that reaches the network.
     if (kind === 'oidc' && (before === null || issuerChanged) && this.options.checkIssuer) {
@@ -502,8 +495,8 @@ export class SignInProvidersService {
     const existing = await this.resolve(id);
     if (!existing) throw new IdpSettingsError([`no sign-in provider has the id '${id}'`]);
     const remaining = (await this.views()).map((p) => p.id).filter((other) => other !== id);
-    const ruleProblem = this.adminRuleChange([...remaining, id], remaining);
-    if (ruleProblem) throw new IdpSettingsError([ruleProblem]);
+    const ruleProblems = await this.adminRuleChange([...remaining, id], remaining);
+    if (ruleProblems.length > 0) throw new IdpSettingsError(ruleProblems);
     const writes: ConfigWrite[] =
       id === LEGACY_PROVIDER_ID
         ? Object.values(IDP_CONFIG_KEYS).map((key) => ({ kind: 'delete', key }))
@@ -516,38 +509,21 @@ export class SignInProvidersService {
   }
 
   /**
-   * Writes every provider the configuration sets, and the admin rule, into this
-   * store as store-held ones (ADR backup-carries-the-sign-in-configuration). Run by
-   * the `backup` command on its copy, never on a live store: the copy restored
-   * elsewhere signs people in as the source did. The client secrets are sealed like
-   * any stored secret; the provider `idp` goes to the single-provider keys. The
-   * admin rule's group is written `<provider>:<group>` against the providers of now,
-   * so a host that adds its own does not make it ambiguous. One transaction.
+   * Writes every provider the configuration sets into this store as store-held ones
+   * (ADR backup-carries-the-sign-in-configuration). Run by the `backup` command on
+   * its copy, never on a live store: the copy restored elsewhere signs people in as
+   * the source did. The client secrets are sealed like any stored secret; the
+   * provider `idp` goes to the single-provider keys. One transaction. The
+   * administrators need no carrying: they are rows of the store being copied (ADR
+   * administrators-live-in-the-instance), so no `restored.admin_rule` is written.
    */
   async carryIntoStore(): Promise<CarriedSignIn> {
-    const ids = (await this.views()).map((p) => p.id);
-    const resolved = resolveAdminGroup(
-      this.rule.group,
-      ids.length > 0 ? ids : [LEGACY_PROVIDER_ID],
-    );
-    const merged = await withRestoredAdminRule(
-      {
-        group: resolved ? `${resolved.provider}:${resolved.name}` : this.rule.group,
-        emails: this.rule.emails,
-      },
-      this.store,
-    );
     const writes: ConfigWrite[] = [];
     for (const provider of this.file) {
       writes.push(...(await this.carriedWritesOf(provider)));
     }
-    writes.push({
-      kind: 'value',
-      key: RESTORED_ADMIN_RULE_KEY,
-      value: serializeRestoredAdminRule(merged.rule),
-    });
     await this.store.apply(writes);
-    return { providers: this.file.map((p) => p.id), adminRule: true };
+    return { providers: this.file.map((p) => p.id) };
   }
 
   private async carriedWritesOf(provider: SignInProvider): Promise<ConfigWrite[]> {
@@ -598,27 +574,30 @@ export class SignInProvidersService {
   }
 
   /**
-   * Refuses a change of the provider list that would leave the admin rule's group
-   * ambiguous, or make it name another provider's group than it does now.
+   * Refuses a change of the provider list that would leave an administrators' group
+   * designated without a provider ambiguous, or make it name another provider's group
+   * than it does now.
    */
-  private adminRuleChange(
+  private async adminRuleChange(
     beforeIds: readonly string[],
     afterIds: readonly string[],
-  ): string | null {
-    const raw = this.rule.group;
-    if (raw === null) return null;
-    const before = resolveAdminGroup(raw, beforeIds);
-    const after = resolveAdminGroup(raw, afterIds);
-    if (after === null && afterIds.length > 1) {
-      return (
-        `the admin rule's group "${raw}" does not say which provider claims it, and this change leaves ${afterIds.length} providers: ` +
-        `write admin.group as "<provider>:<group>" in the configuration first (for instance "${before?.provider ?? afterIds[0] ?? LEGACY_PROVIDER_ID}:${before?.name ?? raw}")`
-      );
+  ): Promise<string[]> {
+    const problems: string[] = [];
+    for (const raw of await this.bareAdminGroups()) {
+      const before = resolveAdminGroup(raw, beforeIds);
+      const after = resolveAdminGroup(raw, afterIds);
+      if (after === null && afterIds.length > 1) {
+        problems.push(
+          `the administrators' group "${raw}" does not say which provider claims it, and this change leaves ${afterIds.length} providers: ` +
+            `name the group with its provider first in Administration → Users (for instance "${before?.provider ?? afterIds[0] ?? LEGACY_PROVIDER_ID}:${before?.name ?? raw}"), then remove the one without`,
+        );
+      } else if (before !== null && after !== null && !sameGroup(before, after)) {
+        problems.push(
+          `this change would make the administrators' group "${raw}" mean the group "${after.name}" of provider '${after.provider}' instead of "${before.name}" of '${before.provider}': name the group with its provider first in Administration → Users`,
+        );
+      }
     }
-    if (before !== null && after !== null && !sameGroup(before, after)) {
-      return `this change would make the admin rule's group "${raw}" mean the group "${after.name}" of provider '${after.provider}' instead of "${before.name}" of '${before.provider}': change admin.group first`;
-    }
-    return null;
+    return problems;
   }
 
   private parseIssuer(kind: SignInKind, raw: string, problems: string[]): URL | null {

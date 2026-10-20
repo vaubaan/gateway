@@ -1,0 +1,119 @@
+import { describe, expect, it } from 'vitest';
+
+import type { Designation, GroupDesignation } from '../store/repositories/administrators';
+import type { GroupRecord } from '../store/types';
+import { isOperator, resolveAdministrators, resolveGroupDesignation } from './administrators';
+
+function group(
+  name: string,
+  provider: string | null,
+  source: GroupRecord['source'] = 'idp',
+): Pick<GroupRecord, 'name' | 'source' | 'provider'> {
+  return { name, source, provider };
+}
+
+const base = { grantedBy: 'configuration', origin: 'configuration', createdAt: '' } as const;
+const userRow = (userId: string): Designation => ({
+  ...base,
+  id: `u-${userId}`,
+  kind: 'user',
+  userId,
+});
+const emailRow = (email: string, provider: string | null = null): Designation => ({
+  ...base,
+  id: `e-${email}`,
+  kind: 'email',
+  email,
+  provider,
+});
+const groupRow = (groupName: string, provider: string | null = null): GroupDesignation => ({
+  ...base,
+  id: `g-${groupName}`,
+  kind: 'group',
+  groupName,
+  provider,
+});
+
+const subject = (
+  over: Partial<{
+    id: string;
+    email: string;
+    providerId: string | null;
+    groups: Pick<GroupRecord, 'name' | 'source' | 'provider'>[];
+  }> = {},
+) => ({ id: 'u1', email: 'a@x.test', providerId: 'idp', groups: [], ...over });
+
+describe('administrators', () => {
+  it('a user designation names that user only', () => {
+    const admins = resolveAdministrators([userRow('u1')], ['idp']);
+    expect(isOperator(subject(), admins)).toBe(true);
+    expect(isOperator(subject({ id: 'u2' }), admins)).toBe(false);
+  });
+
+  it('a designated group of the one provider names its members, never a local group', () => {
+    const admins = resolveAdministrators([groupRow('gateway-admins')], ['idp']);
+    expect(
+      isOperator(
+        subject({ groups: [group('dev', 'idp'), group('gateway-admins', 'idp')] }),
+        admins,
+      ),
+    ).toBe(true);
+    expect(isOperator(subject({ groups: [group('dev', 'idp')] }), admins)).toBe(false);
+    expect(isOperator(subject({ groups: [group('gateway-admins', null, 'local')] }), admins)).toBe(
+      false,
+    );
+  });
+
+  it('a pending address names its person, case-insensitively, through its provider or any', () => {
+    const any = resolveAdministrators([emailRow('ops@example.com')], ['idp']);
+    expect(isOperator(subject({ email: 'OPS@Example.com' }), any)).toBe(true);
+    expect(isOperator(subject({ email: 'dev@example.com' }), any)).toBe(false);
+    const bound = resolveAdministrators([emailRow('ops@example.com', 'github')], ['idp', 'github']);
+    expect(isOperator(subject({ email: 'ops@example.com', providerId: 'idp' }), bound)).toBe(false);
+    expect(isOperator(subject({ email: 'ops@example.com', providerId: 'github' }), bound)).toBe(
+      true,
+    );
+  });
+
+  it('a group of provider A never satisfies a designation of provider B', () => {
+    const admins = resolveAdministrators(
+      [groupRow('acme/admins', 'github')],
+      ['company', 'github'],
+    );
+    expect(admins.groups).toEqual([{ provider: 'github', name: 'acme/admins' }]);
+    expect(isOperator(subject({ groups: [group('acme/admins', 'github')] }), admins)).toBe(true);
+    expect(isOperator(subject({ groups: [group('acme/admins', 'company')] }), admins)).toBe(false);
+  });
+
+  it('a bare group (carried from the configuration) is ambiguous with several providers', () => {
+    expect(resolveGroupDesignation(groupRow('admins'), ['a', 'b'])).toBeNull();
+    expect(resolveGroupDesignation(groupRow('admins'), ['a'])).toEqual({
+      provider: 'a',
+      name: 'admins',
+    });
+    // Written with its provider in the configuration, it resolves with several.
+    expect(resolveGroupDesignation(groupRow('github:acme/admins'), ['company', 'github'])).toEqual({
+      provider: 'github',
+      name: 'acme/admins',
+    });
+  });
+
+  it('a group naming a removed provider does not fall to the remaining one', () => {
+    expect(resolveGroupDesignation(groupRow('github:acme/admins'), ['company'])).toBeNull();
+    expect(resolveGroupDesignation(groupRow('acme/admins', 'github'), ['company'])).toBeNull();
+  });
+
+  it('keeps a legacy group name with a colon for the single provider idp', () => {
+    expect(resolveGroupDesignation(groupRow('eng:admins'), ['idp'])).toEqual({
+      provider: 'idp',
+      name: 'eng:admins',
+    });
+  });
+
+  it('with no provider configured, reads a bare group for the provider idp', () => {
+    expect(resolveGroupDesignation(groupRow('gateway-admins'), [])).toEqual({
+      provider: 'idp',
+      name: 'gateway-admins',
+    });
+  });
+});

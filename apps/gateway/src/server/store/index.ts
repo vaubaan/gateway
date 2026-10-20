@@ -15,6 +15,10 @@ import { backupTo, MEMORY_PATH, openCopyForWriting, openDb, type StoreDb } from 
 import type { Encryptor } from './encryptor.ts';
 import { newId, type IdGenerator } from './ids.ts';
 import { DEFAULT_MIGRATIONS_DIR, loadMigrations, runMigrations } from './migrate.ts';
+import {
+  createAdministratorsRepo,
+  type AdministratorsRepo,
+} from './repositories/administrators.ts';
 import { createApprovalsRepo, type ApprovalsRepo } from './repositories/approvals.ts';
 import { createAuditRepo, type AuditRepo } from './repositories/audit.ts';
 import { createConfigRepo, type ConfigRepo } from './repositories/config.ts';
@@ -54,6 +58,8 @@ export interface Store {
   readonly groups: GroupsRepo;
   /** The addresses an administrator invited to sign in (migration 0014). */
   readonly invitations: InvitationsRepo;
+  /** The administrators of the instance: users, pending addresses, groups (migration 0020). */
+  readonly administrators: AdministratorsRepo;
   /** The accounts, secrets and links of a sign-in provider of kind `local`. */
   readonly localAccounts: LocalAccountsRepo;
   /** Temporary refs of pushes waiting for an approval (migration 0015). */
@@ -111,6 +117,7 @@ export function openStore(options: StoreOptions): Store {
     users: createUsersRepo(ctx),
     groups: createGroupsRepo(ctx),
     invitations: createInvitationsRepo(ctx),
+    administrators: createAdministratorsRepo(ctx),
     localAccounts: createLocalAccountsRepo(ctx),
     pendingRefs: createPendingRefsRepo(ctx),
     connections: createConnectionsRepo(ctx),
@@ -208,6 +215,17 @@ export { effectiveResourceEnv, ownResourceEnv, type EffectiveEnv } from './resou
 export type { UpsertUserInput, UsersRepo } from './repositories/users.ts';
 export type { GroupsRepo } from './repositories/groups.ts';
 export type { InvitationRecord, InvitationsRepo } from './repositories/invitations.ts';
+export {
+  ADMINISTRATOR_KINDS,
+  ADMINISTRATOR_ORIGINS,
+  type AdministratorKind,
+  type AdministratorOrigin,
+  type AdministratorsRepo,
+  type Designation,
+  type EmailDesignation,
+  type GroupDesignation,
+  type UserDesignation,
+} from './repositories/administrators.ts';
 export {
   LOCAL_LINK_KINDS,
   LOCAL_SECRET_KINDS,

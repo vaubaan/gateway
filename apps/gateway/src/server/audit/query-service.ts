@@ -18,6 +18,10 @@
 import {
   BOOTSTRAP_ACTOR_ID,
   BOOTSTRAP_ACTOR_LABEL,
+  CONFIGURATION_ACTOR_ID,
+  CONFIGURATION_ACTOR_LABEL,
+  RECOVERY_ACTOR_ID,
+  RECOVERY_ACTOR_LABEL,
   type AdminAct,
   type AdminObjectType,
   type AuditDecision,
@@ -612,6 +616,9 @@ async function objectLabel(
 async function actorView(userId: string, names: NameCache): Promise<AuditAdminView['actor']> {
   if (userId === BOOTSTRAP_ACTOR_ID)
     return { id: userId, email: null, label: BOOTSTRAP_ACTOR_LABEL };
+  if (userId === CONFIGURATION_ACTOR_ID)
+    return { id: userId, email: null, label: CONFIGURATION_ACTOR_LABEL };
+  if (userId === RECOVERY_ACTOR_ID) return { id: userId, email: null, label: RECOVERY_ACTOR_LABEL };
   const email = await names.email(userId);
   return { id: userId, email, label: email ?? userId };
 }

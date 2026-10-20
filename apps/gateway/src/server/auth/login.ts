@@ -14,7 +14,11 @@ import type { Logger } from '../logging';
 import type { Store } from '../store';
 import { systemClock, toIso, type Clock } from '../store/clock';
 import type { GroupRecord, UserRecord } from '../store/types';
-import { isOperator, type ResolvedAdminRule } from './admin-rule';
+import {
+  isOperator,
+  type AdministratorsService,
+  type ResolvedAdministrators,
+} from './administrators';
 import type { BootstrapService } from './bootstrap';
 import type { IdentityClaims } from './claims';
 import { LoginError } from './errors';
@@ -54,15 +58,16 @@ export type MembershipsChanged = () => Promise<void>;
 export async function currentAuthority(
   store: Store,
   user: UserRecord,
-  adminRule: ResolvedAdminRule,
+  administrators: ResolvedAdministrators,
+  providerId: string | null = null,
 ): Promise<Authority> {
   const groups = await store.groups.groupsOf(user.id);
-  // The admin rule names a group of one sign-in provider: only a membership that
+  // A designated group is a group of one sign-in provider: only a membership that
   // provider claimed counts (`isOperator`). A local group, kept by an operator in
   // Administration, never makes anyone an operator.
   return {
     groups,
-    isOperator: isOperator({ email: user.email, groups }, adminRule),
+    isOperator: isOperator({ id: user.id, email: user.email, providerId, groups }, administrators),
   };
 }
 
@@ -89,10 +94,10 @@ export async function syncIdpGroups(
   }
 }
 
-/** What the sign-in knows besides the identity: which provider, the admin rule against the providers now. */
+/** What the sign-in knows besides the identity: which provider, and who administers. */
 export interface LoginContext {
   readonly providerId: string;
-  readonly adminRule: ResolvedAdminRule;
+  readonly administrators: Pick<AdministratorsService, 'consumeAtSignIn' | 'current'>;
 }
 
 export async function completeLogin(
@@ -155,7 +160,14 @@ export async function completeLogin(
   } catch (err) {
     settleFailed(err);
   }
-  const authority = await currentAuthority(deps.store, user, context.adminRule);
+  // A pending address that names this person becomes their own designation now.
+  await context.administrators.consumeAtSignIn(user, context.providerId);
+  const authority = await currentAuthority(
+    deps.store,
+    user,
+    await context.administrators.current(),
+    context.providerId,
+  );
 
   let bootstrapRevoked = false;
   if (authority.isOperator && (await deps.bootstrap.state()).status === 'active') {

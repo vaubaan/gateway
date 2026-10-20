@@ -1,5 +1,5 @@
 ---
-title: Authentication — sign-in providers (OIDC, GitHub, local accounts), admission, web session, bootstrap token, admin rule
+title: Authentication — sign-in providers (OIDC, GitHub, local accounts), admission, web session, bootstrap token, administrators
 status: current
 date: 2026-10-13
 last_synced: 2026-10-20
@@ -11,6 +11,8 @@ tracks:
   - apps/gateway/src/server/crypto/totp.ts
   - apps/gateway/src/server/store/repositories/local-accounts.ts
   - apps/gateway/migrations/0019_local_accounts.sql
+  - apps/gateway/migrations/0020_administrators.sql
+  - apps/gateway/src/server/store/repositories/administrators.ts
   - apps/gateway/src/app/(public)/account/
   - apps/gateway/src/app/(public)/login/
   - apps/gateway/src/app/(app)/settings/security/
@@ -53,7 +55,7 @@ tracks:
   - apps/gateway/tests/unit/server/auth/mutation-guard.test.ts
 ---
 
-# Authentication — sign-in providers (OIDC, GitHub), admission, web session, bootstrap token, admin rule
+# Authentication — sign-in providers (OIDC, GitHub), admission, web session, bootstrap token, administrators
 
 How a human gets a session on the instance (spec §0 "Operator", "User",
 "Group", "IdP"; §4.2 Administration; §4.3; §6 "human authentication";
@@ -75,12 +77,13 @@ Built on the [configuration](configuration.md) root (`InstanceConfig.idp`,
 apps/gateway/src/server/auth/            host-agnostic, never imports `next`
   index.ts            createAuthModule(deps) → root.auth; barrel
   relying-party.ts    openid-client v6 RP: discovery cache, PKCE/state/nonce, code grant, userinfo merge; callbackUrl(public, id)
-  github.ts           GithubSignIn: GitHub's OAuth web flow (state, PKCE), /user, /user/emails, the admin rule's team
+  github.ts           GithubSignIn: GitHub's OAuth web flow (state, PKCE), /user, /user/emails, the designated administrators' teams
   sign-in-flows.ts    createSignInFlows(): one SignInFlow per provider, whatever its kind; the iss of a token must be the provider's
-  sign-in-providers.ts SignInProvidersService: the providers of the file and of Settings; views() (no secret), resolve(id), save, remove, adminRule()
-  admission.ts        admit(): verified email; domains, invitation, admin email or group, or everyone of a directory
+  sign-in-providers.ts SignInProvidersService: the providers of the file and of Settings; views() (no secret), resolve(id), save, remove, carryIntoStore()
+  admission.ts        admit(): verified email; domains, invitation, an administrator, or everyone of a directory
   claims.ts           mapClaims(), parseGroupsClaim(), groupsMovedOutOfToken(), assertEmailDomainAllowed()
-  admin-rule.ts       resolveAdminRule(), isOperator(), describeAdminRule()
+  administrators.ts   AdministratorsService: the designations of the store; isOperator(), admits(), seedFromConfiguration(), configurationDrift(), withAWayIn(), assertNoLockout()
+  restored-admin-rule.ts  the `restored.admin_rule` key a backup of 2.0.0-alpha.3 builds carried; read once by the seed
   idp-settings.ts     IdpSettingsService: the provider `idp` saved from the interface, secret sealed in instance_config
   bootstrap.ts        BootstrapService: constant-time verify, revoked flag in instance_config
   session-service.ts  SessionService over SessionStore: session + pending-login records, their type guards, cookies
@@ -94,7 +97,7 @@ apps/gateway/src/server/mail/index.ts    createLinkMailer(): the two mails (invi
 apps/gateway/src/server/crypto/password.ts  hashPassword() / verifyPassword() (libsodium crypto_pwhash_str, argon2id), passwordProblem(), decoyHash()
 apps/gateway/src/server/crypto/totp.ts      RFC 6238 over node:crypto: totpCode(), verifyTotp(), otpauthUrl(), base32, recovery codes
 apps/gateway/src/server/store/repositories/local-accounts.ts  local_accounts, local_secrets (sealed), local_links (migration 0019)
-  login.ts            completeLogin(): unbound accounts bound to the issuer, deactivated user refused, users upsert, IdP group sync, bootstrap revocation; currentAuthority()
+  login.ts            completeLogin(): unbound accounts bound to the issuer, deactivated user refused, users upsert, IdP group sync, pending address consumed, bootstrap revocation; currentAuthority()
   authenticator.ts    Authenticator.authenticate(headers) → Principal; authorizeAdmin(); auditActorId()
   handlers.ts         Request → Response handlers of the sign-in endpoints and of Settings → Sign-in; adminSignInPage()
 apps/gateway/src/server/config/sign-in.ts  pure: provider ids, issuerKey(), the open issuers, admissionProblem(), resolveAdminGroup()
@@ -168,14 +171,14 @@ tested without Next.
 
 ## The three states of an instance
 
-| State                     | How a human gets in                                         | Who is operator                                  |
-| ------------------------- | ----------------------------------------------------------- | ------------------------------------------------ |
-| No sign-in provider       | `/admin/bootstrap` with the `bootstrap_token` of the config | whoever holds the bootstrap token                |
-| Provider(s), token active | both: bootstrap token **or** a provider's sign-in           | bootstrap holder, and any user matching the rule |
-| Token revoked (or absent) | a provider's sign-in only                                   | any user matching the **admin rule**             |
+| State                     | How a human gets in                                         | Who is operator                           |
+| ------------------------- | ----------------------------------------------------------- | ----------------------------------------- |
+| No sign-in provider       | `/admin/bootstrap` with the `bootstrap_token` of the config | whoever holds the bootstrap token         |
+| Provider(s), token active | both: bootstrap token **or** a provider's sign-in           | bootstrap holder, and every administrator |
+| Token revoked (or absent) | a provider's sign-in only                                   | every **administrator** the store names   |
 
-The transition happens on the **first IdP sign-in of a user matching the admin
-rule**: `completeLogin()` writes `bootstrap.revoked_at` into `instance_config`
+The transition happens on the **first sign-in of an administrator**:
+`completeLogin()` writes `bootstrap.revoked_at` into `instance_config`
 (`BootstrapService.revoke()`) and an administrative audit entry
 (`config-changed` on `instance-config` / `bootstrap`, in that user's name); the
 token is refused from then on even if it is still present in the configuration, and open bootstrap sessions stop being
@@ -184,7 +187,10 @@ anything (that would lock the instance). When the IdP is set in the mounted
 configuration the token is optional: without one,
 `InstanceConfig.bootstrapToken` is `null` and the state is `unavailable`; one
 given next to the IdP is kept and stays `active` until the first operator
-sign-in.
+sign-in. A store that names no administrator, with no token and no admin rule
+in the configuration, has no way to a first administrator: `buildRoot`
+(`settleAdministrators`) refuses to start with a `ConfigError` on
+`bootstrap_token` (exit 78).
 
 **A guessed token is revoked.** `POST /api/auth/bootstrap` takes one slot of an
 instance-wide window (`AUTH_LIMITS.bootstrapPerInstance`: 10 attempts per 10
@@ -199,8 +205,8 @@ the configuration first (ADR
 
 **Recovering after a bootstrap lockout.** The page says "Bootstrap sign-in is no
 longer available". Either set a sign-in provider in the configuration
-(`VAUBAAN_SIGN_IN_<ID>_*`, with an admin rule) and redeploy — the way the deploy
-guides recommend; or, to use the token again, delete the two rows it left, from a
+(`VAUBAAN_SIGN_IN_<ID>_*`) and redeploy — an administrator of the store signs in
+through it; or, to use the token again, delete the two rows it left, from a
 shell in the container, as the image user, then restart:
 
 ```bash
@@ -213,29 +219,95 @@ guessed. **If nobody can start a sign-in** (`too-many-attempts` for everybody, n
 client address known): the instance-wide window slides — wait ten minutes, or
 restart (the limiter is in memory).
 
-The **admin rule** is `InstanceConfig.admin` (`admin.group` and/or
-`admin.emails`, required by the loader), resolved against the providers
-configured now (`resolveAdminRule`, `SignInProvidersService.adminRule()`):
-`admin.group` is `<provider>:<group>` — a GitHub group is a team, `org/team` —
-or a bare name while one provider is configured (`resolveAdminGroup`; with no
-provider at all it reads as the provider `idp`'s, as before several providers).
-A bare name with several providers resolves to nobody, is refused by the loader
-when the file sets several, and Settings refuses a provider whose addition
-would make it ambiguous or change what it names. A `<provider>:` prefix that
-names no configured provider names nobody (except under the one provider
-`idp`, whose group names may contain a colon). `isOperator({ email, groups },
-rule)` is true for a member of the rule's group **of the rule's provider**
-(`group.source = 'idp'` and `group.provider = rule.group.provider`) or a listed
-email (lower-cased compare, the user of any provider: every stored email passed
-admission). Only groups a provider claimed count: membership of a local group, kept by an operator in Settings →
-Teams (`/admin/groups`, [authority](authority.md)), never makes anyone an operator, and a
-local group cannot take the rule's name. It is evaluated by
-`currentAuthority()` from the user's
-rows in `group_members` on **every** `authenticate()`, never from the session
-(spec §10 "authority recomputed from current membership"; integration test
-"removed from the admin group, the next check fails").
+## Administrators
 
-**`admin.emails` rests on the email claim.** It is only as strong as the
+The administrators live in the store (ADR
+[administrators-live-in-the-instance](../decisions/administrators-live-in-the-instance.md);
+migration `0020`, `store/repositories/administrators.ts`): one **designation**
+per row of `administrators` —
+
+- `user`: one user (`user_id`), administrator until unmade;
+- `email`: a lower-cased address for one provider (`provider`) or any
+  (`NULL`), **pending**: the first sign-in it admits turns it into a `user` row
+  of that person and deletes it (`consumeEmail`, in one transaction, from
+  `completeLogin` → `AdministratorsService.consumeAtSignIn`); until then the
+  address is an administrator for any user who carries it (the semantic
+  `admin.emails` had);
+- `group`: a group (`group_name`) of one provider (`provider`), or, `provider`
+  `NULL`, a bare or qualified `admin.group` carried over from the configuration
+  and resolved as before (`resolveGroupDesignation` → `resolveAdminGroup`: the
+  one provider; `<provider>:<group>` for a configured provider; ambiguous with
+  several, so Settings refuses a provider change that would make it so).
+
+Each row says who made it (`granted_by`: a user id, `bootstrap`,
+`configuration`, `recovery`) and why (`origin`: `setup`, `granted`,
+`configuration`, `recovered`). `AdministratorsService.current()` resolves them
+against the providers configured now; `isOperator({ id, email, providerId,
+groups }, administrators)` is true for a `user` row, a pending address naming
+the user (for its provider or any), or a membership the designated group's own
+provider claimed (`group.source = 'idp'` and `group.provider` = the
+designation's provider). Only groups a provider claimed count: a local group
+never makes anyone an operator, and a local group cannot take a designated
+group's name (`GroupService.reservedNames`). It is evaluated by
+`currentAuthority()` from the user's rows on **every** `authenticate()`, never
+from the session (spec §10 "authority recomputed from current membership").
+
+**The configuration's rule is a seed.** `admin.group` / `admin.emails` are
+optional. At every boot, `buildRoot` → `settleAdministrators` →
+`seedFromConfiguration()`: when the store holds **no designation**, each email
+of the rule becomes a `user` row for every active user already known by it, or
+a pending `email` row for any provider; the group a `group` row as written
+(`provider` NULL). The applied rule is recorded (`administrators.seeded_rule`,
+canonical JSON) with one `administrators-seeded` entry (actor `configuration`).
+This is how an instance upgraded from a version where the rule decided keeps
+every administrator. When the store already names somebody, nothing is applied:
+a rule that differs from the recorded one is logged at `warn` and shown on
+Administration → Users and on the setup page (`configurationDrift()`); an
+administrator may "Apply the configuration's rule" (`applyConfiguration`,
+`POST /admin/users/administrators/apply-configuration`), which writes ordinary
+`administrator-granted` entries in their name. A rule removed from the
+configuration removes nobody.
+
+**The rule a backup carried.** A copy made by the `backup` command of
+2.0.0-alpha.3 builds after ADR
+[backup-carries-the-sign-in-configuration](../decisions/backup-carries-the-sign-in-configuration.md)
+carries its source's rule as `restored.admin_rule` (`restored-admin-rule.ts`).
+The seed reads it once: while the store names nobody, its emails and its group
+are applied with the configuration's (both groups become designations; the
+configuration's rule alone is recorded as applied, so no drift follows); the
+key is deleted then, or at the first boot that finds administrators already
+named. The `backup` command of this version writes no such key: the
+administrators are rows of the copy. Test: `compose/restored-admin-rule.test.ts`.
+
+**Admission.** `admit()` admits on `administrator` when
+`AdministratorsService.admits(identity, provider)` says so: a `user` row of the
+identity's (issuer, subject), a pending address for this provider or any, or a
+designated group this provider claims the identity a member of. A GitHub
+provider reads the teams of every group designation that names it
+(`groupsOfProvider`).
+
+**Administration → Users** (`/admin/users`): "Make administrator" and "No
+longer administrator" on a person (`POST /admin/users/<id>/make-administrator`,
+`…/unmake-administrator`; a person administrator through a group only is told
+to remove the group or their membership); the **Administrators** section lists
+every designation with who named it, "Remove" on a pending address or a group
+(`POST /admin/users/administrators/remove`, field `designation`), and a form
+that names a group of a provider (`POST /admin/users/administrators/group`,
+fields `provider`, `group`). Audited: `administrator-granted`,
+`administrator-revoked` on `instance-config` / `administrators`.
+
+**No self-lockout.** `withAWayIn(change)` lists the administrators with a way
+in: active users, administrators by a `user` row, a pending address or a
+designated group's membership, whose provider (by their issuer) is configured
+and enabled — and, for local accounts, whose account exists.
+`assertNoLockout(change)` throws `AdministratorsError('last-way-in')` when the
+instance had one before the change and would have none after it. Checked by
+unmaking or removing a designation, deactivating a person
+(`users.handlers.deactivate`) and removing a sign-in provider
+(`removeSignInProvider`). Removing a provider ends its users' sessions except
+the remover's own (`endSessionsOfIssuer(issuer, exceptUserId)`).
+
+**An address rests on the email claim.** It is only as strong as the
 IdP's control of that attribute: use it with an IdP whose directory owns the
 address (the user cannot edit it, a foreign tenant cannot assert it).
 `admin.group` is the stronger rule, since group membership is granted by the
@@ -331,7 +403,7 @@ Enterprise Server base URL), `clientId`, `clientSecret`, `claims` (OIDC),
   [backup-carries-the-sign-in-configuration](../decisions/backup-carries-the-sign-in-configuration.md)):
   `carryIntoStore()` writes every provider of the configuration into a store
   as a store-held one, as `save` would (secret sealed, `idp` in the
-  single-provider keys), and the admin rule as `restored.admin_rule` (below).
+  single-provider keys). The administrators travel as rows of the copy.
   The `backup` command runs it on its copy, never on the live store. Restored
   on another host, they are `store` providers there, editable in
   Administration → Identity provider; that host's configuration adds its own,
@@ -356,21 +428,11 @@ Enterprise Server base URL), `clientId`, `clientSecret`, `claims` (OIDC),
 
 ### The admin rule a backup carried
 
-`restored.admin_rule` in `instance_config` (`RESTORED_ADMIN_RULE_KEY`,
-`admin-rule.ts`): JSON `{ group, emails }`, written by the `backup` command
-into its copy, the group qualified `<provider>:<group>` against the source's
-providers. At boot (`buildRoot`, `withCarriedAdminRule`) the effective
-`config.admin` is the configured rule plus this one (`mergeAdminRules`): the
-emails united; the configured group when the configuration sets one, the
-carried one otherwise — a carried group so replaced is logged at `warn`
-(one group per rule). The configuration still needs an admin rule at boot.
-Dropping the carried rule: delete that key from `instance_config` and
-restart. A backup of a restored instance carries the merged rule again.
-Tests: `admin-rule.test.ts`, `compose/restored-admin-rule.test.ts`.
+See "Administrators" above: read once by the seed, then deleted.
 
 ## Admission
 
-`admit(identity, provider, { isInvited, adminEmails, adminGroup })` (`admission.ts`) runs
+`admit(identity, provider, { isInvited, isAdministrator })` (`admission.ts`) runs
 after the provider vouched for the identity and before anything is written: a
 refusal creates no user, syncs no group and revokes no bootstrap token.
 
@@ -387,12 +449,12 @@ refusal creates no user, syncs no group and revokes no bootstrap token.
    it signs in (`everyone-of-the-directory`; never an open provider: the
    loader and `save` refuse such a provider).
 3. Otherwise: the email's domain in `allowedEmailDomains` (`domain`), the
-   address on the invitation list (`invitation`), in `admin.emails`
-   (`admin-email`), or the admin rule's group is this provider's and the
-   provider claimed the person a member — a groups-claim value, or the
-   GitHub team it answered for (`admin-group`; the same membership
-   `isOperator` reads after the sync, so a group of another provider does not
-   admit). Refused: `not-invited` when the provider has no domain (invited
+   address on the invitation list (`invitation`), or an administrator of
+   the store (`administrator`: the identity's `user` row, a pending address
+   for this provider or any, or a designated group this provider claimed the
+   person a member of — a groups-claim value, or the GitHub team it answered
+   for; the same membership `isOperator` reads after the sync, so a group of
+   another provider does not admit). Refused: `not-invited` when the provider has no domain (invited
    only), `email-domain-not-allowed` otherwise.
 
 The reason is logged (`sign-in admitted`, with the provider). **Identities
@@ -425,7 +487,7 @@ GET /auth/callback/github?code&state
   POST <issuer>/login/oauth/access_token (client secret, code, redirect_uri, code_verifier), Accept: application/json
   GET <api>/user          id (numeric) → subject; name ?? login → display name
   GET <api>/user/emails   the primary address; unverified or absent → email-not-verified
-  GET <api>/orgs/<org>/teams/<team>/memberships/<login>   only the admin rule's team of this provider:
+  GET <api>/orgs/<org>/teams/<team>/memberships/<login>   only the designated administrators' teams of this provider:
       200 state=active → member; 404 → not; anything else → groups-unavailable
 ```
 
@@ -602,15 +664,15 @@ GET /auth/callback[/<id>]?code&state    (Lax cookie travels on this top-level GE
   whatever claim the email is mapped from; the sign-in stops there (no user
   row, no group sync, no bootstrap revocation). An absent claim is accepted:
   many IdPs never send it. Entra ID returns group **object ids**
-  unless the app registration is configured to emit names; the admin rule
-  then names the object id.
+  unless the app registration is configured to emit names; a designated
+  administrators' group then names the object id.
 - **Groups that could not be read.** `mapClaims` is told whether the
   userinfo request failed (its third argument, `{ userinfoFailed }`) and
   throws `LoginError('groups-unavailable')` when it did **and** the
   configured groups claim is absent from
   the ID token: the groups are unknown, not empty, and syncing "no group"
   would take the user out of every IdP group (the connections those groups
-  own, the shares made to them, the admin rule). The sign-in stops there (no
+  own, the shares made to them, the designated administrators' groups). The sign-in stops there (no
   user row, no group sync, no bootstrap revocation) and the login page says
   to try again. It is judged on evidence, not on a setting: an ID token that
   carries the claim, even as an empty list, signs in although userinfo is
@@ -826,7 +888,7 @@ rendered without its layout. So:
   (`guardMutation(…, 'operator')`) and answers 401/403 JSON bodies;
 - the guarded layout renders the Administration shell (`AdminShell`), the
   same 401 redirect and the note "You do not administer this gateway", which
-  names the admin rule and is what a non-operator sees on a normal navigation.
+  says to ask an administrator and is what a non-operator sees on a normal navigation.
 
 `tests/unit/app/admin-guard.test.ts` discovers every `page.tsx` and
 `route.ts` under `(guarded)`, so a page added without the guard fails it.
@@ -938,7 +1000,7 @@ accounts" in Settings → Sign-in; default id `local`). Its issuer is
 `urn:vaubaan:local:<id>` (`localIssuer`), its users (issuer, subject) like
 everyone's, the subject being the account id. It is never open and always
 "invited only" (`localProviderOf`): `admit()` runs unchanged on every sign-in
-(the address must be invited, or named by the admin rule), and `completeLogin()`
+(the address must be invited, or an administrator), and `completeLogin()`
 after it (the `users` row at the first sign-in, the deactivation check).
 
 **The store** (migration `0019`, `store/repositories/local-accounts.ts`):
@@ -1013,7 +1075,7 @@ both secrets.
 password, `return_to`) → `checkPassword` → `continueSignIn`: an account with a
 second factor gets a `PendingLocalStep` of step `second-factor`
 (`SessionService.createLocalStep`: the pending-login cookie, ten minutes) and
-`/login/code`; a person **named by `admin.emails`** who has none gets a step
+`/login/code`; an **administrator** (or a pending address) who has none gets a step
 `enrol` carrying a fresh secret and `/login/second-factor` (an administrator
 cannot finish a sign-in without a factor); anyone else gets the session at
 once. `POST …/code` takes the step (`takeLocalStep`, single use), checks the
@@ -1022,16 +1084,16 @@ and answers `?error=second-factor-refused`; a stale cookie is
 `login-expired`. `POST …/enrol` confirms the enrolment, opens the session and
 lands on `/settings/security?notice=` where the recovery codes are shown once
 (a `NoticeStore` entry keyed by the new session). A local account's identity
-carries `emailVerified: true` (the link proved the mailbox, or the admin rule
-named the address) and no group: the admin rule's group never names a local
-account, only `admin.emails` does.
+carries `emailVerified: true` (the link proved the mailbox, or the setup typed
+the address) and no group: a designated group never names a local account; a
+`user` row or a pending address does.
 
 **Settings → Security** (`/settings/security`, a user's own page; the row
 "Security" of Settings): for a local account, the second factor (set up or
 replace — `beginSecondFactor` puts the secret in a step and comes back with
 `?enrol=1`, `confirmSecondFactor` takes the code; remove — `removeSecondFactor`,
 only within ten minutes of signing in (`FRESH_SIGN_IN_FOR_FACTOR_MS`) and never
-for an address of `admin.emails`) and the password (`changePassword`: the
+for an administrator) and the password (`changePassword`: the
 current one, checked through the same lockout, and the new one twice). A
 person who signed in through another provider reads that the provider keeps
 both. The four are `guardMutation(…, 'user')` mutations.
@@ -1039,12 +1101,13 @@ both. The four are `guardMutation(…, 'user')` mutations.
 **The setup** (`/admin/first-administrator`, the checklist step "The first
 administrator's account" on `/admin` while a local provider exists and the
 bootstrap token is active): the bootstrap operator (or an administrator)
-creates the account of an address of `admin.emails` with its password
-(`users.handlers.createFirstAdministrator`: an address outside the rule is
-refused); that account's first sign-in enrols the second factor, shows the
-recovery codes and — being an operator's — revokes the bootstrap token as
-`completeLogin` does for every first operator sign-in. A rule made of a group
-alone cannot name a local account: the step says so.
+creates the account of **any address** with its password
+(`users.handlers.createFirstAdministrator`), its `users` row
+(`ensureIdentity`, no sign-in counted) and a `user` designation (`origin:
+setup`, ADR administrators-live-in-the-instance §4); that account's first
+sign-in enrols the second factor, shows the recovery codes and — being an
+operator's — revokes the bootstrap token as `completeLogin` does for every
+first operator sign-in.
 
 **Audit** (object `instance-config` / `local-account:<provider>`):
 `local-link-created` (kind, address, expiry — never the link),
@@ -1056,10 +1119,9 @@ telemetry profile counts the kind `local` with the others (`sign_in_kinds`).
 
 **What stays the operator's to keep.** A lone administrator who loses their
 password, their authenticator and their recovery codes is locked out: the
-instance cannot open an account for anyone. A second administrator, or an
-address of `admin.emails` that has not created its account yet (the setup
-page creates it while the bootstrap token is active), is the way back; so is a
-reset link made by another administrator from People.
+instance cannot open an account for anyone. A second administrator is the
+way back (a reset link or a factor reset from People); while the bootstrap
+token is active, the setup page creates another administrator's account.
 
 ## Pages
 
@@ -1199,8 +1261,9 @@ reset link made by another administrator from People.
   provider or an unknown id is "not found".
 - **`/admin/users`** — **People**: everyone who has signed in, in sign-up
   order (`UserAdminService.list()`), one row each: the name with "· you ·
-  admin" where it applies (the admin rule resolved now, on the user's group
-  records) and the email under it, **the provider they signed in with** ("a
+  admin" where it applies (the designations resolved now, on the user's group
+  records); "Make administrator" / "No longer administrator"; the
+  **Administrators** section (see "Administrators") and the email under it, **the provider they signed in with** ("a
   removed provider" when it is gone), the teams, the last
   sign-in, and "deactivated <date>" on a quiet row. A hint says that one
   person signing in through two providers is two people. Under it,
@@ -1256,8 +1319,8 @@ refused in its boolean and string forms and accepted when true or absent;
 the group overage refused for `_claim_names` naming the configured claim, for
 `hasgroups` as a boolean or a string and with a partial list next to the
 pointer, a pointer for another claim and a token with no groups and no
-pointer accepted); admin rule (group,
-email, neither, both); origin check (match, mismatch, scheme, internal host,
+pointer accepted); administrators (`administrators.test.ts`: user, pending
+address, group, provider-bound, bare group, removed provider); origin check (match, mismatch, scheme, internal host,
 Referer fallback, missing, `null`); cookies and `SessionService` (attributes,
 both names under the `__Host-` prefix, a `__Host-` cookie on another path
 refused, the name matched exactly — a look-alike a sibling subdomain can set
