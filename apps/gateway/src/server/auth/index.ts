@@ -172,6 +172,7 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
     clock,
     rateLimiter: deps.rateLimiter,
     clientIp,
+    checkIssuer: (issuer) => relyingParties.checkIssuer(issuer),
   });
   return {
     sessions,
@@ -222,6 +223,9 @@ export {
   type SaveMode,
   type SignInProviderInput,
   type SignInProviderView,
+  type ProviderState,
+  type ProviderTestRecord,
+  testPassedSinceSaved,
 } from './sign-in-providers';
 export {
   auditActorId,
@@ -278,6 +282,8 @@ export {
   safeReturnTo,
   signInProviderPage,
   signInStartPath,
+  signInTestPage,
+  signInTestPath,
   statusResponse,
   type AuthHandlers,
 } from './handlers';

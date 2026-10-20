@@ -5,6 +5,7 @@
  * (`openid-client`) talking to the in-process `FakeIdp` through `customFetch`,
  * the host-agnostic handlers driven with web-standard `Request`s.
  */
+import { switchOnForTests } from '../../../src/server/auth/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BOOTSTRAP_ACTOR_ID } from '@vaubaan/gateway-core';
 
@@ -288,6 +289,8 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
       }),
     );
     expect(saved.headers.get('location')).toBe('/admin/identity-provider?saved=idp');
+    // Saved off (ADR administrators-live-in-the-instance): switched on as after a passed test.
+    await switchOnForTests(root.store.config, 'idp');
     expect(await root.store.config.getSecret(IDP_CONFIG_KEYS.clientSecret)).toBe(
       CLIENT.clientSecret,
     );

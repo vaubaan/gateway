@@ -228,7 +228,7 @@ export default async function SetupPage({ searchParams }: Props) {
     {
       key: 'sign-in',
       counted: true,
-      state: providers.length > 0 ? 'done' : 'todo',
+      state: providers.some((provider) => provider.enabled) ? 'done' : 'todo',
       title:
         providers.length > 0
           ? `Sign-in through ${listOf(providers.map((provider) => provider.name))}`

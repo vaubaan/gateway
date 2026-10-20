@@ -54,7 +54,51 @@ export type SignInProviderWithoutSecret =
 /** A provider as the pages and the authenticator see it: never its secret. */
 export type SignInProviderView = SignInProviderWithoutSecret & {
   readonly source: SignInProviderSource;
+  /**
+   * Whether people may sign in through it (ADR administrators-live-in-the-instance,
+   * §5): a provider of the configuration always; one saved in Settings once an
+   * administrator enabled it after a passed test (local accounts: when added).
+   */
+  readonly enabled: boolean;
 };
+
+/** What a test of a provider beside the session found (`/auth/test/<id>`). */
+export interface ProviderTestRecord {
+  readonly at: string;
+  /** The tester: a user id, or `bootstrap`. */
+  readonly by: string;
+  /** The web session that ran it: only that session acts on the result. */
+  readonly sessionId: string;
+  /** `passed`: the provider returned an identity the instance accepts as one. */
+  readonly outcome: 'passed' | 'failed';
+  /** The closed code of the failure (`LoginErrorCode`), and what the discovery said. */
+  readonly error?: string;
+  readonly detail?: string;
+  readonly identity?: {
+    readonly issuer: string;
+    readonly subject: string;
+    readonly email: string;
+    readonly emailVerified: boolean;
+    readonly displayName: string | null;
+    readonly groups: readonly string[];
+    readonly amr?: readonly string[];
+  };
+  /** The sign-in it would give: admitted (and why), as administrator or not, or refused (and why). */
+  readonly verdict?: {
+    readonly admitted: boolean;
+    readonly reason?: string;
+    readonly refusal?: string;
+    readonly administrator: boolean;
+  };
+}
+
+/** The state of a provider saved in Settings: `sign_in_state.<id>` (absent: enabled). */
+export interface ProviderState {
+  readonly enabled: boolean;
+  /** When its settings were last saved: a test before that is stale. */
+  readonly changedAt: string | null;
+  readonly test: ProviderTestRecord | null;
+}
 
 /** A provider with its secret, for a sign-in. */
 export interface EffectiveSignInProvider {
@@ -235,10 +279,55 @@ function storedSettingsOf(
   };
 }
 
-function viewOf(provider: SignInProvider, source: SignInProviderSource): SignInProviderView {
-  if (provider.kind === 'local') return { ...provider, source };
+function viewOf(
+  provider: SignInProvider,
+  source: SignInProviderSource,
+  enabled = true,
+): SignInProviderView {
+  if (provider.kind === 'local') return { ...provider, source, enabled };
   const { clientSecret: _secret, ...rest } = provider;
-  return { ...rest, source };
+  return { ...rest, source, enabled };
+}
+
+const STATE_PREFIX = 'sign_in_state.';
+function stateKey(id: string): string {
+  return `${STATE_PREFIX}${id}`;
+}
+
+function parseState(raw: string | null): ProviderState {
+  if (!raw) return { enabled: true, changedAt: null, test: null };
+  try {
+    const value = JSON.parse(raw) as {
+      enabled?: unknown;
+      changed_at?: unknown;
+      test?: unknown;
+    };
+    return {
+      enabled: value.enabled !== false,
+      changedAt: typeof value.changed_at === 'string' ? value.changed_at : null,
+      test:
+        typeof value.test === 'object' && value.test !== null
+          ? (value.test as ProviderTestRecord)
+          : null,
+    };
+  } catch {
+    return { enabled: true, changedAt: null, test: null };
+  }
+}
+
+function serializeState(state: ProviderState): string {
+  return JSON.stringify({
+    enabled: state.enabled,
+    changed_at: state.changedAt,
+    ...(state.test ? { test: state.test } : {}),
+  });
+}
+
+/** Whether a test passed since the provider was last saved: what enabling it needs. */
+export function testPassedSinceSaved(state: ProviderState): boolean {
+  const test = state.test;
+  if (!test || test.outcome !== 'passed') return false;
+  return state.changedAt === null || test.at >= state.changedAt;
 }
 
 /** What an administrative audit entry records of a provider: never the secret. */
@@ -290,7 +379,45 @@ export class SignInProvidersService {
     const fromFile = this.file.map((p) => viewOf(p, 'file'));
     const fileIds = new Set(this.file.map((p) => p.id));
     const fromStore = (await this.storedProviders(false)).filter((p) => !fileIds.has(p.id));
-    return [...fromFile, ...fromStore.map((p) => viewOf(p, 'store'))];
+    const stored: SignInProviderView[] = [];
+    for (const p of fromStore) stored.push(viewOf(p, 'store', (await this.state(p.id)).enabled));
+    return [...fromFile, ...stored];
+  }
+
+  /** The state of a provider saved in Settings; a provider of the file is always enabled. */
+  async state(id: string): Promise<ProviderState> {
+    if (this.isReadOnly(id)) {
+      return { ...parseState(await this.store.get(stateKey(id))), enabled: true };
+    }
+    return parseState(await this.store.get(stateKey(id)));
+  }
+
+  /** Records the outcome of a test beside the session; returns it. */
+  async recordTest(id: string, test: ProviderTestRecord): Promise<void> {
+    const current = parseState(await this.store.get(stateKey(id)));
+    await this.store.set(stateKey(id), serializeState({ ...current, test }));
+  }
+
+  /**
+   * Switches a provider saved in Settings on or off. On: only after a test that passed
+   * since its last save (local accounts need none). A file provider cannot be switched.
+   */
+  async setEnabled(id: string, enabled: boolean): Promise<SignInProvider> {
+    if (this.isReadOnly(id)) {
+      throw new IdpSettingsError([
+        `provider '${id}' is set by the mounted configuration; it is always on`,
+      ]);
+    }
+    const existing = await this.resolve(id);
+    if (!existing) throw new IdpSettingsError([`no sign-in provider has the id '${id}'`]);
+    const current = await this.state(id);
+    if (enabled && existing.provider.kind !== 'local' && !testPassedSinceSaved(current)) {
+      throw new IdpSettingsError([
+        'test it first: a provider is switched on after a test that passed since it was last saved',
+      ]);
+    }
+    await this.store.set(stateKey(id), serializeState({ ...current, enabled }));
+    return existing.provider;
   }
 
   async view(id: string): Promise<SignInProviderView | null> {
@@ -321,6 +448,26 @@ export class SignInProvidersService {
    * provider in one transaction. Returns what was saved and what it replaced.
    */
   async save(
+    input: SignInProviderInput,
+    mode: SaveMode,
+  ): Promise<{ saved: SignInProvider; before: SignInProvider | null }> {
+    const result = await this.saveSettings(input, mode);
+    // A new provider that redirects is saved off, and switched on after a passed
+    // test; local accounts have nothing to test. An edit keeps the switch, and makes
+    // the last test stale (ADR administrators-live-in-the-instance, §5).
+    const current = parseState(await this.store.get(stateKey(result.saved.id)));
+    await this.store.set(
+      stateKey(result.saved.id),
+      serializeState({
+        enabled: result.before === null ? result.saved.kind === 'local' : current.enabled,
+        changedAt: this.clock.now().toISOString(),
+        test: current.test,
+      }),
+    );
+    return result;
+  }
+
+  private async saveSettings(
     input: SignInProviderInput,
     mode: SaveMode,
   ): Promise<{ saved: SignInProvider; before: SignInProvider | null }> {
@@ -504,6 +651,7 @@ export class SignInProvidersService {
             { kind: 'delete', key: settingsKey(id) },
             { kind: 'delete', key: secretKey(id) },
           ];
+    writes.push({ kind: 'delete', key: stateKey(id) });
     await this.store.apply(writes);
     return existing.provider;
   }

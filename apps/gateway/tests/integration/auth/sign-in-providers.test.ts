@@ -6,6 +6,7 @@
  * `FakeIdp` and GitHub through the in-process `FakeGithub`, the host-agnostic
  * handlers driven with web-standard `Request`s. No network.
  */
+import { switchOnForTests } from '../../../src/server/auth/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { LOGIN_COOKIE, SESSION_COOKIE } from '../../../src/server/auth';
@@ -105,6 +106,9 @@ describe('several sign-in providers: OpenID Connect and GitHub on one instance',
       },
       'create',
     );
+    // Saved off; switched on as a passed test would let an administrator do.
+    await switchOnForTests(root.store.config, 'company');
+    await switchOnForTests(root.store.config, 'github');
   });
   afterEach(async () => {
     await root.close();

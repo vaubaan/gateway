@@ -12,6 +12,11 @@
  *   POST /api/admin/identity-provider    save a sign-in provider (operator, origin-checked)
  *   POST /api/admin/sign-in-providers    the same, under the name of the page
  *   POST /api/admin/sign-in-providers/<id>/remove   remove one (operator, origin-checked)
+ *   GET  /auth/test/<id>                 test a provider beside the session (operator): the
+ *                                        callback signs nobody in (ADR administrators-live-in-the-instance)
+ *   POST /api/admin/sign-in-providers/<id>/enable    switch on, after a passed test (operator)
+ *   POST /api/admin/sign-in-providers/<id>/disable   switch off (operator; never the last way in)
+ *   POST /api/admin/sign-in-providers/<id>/test/administrator   make the tested identity an administrator
  *
  * Every redirect target is a same-origin path; every error reaches the
  * browser as a closed `LoginErrorCode` in the query string, the detail
@@ -33,22 +38,24 @@ import {
   type AdministratorsService,
 } from './administrators';
 import { admit } from './admission';
-import { auditActorId, type Authenticator } from './authenticator';
+import { auditActorId, type Authenticator, type Principal } from './authenticator';
 import { BOOTSTRAP_MAX_MISSES, type BootstrapService } from './bootstrap';
-import { IdpSettingsError, LoginError, type LoginErrorCode } from './errors';
+import { IdpSettingsError, LOGIN_ERROR_MESSAGES, LoginError, type LoginErrorCode } from './errors';
 import { guardMutation, OPERATOR_REFUSALS, refusalResponse } from './guard';
 import { splitList } from './idp-settings';
 import { completeLogin, type LoginDeps } from './login';
 import { forbiddenOriginResponse, isSameOrigin } from './origin';
-import type { SessionService } from './session-service';
+import type { PendingLogin, SessionService } from './session-service';
 import type { SignInFlows } from './sign-in-flows';
 import { createThrottle } from './throttle';
 import {
   signInAuditObjectId,
   signInProviderAuditView,
+  type ProviderTestRecord,
   type SaveMode,
   type SignInProvidersService,
 } from './sign-in-providers';
+import type { SignInProvider } from '../config/sign-in';
 
 export const LOGIN_PAGE = '/login';
 export const ADMIN_PAGE = '/admin';
@@ -64,6 +71,14 @@ export function signInProviderPage(id: string): string {
 /** The address that starts a sign-in with one provider. */
 export function signInStartPath(id: string): string {
   return `/auth/login/${encodeURIComponent(id)}`;
+}
+/** The address that tests a provider beside the session. */
+export function signInTestPath(id: string): string {
+  return `/auth/test/${encodeURIComponent(id)}`;
+}
+/** The page that shows the last test of a provider. */
+export function signInTestPage(id: string): string {
+  return `${IDP_PAGE}/${encodeURIComponent(id)}/test`;
 }
 const RETURN_TO_PARAM = 'return_to';
 
@@ -111,6 +126,11 @@ export interface AuthHandlerDeps {
   readonly rateLimiter: RateLimiter;
   /** The client address the per-address limits are keyed on (`http/client-ip.ts`). */
   readonly clientIp: (headers: Headers) => string;
+  /**
+   * Whether an OpenID Connect issuer answers its discovery document: why not, or
+   * `null` (`RelyingPartyFactory.checkIssuer`). A test reads it before it starts.
+   */
+  readonly checkIssuer?: (issuer: URL) => Promise<string | null>;
 }
 
 export interface AuthHandlers {
@@ -123,6 +143,12 @@ export interface AuthHandlers {
   /** Saves a sign-in provider from the Settings form (the single-provider form included). */
   saveIdpSettings(request: Request): Promise<Response>;
   removeSignInProvider(request: Request, providerId: string): Promise<Response>;
+  /** `GET /auth/test/<id>`: a test of the provider, in another window, beside the session. */
+  testStart(request: Request, providerId: string): Promise<Response>;
+  enableSignInProvider(request: Request, providerId: string): Promise<Response>;
+  disableSignInProvider(request: Request, providerId: string): Promise<Response>;
+  /** The identity the session's last test of this provider returned becomes an administrator. */
+  makeAdministratorFromTest(request: Request, providerId: string): Promise<Response>;
 }
 
 export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
@@ -189,7 +215,7 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
       );
       let id = providerId;
       if (id === undefined) {
-        const views = await deps.providers.views();
+        const views = (await deps.providers.views()).filter((view) => view.enabled);
         if (views.length === 0) return loginError('idp-not-configured');
         const [only] = views;
         if (views.length > 1 || !only) {
@@ -201,6 +227,7 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
       try {
         const effective = await deps.providers.resolve(id);
         if (!effective) return loginError('provider-unknown');
+        if (!(await deps.providers.state(id)).enabled) return loginError('provider-disabled');
         const administrators = await deps.administrators.current();
         const started = await deps.flows
           .for(effective.provider, groupsOfProvider(administrators, effective.provider.id))
@@ -243,6 +270,12 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
       const effective = await deps.providers.resolve(providerId);
       if (!effective) return loginError('provider-unknown', { 'Set-Cookie': clearPending });
       const provider = effective.provider;
+      if (pending.testerSessionId !== undefined) {
+        return finishTest(request, provider, pending, clearPending);
+      }
+      if (!(await deps.providers.state(provider.id)).enabled) {
+        return loginError('provider-disabled', { 'Set-Cookie': clearPending });
+      }
 
       // The callback URL the provider redirected to is the public one (TLS terminator in
       // front); only the query string is taken from the request.
@@ -414,6 +447,152 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
       }
     },
 
+    async testStart(request, providerId) {
+      const principal = await deps.authenticator.authenticate(request.headers);
+      const decision = await deps.authenticator.authorizeAdmin(principal);
+      if (!decision.ok) {
+        return decision.status === 401
+          ? redirect(`${LOGIN_PAGE}?${RETURN_TO_PARAM}=${encodeURIComponent(IDP_PAGE)}`)
+          : statusResponse(403, decision.reason);
+      }
+      if (
+        !(await admitted(
+          request,
+          'login-start',
+          AUTH_LIMITS.loginStartPerAddress,
+          AUTH_LIMITS.loginStartPerInstance,
+        ))
+      ) {
+        return redirect(
+          `${IDP_PAGE}?problem=${encodeURIComponent(LOGIN_ERROR_MESSAGES['too-many-attempts'])}`,
+        );
+      }
+      const effective = await deps.providers.resolve(providerId);
+      if (!effective || effective.provider.kind === 'local') {
+        return redirect(
+          `${IDP_PAGE}?problem=${encodeURIComponent('Only a provider people are sent to (OpenID Connect, GitHub) is tested here.')}`,
+        );
+      }
+      const provider = effective.provider;
+      const tester = decision.principal;
+      if (provider.kind === 'oidc' && deps.checkIssuer) {
+        // The check of the form (#81), before anything is started: a test that cannot
+        // even find the provider says why, rather than "could not be reached".
+        const problem = await deps.checkIssuer(provider.issuer);
+        if (problem !== null) {
+          await recordTest(provider.id, tester, {
+            outcome: 'failed',
+            error: 'discovery-failed',
+            detail: problem,
+          });
+          return redirect(signInTestPage(provider.id));
+        }
+      }
+      try {
+        const administrators = await deps.administrators.current();
+        const started = await deps.flows
+          .for(provider, groupsOfProvider(administrators, provider.id))
+          .start();
+        const pending = await deps.sessions.createPending({
+          providerId: provider.id,
+          state: started.state,
+          nonce: started.nonce,
+          codeVerifier: started.codeVerifier,
+          returnTo: signInTestPage(provider.id),
+          testerSessionId: tester.sessionId,
+        });
+        return redirect(started.redirectTo.href, { 'Set-Cookie': pending.setCookie });
+      } catch (err) {
+        await recordTest(provider.id, tester, {
+          outcome: 'failed',
+          error: err instanceof LoginError ? err.code : 'idp-error',
+        });
+        return redirect(signInTestPage(provider.id));
+      }
+    },
+
+    async enableSignInProvider(request, providerId) {
+      const guard = await guardMutation(request, deps, 'operator');
+      if (!guard.ok) return refusalResponse(guard, OPERATOR_REFUSALS);
+      try {
+        const provider = await deps.providers.setEnabled(providerId, true);
+        await writeAct(
+          auditActorId(guard.principal),
+          'sign-in-provider-enabled',
+          provider.id,
+          {
+            enabled: false,
+          },
+          { enabled: true },
+        );
+        return redirect(`${IDP_PAGE}?enabled=${encodeURIComponent(provider.id)}`);
+      } catch (err) {
+        return problemRedirect(err, IDP_PAGE);
+      }
+    },
+
+    async disableSignInProvider(request, providerId) {
+      const guard = await guardMutation(request, deps, 'operator');
+      if (!guard.ok) return refusalResponse(guard, OPERATOR_REFUSALS);
+      try {
+        await deps.administrators.assertNoLockout({ withoutProvider: providerId });
+        const provider = await deps.providers.setEnabled(providerId, false);
+        // Its users stop here, as for a removal — except the administrator who did it.
+        const ended = await deps.store.users.endSessionsOfIssuer(
+          provider.issuer.href,
+          guard.principal.kind === 'user' ? guard.principal.user.id : null,
+        );
+        await writeAct(
+          auditActorId(guard.principal),
+          'sign-in-provider-disabled',
+          provider.id,
+          {
+            enabled: true,
+          },
+          { enabled: false, users: ended },
+        );
+        logger.warn('sign-in provider switched off', { provider: provider.id, users: ended });
+        return redirect(`${IDP_PAGE}?disabled=${encodeURIComponent(provider.id)}&people=${ended}`);
+      } catch (err) {
+        return problemRedirect(err, IDP_PAGE);
+      }
+    },
+
+    async makeAdministratorFromTest(request, providerId) {
+      const guard = await guardMutation(request, deps, 'operator');
+      if (!guard.ok) return refusalResponse(guard, OPERATOR_REFUSALS);
+      const page = signInTestPage(providerId);
+      try {
+        const test = (await deps.providers.state(providerId)).test;
+        // The result this session saw, never a field of the form.
+        if (
+          !test ||
+          test.outcome !== 'passed' ||
+          !test.identity ||
+          test.sessionId !== guard.principal.sessionId
+        ) {
+          throw new AdministratorsError(
+            'not-found',
+            'no passed test of this provider in this session',
+          );
+        }
+        const user = await deps.store.users.ensureIdentity({
+          issuer: test.identity.issuer,
+          subject: test.identity.subject,
+          email: test.identity.email,
+          displayName: test.identity.displayName,
+        });
+        await deps.administrators.grantUser(
+          user.id,
+          auditActorId(guard.principal),
+          guard.principal.kind === 'bootstrap' ? 'setup' : 'granted',
+        );
+        return redirect(`${page}?administrator=1`);
+      } catch (err) {
+        return problemRedirect(err, page);
+      }
+    },
+
     async removeSignInProvider(request, providerId) {
       const guard = await guardMutation(request, deps, 'operator');
       if (!guard.ok) return refusalResponse(guard, OPERATOR_REFUSALS);
@@ -452,6 +631,127 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
       }
     },
   };
+
+  /** Back to `page` with the problem in words, for the errors an act of Settings may meet. */
+  function problemRedirect(err: unknown, page: string): Response {
+    let problems: readonly string[];
+    if (err instanceof IdpSettingsError) problems = err.problems;
+    else if (err instanceof AdministratorsError) {
+      problems = [ADMINISTRATORS_ERROR_MESSAGES[err.code]];
+    } else throw err;
+    const params = new URLSearchParams();
+    for (const p of problems) params.append('problem', p);
+    return redirect(`${page}?${params.toString()}`);
+  }
+
+  async function writeAct(
+    actor: string,
+    act: 'sign-in-provider-enabled' | 'sign-in-provider-disabled' | 'sign-in-provider-tested',
+    providerId: string,
+    before: unknown,
+    after: unknown,
+  ): Promise<void> {
+    await deps.audit.write({
+      kind: 'admin',
+      ts: toIso(deps.clock.now()),
+      user_id: actor,
+      act,
+      object: { type: 'instance-config', id: signInAuditObjectId(providerId) },
+      before,
+      after,
+      delegated_client_id: null,
+    });
+  }
+
+  async function recordTest(
+    providerId: string,
+    tester: Principal,
+    result: Omit<ProviderTestRecord, 'at' | 'by' | 'sessionId'>,
+  ): Promise<void> {
+    const record: ProviderTestRecord = {
+      ...result,
+      at: toIso(deps.clock.now()),
+      by: auditActorId(tester),
+      sessionId: tester.sessionId,
+    };
+    await deps.providers.recordTest(providerId, record);
+    await writeAct(record.by, 'sign-in-provider-tested', providerId, null, {
+      outcome: record.outcome,
+      ...(record.error ? { error: record.error } : {}),
+      ...(record.identity ? { email: record.identity.email } : {}),
+      ...(record.verdict ? { verdict: record.verdict } : {}),
+    });
+    logger.info('sign-in provider tested', {
+      provider: providerId,
+      outcome: record.outcome,
+      error: record.error ?? null,
+    });
+  }
+
+  /**
+   * The callback of a test: the provider's answer is read to the end, then shown with
+   * the verdict a sign-in would get — and nothing is written of it: no user, no group,
+   * no session, no designation consumed, no token revoked. The tester's session stays.
+   */
+  async function finishTest(
+    request: Request,
+    provider: SignInProvider,
+    pending: PendingLogin,
+    clearPending: string,
+  ): Promise<Response> {
+    const principal = await deps.authenticator.authenticate(request.headers);
+    const decision = await deps.authenticator.authorizeAdmin(principal);
+    if (!decision.ok || decision.principal.sessionId !== pending.testerSessionId) {
+      logger.warn('sign-in test refused', { code: 'state-mismatch', provider: provider.id });
+      return loginError('state-mismatch', { 'Set-Cookie': clearPending });
+    }
+    const tester = decision.principal;
+    const url = deps.flows.callbackUrl(provider.id);
+    url.search = new URL(request.url).search;
+    try {
+      const administrators = await deps.administrators.current();
+      const finished = await deps.flows
+        .for(provider, groupsOfProvider(administrators, provider.id))
+        .finish(url, pending);
+      const identity = finished.identity;
+      const administrator = await deps.administrators.admits(identity, provider.id);
+      let verdict: NonNullable<ProviderTestRecord['verdict']>;
+      try {
+        const reason = await admit(identity, provider, {
+          isInvited: async (email) => (await deps.store.invitations.get(email)) !== null,
+          isAdministrator: async () => administrator,
+        });
+        verdict = { admitted: true, reason, administrator };
+      } catch (err) {
+        if (!(err instanceof LoginError)) throw err;
+        verdict = { admitted: false, refusal: err.code, administrator: false };
+      }
+      await recordTest(provider.id, tester, {
+        outcome: 'passed',
+        identity: {
+          issuer: identity.issuer,
+          subject: identity.subject,
+          email: identity.email,
+          emailVerified: identity.emailVerified === true,
+          displayName: identity.displayName,
+          groups: identity.groups,
+          ...(identity.amr ? { amr: identity.amr } : {}),
+        },
+        verdict,
+      });
+    } catch (err) {
+      if (!(err instanceof LoginError)) {
+        logger.error('sign-in test failed unexpectedly', { err });
+      }
+      await recordTest(provider.id, tester, {
+        outcome: 'failed',
+        error: err instanceof LoginError ? err.code : 'idp-error',
+      });
+    }
+    return redirect(safeReturnTo(pending.returnTo, deps.publicUrl, IDP_PAGE), {
+      'Set-Cookie': clearPending,
+    });
+  }
 
   function failLogin(err: unknown, extraHeaders: Record<string, string> = {}): Response {
     if (err instanceof LoginError) {

@@ -11,6 +11,7 @@
  * until it is classified; a mutation is then driven on an ephemeral instance
  * and must leave the administrative entry named next to it.
  */
+import { switchOnForTests } from '../../../src/server/auth/testing';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -1051,6 +1052,41 @@ const RULES: Readonly<Record<string, Rule>> = {
   'SignInProvidersService.resolve': READ,
   'SignInProvidersService.ofIssuer': READ,
   'SignInProvidersService.isReadOnly': READ,
+  'SignInProvidersService.state': READ,
+  'SignInProvidersService.recordTest': exempt(
+    'the outcome of a test beside the session, recorded by the handler that writes its `sign-in-provider-tested` entry (tests/integration/auth/provider-test.test.ts)',
+  ),
+  'SignInProvidersService.setEnabled': {
+    kind: 'mutation',
+    target: (root) => root.auth.providers,
+    prepare: async (rig) => {
+      await rig.root.auth.providers.save(
+        {
+          id: 'github',
+          kind: 'github',
+          name: '',
+          issuer: '',
+          clientId: 'Ov23liAuditTest',
+          clientSecret: 'github-sign-in-secret',
+          allowedEmailDomains: [],
+          invitationOnly: true,
+        },
+        'create',
+      );
+      await switchOnForTests(rig.root.store.config, 'github');
+    },
+    drive: async (rig) =>
+      rig.root.auth.handlers.disableSignInProvider(
+        await rig.operatorPost('/api/admin/sign-in-providers/github/disable', {}),
+        'github',
+      ),
+    writes: {
+      act: 'sign-in-provider-disabled',
+      object: 'instance-config',
+      objectId: 'sign-in:github',
+      actor: 'operator',
+    },
+  },
   'SignInProvidersService.carryIntoStore': exempt(
     'the backup command writes it into its copy of the store, never into the live store: nobody acts on this instance (ADR backup-carries-the-sign-in-configuration)',
   ),
@@ -1770,6 +1806,7 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'resources-discovered',
       'share-created',
       'share-revoked',
+      'sign-in-provider-disabled',
       'user-deactivated',
       'user-reactivated',
       'user-sessions-ended',
