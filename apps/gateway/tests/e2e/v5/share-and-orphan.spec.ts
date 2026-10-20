@@ -122,8 +122,8 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
 
   await dialog.getByLabel('Email').fill(E2E_SHARE_TARGET.email);
   // "Select all" ticks the boxes one by one: every permission but "anything not named".
-  await dialog.getByRole('button', { name: 'Select all 18' }).click();
-  await expect(summary).toContainText('18 of 19 permissions');
+  await dialog.getByRole('button', { name: 'Select all 16' }).click();
+  await expect(summary).toContainText('16 of 19 permissions');
   await expect(dialog.getByLabel('Give github.uncategorized-write')).not.toBeChecked();
   await expect(dialog.getByLabel('Give github.merge-protected')).toBeChecked();
   await snap(ines, 'share-dialog-select-all');
@@ -369,9 +369,7 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await ines.goto(`/accounts/${connectionId}`);
   await expect(ines.getByText('Account disconnected', { exact: true })).toHaveCount(0);
   await expect(ines.getByTestId('account-disconnected')).toBeVisible();
-  await expect(ines.getByTestId('provider-grant')).toContainText(
-    /Uninstall your company.s GitHub App/,
-  );
+  await expect(ines.getByTestId('provider-grant')).toContainText(/Delete the token at GitHub/);
   await expect(byHand).toHaveCount(1);
   // A disconnected account takes no owner act any more.
   await expect(ines.getByRole('link', { name: 'Give access', exact: true })).toHaveCount(0);

@@ -130,9 +130,10 @@ test('create a three-account mission on one page, then replace its key and stop 
   const digest = page.getByTestId('preset-digest-github');
   await expect(digest).toContainText('8 run freely');
   await expect(digest).toContainText('2 ask you first');
-  // Nineteen ids on GitHub today: ten chosen, eight left out, and the fallback,
-  // which no preset holds and nobody counts as something a preset "left out".
-  await expect(digest).toContainText('8 not included');
+  // Nineteen ids on GitHub today: ten chosen, six left out, the two deprecated
+  // mint risks of the App and the fallback, which no preset holds and nobody
+  // counts as something a preset "left out".
+  await expect(digest).toContainText('6 not included');
   await expect(
     page.getByTestId('preset-detail-github').getByRole('link', { name: /In the reference/ }),
   ).toHaveAttribute('href', '/reference/github#preset-developer');
